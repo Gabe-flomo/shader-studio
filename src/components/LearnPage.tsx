@@ -498,6 +498,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const sec4Ref = useRef<HTMLDivElement>(null);
   const sec5Ref = useRef<HTMLDivElement>(null);
   const sec6Ref = useRef<HTMLDivElement>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   function tryExample(key: string) {
     loadExampleGraph(key);
@@ -507,7 +508,44 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   return (
     <div style={S.page}>
       {/* ── Sidebar TOC ── */}
-      <nav style={S.sidebar}>
+      <nav style={{
+        ...S.sidebar,
+        width: sidebarOpen ? '196px' : '32px',
+        transition: 'width 0.2s ease',
+        overflow: 'hidden',
+        position: 'relative',
+      }}>
+        {/* Toggle button — always visible */}
+        <button
+          onClick={() => setSidebarOpen(v => !v)}
+          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          style={{
+            position: sidebarOpen ? 'absolute' : 'static',
+            top: sidebarOpen ? '12px' : undefined,
+            right: sidebarOpen ? '8px' : undefined,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '20px',
+            height: '20px',
+            background: 'none',
+            border: 'none',
+            color: '#585b70',
+            cursor: 'pointer',
+            fontSize: '12px',
+            borderRadius: '3px',
+            flexShrink: 0,
+            margin: sidebarOpen ? undefined : '8px auto',
+            padding: 0,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#cdd6f4')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#585b70')}
+        >
+          {sidebarOpen ? '◀' : '▶'}
+        </button>
+
+        {/* TOC content — hidden when collapsed */}
+        {sidebarOpen && <>
         <span style={{ ...S.tocSection, paddingTop: '2px' }}>Shader Studio</span>
         <span style={{ ...S.tocSection }}>1. Node Basics</span>
         <TocLink label="How Nodes Work" targetRef={sec1Ref} />
@@ -543,6 +581,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
         <TocLink label="Field Modes" targetRef={sec6Ref} />
         <TocLink label="Circle Packing" targetRef={sec6Ref} />
         <TocLink label="Combining Both" targetRef={sec6Ref} />
+        </>}
       </nav>
 
       {/* ── Scrollable content ── */}
