@@ -73,7 +73,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     counter: 2,
     nodes: [
       { id: 'n1', type: 'uv',     position: { x: 100, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'n2', type: 'output', position: { x: 420, y: 240 }, inputs: { color: { type: 'vec3', label: 'Color', connection: null } }, outputs: {}, params: {} },
+      { id: 'n2', type: 'output', position: { x: 420, y: 240 }, inputs: { color: { type: 'vec3', label: 'Color', connection: undefined } }, outputs: {}, params: {} },
     ],
   },
 
@@ -1169,8 +1169,8 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         id: 'mandel_5', type: 'mandelbrot', position: { x: 640, y: 200 },
         inputs: {
           uv:    { type: 'vec2',  label: 'UV',       connection: { nodeId: 'lens_4', outputKey: 'uv_lensed' } },
-          c_pos: { type: 'vec2',  label: 'c (Julia)', connection: null },
-          time:  { type: 'float', label: 'Time',     connection: null },
+          c_pos: { type: 'vec2',  label: 'c (Julia)', connection: undefined },
+          time:  { type: 'float', label: 'Time',     connection: undefined },
         },
         outputs: {
           color: { type: 'vec3',  label: 'Color'          },

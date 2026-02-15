@@ -1,4 +1,3 @@
-import React from 'react';
 
 type Page = 'studio' | 'learn';
 

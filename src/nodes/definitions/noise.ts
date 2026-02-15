@@ -147,14 +147,6 @@ export const VoronoiNode: NodeDefinition = {
 
 // ─── Domain Warp — UV distortion via noise ────────────────────────────────────
 
-const DOMAIN_WARP_GLSL = NOISE_HELPERS + `
-// Domain warp: displace UV by two layers of value noise
-vec2 domainWarp(vec2 p, float strength, float scale, int octaves, float lacunarity, float gain) {
-    vec2 q = vec2(fbm(p              , octaves, lacunarity, gain),
-                  fbm(p + vec2(5.2, 1.3), octaves, lacunarity, gain));
-    return p + strength * q;
-}`;
-
 // DomainWarp needs fbm too — combine the GLSL
 const DOMAIN_WARP_FULL_GLSL = NOISE_HELPERS + `
 float fbmW(vec2 p, int octaves, float lacunarity, float gain) {

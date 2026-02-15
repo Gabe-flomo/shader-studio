@@ -3,7 +3,6 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
-import type { DataType } from '../../types/nodeGraph';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 // Used only as fallback estimates — actual positions come from DOM when available

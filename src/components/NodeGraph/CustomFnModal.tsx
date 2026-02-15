@@ -76,8 +76,8 @@ interface Props {
 
 export function CustomFnModal({ node, onClose }: Props) {
   const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-  const fnRef   = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const fnRef   = useRef<HTMLTextAreaElement | null>(null);
 
   // Read current params
   const customInputs = (node.params.inputs as Array<{ name: string; type: DataType }>) || [];
@@ -87,7 +87,7 @@ export function CustomFnModal({ node, onClose }: Props) {
   const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Fn';
 
   // Insert text at textarea cursor
-  const insertAtCursor = (ref: React.RefObject<HTMLTextAreaElement>, current: string, paramKey: string, text: string) => {
+  const insertAtCursor = (ref: React.RefObject<HTMLTextAreaElement | null>, current: string, paramKey: string, text: string) => {
     const ta = ref.current;
     if (!ta) {
       updateNodeParams(node.id, { [paramKey]: current + text });
