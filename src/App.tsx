@@ -57,7 +57,9 @@ function App() {
   const [activeExample, setActiveExample] = useState('fractalRings');
 
   // Mobile/tablet drawer state
-  const [drawerOpen, setDrawerOpen]     = useState(false);
+  const [drawerOpen, setDrawerOpen]         = useState(false);
+  // Mobile: show node graph as overlay on top of preview
+  const [showMobileGraph, setShowMobileGraph] = useState(false);
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -281,12 +283,26 @@ function App() {
           display: 'flex', alignItems: 'center', gap: '8px',
           minHeight: '56px',
         }}>
+          {/* Graph overlay toggle */}
+          <button
+            onClick={() => setShowMobileGraph(v => !v)}
+            style={{
+              ...btnStyle(showMobileGraph),
+              padding: '8px 12px',
+              fontSize: '13px',
+              flexShrink: 0,
+            }}
+            title={showMobileGraph ? 'Hide node graph' : 'Show node graph'}
+          >
+            {showMobileGraph ? '✕ Graph' : '◈ Graph'}
+          </button>
+
           {/* Nodes drawer toggle */}
           <button
             onClick={() => setDrawerOpen(v => !v)}
             style={{
               ...btnStyle(drawerOpen),
-              padding: '8px 14px',
+              padding: '8px 12px',
               fontSize: '13px',
               flexShrink: 0,
             }}
@@ -324,6 +340,23 @@ function App() {
             <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
             <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
             <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
+          </div>
+        )}
+
+        {/* Node graph overlay — sits on top of preview, below bottom bar */}
+        {showMobileGraph && (
+          <div style={{
+            position: 'absolute',
+            top: 44,       // below floating nav
+            left: 0,
+            right: 0,
+            bottom: 56,    // above bottom action bar
+            zIndex: 20,
+            background: 'rgba(17, 17, 27, 0.82)',
+            backdropFilter: 'blur(2px)',
+            WebkitBackdropFilter: 'blur(2px)',
+          }}>
+            <NodeGraph />
           </div>
         )}
 
