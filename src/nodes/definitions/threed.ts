@@ -647,23 +647,27 @@ export const CombineRGBNode: NodeDefinition = {
     const bRaw = inputVars.b ?? '0.0';
     const mode = (node.params.mode as string) ?? 'channel';
 
-    // Promote scalar or vec3 input to a reliable vec3 temp
-    // Works whether the connected output is float or vec3
-    const code = [
-      `    vec3 ${id}_full_r = vec3(${rRaw});\n`,
-      `    vec3 ${id}_full_g = vec3(${gRaw});\n`,
-      `    vec3 ${id}_full_b = vec3(${bRaw});\n`,
-    ];
+    // Each input is treated as a float scalar. For vec3 inputs we grab .r.
+    // In channel mode each scalar becomes only its own R/G/B channel.
+    // In add/avg mode we promote to grey vec3 first then combine.
+    const toFloat = (v: string) => `(${v})`;
+    const toVec3  = (v: string) => `vec3(${v})`;
 
+    const code: string[] = [];
     let colorExpr: string;
+
     if (mode === 'add') {
-      colorExpr = `${id}_full_r + ${id}_full_g + ${id}_full_b`;
+      colorExpr = `${toVec3(rRaw)} + ${toVec3(gRaw)} + ${toVec3(bRaw)}`;
     } else if (mode === 'avg') {
-      colorExpr = `(${id}_full_r + ${id}_full_g + ${id}_full_b) / 3.0`;
+      colorExpr = `(${toVec3(rRaw)} + ${toVec3(gRaw)} + ${toVec3(bRaw)}) / 3.0`;
     } else {
-      // channel: take .r from R input, .g from G input, .b from B input
-      colorExpr = `vec3(${id}_full_r.r, ${id}_full_g.g, ${id}_full_b.b)`;
+      // channel mode: float R → red only, float G → green only, float B → blue only
+      colorExpr = `vec3(${toFloat(rRaw)}, ${toFloat(gRaw)}, ${toFloat(bRaw)})`;
     }
+
+    code.push(`    vec3 ${id}_full_r = vec3(${rRaw});\n`);
+    code.push(`    vec3 ${id}_full_g = vec3(${gRaw});\n`);
+    code.push(`    vec3 ${id}_full_b = vec3(${bRaw});\n`);
     code.push(`    vec3 ${id}_color  = ${colorExpr};\n`);
 
     return {
