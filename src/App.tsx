@@ -6,30 +6,72 @@ import { CodePanel } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { LearnPage } from './components/LearnPage';
 import { useNodeGraphStore, EXAMPLE_GRAPHS } from './store/useNodeGraphStore';
+import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 
-const DEFAULT_PREVIEW_WIDTH = Math.max(Math.floor(window.innerWidth * 0.38), 420);
-const MIN_PREVIEW = 250;
-const MIN_GRAPH = 350;
+// ── Responsive sizing helpers ─────────────────────────────────────────────────
+function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
+  if (bp === 'desktop-lg') return Math.max(Math.floor(window.innerWidth * 0.38), 420);
+  if (bp === 'desktop-sm') return Math.max(Math.floor(window.innerWidth * 0.35), 300);
+  if (bp === 'tablet')     return Math.max(Math.floor(window.innerWidth * 0.45), 280);
+  return window.innerWidth; // mobile: full width (canvas is background)
+}
+
+function getPaletteWidth(bp: ReturnType<typeof useBreakpoint>) {
+  if (bp === 'desktop-lg') return 210;
+  if (bp === 'desktop-sm') return 180;
+  return 0; // tablet/mobile: no fixed palette sidebar
+}
+
+const MIN_PREVIEW = 200;
+const MIN_GRAPH   = 280;
+
+// ── Button style helper ───────────────────────────────────────────────────────
+const btnStyle = (active = false): React.CSSProperties => ({
+  background: active ? '#89b4fa22' : '#313244',
+  border: `1px solid ${active ? '#89b4fa55' : '#45475a'}`,
+  color: active ? '#89b4fa' : '#cdd6f4',
+  borderRadius: '6px',
+  padding: '4px 10px',
+  fontSize: '11px',
+  cursor: 'pointer',
+  touchAction: 'manipulation' as const,
+  whiteSpace: 'nowrap' as const,
+});
 
 function App() {
   const {
     loadExampleGraph, compilationErrors, glslErrors, pixelSample, fragmentShader,
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraph,
   } = useNodeGraphStore();
-  const [showErrors, setShowErrors] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(DEFAULT_PREVIEW_WIDTH);
-  const [isDragging, setIsDragging] = useState(false);
-  const [showCode, setShowCode] = useState(false);
 
-  const [page, setPage] = useState<'studio' | 'learn'>('studio');
+  const bp = useBreakpoint();
+  const mobile = isMobile(bp);
+  const tablet = isTablet(bp);
+  void isDesktop; // used implicitly via breakpoint branching
+
+  const [showErrors, setShowErrors]     = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(() => getDefaultPreviewWidth(bp));
+  const [isDragging, setIsDragging]     = useState(false);
+  const [showCode, setShowCode]         = useState(false);
+  const [page, setPage]                 = useState<'studio' | 'learn'>('studio');
   const [activeExample, setActiveExample] = useState('fractalRings');
+
+  // Mobile/tablet drawer state
+  const [drawerOpen, setDrawerOpen]     = useState(false);
+  // Tablet: palette sidebar expanded or icon-only
+  const [paletteExpanded, setPaletteExpanded] = useState(false);
 
   // Save / Load panel state
   const [showSavePanel, setShowSavePanel] = useState(false);
   const [showLoadPanel, setShowLoadPanel] = useState(false);
   const [saveNameInput, setSaveNameInput] = useState('');
-  const [savedNames, setSavedNames] = useState<string[]>([]);
+  const [savedNames, setSavedNames]       = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Update preview width when breakpoint changes
+  useEffect(() => {
+    setPreviewWidth(getDefaultPreviewWidth(bp));
+  }, [bp]);
 
   const handleSave = () => {
     const name = saveNameInput.trim();
@@ -55,382 +97,472 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Desktop divider drag (mouse + touch) ──────────────────────────────────
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
-
     const onMove = (ev: MouseEvent) => {
-      // previewWidth = distance from right edge of window to mouse
       const newWidth = window.innerWidth - ev.clientX;
-      const clamped = Math.max(MIN_PREVIEW, Math.min(newWidth, window.innerWidth - MIN_GRAPH));
-      setPreviewWidth(clamped);
+      setPreviewWidth(Math.max(MIN_PREVIEW, Math.min(newWidth, window.innerWidth - MIN_GRAPH)));
     };
-
     const onUp = () => {
       setIsDragging(false);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }, []);
 
-  return (
-    <div
-      style={{
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        background: '#11111b',
-      }}
-    >
-      {/* Top navigation bar */}
-      <TopNav page={page} onPageChange={setPage} />
+  const handleDividerTouchStart = useCallback((_e: React.TouchEvent) => {
+    setIsDragging(true);
+    const onMove = (ev: TouchEvent) => {
+      const touch = ev.touches[0];
+      const newWidth = window.innerWidth - touch.clientX;
+      setPreviewWidth(Math.max(MIN_PREVIEW, Math.min(newWidth, window.innerWidth - MIN_GRAPH)));
+    };
+    const onEnd = () => {
+      setIsDragging(false);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd);
+  }, []);
 
-      {/* Learn page */}
-      {page === 'learn' && (
-        <LearnPage onNavigateToStudio={() => setPage('studio')} />
+  // ── Shared toolbar (examples + save/load/export/import) ───────────────────
+  const toolbar = (compact = false) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
+      {!compact && (
+        <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Example</span>
       )}
-
-      {/* Studio layout */}
-      <div
+      <select
+        value={activeExample}
+        onChange={e => { setActiveExample(e.target.value); loadExampleGraph(e.target.value); }}
         style={{
-          display: page === 'studio' ? 'flex' : 'none',
-          flex: 1,
-          overflow: 'hidden',
-          // Prevent text selection while dragging divider
-          userSelect: isDragging ? 'none' : undefined,
+          background: '#313244', border: '1px solid #45475a', color: '#cdd6f4',
+          borderRadius: '6px', padding: compact ? '5px 6px' : '4px 8px',
+          fontSize: '11px', cursor: 'pointer', outline: 'none',
+          maxWidth: compact ? '120px' : '140px',
         }}
       >
-      {/* Left: Node Palette */}
-      <NodePalette />
+        {Object.entries(EXAMPLE_GRAPHS).map(([key, ex]) => (
+          <option key={key} value={key}>{ex.label}</option>
+        ))}
+      </select>
 
-      {/* Center: Node Graph Editor */}
-      <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+      {!compact && <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />}
 
-        {/* Examples dropdown */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 8,
-            left: 8,
-            zIndex: 15,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-        >
-          <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.03em' }}>Example</span>
-          <select
-            value={activeExample}
-            onChange={e => {
-              const key = e.target.value;
-              setActiveExample(key);
-              loadExampleGraph(key);
-            }}
-            style={{
-              background: '#313244',
-              border: '1px solid #45475a',
-              color: '#cdd6f4',
-              borderRadius: '6px',
-              padding: '4px 8px',
-              fontSize: '11px',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
-          >
-            {Object.entries(EXAMPLE_GRAPHS).map(([key, ex]) => (
-              <option key={key} value={key}>{ex.label}</option>
-            ))}
-          </select>
-
-          {/* Save / Load / Export / Import buttons */}
-          <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
-
-          {/* 💾 Save */}
-          <button
-            onClick={handleOpenSave}
-            title="Save current graph to browser storage"
-            style={{
-              background: showSavePanel ? '#89b4fa22' : '#313244',
-              border: `1px solid ${showSavePanel ? '#89b4fa55' : '#45475a'}`,
-              color: showSavePanel ? '#89b4fa' : '#cdd6f4',
-              borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer',
-            }}
-          >💾 Save</button>
-
-          {/* 📂 Load */}
-          <button
-            onClick={handleOpenLoad}
-            title="Load a saved graph"
-            style={{
-              background: showLoadPanel ? '#89b4fa22' : '#313244',
-              border: `1px solid ${showLoadPanel ? '#89b4fa55' : '#45475a'}`,
-              color: showLoadPanel ? '#89b4fa' : '#cdd6f4',
-              borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer',
-            }}
-          >📂 Load</button>
-
-          {/* ⬇ Export */}
-          <button
-            onClick={exportGraph}
-            title="Export graph as JSON file"
-            style={{
-              background: '#313244', border: '1px solid #45475a', color: '#cdd6f4',
-              borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer',
-            }}
-          >⬇ Export</button>
-
-          {/* ⬆ Import */}
-          <label
-            title="Import graph from JSON file"
-            style={{
-              background: '#313244', border: '1px solid #45475a', color: '#cdd6f4',
-              borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center',
-            }}
-          >
-            ⬆ Import
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              style={{ display: 'none' }}
+      {!compact && (
+        <>
+          <button onClick={handleOpenSave} style={btnStyle(showSavePanel)}>💾</button>
+          <button onClick={handleOpenLoad} style={btnStyle(showLoadPanel)}>📂</button>
+          <button onClick={exportGraph} style={btnStyle()}>⬇</button>
+          <label style={{ ...btnStyle(), display: 'inline-flex', alignItems: 'center' }}>
+            ⬆
+            <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }}
               onChange={e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 file.text().then(json => importGraph(json));
-                // Reset so the same file can be re-imported
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
             />
           </label>
+        </>
+      )}
+    </div>
+  );
+
+  // ── Error badge ───────────────────────────────────────────────────────────
+  const errorCount = compilationErrors.length + glslErrors.length;
+  const errorBadge = errorCount > 0 ? (
+    <button
+      onClick={() => setShowErrors(v => !v)}
+      style={{
+        background: showErrors ? '#f38ba822' : 'none',
+        border: `1px solid ${showErrors ? '#f38ba855' : '#f38ba844'}`,
+        color: '#f38ba8', borderRadius: '4px',
+        padding: '3px 8px', fontSize: '10px', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: '5px',
+        fontFamily: 'monospace', touchAction: 'manipulation',
+      }}
+    >
+      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#f38ba8' }} />
+      {errorCount} err
+    </button>
+  ) : null;
+
+  // ── Error popup ───────────────────────────────────────────────────────────
+  const errorPopup = showErrors && errorCount > 0 ? (
+    <div style={{
+      background: '#1e1e2e', border: '1px solid #f38ba8', borderBottom: 'none',
+      padding: '8px 12px', fontSize: '11px', color: '#f38ba8',
+      maxHeight: '160px', overflowY: 'auto', fontFamily: 'monospace', flexShrink: 0,
+    }}>
+      {compilationErrors.length > 0 && (
+        <div style={{ marginBottom: glslErrors.length > 0 ? '6px' : 0 }}>
+          <span style={{ color: '#f38ba888', fontSize: '10px', letterSpacing: '0.05em' }}>GRAPH</span>
+          {compilationErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
         </div>
+      )}
+      {glslErrors.length > 0 && (
+        <div>
+          <span style={{ color: '#f38ba888', fontSize: '10px', letterSpacing: '0.05em' }}>GLSL</span>
+          {glslErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
+        </div>
+      )}
+    </div>
+  ) : null;
 
-        {/* Save panel */}
-        {showSavePanel && (
-          <div style={{
-            position: 'absolute', top: 36, left: 8, zIndex: 20,
-            background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
-            padding: '8px', display: 'flex', gap: '6px', alignItems: 'center',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          }}>
-            <input
-              autoFocus
-              value={saveNameInput}
-              onChange={e => setSaveNameInput(e.target.value)}
-              placeholder="Graph name..."
-              onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setShowSavePanel(false); }}
-              style={{
-                background: '#313244', border: '1px solid #45475a', color: '#cdd6f4',
-                borderRadius: '4px', padding: '3px 8px', fontSize: '11px', outline: 'none', width: '150px',
-              }}
-            />
-            <button
-              onClick={handleSave}
-              disabled={!saveNameInput.trim()}
-              style={{
-                background: saveNameInput.trim() ? '#89b4fa22' : '#313244',
-                border: `1px solid ${saveNameInput.trim() ? '#89b4fa55' : '#45475a'}`,
-                color: saveNameInput.trim() ? '#89b4fa' : '#585b70',
-                borderRadius: '4px', padding: '3px 10px', fontSize: '11px', cursor: saveNameInput.trim() ? 'pointer' : 'default',
-              }}
-            >Save</button>
-            <button
-              onClick={() => setShowSavePanel(false)}
-              style={{
-                background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '12px', padding: '2px 4px',
-              }}
-            >✕</button>
-          </div>
-        )}
-
-        {/* Load panel */}
-        {showLoadPanel && (
-          <div style={{
-            position: 'absolute', top: 36, left: 8, zIndex: 20,
-            background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
-            padding: '4px', minWidth: '200px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          }}>
-            {savedNames.length === 0 ? (
-              <div style={{ padding: '8px 10px', fontSize: '11px', color: '#585b70' }}>No saved graphs yet</div>
-            ) : savedNames.map(name => (
-              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 6px', borderRadius: '4px' }}
-                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = '#313244'}
-                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
-              >
-                <span style={{ flex: 1, fontSize: '11px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                <button
-                  onClick={() => { loadSavedGraph(name); setShowLoadPanel(false); }}
-                  style={{ background: '#313244', border: '1px solid #45475a', color: '#89b4fa', borderRadius: '4px', padding: '1px 7px', fontSize: '10px', cursor: 'pointer' }}
-                >Load</button>
-                <button
-                  onClick={() => { deleteSavedGraph(name); setSavedNames(getSavedGraphNames()); }}
-                  style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '1px 3px' }}
-                  title="Delete this save"
-                >✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Code toggle button */}
-        <button
-          onClick={() => setShowCode(v => !v)}
-          title={showCode ? 'Hide shader code' : 'Show compiled shader code'}
-          style={{
-            position: 'absolute',
-            bottom: showCode ? 248 : 8,
-            right: 8,
-            zIndex: 15,
-            background: showCode ? '#89b4fa22' : '#313244',
-            border: `1px solid ${showCode ? '#89b4fa55' : '#45475a'}`,
-            color: showCode ? '#89b4fa' : '#cdd6f4',
-            borderRadius: '6px',
-            padding: '5px 10px',
-            fontSize: '11px',
-            cursor: 'pointer',
-            letterSpacing: '0.02em',
-            fontFamily: 'monospace',
-          }}
-          onMouseEnter={e => {
-            if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#45475a';
-          }}
-          onMouseLeave={e => {
-            if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#313244';
-          }}
-        >
-          {'{ } Code'}
-        </button>
-
-        <NodeGraph />
-
-        {/* Full shader code panel */}
-        {showCode && (
-          <CodePanel
-            code={fragmentShader}
-            onClose={() => setShowCode(false)}
-          />
-        )}
-      </div>
-
-      {/* Resize Divider */}
-      <div
-        onMouseDown={handleDividerMouseDown}
-        style={{
-          width: '5px',
-          flexShrink: 0,
-          background: isDragging ? '#45475a' : '#313244',
-          cursor: 'col-resize',
-          transition: 'background 0.15s',
-        }}
-        onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#45475a'; }}
-        onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#313244'; }}
+  // ── Save / Load panels (shared) ───────────────────────────────────────────
+  const savePanelEl = showSavePanel ? (
+    <div style={{
+      position: 'absolute', top: 36, left: 8, zIndex: 20,
+      background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+      padding: '8px', display: 'flex', gap: '6px', alignItems: 'center',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+    }}>
+      <input autoFocus value={saveNameInput} onChange={e => setSaveNameInput(e.target.value)}
+        placeholder="Graph name..."
+        onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setShowSavePanel(false); }}
+        style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', outline: 'none', width: '150px' }}
       />
+      <button onClick={handleSave} disabled={!saveNameInput.trim()} style={btnStyle(!!saveNameInput.trim())}>Save</button>
+      <button onClick={() => setShowSavePanel(false)} style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}>✕</button>
+    </div>
+  ) : null;
 
-      {/* Right: Shader Preview */}
-      <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* Canvas fills remaining space */}
-        <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+  const loadPanelEl = showLoadPanel ? (
+    <div style={{
+      position: 'absolute', top: 36, left: 8, zIndex: 20,
+      background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+      padding: '4px', minWidth: '200px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+    }}>
+      {savedNames.length === 0 ? (
+        <div style={{ padding: '8px 10px', fontSize: '11px', color: '#585b70' }}>No saved graphs yet</div>
+      ) : savedNames.map(name => (
+        <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 6px', borderRadius: '4px' }}
+          onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = '#313244'}
+          onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
+        >
+          <span style={{ flex: 1, fontSize: '11px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          <button onClick={() => { loadSavedGraph(name); setShowLoadPanel(false); }} style={{ background: '#313244', border: '1px solid #45475a', color: '#89b4fa', borderRadius: '4px', padding: '1px 7px', fontSize: '10px', cursor: 'pointer' }}>Load</button>
+          <button onClick={() => { deleteSavedGraph(name); setSavedNames(getSavedGraphNames()); }} style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '1px 3px' }} title="Delete">✕</button>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MOBILE LAYOUT (< 768px)
+  // Preview fills entire screen, floating nav + bottom action bar
+  // ══════════════════════════════════════════════════════════════════════════
+  if (mobile && page === 'studio') {
+    return (
+      <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none' }}>
+
+        {/* Full-screen shader preview as background */}
+        <div style={{ position: 'absolute', inset: 0 }}>
           <ShaderCanvas />
         </div>
 
-        {/* ── Status bar ── */}
+        {/* Floating TopNav */}
+        <TopNav page={page} onPageChange={setPage} floating />
+
+        {/* Bottom action bar */}
         <div style={{
-          background: '#181825',
+          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 25,
+          background: 'rgba(24,24,37,0.90)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
           borderTop: '1px solid #313244',
-          padding: '4px 10px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: '10px',
-          fontFamily: 'monospace',
-          color: '#585b70',
-          minHeight: '28px',
-          flexShrink: 0,
+          padding: '8px 12px',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          minHeight: '56px',
         }}>
-          {/* Pixel color swatch + values (shown when hovering canvas) */}
-          {pixelSample ? (
-            <div
-              title="Pixel color under cursor (0.0–1.0)"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <div style={{
-                width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0,
-                background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`,
-                border: '1px solid #45475a',
-              }} />
-              <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0] / 255).toFixed(3)}</span>
-              <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1] / 255).toFixed(3)}</span>
-              <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2] / 255).toFixed(3)}</span>
-            </div>
-          ) : (
-            <span style={{ opacity: 0.4 }}>hover for color</span>
-          )}
+          {/* Nodes drawer toggle */}
+          <button
+            onClick={() => setDrawerOpen(v => !v)}
+            style={{
+              ...btnStyle(drawerOpen),
+              padding: '8px 14px',
+              fontSize: '13px',
+              flexShrink: 0,
+            }}
+          >
+            ⬡ Nodes
+          </button>
 
-          {/* Spacer */}
-          <div style={{ flex: 1 }} />
+          {/* Example picker */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {toolbar(true)}
+          </div>
 
-          {/* Error badge — click to toggle error popup */}
-          {(compilationErrors.length > 0 || glslErrors.length > 0) && (
-            <button
-              onClick={() => setShowErrors(v => !v)}
-              title={showErrors ? 'Hide errors' : 'Show errors'}
-              style={{
-                background: showErrors ? '#f38ba822' : 'none',
-                border: `1px solid ${showErrors ? '#f38ba855' : '#f38ba844'}`,
-                color: '#f38ba8',
-                borderRadius: '4px',
-                padding: '1px 7px',
-                fontSize: '10px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                fontFamily: 'monospace',
-              }}
-            >
-              <span style={{
-                display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%',
-                background: '#f38ba8',
-              }} />
-              {compilationErrors.length + glslErrors.length} error{compilationErrors.length + glslErrors.length !== 1 ? 's' : ''}
-            </button>
-          )}
+          {/* Error badge */}
+          {errorBadge}
         </div>
 
-        {/* Error popup (shown when badge is clicked) */}
-        {showErrors && (compilationErrors.length > 0 || glslErrors.length > 0) && (
+        {/* Error popup — sits above bottom bar */}
+        {showErrors && errorCount > 0 && (
+          <div style={{ position: 'absolute', bottom: 56, left: 0, right: 0, zIndex: 24 }}>
+            {errorPopup}
+          </div>
+        )}
+
+        {/* Pixel color info (top-right, non-intrusive) */}
+        {pixelSample && (
           <div style={{
-            background: '#1e1e2e',
-            border: '1px solid #f38ba8',
-            borderBottom: 'none',
-            padding: '8px 12px',
-            fontSize: '11px',
-            color: '#f38ba8',
-            maxHeight: '160px',
-            overflowY: 'auto',
-            fontFamily: 'monospace',
-            flexShrink: 0,
+            position: 'absolute', top: 52, right: 10, zIndex: 22,
+            background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
+            borderRadius: '6px', padding: '4px 8px',
+            display: 'flex', alignItems: 'center', gap: '6px',
+            fontSize: '10px', fontFamily: 'monospace', color: '#585b70',
+            border: '1px solid #313244',
           }}>
-            {compilationErrors.length > 0 && (
-              <div style={{ marginBottom: glslErrors.length > 0 ? '6px' : 0 }}>
-                <span style={{ color: '#f38ba888', fontSize: '10px', letterSpacing: '0.05em' }}>GRAPH</span>
-                {compilationErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
-              </div>
-            )}
-            {glslErrors.length > 0 && (
-              <div>
-                <span style={{ color: '#f38ba888', fontSize: '10px', letterSpacing: '0.05em' }}>GLSL</span>
-                {glslErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
+            <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
+            <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
+            <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
+            <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
+          </div>
+        )}
+
+        {/* Bottom sheet drawer backdrop */}
+        {drawerOpen && (
+          <div
+            onClick={() => setDrawerOpen(false)}
+            style={{ position: 'absolute', inset: 0, zIndex: 28, background: 'rgba(0,0,0,0.5)' }}
+          />
+        )}
+
+        {/* Bottom sheet drawer */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 29,
+          height: '72vh',
+          background: '#1e1e2e',
+          borderRadius: '16px 16px 0 0',
+          borderTop: '1px solid #45475a',
+          display: 'flex', flexDirection: 'column',
+          transform: drawerOpen ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.5)',
+        }}>
+          {/* Drag handle + header */}
+          <div style={{ padding: '12px 16px 8px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#45475a', margin: '0 auto 0 auto', position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '8px' }} />
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa', paddingTop: '4px' }}>Add Node</span>
+            <button
+              onClick={() => setDrawerOpen(false)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '16px', padding: '0 4px', touchAction: 'manipulation' }}
+            >✕</button>
+          </div>
+          {/* Palette fills rest of drawer */}
+          <NodePalette mode="drawer" onNodeAdded={() => setDrawerOpen(false)} />
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MOBILE LEARN PAGE
+  // ══════════════════════════════════════════════════════════════════════════
+  if (mobile && page === 'learn') {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+        <TopNav page={page} onPageChange={setPage} />
+        <LearnPage onNavigateToStudio={() => setPage('studio')} />
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TABLET LAYOUT (768–1024px)
+  // 2-panel: collapsible palette strip | graph + preview side by side
+  // ══════════════════════════════════════════════════════════════════════════
+  if (tablet) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+        <TopNav page={page} onPageChange={setPage} />
+
+        {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
+
+        <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
+
+          {/* Collapsible palette — icon strip when collapsed, 200px when expanded */}
+          <div style={{
+            width: paletteExpanded ? '200px' : '36px',
+            flexShrink: 0,
+            background: '#1e1e2e',
+            borderRight: '1px solid #313244',
+            transition: 'width 0.2s ease',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            {/* Toggle button */}
+            <button
+              onClick={() => setPaletteExpanded(v => !v)}
+              title={paletteExpanded ? 'Collapse palette' : 'Expand palette'}
+              style={{
+                background: 'none', border: 'none',
+                color: '#89b4fa', cursor: 'pointer',
+                padding: '10px 0', fontSize: '16px',
+                width: '100%', flexShrink: 0,
+                touchAction: 'manipulation',
+              }}
+            >
+              {paletteExpanded ? '◀' : '⬡'}
+            </button>
+            {/* Full palette only when expanded */}
+            {paletteExpanded && (
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <NodePalette mode="drawer" onNodeAdded={() => setPaletteExpanded(false)} />
               </div>
             )}
           </div>
-        )}
+
+          {/* Center: Node Graph */}
+          <div style={{ flex: 1, position: 'relative', minWidth: 0, userSelect: isDragging ? 'none' : undefined }}>
+            {/* Toolbar */}
+            <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '5px' }}>
+              {toolbar(false)}
+            </div>
+            {savePanelEl}
+            {loadPanelEl}
+
+            {/* Code toggle */}
+            <button onClick={() => setShowCode(v => !v)} style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode) }}>
+              {'{ } Code'}
+            </button>
+
+            <NodeGraph />
+            {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} />}
+          </div>
+
+          {/* Divider — wider touch target for tablet */}
+          <div
+            onMouseDown={handleDividerMouseDown}
+            onTouchStart={handleDividerTouchStart}
+            style={{ width: '8px', flexShrink: 0, background: isDragging ? '#45475a' : '#313244', cursor: 'col-resize', transition: 'background 0.15s' }}
+          />
+
+          {/* Right: Preview */}
+          <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas /></div>
+            <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
+              {pixelSample ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
+                  <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(3)}</span>
+                  <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
+                  <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
+                </div>
+              ) : <span style={{ opacity: 0.4 }}>hover for color</span>}
+              <div style={{ flex: 1 }} />
+              {errorBadge}
+            </div>
+            {errorPopup}
+          </div>
+        </div>
       </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DESKTOP LAYOUT (1024px+) — original 3-panel layout, responsively sized
+  // ══════════════════════════════════════════════════════════════════════════
+  const paletteW = getPaletteWidth(bp);
+
+  return (
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+      <TopNav page={page} onPageChange={setPage} />
+
+      {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
+
+      <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined }}>
+
+        {/* Left: Node Palette */}
+        <div style={{ width: paletteW, minWidth: paletteW, flexShrink: 0, overflow: 'hidden' }}>
+          <NodePalette />
+        </div>
+
+        {/* Center: Node Graph Editor */}
+        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+
+          {/* Toolbar */}
+          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.03em' }}>Example</span>
+            <select
+              value={activeExample}
+              onChange={e => { setActiveExample(e.target.value); loadExampleGraph(e.target.value); }}
+              style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', outline: 'none' }}
+            >
+              {Object.entries(EXAMPLE_GRAPHS).map(([key, ex]) => (
+                <option key={key} value={key}>{ex.label}</option>
+              ))}
+            </select>
+            <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
+            <button onClick={handleOpenSave} style={btnStyle(showSavePanel)}>💾 Save</button>
+            <button onClick={handleOpenLoad} style={btnStyle(showLoadPanel)}>📂 Load</button>
+            <button onClick={exportGraph} style={btnStyle()}>⬇ Export</button>
+            <label style={{ ...btnStyle(), display: 'inline-flex', alignItems: 'center' }}>
+              ⬆ Import
+              <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }}
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  file.text().then(json => importGraph(json));
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              />
+            </label>
+          </div>
+
+          {savePanelEl}
+          {loadPanelEl}
+
+          {/* Code toggle */}
+          <button
+            onClick={() => setShowCode(v => !v)}
+            style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode), fontFamily: 'monospace' }}
+            onMouseEnter={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#45475a'; }}
+            onMouseLeave={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#313244'; }}
+          >
+            {'{ } Code'}
+          </button>
+
+          <NodeGraph />
+          {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} />}
+        </div>
+
+        {/* Resize Divider */}
+        <div
+          onMouseDown={handleDividerMouseDown}
+          onTouchStart={handleDividerTouchStart}
+          style={{ width: '5px', flexShrink: 0, background: isDragging ? '#45475a' : '#313244', cursor: 'col-resize', transition: 'background 0.15s' }}
+          onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#45475a'; }}
+          onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#313244'; }}
+        />
+
+        {/* Right: Shader Preview */}
+        <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas /></div>
+
+          {/* Status bar */}
+          <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
+            {pixelSample ? (
+              <div title="Pixel color under cursor (0.0–1.0)" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
+                <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(3)}</span>
+                <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
+                <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
+              </div>
+            ) : <span style={{ opacity: 0.4 }}>hover for color</span>}
+            <div style={{ flex: 1 }} />
+            {errorBadge}
+          </div>
+          {errorPopup}
+        </div>
       </div>
     </div>
   );

@@ -135,7 +135,14 @@ const QUICK_NODES: QuickNode[] = [
   { label: 'Light',         type: 'light',        desc: 'Glow / Ring / Simple light'     },
 ];
 
-export function NodePalette() {
+interface NodePaletteProps {
+  /** 'full' = normal left sidebar; 'drawer' = fills container (used in mobile bottom sheet) */
+  mode?: 'full' | 'drawer';
+  /** Called when a node is added (e.g. to close the drawer on mobile) */
+  onNodeAdded?: () => void;
+}
+
+export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   const { addNode } = useNodeGraphStore();
   const categories = getAllCategories();
 
@@ -160,6 +167,7 @@ export function NodePalette() {
     const x = 200 + Math.random() * 120;
     const y = 120 + Math.random() * 200;
     addNode(type, { x, y });
+    onNodeAdded?.();
   };
 
   // Search mode: show all matching nodes across categories, ungrouped
@@ -182,16 +190,17 @@ export function NodePalette() {
       style={{
         display: 'block',
         width: '100%',
-        padding: '5px 10px',
-        marginBottom: '2px',
+        padding: isDrawer ? '9px 12px' : '5px 10px',
+        marginBottom: '3px',
         background: '#313244',
         border: '1px solid #45475a',
         color: '#cdd6f4',
         cursor: 'pointer',
         textAlign: 'left',
-        borderRadius: '5px',
-        fontSize: '12px',
+        borderRadius: '6px',
+        fontSize: isDrawer ? '13px' : '12px',
         transition: 'background 0.1s',
+        touchAction: 'manipulation',
       }}
       onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
       onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
@@ -200,19 +209,24 @@ export function NodePalette() {
     </button>
   );
 
+  const isDrawer = mode === 'drawer';
+
   return (
     <div
       style={{
-        width: '210px',
-        minWidth: '210px',
+        // In full mode: fixed sidebar. In drawer mode: fill the parent container.
+        width:    isDrawer ? '100%'    : '210px',
+        minWidth: isDrawer ? undefined : '210px',
         background: '#1e1e2e',
         color: '#cdd6f4',
-        padding: '10px 8px',
+        padding: isDrawer ? '4px 12px 20px' : '10px 8px',
         overflowY: 'auto',
-        borderRight: '1px solid #313244',
+        borderRight: isDrawer ? 'none' : '1px solid #313244',
         display: 'flex',
         flexDirection: 'column',
         gap: '4px',
+        flex: isDrawer ? 1 : undefined,
+        minHeight: 0,
       }}
     >
       {/* Title */}
