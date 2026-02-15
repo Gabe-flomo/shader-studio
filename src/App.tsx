@@ -343,20 +343,17 @@ function App() {
           </div>
         )}
 
-        {/* Node graph overlay — sits on top of preview, below bottom bar */}
+        {/* Node graph overlay — transparent bg so shader shows through */}
         {showMobileGraph && (
           <div style={{
             position: 'absolute',
-            top: 44,       // below floating nav
+            top: 44,    // below floating nav
             left: 0,
             right: 0,
-            bottom: 56,    // above bottom action bar
+            bottom: 56, // above bottom action bar
             zIndex: 20,
-            background: 'rgba(17, 17, 27, 0.82)',
-            backdropFilter: 'blur(2px)',
-            WebkitBackdropFilter: 'blur(2px)',
           }}>
-            <NodeGraph />
+            <NodeGraph transparent />
           </div>
         )}
 

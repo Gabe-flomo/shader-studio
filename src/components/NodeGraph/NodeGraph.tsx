@@ -39,7 +39,7 @@ function getSocketPos(
   return { x: cx, y: cy };
 }
 
-export function NodeGraph() {
+export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const { nodes, connectNodes, autoLayout, setPreviewNodeId } = useNodeGraphStore();
   const previewNodeId = useNodeGraphStore(s => s.previewNodeId);
 
@@ -136,10 +136,11 @@ export function NodeGraph() {
         position: 'relative',
         width: '100%',
         height: '100%',
-        background: '#11111b',
+        background: transparent ? 'transparent' : '#11111b',
         overflow: 'auto',
-        backgroundImage:
-          'radial-gradient(circle, #313244 1px, transparent 1px)',
+        backgroundImage: transparent
+          ? 'none'
+          : 'radial-gradient(circle, #313244 1px, transparent 1px)',
         backgroundSize: '24px 24px',
       }}
     >
