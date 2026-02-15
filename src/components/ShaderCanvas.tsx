@@ -2,6 +2,8 @@ import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 
+export type CanvasHandle = { canvas: HTMLCanvasElement };
+
 // Minimal fallback shaders so Three.js doesn't throw on first render
 const FALLBACK_VERTEX = `
 varying vec2 vUv;
@@ -34,7 +36,12 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
   };
 }
 
-export default function ShaderCanvas() {
+interface Props {
+  /** Called with the WebGL canvas element once Three.js is initialized */
+  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
+}
+
+export default function ShaderCanvas({ onCanvasReady }: Props = {}) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -53,10 +60,11 @@ export default function ShaderCanvas() {
   useEffect(() => {
     const container = canvasRef.current!;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
     renderer.setSize(1, 1);
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    onCanvasReady?.(renderer.domElement);
 
     // Intercept WebGL compile errors
     const gl = renderer.getContext();

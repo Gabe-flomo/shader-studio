@@ -10,6 +10,13 @@ export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './source
 // Transforms
 export { FractNode, Rotate2DNode } from './transforms';
 
+// Spaces
+export {
+  PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
+  MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
+  RippleSpaceNode, InfiniteRepeatSpaceNode,
+} from './spaces';
+
 // 2D Primitives
 export { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 
@@ -17,13 +24,18 @@ export { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } f
 export { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
 
 // Combiners
-export { SmoothMinNode, MinNode } from './combiners';
+export {
+  SmoothMinNode, MinNode, MaxNode2, SubtractNode2,
+  SmoothMaxNode, SmoothSubtractNode,
+  BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
+  GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
+} from './combiners';
 
 // Effects / Loops
 export {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
-  ExprNode, CustomFnNode, GravitationalLensNode,
+  ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
 
 // Noise
@@ -60,13 +72,23 @@ export {
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './sources';
 import { FractNode, Rotate2DNode } from './transforms';
+import {
+  PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
+  MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
+  RippleSpaceNode, InfiniteRepeatSpaceNode,
+} from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
-import { SmoothMinNode, MinNode } from './combiners';
+import {
+  SmoothMinNode, MinNode, MaxNode2, SubtractNode2,
+  SmoothMaxNode, SmoothSubtractNode,
+  BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
+  GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
+} from './combiners';
 import {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
-  ExprNode, CustomFnNode, GravitationalLensNode,
+  ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
 import { MandelbrotNode, IFSNode } from './fractals';
@@ -95,6 +117,17 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,
+  // Spaces
+  polarSpace: PolarSpaceNode,
+  logPolarSpace: LogPolarSpaceNode,
+  hyperbolicSpace: HyperbolicSpaceNode,
+  inversionSpace: InversionSpaceNode,
+  mobiusSpace: MobiusSpaceNode,
+  swirlSpace: SwirlSpaceNode,
+  kaleidoSpace: KaleidoSpaceNode,
+  sphericalSpace: SphericalSpaceNode,
+  rippleSpace: RippleSpaceNode,
+  infiniteRepeatSpace: InfiniteRepeatSpaceNode,
   // 2D Primitives
   circleSDF: CircleSDFNode,
   boxSDF: BoxSDFNode,
@@ -110,6 +143,17 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Combiners
   smoothMin: SmoothMinNode,
   min: MinNode,
+  sdfMax: MaxNode2,
+  sdfSubtract: SubtractNode2,
+  smoothMax: SmoothMaxNode,
+  smoothSubtract: SmoothSubtractNode,
+  blend: BlendNode,
+  mask: MaskNode,
+  addColor: AddColorNode,
+  screenBlend: ScreenBlendNode,
+  glowLayer: GlowLayerNode,
+  sdfOutline: SDFOutlineNode,
+  sdfColorize: SDFColorizeNode,
   // Effects
   makeLight: MakeLightNode,
   abs: AbsNode,
@@ -123,6 +167,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   expr: ExprNode,
   customFn: CustomFnNode,
   gravitationalLens: GravitationalLensNode,
+  floatWarp: FloatWarpNode,
   // Noise
   fbm: FBMNode,
   voronoi: VoronoiNode,

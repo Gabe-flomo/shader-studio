@@ -19,7 +19,7 @@ float chladni(vec2 p, float m, float n) {
 export const ChladniNode: NodeDefinition = {
   type: 'chladni',
   label: 'Chladni Plate',
-  category: 'Physics',
+  category: 'Science',
   description: 'Chladni plate resonance pattern. m and n are wirable float inputs — wire a Sin or Expr node to animate the mode. Anti-aliased via fwidth().',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
@@ -220,7 +220,7 @@ float orbitalPsi3(vec3 p, float n, float l, float mq, float a0) {
 export const ElectronOrbitalNode: NodeDefinition = {
   type: 'electronOrbital',
   label: 'Electron Orbital',
-  category: 'Physics',
+  category: 'Science',
   description: '2D cross-section of a hydrogen-like electron orbital. slice_z takes cross-sections through the 3D shape — slide it to reveal inner rings. n=shell (1–6), l=subshell (0=s..4=g), m=magnetic. Gamma < 1 reveals faint outer rings.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },

@@ -194,12 +194,13 @@ function getSourceExpr(fragmentShader: string, sourceNodeId: string, outputKey: 
 }
 
 export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType }: Props) {
-  const { nodes, updateNodePosition, removeNode, updateNodeParams, disconnectInput, setPreviewNodeId } = useNodeGraphStore();
+  const { nodes, updateNodePosition, removeNode, updateNodeParams, disconnectInput, setPreviewNodeId, toggleBypass } = useNodeGraphStore();
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const currentTime     = useNodeGraphStore(s => s.currentTime);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
   const isPreviewActive = previewNodeId === node.id;
   const def = getNodeDefinition(node.type);
+  const isBypassed = !!node.bypassed;
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -333,12 +334,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         left: node.position.x,
         top: node.position.y,
         background: '#1e1e2e',
-        border: isPreviewActive ? '1px solid #a6e3a1' : '1px solid #444',
+        border: isBypassed ? '1px solid #f9e2af55' : isPreviewActive ? '1px solid #a6e3a1' : '1px solid #444',
         borderRadius: '8px',
         minWidth: '240px',
         color: '#cdd6f4',
         fontSize: '12px',
         userSelect: 'none',
+        opacity: isBypassed ? 0.55 : 1,
         boxShadow: isPreviewActive
           ? '0 0 14px #a6e3a133, 0 4px 12px rgba(0,0,0,0.4)'
           : '0 4px 12px rgba(0,0,0,0.4)',
@@ -370,6 +372,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         >
           <span style={{ fontSize: '9px', opacity: 0.5, lineHeight: 1 }}>{collapsed ? '▶' : '▼'}</span>
           {node.type === 'customFn' && typeof node.params.label === 'string' ? node.params.label || def.label : def.label}
+          {isBypassed && (
+            <span style={{ fontSize: '8px', color: '#f9e2af', letterSpacing: '0.06em', opacity: 0.9, fontWeight: 400 }}>BYPASS</span>
+          )}
         </span>
         {showNodeTooltip && <NodeTooltip def={def} />}
         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
@@ -412,8 +417,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               👁
             </button>
           )}
-          {/* Expr modal expand button — only shown on Expr nodes */}
-          {node.type === 'expr' && (
+          {/* Expr modal expand button — shown on Expr and FloatWarp nodes */}
+          {(node.type === 'expr' || node.type === 'floatWarp') && (
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setShowExprModal(v => !v)}
@@ -473,6 +478,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               }}
             >
               ↺
+            </button>
+          )}
+          {/* Bypass toggle — skip node, pass input through to output */}
+          {!['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type) && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => toggleBypass(node.id)}
+              title={isBypassed ? 'Enable node (currently bypassed)' : 'Bypass node (pass input through)'}
+              style={{
+                background: isBypassed ? '#f9e2af22' : 'none',
+                border: isBypassed ? '1px solid #f9e2af55' : 'none',
+                color: isBypassed ? '#f9e2af' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '12px',
+                lineHeight: 1,
+                padding: '1px 4px',
+                borderRadius: '3px',
+              }}
+            >
+              ⊘
             </button>
           )}
           {/* Delete button */}
@@ -912,7 +937,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       </div>
 
       {/* ── Expr modal ── */}
-      {showExprModal && node.type === 'expr' && (
+      {showExprModal && (node.type === 'expr' || node.type === 'floatWarp') && (
         <ExprModal node={node} onClose={() => setShowExprModal(false)} />
       )}
 

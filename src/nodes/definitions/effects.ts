@@ -37,7 +37,7 @@ float make_light(float dist, float brightness) {
 export const AbsNode: NodeDefinition = {
   type: 'abs',
   label: 'Abs',
-  category: 'Effects',
+  category: 'Math',
   description: 'Absolute value of a float',
   inputs: {
     input: { type: 'float', label: 'Input' },
@@ -201,7 +201,7 @@ float simpleLight(float d, float brightness) {
 export const FractalLoopNode: NodeDefinition = {
   type: 'fractalLoop',
   label: 'Fractal Loop',
-  category: 'Effects',
+  category: 'Presets',
   description: 'IQ-style iterated fractal with built-in palette. Each iteration tiles UV and accumulates glowing rings.',
   inputs: {
     uv:          { type: 'vec2',  label: 'UV'           },
@@ -289,8 +289,8 @@ export const FractalLoopNode: NodeDefinition = {
 
 export const RotatingLinesLoopNode: NodeDefinition = {
   type: 'rotatingLinesLoop',
-  label: 'Rotating Lines Loop',
-  category: 'Effects',
+  label: 'Rotating Lines',
+  category: 'Presets',
   description: 'Iterated rotating box/line glow. Each layer builds a pseudo-random mat2 from cosines, tiles rotated space, and accumulates glowing horizontal stripes with an RGBA cosine palette.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV (Pixel)'  },
@@ -355,7 +355,7 @@ export const RotatingLinesLoopNode: NodeDefinition = {
 export const AccumulateLoopNode: NodeDefinition = {
   type: 'accumulateLoop',
   label: 'Accumulate Loop',
-  category: 'Effects',
+  category: 'Presets',
   description: 'General iterated accumulation loop. Configure position, distance, attenuation, color and tonemap modes to create stars, orbs, arc rings, plasma, and more.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
@@ -623,26 +623,33 @@ export const GravitationalLensNode: NodeDefinition = {
     'Warps UV coordinates using a gravitational lens (inverse-square falloff). ',
     'Wire uv_lensed into any shader\'s UV input — it samples the content at the displaced position. ',
     'Wire lens_center to Mouse for interactive black-hole lensing. ',
-    'Modes: gravity (1/r²), fisheye (smooth barrel), ripple (animated wave).',
+    'Modes: gravity (1/r²), fisheye (smooth barrel), ripple (animated wave). ',
+    'Relativistic extras: Einstein radius sizing, gravitational redshift tint, photon ring glow, Kerr frame-dragging spin.',
   ].join(''),
   inputs: {
     uv:          { type: 'vec2',  label: 'UV'                          },
     lens_center: { type: 'vec2',  label: 'Lens Center (wire Mouse →)'  },
-    time:        { type: 'float', label: 'Time (ripple mode)'          },
+    time:        { type: 'float', label: 'Time (ripple / spin)'        },
   },
   outputs: {
     uv_lensed:    { type: 'vec2',  label: 'Lensed UV'                  },
     horizon_mask: { type: 'float', label: 'Horizon Mask (1=outside)'   },
     dist:         { type: 'float', label: 'Distance to Lens'           },
+    redshift:     { type: 'float', label: 'Redshift (0=horizon,1=far)' },
+    photon_ring:  { type: 'float', label: 'Photon Ring glow'           },
   },
   defaultParams: {
-    lens_type:     'gravity',
-    strength:      0.002,
-    horizon_radius: 0.083,
-    softening:     0.0001,
-    aspect_correct: 'yes',
-    ripple_freq:   20.0,
-    ripple_speed:   2.0,
+    lens_type:       'gravity',
+    strength:        0.002,
+    einstein_radius: 0.12,
+    horizon_radius:  0.05,
+    softening:       0.0001,
+    aspect_correct:  'yes',
+    ripple_freq:     20.0,
+    ripple_speed:     2.0,
+    spin:            0.0,
+    redshift_power:  2.0,
+    photon_width:    0.008,
   },
   paramDefs: {
     lens_type: { label: 'Lens Type', type: 'select', options: [
@@ -650,9 +657,13 @@ export const GravitationalLensNode: NodeDefinition = {
       { value: 'fisheye', label: 'Fisheye (barrel)'    },
       { value: 'ripple',  label: 'Ripple (animated)'   },
     ]},
-    strength:       { label: 'Strength',       type: 'float', min: 0.0001, max: 0.05,  step: 0.0001 },
-    horizon_radius: { label: 'Horizon Radius', type: 'float', min: 0.0,    max: 0.5,   step: 0.005  },
-    softening:      { label: 'Softening',      type: 'float', min: 0.0,    max: 0.01,  step: 0.0001 },
+    einstein_radius: { label: 'Einstein Radius',   type: 'float', min: 0.01,   max: 0.6,   step: 0.005  },
+    strength:        { label: 'Strength',           type: 'float', min: 0.0001, max: 0.05,  step: 0.0001 },
+    horizon_radius:  { label: 'Horizon Radius',     type: 'float', min: 0.0,    max: 0.3,   step: 0.005  },
+    softening:       { label: 'Softening',          type: 'float', min: 0.0,    max: 0.01,  step: 0.0001 },
+    spin:            { label: 'Spin (Kerr)',         type: 'float', min: -1.0,   max: 1.0,   step: 0.01   },
+    redshift_power:  { label: 'Redshift Power',     type: 'float', min: 0.0,    max: 6.0,   step: 0.1    },
+    photon_width:    { label: 'Photon Ring Width',  type: 'float', min: 0.0,    max: 0.05,  step: 0.001  },
     aspect_correct: { label: 'Aspect Correct', type: 'select', options: [
       { value: 'yes', label: 'Yes (circular lens)' },
       { value: 'no',  label: 'No (square space)'   },
@@ -667,42 +678,57 @@ export const GravitationalLensNode: NodeDefinition = {
     const lensCenterVar = inputVars.lens_center  ?? 'vec2(0.0)';
     const timeVar       = inputVars.time         ?? '0.0';
 
-    const lensType     = (node.params.lens_type     as string)  ?? 'gravity';
-    const strength     = f(typeof node.params.strength      === 'number' ? node.params.strength      : 0.002);
-    const horizonRadius = f(typeof node.params.horizon_radius === 'number' ? node.params.horizon_radius : 0.083);
-    const softening    = f(typeof node.params.softening     === 'number' ? node.params.softening     : 0.0001);
-    const aspectCorr   = (node.params.aspect_correct as string) ?? 'yes';
-    const rippleFreq   = f(typeof node.params.ripple_freq   === 'number' ? node.params.ripple_freq   : 20.0);
-    const rippleSpeed  = f(typeof node.params.ripple_speed  === 'number' ? node.params.ripple_speed  : 2.0);
+    const lensType      = (node.params.lens_type      as string) ?? 'gravity';
+    const strength      = f(typeof node.params.strength       === 'number' ? node.params.strength       : 0.002);
+    const einsteinR     = f(typeof node.params.einstein_radius === 'number' ? node.params.einstein_radius : 0.12);
+    const horizonRadius = f(typeof node.params.horizon_radius  === 'number' ? node.params.horizon_radius  : 0.05);
+    const softening     = f(typeof node.params.softening      === 'number' ? node.params.softening      : 0.0001);
+    const aspectCorr    = (node.params.aspect_correct as string) ?? 'yes';
+    const rippleFreq    = f(typeof node.params.ripple_freq    === 'number' ? node.params.ripple_freq    : 20.0);
+    const rippleSpeed   = f(typeof node.params.ripple_speed   === 'number' ? node.params.ripple_speed   : 2.0);
+    const spin          = f(typeof node.params.spin           === 'number' ? node.params.spin           : 0.0);
+    const redshiftPow   = f(typeof node.params.redshift_power === 'number' ? node.params.redshift_power : 2.0);
+    const photonWidth   = f(typeof node.params.photon_width   === 'number' ? node.params.photon_width   : 0.008);
 
-    // Per-mode warp expression (compile-time select — no GLSL branching needed)
+    // Kerr frame-dragging: rotate displacement direction by spin * time
+    const spinVal = typeof node.params.spin === 'number' ? node.params.spin : 0;
+    const kerrLine = Math.abs(spinVal) > 0.001
+      ? `    float ${id}_kerrA = ${spin} * ${timeVar} * 0.5;\n` +
+        `    ${id}_offset = vec2(${id}_offset.x*cos(${id}_kerrA) - ${id}_offset.y*sin(${id}_kerrA),\n` +
+        `                        ${id}_offset.x*sin(${id}_kerrA) + ${id}_offset.y*cos(${id}_kerrA));\n`
+      : '';
+
+    // Per-mode warp expression
     let warpExpr: string;
     if (lensType === 'fisheye') {
-      // tanh-based barrel: compress space toward lens center
-      // displacement = dir * (tanh(dist * k) / dist - 1) * scale
-      // k = 10 gives a reasonable barrel; scale it by strength * 5
       const scale = f(typeof node.params.strength === 'number' ? node.params.strength * 5.0 : 0.01);
       warpExpr = `${id}_dir * (tanh(${id}_dist * 10.0) / max(${id}_dist, 0.00001) - 1.0) * ${scale}`;
     } else if (lensType === 'ripple') {
-      // Radial sine wave: dir * sin(dist * freq - time * speed) * strength
       warpExpr = `${id}_dir * sin(${id}_dist * ${rippleFreq} - ${timeVar} * ${rippleSpeed}) * ${strength}`;
     } else {
-      // gravity (default): inverse-square falloff with softening
-      warpExpr = `${id}_dir * (${strength} / (${id}_dist * ${id}_dist + ${softening}))`;
+      // Gravity: deflection scaled by Einstein radius² → intuitive sizing
+      warpExpr = `${id}_dir * (${strength} * ${einsteinR} * ${einsteinR} / (${id}_dist * ${id}_dist + ${softening}))`;
     }
 
     const aspectLine = aspectCorr === 'yes'
       ? `    ${id}_offset.x *= u_resolution.x / u_resolution.y;\n`
       : '';
 
+    // Photon sphere ≈ 1.5× Schwarzschild radius
+    const horizonVal = typeof node.params.horizon_radius === 'number' ? node.params.horizon_radius : 0.05;
+    const photonR = f(horizonVal * 1.5);
+
     const code = [
       `    // Gravitational Lens (${lensType})\n`,
       `    vec2 ${id}_offset = ${lensCenterVar} - ${uvVar};\n`,
       aspectLine,
+      kerrLine,
       `    float ${id}_dist = length(${id}_offset);\n`,
       `    vec2  ${id}_dir  = ${id}_offset / max(${id}_dist, 0.00001);\n`,
       `    vec2  ${id}_uv_lensed = ${uvVar} + (${warpExpr});\n`,
       `    float ${id}_horizon_mask = step(${horizonRadius}, ${id}_dist);\n`,
+      `    float ${id}_redshift = 1.0 - exp(-pow(max(${id}_dist - ${horizonRadius}, 0.0) / max(${einsteinR}, 0.0001), ${redshiftPow}));\n`,
+      `    float ${id}_photon_ring = ${photonWidth} > 0.0001 ? smoothstep(0.0, 1.0, 1.0 - abs(${id}_dist - ${photonR}) / ${photonWidth}) : 0.0;\n`,
     ].join('');
 
     return {
@@ -711,7 +737,62 @@ export const GravitationalLensNode: NodeDefinition = {
         uv_lensed:    `${id}_uv_lensed`,
         horizon_mask: `${id}_horizon_mask`,
         dist:         `${id}_dist`,
+        redshift:     `${id}_redshift`,
+        photon_ring:  `${id}_photon_ring`,
       },
+    };
+  },
+};
+
+// ─── Float Warp ───────────────────────────────────────────────────────────────
+// A single-float expression node. Wire any float in as `value`, optionally wire
+// `a`, `b`, `c` for extra parameters, write a one-liner to transform it.
+// Perfect for time remapping: sin(value), abs(fract(value*2.0)-0.5)*2.0, etc.
+
+export const FloatWarpNode: NodeDefinition = {
+  type: 'floatWarp',
+  label: 'Float Warp',
+  category: 'Effects',
+  description: 'Transform a single float with a one-line GLSL expression. Use "value" for the input. Wire a, b, c for extra params. Intensity blends between the original value (0) and the expression result (1). Great for time remapping, oscillation, ping-pong, etc.',
+  inputs: {
+    value:     { type: 'float', label: 'Value' },
+    a:         { type: 'float', label: 'A' },
+    b:         { type: 'float', label: 'B' },
+    c:         { type: 'float', label: 'C' },
+    intensity: { type: 'float', label: 'Intensity' },
+  },
+  outputs: {
+    result: { type: 'float', label: 'Result' },
+  },
+  defaultParams: { expr: 'sin(value)', intensity: 1.0 },
+  paramDefs: {
+    expr:      { label: 'Expression', type: 'string' },
+    intensity: { label: 'Intensity',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id     = node.id;
+    const outVar = `${id}_result`;
+    let expr = (node.params.expr as string) || 'value';
+    const valueVar = inputVars.value || '0.0';
+    const subs: Record<string, string> = {
+      value: valueVar,
+      a:     inputVars.a || '0.0',
+      b:     inputVars.b || '0.0',
+      c:     inputVars.c || '0.0',
+    };
+    for (const [name, glslVar] of Object.entries(subs)) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      expr = expr.replace(new RegExp(`\\b${escaped}\\b`, 'g'), glslVar);
+    }
+    const intensityParam = typeof node.params.intensity === 'number' ? node.params.intensity : 1.0;
+    const intensityVar   = inputVars.intensity || f(intensityParam);
+    // Blend: mix(original_value, expr_result, intensity) — dial intensity for A/B
+    return {
+      code: [
+        `    float ${id}_warped = ${expr};\n`,
+        `    float ${outVar} = mix(${valueVar}, ${id}_warped, clamp(${intensityVar}, 0.0, 1.0));\n`,
+      ].join(''),
+      outputVars: { result: outVar },
     };
   },
 };

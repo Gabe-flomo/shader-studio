@@ -270,7 +270,7 @@ float ffAngle(vec2 p, float scale, float quant, int mode) {
 export const FlowFieldNode: NodeDefinition = {
   type: 'flowField',
   label: 'Flow Field',
-  category: 'Noise',
+  category: 'Presets',
   description: 'Tyler Hobbs-style flow field — curves march step-by-step through a grid of noise-derived angles. field_mode: perlin (smooth), curl (swirling loops), quantized (rocky angular). Adjust curves, steps, and line_width for fur → long fluid strokes.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'   },
@@ -405,7 +405,7 @@ export const FlowFieldNode: NodeDefinition = {
 export const CirclePackNode: NodeDefinition = {
   type: 'circlePack',
   label: 'Circle Pack',
-  category: 'Noise',
+  category: 'Presets',
   description: 'Tyler Hobbs-style brute-force circle packing. Hash-placed circles with collision avoidance. circle_mode: flat, gradient (radial falloff), ring (stroke), or noise-filled. Great as a standalone design or as starting positions for a Flow Field.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },

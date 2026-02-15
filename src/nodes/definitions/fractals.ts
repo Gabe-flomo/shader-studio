@@ -47,7 +47,7 @@ const MANDELBROT_GLSL = FRACTAL_GLSL_HELPERS + '\n' + PALETTE_GLSL_FN;
 export const MandelbrotNode: NodeDefinition = {
   type: 'mandelbrot',
   label: 'Mandelbrot / Julia',
-  category: 'Noise',
+  category: 'Presets',
   description: [
     'Generalized Mandelbrot (z^k + c) or Julia set. ',
     'Smooth coloring via IQ log/log formula. ',
@@ -340,7 +340,7 @@ const IFS_GLSL = IFS_HELPERS + '\n' + FERN_TRANSFORMS + '\n'
 export const IFSNode: NodeDefinition = {
   type: 'ifs',
   label: 'IFS Fractal',
-  category: 'Noise',
+  category: 'Presets',
   description: [
     'Iterated Function System fractal via chaos game simulation. ',
     'Presets: Sierpinski triangle, Barnsley Fern, Koch, Dragon curve. ',

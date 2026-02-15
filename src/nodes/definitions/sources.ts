@@ -85,8 +85,10 @@ export const ConstantNode: NodeDefinition = {
   type: 'constant',
   label: 'Constant',
   category: 'Sources',
-  description: 'A constant float value',
-  inputs: {},
+  description: 'A constant float value — wire an input to override the slider',
+  inputs: {
+    value: { type: 'float', label: 'Value' },
+  },
   outputs: {
     value: { type: 'float', label: 'Value' },
   },
@@ -94,9 +96,9 @@ export const ConstantNode: NodeDefinition = {
   paramDefs: {
     value: { label: 'Value', type: 'float', step: 0.01 },
   },
-  generateGLSL: (node: GraphNode) => {
+  generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_value`;
-    const val = f(typeof node.params.value === 'number' ? node.params.value : 1.0);
+    const val = inputVars.value || f(typeof node.params.value === 'number' ? node.params.value : 1.0);
     return {
       code: `    float ${outVar} = ${val};\n`,
       outputVars: { value: outVar },

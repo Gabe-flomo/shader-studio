@@ -2,19 +2,66 @@ import { useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
+import type { NodeDefinition } from '../../types/nodeGraph';
+
+// ── Math node ordering: simple → complex ──────────────────────────────────────
+const MATH_ORDER: string[] = [
+  // Arithmetic
+  'add', 'subtract', 'multiply', 'divide',
+  // Trig
+  'sin', 'cos',
+  // Rounding / stepping
+  'abs', 'negate', 'ceil', 'floor', 'round', 'fract',
+  // Algebra
+  'pow', 'sqrt', 'exp',
+  // Interpolation / clamping
+  'clamp', 'mix', 'smoothstep', 'mod',
+  // Comparison
+  'min', 'max',
+  // Hyperbolic
+  'tanh',
+  // Angle
+  'atan2',
+  // Length / dot
+  'length', 'dot',
+  // Vec2 ops
+  'makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2',
+  // Vec3 ops
+  'makeVec3', 'floatToVec3', 'multiplyVec3', 'addVec3',
+];
+
+function sortMathNodes(nodes: NodeDefinition[]): NodeDefinition[] {
+  const indexMap = new Map(MATH_ORDER.map((id, i) => [id, i]));
+  return [...nodes].sort((a, b) => {
+    const ia = indexMap.get(a.type) ?? 999;
+    const ib = indexMap.get(b.type) ?? 999;
+    return ia - ib;
+  });
+}
 
 // Category accent colors
 const CATEGORY_COLORS: Record<string, string> = {
-  Sources:       '#89b4fa',
-  Transforms:    '#a6e3a1',
-  '2D Primitives': '#f9e2af',
-  Combiners:     '#cba6f7',
-  Effects:       '#f38ba8',
-  Color:         '#fab387',
-  Output:        '#94e2d5',
-  Math:          '#b4befe',
-  SDF:           '#f5c2e7',
+  Sources:         '#89b4fa',  // blue
+  Transforms:      '#a6e3a1',  // green
+  Math:            '#b4befe',  // lavender
+  Color:           '#fab387',  // orange
+  Noise:           '#74c7ec',  // sky blue
+  Effects:         '#f38ba8',  // pink
+  '2D Primitives': '#f9e2af',  // yellow
+  SDF:             '#f5c2e7',  // light pink
+  Combiners:       '#cba6f7',  // purple
+  Spaces:          '#f2cdcd',  // rose — UV space warp nodes
+  Science:         '#94e2d5',  // teal
+  Presets:         '#f9e2af',  // warm gold — these are the complex self-contained nodes
+  Output:          '#94e2d5',  // teal
 };
+
+// Preferred display order for categories (unlisted categories fall at the end alphabetically)
+const CATEGORY_ORDER = [
+  'Sources', 'Spaces', 'Transforms', 'Math', 'Color', 'Noise',
+  'Effects', '2D Primitives', 'SDF', 'Combiners',
+  'Science', 'Presets', 'Output',
+];
 
 // ─── CustomFn presets ─────────────────────────────────────────────────────────
 
@@ -110,30 +157,6 @@ const CUSTOMFN_PRESETS: CustomFnPreset[] = [
   },
 ];
 
-// ─── Quick-add buttons for new nodes ──────────────────────────────────────────
-
-interface QuickNode { label: string; type: string; desc?: string; }
-const QUICK_NODES: QuickNode[] = [
-  { label: 'Raymarch 3D',       type: 'raymarch3d',         desc: '3D raymarcher: sphere/box/torus/repeat scene, camera orbit, Phong lighting, fog, AO' },
-  { label: 'Volume Clouds',     type: 'volumeClouds',       desc: 'Volumetric sunset cloud slab via raymarching + turbulence density field' },
-  { label: 'Chromatic Aberr.', type: 'chromaticAberration', desc: 'RGB channel split: radial/horizontal/barrel distortion. Outputs 3 offset UVs.' },
-  { label: 'Combine RGB',       type: 'combineRGB',         desc: 'Merge 3 separate float/vec3 channels into a single vec3 color' },
-  { label: 'Gravity Lens',      type: 'gravitationalLens',  desc: 'Gravitational / black-hole lens warp. Outputs lensed UV — wire to any shader input. Wire Mouse → lens_center for interactive lensing.' },
-  { label: 'Mandelbrot/Julia', type: 'mandelbrot', desc: 'Generalized Mandelbrot or Julia set with smooth coloring, distance estimation + orbit traps' },
-  { label: 'IFS Fractal',      type: 'ifs',        desc: 'Iterated Function System: Sierpinski, Barnsley Fern, Dragon, Koch' },
-  { label: 'Mouse',         type: 'mouse',        desc: 'Mouse position as UV + X + Y'   },
-  { label: 'Gradient',      type: 'gradient',     desc: 'Linear / Radial / Angular blend' },
-  { label: 'Flow Field',    type: 'flowField',    desc: 'Fake GLSL particle flow field'  },
-  { label: 'FBM',           type: 'fbm',          desc: 'Fractal Brownian Motion noise'  },
-  { label: 'Voronoi',       type: 'voronoi',      desc: 'Cell/Worley noise'              },
-  { label: 'Domain Warp',   type: 'domainWarp',   desc: 'UV warping via layered noise'   },
-  { label: 'Simple SDF',    type: 'simpleSDF',    desc: 'Circle / Box / Ring SDF'        },
-  { label: 'Shape SDF',     type: 'shapeSDF',     desc: 'Multi-shape SDF (dropdown)'     },
-  { label: 'Palette Preset',type: 'palettePreset',desc: 'Cosine palette with named presets' },
-  { label: 'Tone Map',      type: 'toneMap',      desc: 'ACES / Hable / Unreal / Tanh'  },
-  { label: 'Grain',         type: 'grain',        desc: 'Film grain post-process'        },
-  { label: 'Light',         type: 'light',        desc: 'Glow / Ring / Simple light'     },
-];
 
 interface NodePaletteProps {
   /** 'full' = normal left sidebar; 'drawer' = fills container (used in mobile bottom sheet) */
@@ -144,13 +167,18 @@ interface NodePaletteProps {
 
 export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   const { addNode } = useNodeGraphStore();
-  const categories = getAllCategories();
+  // Sort categories by preferred order; unknown categories appended alphabetically
+  const rawCategories = getAllCategories();
+  const categories = [
+    ...CATEGORY_ORDER.filter(c => rawCategories.includes(c)),
+    ...rawCategories.filter(c => !CATEGORY_ORDER.includes(c)).sort(),
+  ];
 
   // Search query
   const [query, setQuery] = useState('');
 
-  // Which categories are expanded (accordion). Default: Sources + Effects open.
-  const [open, setOpen] = useState<Set<string>>(new Set(['Sources', 'Effects']));
+  // Which categories are expanded (accordion). Default: Sources + Math open.
+  const [open, setOpen] = useState<Set<string>>(new Set(['Sources', 'Math']));
 
   // Import GLSL modal
   const [showImport, setShowImport] = useState(false);
@@ -217,6 +245,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
         // In full mode: fixed sidebar. In drawer mode: fill the parent container.
         width:    isDrawer ? '100%'    : '210px',
         minWidth: isDrawer ? undefined : '210px',
+        height:   isDrawer ? undefined : '100%',
         background: '#1e1e2e',
         color: '#cdd6f4',
         padding: isDrawer ? '4px 12px 20px' : '10px 8px',
@@ -227,6 +256,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
         gap: '4px',
         flex: isDrawer ? 1 : undefined,
         minHeight: 0,
+        boxSizing: 'border-box',
       }}
     >
       {/* Title */}
@@ -268,7 +298,8 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
         categories.map(category => {
           const isOpen  = open.has(category);
           const color   = CATEGORY_COLORS[category] ?? '#888';
-          const nodes   = getNodesByCategory(category);
+          const rawNodes = getNodesByCategory(category);
+          const nodes   = category === 'Math' ? sortMathNodes(rawNodes) : rawNodes;
           return (
             <div key={category} style={{ marginBottom: '2px' }}>
               {/* Category header toggle */}
@@ -354,38 +385,6 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
         </div>
       )}
 
-      {/* ── New Nodes Quick-Add ── */}
-      {!isSearching && (
-        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{
-            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: '#f38ba8',
-            paddingLeft: '4px', marginBottom: '4px',
-          }}>
-            New
-          </div>
-          {QUICK_NODES.map(qn => (
-            <button
-              key={qn.type}
-              onClick={() => handleAdd(qn.type)}
-              title={qn.desc}
-              style={{
-                display: 'block', width: '100%',
-                padding: '5px 10px', marginBottom: '2px',
-                background: '#2a1a2a',
-                border: '1px solid #f38ba833',
-                color: '#f38ba8', cursor: 'pointer',
-                textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#3a2030')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#2a1a2a')}
-            >
-              {qn.label}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* ── Import GLSL button ── */}
       <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>

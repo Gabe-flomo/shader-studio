@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
@@ -86,6 +86,27 @@ const EXPR_PRESETS: ExprPreset[] = [
   { label: 'Ripple',        outputType: 'float', inputNames: ['d', 't'],     expr: 'sin(d * 10.0 - t * 3.0) * 0.5 + 0.5' },
 ];
 
+// Presets specifically for FloatWarp — float-only, use value/a/b/c socket names only
+interface FloatWarpPreset {
+  label: string;
+  expr:  string;
+  hint?: string;
+}
+const FLOAT_WARP_PRESETS: FloatWarpPreset[] = [
+  { label: 'Sine',         expr: 'sin(value)',                                   hint: 'Oscillate' },
+  { label: 'Abs Sine',     expr: 'abs(sin(value))',                              hint: 'Always positive bounce' },
+  { label: 'Ping-Pong',    expr: 'abs(fract(value * a) * 2.0 - 1.0)',           hint: 'a = speed' },
+  { label: 'Slow Down',    expr: 'value * a',                                    hint: 'a = scale (try 0.25)' },
+  { label: 'Ease In-Out',  expr: 'smoothstep(0.0, 1.0, fract(value * a))',      hint: 'a = cycles/sec' },
+  { label: 'Step',         expr: 'floor(value * a) / a',                        hint: 'a = steps' },
+  { label: 'Sawtooth',     expr: 'fract(value * a)',                             hint: 'a = freq' },
+  { label: 'Square Wave',  expr: 'step(0.5, fract(value * a))',                 hint: 'a = freq' },
+  { label: 'Exponential',  expr: 'pow(max(value, 0.0), a)',                     hint: 'a = exponent' },
+  { label: 'Ripple',       expr: 'sin(value * a - b * 3.0) * 0.5 + 0.5',       hint: 'a = freq, b = time' },
+  { label: 'Remap',        expr: 'value * (b - a) + a',                         hint: 'remap [0,1] → [a,b]' },
+  { label: 'Clamp',        expr: 'clamp(value, a, b)',                          hint: 'clamp to [a,b]' },
+];
+
 // Group entries
 const GROUPS = Array.from(new Set(GLSL_PALETTE.map(e => e.group)));
 
@@ -123,10 +144,55 @@ const SECTION_LABEL: React.CSSProperties = {
 
 export function ExprModal({ node, onClose }: Props) {
   const { updateNodeParams, disconnectInput } = useNodeGraphStore();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [autoWrap, setAutoWrap] = useState(false);
 
-  const expr       = typeof node.params.expr === 'string' ? node.params.expr : '';
-  const outputType = typeof node.params.outputType === 'string' ? node.params.outputType : 'float';
+  // FloatWarp has fixed socket names (value, a, b, c) — skip the in0–in3 UI
+  const isFloatWarp = node.type === 'floatWarp';
+  const expr        = typeof node.params.expr === 'string' ? node.params.expr : '';
+  const outputType  = typeof node.params.outputType === 'string' ? node.params.outputType : 'float';
+
+  // ── Undo / Redo history ────────────────────────────────────────────────────
+  // Stored as a ref so mutations don't cause re-renders; we only re-render when
+  // the index changes (which drives button disabled state).
+  const history      = useRef<string[]>([expr]);
+  const historyIndex = useRef<number>(0);
+  const [historyPos, setHistoryPos] = useState(0); // mirrors historyIndex for react state
+
+  // Push a new snapshot — call this every time expr changes from a button/preset.
+  // Typing in the textarea is handled separately (on blur / debounced).
+  const pushHistory = (newExpr: string) => {
+    // Drop any redo-future when a new change is made
+    const trimmed = history.current.slice(0, historyIndex.current + 1);
+    trimmed.push(newExpr);
+    history.current    = trimmed;
+    historyIndex.current = trimmed.length - 1;
+    setHistoryPos(historyIndex.current);
+  };
+
+  const commitExpr = (newExpr: string) => {
+    updateNodeParams(node.id, { expr: newExpr });
+    pushHistory(newExpr);
+  };
+
+  const undo = () => {
+    if (historyIndex.current <= 0) return;
+    historyIndex.current -= 1;
+    setHistoryPos(historyIndex.current);
+    updateNodeParams(node.id, { expr: history.current[historyIndex.current] });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const redo = () => {
+    if (historyIndex.current >= history.current.length - 1) return;
+    historyIndex.current += 1;
+    setHistoryPos(historyIndex.current);
+    updateNodeParams(node.id, { expr: history.current[historyIndex.current] });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const canUndo = historyPos > 0;
+  const canRedo = historyPos < history.current.length - 1;
 
   // Apply a preset — sets expr, outputType, and all input slot names at once
   const applyPreset = (preset: ExprPreset) => {
@@ -139,24 +205,78 @@ export function ExprModal({ node, onClose }: Props) {
       in2Name: preset.inputNames[2] ?? slotDefaults[2],
       in3Name: preset.inputNames[3] ?? slotDefaults[3],
     });
+    pushHistory(preset.expr);
   };
 
-  // Insert text at cursor position in textarea, falling back to append
+  // Apply a FloatWarp preset — only updates expr, socket names are fixed (value/a/b/c)
+  const applyFloatWarpPreset = (preset: FloatWarpPreset) => {
+    updateNodeParams(node.id, { expr: preset.expr });
+    pushHistory(preset.expr);
+  };
+
+  // Insert text at cursor — with selection-wrapping and auto-wrap support.
+  // • autoWrap ON  + text has "(": wraps the entire current expression as the first arg.
+  // • Selection present + text has "(": wraps the selected text as the first arg.
+  // • Otherwise: plain insert/replace at cursor (existing behaviour).
   const insertAtCursor = (text: string) => {
-    const ta = textareaRef.current;
-    if (!ta) {
-      updateNodeParams(node.id, { expr: expr + text });
-      return;
+    const ta    = textareaRef.current;
+    const start = ta?.selectionStart ?? expr.length;
+    const end   = ta?.selectionEnd   ?? expr.length;
+
+    const hasParen    = text.includes('(');
+    const hasSelection = start !== end;
+    const selectedText = hasSelection ? expr.slice(start, end) : '';
+
+    // Helper: put `inner` as the first argument of a function insert like "sin()" or "pow(, )"
+    const wrapFirst = (fnInsert: string, inner: string): string => {
+      // Find the opening paren and insert `inner` right after it
+      const parenIdx = fnInsert.indexOf('(');
+      return fnInsert.slice(0, parenIdx + 1) + inner + fnInsert.slice(parenIdx + 1);
+    };
+
+    let newExpr: string;
+    let cursorPos: number;
+
+    if (autoWrap && hasParen) {
+      // Wrap the entire current expression as the first arg
+      const wrapped = wrapFirst(text, expr);
+      newExpr   = wrapped;
+      cursorPos = wrapped.length;
+    } else if (hasSelection && hasParen) {
+      // Wrap the selected region as the first arg, replace the selection
+      const wrapped = wrapFirst(text, selectedText);
+      newExpr   = expr.slice(0, start) + wrapped + expr.slice(end);
+      cursorPos = start + wrapped.length;
+    } else {
+      // Plain insert at cursor (original behaviour)
+      newExpr   = expr.slice(0, start) + text + expr.slice(end);
+      cursorPos = start + text.length;
     }
-    const start = ta.selectionStart ?? expr.length;
-    const end   = ta.selectionEnd   ?? expr.length;
-    const newExpr = expr.slice(0, start) + text + expr.slice(end);
-    updateNodeParams(node.id, { expr: newExpr });
+
+    commitExpr(newExpr);
     // Restore focus + cursor after React re-render
     requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + text.length, start + text.length);
+      ta?.focus();
+      ta?.setSelectionRange(cursorPos, cursorPos);
     });
+  };
+
+  // Handle Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z inside the textarea
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) redo(); else undo();
+    } else if (mod && e.key === 'y') {
+      e.preventDefault();
+      redo();
+    }
+  };
+
+  // Push a history snapshot when the user finishes typing (on blur)
+  const handleTextareaBlur = () => {
+    const current = history.current[historyIndex.current];
+    if (expr !== current) pushHistory(expr);
   };
 
   return (
@@ -202,79 +322,145 @@ export function ExprModal({ node, onClose }: Props) {
         {/* Presets */}
         <div style={{ ...(SECTION_LABEL as React.CSSProperties), color: '#94e2d5' }}>Presets</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
-          {EXPR_PRESETS.map(preset => (
-            <button
-              key={preset.label}
-              onClick={() => applyPreset(preset)}
-              title={`${preset.outputType}: ${preset.expr}`}
-              style={{
-                ...BTN,
-                color: '#94e2d5',
-                borderColor: '#94e2d533',
-                background: '#1e3a3a',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2a4a4a'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1e3a3a'; }}
-            >
-              {preset.label}
-            </button>
-          ))}
+          {isFloatWarp
+            ? FLOAT_WARP_PRESETS.map(preset => (
+                <button
+                  key={preset.label}
+                  onClick={() => applyFloatWarpPreset(preset)}
+                  title={preset.hint ? `${preset.hint} — ${preset.expr}` : preset.expr}
+                  style={{
+                    ...BTN,
+                    color: '#94e2d5',
+                    borderColor: '#94e2d533',
+                    background: '#1e3a3a',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2a4a4a'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1e3a3a'; }}
+                >
+                  {preset.label}
+                </button>
+              ))
+            : EXPR_PRESETS.map(preset => (
+                <button
+                  key={preset.label}
+                  onClick={() => applyPreset(preset)}
+                  title={`${preset.outputType}: ${preset.expr}`}
+                  style={{
+                    ...BTN,
+                    color: '#94e2d5',
+                    borderColor: '#94e2d533',
+                    background: '#1e3a3a',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2a4a4a'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1e3a3a'; }}
+                >
+                  {preset.label}
+                </button>
+              ))
+          }
         </div>
 
         {/* Inputs */}
         <div style={SECTION_LABEL as React.CSSProperties}>Inputs</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-          {[0, 1, 2, 3].map(i => {
-            const slotKey     = `in${i}`;
-            const nameKey     = `in${i}Name`;
-            const input       = node.inputs[slotKey];
-            const isConnected = !!input?.connection;
-            const name        = typeof node.params[nameKey] === 'string' ? (node.params[nameKey] as string) : slotKey;
-            return (
-              <div
-                key={i}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  background: '#181825', border: '1px solid #313244',
-                  borderRadius: '5px', padding: '4px 8px',
-                }}
-              >
-                <div
-                  style={{
-                    width: '8px', height: '8px', borderRadius: '50%',
-                    background: isConnected ? (TYPE_COLORS[input?.type ?? 'float'] || '#888') : '#444',
-                    border: `2px solid ${TYPE_COLORS[input?.type ?? 'float'] || '#888'}`,
-                    cursor: isConnected ? 'pointer' : 'default', flexShrink: 0,
-                  }}
-                  title={isConnected ? 'Click to disconnect' : 'Not wired'}
-                  onClick={() => { if (isConnected) disconnectInput(node.id, slotKey); }}
-                />
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => updateNodeParams(node.id, { [nameKey]: e.target.value })}
-                  spellCheck={false}
-                  style={{
-                    background: 'transparent', border: 'none',
-                    borderBottom: '1px solid #313244',
-                    color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace',
-                    outline: 'none', width: '60px', padding: '0 2px',
-                  }}
-                />
-                <span style={{ fontSize: '10px', color: '#585b70' }}>{input?.type ?? 'float'}</span>
-                <button
-                  onClick={() => insertAtCursor(name)}
-                  title={`Insert "${name}" into expression`}
-                  style={{ ...BTN, padding: '1px 5px', fontSize: '10px', background: '#313244' }}
-                >
-                  ↵
-                </button>
-              </div>
-            );
-          })}
+          {isFloatWarp
+            // FloatWarp: fixed named sockets — show them as insert buttons with connection status
+            // 'intensity' is shown but not insertable (it's a blend knob, not part of the expr)
+            ? (['value', 'a', 'b', 'c', 'intensity'] as const).map(name => {
+                const input          = node.inputs[name];
+                const isConnected    = !!input?.connection;
+                const isIntensity    = name === 'intensity';
+                return (
+                  <div
+                    key={name}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      background: '#181825', border: '1px solid #313244',
+                      borderRadius: '5px', padding: '4px 8px',
+                      opacity: isIntensity ? 0.7 : 1,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '8px', height: '8px', borderRadius: '50%',
+                        background: isConnected ? '#f0a' : '#444',
+                        border: '2px solid #f0a',
+                        cursor: isConnected ? 'pointer' : 'default', flexShrink: 0,
+                      }}
+                      title={isConnected ? 'Click to disconnect' : 'Not wired'}
+                      onClick={() => { if (isConnected) disconnectInput(node.id, name); }}
+                    />
+                    <span style={{ color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace' }}>{name}</span>
+                    <span style={{ fontSize: '10px', color: '#585b70' }}>float</span>
+                    {isIntensity
+                      ? <span style={{ fontSize: '10px', color: '#585b70', fontStyle: 'italic' }}>blend knob</span>
+                      : (
+                        <button
+                          onClick={() => insertAtCursor(name)}
+                          title={`Insert "${name}" into expression`}
+                          style={{ ...BTN, padding: '1px 5px', fontSize: '10px', background: '#313244' }}
+                        >
+                          ↵
+                        </button>
+                      )
+                    }
+                  </div>
+                );
+              })
+            // Expr node: in0–in3 with editable names
+            : [0, 1, 2, 3].map(i => {
+                const slotKey     = `in${i}`;
+                const nameKey     = `in${i}Name`;
+                const input       = node.inputs[slotKey];
+                const isConnected = !!input?.connection;
+                const name        = typeof node.params[nameKey] === 'string' ? (node.params[nameKey] as string) : slotKey;
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      background: '#181825', border: '1px solid #313244',
+                      borderRadius: '5px', padding: '4px 8px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '8px', height: '8px', borderRadius: '50%',
+                        background: isConnected ? (TYPE_COLORS[input?.type ?? 'float'] || '#888') : '#444',
+                        border: `2px solid ${TYPE_COLORS[input?.type ?? 'float'] || '#888'}`,
+                        cursor: isConnected ? 'pointer' : 'default', flexShrink: 0,
+                      }}
+                      title={isConnected ? 'Click to disconnect' : 'Not wired'}
+                      onClick={() => { if (isConnected) disconnectInput(node.id, slotKey); }}
+                    />
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={e => updateNodeParams(node.id, { [nameKey]: e.target.value })}
+                      spellCheck={false}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        borderBottom: '1px solid #313244',
+                        color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace',
+                        outline: 'none', width: '60px', padding: '0 2px',
+                      }}
+                    />
+                    <span style={{ fontSize: '10px', color: '#585b70' }}>{input?.type ?? 'float'}</span>
+                    <button
+                      onClick={() => insertAtCursor(name)}
+                      title={`Insert "${name}" into expression`}
+                      style={{ ...BTN, padding: '1px 5px', fontSize: '10px', background: '#313244' }}
+                    >
+                      ↵
+                    </button>
+                  </div>
+                );
+              })
+          }
         </div>
 
-        {/* Output type */}
+        {/* Output type — hidden for FloatWarp (always float) */}
+        {!isFloatWarp && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
           <span style={{ color: '#6c7086', fontSize: '11px' }}>Output type</span>
           <select
@@ -291,13 +477,69 @@ export function ExprModal({ node, onClose }: Props) {
             ))}
           </select>
         </div>
+        )}
 
         {/* Expression textarea */}
-        <div style={SECTION_LABEL as React.CSSProperties}>Expression</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+          <span style={{ ...(SECTION_LABEL as React.CSSProperties), margin: 0 }}>Expression</span>
+
+          {/* Undo */}
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (Cmd/Ctrl+Z)"
+            style={{
+              ...BTN,
+              padding: '2px 7px',
+              fontSize: '12px',
+              opacity: canUndo ? 1 : 0.35,
+              cursor: canUndo ? 'pointer' : 'default',
+            }}
+          >
+            ↩
+          </button>
+
+          {/* Redo */}
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Cmd/Ctrl+Shift+Z)"
+            style={{
+              ...BTN,
+              padding: '2px 7px',
+              fontSize: '12px',
+              opacity: canRedo ? 1 : 0.35,
+              cursor: canRedo ? 'pointer' : 'default',
+            }}
+          >
+            ↪
+          </button>
+
+          {/* Auto-wrap toggle */}
+          <button
+            onClick={() => setAutoWrap(v => !v)}
+            title={autoWrap
+              ? 'Auto-wrap ON — clicking a function wraps the entire expression as its first argument. Click to toggle off.'
+              : 'Auto-wrap OFF — clicking a function while text is selected wraps just the selection. Click to toggle on.'}
+            style={{
+              ...BTN,
+              padding: '2px 8px',
+              fontSize: '10px',
+              background: autoWrap ? '#45475a' : '#313244',
+              color: autoWrap ? '#cba6f7' : '#585b70',
+              border: `1px solid ${autoWrap ? '#cba6f7' : '#45475a'}`,
+              transition: 'all 0.15s',
+            }}
+          >
+            ⊂ auto-wrap {autoWrap ? 'ON' : 'OFF'}
+          </button>
+        </div>
         <textarea
           ref={textareaRef}
           value={expr}
           onChange={e => updateNodeParams(node.id, { expr: e.target.value })}
+          onBlur={handleTextareaBlur}
+          onKeyDown={handleTextareaKeyDown}
           spellCheck={false}
           rows={4}
           style={{

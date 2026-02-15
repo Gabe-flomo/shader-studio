@@ -111,7 +111,7 @@ function rmPalVec(v: number[]): string {
 export const RaymarchNode: NodeDefinition = {
   type: 'raymarch3d',
   label: 'Raymarch 3D',
-  category: 'Effects',
+  category: 'Presets',
   description: [
     '3D raymarcher with configurable scene, camera, and lighting. ',
     'Scene: sphere, box, torus, or repeat+blend. ',
@@ -368,7 +368,7 @@ const VOLUME_CLOUDS_GLSL = CLOUD_GLSL + CAMERA3D_GLSL;
 export const VolumeCloudsNode: NodeDefinition = {
   type: 'volumeClouds',
   label: 'Volume Clouds',
-  category: 'Effects',
+  category: 'Presets',
   description: [
     'Volumetric cloud slab via raymarching + turbulence density field. ',
     'Inspired by XorDev\'s sunset shader. ',
@@ -785,7 +785,7 @@ mat3 orbital3dCam(vec3 ro, vec3 ta) {
 export const OrbitalVolume3DNode: NodeDefinition = {
   type: 'orbitalVolume3d',
   label: 'Orbital 3D',
-  category: '3D',
+  category: 'Science',
   description: 'Volumetric 3D hydrogen orbital — raymarches through |ψ_nlm(r,θ,φ)|² using real spherical harmonics. n=shell (1–5), l=subshell (0–4), m=magnetic (−l..l). Wire orbit_angle for manual rotation control.',
   inputs: {
     uv:          { type: 'vec2',  label: 'UV'          },

@@ -5,6 +5,7 @@ import { NodePalette } from './components/NodeGraph/NodePalette';
 import { CodePanel } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { LearnPage } from './components/LearnPage';
+import { ExportModal } from './components/ExportModal';
 import { useNodeGraphStore, EXAMPLE_GRAPHS } from './store/useNodeGraphStore';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 
@@ -69,6 +70,11 @@ function App() {
   const [saveNameInput, setSaveNameInput] = useState('');
   const [savedNames, setSavedNames]       = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Export animation modal
+  const [showExport, setShowExport]           = useState(false);
+  const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
 
   // Update preview width when breakpoint changes
   useEffect(() => {
@@ -266,7 +272,7 @@ function App() {
 
         {/* Full-screen shader preview as background */}
         <div style={{ position: 'absolute', inset: 0 }}>
-          <ShaderCanvas />
+          <ShaderCanvas onCanvasReady={handleCanvasReady} />
         </div>
 
         {/* Floating TopNav */}
@@ -317,6 +323,15 @@ function App() {
 
           {/* Error badge */}
           {errorBadge}
+
+          {/* Record button */}
+          <button
+            onClick={() => setShowExport(true)}
+            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744' }}
+            title="Export animation"
+          >
+            🎬
+          </button>
         </div>
 
         {/* Error popup — sits above bottom bar */}
@@ -389,6 +404,11 @@ function App() {
           {/* Palette fills rest of drawer */}
           <NodePalette mode="drawer" onNodeAdded={() => setDrawerOpen(false)} />
         </div>
+
+        {/* Export modal */}
+        {showExport && (
+          <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />
+        )}
       </div>
     );
   }
@@ -456,6 +476,10 @@ function App() {
             {/* Toolbar */}
             <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '5px' }}>
               {toolbar(false)}
+              <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
+              <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Export animation">
+                🎬 Record
+              </button>
             </div>
             {savePanelEl}
             {loadPanelEl}
@@ -478,7 +502,7 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas /></div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} /></div>
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -494,8 +518,9 @@ function App() {
             {errorPopup}
           </div>
         </div>
+        {showExport && <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />}
       </div>
-    );
+  );
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -512,7 +537,7 @@ function App() {
       <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined }}>
 
         {/* Left: Node Palette */}
-        <div style={{ width: paletteW, minWidth: paletteW, flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ width: paletteW, minWidth: paletteW, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
           <NodePalette />
         </div>
 
@@ -546,6 +571,10 @@ function App() {
                 }}
               />
             </label>
+            <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
+            <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Export animation as video">
+              🎬 Record
+            </button>
           </div>
 
           {savePanelEl}
@@ -576,7 +605,7 @@ function App() {
 
         {/* Right: Shader Preview */}
         <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas /></div>
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} /></div>
 
           {/* Status bar */}
           <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
@@ -594,6 +623,9 @@ function App() {
           {errorPopup}
         </div>
       </div>
+      {showExport && (
+        <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />
+      )}
     </div>
   );
 }

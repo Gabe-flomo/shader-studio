@@ -27,6 +27,8 @@ export interface GraphNode {
   inputs: Record<string, InputSocket>;
   outputs: Record<string, OutputSocket>;
   params: Record<string, unknown>;
+  /** When true the node is skipped — inputs are passed through to outputs */
+  bypassed?: boolean;
 }
 
 // Editable parameter definition (used to render inline controls on the node card)

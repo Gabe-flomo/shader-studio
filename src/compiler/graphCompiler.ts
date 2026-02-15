@@ -229,6 +229,60 @@ function generateFragmentShader(sortedNodes: GraphNode[]): string {
       }
     }
 
+    // ── Bypass: pass the primary input through to each output ────────────────
+    if (node.bypassed) {
+      // Find the first connected input variable (or any resolved inputVar)
+      const inputEntries = Object.entries(inputVars);
+      const bypassOutputVars: Record<string, string> = {};
+      let bypassCode = '';
+      if (inputEntries.length > 0) {
+        // Use the first resolved input as the pass-through value
+        const [, passthroughVar] = inputEntries[0];
+        const outputEntries = Object.entries(def.outputs);
+        for (const [outKey, outSocket] of outputEntries) {
+          const varName = `${node.id}_${outKey}`;
+          // Coerce type if needed: float→vecN, vec2→float, etc.
+          const srcType = (() => {
+            // Try to determine source type from variable name in already-emitted code
+            // or fall back to the def's first input type
+            const firstInputDef = Object.values(def.inputs)[0];
+            return firstInputDef?.type ?? 'float';
+          })();
+          let coerced = passthroughVar;
+          if (srcType !== outSocket.type) {
+            // Simple coercions
+            if (outSocket.type === 'float' && srcType === 'vec2') coerced = `${passthroughVar}.x`;
+            else if (outSocket.type === 'float' && srcType === 'vec3') coerced = `${passthroughVar}.x`;
+            else if (outSocket.type === 'float' && srcType === 'vec4') coerced = `${passthroughVar}.x`;
+            else if (outSocket.type === 'vec2' && srcType === 'float') coerced = `vec2(${passthroughVar})`;
+            else if (outSocket.type === 'vec3' && srcType === 'float') coerced = `vec3(${passthroughVar})`;
+            else if (outSocket.type === 'vec3' && srcType === 'vec2') coerced = `vec3(${passthroughVar}, 0.0)`;
+            else if (outSocket.type === 'vec4' && srcType === 'float') coerced = `vec4(${passthroughVar})`;
+            else if (outSocket.type === 'vec4' && srcType === 'vec3') coerced = `vec4(${passthroughVar}, 1.0)`;
+            // Matching secondary inputs if available (e.g. vec3 in → vec2 out, try a vec2 input)
+            const matchingInput = inputEntries.find(([, v]) => v !== passthroughVar);
+            if (matchingInput) coerced = matchingInput[1];
+          }
+          bypassCode += `    ${outSocket.type} ${varName} = ${coerced};\n`;
+          bypassOutputVars[outKey] = varName;
+        }
+        // If no outputs defined just re-use the normal path outputs
+        if (outputEntries.length === 0) {
+          const result = def.generateGLSL(node, inputVars);
+          bypassCode = result.code;
+          Object.assign(bypassOutputVars, result.outputVars);
+        }
+      } else {
+        // No connected inputs — fall back to normal generation so we get valid vars
+        const result = def.generateGLSL(node, inputVars);
+        bypassCode = result.code;
+        Object.assign(bypassOutputVars, result.outputVars);
+      }
+      mainCode.push(bypassCode);
+      nodeOutputs.set(node.id, bypassOutputVars);
+      continue;
+    }
+
     // If node has a __codeOverride, use it verbatim (derive outputVars from normal generateGLSL)
     const override = typeof node.params.__codeOverride === 'string' ? (node.params.__codeOverride as string).trim() : null;
     if (override) {

@@ -53,6 +53,7 @@ interface NodeGraphState {
   setGlslErrors: (errors: string[]) => void;
   setPixelSample: (sample: [number, number, number, number] | null) => void;
   setCurrentTime: (t: number) => void;
+  toggleBypass: (nodeId: string) => void;
 
   // Save / Load
   saveGraph: (name: string) => void;
@@ -101,9 +102,8 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── For Loop Rings — general for loop node showing @-token body ──────────
+  // ── For Loop Rings — for loop node with editable body ─────────────────────
   forLoopRings: {
-    // For Loop node with default body wired to output — shows the loop editor
     label: 'For Loop Rings',
     counter: 4,
     nodes: [
@@ -203,49 +203,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
       { id: 'output_7', type: 'output', position: { x: 1300, y: 300 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_6', outputKey: 'result' } } },
-        outputs: {}, params: {} },
-    ],
-  },
-
-  // ── Pulsing Tiles — Expr animates tile scale, ForLoop does the inner ring ──
-  pulsingTiles: {
-    // Expr: sin(t)*2.5+4 as one expression drives Fract scale.
-    label: 'Pulsing Tiles',
-    counter: 8,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40, y: 440 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // Expr: animated tile scale in one line — sin(t)*2.5+4.0
-      { id: 'scaleExpr_2', type: 'expr', position: { x: 300, y: 380 },
-        inputs: {
-          in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } },
-          in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' },
-        },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { expr: 'sin(t) * 2.5 + 4.0', outputType: 'float', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
-      // Fract/tile with wired scale
-      { id: 'fract_3', type: 'fract', position: { x: 560, y: 280 },
-        inputs: {
-          input: { type: 'vec2',  label: 'Input', connection: { nodeId: 'uv_0',        outputKey: 'uv'     } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'scaleExpr_2', outputKey: 'result' } },
-        },
-        outputs: { output: { type: 'vec2', label: 'Output' } }, params: { scale: 4.0 } },
-      // Circle in each tile
-      { id: 'circle_4', type: 'circleSDF', position: { x: 820, y: 280 },
-        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'fract_3', outputKey: 'output' } }, radius: { type: 'float', label: 'Radius' }, offset: { type: 'vec2', label: 'Offset' } },
-        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.3, posX: 0.0, posY: 0.0 } },
-      { id: 'light_5', type: 'makeLight', position: { x: 1060, y: 280 },
-        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'circle_4', outputKey: 'distance' } }, brightness: { type: 'float', label: 'Brightness' } },
-        outputs: { glow: { type: 'float', label: 'Glow' } }, params: { brightness: 30.0 } },
-      // Palette colored by time
-      { id: 'palette_6', type: 'palette', position: { x: 1060, y: 460 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } }, a_r: { type: 'float', label: 'a.r' }, a_g: { type: 'float', label: 'a.g' }, a_b: { type: 'float', label: 'a.b' }, b_r: { type: 'float', label: 'b.r' }, b_g: { type: 'float', label: 'b.g' }, b_b: { type: 'float', label: 'b.b' }, c_r: { type: 'float', label: 'c.r' }, c_g: { type: 'float', label: 'c.g' }, c_b: { type: 'float', label: 'c.b' }, d_r: { type: 'float', label: 'd.r' }, d_g: { type: 'float', label: 'd.g' }, d_b: { type: 'float', label: 'd.b' } },
-        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { a: [0.5,0.5,0.5], b: [0.5,0.5,0.5], c: [1.0,1.0,1.0], d: [0.0,0.33,0.67] } },
-      { id: 'mul_7', type: 'multiplyVec3', position: { x: 1300, y: 360 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_6', outputKey: 'color' } }, scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_5', outputKey: 'glow' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
-      { id: 'output_8', type: 'output', position: { x: 1540, y: 360 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_7', outputKey: 'result' } } },
         outputs: {}, params: {} },
     ],
   },
@@ -446,143 +403,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Hex Grid — hexagon SDF + fract tiling + palette preset ────────────────
-  hexGrid: {
-    label: 'Hex Grid',
-    counter: 6,
-    nodes: [
-      { id: 'uv_0',  type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1',type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      {
-        id: 'fract_2', type: 'fract', position: { x: 260, y: 200 },
-        inputs: {
-          input: { type: 'vec2',  label: 'Input', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
-          scale: { type: 'float', label: 'Scale' },
-        },
-        outputs: { output: { type: 'vec2', label: 'Output' } },
-        params: { scale: 4.0 },
-      },
-      {
-        id: 'shape_3', type: 'shapeSDF', position: { x: 480, y: 160 },
-        inputs: {
-          p:  { type: 'vec2',  label: 'Position', connection: { nodeId: 'fract_2', outputKey: 'output' } },
-          r:  { type: 'float', label: 'Radius / Size' },
-          b:  { type: 'vec2',  label: 'Half-size (box)' },
-          a:  { type: 'vec2',  label: 'Point A (segment)' },
-          b2: { type: 'vec2',  label: 'Point B (segment)' },
-          rf: { type: 'float', label: 'Inner ratio (star)' },
-          c:  { type: 'vec2',  label: 'Angle vec (pie)' },
-          th: { type: 'float', label: 'Thickness (ring)' },
-          n:  { type: 'vec2',  label: 'Normal (ring)' },
-        },
-        outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { shape: 'hexagon', r: 0.38, rx: 0.3, ry: 0.3, roundness: 0.05, rf: 0.5, cx: 0.866, cy: 0.5, th: 0.05, nx: 0.0, ny: 1.0 },
-      },
-      {
-        id: 'light_4', type: 'makeLight', position: { x: 720, y: 200 },
-        inputs: {
-          distance:   { type: 'float', label: 'Distance',   connection: { nodeId: 'shape_3', outputKey: 'distance' } },
-          brightness: { type: 'float', label: 'Brightness' },
-        },
-        outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { brightness: 12.0 },
-      },
-      {
-        id: 'palette_5', type: 'palettePreset', position: { x: 720, y: 380 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '0' },
-      },
-      {
-        id: 'scale_6', type: 'multiplyVec3', position: { x: 940, y: 280 },
-        inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'palette_5', outputKey: 'color' } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_4',   outputKey: 'glow'  } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'output_7', type: 'output', position: { x: 1160, y: 300 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'scale_6', outputKey: 'result' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
-  // ── Star Field — star SDF tiled + animated rotation + rainbow palette ──────
-  starField: {
-    label: 'Star Field',
-    counter: 8,
-    nodes: [
-      { id: 'uv_0',  type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1',type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      {
-        id: 'rot_2', type: 'rotate2d', position: { x: 240, y: 200 },
-        inputs: {
-          input: { type: 'vec2',  label: 'Input', connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          angle: { type: 'float', label: 'Angle', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: { output: { type: 'vec2', label: 'Output' } },
-        params: { angle: 0.0 },
-      },
-      {
-        id: 'fract_3', type: 'fract', position: { x: 450, y: 200 },
-        inputs: {
-          input: { type: 'vec2',  label: 'Input', connection: { nodeId: 'rot_2', outputKey: 'output' } },
-          scale: { type: 'float', label: 'Scale' },
-        },
-        outputs: { output: { type: 'vec2', label: 'Output' } },
-        params: { scale: 5.0 },
-      },
-      {
-        id: 'shape_4', type: 'shapeSDF', position: { x: 660, y: 160 },
-        inputs: {
-          p:  { type: 'vec2',  label: 'Position', connection: { nodeId: 'fract_3', outputKey: 'output' } },
-          r:  { type: 'float', label: 'Radius / Size' },
-          b:  { type: 'vec2',  label: 'Half-size (box)' },
-          a:  { type: 'vec2',  label: 'Point A (segment)' },
-          b2: { type: 'vec2',  label: 'Point B (segment)' },
-          rf: { type: 'float', label: 'Inner ratio (star)' },
-          c:  { type: 'vec2',  label: 'Angle vec (pie)' },
-          th: { type: 'float', label: 'Thickness (ring)' },
-          n:  { type: 'vec2',  label: 'Normal (ring)' },
-        },
-        outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { shape: 'star', r: 0.3, rf: 0.45, rx: 0.3, ry: 0.3, roundness: 0.05, cx: 0.866, cy: 0.5, th: 0.05, nx: 0.0, ny: 1.0 },
-      },
-      {
-        id: 'light_5', type: 'makeLight', position: { x: 880, y: 200 },
-        inputs: {
-          distance:   { type: 'float', label: 'Distance',   connection: { nodeId: 'shape_4', outputKey: 'distance' } },
-          brightness: { type: 'float', label: 'Brightness' },
-        },
-        outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { brightness: 15.0 },
-      },
-      {
-        id: 'palette_6', type: 'palettePreset', position: { x: 880, y: 380 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '1' },
-      },
-      {
-        id: 'scale_7', type: 'multiplyVec3', position: { x: 1080, y: 280 },
-        inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'palette_6', outputKey: 'color' } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_5',   outputKey: 'glow'  } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'output_8', type: 'output', position: { x: 1300, y: 300 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'scale_7', outputKey: 'result' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
   // ── FBM Landscape — FBM noise → palette color ─────────────────────────────
   fbmLandscape: {
     label: 'FBM Landscape',
@@ -621,57 +441,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Voronoi Cells — Voronoi dist → makeLight glow → palette ───────────────
-  voronoiCells: {
-    label: 'Voronoi Cells',
-    counter: 6,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      {
-        id: 'voro_2', type: 'voronoi', position: { x: 280, y: 200 },
-        inputs: {
-          uv:         { type: 'vec2',  label: 'UV',         connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          time:       { type: 'float', label: 'Time',       connection: { nodeId: 'time_1', outputKey: 'time' } },
-          scale:      { type: 'float', label: 'Scale'      },
-          jitter:     { type: 'float', label: 'Jitter'     },
-          time_scale: { type: 'float', label: 'Anim Speed' },
-        },
-        outputs: { dist: { type: 'float', label: 'Distance' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
-        params: { scale: 6.0, jitter: 1.0, time_scale: 0.2 },
-      },
-      {
-        id: 'light_3', type: 'makeLight', position: { x: 560, y: 200 },
-        inputs: {
-          distance:   { type: 'float', label: 'Distance',   connection: { nodeId: 'voro_2', outputKey: 'dist' } },
-          brightness: { type: 'float', label: 'Brightness' },
-        },
-        outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { brightness: 40.0 },
-      },
-      {
-        id: 'palette_4', type: 'palettePreset', position: { x: 560, y: 380 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '6' },
-      },
-      {
-        id: 'mul_5', type: 'multiplyVec3', position: { x: 800, y: 280 },
-        inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'palette_4', outputKey: 'color' } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_3',   outputKey: 'glow'  } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'output_6', type: 'output', position: { x: 1020, y: 280 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_5', outputKey: 'result' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
   // ── Domain Warp Fractal — DomainWarp pre-distorts UV into fractal loop ──────
   domainWarpFractal: {
     label: 'Domain Warp Fractal',
@@ -703,61 +472,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'output_4', type: 'output', position: { x: 920, y: 200 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fractal_3', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
-  // ── Flow Field Demo — fake GLSL particle flow field ────────────────────────
-  flowFieldDemo: {
-    label: 'Flow Field',
-    counter: 4,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      {
-        id: 'flow_2', type: 'flowField', position: { x: 280, y: 180 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: {
-          color:   { type: 'vec3',  label: 'Color'   },
-          density: { type: 'float', label: 'Density' },
-        },
-        params: { curves: 60, steps: 24, step_size: 0.04, noise_scale: 1.8, speed: 0.15, line_width: 0.006, line_softness: 1.5, field_mode: 'perlin', quant_steps: 10, palette_offset: 0.0, palette_a: [0.5,0.5,0.5], palette_b: [0.5,0.5,0.5], palette_c: [1.0,1.0,1.0], palette_d: [0.0,0.33,0.67] },
-      },
-      {
-        id: 'output_3', type: 'output', position: { x: 580, y: 220 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'flow_2', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
-  // ── Circle Pack demo ──────────────────────────────────────────────────────
-  circlePackDemo: {
-    label: 'Circle Pack',
-    counter: 4,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      {
-        id: 'cp_2', type: 'circlePack', position: { x: 280, y: 180 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: {
-          color:   { type: 'vec3',  label: 'Color'          },
-          mask:    { type: 'float', label: 'Mask'            },
-          centers: { type: 'vec2',  label: 'Nearest Centre' },
-        },
-        params: { circles: 80, min_radius: 0.03, max_radius: 0.15, padding: 0.01, circle_mode: 'gradient', edge_softness: 1.0, animate: 0.0, palette_offset: 0.0, palette_a: [0.5,0.5,0.5], palette_b: [0.5,0.5,0.5], palette_c: [1.0,1.0,1.0], palette_d: [0.0,0.33,0.67] },
-      },
-      {
-        id: 'output_3', type: 'output', position: { x: 580, y: 220 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'cp_2', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],
@@ -918,29 +632,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Barnsley Fern — IFS fractal ────────────────────────────────────────────
-  barnsleyFern: {
-    label: 'Barnsley Fern',
-    counter: 3,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      {
-        id: 'ifs_1', type: 'ifs', position: { x: 280, y: 180 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0', outputKey: 'uv' } },
-          time: { type: 'float', label: 'Time'  },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' }, glow: { type: 'float', label: 'Glow (raw)' } },
-        params: { preset: 'fern', iterations: 40, glow: 0.004, scale: 0.8, offset_x: 0.0, offset_y: -0.5, anim_speed: 0.0, palette_preset: '6', color_scale: 1.2, color_offset: 0.0 },
-      },
-      {
-        id: 'output_2', type: 'output', position: { x: 580, y: 220 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ifs_1', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
   // ── Angular Gradient — recreate Gradients/shader.frag ─────────────────────
   angularGradient: {
     label: 'Angular Gradient',
@@ -1017,42 +708,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Sunset Clouds — volumetric cloud slab ─────────────────────────────────
-  sunsetClouds: {
-    label: 'Sunset Clouds',
-    counter: 4,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40, y: 420 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      {
-        id: 'clouds_2', type: 'volumeClouds', position: { x: 290, y: 160 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: {
-          color:      { type: 'vec3',  label: 'Sky+Clouds'    },
-          cloud_mask: { type: 'float', label: 'Cloud Density' },
-          sun:        { type: 'float', label: 'Sun Disk'      },
-          sky:        { type: 'vec3',  label: 'Sky Only'      },
-        },
-        params: {
-          steps: 40, cloud_min_y: 1.2, cloud_max_y: 5.0,
-          coverage: 0.35, puffiness: 0.55, density_scale: 0.9, cloud_scale: 0.35,
-          scatter: 0.25, cam_speed: 0.08, sun_angle: 0.8, sun_size: 0.025,
-          sky_top: [0.05, 0.1, 0.4], sky_horizon: [0.85, 0.5, 0.25],
-          sky_ground: [0.25, 0.12, 0.05],
-          cloud_col: [1.0, 0.95, 0.88], sun_col: [1.0, 0.85, 0.35],
-        },
-      },
-      {
-        id: 'output_3', type: 'output', position: { x: 620, y: 240 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'clouds_2', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
   // ── Chromatic Glitch — chromatic aberration on fractal rings ─────────────
   // CombineRGB takes one vec3 per input socket.
   // combineRGB generates: vec3 result = vec3(r, g, b)
@@ -1061,77 +716,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // count totals 3. Actually vec3(vec3) is valid (same as identity).
   // Instead we use ExtractX to pull just the .x (red) channel from
   // each fractal's color vec3 so the combineRGB gets 3 true floats.
-  chromaticGlitch: {
-    label: 'Chromatic Glitch',
-    counter: 7,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40, y: 460 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // Chromatic aberration splits UV into R/G/B offset UVs
-      {
-        id: 'ca_2', type: 'chromaticAberration', position: { x: 280, y: 300 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: {
-          uv_r:   { type: 'vec2', label: 'UV (Red)'   },
-          uv_g:   { type: 'vec2', label: 'UV (Green)' },
-          uv_b:   { type: 'vec2', label: 'UV (Blue)'  },
-          offset: { type: 'vec2', label: 'Offset'     },
-        },
-        params: { strength: 0.025, mode: 'radial', animate: 'true', anim_speed: 0.8 },
-      },
-      // Three fractal loop nodes — one per aberrated UV channel
-      {
-        id: 'fr_3', type: 'fractalLoop', position: { x: 560, y: 100 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'ca_2',   outputKey: 'uv_r' } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
-        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.4, a: [0.5,0.5,0.5], b: [0.5,0.5,0.5], c: [1.0,1.0,1.0], d: [0.0,0.33,0.67] },
-      },
-      {
-        id: 'fg_4', type: 'fractalLoop', position: { x: 560, y: 300 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'ca_2',   outputKey: 'uv_g' } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
-        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.4, a: [0.5,0.5,0.5], b: [0.5,0.5,0.5], c: [1.0,1.0,1.0], d: [0.0,0.33,0.67] },
-      },
-      {
-        id: 'fb_5', type: 'fractalLoop', position: { x: 560, y: 500 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'ca_2',   outputKey: 'uv_b' } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
-        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.4, a: [0.5,0.5,0.5], b: [0.5,0.5,0.5], c: [1.0,1.0,1.0], d: [0.0,0.33,0.67] },
-      },
-      // Combine R/G/B channel: pick .r from each fractal result via floatToVec3 trick —
-      // actually just wire each vec3 directly: combineRGB uses vec3(r, g, b)
-      // where r, g, b are floats. Use multiplyVec3 + constant(1,0,0) to extract channel,
-      // or simplest: use Expr node to dot with vec3(1,0,0) giving just .r
-      {
-        id: 'comb_6', type: 'combineRGB', position: { x: 870, y: 300 },
-        inputs: {
-          r: { type: 'vec3', label: 'R source (vec3)', connection: { nodeId: 'fr_3', outputKey: 'color' } },
-          g: { type: 'vec3', label: 'G source (vec3)', connection: { nodeId: 'fg_4', outputKey: 'color' } },
-          b: { type: 'vec3', label: 'B source (vec3)', connection: { nodeId: 'fb_5', outputKey: 'color' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' }, full_r: { type: 'vec3', label: 'R full' }, full_g: { type: 'vec3', label: 'G full' }, full_b: { type: 'vec3', label: 'B full' } },
-        params: { mode: 'channel' },
-      },
-      {
-        id: 'output_7', type: 'output', position: { x: 1100, y: 300 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'comb_6', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
   // ── Gravitational Lens — lensed Mandelbrot with mouse control ─────────────
   gravitationalLens: {
     label: 'Gravity Lens',
@@ -1183,82 +767,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'output_6', type: 'output', position: { x: 940, y: 200 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mandel_5', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
-  // ── Tutorial: Wavy Colors — sin(time) animated color (Section 2 example) ────
-  wavyColors: {
-    label: 'Wavy Colors',
-    counter: 9,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // sin(time * 1.5) — oscillates red channel
-      {
-        id: 'sin_2', type: 'sin', position: { x: 260, y: 360 },
-        inputs: { x: { type: 'float', label: 'X', connection: { nodeId: 'time_1', outputKey: 'time' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { scale: 1.5 },
-      },
-      // length(uv) — radial distance from center
-      {
-        id: 'len_3', type: 'length', position: { x: 260, y: 180 },
-        inputs: { v: { type: 'vec2', label: 'V', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: {},
-      },
-      // add: length + sin → combined wave
-      {
-        id: 'add_4', type: 'add', position: { x: 480, y: 260 },
-        inputs: {
-          a: { type: 'float', label: 'A', connection: { nodeId: 'len_3', outputKey: 'result' } },
-          b: { type: 'float', label: 'B', connection: { nodeId: 'sin_2', outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: {},
-      },
-      // palette — color from combined value
-      {
-        id: 'pal_5', type: 'palettePreset', position: { x: 680, y: 220 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'add_4', outputKey: 'result' } } },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '3' },
-      },
-      // multiply by sin (brightness pulse)
-      {
-        id: 'mul_6', type: 'multiply', position: { x: 680, y: 400 },
-        inputs: {
-          a: { type: 'float', label: 'A', connection: { nodeId: 'sin_2', outputKey: 'result' } },
-          b: { type: 'float', label: 'B' },
-        },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 0.4 },
-      },
-      // add offset to keep positive
-      {
-        id: 'add_7', type: 'add', position: { x: 880, y: 400 },
-        inputs: {
-          a: { type: 'float', label: 'A', connection: { nodeId: 'mul_6', outputKey: 'result' } },
-          b: { type: 'float', label: 'B' },
-        },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 0.6 },
-      },
-      // multiplyVec3: dim/brighten color by brightness
-      {
-        id: 'mulv_8', type: 'multiplyVec3', position: { x: 880, y: 240 },
-        inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_5',  outputKey: 'color'  } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'add_7',  outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'output_9', type: 'output', position: { x: 1100, y: 260 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mulv_8', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
     ],
@@ -1327,84 +835,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'output_8', type: 'output', position: { x: 1160, y: 260 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mulv_7', outputKey: 'result' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
-  // ── Tutorial: Chromatic Rings — chromatic aberration on ring SDF (Section 3) ─
-  chromaticRings: {
-    label: 'Chromatic Rings',
-    counter: 9,
-    nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 280 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40,  y: 480 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // Chromatic aberration: 3 offset UVs
-      {
-        id: 'chroma_2', type: 'chromaticAberration', position: { x: 280, y: 240 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
-        },
-        outputs: {
-          uv_r: { type: 'vec2', label: 'UV (Red)'   },
-          uv_g: { type: 'vec2', label: 'UV (Green)' },
-          uv_b: { type: 'vec2', label: 'UV (Blue)'  },
-        },
-        params: { offset: 0.012, anim_speed: 0.3 },
-      },
-      // Three RingSDF nodes — one per channel
-      {
-        id: 'ringR_3', type: 'ringSDF', position: { x: 560, y: 100 },
-        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'chroma_2', outputKey: 'uv_r' } } },
-        outputs: { dist: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.3, thickness: 0.06 },
-      },
-      {
-        id: 'ringG_4', type: 'ringSDF', position: { x: 560, y: 280 },
-        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'chroma_2', outputKey: 'uv_g' } } },
-        outputs: { dist: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.3, thickness: 0.06 },
-      },
-      {
-        id: 'ringB_5', type: 'ringSDF', position: { x: 560, y: 460 },
-        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'chroma_2', outputKey: 'uv_b' } } },
-        outputs: { dist: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.3, thickness: 0.06 },
-      },
-      // MakeLight per channel
-      {
-        id: 'lightR_6', type: 'makeLight', position: { x: 780, y: 100 },
-        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'ringR_3', outputKey: 'dist' } } },
-        outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { brightness: 0.008, falloff: 1.2 },
-      },
-      {
-        id: 'lightG_7', type: 'makeLight', position: { x: 780, y: 280 },
-        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'ringG_4', outputKey: 'dist' } } },
-        outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { brightness: 0.008, falloff: 1.2 },
-      },
-      {
-        id: 'lightB_8', type: 'makeLight', position: { x: 780, y: 460 },
-        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'ringB_5', outputKey: 'dist' } } },
-        outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { brightness: 0.008, falloff: 1.2 },
-      },
-      // CombineRGB — reassemble from per-channel glow
-      {
-        id: 'rgb_9', type: 'combineRGB', position: { x: 1020, y: 280 },
-        inputs: {
-          r: { type: 'float', label: 'R source', connection: { nodeId: 'lightR_6', outputKey: 'glow' } },
-          g: { type: 'float', label: 'G source', connection: { nodeId: 'lightG_7', outputKey: 'glow' } },
-          b: { type: 'float', label: 'B source', connection: { nodeId: 'lightB_8', outputKey: 'glow' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: {},
-      },
-      {
-        id: 'output_10', type: 'output', position: { x: 1240, y: 280 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'rgb_9', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],
@@ -1523,25 +953,288 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Tutorial: IFS Fractal — IFS node with all 4 presets available (Section 4) ─
-  ifsFractal: {
-    label: 'IFS Fractal',
-    counter: 4,
+  // ── Kaleidoscope Noise — KaleidoSpace + FBM ────────────────────────────────
+  kaleidoscopeNoise: {
+    label: 'Kaleidoscope Noise',
+    counter: 6,
     nodes: [
-      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'time_1', type: 'time', position: { x: 40, y: 420 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
       {
-        id: 'ifs_2', type: 'ifs', position: { x: 300, y: 180 },
+        id: 'kaleido_2', type: 'kaleidoSpace', position: { x: 260, y: 200 },
         inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+          input:    { type: 'vec2',  label: 'UV',       connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          segments: { type: 'float', label: 'Segments' },
+          rotate:   { type: 'float', label: 'Rotate' },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, glow: { type: 'float', label: 'Glow (raw)' } },
-        params: { preset: 'sierpinski', iterations: 60, glow: 0.008, scale: 1.2, offset_x: 0.0, offset_y: 0.0, anim_speed: 0.2, palette_preset: '2', color_scale: 1.0, color_offset: 0.0 },
+        outputs: { output: { type: 'vec2', label: 'Folded UV' } },
+        params: { segments: 6.0, rotate: 0.0 },
       },
       {
-        id: 'output_3', type: 'output', position: { x: 600, y: 220 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ifs_2', outputKey: 'color' } } },
+        id: 'fbm_3', type: 'fbm', position: { x: 500, y: 200 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'kaleido_2', outputKey: 'output' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1',    outputKey: 'time'   } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { octaves: 5, lacunarity: 2.0, gain: 0.5, scale: 2.5, time_scale: 0.3 },
+      },
+      {
+        id: 'palette_4', type: 'palettePreset', position: { x: 720, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_3', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '3' },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 940, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Polar Rings — PolarSpace maps UV to (angle, radius); FBM in polar space → concentric rings ──
+  polarRings: {
+    label: 'Polar Rings',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'polar_2', type: 'polarSpace', position: { x: 260, y: 200 },
+        inputs: {
+          input:       { type: 'vec2',  label: 'UV',           connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          twist:       { type: 'float', label: 'Twist' },
+          radialScale: { type: 'float', label: 'Radial Scale' },
+        },
+        outputs: {
+          output:   { type: 'vec2',  label: 'Polar UV' },
+          seamless: { type: 'vec2',  label: 'Seamless' },
+          angle:    { type: 'float', label: 'Angle' },
+          radius:   { type: 'float', label: 'Radius' },
+        },
+        params: { twist: 1.5, radialScale: 3.0 },
+      },
+      {
+        id: 'fbm_3', type: 'fbm', position: { x: 500, y: 200 },
+        inputs: {
+          // Use seamless output: angle encoded as (cos,sin) — no wrap discontinuity
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'polar_2', outputKey: 'seamless' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1',  outputKey: 'time'   } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { octaves: 4, lacunarity: 2.5, gain: 0.5, scale: 4.0, time_scale: 0.2 },
+      },
+      {
+        id: 'palette_4', type: 'palettePreset', position: { x: 720, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_3', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '1' },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 940, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Hyperbolic Circles — Poincaré disk space + tiled circles ───────────────
+  hyperbolicCircles: {
+    label: 'Hyperbolic Circles',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'hyp_2', type: 'hyperbolicSpace', position: { x: 260, y: 200 },
+        inputs: {
+          input:     { type: 'vec2',  label: 'UV',        connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          curvature: { type: 'float', label: 'Curvature' },
+        },
+        outputs: { output: { type: 'vec2', label: 'Hyperbolic UV' } },
+        params: { curvature: 0.75 },
+      },
+      {
+        id: 'fract_3', type: 'fract', position: { x: 480, y: 200 },
+        inputs: {
+          input: { type: 'vec2',  label: 'Input', connection: { nodeId: 'hyp_2', outputKey: 'output' } },
+          scale: { type: 'float', label: 'Scale' },
+        },
+        outputs: { output: { type: 'vec2', label: 'Output' } },
+        params: { scale: 4.0 },
+      },
+      {
+        id: 'circle_4', type: 'circleSDF', position: { x: 700, y: 200 },
+        inputs: {
+          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'fract_3', outputKey: 'output' } },
+          radius:   { type: 'float', label: 'Radius' },
+          offset:   { type: 'vec2',  label: 'Offset' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.3, posX: 0.0, posY: 0.0 },
+      },
+      {
+        id: 'colorize_5', type: 'sdfColorize', position: { x: 920, y: 200 },
+        inputs: {
+          d:       { type: 'float', label: 'SDF',           connection: { nodeId: 'circle_4', outputKey: 'distance' } },
+          inside:  { type: 'vec3',  label: 'Inside Color' },
+          outside: { type: 'vec3',  label: 'Outside Color' },
+          edge:    { type: 'float', label: 'Edge Softness' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { edge: 0.015 },
+      },
+      {
+        id: 'output_6', type: 'output', position: { x: 1140, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'colorize_5', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Swirl Voronoi — SwirlSpace vortex warps UV before Voronoi ──────────────
+  swirlVoronoi: {
+    label: 'Swirl Voronoi',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'swirl_2', type: 'swirlSpace', position: { x: 260, y: 200 },
+        inputs: {
+          input:    { type: 'vec2',  label: 'UV',       connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          strength: { type: 'float', label: 'Strength' },
+          falloff:  { type: 'float', label: 'Falloff'  },
+        },
+        outputs: { output: { type: 'vec2', label: 'Swirled UV' } },
+        params: { strength: 3.0, falloff: 1.0 },
+      },
+      {
+        id: 'voronoi_3', type: 'voronoi', position: { x: 480, y: 200 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'swirl_2', outputKey: 'output' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1',  outputKey: 'time'   } },
+        },
+        outputs: { dist: { type: 'float', label: 'Distance' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { scale: 4.0, time_scale: 0.2, jitter: 1.0 },
+      },
+      {
+        id: 'palette_4', type: 'palettePreset', position: { x: 680, y: 340 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'voronoi_3', outputKey: 'dist' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '0' },
+      },
+      {
+        id: 'glowLayer_5', type: 'glowLayer', position: { x: 700, y: 200 },
+        inputs: {
+          d:         { type: 'float', label: 'SDF',       connection: { nodeId: 'voronoi_3', outputKey: 'dist'  } },
+          color:     { type: 'vec3',  label: 'Color',     connection: { nodeId: 'palette_4', outputKey: 'color' } },
+          intensity: { type: 'float', label: 'Intensity' },
+          power:     { type: 'float', label: 'Power' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Glow' } },
+        params: { intensity: 0.02, power: 1.2 },
+      },
+      {
+        id: 'tonemap_6', type: 'toneMap', position: { x: 940, y: 200 },
+        inputs: {
+          color:    { type: 'vec3',  label: 'Color',    connection: { nodeId: 'glowLayer_5', outputKey: 'result' } },
+          exposure: { type: 'float', label: 'Exposure' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { exposure: 1.5 },
+      },
+      {
+        id: 'output_7', type: 'output', position: { x: 1160, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tonemap_6', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Möbius Warp — Möbius transform distorts UV, FBM fills the curved space ─
+  mobiusWarp: {
+    label: 'Möbius Warp',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'mobius_2', type: 'mobiusSpace', position: { x: 260, y: 200 },
+        inputs: {
+          input: { type: 'vec2',  label: 'UV',     connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          poleX: { type: 'float', label: 'Pole X' },
+          poleY: { type: 'float', label: 'Pole Y' },
+          angle: { type: 'float', label: 'Angle',  connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Möbius UV' } },
+        params: { poleX: 0.5, poleY: 0.0, angle: 0.0 },
+      },
+      {
+        id: 'fbm_3', type: 'fbm', position: { x: 500, y: 200 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'mobius_2', outputKey: 'output' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1',   outputKey: 'time'   } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 2.0, time_scale: 0.15 },
+      },
+      {
+        id: 'palette_4', type: 'palettePreset', position: { x: 720, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_3', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '2' },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 940, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Infinite Repeat — opRepeat tiles space, sdBox drawn in each cell ────────
+  infiniteMirror: {
+    label: 'Infinite Repeat',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'repeat_2', type: 'infiniteRepeatSpace', position: { x: 260, y: 200 },
+        inputs: {
+          input: { type: 'vec2',  label: 'UV',     connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          cellX: { type: 'float', label: 'Cell W' },
+          cellY: { type: 'float', label: 'Cell H' },
+        },
+        outputs: { output: { type: 'vec2', label: 'Cell UV' }, cellID: { type: 'vec2', label: 'Cell ID' } },
+        params: { cellX: 0.5, cellY: 0.5 },
+      },
+      {
+        id: 'sdbox_3', type: 'sdBox', position: { x: 500, y: 200 },
+        inputs: {
+          p: { type: 'vec2', label: 'Point',    connection: { nodeId: 'repeat_2', outputKey: 'output' } },
+          b: { type: 'vec2', label: 'Half-size' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { bx: 0.18, by: 0.18 },
+      },
+      {
+        id: 'outline_4', type: 'sdfOutline', position: { x: 720, y: 180 },
+        inputs: {
+          d:           { type: 'float', label: 'SDF',          connection: { nodeId: 'sdbox_3', outputKey: 'distance' } },
+          fillColor:   { type: 'vec3',  label: 'Fill' },
+          strokeColor: { type: 'vec3',  label: 'Stroke' },
+          strokeWidth: { type: 'float', label: 'Stroke Width' },
+          antialias:   { type: 'float', label: 'AA Width' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
+        params: { strokeWidth: 0.025, antialias: 0.004 },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 960, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'outline_4', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
     ],
@@ -1753,6 +1446,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         delete newInput.connection;
         return { ...n, inputs: { ...n.inputs, [inputKey]: newInput } };
       }),
+    }));
+    get().compile();
+  },
+
+  toggleBypass: (nodeId) => {
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n
+      ),
     }));
     get().compile();
   },
