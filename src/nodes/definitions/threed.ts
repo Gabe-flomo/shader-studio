@@ -616,15 +616,15 @@ export const CombineRGBNode: NodeDefinition = {
   label: 'Combine RGB',
   category: 'Effects',
   description: [
-    'Combines three vec3 inputs by extracting one channel from each — ',
-    'takes .r from input R, .g from input G, .b from input B. ',
-    'Use with Chromatic Aberration: wire a shader at each of the 3 offset UVs, ',
-    'then wire the per-channel vec3 results here to reassemble the aberrated image.',
+    'Combines three inputs (float or vec3) into a single vec3 color. ',
+    'Channel mode: takes .r from R input, .g from G input, .b from B input. ',
+    'Works with floats (e.g. glow values) or full vec3 colors. ',
+    'Use with Chromatic Aberration to reassemble per-channel renders.',
   ].join(''),
   inputs: {
-    r: { type: 'vec3', label: 'R source (vec3)' },
-    g: { type: 'vec3', label: 'G source (vec3)' },
-    b: { type: 'vec3', label: 'B source (vec3)' },
+    r: { type: 'float', label: 'R source' },
+    g: { type: 'float', label: 'G source' },
+    b: { type: 'float', label: 'B source' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -642,28 +642,32 @@ export const CombineRGBNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id  = node.id;
-    const rIn = inputVars.r ?? 'vec3(0.0)';
-    const gIn = inputVars.g ?? 'vec3(0.0)';
-    const bIn = inputVars.b ?? 'vec3(0.0)';
+    const rRaw = inputVars.r ?? '0.0';
+    const gRaw = inputVars.g ?? '0.0';
+    const bRaw = inputVars.b ?? '0.0';
     const mode = (node.params.mode as string) ?? 'channel';
+
+    // Promote scalar or vec3 input to a reliable vec3 temp
+    // Works whether the connected output is float or vec3
+    const code = [
+      `    vec3 ${id}_full_r = vec3(${rRaw});\n`,
+      `    vec3 ${id}_full_g = vec3(${gRaw});\n`,
+      `    vec3 ${id}_full_b = vec3(${bRaw});\n`,
+    ];
 
     let colorExpr: string;
     if (mode === 'add') {
-      colorExpr = `${rIn} + ${gIn} + ${bIn}`;
+      colorExpr = `${id}_full_r + ${id}_full_g + ${id}_full_b`;
     } else if (mode === 'avg') {
-      colorExpr = `(${rIn} + ${gIn} + ${bIn}) / 3.0`;
+      colorExpr = `(${id}_full_r + ${id}_full_g + ${id}_full_b) / 3.0`;
     } else {
-      // channel: extract .r from rIn, .g from gIn, .b from bIn
-      colorExpr = `vec3((${rIn}).r, (${gIn}).g, (${bIn}).b)`;
+      // channel: take .r from R input, .g from G input, .b from B input
+      colorExpr = `vec3(${id}_full_r.r, ${id}_full_g.g, ${id}_full_b.b)`;
     }
-    const code = [
-      `    vec3 ${id}_full_r = ${rIn};\n`,
-      `    vec3 ${id}_full_g = ${gIn};\n`,
-      `    vec3 ${id}_full_b = ${bIn};\n`,
-      `    vec3 ${id}_color  = ${colorExpr};\n`,
-    ].join('');
+    code.push(`    vec3 ${id}_color  = ${colorExpr};\n`);
+
     return {
-      code,
+      code: code.join(''),
       outputVars: {
         color:  `${id}_color`,
         full_r: `${id}_full_r`,

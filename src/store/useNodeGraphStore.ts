@@ -1395,9 +1395,9 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'rgb_9', type: 'combineRGB', position: { x: 1020, y: 280 },
         inputs: {
-          r: { type: 'float', label: 'Red',   connection: { nodeId: 'lightR_6', outputKey: 'glow' } },
-          g: { type: 'float', label: 'Green', connection: { nodeId: 'lightG_7', outputKey: 'glow' } },
-          b: { type: 'float', label: 'Blue',  connection: { nodeId: 'lightB_8', outputKey: 'glow' } },
+          r: { type: 'float', label: 'R source', connection: { nodeId: 'lightR_6', outputKey: 'glow' } },
+          g: { type: 'float', label: 'G source', connection: { nodeId: 'lightG_7', outputKey: 'glow' } },
+          b: { type: 'float', label: 'B source', connection: { nodeId: 'lightB_8', outputKey: 'glow' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: {},
