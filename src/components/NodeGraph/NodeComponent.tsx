@@ -201,6 +201,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const isPreviewActive = previewNodeId === node.id;
   const def = getNodeDefinition(node.type);
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
@@ -362,7 +363,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           position: 'relative',
         }}
       >
-        <span>{node.type === 'customFn' && typeof node.params.label === 'string' ? node.params.label || def.label : def.label}</span>
+        <span
+          onClick={e => { e.stopPropagation(); setCollapsed(v => !v); }}
+          title={collapsed ? 'Expand node' : 'Collapse node'}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', userSelect: 'none' }}
+        >
+          <span style={{ fontSize: '9px', opacity: 0.5, lineHeight: 1 }}>{collapsed ? '▶' : '▼'}</span>
+          {node.type === 'customFn' && typeof node.params.label === 'string' ? node.params.label || def.label : def.label}
+        </span>
         {showNodeTooltip && <NodeTooltip def={def} />}
         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
           {/* Code toggle button */}
@@ -488,7 +496,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       </div>
 
       <div style={{ padding: '6px 0 4px' }}>
-        {/* ── Inputs ── */}
+        {/* ── Inputs (always visible) ── */}
         {Object.entries(node.inputs).map(([key, input]) => {
           const isConnected = !!input.connection;
 
@@ -612,8 +620,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           );
         })}
 
-        {/* ── Params ── */}
-        {Object.entries(paramDefs).map(([key, paramDef]) => {
+        {/* ── Params (hidden when collapsed) ── */}
+        {!collapsed && Object.entries(paramDefs).map(([key, paramDef]) => {
           // showWhen — conditionally hide params based on another param's value
           if (paramDef.showWhen) {
             const watchedVal = node.params[paramDef.showWhen.param] as string;
@@ -852,7 +860,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           return null;
         })}
 
-        {/* ── Outputs ── */}
+        {/* ── Outputs (always visible) ── */}
         {Object.entries(node.outputs).map(([key, output]) => {
           const isHovered = hoveredOutput === key;
           // Live value badge: show time for Time node
@@ -913,8 +921,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         <CustomFnModal node={node} onClose={() => setShowCustomFnModal(false)} />
       )}
 
-      {/* ── Generated GLSL code (editable) ── */}
-      {showCode && (
+      {/* ── Generated GLSL code (editable, hidden when collapsed) ── */}
+      {showCode && !collapsed && (
         <div
           style={{
             background: '#181825',
