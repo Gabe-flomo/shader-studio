@@ -269,7 +269,7 @@ export const RaymarchNode: NodeDefinition = {
       `    for (int ${id}_aoi = 1; ${id}_aoi <= ${aoSteps}; ${id}_aoi++) {\n`,
       `        float ${id}_aoh = float(${id}_aoi) * 0.08;\n`,
       `        vec3 ${id}_aop = ${id}_hp + ${id}_nm * ${id}_aoh;\n`,
-      `        float ${id}_aod = ${sdfExpr.replace(`${id}_p`, `${id}_aop`)};\n`,
+      `        float ${id}_aod = ${sdfExpr.replaceAll(`${id}_p`, `${id}_aop`)};\n`,
       `        ${id}_ao += clamp(${id}_aoh - ${id}_aod, 0.0, 1.0) / ${id}_aoh;\n`,
       `    }\n`,
       `    ${id}_ao = 1.0 - ${id}_ao / float(${aoSteps});\n`,
