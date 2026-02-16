@@ -298,6 +298,7 @@ export const RotatingLinesLoopNode: NodeDefinition = {
   },
   outputs: {
     color: { type: 'vec4', label: 'Color (RGBA)' },
+    uv:    { type: 'vec2', label: 'UV (pass-through)' },
   },
   defaultParams: {
     iterations: 20, uv_scale: 0.1, scroll_y: 0.2, box_half_y: 0.2,
@@ -348,7 +349,7 @@ export const RotatingLinesLoopNode: NodeDefinition = {
       `        ${id}_color += ${glow} / max(${id}_d, 0.00001) * (cos(${id}_p.y / ${cFreq} + vec4(${pR}, ${pG}, ${pB}, ${pA})) + 1.0);\n`,
       `    }\n`,
     ].join('');
-    return { code, outputVars: { color: `${id}_color` } };
+    return { code, outputVars: { color: `${id}_color`, uv: uvVar } };
   },
 };
 
@@ -369,6 +370,7 @@ export const AccumulateLoopNode: NodeDefinition = {
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
+    uv:    { type: 'vec2', label: 'UV (pass-through)' },
   },
   defaultParams: {
     iterations: 50, time_scale: 0.2, freq: 60.0, glow: 0.0003,
@@ -469,7 +471,7 @@ export const AccumulateLoopNode: NodeDefinition = {
       `    }\n`,
       `    vec3 ${id}_color = ${tonemapExpr};\n`,
     ].join('');
-    return { code, outputVars: { color: `${id}_color` } };
+    return { code, outputVars: { color: `${id}_color`, uv: uvVar } };
   },
 };
 

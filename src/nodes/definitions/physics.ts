@@ -94,6 +94,7 @@ export const ChladniNode: NodeDefinition = {
     density: { type: 'float', label: 'Density'  },
     field:   { type: 'float', label: 'Raw Field' },
     color:   { type: 'vec3',  label: 'Color'     },
+    uv:      { type: 'vec2',  label: 'UV (scaled)' },
   },
   glslFunction: CHLADNI_GLSL,
   defaultParams: {
@@ -171,6 +172,7 @@ export const ChladniNode: NodeDefinition = {
         density: `${id}_density`,
         field:   `${id}_field`,
         color:   `${id}_color`,
+        uv:      `${id}_p`,
       },
     };
   },
@@ -270,6 +272,7 @@ export const ElectronOrbitalNode: NodeDefinition = {
     density:  { type: 'float', label: 'Density |ψ|²' },
     psi:      { type: 'float', label: 'Raw ψ'         },
     color:    { type: 'vec3',  label: 'Color'          },
+    uv:       { type: 'vec2',  label: 'UV (scaled)'    },
   },
   glslFunction: ORBITAL_GLSL,
   defaultParams: {
@@ -381,6 +384,7 @@ export const ElectronOrbitalNode: NodeDefinition = {
         density: `${id}_density`,
         psi:     `${id}_psi`,
         color:   `${id}_color`,
+        uv:      `${id}_uv2`,
       },
     };
   },
@@ -434,6 +438,7 @@ export const Chladni3DNode: NodeDefinition = {
     color: { type: 'vec3',  label: 'Color'       },
     alpha: { type: 'float', label: 'Alpha'        },
     depth: { type: 'float', label: 'Depth'        },
+    uv:    { type: 'vec2',  label: 'UV (pass-through)' },
   },
   glslFunction: CHLADNI3D_GLSL_FN,
   defaultParams: {
@@ -581,6 +586,7 @@ export const Chladni3DNode: NodeDefinition = {
     vec3  ${id}_color  = mix(${id}_bgC, ${id}_surfC, ${id}_accA);
     float ${id}_alpha  = ${id}_accA;
     ${id}_depth = ${id}_depth / ${id}_tFar; // normalise 0-1
+    vec2  ${id}_uv_out = ${uv};
 `;
 
     return {
@@ -589,6 +595,7 @@ export const Chladni3DNode: NodeDefinition = {
         color: `${id}_color`,
         alpha: `${id}_alpha`,
         depth: `${id}_depth`,
+        uv:    `${id}_uv_out`,
       },
     };
   },
@@ -734,6 +741,7 @@ export const Chladni3DParticlesNode: NodeDefinition = {
   outputs: {
     color:   { type: 'vec3',  label: 'Color'   },
     density: { type: 'float', label: 'Density' },
+    uv:      { type: 'vec2',  label: 'UV (pass-through)' },
   },
   glslFunction: CHLADNI3D_PARTICLES_GLSL_FN,
   defaultParams: {
@@ -876,6 +884,7 @@ export const Chladni3DParticlesNode: NodeDefinition = {
     // ── Colour ───────────────────────────────────────────────────────────────
     vec3  ${id}_color   = (${colorExpr}) * ${id}_dens;
     float ${id}_density = ${id}_dens;
+    vec2  ${id}_uv_out  = ${uv};
 `;
 
     return {
@@ -883,6 +892,7 @@ export const Chladni3DParticlesNode: NodeDefinition = {
       outputVars: {
         color:   `${id}_color`,
         density: `${id}_density`,
+        uv:      `${id}_uv_out`,
       },
     };
   },

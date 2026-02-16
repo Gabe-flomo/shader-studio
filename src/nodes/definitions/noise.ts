@@ -279,6 +279,7 @@ export const FlowFieldNode: NodeDefinition = {
   outputs: {
     color:    { type: 'vec3',  label: 'Color'      },
     density:  { type: 'float', label: 'Density'    },
+    uv:       { type: 'vec2',  label: 'UV (pass-through)' },
   },
   glslFunction: FLOW_FIELD_GLSL,
   defaultParams: {
@@ -381,6 +382,7 @@ export const FlowFieldNode: NodeDefinition = {
       outputVars: {
         color:   `${id}_color`,
         density: `${id}_density`,
+        uv:      uvVar,
       },
     };
   },
@@ -415,6 +417,7 @@ export const CirclePackNode: NodeDefinition = {
     color:    { type: 'vec3',  label: 'Color'    },
     mask:     { type: 'float', label: 'Mask'     },
     centers:  { type: 'vec2',  label: 'Nearest Centre' },
+    uv:       { type: 'vec2',  label: 'UV (pass-through)' },
   },
   glslFunction: NOISE_HELPERS,   // reuses noiseHash1/noiseHash2/valueNoise
   defaultParams: {
@@ -551,6 +554,7 @@ export const CirclePackNode: NodeDefinition = {
         color:   `${id}_color`,
         mask:    `${id}_mask`,
         centers: `${id}_nearest`,
+        uv:      uvVar,
       },
     };
   },
