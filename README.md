@@ -2,7 +2,7 @@
 
 A node-based visual GLSL shader editor. Build fragment shaders by connecting nodes in a graph — no code required. Every connection compiles to optimized WebGL in real time.
 
-**[Live Demo →](https://gflomo.github.io/shader-studio)**
+**[Live Demo →](http://gabe-flomo.github.io/shader-studio/)**
 
 ---
 
