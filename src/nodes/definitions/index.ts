@@ -37,6 +37,7 @@ export {
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
+export { LoopNode } from './loop';
 
 // Noise
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
@@ -90,6 +91,7 @@ import {
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
+import { LoopNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
 import { MandelbrotNode, IFSNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
@@ -168,6 +170,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   customFn: CustomFnNode,
   gravitationalLens: GravitationalLensNode,
   floatWarp: FloatWarpNode,
+  loop: LoopNode,
   // Noise
   fbm: FBMNode,
   voronoi: VoronoiNode,

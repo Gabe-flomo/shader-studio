@@ -1,4 +1,4 @@
-import type { GraphNode, NodeGraph } from '../types/nodeGraph';
+import type { GraphNode, NodeGraph, DataType } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 
 export interface CompilationResult {
@@ -13,13 +13,29 @@ export interface CompilationResult {
   nodeOutputVars: Map<string, Record<string, string>>;
 }
 
+/** Returns the set of node IDs that are referenced as loop steps — they are
+ *  compiled inline inside the loop body and skipped in the main pass. */
+function collectLoopInternalIds(nodes: GraphNode[]): Set<string> {
+  const ids = new Set<string>();
+  for (const node of nodes) {
+    if (node.type === 'loop') {
+      const steps = (node.params.steps as string[]) ?? [];
+      for (const id of steps) ids.add(id);
+    }
+  }
+  return ids;
+}
+
 export function compileGraph(graph: NodeGraph): CompilationResult {
   const emptyNodeOutputVars = new Map<string, Record<string, string>>();
   try {
     const { nodes } = graph;
 
-    // 1. Validate graph
-    const validation = validateGraph(nodes);
+    // Collect node IDs used as loop steps — they are excluded from the main pass
+    const loopInternalIds = collectLoopInternalIds(nodes);
+
+    // 1. Validate graph (excluding loop-internal nodes)
+    const validation = validateGraph(nodes, loopInternalIds);
     if (!validation.valid) {
       return {
         vertexShader: '',
@@ -30,11 +46,11 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       };
     }
 
-    // 2. Topological sort (execution order)
-    const sortedNodes = topologicalSort(nodes);
+    // 2. Topological sort (execution order), excluding loop-internal nodes
+    const sortedNodes = topologicalSort(nodes, loopInternalIds);
 
     // 3. Generate GLSL code + capture nodeOutputVars
-    const { fragmentShader, nodeOutputVars } = generateFragmentShader(sortedNodes);
+    const { fragmentShader, nodeOutputVars } = generateFragmentShader(sortedNodes, nodes, loopInternalIds);
     const vertexShader = VERTEX_SHADER;
 
     return {
@@ -54,12 +70,14 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
   }
 }
 
-function validateGraph(nodes: GraphNode[]): { valid: boolean; errors?: string[] } {
+function validateGraph(nodes: GraphNode[], loopInternalIds = new Set<string>()): { valid: boolean; errors?: string[] } {
   const errors: string[] = [];
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  // Exclude loop-internal nodes from main-pass validation
+  const visibleNodes = nodes.filter(n => !loopInternalIds.has(n.id));
+  const nodeMap = new Map(nodes.map(n => [n.id, n])); // keep full map for connection lookups
 
   // Must have exactly one output node (either vec3 'output' or vec4 'vec4Output')
-  const outputNodes = nodes.filter(n => n.type === 'output' || n.type === 'vec4Output');
+  const outputNodes = visibleNodes.filter(n => n.type === 'output' || n.type === 'vec4Output');
   if (outputNodes.length === 0) {
     errors.push('Graph must have an Output node');
   }
@@ -68,7 +86,7 @@ function validateGraph(nodes: GraphNode[]): { valid: boolean; errors?: string[] 
   }
 
   // All nodes must be valid types
-  for (const node of nodes) {
+  for (const node of visibleNodes) {
     const def = getNodeDefinition(node.type);
     if (!def) {
       errors.push(`Unknown node type: ${node.type}`);
@@ -76,7 +94,7 @@ function validateGraph(nodes: GraphNode[]): { valid: boolean; errors?: string[] 
   }
 
   // All connections must be valid (type-safe)
-  for (const node of nodes) {
+  for (const node of visibleNodes) {
     const def = getNodeDefinition(node.type);
     if (!def) continue;
 
@@ -131,25 +149,30 @@ function validateGraph(nodes: GraphNode[]): { valid: boolean; errors?: string[] 
   };
 }
 
-function topologicalSort(nodes: GraphNode[]): GraphNode[] {
+function topologicalSort(nodes: GraphNode[], loopInternalIds = new Set<string>()): GraphNode[] {
+  // Exclude loop-internal nodes — they are compiled inside the loop body, not in the main pass
+  const visibleNodes = nodes.filter(n => !loopInternalIds.has(n.id));
   // Build dependency graph
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const nodeMap = new Map(visibleNodes.map(n => [n.id, n]));
   const inDegree = new Map<string, number>();
   const adjacencyList = new Map<string, string[]>();
 
   // Initialize
-  for (const node of nodes) {
+  for (const node of visibleNodes) {
     inDegree.set(node.id, 0);
     adjacencyList.set(node.id, []);
   }
 
   // Build edges (dependencies)
-  for (const node of nodes) {
+  for (const node of visibleNodes) {
     for (const input of Object.values(node.inputs)) {
       if (input.connection) {
         const sourceId = input.connection.nodeId;
-        adjacencyList.get(sourceId)?.push(node.id);
-        inDegree.set(node.id, (inDegree.get(node.id) || 0) + 1);
+        // Only track edges where both ends are in the visible (non-loop-internal) set
+        if (nodeMap.has(sourceId)) {
+          adjacencyList.get(sourceId)?.push(node.id);
+          inDegree.set(node.id, (inDegree.get(node.id) || 0) + 1);
+        }
       }
     }
   }
@@ -180,15 +203,29 @@ function topologicalSort(nodes: GraphNode[]): GraphNode[] {
     }
   }
 
-  if (sorted.length !== nodes.length) {
+  if (sorted.length !== visibleNodes.length) {
     throw new Error('Circular dependency detected in node graph');
   }
 
   return sorted;
 }
 
-function generateFragmentShader(sortedNodes: GraphNode[]): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>> } {
+/** Default GLSL literal for a given type */
+function defaultGlslVal(type: DataType | string): string {
+  if (type === 'float') return '0.0';
+  if (type === 'vec2')  return 'vec2(0.0)';
+  if (type === 'vec3')  return 'vec3(0.0)';
+  if (type === 'vec4')  return 'vec4(0.0)';
+  return '0.0';
+}
+
+function generateFragmentShader(
+  sortedNodes: GraphNode[],
+  allNodes: GraphNode[],
+  _loopInternalIds: Set<string>,
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>> } {
   const nodeMap = new Map(sortedNodes.map(n => [n.id, n]));
+  const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
   const functions = new Set<string>();
   const mainCode: string[] = [];
 
@@ -247,6 +284,90 @@ function generateFragmentShader(sortedNodes: GraphNode[]): { fragmentShader: str
           inputVars[inputKey] = `${type}(${values})`;
         }
       }
+    }
+
+    // ── Loop node: inline-unroll step nodes N times ───────────────────────────
+    if (node.type === 'loop') {
+      const steps       = (node.params.steps as string[]) ?? [];
+      const carryType   = ((node.params.carryType as DataType) ?? 'vec2') as DataType;
+      const iters       = Math.max(1, Math.min(16, Math.round(
+        typeof node.params.iterations === 'number' ? node.params.iterations : 4
+      )));
+      const carryVar    = inputVars['carry'] ?? defaultGlslVal(carryType);
+      const id          = node.id;
+
+      // Collect glslFunctions from step nodes up-front
+      for (const stepId of steps) {
+        const stepNode = allNodeMap.get(stepId);
+        if (!stepNode) continue;
+        const stepDef = getNodeDefinition(stepNode.type);
+        if (stepDef?.glslFunction) functions.add(stepDef.glslFunction);
+        if (stepNode.type === 'customFn' && typeof stepNode.params.glslFunctions === 'string') {
+          const h = (stepNode.params.glslFunctions as string).trim();
+          if (h) functions.add(h);
+        }
+      }
+
+      let loopCode = `    ${carryType} ${id}_val = ${carryVar};\n`;
+
+      for (let n = 0; n < iters; n++) {
+        let iterCarry = `${id}_val`;
+        for (const stepId of steps) {
+          const stepNode = allNodeMap.get(stepId);
+          if (!stepNode) continue;
+          const stepDef = getNodeDefinition(stepNode.type);
+          if (!stepDef) continue;
+
+          // Resolve step's inputVars:
+          // - carry-type sockets without a connection → inject current iterCarry
+          // - sockets with a connection → resolve from nodeOutputs (external, already compiled)
+          // - sockets with defaultValue → use that
+          const stepInputVars: Record<string, string> = {};
+          for (const [k, sock] of Object.entries(stepNode.inputs)) {
+            if (sock.type === carryType && !sock.connection) {
+              stepInputVars[k] = iterCarry;
+            } else if (sock.connection) {
+              const src = nodeOutputs.get(sock.connection.nodeId);
+              stepInputVars[k] = src?.[sock.connection.outputKey] ?? defaultGlslVal(sock.type);
+            } else if (stepNode.type === 'customFn' && typeof stepNode.params[k] === 'number') {
+              const cfInputs = (stepNode.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
+              const cfInp = cfInputs.find(c => c.name === k);
+              if (cfInp?.slider != null) {
+                const v = stepNode.params[k] as number;
+                stepInputVars[k] = Number.isInteger(v) ? `${v}.0` : `${v}`;
+              }
+            } else if (sock.defaultValue !== undefined) {
+              if (typeof sock.defaultValue === 'number') {
+                const sv = sock.defaultValue;
+                stepInputVars[k] = Number.isInteger(sv) ? `${sv}.0` : `${sv}`;
+              } else if (Array.isArray(sock.defaultValue)) {
+                const vals = sock.defaultValue.map((v: number) => v.toFixed(1)).join(', ');
+                stepInputVars[k] = `${sock.type}(${vals})`;
+              }
+            }
+          }
+
+          // Generate step GLSL, then rename all its vars with a per-iteration suffix
+          // to avoid collisions across unrolled iterations
+          const stepResult = stepDef.generateGLSL(stepNode, stepInputVars);
+          const prefixed   = stepResult.code.replace(
+            new RegExp(`\\b${stepId}_`, 'g'),
+            `${stepId}_L${n}_`,
+          );
+          loopCode += prefixed;
+
+          // The first output key becomes the new carry for the next step
+          const firstOutKey = Object.keys(stepResult.outputVars)[0];
+          if (firstOutKey) {
+            iterCarry = `${stepId}_L${n}_${firstOutKey}`;
+          }
+        }
+        loopCode += `    ${id}_val = ${iterCarry};\n`;
+      }
+
+      mainCode.push(loopCode);
+      nodeOutputs.set(node.id, { result: `${id}_val` });
+      continue;
     }
 
     // ── Bypass: pass the primary input through to each output ────────────────

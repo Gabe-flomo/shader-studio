@@ -4,6 +4,7 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
+import { LoopModal } from './LoopModal';
 import { registerSocket } from './socketRegistry';
 
 interface Props {
@@ -225,6 +226,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
+  const [showLoopModal, setShowLoopModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -501,6 +503,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               }}
             >
               ƒ
+            </button>
+          )}
+          {/* Loop modal button — only shown on loop nodes */}
+          {node.type === 'loop' && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowLoopModal(v => !v)}
+              title="Open Loop editor"
+              style={{
+                background: showLoopModal ? '#89dceb22' : 'none',
+                border: showLoopModal ? '1px solid #89dceb55' : 'none',
+                color: showLoopModal ? '#89dceb' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '13px',
+                lineHeight: 1,
+                padding: '1px 4px',
+                borderRadius: '3px',
+              }}
+            >
+              ⟳
             </button>
           )}
           {/* Reset params button — only shown if node has paramDefs */}
@@ -1047,6 +1069,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       {/* ── CustomFn modal ── */}
       {showCustomFnModal && node.type === 'customFn' && (
         <CustomFnModal node={node} onClose={() => setShowCustomFnModal(false)} />
+      )}
+
+      {/* ── Loop modal ── */}
+      {showLoopModal && node.type === 'loop' && (
+        <LoopModal node={node} onClose={() => setShowLoopModal(false)} />
       )}
 
       {/* ── Generated GLSL code (editable, hidden when collapsed) ── */}
