@@ -11,6 +11,7 @@ interface Props {
   onStartConnection: (nodeId: string, outputKey: string, event: React.MouseEvent) => void;
   onEndConnection: (nodeId: string, inputKey: string) => void;
   draggingType?: DataType | null;
+  zoom?: number;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -193,7 +194,7 @@ function getSourceExpr(fragmentShader: string, sourceNodeId: string, outputKey: 
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType, zoom = 1 }: Props) {
   const { nodes, updateNodePosition, removeNode, updateNodeParams, disconnectInput, setPreviewNodeId, toggleBypass } = useNodeGraphStore();
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const currentTime     = useNodeGraphStore(s => s.currentTime);
@@ -215,16 +216,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Store offset in world-space units (divide by zoom to compensate for canvas scale)
     dragOffset.current = {
-      x: e.clientX - node.position.x,
-      y: e.clientY - node.position.y,
+      x: e.clientX / zoom - node.position.x,
+      y: e.clientY / zoom - node.position.y,
     };
 
     const handleMouseMove = (ev: MouseEvent) => {
       if (dragOffset.current) {
         updateNodePosition(node.id, {
-          x: ev.clientX - dragOffset.current.x,
-          y: ev.clientY - dragOffset.current.y,
+          x: ev.clientX / zoom - dragOffset.current.x,
+          y: ev.clientY / zoom - dragOffset.current.y,
         });
       }
     };

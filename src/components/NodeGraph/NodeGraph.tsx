@@ -1,17 +1,16 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
-// Used only as fallback estimates — actual positions come from DOM when available
 const NODE_WIDTH = 240;
 
 // ─── Socket position registry ────────────────────────────────────────────────
 // NodeComponent registers DOM elements for each socket dot here so NodeGraph
 // can read actual pixel positions instead of computing from layout constants.
-type SocketRegistry = Map<string, HTMLElement>; // key: `${nodeId}:in:${key}` or `${nodeId}:out:${key}`
+type SocketRegistry = Map<string, HTMLElement>;
 
 export const socketRegistry: SocketRegistry = new Map();
 
@@ -24,55 +23,163 @@ export function registerSocket(nodeId: string, dir: 'in' | 'out', key: string, e
   }
 }
 
+// Returns socket position in *world space* (pre-transform canvas coords),
+// accounting for the current pan/zoom so connection lines stay accurate.
 function getSocketPos(
   nodeId: string,
   dir: 'in' | 'out',
   key: string,
   canvasEl: HTMLElement | null,
+  zoom: number,
+  pan: { x: number; y: number },
 ): { x: number; y: number } | null {
   const el = socketRegistry.get(`${nodeId}:${dir}:${key}`);
   if (!el || !canvasEl) return null;
-  const elRect = el.getBoundingClientRect();
+  const elRect    = el.getBoundingClientRect();
   const canvasRect = canvasEl.getBoundingClientRect();
-  const cx = elRect.left + elRect.width / 2 - canvasRect.left + canvasEl.scrollLeft;
-  const cy = elRect.top + elRect.height / 2 - canvasRect.top + canvasEl.scrollTop;
-  return { x: cx, y: cy };
+  // Screen-space position relative to canvas origin
+  const sx = elRect.left + elRect.width  / 2 - canvasRect.left;
+  const sy = elRect.top  + elRect.height / 2 - canvasRect.top;
+  // Unproject to world space: world = (screen - pan) / zoom
+  return {
+    x: (sx - pan.x) / zoom,
+    y: (sy - pan.y) / zoom,
+  };
 }
+
+// ─── Pan/zoom constants ───────────────────────────────────────────────────────
+const ZOOM_MIN = 0.15;
+const ZOOM_MAX = 2.5;
+const ZOOM_SPEED = 0.001;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const { nodes, connectNodes, autoLayout, setPreviewNodeId } = useNodeGraphStore();
   const previewNodeId = useNodeGraphStore(s => s.previewNodeId);
 
-  // Resolve the label for the preview banner
-  const previewNode = previewNodeId ? nodes.find(n => n.id === previewNodeId) : null;
-  const previewDef  = previewNode ? getNodeDefinition(previewNode.type) : null;
+  const previewNode  = previewNodeId ? nodes.find(n => n.id === previewNodeId) : null;
+  const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
   const previewLabel = previewDef
     ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
         ? (previewNode.params.label as string) || previewDef.label
         : previewDef.label)
     : null;
+
   const canvasRef = useRef<HTMLDivElement>(null);
-  // Tick forces a re-render after mount so canvasRef.current is available for SVG line calculation
   const [, setTick] = useState(0);
   useEffect(() => { setTick(t => t + 1); }, []);
 
+  // ── Pan / zoom state ────────────────────────────────────────────────────────
+  const [zoom, setZoom] = useState(1);
+  const [pan,  setPan]  = useState({ x: 0, y: 0 });
+  // Refs mirror state so event handlers always see current values without stale closure
+  const zoomRef = useRef(zoom);
+  const panRef  = useRef(pan);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { panRef.current  = pan;  }, [pan]);
+
+  // Middle-mouse / space+drag panning
+  const isPanning   = useRef(false);
+  const panStart    = useRef({ x: 0, y: 0 });
+  const panOrigin   = useRef({ x: 0, y: 0 });
+  const spaceDown   = useRef(false);
+
+  // Keyboard: space to enter pan mode
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT'
+          && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        spaceDown.current = true;
+        if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceDown.current = false;
+        if (canvasRef.current) canvasRef.current.style.cursor = 'default';
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup',   onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup',   onKeyUp);
+    };
+  }, []);
+
+  // Wheel zoom — zoom toward cursor position
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    // Mouse position relative to canvas
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const oldZoom = zoomRef.current;
+    const delta   = -e.deltaY * ZOOM_SPEED;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, oldZoom * (1 + delta)));
+    // Adjust pan so the point under the cursor stays fixed
+    const oldPan  = panRef.current;
+    const newPan  = {
+      x: mx - (mx - oldPan.x) * (newZoom / oldZoom),
+      y: my - (my - oldPan.y) * (newZoom / oldZoom),
+    };
+    setZoom(newZoom);
+    setPan(newPan);
+  }, []);
+
+  // Canvas mouse down — start pan if middle button or space held
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
+    const isMiddle = e.button === 1;
+    const isSpaceDrag = spaceDown.current && e.button === 0;
+    if (!isMiddle && !isSpaceDrag) return;
+    e.preventDefault();
+    isPanning.current  = true;
+    panStart.current   = { x: e.clientX, y: e.clientY };
+    panOrigin.current  = { ...panRef.current };
+    if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+
+    const onMove = (ev: MouseEvent) => {
+      if (!isPanning.current) return;
+      setPan({
+        x: panOrigin.current.x + (ev.clientX - panStart.current.x),
+        y: panOrigin.current.y + (ev.clientY - panStart.current.y),
+      });
+    };
+    const onUp = () => {
+      isPanning.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup',   onUp);
+      if (canvasRef.current)
+        canvasRef.current.style.cursor = spaceDown.current ? 'grab' : 'default';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onUp);
+  }, []);
+
+  // ── Connection drag ─────────────────────────────────────────────────────────
   const [dragConnection, setDragConnection] = useState<{
     sourceNodeId: string;
     sourceOutputKey: string;
-    fromPos: { x: number; y: number };
-    mousePos: { x: number; y: number };
+    fromPos: { x: number; y: number };   // world space
+    mousePos: { x: number; y: number };  // world space
   } | null>(null);
 
-  // Type of the output socket currently being dragged (for compatibility highlighting)
   const draggingType = dragConnection
     ? (getNodeDefinition(nodes.find(n => n.id === dragConnection.sourceNodeId)?.type ?? '')
         ?.outputs[dragConnection.sourceOutputKey]?.type ?? null)
     : null;
 
-  const getCanvasOffset = () => {
+  // Convert screen coords to world space
+  const screenToWorld = useCallback((sx: number, sy: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    return rect ? { x: rect.left, y: rect.top } : { x: 0, y: 0 };
-  };
+    if (!rect) return { x: sx, y: sy };
+    return {
+      x: (sx - rect.left  - panRef.current.x) / zoomRef.current,
+      y: (sy - rect.top   - panRef.current.y) / zoomRef.current,
+    };
+  }, []);
 
   const handleStartConnection = (
     nodeId: string,
@@ -80,32 +187,26 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     event: React.MouseEvent
   ) => {
     event.stopPropagation();
-    const offset = getCanvasOffset();
     const canvas = canvasRef.current;
-
-    // Try to get exact DOM position first
-    let fromPos = getSocketPos(nodeId, 'out', outputKey, canvas);
+    let fromPos = getSocketPos(nodeId, 'out', outputKey, canvas, zoomRef.current, panRef.current);
     if (!fromPos) {
-      // Fallback: estimate from node position
       const node = nodes.find(n => n.id === nodeId);
       if (!node) return;
       fromPos = { x: node.position.x + NODE_WIDTH, y: node.position.y + 80 };
     }
-
     setDragConnection({
-      sourceNodeId: nodeId,
+      sourceNodeId:    nodeId,
       sourceOutputKey: outputKey,
       fromPos,
-      mousePos: { x: event.clientX - offset.x, y: event.clientY - offset.y },
+      mousePos: screenToWorld(event.clientX, event.clientY),
     });
   };
 
   const handleMouseMove = (event: React.MouseEvent) => {
     if (!dragConnection) return;
-    const offset = getCanvasOffset();
     setDragConnection({
       ...dragConnection,
-      mousePos: { x: event.clientX - offset.x, y: event.clientY - offset.y },
+      mousePos: screenToWorld(event.clientX, event.clientY),
     });
   };
 
@@ -125,23 +226,53 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     setDragConnection(null);
   };
 
+  // ── Fit to screen helper ────────────────────────────────────────────────────
+  const handleFitView = useCallback(() => {
+    if (!nodes.length || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const pad = 60;
+    const minX = Math.min(...nodes.map(n => n.position.x)) - pad;
+    const minY = Math.min(...nodes.map(n => n.position.y)) - pad;
+    const maxX = Math.max(...nodes.map(n => n.position.x + NODE_WIDTH)) + pad;
+    const maxY = Math.max(...nodes.map(n => n.position.y + 200)) + pad;
+    const cw = canvas.clientWidth;
+    const ch = canvas.clientHeight;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
+      Math.min(cw / (maxX - minX), ch / (maxY - minY))
+    ));
+    setPan({
+      x: (cw - (maxX + minX) * newZoom) / 2,
+      y: (ch - (maxY + minY) * newZoom) / 2,
+    });
+    setZoom(newZoom);
+  }, [nodes]);
+
   const canvas = canvasRef.current;
+
+  // Dot grid background size scales with zoom
+  const gridSize = 24 * zoom;
+  const gridOffX = pan.x % gridSize;
+  const gridOffY = pan.y % gridSize;
 
   return (
     <div
       ref={canvasRef}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onMouseDown={handleCanvasMouseDown}
+      onWheel={handleWheel}
       style={{
         position: 'relative',
         width: '100%',
         height: '100%',
         background: transparent ? 'transparent' : '#11111b',
-        overflow: 'auto',
+        overflow: 'hidden',
+        cursor: 'default',
         backgroundImage: transparent
           ? 'none'
           : 'radial-gradient(circle, #313244 1px, transparent 1px)',
-        backgroundSize: '24px 24px',
+        backgroundSize: `${gridSize}px ${gridSize}px`,
+        backgroundPosition: `${gridOffX}px ${gridOffY}px`,
       }}
     >
       {/* Preview mode banner */}
@@ -184,87 +315,130 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         </div>
       )}
 
-      {/* Auto Layout button */}
-      <button
-        onClick={autoLayout}
-        title="Automatically arrange nodes left-to-right by data flow"
+      {/* Toolbar — top-right, always in screen space */}
+      <div
         style={{
           position: 'absolute',
           top: '10px',
           right: '10px',
           zIndex: 10,
-          background: '#313244',
-          border: '1px solid #45475a',
-          color: '#cdd6f4',
-          borderRadius: '6px',
-          padding: '5px 10px',
-          fontSize: '11px',
-          cursor: 'pointer',
-          letterSpacing: '0.02em',
+          display: 'flex',
+          gap: '6px',
+          alignItems: 'center',
         }}
-        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
       >
-        ⊞ Auto Layout
-      </button>
+        {/* Zoom indicator + reset */}
+        <button
+          onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+          title="Reset zoom to 100%"
+          style={toolbarBtnStyle}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+        >
+          {Math.round(zoom * 100)}%
+        </button>
 
-      {/* SVG overlay for connection lines */}
-      <svg
+        <button
+          onClick={handleFitView}
+          title="Fit all nodes in view"
+          style={toolbarBtnStyle}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+        >
+          ⊡ Fit
+        </button>
+
+        <button
+          onClick={autoLayout}
+          title="Automatically arrange nodes left-to-right by data flow"
+          style={toolbarBtnStyle}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+        >
+          ⊞ Auto Layout
+        </button>
+      </div>
+
+      {/* ── World-space container — receives pan+zoom transform ── */}
+      <div
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-          overflow: 'visible',
+          width: 0,
+          height: 0,
+          transformOrigin: '0 0',
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         }}
       >
-        {/* Existing connections — positions read from DOM via registry */}
-        {nodes.map(node =>
-          Object.entries(node.inputs).map(([inputKey, input]) => {
-            if (!input.connection) return null;
-            const sourceNode = nodes.find(n => n.id === input.connection!.nodeId);
-            if (!sourceNode) return null;
+        {/* SVG overlay for connection lines — drawn in world space */}
+        <svg
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100000px',
+            height: '100000px',
+            pointerEvents: 'none',
+            overflow: 'visible',
+          }}
+        >
+          {nodes.map(node =>
+            Object.entries(node.inputs).map(([inputKey, input]) => {
+              if (!input.connection) return null;
+              const sourceNode = nodes.find(n => n.id === input.connection!.nodeId);
+              if (!sourceNode) return null;
 
-            const fromPos = getSocketPos(input.connection.nodeId, 'out', input.connection.outputKey, canvas);
-            const toPos   = getSocketPos(node.id, 'in', inputKey, canvas);
-            if (!fromPos || !toPos) return null;
+              const fromPos = getSocketPos(input.connection.nodeId, 'out', input.connection.outputKey, canvas, zoom, pan);
+              const toPos   = getSocketPos(node.id, 'in', inputKey, canvas, zoom, pan);
+              if (!fromPos || !toPos) return null;
 
-            const srcDef  = getNodeDefinition(sourceNode.type);
-            const lineType = srcDef?.outputs[input.connection.outputKey]?.type;
+              const srcDef   = getNodeDefinition(sourceNode.type);
+              const lineType = srcDef?.outputs[input.connection.outputKey]?.type;
 
-            return (
-              <ConnectionLine
-                key={`${node.id}-${inputKey}`}
-                from={fromPos}
-                to={toPos}
-                dataType={lineType}
-              />
-            );
-          })
-        )}
+              return (
+                <ConnectionLine
+                  key={`${node.id}-${inputKey}`}
+                  from={fromPos}
+                  to={toPos}
+                  dataType={lineType}
+                />
+              );
+            })
+          )}
 
-        {/* In-progress drag connection */}
-        {dragConnection && (
-          <ConnectionLine
-            from={dragConnection.fromPos}
-            to={dragConnection.mousePos}
-            dataType={draggingType ?? undefined}
+          {dragConnection && (
+            <ConnectionLine
+              from={dragConnection.fromPos}
+              to={dragConnection.mousePos}
+              dataType={draggingType ?? undefined}
+            />
+          )}
+        </svg>
+
+        {/* Node cards — positioned in world space */}
+        {nodes.map(node => (
+          <NodeComponent
+            key={node.id}
+            node={node}
+            onStartConnection={handleStartConnection}
+            onEndConnection={handleEndConnection}
+            draggingType={draggingType}
+            zoom={zoom}
           />
-        )}
-      </svg>
-
-      {/* Node cards */}
-      {nodes.map(node => (
-        <NodeComponent
-          key={node.id}
-          node={node}
-          onStartConnection={handleStartConnection}
-          onEndConnection={handleEndConnection}
-          draggingType={draggingType}
-        />
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
+
+const toolbarBtnStyle: React.CSSProperties = {
+  background: '#313244',
+  border: '1px solid #45475a',
+  color: '#cdd6f4',
+  borderRadius: '6px',
+  padding: '5px 10px',
+  fontSize: '11px',
+  cursor: 'pointer',
+  letterSpacing: '0.02em',
+};
