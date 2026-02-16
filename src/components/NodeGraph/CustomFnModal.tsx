@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
@@ -80,13 +81,15 @@ export function CustomFnModal({ node, onClose }: Props) {
   const fnRef   = useRef<HTMLTextAreaElement | null>(null);
 
   // Read current params
-  const customInputs = (node.params.inputs as Array<{ name: string; type: DataType }>) || [];
+  const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
   const outputType   = (node.params.outputType as DataType) || 'float';
   const body         = typeof node.params.body === 'string' ? node.params.body : '0.0';
   const glslFns      = typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '';
   const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Fn';
 
-  // Insert text at textarea cursor
+  // Insert text at textarea cursor — if text contains "()" and there is a
+  // non-empty selection, auto-wraps the selection inside the first "()" pair.
+  // e.g. selected "myVar" + click sin() → sin(myVar)
   const insertAtCursor = (ref: React.RefObject<HTMLTextAreaElement | null>, current: string, paramKey: string, text: string) => {
     const ta = ref.current;
     if (!ta) {
@@ -95,11 +98,27 @@ export function CustomFnModal({ node, onClose }: Props) {
     }
     const start = ta.selectionStart ?? current.length;
     const end   = ta.selectionEnd   ?? current.length;
-    const next  = current.slice(0, start) + text + current.slice(end);
+    const selected = current.slice(start, end);
+
+    let inserted = text;
+    let cursorOffset = text.length;
+
+    if (selected && text.includes('()')) {
+      // Wrap selection inside the first empty "()" in the template
+      inserted = text.replace('()', `(${selected})`);
+      // Place cursor after the closing paren of the wrap
+      cursorOffset = inserted.length;
+    } else if (!selected && text.includes('()')) {
+      // No selection — place cursor inside the parens
+      const parenIdx = text.indexOf('()');
+      cursorOffset = parenIdx + 1; // inside the ()
+    }
+
+    const next = current.slice(0, start) + inserted + current.slice(end);
     updateNodeParams(node.id, { [paramKey]: next });
     requestAnimationFrame(() => {
       ta.focus();
-      ta.setSelectionRange(start + text.length, start + text.length);
+      ta.setSelectionRange(start + cursorOffset, start + cursorOffset);
     });
   };
 
@@ -107,7 +126,7 @@ export function CustomFnModal({ node, onClose }: Props) {
 
   const addInput = () => {
     const newName = `in${customInputs.length}`;
-    const next = [...customInputs, { name: newName, type: 'float' as DataType }];
+    const next = [...customInputs, { name: newName, type: 'float' as DataType, slider: null as { min: number; max: number } | null }];
     updateNodeParams(node.id, { inputs: next });
     updateNodeSockets(node.id, next, outputType);
   };
@@ -125,7 +144,34 @@ export function CustomFnModal({ node, onClose }: Props) {
   };
 
   const updateInputType = (idx: number, type: DataType) => {
-    const next = customInputs.map((inp, i) => i === idx ? { ...inp, type } : inp);
+    // Changing type away from float clears any slider
+    const next = customInputs.map((inp, i) =>
+      i === idx ? { ...inp, type, slider: type !== 'float' ? null : inp.slider } : inp
+    );
+    updateNodeParams(node.id, { inputs: next });
+    updateNodeSockets(node.id, next, outputType);
+  };
+
+  const toggleSlider = (idx: number) => {
+    const inp = customInputs[idx];
+    const newSlider = inp.slider ? null : { min: 0, max: 1 };
+    // Initialize param value to midpoint when enabling
+    const extraParams: Record<string, unknown> = {};
+    if (newSlider && typeof node.params[inp.name] !== 'number') {
+      extraParams[inp.name] = 0.5;
+    }
+    const next = customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c);
+    updateNodeParams(node.id, { inputs: next, ...extraParams });
+    updateNodeSockets(node.id, next, outputType);
+  };
+
+  const updateSliderRange = (idx: number, field: 'min' | 'max', raw: string) => {
+    const val = parseFloat(raw);
+    if (isNaN(val)) return;
+    const inp = customInputs[idx];
+    const oldSlider = inp.slider ?? { min: 0, max: 1 };
+    const newSlider = { ...oldSlider, [field]: val };
+    const next = customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c);
     updateNodeParams(node.id, { inputs: next });
     updateNodeSockets(node.id, next, outputType);
   };
@@ -135,8 +181,9 @@ export function CustomFnModal({ node, onClose }: Props) {
     updateNodeSockets(node.id, customInputs, type);
   };
 
-  return (
-    // Backdrop
+  return createPortal(
+    // Backdrop — portalled to document.body so position:fixed escapes
+    // the CSS transform on the node graph's world-space container.
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
@@ -201,61 +248,113 @@ export function CustomFnModal({ node, onClose }: Props) {
             <div
               key={idx}
               style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
+                display: 'flex', flexDirection: 'column', gap: '4px',
                 background: '#181825', border: '1px solid #313244',
                 borderRadius: '5px', padding: '5px 8px',
               }}
             >
-              <span style={{ color: '#585b70', fontSize: '10px', minWidth: '16px' }}>{idx}</span>
-              <input
-                type="text"
-                value={inp.name}
-                onChange={e => updateInputName(idx, e.target.value)}
-                spellCheck={false}
-                placeholder="name"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: '1px solid #313244',
-                  color: '#cdd6f4',
-                  fontSize: '12px',
-                  fontFamily: 'monospace',
-                  outline: 'none',
-                  width: '90px',
-                  padding: '0 2px',
-                }}
-              />
-              <select
-                value={inp.type}
-                onChange={e => updateInputType(idx, e.target.value as DataType)}
-                style={{
-                  background: '#181825',
-                  border: '1px solid #45475a',
-                  color: '#cdd6f4',
-                  borderRadius: '3px',
-                  fontSize: '11px',
-                  padding: '2px 4px',
-                  outline: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              {/* Insert into body */}
-              <button
-                onClick={() => insertAtCursor(bodyRef, body, 'body', inp.name)}
-                title={`Insert "${inp.name}" into body`}
-                style={{ ...BTN, padding: '2px 6px', fontSize: '10px' }}
-              >
-                ↵
-              </button>
-              <button
-                onClick={() => removeInput(idx)}
-                style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', padding: '2px 4px', fontSize: '13px', marginLeft: 'auto' }}
-                title="Remove input"
-              >
-                ×
-              </button>
+              {/* Main row: index · name · type · insert · slider toggle · remove */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#585b70', fontSize: '10px', minWidth: '16px' }}>{idx}</span>
+                <input
+                  type="text"
+                  value={inp.name}
+                  onChange={e => updateInputName(idx, e.target.value)}
+                  spellCheck={false}
+                  placeholder="name"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid #313244',
+                    color: '#cdd6f4',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    outline: 'none',
+                    width: '90px',
+                    padding: '0 2px',
+                  }}
+                />
+                <select
+                  value={inp.type}
+                  onChange={e => updateInputType(idx, e.target.value as DataType)}
+                  style={{
+                    background: '#181825',
+                    border: '1px solid #45475a',
+                    color: '#cdd6f4',
+                    borderRadius: '3px',
+                    fontSize: '11px',
+                    padding: '2px 4px',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                {/* Insert into body */}
+                <button
+                  onClick={() => insertAtCursor(bodyRef, body, 'body', inp.name)}
+                  title={`Insert "${inp.name}" into body`}
+                  style={{ ...BTN, padding: '2px 6px', fontSize: '10px' }}
+                >
+                  ↵
+                </button>
+                {/* Slider toggle — only for float inputs */}
+                {inp.type === 'float' && (
+                  <button
+                    onClick={() => toggleSlider(idx)}
+                    title={inp.slider ? 'Remove slider — use socket connection instead' : 'Add slider — control value with a range slider'}
+                    style={{
+                      ...BTN,
+                      padding: '2px 7px',
+                      fontSize: '10px',
+                      color: inp.slider ? '#cba6f7' : '#585b70',
+                      borderColor: inp.slider ? '#cba6f755' : '#45475a',
+                      background: inp.slider ? '#cba6f711' : '#313244',
+                    }}
+                  >
+                    ⊟ slider
+                  </button>
+                )}
+                <button
+                  onClick={() => removeInput(idx)}
+                  style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', padding: '2px 4px', fontSize: '13px', marginLeft: 'auto' }}
+                  title="Remove input"
+                >
+                  ×
+                </button>
+              </div>
+              {/* Slider range row — visible only when slider is enabled */}
+              {inp.slider && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '22px' }}>
+                  <span style={{ fontSize: '10px', color: '#585b70' }}>range</span>
+                  <input
+                    type="number"
+                    value={inp.slider.min}
+                    onChange={e => updateSliderRange(idx, 'min', e.target.value)}
+                    step="0.1"
+                    style={{
+                      background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
+                      borderRadius: '3px', fontSize: '11px', padding: '2px 5px',
+                      outline: 'none', width: '64px', fontFamily: 'monospace',
+                    }}
+                  />
+                  <span style={{ fontSize: '10px', color: '#585b70' }}>→</span>
+                  <input
+                    type="number"
+                    value={inp.slider.max}
+                    onChange={e => updateSliderRange(idx, 'max', e.target.value)}
+                    step="0.1"
+                    style={{
+                      background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
+                      borderRadius: '3px', fontSize: '11px', padding: '2px 5px',
+                      outline: 'none', width: '64px', fontFamily: 'monospace',
+                    }}
+                  />
+                  <span style={{ fontSize: '10px', color: '#585b70' }}>
+                    (current: {typeof node.params[inp.name] === 'number' ? (node.params[inp.name] as number).toFixed(3) : '—'})
+                  </span>
+                </div>
+              )}
             </div>
           ))}
           <button
@@ -375,6 +474,7 @@ export function CustomFnModal({ node, onClose }: Props) {
           }}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

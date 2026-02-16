@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import ShaderCanvas from './components/ShaderCanvas';
+import ShaderCanvas, { type OfflineRenderHandle } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { CodePanel } from './components/CodePanel';
@@ -46,8 +46,23 @@ function App() {
   const {
     loadExampleGraph, compilationErrors, glslErrors, pixelSample, fragmentShader,
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
-    addNode, setNodeHighlightFilter, _fitViewCallback,
+    addNode, setNodeHighlightFilter, _fitViewCallback, undo,
+    nodeProbeValues, selectedNodeId, nodes: graphNodes,
   } = useNodeGraphStore();
+
+  // Build probe display for selected node — shown in status bar instead of "hover for color"
+  const selectedNode = selectedNodeId ? graphNodes.find(n => n.id === selectedNodeId) : null;
+  const probeDisplay = selectedNode && nodeProbeValues
+    ? Object.entries(nodeProbeValues).map(([outKey, vals]) => {
+        const outSocket = selectedNode.outputs[outKey];
+        const label = outSocket?.label ?? outKey;
+        const type  = outSocket?.type ?? 'float';
+        const COLOR_MAP: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
+        const col = COLOR_MAP[type] || '#cdd6f4';
+        const formatted = vals.map(v => v.toFixed(3)).join(', ');
+        return { label, col, formatted, type };
+      })
+    : null;
 
   const bp = useBreakpoint();
   const mobile = isMobile(bp);
@@ -59,7 +74,7 @@ function App() {
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
   const [page, setPage]                 = useState<'studio' | 'learn' | 'shortcuts'>('studio');
-  const [activeExample, setActiveExample] = useState('fractalRings');
+  const [activeExample, setActiveExample] = useState('blank');
 
   // Mobile/tablet drawer state
   const [drawerOpen, setDrawerOpen]         = useState(false);
@@ -78,7 +93,9 @@ function App() {
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const offlineRenderRef = useRef<OfflineRenderHandle | null>(null);
   const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
+  const handleRegisterOfflineRender = useCallback((handle: OfflineRenderHandle) => { offlineRenderRef.current = handle; }, []);
 
   // Update preview width when breakpoint changes
   useEffect(() => {
@@ -91,6 +108,7 @@ function App() {
   }, [addNode]);
 
   const shortcutHandlers = useMemo(() => ({
+    undo:           () => undo(),
     export:         () => exportGraph(),
     import:         () => importGraphFromFile(),
     fitView:        () => _fitViewCallback?.(),
@@ -110,9 +128,15 @@ function App() {
     filterUVInputs: () => setNodeHighlightFilter('uv-in'),
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
-  }), [addRandomNode, exportGraph, importGraphFromFile, _fitViewCallback, setNodeHighlightFilter]);
+  }), [undo, addRandomNode, exportGraph, importGraphFromFile, _fitViewCallback, setNodeHighlightFilter]);
 
-  useShortcuts(shortcutHandlers);
+  const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
+  const holdHandlers = useMemo(() => ({
+    ids: HOLD_FILTER_IDS,
+    onRelease: () => setNodeHighlightFilter(null),
+  }), [HOLD_FILTER_IDS, setNodeHighlightFilter]);
+
+  useShortcuts(shortcutHandlers, holdHandlers);
 
   const handleSave = () => {
     const name = saveNameInput.trim();
@@ -123,7 +147,7 @@ function App() {
   };
 
   useEffect(() => {
-    loadExampleGraph('fractalRings');
+    loadExampleGraph('blank');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -283,7 +307,7 @@ function App() {
 
         {/* Full-screen shader preview as background */}
         <div style={{ position: 'absolute', inset: 0 }}>
-          <ShaderCanvas onCanvasReady={handleCanvasReady} />
+          <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
         </div>
 
         {/* Floating TopNav */}
@@ -418,7 +442,7 @@ function App() {
 
         {/* Export modal */}
         {showExport && (
-          <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />
+          <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
         )}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
       </div>
@@ -524,7 +548,7 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} /></div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /></div>
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -533,14 +557,23 @@ function App() {
                   <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
                   <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
                 </div>
-              ) : <span style={{ opacity: 0.4 }}>hover for color</span>}
+              ) : probeDisplay ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                  {probeDisplay.map(({ label, col, formatted }) => (
+                    <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                      <span style={{ color: col, fontWeight: 700 }}>{label}</span>
+                      <span style={{ color: '#cdd6f4' }}>{formatted}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover for color · click node to probe'}</span>}
               <div style={{ flex: 1 }} />
               {errorBadge}
             </div>
             {errorPopup}
           </div>
         </div>
-        {showExport && <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />}
+        {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
       </div>
   );
@@ -618,7 +651,7 @@ function App() {
 
         {/* Right: Shader Preview */}
         <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} /></div>
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /></div>
 
           {/* Status bar */}
           <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
@@ -629,7 +662,16 @@ function App() {
                 <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
                 <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
               </div>
-            ) : <span style={{ opacity: 0.4 }}>hover for color</span>}
+            ) : probeDisplay ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                {probeDisplay.map(({ label, col, formatted }) => (
+                  <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                    <span style={{ color: col, fontWeight: 700 }}>{label}</span>
+                    <span style={{ color: '#cdd6f4' }}>{formatted}</span>
+                  </span>
+                ))}
+              </div>
+            ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover for color · click node to probe'}</span>}
             <div style={{ flex: 1 }} />
             {errorBadge}
           </div>
@@ -637,7 +679,7 @@ function App() {
         </div>
       </div>
       {showExport && (
-        <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />
+        <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>

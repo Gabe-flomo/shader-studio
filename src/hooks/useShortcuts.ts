@@ -24,6 +24,7 @@ export type ShortcutMap = Record<string, string>; // actionId → combo
 
 export const DEFAULT_ACTIONS: ShortcutAction[] = [
   // Graph management
+  { id: 'undo',              label: 'Undo',                  group: 'Graph',      defaultCombo: 'cmd+z',       description: 'Undo last graph change' },
   { id: 'export',            label: 'Export graph',          group: 'Graph',      defaultCombo: 'cmd+s',       description: 'Export graph to file' },
   { id: 'import',            label: 'Import graph',          group: 'Graph',      defaultCombo: 'cmd+o',       description: 'Import graph from file' },
   // View
@@ -40,11 +41,11 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'addColor',          label: 'Add Color node',        group: 'Add Nodes',  defaultCombo: 'c',           description: 'Instantly add a Color constant node' },
   // Node graph — select/filter/highlight
   { id: 'selectAll',         label: 'Show all nodes',        group: 'Filter',     defaultCombo: 'cmd+a',       description: 'Clear filter — show all nodes normally' },
-  { id: 'filterFloat',       label: 'Highlight float nodes', group: 'Filter',     defaultCombo: '1',           description: 'Highlight nodes that output float' },
-  { id: 'filterVec2',        label: 'Highlight vec2 nodes',  group: 'Filter',     defaultCombo: '2',           description: 'Highlight nodes that output vec2 (UV)' },
-  { id: 'filterVec3',        label: 'Highlight vec3 nodes',  group: 'Filter',     defaultCombo: '3',           description: 'Highlight nodes that output vec3 (color/pos)' },
-  { id: 'filterUVInputs',    label: 'Highlight UV inputs',   group: 'Filter',     defaultCombo: 'shift+u',     description: 'Highlight nodes that have a vec2 input' },
-  { id: 'filterUVOutputs',   label: 'Highlight UV outputs',  group: 'Filter',     defaultCombo: 'shift+v',     description: 'Highlight nodes that output vec2' },
+  { id: 'filterFloat',       label: 'Highlight float nodes', group: 'Filter',     defaultCombo: '1',           description: 'Hold to highlight nodes that output float' },
+  { id: 'filterVec2',        label: 'Highlight vec2 nodes',  group: 'Filter',     defaultCombo: '2',           description: 'Hold to highlight nodes that output vec2 (UV)' },
+  { id: 'filterVec3',        label: 'Highlight vec3 nodes',  group: 'Filter',     defaultCombo: '3',           description: 'Hold to highlight nodes that output vec3 (color/pos)' },
+  { id: 'filterUVInputs',    label: 'Highlight UV inputs',   group: 'Filter',     defaultCombo: 'shift+u',     description: 'Hold to highlight nodes that have a vec2 input' },
+  { id: 'filterUVOutputs',   label: 'Highlight UV outputs',  group: 'Filter',     defaultCombo: 'shift+v',     description: 'Hold to highlight nodes that output vec2' },
   // Help
   { id: 'shortcuts',         label: 'Keyboard shortcuts',    group: 'Help',       defaultCombo: '?',           description: 'Show this panel' },
 ];
@@ -134,10 +135,22 @@ type ActionHandlers = Partial<Record<string, () => void>>;
 
 /**
  * Listen for keyboard shortcuts and fire the matching handler.
+ *
+ * `holdHandlers` — actions in this set are "hold to activate": the handler fires
+ * on keydown, and `onHoldRelease` fires when the same key is released.
+ * Used for highlight filters (hold key = highlight, release = clear).
  */
-export function useShortcuts(handlers: ActionHandlers) {
-  const handlersRef = useRef(handlers);
-  useEffect(() => { handlersRef.current = handlers; }, [handlers]);
+export function useShortcuts(
+  handlers: ActionHandlers,
+  holdHandlers?: { ids: Set<string>; onRelease: () => void },
+) {
+  const handlersRef    = useRef(handlers);
+  const holdHandlerRef = useRef(holdHandlers);
+  useEffect(() => { handlersRef.current    = handlers;    }, [handlers]);
+  useEffect(() => { holdHandlerRef.current = holdHandlers; }, [holdHandlers]);
+
+  // Track which key combo is currently held for a hold-action (so keyup matches)
+  const heldComboRef = useRef<string | null>(null);
 
   const dispatch = useCallback((actionId: string) => {
     handlersRef.current[actionId]?.();
@@ -145,6 +158,9 @@ export function useShortcuts(handlers: ActionHandlers) {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Suppress key-repeat for hold actions (don't re-fire on every repeat tick)
+      if (e.repeat) return;
+
       const tag      = (e.target as HTMLElement)?.tagName;
       const editable = (e.target as HTMLElement)?.isContentEditable;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || editable) return;
@@ -156,12 +172,32 @@ export function useShortcuts(handlers: ActionHandlers) {
         if (normaliseCombo(bound) === normaliseCombo(combo)) {
           e.preventDefault();
           dispatch(actionId);
+          // If this is a hold action, remember the combo so keyup can match it
+          if (holdHandlerRef.current?.ids.has(actionId)) {
+            heldComboRef.current = normaliseCombo(combo);
+          }
           return;
         }
       }
     };
 
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!heldComboRef.current) return;
+      const combo = comboFromEvent(e);
+      // keyup combo may drop modifiers; match on just the bare key too
+      const bareKey = e.key.toLowerCase();
+      const held    = heldComboRef.current;
+      if (normaliseCombo(combo) === held || held.endsWith(bareKey)) {
+        heldComboRef.current = null;
+        holdHandlerRef.current?.onRelease();
+      }
+    };
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup',   onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup',   onKeyUp);
+    };
   }, [dispatch]);
 }

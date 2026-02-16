@@ -7,6 +7,21 @@ import { saveTextFile, openTextFile } from '../utils/fileIO';
 // Module-level debounce timer for recompilation triggered by param edits.
 // Structure changes (connect/disconnect/add/remove) still compile immediately.
 let _compileTimer: ReturnType<typeof setTimeout> | null = null;
+// Debounce timer for history pushes during param edits (sliders/text) — we
+// push once at the START of an edit burst, not on every keystroke/tick.
+let _historyParamTimer: ReturnType<typeof setTimeout> | null = null;
+let _historyParamPending = false;
+
+// ── Undo history ──────────────────────────────────────────────────────────────
+// Stored outside Zustand state so pushing snapshots never triggers a re-render.
+const MAX_HISTORY = 50;
+const _history: GraphNode[][] = [];
+
+/** Push a deep-clone of the current node list onto the undo stack. */
+function pushHistory(nodes: GraphNode[]) {
+  _history.push(JSON.parse(JSON.stringify(nodes)));
+  if (_history.length > MAX_HISTORY) _history.shift();
+}
 
 interface NodeGraphState {
   // Graph data
@@ -21,6 +36,15 @@ interface NodeGraphState {
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
   pixelSample: [number, number, number, number] | null;  // mouse pixel RGBA 0-255
   currentTime: number;            // current u_time uniform value (seconds)
+
+  // Node probe — click a node to see its live output values in the status bar
+  selectedNodeId: string | null;
+  /** Maps nodeId → { outputKey → glslVarName }, updated on every compile */
+  nodeOutputVarMap: Map<string, Record<string, string>>;
+  /** Live-sampled values for the selected node: outputKey → number[] (1–4 components) */
+  nodeProbeValues: Record<string, number[]> | null;
+  setSelectedNodeId: (id: string | null) => void;
+  setNodeProbeValues: (values: Record<string, number[]> | null) => void;
 
   // Preview mode — isolates a single node's output for focused editing
   previewNodeId: string | null;
@@ -53,10 +77,11 @@ interface NodeGraphState {
   // Rebuild a node's input sockets from a custom-fn inputs definition array
   updateNodeSockets: (
     nodeId: string,
-    inputs: Array<{ name: string; type: DataType }>,
+    inputs: Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>,
     outputType: DataType
   ) => void;
 
+  undo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => void;
   autoLayout: () => void;
@@ -1368,6 +1393,18 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
 
 let nodeIdCounter = 0;
 
+/** Advance nodeIdCounter past the highest node_N index in a loaded node list
+ *  so newly-added nodes never collide with existing IDs. */
+function syncCounterFromNodes(nodes: GraphNode[]) {
+  for (const node of nodes) {
+    const m = node.id.match(/^node_(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10) + 1;
+      if (n > nodeIdCounter) nodeIdCounter = n;
+    }
+  }
+}
+
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodes: [],
   vertexShader: '',
@@ -1376,6 +1413,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   glslErrors: [],
   pixelSample: null,
   currentTime: 0,
+  selectedNodeId: null,
+  nodeOutputVarMap: new Map(),
+  nodeProbeValues: null,
   previewNodeId: null,
   nodeHighlightFilter: null,
   _fitViewCallback: null,
@@ -1383,7 +1423,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
 
+  undo: () => {
+    const prev = _history.pop();
+    if (!prev) return;
+    // Restore counter so new nodes after undo don't collide
+    syncCounterFromNodes(prev);
+    set({ nodes: prev, nodeProbeValues: null });
+    get().compile();
+  },
+
   addNode: (type, position, overrideParams?) => {
+    pushHistory(get().nodes);
     const def = getNodeDefinition(type);
     if (!def) {
       console.error(`Unknown node type: ${type}`);
@@ -1409,9 +1459,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       };
     }
 
-    // For customFn nodes with overrideParams.inputs, rebuild sockets from the array
-    const customInputDefs = type === 'customFn' && Array.isArray(overrideParams?.inputs)
-      ? (overrideParams!.inputs as Array<{ name: string; type: DataType }>)
+    // For customFn nodes, build sockets from the inputs array in params
+    // (either overrideParams.inputs or defaultParams.inputs for fresh nodes)
+    const customInputDefs = type === 'customFn'
+      ? (Array.isArray(overrideParams?.inputs)
+          ? (overrideParams!.inputs as Array<{ name: string; type: DataType }>)
+          : Array.isArray(def.defaultParams?.inputs)
+            ? (def.defaultParams!.inputs as Array<{ name: string; type: DataType }>)
+            : null)
       : null;
 
     if (customInputDefs) {
@@ -1448,6 +1503,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeNode: (nodeId) => {
+    pushHistory(get().nodes);
     set(state => {
       const newNodes = state.nodes
         .filter(n => n.id !== nodeId)
@@ -1476,6 +1532,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   updateNodeParams: (nodeId, params, options?) => {
+    // Push history once at the start of an edit burst (debounced — not on every keystroke/tick)
+    if (!_historyParamPending) {
+      pushHistory(get().nodes);
+      _historyParamPending = true;
+    }
+    if (_historyParamTimer) clearTimeout(_historyParamTimer);
+    _historyParamTimer = setTimeout(() => { _historyParamPending = false; }, 1000);
     set(state => ({
       nodes: state.nodes.map(n =>
         n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n
@@ -1493,6 +1556,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
+    pushHistory(get().nodes);
     set(state => ({
       nodes: state.nodes.map(n => {
         if (n.id !== targetNodeId) return n;
@@ -1512,6 +1576,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   disconnectInput: (nodeId, inputKey) => {
+    pushHistory(get().nodes);
     set(state => ({
       nodes: state.nodes.map(n => {
         if (n.id !== nodeId) return n;
@@ -1524,6 +1589,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   toggleBypass: (nodeId) => {
+    pushHistory(get().nodes);
     set(state => ({
       nodes: state.nodes.map(n =>
         n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n
@@ -1533,6 +1599,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   updateNodeSockets: (nodeId, inputDefs, outputType) => {
+    pushHistory(get().nodes);
     set(state => ({
       nodes: state.nodes.map(n => {
         if (n.id !== nodeId) return n;
@@ -1540,11 +1607,16 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const newInputs: Record<string, InputSocket> = {};
         for (const inp of inputDefs) {
           const existing = n.inputs[inp.name];
+          // Slider inputs: no socket connection — value comes from node.params[name]
+          const hasSlider = inp.type === 'float' && inp.slider != null;
+          const paramVal = typeof n.params[inp.name] === 'number' ? (n.params[inp.name] as number) : 0;
           newInputs[inp.name] = {
             type: inp.type,
             label: inp.name,
-            // preserve connection only if the socket name & type still match
-            connection: existing?.type === inp.type ? existing.connection : undefined,
+            // Slider inputs: set defaultValue so compiler emits the param value as GLSL literal
+            defaultValue: hasSlider ? paramVal : undefined,
+            // Preserve connection only if socket name & type still match, and no slider override
+            connection: (!hasSlider && existing?.type === inp.type) ? existing.connection : undefined,
           };
         }
         const newOutputs = { result: { type: outputType, label: 'Result' } };
@@ -1564,6 +1636,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       vertexShader: result.vertexShader,
       fragmentShader: result.fragmentShader,
       compilationErrors: result.errors ?? [],
+      nodeOutputVarMap: result.nodeOutputVars,
+      // Clear stale probe values when graph recompiles
+      nodeProbeValues: null,
     });
   },
 
@@ -1650,7 +1725,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   loadExampleGraph: (name?: string) => {
     const example = name ?? 'fractalRings';
-    const { nodes: rawNodes, counter } = EXAMPLE_GRAPHS[example] ?? EXAMPLE_GRAPHS['fractalRings'];
+    const { nodes: rawNodes } = EXAMPLE_GRAPHS[example] ?? EXAMPLE_GRAPHS['fractalRings'];
 
     // Backfill any input sockets that exist in the live NodeDefinition but are
     // missing from the serialized graph (handles schema evolution across iterations).
@@ -1671,8 +1746,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return { ...node, inputs: mergedInputs };
     });
 
+    syncCounterFromNodes(nodes);
     set({ nodes, previewNodeId: null });
-    nodeIdCounter = counter;
     get().compile();
   },
 
@@ -1684,6 +1759,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setGlslErrors: (errors) => set({ glslErrors: errors }),
   setPixelSample: (sample) => set({ pixelSample: sample }),
   setCurrentTime: (t) => set({ currentTime: t }),
+  setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
+  setNodeProbeValues: (values) => set({ nodeProbeValues: values }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: (name) => {
@@ -1703,6 +1780,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     try {
       const { nodes } = JSON.parse(raw) as { nodes: GraphNode[] };
       if (Array.isArray(nodes)) {
+        syncCounterFromNodes(nodes);
         set({ nodes, previewNodeId: null });
         get().compile();
       }
@@ -1723,6 +1801,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     try {
       const { nodes } = JSON.parse(json) as { nodes: GraphNode[] };
       if (Array.isArray(nodes)) {
+        syncCounterFromNodes(nodes);
         set({ nodes, previewNodeId: null });
         get().compile();
       }

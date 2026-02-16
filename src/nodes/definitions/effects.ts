@@ -583,7 +583,7 @@ export const CustomFnNode: NodeDefinition = {
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: {
     label: 'Custom Fn',
-    inputs: [] as Array<{ name: string; type: string }>,
+    inputs: [{ name: 'uv', type: 'vec2', slider: null }] as Array<{ name: string; type: string; slider: null }>,
     outputType: 'float',
     body: '0.0',
     glslFunctions: '',

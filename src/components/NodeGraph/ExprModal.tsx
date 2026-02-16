@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
@@ -279,8 +280,9 @@ export function ExprModal({ node, onClose }: Props) {
     if (expr !== current) pushHistory(expr);
   };
 
-  return (
-    // Backdrop
+  return createPortal(
+    // Backdrop — portalled to document.body so position:fixed escapes the
+    // CSS transform on the node graph's world-space container.
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
@@ -584,6 +586,7 @@ export function ExprModal({ node, onClose }: Props) {
           </div>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

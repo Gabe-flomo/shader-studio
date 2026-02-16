@@ -3,25 +3,10 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
+import { socketRegistry } from './socketRegistry';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 240;
-
-// ─── Socket position registry ────────────────────────────────────────────────
-// NodeComponent registers DOM elements for each socket dot here so NodeGraph
-// can read actual pixel positions instead of computing from layout constants.
-type SocketRegistry = Map<string, HTMLElement>;
-
-export const socketRegistry: SocketRegistry = new Map();
-
-export function registerSocket(nodeId: string, dir: 'in' | 'out', key: string, el: HTMLElement | null) {
-  const k = `${nodeId}:${dir}:${key}`;
-  if (el) {
-    socketRegistry.set(k, el);
-  } else {
-    socketRegistry.delete(k);
-  }
-}
 
 // Returns socket position in *world space* (pre-transform canvas coords),
 // accounting for the current pan/zoom so connection lines stay accurate.
@@ -69,8 +54,25 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     : null;
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  // canvasEl is stored in state so getSocketPos always has a stable reference.
+  // It's set once after mount via useEffect and never changes.
+  const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
   const [, setTick] = useState(0);
-  useEffect(() => { setTick(t => t + 1); }, []);
+
+  useEffect(() => {
+    setCanvasEl(canvasRef.current);
+    if (!canvasRef.current) return;
+    const ro = new ResizeObserver(() => setTick(t => t + 1));
+    ro.observe(canvasRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // After nodes change, wait one rAF for the browser to paint new DOM positions,
+  // then trigger a re-render so connection lines read fresh getBoundingClientRect.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setTick(t => t + 1));
+    return () => cancelAnimationFrame(id);
+  }, [nodes]);
 
   // ── Pan / zoom state ────────────────────────────────────────────────────────
   const [zoom, setZoom] = useState(1);
@@ -167,6 +169,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     panStart.current   = { x: e.clientX, y: e.clientY };
     panOrigin.current  = { ...panRef.current };
     if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+    (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = 'none';
 
     const onMove = (ev: MouseEvent) => {
       if (!isPanning.current) return;
@@ -177,6 +181,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     };
     const onUp = () => {
       isPanning.current = false;
+      document.body.style.userSelect = '';
+      (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = '';
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup',   onUp);
       if (canvasRef.current)
@@ -305,8 +311,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     }
     return matching;
   }, [nodeHighlightFilter, nodes]);
-
-  const canvas = canvasRef.current;
 
   // Dot grid background size scales with zoom
   const gridSize = 24 * zoom;
@@ -449,8 +453,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               const sourceNode = nodes.find(n => n.id === input.connection!.nodeId);
               if (!sourceNode) return null;
 
-              const fromPos = getSocketPos(input.connection.nodeId, 'out', input.connection.outputKey, canvas, zoom, pan);
-              const toPos   = getSocketPos(node.id, 'in', inputKey, canvas, zoom, pan);
+              const fromPos = getSocketPos(input.connection.nodeId, 'out', input.connection.outputKey, canvasEl, zoom, pan);
+              const toPos   = getSocketPos(node.id, 'in', inputKey, canvasEl, zoom, pan);
               if (!fromPos || !toPos) return null;
 
               const srcDef   = getNodeDefinition(sourceNode.type);

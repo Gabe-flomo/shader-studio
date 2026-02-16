@@ -4,7 +4,7 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
-import { registerSocket } from './NodeGraph';
+import { registerSocket } from './socketRegistry';
 
 interface Props {
   node: GraphNode;
@@ -204,6 +204,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
+  const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
+  const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
+  const isSelected         = selectedNodeId === node.id;
   // currentTime is only needed for the Time node live badge — subscribed below conditionally
   const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
 
@@ -231,14 +234,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent browser text-selection during drag
     // Store offset in world-space units (divide by zoom to compensate for canvas scale)
     dragOffset.current = {
       x: e.clientX / zoom - node.position.x,
       y: e.clientY / zoom - node.position.y,
     };
 
+    let hasDragged = false;
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    // Disable all text selection globally for the duration of this drag
+    document.body.style.userSelect = 'none';
+    (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = 'none';
+
     const handleMouseMove = (ev: MouseEvent) => {
       if (dragOffset.current) {
+        if (!hasDragged && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) {
+          hasDragged = true;
+        }
         updateNodePosition(node.id, {
           x: ev.clientX / zoom - dragOffset.current.x,
           y: ev.clientY / zoom - dragOffset.current.y,
@@ -246,14 +261,25 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       }
     };
 
+    const suppressSelect = (ev: Event) => ev.preventDefault();
+
     const handleMouseUp = () => {
       dragOffset.current = null;
+      // Restore selection
+      document.body.style.userSelect = '';
+      (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = '';
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('selectstart', suppressSelect);
+      // If mouse didn't move, treat as a click — toggle selection
+      if (!hasDragged) {
+        setSelectedNodeId(isSelected ? null : node.id);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('selectstart', suppressSelect);
   };
 
   const setFloat = (key: string, raw: string) => {
@@ -351,7 +377,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         left: node.position.x,
         top: node.position.y,
         background: '#1e1e2e',
-        border: isBypassed ? '1px solid #f9e2af55' : isPreviewActive ? '1px solid #a6e3a1' : '1px solid #444',
+        border: isBypassed ? '1px solid #f9e2af55' : isPreviewActive ? '1px solid #a6e3a1' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
         borderRadius: '8px',
         minWidth: '240px',
         color: '#cdd6f4',
@@ -361,6 +387,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         transition: 'opacity 0.2s ease',
         boxShadow: isPreviewActive
           ? '0 0 14px #a6e3a133, 0 4px 12px rgba(0,0,0,0.4)'
+          : isSelected
+          ? '0 0 10px #89b4fa33, 0 4px 12px rgba(0,0,0,0.4)'
           : '0 4px 12px rgba(0,0,0,0.4)',
       }}
     >
@@ -542,6 +570,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         {/* ── Inputs (always visible) ── */}
         {Object.entries(node.inputs).map(([key, input]) => {
           const isConnected = !!input.connection;
+
+          // CustomFn slider inputs are rendered as sliders below — skip socket row
+          if (node.type === 'customFn') {
+            const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) || [];
+            const cfInp = cfInputs.find(c => c.name === key);
+            if (cfInp?.slider != null) return null;
+          }
 
           // For Expr node: show name-edit field inline with each input slot
           const isExprSlot = node.type === 'expr' && /^in\d$/.test(key);
@@ -902,6 +937,56 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
 
           return null;
         })}
+
+        {/* ── CustomFn slider params (hidden when collapsed) ── */}
+        {!collapsed && node.type === 'customFn' && (() => {
+          const cfInputs = (node.params.inputs as Array<{ name: string; type: string; slider?: { min: number; max: number } | null }>) || [];
+          const sliderInputs = cfInputs.filter(inp => inp.type === 'float' && inp.slider != null);
+          if (sliderInputs.length === 0) return null;
+          return sliderInputs.map(inp => {
+            const sl = inp.slider!;
+            const val = typeof node.params[inp.name] === 'number' ? (node.params[inp.name] as number) : 0;
+            const range = sl.max - sl.min || 1;
+            const step = range <= 2 ? 0.001 : range <= 10 ? 0.01 : 0.1;
+            return (
+              <div
+                key={inp.name}
+                style={{ padding: '3px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#6c7086', fontSize: '11px' }}>{inp.name}</span>
+                  <input
+                    type="number"
+                    style={{ ...INPUT_STYLE, width: '56px' }}
+                    value={val}
+                    step={step}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v)) updateNodeParams(node.id, { [inp.name]: v }, { immediate: true });
+                    }}
+                  />
+                </div>
+                <input
+                  type="range"
+                  min={sl.min}
+                  max={sl.max}
+                  step={step}
+                  value={val}
+                  style={{ width: '100%', accentColor: '#cba6f7', cursor: 'pointer' }}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value);
+                    updateNodeParams(node.id, { [inp.name]: v }, { immediate: true });
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#45475a', fontSize: '9px', fontFamily: 'monospace' }}>{sl.min}</span>
+                  <span style={{ color: '#45475a', fontSize: '9px', fontFamily: 'monospace' }}>{sl.max}</span>
+                </div>
+              </div>
+            );
+          });
+        })()}
 
         {/* ── Outputs (always visible) ── */}
         {Object.entries(node.outputs).map(([key, output]) => {

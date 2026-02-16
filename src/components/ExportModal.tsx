@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
+import { runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
+import type { OfflineRenderHandle } from './ShaderCanvas';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -13,7 +15,7 @@ const PANEL: React.CSSProperties = {
   background: '#1e1e2e',
   border: '1px solid #45475a',
   borderRadius: '12px',
-  width: '400px',
+  width: '420px',
   maxWidth: '95vw',
   padding: '20px 24px',
   display: 'flex',
@@ -65,14 +67,21 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface Props {
-  canvas: HTMLCanvasElement | null;
-  onClose: () => void;
-}
+const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-type RecordState = 'idle' | 'recording' | 'done' | 'error';
+const CODEC_LABELS: Record<FfmpegCodec, string> = {
+  h264:   'H.264',
+  prores: 'ProRes 422 HQ',
+  ffv1:   'FFV1 (lossless)',
+};
+
+const CODEC_DESCRIPTIONS: Record<FfmpegCodec, string> = {
+  h264:   'CRF 18 · .mp4 · best compatibility',
+  prores: 'Apple ProRes · .mov · editing master',
+  ffv1:   'Lossless · .mkv · largest file',
+};
 
 // Resolution multipliers relative to the canvas's natural size
 const RESOLUTIONS = [
@@ -81,32 +90,47 @@ const RESOLUTIONS = [
   { label: '4×  (ultra)', scale: 4 },
 ];
 
+// ── Main component ────────────────────────────────────────────────────────────
 
-export function ExportModal({ canvas, onClose }: Props) {
+interface Props {
+  canvas: HTMLCanvasElement | null;
+  /**
+   * Handle registered by ShaderCanvas — renders to a dedicated RT and reads pixels.
+   * Required for FFmpeg offline encoding.
+   */
+  offlineRender?: OfflineRenderHandle | null;
+  onClose: () => void;
+}
+
+type RecordMode  = 'mediarecorder' | 'ffmpeg';
+type RecordState = 'idle' | 'recording' | 'encoding' | 'done' | 'error';
+
+export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const [fps, setFps]               = useState(60);
   const [duration, setDuration]     = useState(5);
   const [manualStop, setManualStop] = useState(false);
   const [bitrate, setBitrate]       = useState(50); // Mbps
   const [resScale, setResScale]     = useState(1);
+  const [codec, setCodec]           = useState<FfmpegCodec>('h264');
+  const [mode, setMode]             = useState<RecordMode>(inTauri ? 'ffmpeg' : 'mediarecorder');
 
   const [state, setState]                       = useState<RecordState>('idle');
   const [captureProgress, setCaptureProgress]   = useState(0);
   const [elapsed, setElapsed]                   = useState(0);
   const [frameCount, setFrameCount]             = useState(0);
   const [errorMsg, setErrorMsg]                 = useState('');
+  const [outputPath, setOutputPath]             = useState('');
 
-  const recorderRef = useRef<CanvasRecorder | null>(null);
-  // Off-screen canvas used when recording at a higher resolution
+  const recorderRef  = useRef<CanvasRecorder | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef       = useRef<number>(0);
   const tickRef      = useRef<number>(0);
+  const abortRef     = useRef(false);
 
   // Derive the recording canvas (upscaled offscreen or the real one)
   const getRecordCanvas = useCallback((): HTMLCanvasElement | null => {
     if (!canvas) return null;
     if (resScale === 1) return canvas;
-
-    // Create/resize offscreen canvas at the target resolution
     if (!offscreenRef.current) offscreenRef.current = document.createElement('canvas');
     const oc = offscreenRef.current;
     oc.width  = canvas.width  * resScale;
@@ -114,7 +138,6 @@ export function ExportModal({ canvas, onClose }: Props) {
     return oc;
   }, [canvas, resScale]);
 
-  // Copy from the real canvas to the offscreen one every frame (only when upscaling)
   const copyToOffscreen = useCallback(() => {
     if (resScale === 1 || !canvas || !offscreenRef.current) return;
     const ctx = offscreenRef.current.getContext('2d');
@@ -122,7 +145,6 @@ export function ExportModal({ canvas, onClose }: Props) {
     ctx.drawImage(canvas, 0, 0, offscreenRef.current.width, offscreenRef.current.height);
   }, [canvas, resScale]);
 
-  // Poll recorder stats while capturing
   const startPolling = useCallback(() => {
     tickRef.current = window.setInterval(() => {
       const r = recorderRef.current;
@@ -137,14 +159,15 @@ export function ExportModal({ canvas, onClose }: Props) {
 
   const stopPolling = () => clearInterval(tickRef.current);
 
-  // rAF capture loop
   const captureLoop = useCallback(() => {
     copyToOffscreen();
     recorderRef.current?.capture();
     rafRef.current = requestAnimationFrame(captureLoop);
   }, [copyToOffscreen]);
 
-  const handleStart = async () => {
+  // ── MediaRecorder path ────────────────────────────────────────────────────
+
+  const handleStartMediaRecorder = async () => {
     if (!canvas) { setErrorMsg('No canvas available.'); return; }
     setErrorMsg('');
     setCaptureProgress(0);
@@ -175,14 +198,7 @@ export function ExportModal({ canvas, onClose }: Props) {
     }
   };
 
-  const handleStop = async () => {
-    cancelAnimationFrame(rafRef.current);
-    stopPolling();
-    await recorderRef.current?.stop();
-    setTimeout(() => setState('done'), 400);
-  };
-
-  // Auto-finish when recorder auto-stops (duration reached)
+  // Auto-finish when MediaRecorder auto-stops (duration reached)
   useEffect(() => {
     if (state !== 'recording') return;
     const id = setInterval(() => {
@@ -198,23 +214,97 @@ export function ExportModal({ canvas, onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
+  // ── FFmpeg offline encode path ────────────────────────────────────────────
+
+  const handleStartFfmpeg = async () => {
+    if (!offlineRender) {
+      setErrorMsg('Offline render not available.');
+      return;
+    }
+
+    setErrorMsg('');
+    setCaptureProgress(0);
+    setElapsed(0);
+    setFrameCount(0);
+    abortRef.current = false;
+    setState('encoding');
+
+    // Use the dedicated render target dimensions from the handle.
+    // These are fixed at registration time — immune to live canvas resizes.
+    const { width: w, height: h, renderAtTime, readPixels: handleReadPixels } = offlineRender;
+    const startT = performance.now();
+
+    try {
+      const path = await runFfmpegEncode({
+        width: w,
+        height: h,
+        fps,
+        duration,
+        codec,
+        renderFrame: renderAtTime,
+        readPixels: handleReadPixels,
+        onProgress: (fraction, frame) => {
+          if (abortRef.current) return;
+          setCaptureProgress(fraction);
+          setFrameCount(frame);
+          setElapsed((performance.now() - startT) / 1000);
+        },
+      });
+
+      setOutputPath(path);
+      setState('done');
+    } catch (err) {
+      const msg = String(err);
+      if (msg === 'Error: cancelled') {
+        setState('idle');
+      } else {
+        setErrorMsg(msg);
+        setState('error');
+      }
+    }
+  };
+
+  // ── Unified start/stop ────────────────────────────────────────────────────
+
+  const handleStart = () => {
+    if (mode === 'ffmpeg') handleStartFfmpeg();
+    else handleStartMediaRecorder();
+  };
+
+  const handleStop = async () => {
+    if (mode === 'ffmpeg') {
+      abortRef.current = true;
+      setState('idle');
+    } else {
+      cancelAnimationFrame(rafRef.current);
+      stopPolling();
+      await recorderRef.current?.stop();
+      setTimeout(() => setState('done'), 400);
+    }
+  };
+
   // Clean up on unmount
   useEffect(() => {
     return () => {
       cancelAnimationFrame(rafRef.current);
       stopPolling();
       if (recorderRef.current?.isRecording) recorderRef.current.stop();
+      abortRef.current = true;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isRecording = state === 'recording';
+  const isEncoding  = state === 'encoding';
   const isDone      = state === 'done';
   const isError     = state === 'error';
-  const isBusy      = isRecording;
+  const isBusy      = isRecording || isEncoding;
 
-  // Derived display resolution
-  const displayW = canvas ? canvas.width  * resScale : 0;
-  const displayH = canvas ? canvas.height * resScale : 0;
+  const displayW = mode === 'ffmpeg' && offlineRender
+    ? offlineRender.width
+    : canvas ? canvas.width * resScale : 0;
+  const displayH = mode === 'ffmpeg' && offlineRender
+    ? offlineRender.height
+    : canvas ? canvas.height * resScale : 0;
 
   return (
     <div style={OVERLAY} onMouseDown={e => { if (e.target === e.currentTarget && !isBusy) onClose(); }}>
@@ -222,7 +312,7 @@ export function ExportModal({ canvas, onClose }: Props) {
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '15px', color: '#89b4fa' }}>⬡ Export WebM</span>
+          <span style={{ fontWeight: 700, fontSize: '15px', color: '#89b4fa' }}>⬡ Export Video</span>
           <button
             onClick={onClose}
             disabled={isBusy}
@@ -230,10 +320,71 @@ export function ExportModal({ canvas, onClose }: Props) {
           >✕</button>
         </div>
 
+        {/* Mode selector — Tauri only */}
+        {inTauri && state === 'idle' && (
+          <div>
+            <div style={LABEL}>Export Mode</div>
+            <div style={ROW}>
+              <button
+                onClick={() => setMode('ffmpeg')}
+                style={{
+                  ...BTN_BASE, flex: 1, padding: '5px 8px',
+                  background: mode === 'ffmpeg' ? '#313244' : '#181825',
+                  color: mode === 'ffmpeg' ? '#cdd6f4' : '#585b70',
+                  borderColor: mode === 'ffmpeg' ? '#cba6f7' : '#313244',
+                  fontSize: '11px',
+                }}
+              >✦ FFmpeg (HQ)</button>
+              <button
+                onClick={() => setMode('mediarecorder')}
+                style={{
+                  ...BTN_BASE, flex: 1, padding: '5px 8px',
+                  background: mode === 'mediarecorder' ? '#313244' : '#181825',
+                  color: mode === 'mediarecorder' ? '#cdd6f4' : '#585b70',
+                  borderColor: mode === 'mediarecorder' ? '#89b4fa' : '#313244',
+                  fontSize: '11px',
+                }}
+              >◉ Real-time</button>
+            </div>
+            {mode === 'ffmpeg' && (
+              <div style={{ marginTop: '4px', fontSize: '10px', color: '#45475a', lineHeight: 1.4 }}>
+                Renders offline at exact timing — no dropped frames. Requires FFmpeg (auto-downloaded on first use).
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Setup UI */}
         {state === 'idle' && (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+              {/* Codec picker — FFmpeg mode only */}
+              {mode === 'ffmpeg' && (
+                <div>
+                  <div style={LABEL}>Codec</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {(['h264', 'prores', 'ffv1'] as FfmpegCodec[]).map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setCodec(c)}
+                        style={{
+                          ...BTN_BASE, padding: '5px 10px', textAlign: 'left',
+                          background: codec === c ? '#313244' : '#181825',
+                          color: codec === c ? '#cdd6f4' : '#585b70',
+                          borderColor: codec === c ? '#cba6f7' : '#313244',
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        }}
+                      >
+                        <span style={{ fontWeight: codec === c ? 600 : 400 }}>{CODEC_LABELS[c]}</span>
+                        <span style={{ fontSize: '10px', color: '#45475a', marginLeft: '8px' }}>
+                          {CODEC_DESCRIPTIONS[c]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* FPS */}
               <div>
@@ -257,16 +408,18 @@ export function ExportModal({ canvas, onClose }: Props) {
               <div>
                 <div style={LABEL}>Duration</div>
                 <div style={ROW}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6c7086' }}>
-                    <input
-                      type="checkbox"
-                      checked={manualStop}
-                      onChange={e => setManualStop(e.target.checked)}
-                      style={{ accentColor: '#89b4fa' }}
-                    />
-                    Manual stop
-                  </label>
-                  {!manualStop && (
+                  {mode === 'mediarecorder' && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6c7086' }}>
+                      <input
+                        type="checkbox"
+                        checked={manualStop}
+                        onChange={e => setManualStop(e.target.checked)}
+                        style={{ accentColor: '#89b4fa' }}
+                      />
+                      Manual stop
+                    </label>
+                  )}
+                  {(!manualStop || mode === 'ffmpeg') && (
                     <>
                       <input
                         type="range" min={1} max={60} step={1}
@@ -280,24 +433,26 @@ export function ExportModal({ canvas, onClose }: Props) {
                 </div>
               </div>
 
-              {/* Bitrate */}
-              <div>
-                <div style={LABEL}>Bitrate</div>
-                <div style={ROW}>
-                  {[8, 25, 50, 100].map(b => (
-                    <button
-                      key={b} onClick={() => setBitrate(b)}
-                      style={{
-                        ...BTN_BASE, padding: '4px 10px',
-                        background: bitrate === b ? '#313244' : '#181825',
-                        color: bitrate === b ? '#cdd6f4' : '#585b70',
-                        borderColor: bitrate === b ? '#89b4fa' : '#313244',
-                      }}
-                    >{b}</button>
-                  ))}
-                  <span style={{ color: '#45475a', fontSize: '10px' }}>Mbps</span>
+              {/* Bitrate — MediaRecorder only */}
+              {mode === 'mediarecorder' && (
+                <div>
+                  <div style={LABEL}>Bitrate</div>
+                  <div style={ROW}>
+                    {[8, 25, 50, 100].map(b => (
+                      <button
+                        key={b} onClick={() => setBitrate(b)}
+                        style={{
+                          ...BTN_BASE, padding: '4px 10px',
+                          background: bitrate === b ? '#313244' : '#181825',
+                          color: bitrate === b ? '#cdd6f4' : '#585b70',
+                          borderColor: bitrate === b ? '#89b4fa' : '#313244',
+                        }}
+                      >{b}</button>
+                    ))}
+                    <span style={{ color: '#45475a', fontSize: '10px' }}>Mbps</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Resolution */}
               <div>
@@ -325,14 +480,16 @@ export function ExportModal({ canvas, onClose }: Props) {
               </div>
             </div>
 
-            <div style={{ fontSize: '10px', color: '#45475a', lineHeight: 1.5 }}>
-              Records in real-time via MediaRecorder. Downloads as <strong style={{ color: '#6c7086' }}>.webm</strong> when stopped.
-              VP9 codec used when available for best quality.
-            </div>
+            {mode === 'mediarecorder' && (
+              <div style={{ fontSize: '10px', color: '#45475a', lineHeight: 1.5 }}>
+                Records in real-time via MediaRecorder. Downloads as{' '}
+                <strong style={{ color: '#6c7086' }}>{inTauri ? '.mp4' : '.webm'}</strong> when stopped.
+              </div>
+            )}
           </>
         )}
 
-        {/* Recording progress */}
+        {/* Real-time recording progress */}
         {isRecording && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ color: '#a6e3a1', fontWeight: 600, fontSize: '13px' }}>⏺ Recording…</div>
@@ -345,12 +502,37 @@ export function ExportModal({ canvas, onClose }: Props) {
           </div>
         )}
 
+        {/* FFmpeg encoding progress */}
+        {isEncoding && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ color: '#cba6f7', fontWeight: 600, fontSize: '13px' }}>✦ Encoding…</div>
+            <ProgressBar value={captureProgress} />
+            <div style={{ color: '#6c7086', fontSize: '11px', display: 'flex', gap: '16px' }}>
+              <span>⏱ {elapsed.toFixed(1)}s</span>
+              <span>🎞 {frameCount} frames</span>
+              <span>📊 {Math.round(captureProgress * 100)}%</span>
+            </div>
+            <div style={{ fontSize: '10px', color: '#45475a' }}>
+              Rendering offline — UI may be unresponsive during encoding
+            </div>
+          </div>
+        )}
+
         {/* Done */}
         {isDone && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', padding: '8px 0' }}>
             <span style={{ fontSize: '28px' }}>✅</span>
-            <span style={{ color: '#a6e3a1', fontWeight: 600 }}>Done — WebM downloaded!</span>
-            <span style={{ color: '#585b70', fontSize: '11px' }}>{frameCount} frames · {elapsed.toFixed(1)}s · {displayW}×{displayH}</span>
+            <span style={{ color: '#a6e3a1', fontWeight: 600 }}>
+              {mode === 'ffmpeg' ? 'Encoded & saved!' : 'Done — video downloaded!'}
+            </span>
+            {outputPath && (
+              <span style={{ color: '#45475a', fontSize: '10px', wordBreak: 'break-all', textAlign: 'center' }}>
+                {outputPath}
+              </span>
+            )}
+            <span style={{ color: '#585b70', fontSize: '11px' }}>
+              {frameCount} frames · {elapsed.toFixed(1)}s · {displayW}×{displayH}
+            </span>
           </div>
         )}
 
@@ -365,7 +547,7 @@ export function ExportModal({ canvas, onClose }: Props) {
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
           {(isDone || isError) && (
             <button
-              onClick={() => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); }}
+              onClick={() => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); }}
               style={{ ...BTN_BASE, background: '#313244', color: '#cdd6f4' }}
             >Record Again</button>
           )}
@@ -375,15 +557,25 @@ export function ExportModal({ canvas, onClose }: Props) {
           {state === 'idle' && (
             <button
               onClick={handleStart}
-              disabled={!canvas}
-              style={{ ...BTN_BASE, background: '#89b4fa', color: '#1e1e2e', fontWeight: 700, borderColor: '#89b4fa', opacity: canvas ? 1 : 0.4 }}
-            >▶ Start Recording</button>
+              disabled={mode === 'ffmpeg' ? !offlineRender : !canvas}
+              style={{
+                ...BTN_BASE,
+                background: mode === 'ffmpeg' ? '#cba6f7' : '#89b4fa',
+                color: '#1e1e2e', fontWeight: 700,
+                borderColor: mode === 'ffmpeg' ? '#cba6f7' : '#89b4fa',
+                opacity: (mode === 'ffmpeg' ? !offlineRender : !canvas) ? 0.4 : 1,
+              }}
+            >
+              {mode === 'ffmpeg' ? '✦ Encode' : '▶ Record'}
+            </button>
           )}
-          {isRecording && (
+          {isBusy && (
             <button
               onClick={handleStop}
               style={{ ...BTN_BASE, background: '#f38ba8', color: '#1e1e2e', fontWeight: 700, borderColor: '#f38ba8' }}
-            >■ Stop</button>
+            >
+              {isEncoding ? '✕ Cancel' : '■ Stop'}
+            </button>
           )}
           {(isDone || isError) && (
             <button onClick={onClose} style={{ ...BTN_BASE, background: '#313244', color: '#cdd6f4' }}>Close</button>

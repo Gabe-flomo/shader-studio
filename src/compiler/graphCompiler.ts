@@ -6,9 +6,15 @@ export interface CompilationResult {
   fragmentShader: string;
   success: boolean;
   errors?: string[];
+  /**
+   * Maps nodeId → { outputKey → glslVarName } for every node that was compiled.
+   * Used by ShaderCanvas to probe runtime values via 1-pixel render targets.
+   */
+  nodeOutputVars: Map<string, Record<string, string>>;
 }
 
 export function compileGraph(graph: NodeGraph): CompilationResult {
+  const emptyNodeOutputVars = new Map<string, Record<string, string>>();
   try {
     const { nodes } = graph;
 
@@ -20,20 +26,22 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
         fragmentShader: '',
         success: false,
         errors: validation.errors,
+        nodeOutputVars: emptyNodeOutputVars,
       };
     }
 
     // 2. Topological sort (execution order)
     const sortedNodes = topologicalSort(nodes);
 
-    // 3. Generate GLSL code
-    const fragmentShader = generateFragmentShader(sortedNodes);
+    // 3. Generate GLSL code + capture nodeOutputVars
+    const { fragmentShader, nodeOutputVars } = generateFragmentShader(sortedNodes);
     const vertexShader = VERTEX_SHADER;
 
     return {
       vertexShader,
       fragmentShader,
       success: true,
+      nodeOutputVars,
     };
   } catch (error) {
     return {
@@ -41,6 +49,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       fragmentShader: '',
       success: false,
       errors: [error instanceof Error ? error.message : 'Unknown error'],
+      nodeOutputVars: emptyNodeOutputVars,
     };
   }
 }
@@ -178,12 +187,12 @@ function topologicalSort(nodes: GraphNode[]): GraphNode[] {
   return sorted;
 }
 
-function generateFragmentShader(sortedNodes: GraphNode[]): string {
+function generateFragmentShader(sortedNodes: GraphNode[]): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>> } {
   const nodeMap = new Map(sortedNodes.map(n => [n.id, n]));
   const functions = new Set<string>();
   const mainCode: string[] = [];
 
-  // Track output variables from each node
+  // Track output variables from each node (returned alongside the shader)
   const nodeOutputs = new Map<string, Record<string, string>>();
 
   for (const node of sortedNodes) {
@@ -219,6 +228,14 @@ function generateFragmentShader(sortedNodes: GraphNode[]): string {
           } else {
             inputVars[inputKey] = rawVar;
           }
+        }
+      } else if (node.type === 'customFn' && typeof node.params[inputKey] === 'number') {
+        // CustomFn slider input — value lives in node.params, not socket.defaultValue
+        const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
+        const cfInp = cfInputs.find(c => c.name === inputKey);
+        if (cfInp?.slider != null) {
+          const v = node.params[inputKey] as number;
+          inputVars[inputKey] = Number.isInteger(v) ? `${v}.0` : `${v}`;
         }
       } else if (input.defaultValue !== undefined) {
         if (typeof input.defaultValue === 'number') {
@@ -302,7 +319,7 @@ function generateFragmentShader(sortedNodes: GraphNode[]): string {
 
   const functionCode = Array.from(functions).join('\n');
 
-  return `precision mediump float;
+  const fragmentShader = `precision mediump float;
 #define PI 3.1415926538
 #define TAU 6.2831853072
 
@@ -315,6 +332,8 @@ ${functionCode}
 
 void main() {
 ${mainCode.join('')}}`.trim();
+
+  return { fragmentShader, nodeOutputVars: nodeOutputs };
 }
 
 const VERTEX_SHADER = `varying vec2 vUv;
