@@ -49,12 +49,17 @@ export default function ShaderCanvas({ onCanvasReady }: Props = {}) {
   const rtRef = useRef<THREE.WebGLRenderTarget | null>(null);
   // Track mouse pixel position in canvas — null when mouse is not over canvas
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
+  // Ref mirror for hasTimeNode so the rAF loop always sees the latest value
+  const hasTimeNodeRef = useRef(false);
 
   const vertexShader    = useNodeGraphStore((state) => state.vertexShader);
   const fragmentShader  = useNodeGraphStore((state) => state.fragmentShader);
   const setGlslErrors   = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample  = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime  = useNodeGraphStore((state) => state.setCurrentTime);
+  // Only broadcast currentTime when a Time node is in the graph — avoids 10fps
+  // re-renders of all NodeComponents on graphs that don't use time at all.
+  const hasTimeNode     = useNodeGraphStore((state) => state.nodes.some(n => n.type === 'time'));
 
   // Boot Three.js once
   useEffect(() => {
@@ -121,7 +126,10 @@ export default function ShaderCanvas({ onCanvasReady }: Props = {}) {
       // Throttled updates every N frames
       frameCount++;
       if (frameCount % SAMPLE_EVERY === 0) {
-        setCurrentTime(material.uniforms.u_time.value);
+        // Only broadcast time when the graph actually has a Time node
+        if (hasTimeNodeRef.current) {
+          setCurrentTime(material.uniforms.u_time.value);
+        }
         const mp = mousePosRef.current;
         if (mp === null) {
           // Mouse not over canvas — hide the overlay
@@ -171,6 +179,10 @@ export default function ShaderCanvas({ onCanvasReady }: Props = {}) {
       container.removeChild(renderer.domElement);
     };
   }, []);
+
+  // Keep ref in sync so the rAF loop always sees the latest value without
+  // needing to restart the animation loop on every graph change.
+  useEffect(() => { hasTimeNodeRef.current = hasTimeNode; }, [hasTimeNode]);
 
   // Update shader when compiled output changes — flush old errors first
   useEffect(() => {

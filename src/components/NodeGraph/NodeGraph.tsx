@@ -53,8 +53,11 @@ const ZOOM_MAX = 2.5;
 const ZOOM_SPEED = 0.001;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
-  const { nodes, connectNodes, autoLayout, setPreviewNodeId } = useNodeGraphStore();
-  const previewNodeId = useNodeGraphStore(s => s.previewNodeId);
+  const nodes            = useNodeGraphStore(s => s.nodes);
+  const connectNodes     = useNodeGraphStore(s => s.connectNodes);
+  const autoLayout       = useNodeGraphStore(s => s.autoLayout);
+  const setPreviewNodeId = useNodeGraphStore(s => s.setPreviewNodeId);
+  const previewNodeId    = useNodeGraphStore(s => s.previewNodeId);
 
   const previewNode  = previewNodeId ? nodes.find(n => n.id === previewNodeId) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
@@ -159,6 +162,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   }, []);
 
   // ── Connection drag ─────────────────────────────────────────────────────────
+  const dragRafRef = useRef<number | null>(null);
+
   const [dragConnection, setDragConnection] = useState<{
     sourceNodeId: string;
     sourceOutputKey: string;
@@ -204,9 +209,12 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   const handleMouseMove = (event: React.MouseEvent) => {
     if (!dragConnection) return;
-    setDragConnection({
-      ...dragConnection,
-      mousePos: screenToWorld(event.clientX, event.clientY),
+    const x = event.clientX;
+    const y = event.clientY;
+    if (dragRafRef.current !== null) return; // skip if a frame is already queued
+    dragRafRef.current = requestAnimationFrame(() => {
+      dragRafRef.current = null;
+      setDragConnection(prev => prev ? { ...prev, mousePos: screenToWorld(x, y) } : null);
     });
   };
 
@@ -223,6 +231,10 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   };
 
   const handleMouseUp = () => {
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
     setDragConnection(null);
   };
 
@@ -268,6 +280,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         background: transparent ? 'transparent' : '#11111b',
         overflow: 'hidden',
         cursor: 'default',
+        userSelect: 'none',
         backgroundImage: transparent
           ? 'none'
           : 'radial-gradient(circle, #313244 1px, transparent 1px)',

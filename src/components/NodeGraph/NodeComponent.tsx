@@ -166,19 +166,17 @@ function SocketTooltip({ lines, side }: TooltipProps) {
 }
 
 // Extract the lines from the compiled fragment shader that belong to a specific node
-function extractNodeCodeFromShader(fragmentShader: string, nodeId: string): string {
-  if (!fragmentShader) return '';
-  const lines = fragmentShader.split('\n');
+function extractNodeCodeFromShader(lines: string[], nodeId: string): string {
+  if (!lines.length) return '';
   const relevant = lines.filter(l => l.includes(nodeId));
   return relevant.join('\n');
 }
 
 // Extract the RHS expression for a specific output variable from compiled GLSL
 // e.g. for nodeId="make_3", outputKey="glow" finds "float make_3_glow = ..." and returns the RHS
-function getSourceExpr(fragmentShader: string, sourceNodeId: string, outputKey: string): string {
-  if (!fragmentShader) return '';
+function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string): string {
+  if (!lines.length) return '';
   const varName = `${sourceNodeId}_${outputKey}`;
-  const lines = fragmentShader.split('\n');
   for (const line of lines) {
     const trimmed = line.trim();
     // Match: "float varName = ..." or "vec2 varName = ..." etc.
@@ -195,10 +193,25 @@ function getSourceExpr(fragmentShader: string, sourceNodeId: string, outputKey: 
 }
 
 export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType, zoom = 1 }: Props) {
-  const { nodes, updateNodePosition, removeNode, updateNodeParams, disconnectInput, setPreviewNodeId, toggleBypass } = useNodeGraphStore();
+  const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
-  const currentTime     = useNodeGraphStore(s => s.currentTime);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
+  const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
+  const removeNode         = useNodeGraphStore(s => s.removeNode);
+  const updateNodeParams   = useNodeGraphStore(s => s.updateNodeParams);
+  const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
+  const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
+  const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
+  // currentTime is only needed for the Time node live badge — subscribed below conditionally
+  const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
+
+  // Memoize the shader line split so getSourceExpr / extractNodeCodeFromShader
+  // don't re-split the full shader string on every render for every wired input.
+  const shaderLines = React.useMemo(
+    () => (fragmentShader ? fragmentShader.split('\n') : []),
+    [fragmentShader],
+  );
+
   const isPreviewActive = previewNodeId === node.id;
   const def = getNodeDefinition(node.type);
   const isBypassed = !!node.bypassed;
@@ -744,7 +757,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
             const socketConn = node.inputs[key]?.connection;
             const isSocketConnected = socketConn != null;
             if (isSocketConnected) {
-              const srcExpr = getSourceExpr(fragmentShader, socketConn!.nodeId, socketConn!.outputKey);
+              const srcExpr = getSourceExpr(shaderLines, socketConn!.nodeId, socketConn!.outputKey);
               return (
                 <div
                   key={key}
@@ -892,7 +905,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           const isHovered = hoveredOutput === key;
           // Live value badge: show time for Time node
           const liveValueBadge = node.type === 'time' && key === 'time'
-            ? currentTime.toFixed(2) + 's'
+            ? (currentTime as number).toFixed(2) + 's'
             : null;
           return (
             <div
@@ -972,7 +985,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
                 } else {
                   // enter edit mode: seed with LIVE compiled code (real var names) if no override yet
                   if (!hasOverride) {
-                    const liveCode = extractNodeCodeFromShader(fragmentShader, node.id);
+                    const liveCode = extractNodeCodeFromShader(shaderLines, node.id);
                     updateNodeParams(node.id, { __codeOverride: liveCode || generatedCode });
                   }
                   setCodeEditMode(true);

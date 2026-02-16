@@ -47,6 +47,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
 
 function validateGraph(nodes: GraphNode[]): { valid: boolean; errors?: string[] } {
   const errors: string[] = [];
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
 
   // Must have exactly one output node (either vec3 'output' or vec4 'vec4Output')
   const outputNodes = nodes.filter(n => n.type === 'output' || n.type === 'vec4Output');
@@ -72,7 +73,7 @@ function validateGraph(nodes: GraphNode[]): { valid: boolean; errors?: string[] 
 
     for (const [inputKey, input] of Object.entries(node.inputs)) {
       if (input.connection) {
-        const sourceNode = nodes.find(n => n.id === input.connection!.nodeId);
+        const sourceNode = nodeMap.get(input.connection!.nodeId);
         if (!sourceNode) {
           errors.push(`Node ${node.id}: Connected to non-existent node ${input.connection.nodeId}`);
           continue;
@@ -123,6 +124,7 @@ function validateGraph(nodes: GraphNode[]): { valid: boolean; errors?: string[] 
 
 function topologicalSort(nodes: GraphNode[]): GraphNode[] {
   // Build dependency graph
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
   const inDegree = new Map<string, number>();
   const adjacencyList = new Map<string, string[]>();
 
@@ -156,7 +158,7 @@ function topologicalSort(nodes: GraphNode[]): GraphNode[] {
 
   while (queue.length > 0) {
     const nodeId = queue.shift()!;
-    const node = nodes.find(n => n.id === nodeId)!;
+    const node = nodeMap.get(nodeId)!;
     sorted.push(node);
 
     // Reduce in-degree for dependent nodes
@@ -177,6 +179,7 @@ function topologicalSort(nodes: GraphNode[]): GraphNode[] {
 }
 
 function generateFragmentShader(sortedNodes: GraphNode[]): string {
+  const nodeMap = new Map(sortedNodes.map(n => [n.id, n]));
   const functions = new Set<string>();
   const mainCode: string[] = [];
 
@@ -201,7 +204,7 @@ function generateFragmentShader(sortedNodes: GraphNode[]): string {
     const inputVars: Record<string, string> = {};
     for (const [inputKey, input] of Object.entries(node.inputs)) {
       if (input.connection) {
-        const sourceNode = sortedNodes.find(n => n.id === input.connection!.nodeId);
+        const sourceNode = nodeMap.get(input.connection!.nodeId);
         const sourceDef = sourceNode ? getNodeDefinition(sourceNode.type) : undefined;
         // Use instance output type first (reflects dynamic params like Expr outputType), then def type
         const sourceOutputType =
