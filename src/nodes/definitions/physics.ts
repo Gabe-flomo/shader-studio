@@ -14,6 +14,69 @@ const CHLADNI_GLSL = `
 float chladni(vec2 p, float m, float n) {
     return cos(n * 3.14159265 * p.x) * cos(m * 3.14159265 * p.y)
          - cos(m * 3.14159265 * p.x) * cos(n * 3.14159265 * p.y);
+}
+// ── 2D noise helpers for Chladni turbulence ──────────────────────────────────
+float ch2_hash1(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p.yx + 19.19);
+    return fract((p.x + p.y) * p.x);
+}
+float ch2_valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(
+        mix(ch2_hash1(i+vec2(0,0)), ch2_hash1(i+vec2(1,0)), u.x),
+        mix(ch2_hash1(i+vec2(0,1)), ch2_hash1(i+vec2(1,1)), u.x),
+        u.y);
+}
+float ch2_voronoi(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    float minD = 10.0;
+    for (int ch2_y = -1; ch2_y <= 1; ch2_y++) {
+        for (int ch2_x = -1; ch2_x <= 1; ch2_x++) {
+            vec2 nb = vec2(float(ch2_x), float(ch2_y));
+            vec2 pt = vec2(ch2_hash1(i+nb), ch2_hash1(i+nb+0.1));
+            vec2 df = nb + pt - f;
+            float d = dot(df, df);
+            if (d < minD) minD = d;
+        }
+    }
+    return sqrt(minD);
+}
+float ch2_fbm(vec2 p) {
+    float v = 0.0; float a = 0.5;
+    for (int ch2_i = 0; ch2_i < 4; ch2_i++) {
+        v += a * ch2_valueNoise(p);
+        p = p * 2.1 + vec2(5.2, 1.3); a *= 0.5;
+    }
+    return v;
+}
+// Returns a 2D noise offset. mode: 0=hash, 1=value, 2=voronoi, 3=fbm, 4=swirl, 5=jump
+vec2 ch2_noise2(vec2 p, float t, float spd, int mode) {
+    if (mode == 1) {
+        return vec2(ch2_valueNoise(p*3.0+t*spd), ch2_valueNoise(p*3.0+t*spd+vec2(7.3,2.1)))*2.0-1.0;
+    }
+    if (mode == 2) {
+        return vec2(ch2_voronoi(p*3.0+t*spd), ch2_voronoi(p*3.0+t*spd+vec2(4.1,1.7)))*2.0-1.0;
+    }
+    if (mode == 3) {
+        return vec2(ch2_fbm(p*3.0+t*spd), ch2_fbm(p*3.0+t*spd+vec2(5.2,1.3)))*2.0-1.0;
+    }
+    if (mode == 4) {
+        float nx = fract(sin(dot(p*3.0+t*spd,       vec2(127.1,311.7)))*43758.5453);
+        float ny = fract(sin(dot(p*3.0+t*spd+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
+        return vec2(ny, -nx); // curl: perpendicular → swirl
+    }
+    if (mode == 5) {
+        float qt = floor(t*spd)/spd;
+        float nx = fract(sin(dot(p*4.0+qt, vec2(127.1,311.7)))*43758.5453);
+        float ny = fract(sin(dot(p*4.0+qt+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
+        return (vec2(nx,ny)*2.0-1.0);
+    }
+    // mode 0: classic hash drift
+    float nx = fract(sin(dot(p*3.0+t*spd,       vec2(127.1,311.7)))*43758.5453);
+    float ny = fract(sin(dot(p*3.0+t*spd+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
+    return (vec2(nx,ny)*2.0-1.0);
 }`;
 
 export const ChladniNode: NodeDefinition = {
@@ -55,9 +118,12 @@ export const ChladniNode: NodeDefinition = {
     noise_mode: {
       label: 'Noise Mode', type: 'select',
       options: [
-        { value: 'smooth', label: 'Smooth (drift)' },
-        { value: 'swirl',  label: 'Swirl (curl)'   },
-        { value: 'jump',   label: 'Jump (stutter)'  },
+        { value: 'smooth',   label: 'Hash (drift)'     },
+        { value: 'value',    label: 'Value (smooth)'   },
+        { value: 'voronoi',  label: 'Voronoi (clumpy)' },
+        { value: 'fbm',      label: 'fBm (fractal)'    },
+        { value: 'swirl',    label: 'Swirl (curl)'     },
+        { value: 'jump',     label: 'Jump (stutter)'   },
       ],
     },
     brightness: { label: 'Brightness',  type: 'float',  min: 0.1,  max: 5.0,  step: 0.05  },
@@ -78,38 +144,12 @@ export const ChladniNode: NodeDefinition = {
     const brightness = f(typeof node.params.brightness === 'number' ? node.params.brightness : 1.0);
 
     const hasTurb = parseFloat(turbulence) > 0.0;
-
-    // Build noise offset lines based on mode:
-    // smooth — gentle continuous drift (regular hash noise, same as before)
-    // swirl  — curl-noise: rotate the noise vector 90° to create swirling motion
-    // jump   — quantised time so the plate "stutters" rather than flows
-    const turbLines = hasTurb ? (() => {
-      if (noiseMode === 'jump') {
-        // Quantise time to nearest 1/turb_speed second → discrete jumps
-        return [
-          `    float ${id}_qt = floor(${timeVar} * ${turbSpeed}) / ${turbSpeed};\n`,
-          `    float ${id}_nx = fract(sin(dot(${id}_p * 4.0 + ${id}_qt, vec2(127.1, 311.7))) * 43758.5453);\n`,
-          `    float ${id}_ny = fract(sin(dot(${id}_p * 4.0 + ${id}_qt + vec2(5.2, 1.3), vec2(269.5, 183.3))) * 43758.5453);\n`,
-          `    ${id}_p += (vec2(${id}_nx, ${id}_ny) * 2.0 - 1.0) * ${turbulence};\n`,
-        ];
-      } else if (noiseMode === 'swirl') {
-        // Curl: offset direction is perpendicular to hash gradient → swirl
-        return [
-          `    float ${id}_nx = fract(sin(dot(${id}_p * 3.0 + ${timeVar} * ${turbSpeed}, vec2(127.1, 311.7))) * 43758.5453);\n`,
-          `    float ${id}_ny = fract(sin(dot(${id}_p * 3.0 + ${timeVar} * ${turbSpeed} + vec2(5.2, 1.3), vec2(269.5, 183.3))) * 43758.5453);\n`,
-          // Rotate the noise 90° to make it perpendicular (curl-like)
-          `    vec2 ${id}_curl = vec2(${id}_ny, -${id}_nx);\n`,
-          `    ${id}_p += ${id}_curl * ${turbulence};\n`,
-        ];
-      } else {
-        // smooth — plain drift
-        return [
-          `    float ${id}_nx = fract(sin(dot(${id}_p * 3.0 + ${timeVar} * ${turbSpeed}, vec2(127.1, 311.7))) * 43758.5453);\n`,
-          `    float ${id}_ny = fract(sin(dot(${id}_p * 3.0 + ${timeVar} * ${turbSpeed} + vec2(5.2, 1.3), vec2(269.5, 183.3))) * 43758.5453);\n`,
-          `    ${id}_p += (vec2(${id}_nx, ${id}_ny) * 2.0 - 1.0) * ${turbulence};\n`,
-        ];
-      }
-    })() : [];
+    // Map noise_mode string to int for ch2_noise2()
+    // 0=hash(smooth), 1=value, 2=voronoi, 3=fbm, 4=swirl, 5=jump
+    const noiseModeInt2d = noiseMode === 'value' ? 1 : noiseMode === 'voronoi' ? 2 : noiseMode === 'fbm' ? 3 : noiseMode === 'swirl' ? 4 : noiseMode === 'jump' ? 5 : 0;
+    const turbLines = hasTurb ? [
+      `    ${id}_p += ch2_noise2(${id}_p, ${timeVar}, ${turbSpeed}, ${noiseModeInt2d}) * ${turbulence};\n`,
+    ] : [];
 
     const code = [
       `    vec2  ${id}_p = ${uvVar} * ${scale};\n`,
@@ -245,6 +285,7 @@ export const ElectronOrbitalNode: NodeDefinition = {
     edge_soft:  0.6,
     turbulence: 0.0,
     turb_speed: 0.3,
+    noise_mode: 'hash',
   },
   paramDefs: {
     n:          { label: 'n (shell)',    type: 'float', min: 1,    max: 6,    step: 1     },
@@ -259,6 +300,16 @@ export const ElectronOrbitalNode: NodeDefinition = {
     edge_soft:  { label: 'Edge Softness', type: 'float', min: 0.0,  max: 3.0,  step: 0.05  },
     turbulence: { label: 'Turbulence',    type: 'float', min: 0.0,  max: 0.2,  step: 0.005 },
     turb_speed: { label: 'Turb Speed',    type: 'float', min: 0.0,  max: 3.0,  step: 0.05  },
+    noise_mode: {
+      label: 'Noise Algorithm', type: 'select',
+      options: [
+        { value: 'hash',    label: 'Hash (classic)'   },
+        { value: 'value',   label: 'Value (smooth)'   },
+        { value: 'voronoi', label: 'Voronoi (clumpy)' },
+        { value: 'fbm',     label: 'fBm (fractal)'    },
+        { value: 'swirl',   label: 'Swirl (curl)'     },
+      ],
+    },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id         = node.id;
@@ -279,10 +330,13 @@ export const ElectronOrbitalNode: NodeDefinition = {
     const edgeSoft   = f(typeof node.params.edge_soft  === 'number' ? node.params.edge_soft  : 0.8);
     const turbulence = f(typeof node.params.turbulence === 'number' ? node.params.turbulence : 0.0);
     const turbSpeed  = f(typeof node.params.turb_speed === 'number' ? node.params.turb_speed : 0.3);
+    const noiseMode  = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'hash';
 
     const hasTurb   = parseFloat(turbulence) > 0.0;
     const hasAA     = parseFloat(aa) > 0.0;
     const hasEdge   = parseFloat(edgeSoft) > 0.0;
+    // Map noise_mode to int for ch2_noise2(): 0=hash, 1=value, 2=voronoi, 3=fbm, 4=swirl
+    const noiseModeIntOrb = noiseMode === 'value' ? 1 : noiseMode === 'voronoi' ? 2 : noiseMode === 'fbm' ? 3 : noiseMode === 'swirl' ? 4 : 0;
 
     const code = [
       // Build 3D sample point: (uv.x, uv.y, slice_z) all scaled
@@ -290,9 +344,7 @@ export const ElectronOrbitalNode: NodeDefinition = {
       `    vec3  ${id}_p   = vec3(${id}_uv2.x, ${id}_uv2.y, ${sliceZ});\n`,
 
       ...(hasTurb ? [
-        `    float ${id}_tx = fract(sin(dot(${id}_p.xy * 2.0 + ${timeVar} * ${turbSpeed}, vec2(127.1, 311.7))) * 43758.5453);\n`,
-        `    float ${id}_ty = fract(sin(dot(${id}_p.xy * 2.0 + ${timeVar} * ${turbSpeed} + vec2(3.7, 8.1), vec2(269.5, 183.3))) * 43758.5453);\n`,
-        `    ${id}_p.xy += (vec2(${id}_tx, ${id}_ty) * 2.0 - 1.0) * ${turbulence};\n`,
+        `    ${id}_p.xy += ch2_noise2(${id}_p.xy * 2.0, ${timeVar}, ${turbSpeed}, ${noiseModeIntOrb}) * ${turbulence};\n`,
       ] : []),
 
       `    float ${id}_psi     = orbitalPsi3(${id}_p, ${n}, ${l}, ${mq}, ${a0});\n`,
@@ -645,6 +697,25 @@ vec3 c3p_noise3(vec3 p, int mode) {
         fract(sin(dot(p + vec3(2.0), vec3(113.5,271.9,124.6)))*43758.5453)
     ) * 2.0 - 1.0;
 }
+// ── Chladni 3D field helpers (duplicated here so this node is self-contained) ─
+float c3p_chladni3d(vec3 p, float m, float n, float l) {
+    return cos(n*PI*p.x)*cos(m*PI*p.y)*cos(l*PI*p.z)
+         - cos(m*PI*p.x)*cos(l*PI*p.y)*cos(n*PI*p.z);
+}
+vec3 c3p_chladni3dNormal(vec3 p, float m, float n, float l) {
+    float e = 0.01;
+    return normalize(vec3(
+        c3p_chladni3d(p+vec3(e,0,0),m,n,l) - c3p_chladni3d(p-vec3(e,0,0),m,n,l),
+        c3p_chladni3d(p+vec3(0,e,0),m,n,l) - c3p_chladni3d(p-vec3(0,e,0),m,n,l),
+        c3p_chladni3d(p+vec3(0,0,e),m,n,l) - c3p_chladni3d(p-vec3(0,0,e),m,n,l)
+    ));
+}
+mat3 c3p_cam(vec3 ro, vec3 ta) {
+    vec3 cw = normalize(ta - ro);
+    vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+    vec3 cv = cross(cu, cw);
+    return mat3(cu, cv, cw);
+}
 `;
 
 export const Chladni3DParticlesNode: NodeDefinition = {
@@ -756,7 +827,7 @@ export const Chladni3DParticlesNode: NodeDefinition = {
     float ${id}_ang  = ${angleExpr};
     float ${id}_cp   = cos(${orbitPitch}), ${id}_sp = sin(${orbitPitch});
     vec3  ${id}_ro   = vec3(cos(${id}_ang)*${id}_cp, ${id}_sp, sin(${id}_ang)*${id}_cp) * ${camDist};
-    mat3  ${id}_cm   = chladni3dCam(${id}_ro, vec3(0.0));
+    mat3  ${id}_cm   = c3p_cam(${id}_ro, vec3(0.0));
     vec3  ${id}_rd   = normalize(${id}_cm * vec3(${uv}.x, ${uv}.y * (u_resolution.y / u_resolution.x), 1.5));
 
     // ── Particle density march ────────────────────────────────────────────────
@@ -783,13 +854,13 @@ export const Chladni3DParticlesNode: NodeDefinition = {
         if (any(greaterThan(abs(${id}_ps), vec3(${scale})))) { continue; }
         // Perturb sample by noise — particles drift but concentrate near f=0
         ${id}_pn  = ${id}_ps + c3p_noise3(${id}_ps * 3.0 + ${timeVar} * ${noiseSpeed}, ${noiseModeInt}) * ${turbulence};
-        ${id}_fvP = chladni3d(${id}_pn * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
+        ${id}_fvP = c3p_chladni3d(${id}_pn * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
         // Gaussian density peaked at f=0 (surface_pull = sharpness/inverse width)
         ${id}_w   = exp(-${id}_fvP * ${id}_fvP * ${surfPull} * ${surfPull});
         ${id}_dens    += ${id}_w * ${id}_dt;
         // Unperturbed values for surface colour metadata
-        ${id}_fv  = chladni3d(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
-        ${id}_nn  = chladni3dNormal(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
+        ${id}_fv  = c3p_chladni3d(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
+        ${id}_nn  = c3p_chladni3dNormal(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
         ${id}_normW  += ${id}_nn          * ${id}_w;
         ${id}_depthW += (${id}_t / ${id}_tFar) * ${id}_w;
         ${id}_signW  += sign(${id}_fv)    * ${id}_w;
