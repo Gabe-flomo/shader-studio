@@ -170,6 +170,14 @@ export class CanvasRecorder {
   private async _initMediaRecorder() {
     const stream   = this.canvas.captureStream(this.config.fps);
     const mimeType = this._bestMimeType();
+
+    if (!mimeType) {
+      throw new Error(
+        'MediaRecorder: no supported video format found on this platform. ' +
+        'Try switching to PNG frame sequence instead.'
+      );
+    }
+
     this._log(`MediaRecorder mimeType: ${mimeType}`);
 
     this.mediaRecorder = new MediaRecorder(stream, {
@@ -181,10 +189,10 @@ export class CanvasRecorder {
       if (e.data?.size > 0) this.recordedChunks.push(e.data);
     };
 
-    this.mediaRecorder.onstop = () => {
+    this.mediaRecorder.onstop = async () => {
       const blob = new Blob(this.recordedChunks, { type: mimeType });
       const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
-      if (this.config.autoDownload) this._downloadBlob(blob, `${this.config.name}.${ext}`);
+      if (this.config.autoDownload) await this._downloadBlob(blob, `${this.config.name}.${ext}`);
       this.mediaStopResolve?.();
     };
 
@@ -202,22 +210,46 @@ export class CanvasRecorder {
     });
   }
 
-  private _bestMimeType(): string {
+  private _bestMimeType(): string | null {
     const types = [
+      'video/mp4;codecs=h264',   // WebKit (Tauri / Safari) — try first so macOS gets .mp4
+      'video/mp4',
       'video/webm;codecs=vp9',
       'video/webm;codecs=vp8',
       'video/webm',
-      'video/mp4',
     ];
     for (const t of types) {
       if (MediaRecorder.isTypeSupported(t)) return t;
     }
-    return 'video/webm';
+    return null; // nothing supported — caller must handle
   }
 
   // ── Utilities ────────────────────────────────────────────────────────────
 
-  private _downloadBlob(blob: Blob, filename: string) {
+  private async _downloadBlob(blob: Blob, filename: string) {
+    this._log(`saving ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+    // In Tauri, blob: URLs don't work for downloads — use native save dialog instead
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    if (isTauri) {
+      try {
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const { writeFile } = await import('@tauri-apps/plugin-fs');
+        const ext  = filename.split('.').pop() ?? 'mp4';
+        const path = await save({
+          defaultPath: filename,
+          filters: [{ name: 'Video', extensions: [ext] }],
+        });
+        if (path) {
+          const buf = await blob.arrayBuffer();
+          await writeFile(path, new Uint8Array(buf));
+          this._log(`saved to ${path}`);
+        }
+      } catch (err) {
+        console.error('[CanvasRecorder] Tauri save failed', err);
+      }
+      return;
+    }
+    // Browser: standard blob download
     const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href     = url;
@@ -226,7 +258,6 @@ export class CanvasRecorder {
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 100);
-    this._log(`downloaded ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
   }
 
   private _log(...args: unknown[]) {
