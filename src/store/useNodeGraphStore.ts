@@ -887,7 +887,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           field:   { type: 'float', label: 'Raw Field'  },
           color:   { type: 'vec3',  label: 'Color'      },
         },
-        params: { m: 3, n: 4, scale: 1.0, line_width: 1.5, aa: 1.0, turbulence: 0.0, turb_speed: 0.5, noise_mode: 'smooth', brightness: 1.0 },
+        params: { m: 0.75, n: 1.0, scale: 1.0, line_width: 1.5, aa: 1.0, turbulence: 0.0, turb_speed: 0.5, noise_mode: 'smooth', brightness: 1.0 },
       },
       {
         id: 'output_3', type: 'output', position: { x: 620, y: 220 },
@@ -899,7 +899,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
 
   // ── Chladni 3D demo ───────────────────────────────────────────────────────
   chladni3dDemo: {
-    label: 'Chladni 3D (n=3 m=4 l=2)',
+    label: 'Chladni 3D',
     counter: 3,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 240 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
@@ -915,7 +915,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           alpha: { type: 'float', label: 'Alpha' },
           depth: { type: 'float', label: 'Depth' },
         },
-        params: { m: 3.0, n: 4.0, l: 2.0, scale: 1.2, steps: 80, surface_width: 0.08, opacity: 0.92, orbit_speed: 0.3, orbit_pitch: 0.4, cam_dist: 2.2, bg_dark: 0.04, color_mode: 'depth' },
+        params: { m: 0.75, n: 1.0, l: 0.5, scale: 1.2, steps: 80, surface_width: 0.08, opacity: 0.92, orbit_speed: 0.3, orbit_pitch: 0.4, cam_dist: 2.2, bg_dark: 0.04, color_mode: 'depth' },
       },
       {
         id: 'output_3', type: 'output', position: { x: 620, y: 220 },
