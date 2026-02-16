@@ -25,6 +25,15 @@ interface NodeGraphState {
   // Preview mode — isolates a single node's output for focused editing
   previewNodeId: string | null;
 
+  // Node highlight filter — set by keyboard shortcuts to visually dim non-matching nodes.
+  // null = no filter (all nodes normal). 'all' = clear any filter.
+  nodeHighlightFilter: string | null;  // e.g. 'float', 'vec2', 'vec3', 'uv-in', 'uv-out'
+  setNodeHighlightFilter: (filter: string | null) => void;
+
+  // Fit-view callback — registered by NodeGraph so App/shortcuts can trigger it
+  _fitViewCallback: (() => void) | null;
+  registerFitView: (cb: () => void) => void;
+
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
   removeNode: (nodeId: string) => void;
@@ -1368,6 +1377,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   pixelSample: null,
   currentTime: 0,
   previewNodeId: null,
+  nodeHighlightFilter: null,
+  _fitViewCallback: null,
+
+  setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
+  registerFitView: (cb) => set({ _fitViewCallback: cb }),
 
   addNode: (type, position, overrideParams?) => {
     const def = getNodeDefinition(type);

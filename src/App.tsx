@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import ShaderCanvas from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
@@ -6,8 +6,10 @@ import { CodePanel } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { LearnPage } from './components/LearnPage';
 import { ExportModal } from './components/ExportModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { useNodeGraphStore, EXAMPLE_GRAPHS } from './store/useNodeGraphStore';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
+import { useShortcuts } from './hooks/useShortcuts';
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -43,6 +45,7 @@ function App() {
   const {
     loadExampleGraph, compilationErrors, glslErrors, pixelSample, fragmentShader,
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
+    addNode, setNodeHighlightFilter, _fitViewCallback,
   } = useNodeGraphStore();
 
   const bp = useBreakpoint();
@@ -71,6 +74,8 @@ function App() {
   const [savedNames, setSavedNames]       = useState<string[]>([]);
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
+  // Keyboard shortcuts modal
+  const [showShortcuts, setShowShortcuts]     = useState(false);
   const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
 
@@ -79,23 +84,41 @@ function App() {
     setPreviewWidth(getDefaultPreviewWidth(bp));
   }, [bp]);
 
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
+  const addRandomNode = useCallback((type: string) => {
+    addNode(type, { x: 200 + Math.random() * 160, y: 120 + Math.random() * 200 });
+  }, [addNode]);
+
+  const shortcutHandlers = useMemo(() => ({
+    export:         () => exportGraph(),
+    import:         () => importGraphFromFile(),
+    fitView:        () => _fitViewCallback?.(),
+    toggleCode:     () => setShowCode(v => !v),
+    toggleRecord:   () => setShowExport(v => !v),
+    addNode:        () => {/* palette open handled in NodeGraph via store */},
+    addUV:          () => addRandomNode('uv'),
+    addTime:        () => addRandomNode('time'),
+    addFloat:       () => addRandomNode('float'),
+    addOutput:      () => addRandomNode('output'),
+    addMix:         () => addRandomNode('mix'),
+    addColor:       () => addRandomNode('color'),
+    selectAll:      () => setNodeHighlightFilter(null),
+    filterFloat:    () => setNodeHighlightFilter('float'),
+    filterVec2:     () => setNodeHighlightFilter('vec2'),
+    filterVec3:     () => setNodeHighlightFilter('vec3'),
+    filterUVInputs: () => setNodeHighlightFilter('uv-in'),
+    filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
+    shortcuts:      () => setShowShortcuts(v => !v),
+  }), [addRandomNode, exportGraph, importGraphFromFile, _fitViewCallback, setNodeHighlightFilter]);
+
+  useShortcuts(shortcutHandlers);
+
   const handleSave = () => {
     const name = saveNameInput.trim();
     if (!name) return;
     saveGraph(name);
     setShowSavePanel(false);
     setSaveNameInput('');
-  };
-
-  const handleOpenLoad = () => {
-    setSavedNames(getSavedGraphNames());
-    setShowLoadPanel(v => !v);
-    setShowSavePanel(false);
-  };
-
-  const handleOpenSave = () => {
-    setShowSavePanel(v => !v);
-    setShowLoadPanel(false);
   };
 
   useEffect(() => {
@@ -161,10 +184,9 @@ function App() {
 
       {!compact && (
         <>
-          <button onClick={handleOpenSave} style={btnStyle(showSavePanel)}>💾</button>
-          <button onClick={handleOpenLoad} style={btnStyle(showLoadPanel)}>📂</button>
           <button onClick={exportGraph} style={btnStyle()}>⬇</button>
           <button onClick={importGraphFromFile} style={btnStyle()}>⬆</button>
+          <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa' }} title="Keyboard shortcuts">⌨</button>
         </>
       )}
     </div>
@@ -397,6 +419,7 @@ function App() {
         {showExport && (
           <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />
         )}
+        {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
       </div>
     );
   }
@@ -507,6 +530,7 @@ function App() {
           </div>
         </div>
         {showExport && <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />}
+        {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
       </div>
   );
   }
@@ -545,18 +569,17 @@ function App() {
               ))}
             </select>
             <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
-            <button onClick={handleOpenSave} style={btnStyle(showSavePanel)}>💾 Save</button>
-            <button onClick={handleOpenLoad} style={btnStyle(showLoadPanel)}>📂 Load</button>
             <button onClick={exportGraph} style={btnStyle()}>⬇ Export</button>
             <button onClick={importGraphFromFile} style={btnStyle()}>⬆ Import</button>
             <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
             <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Export animation as video">
               🎬 Record
             </button>
+            <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts (?)">
+              ⌨ Keys
+            </button>
           </div>
 
-          {savePanelEl}
-          {loadPanelEl}
 
           {/* Code toggle */}
           <button
@@ -604,6 +627,7 @@ function App() {
       {showExport && (
         <ExportModal canvas={shaderCanvasRef.current} onClose={() => setShowExport(false)} />
       )}
+      {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 }

@@ -50,14 +50,15 @@ function getSocketPos(
 // ─── Pan/zoom constants ───────────────────────────────────────────────────────
 const ZOOM_MIN = 0.15;
 const ZOOM_MAX = 2.5;
-const ZOOM_SPEED = 0.001;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
-  const nodes            = useNodeGraphStore(s => s.nodes);
-  const connectNodes     = useNodeGraphStore(s => s.connectNodes);
-  const autoLayout       = useNodeGraphStore(s => s.autoLayout);
-  const setPreviewNodeId = useNodeGraphStore(s => s.setPreviewNodeId);
-  const previewNodeId    = useNodeGraphStore(s => s.previewNodeId);
+  const nodes                 = useNodeGraphStore(s => s.nodes);
+  const connectNodes          = useNodeGraphStore(s => s.connectNodes);
+  const autoLayout            = useNodeGraphStore(s => s.autoLayout);
+  const setPreviewNodeId      = useNodeGraphStore(s => s.setPreviewNodeId);
+  const previewNodeId         = useNodeGraphStore(s => s.previewNodeId);
+  const nodeHighlightFilter   = useNodeGraphStore(s => s.nodeHighlightFilter);
+  const registerFitView       = useNodeGraphStore(s => s.registerFitView);
 
   const previewNode  = previewNodeId ? nodes.find(n => n.id === previewNodeId) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
@@ -80,13 +81,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { panRef.current  = pan;  }, [pan]);
 
-  // Middle-mouse / space+drag panning
+  // ── Pan mode tracking ───────────────────────────────────────────────────────
+  // Pan is triggered by: middle-mouse drag, Space+drag, or Option+drag (Ableton-style)
   const isPanning   = useRef(false);
   const panStart    = useRef({ x: 0, y: 0 });
   const panOrigin   = useRef({ x: 0, y: 0 });
   const spaceDown   = useRef(false);
+  const optionDown  = useRef(false);
 
-  // Keyboard: space to enter pan mode
+  // Keyboard: Space or Option to enter pan mode
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT'
@@ -95,11 +98,21 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         spaceDown.current = true;
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
       }
+      if (e.code === 'AltLeft' || e.code === 'AltRight') {
+        optionDown.current = true;
+        if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         spaceDown.current = false;
-        if (canvasRef.current) canvasRef.current.style.cursor = 'default';
+        if (!optionDown.current && canvasRef.current)
+          canvasRef.current.style.cursor = 'default';
+      }
+      if (e.code === 'AltLeft' || e.code === 'AltRight') {
+        optionDown.current = false;
+        if (!spaceDown.current && canvasRef.current)
+          canvasRef.current.style.cursor = 'default';
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -110,33 +123,45 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     };
   }, []);
 
-  // Wheel zoom — zoom toward cursor position
+  // ── Wheel / trackpad handler (Ableton-style) ─────────────────────────────
+  // • Two-finger scroll (no ctrl) → pan X + Y
+  // • Pinch gesture / ctrl+wheel  → zoom toward cursor
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    // Mouse position relative to canvas
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const oldZoom = zoomRef.current;
-    const delta   = -e.deltaY * ZOOM_SPEED;
-    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, oldZoom * (1 + delta)));
-    // Adjust pan so the point under the cursor stays fixed
-    const oldPan  = panRef.current;
-    const newPan  = {
-      x: mx - (mx - oldPan.x) * (newZoom / oldZoom),
-      y: my - (my - oldPan.y) * (newZoom / oldZoom),
-    };
-    setZoom(newZoom);
-    setPan(newPan);
+
+    if (e.ctrlKey) {
+      // Pinch-to-zoom (trackpad) or ctrl+scroll (mouse wheel)
+      const rect    = canvas.getBoundingClientRect();
+      const mx      = e.clientX - rect.left;
+      const my      = e.clientY - rect.top;
+      const oldZoom = zoomRef.current;
+      // ctrlKey pinch: deltaY is in "zoom units" (~small floats), scale accordingly
+      const delta   = -e.deltaY * (e.deltaMode === 0 ? 0.008 : 0.3);
+      const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, oldZoom * (1 + delta)));
+      const oldPan  = panRef.current;
+      setZoom(newZoom);
+      setPan({
+        x: mx - (mx - oldPan.x) * (newZoom / oldZoom),
+        y: my - (my - oldPan.y) * (newZoom / oldZoom),
+      });
+    } else {
+      // Two-finger scroll → pan (translate directly in screen space)
+      const oldPan = panRef.current;
+      setPan({
+        x: oldPan.x - e.deltaX,
+        y: oldPan.y - e.deltaY,
+      });
+    }
   }, []);
 
-  // Canvas mouse down — start pan if middle button or space held
+  // ── Canvas mouse down — pan on middle-click, space+drag, or option+drag ──
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
-    const isMiddle = e.button === 1;
-    const isSpaceDrag = spaceDown.current && e.button === 0;
-    if (!isMiddle && !isSpaceDrag) return;
+    const isMiddle    = e.button === 1;
+    const isSpaceDrag = spaceDown.current  && e.button === 0;
+    const isOptionDrag = optionDown.current && e.button === 0;
+    if (!isMiddle && !isSpaceDrag && !isOptionDrag) return;
     e.preventDefault();
     isPanning.current  = true;
     panStart.current   = { x: e.clientX, y: e.clientY };
@@ -155,7 +180,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup',   onUp);
       if (canvasRef.current)
-        canvasRef.current.style.cursor = spaceDown.current ? 'grab' : 'default';
+        canvasRef.current.style.cursor =
+          spaceDown.current || optionDown.current ? 'grab' : 'default';
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup',   onUp);
@@ -258,6 +284,27 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     });
     setZoom(newZoom);
   }, [nodes]);
+
+  // Register fitView with the store so shortcuts / App.tsx can call it
+  useEffect(() => { registerFitView(handleFitView); }, [registerFitView, handleFitView]);
+
+  // ── Highlight filter — compute which node IDs match the current filter ───────
+  const highlightedIds: Set<string> | null = React.useMemo(() => {
+    if (!nodeHighlightFilter) return null;
+    const matching = new Set<string>();
+    for (const node of nodes) {
+      const outputs = Object.values(node.outputs);
+      const inputs  = Object.values(node.inputs);
+      switch (nodeHighlightFilter) {
+        case 'float':   if (outputs.some(o => o.type === 'float'))  matching.add(node.id); break;
+        case 'vec2':    if (outputs.some(o => o.type === 'vec2'))   matching.add(node.id); break;
+        case 'vec3':    if (outputs.some(o => o.type === 'vec3'))   matching.add(node.id); break;
+        case 'uv-out':  if (outputs.some(o => o.type === 'vec2'))   matching.add(node.id); break;
+        case 'uv-in':   if (inputs.some(i => i.type === 'vec2'))    matching.add(node.id); break;
+      }
+    }
+    return matching;
+  }, [nodeHighlightFilter, nodes]);
 
   const canvas = canvasRef.current;
 
@@ -438,6 +485,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             onEndConnection={handleEndConnection}
             draggingType={draggingType}
             zoom={zoom}
+            dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
           />
         ))}
       </div>

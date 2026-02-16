@@ -12,6 +12,8 @@ interface Props {
   onEndConnection: (nodeId: string, inputKey: string) => void;
   draggingType?: DataType | null;
   zoom?: number;
+  /** When a highlight filter is active, non-matching nodes are dimmed */
+  dimmed?: boolean;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -192,7 +194,7 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType, zoom = 1 }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType, zoom = 1, dimmed = false }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
@@ -355,7 +357,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         color: '#cdd6f4',
         fontSize: '12px',
         userSelect: 'none',
-        opacity: isBypassed ? 0.55 : 1,
+        opacity: dimmed ? 0.2 : isBypassed ? 0.55 : 1,
+        transition: 'opacity 0.2s ease',
         boxShadow: isPreviewActive
           ? '0 0 14px #a6e3a133, 0 4px 12px rgba(0,0,0,0.4)'
           : '0 4px 12px rgba(0,0,0,0.4)',
