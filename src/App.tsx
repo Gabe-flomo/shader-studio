@@ -7,6 +7,7 @@ import { TopNav } from './components/TopNav';
 import { LearnPage } from './components/LearnPage';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { ShortcutsPage } from './components/ShortcutsPage';
 import { useNodeGraphStore, EXAMPLE_GRAPHS } from './store/useNodeGraphStore';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
@@ -57,7 +58,7 @@ function App() {
   const [previewWidth, setPreviewWidth] = useState(() => getDefaultPreviewWidth(bp));
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
-  const [page, setPage]                 = useState<'studio' | 'learn'>('studio');
+  const [page, setPage]                 = useState<'studio' | 'learn' | 'shortcuts'>('studio');
   const [activeExample, setActiveExample] = useState('fractalRings');
 
   // Mobile/tablet drawer state
@@ -108,7 +109,7 @@ function App() {
     filterVec3:     () => setNodeHighlightFilter('vec3'),
     filterUVInputs: () => setNodeHighlightFilter('uv-in'),
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
-    shortcuts:      () => setShowShortcuts(v => !v),
+    shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
   }), [addRandomNode, exportGraph, importGraphFromFile, _fitViewCallback, setNodeHighlightFilter]);
 
   useShortcuts(shortcutHandlers);
@@ -436,6 +437,15 @@ function App() {
     );
   }
 
+  if (mobile && page === 'shortcuts') {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+        <TopNav page={page} onPageChange={setPage} />
+        <ShortcutsPage />
+      </div>
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // TABLET LAYOUT (768–1024px)
   // 2-panel: collapsible palette strip | graph + preview side by side
@@ -446,6 +456,7 @@ function App() {
         <TopNav page={page} onPageChange={setPage} />
 
         {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
+        {page === 'shortcuts' && <ShortcutsPage />}
 
         <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
 
@@ -545,6 +556,7 @@ function App() {
       <TopNav page={page} onPageChange={setPage} />
 
       {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
+      {page === 'shortcuts' && <ShortcutsPage />}
 
       <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined }}>
 
