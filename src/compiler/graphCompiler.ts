@@ -426,13 +426,19 @@ function generateFragmentShader(
 
     // ── Loop Start: pass-through (outputs current carry var for downstream) ──
     if (node.type === 'loopStart') {
-      // Emit the carry as-is — body nodes will inject their own carry from nodeOutputs
-      const carryVar = inputVars['carry'] ?? defaultGlslVal(
-        (Object.values(node.outputs)[0]?.type as DataType) ?? 'vec2'
-      );
-      const outType = (Object.values(node.outputs)[0]?.type as DataType) ?? 'vec2';
+      // Determine actual carry type from the source connected to this loopStart's input
+      let startType: DataType = 'vec2';
+      const startConn = node.inputs['carry']?.connection;
+      if (startConn) {
+        const srcNode = nodeMap.get(startConn.nodeId);
+        const srcType = srcNode?.outputs[startConn.outputKey]?.type;
+        if (srcType === 'float' || srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4') {
+          startType = srcType as DataType;
+        }
+      }
+      const carryVar = inputVars['carry'] ?? defaultGlslVal(startType);
       const varName = `${node.id}_carry`;
-      mainCode.push(`    ${outType} ${varName} = ${carryVar};\n`);
+      mainCode.push(`    ${startType} ${varName} = ${carryVar};\n`);
       nodeOutputs.set(node.id, { carry: varName });
       continue;
     }
@@ -445,19 +451,60 @@ function generateFragmentShader(
       )));
       const id = node.id;
 
-      // Determine carry type from the inbound wire (loopEnd's carry input)
-      const carryConn = node.inputs['carry']?.connection;
+      // Determine carry type from the inbound wire (loopEnd's carry input).
+      // Walk backwards through the chain to find the loopStart node.
+      const loopEndCarryConn = node.inputs['carry']?.connection;
       let carryType: DataType = 'vec2';
-      if (carryConn) {
-        const srcNode = allNodeMap.get(carryConn.nodeId);
-        const srcType = srcNode?.outputs[carryConn.outputKey]?.type;
-        if (srcType === 'float' || srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4') {
-          carryType = srcType as DataType;
+      let startNodeId: string | null = null;
+      if (loopEndCarryConn) {
+        let walkId: string | undefined = loopEndCarryConn.nodeId;
+        while (walkId) {
+          const wn = allNodeMap.get(walkId);
+          if (!wn) break;
+          if (wn.type === 'loopStart') {
+            startNodeId = wn.id;
+            // Carry type = the type of loopStart's carry input (what's wired into it)
+            const stConn = wn.inputs['carry']?.connection;
+            if (stConn) {
+              const stSrc = allNodeMap.get(stConn.nodeId);
+              const stType = stSrc?.outputs[stConn.outputKey]?.type;
+              if (stType === 'float' || stType === 'vec2' || stType === 'vec3' || stType === 'vec4') {
+                carryType = stType as DataType;
+              }
+            }
+            break;
+          }
+          // Also check the direct source type from loopEnd's carry conn (last body node output)
+          const srcNode = allNodeMap.get(walkId);
+          if (srcNode) {
+            const outType = srcNode.outputs[loopEndCarryConn.outputKey]?.type;
+            if (outType === 'float' || outType === 'vec2' || outType === 'vec3' || outType === 'vec4') {
+              carryType = outType as DataType;
+            }
+          }
+          const wn2 = allNodeMap.get(walkId);
+          const nextConn = wn2 ? Object.values(wn2.inputs).find(i => i.connection)?.connection : undefined;
+          walkId = nextConn?.nodeId;
         }
       }
 
-      // Initial carry value: whatever the loopStart (or last body node) resolved to
-      const initialCarry = inputVars['carry'] ?? defaultGlslVal(carryType);
+      // Build set of all chain-internal node IDs (loopStart + body nodes)
+      // Connections from these are carry-path connections, not external dependencies
+      const chainNodeIds = new Set<string>(bodyIds);
+      if (startNodeId) chainNodeIds.add(startNodeId);
+
+      // Initial carry value: read from loopStart's compiled output in nodeOutputs
+      let initialCarry = defaultGlslVal(carryType);
+      if (startNodeId) {
+        const startOutputs = nodeOutputs.get(startNodeId);
+        if (startOutputs) {
+          const firstKey = Object.keys(startOutputs)[0];
+          if (firstKey) initialCarry = startOutputs[firstKey];
+        }
+      } else {
+        // No loopStart found (loopEnd wired directly to something else)
+        initialCarry = inputVars['carry'] ?? defaultGlslVal(carryType);
+      }
 
       // Collect glslFunctions from body nodes
       for (const bodyId of bodyIds) {
@@ -482,13 +529,16 @@ function generateFragmentShader(
           if (!bodyDef) continue;
 
           // Resolve body node inputs:
-          // - sockets of carryType with no external connection → inject iterCarry
-          // - sockets with an external connection → resolve from nodeOutputs
+          // - sockets connected to a chain node (loopStart or previous body) → inject iterCarry
+          //   (these are the "carry path" connections, not external dependencies)
+          // - sockets of carryType with no connection → also inject iterCarry
+          // - sockets with an external connection (outside the chain) → resolve from nodeOutputs
           // - customFn slider params → from node.params
           // - defaultValue → use that
           const bodyInputVars: Record<string, string> = {};
           for (const [k, sock] of Object.entries(bodyNode.inputs)) {
-            if (!sock.connection && (sock.type as string) === (carryType as string)) {
+            const isCarryConn = sock.connection && chainNodeIds.has(sock.connection.nodeId);
+            if (isCarryConn || (!sock.connection && (sock.type as string) === (carryType as string))) {
               bodyInputVars[k] = iterCarry;
             } else if (sock.connection) {
               // External connection (e.g. time, UV, params from outside the loop)
