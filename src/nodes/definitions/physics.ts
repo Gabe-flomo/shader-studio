@@ -235,14 +235,14 @@ export const ElectronOrbitalNode: NodeDefinition = {
   defaultParams: {
     n:          2.0,
     l:          1.0,
-    m_q:        0.0,
-    a0:         0.05,
+    m_q:        1.0,  // 2px: Y_1^1 = sinT*cos(phi) — visible in the z=0 equatorial slice
+    a0:         0.094, // sized so peak radius ≈ 0.5 screen units at scale 3
     scale:      3.0,
     slice_z:    0.0,
-    brightness: 3.0,
-    gamma:      0.5,
+    brightness: 5.0,
+    gamma:      0.45,
     aa:         1.0,
-    edge_soft:  0.8,
+    edge_soft:  0.6,
     turbulence: 0.0,
     turb_speed: 0.3,
   },

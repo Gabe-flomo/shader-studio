@@ -915,7 +915,9 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           psi:     { type: 'float', label: 'Raw ψ'         },
           color:   { type: 'vec3',  label: 'Color'          },
         },
-        params: { n: 2, l: 1, m_q: 0, a0: 0.05, scale: 3.0, slice_z: 0.0, brightness: 3.0, gamma: 0.5, aa: 1.0, edge_soft: 0.8, turbulence: 0.0, turb_speed: 0.3 },
+        // m=1 (2px): Y_1^1 = sinT*cos(phi) — visible in the z=0 equatorial slice.
+        // m=0 (2pz): Y_1^0 = cosT = 0 at z=0, so the equatorial cross-section is completely dark.
+        params: { n: 2, l: 1, m_q: 1, a0: 0.094, scale: 3.0, slice_z: 0.0, brightness: 5.0, gamma: 0.45, aa: 1.0, edge_soft: 0.6, turbulence: 0.0, turb_speed: 0.3 },
       },
       {
         id: 'output_3', type: 'output', position: { x: 620, y: 220 },
