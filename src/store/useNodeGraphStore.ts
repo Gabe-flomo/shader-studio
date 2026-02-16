@@ -912,10 +912,10 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
         outputs: {
           color: { type: 'vec3',  label: 'Color' },
-          glow:  { type: 'float', label: 'Glow'  },
+          alpha: { type: 'float', label: 'Alpha' },
           depth: { type: 'float', label: 'Depth' },
         },
-        params: { m: 3.0, n: 4.0, l: 2.0, scale: 1.2, steps: 60, line_width: 1.8, brightness: 2.5, glow_falloff: 2.5, orbit_speed: 0.3, orbit_pitch: 0.4, cam_dist: 2.2, color_mode: 'normal' },
+        params: { m: 3.0, n: 4.0, l: 2.0, scale: 1.2, steps: 80, surface_width: 0.08, opacity: 0.92, orbit_speed: 0.3, orbit_pitch: 0.4, cam_dist: 2.2, bg_dark: 0.04, color_mode: 'depth' },
       },
       {
         id: 'output_3', type: 'output', position: { x: 620, y: 220 },
