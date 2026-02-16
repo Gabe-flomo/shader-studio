@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 // base switches automatically: '/' for Tauri desktop, '/shader-studio/' for GitHub Pages.
-// TAURI_ENV_DEBUG is set automatically by the Tauri CLI during tauri dev / tauri build.
-const isTauri = process.env.TAURI_ENV_DEBUG !== undefined;
+// TAURI_ENV_PLATFORM is set by the Tauri CLI during both `tauri dev` and `tauri build`.
+const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 
 export default defineConfig({
   plugins: [
