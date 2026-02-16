@@ -541,3 +541,278 @@ export const Chladni3DNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Chladni 3D Particles (Orbital-style density cloud) ───────────────────────
+//
+// Instead of raymarching clean surfaces, this node scatters virtual particles
+// through the volume. Each particle drifts on a noise field but is attracted
+// toward f(x,y,z)=0 nodal surfaces. The result is a turbulent particle-cloud
+// that reveals the 3D field topology — similar to electron orbital probability
+// density visualisations.
+//
+// Four noise algorithms let the user swap the turbulence character:
+//   hash   — classic sin/dot hash (smooth drift, occasionally bands)
+//   value  — smooth value noise (rounder, softer clouds)
+//   cell   — Voronoi cellular (clumpy blobs, strong structure)
+//   fbm    — 4-octave fBm value noise (fractal, most detail, slowest)
+
+const CHLADNI3D_PARTICLES_GLSL_FN = `
+// ── noise helpers ────────────────────────────────────────────────────────────
+float c3p_hash1(vec3 p) {
+    p = fract(p * vec3(127.1, 311.7, 74.7));
+    p += dot(p, p.yzx + 19.19);
+    return fract((p.x + p.y) * p.z);
+}
+vec3 c3p_hash3(vec3 p) {
+    return vec3(
+        c3p_hash1(p),
+        c3p_hash1(p + vec3(1.0)),
+        c3p_hash1(p + vec3(2.0))
+    );
+}
+float c3p_valueNoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = f*f*(3.0 - 2.0*f);
+    float v000 = c3p_hash1(i + vec3(0,0,0));
+    float v100 = c3p_hash1(i + vec3(1,0,0));
+    float v010 = c3p_hash1(i + vec3(0,1,0));
+    float v110 = c3p_hash1(i + vec3(1,1,0));
+    float v001 = c3p_hash1(i + vec3(0,0,1));
+    float v101 = c3p_hash1(i + vec3(1,0,1));
+    float v011 = c3p_hash1(i + vec3(0,1,1));
+    float v111 = c3p_hash1(i + vec3(1,1,1));
+    return mix(
+        mix(mix(v000,v100,u.x), mix(v010,v110,u.x), u.y),
+        mix(mix(v001,v101,u.x), mix(v011,v111,u.x), u.y),
+        u.z
+    );
+}
+float c3p_fbm(vec3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int c3p_i = 0; c3p_i < 4; c3p_i++) {
+        v += a * c3p_valueNoise(p);
+        p = p * 2.1 + vec3(5.2, 1.3, 2.7);
+        a *= 0.5;
+    }
+    return v;
+}
+float c3p_voronoi(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    float minD = 10.0;
+    for (int c3p_z = -1; c3p_z <= 1; c3p_z++) {
+        for (int c3p_y = -1; c3p_y <= 1; c3p_y++) {
+            for (int c3p_x = -1; c3p_x <= 1; c3p_x++) {
+                vec3 nb  = vec3(float(c3p_x), float(c3p_y), float(c3p_z));
+                vec3 pt  = c3p_hash3(i + nb);
+                vec3 df  = nb + pt - f;
+                float d  = dot(df, df);
+                if (d < minD) minD = d;
+            }
+        }
+    }
+    return sqrt(minD);
+}
+// Returns a noise vec3 offset. mode: 0=hash, 1=value, 2=voronoi, 3=fbm
+vec3 c3p_noise3(vec3 p, int mode) {
+    if (mode == 1) {
+        return vec3(
+            c3p_valueNoise(p),
+            c3p_valueNoise(p + vec3(7.3, 2.1, 5.5)),
+            c3p_valueNoise(p + vec3(3.7, 8.9, 1.4))
+        ) * 2.0 - 1.0;
+    }
+    if (mode == 2) {
+        return vec3(
+            c3p_voronoi(p),
+            c3p_voronoi(p + vec3(4.1, 1.7, 3.3)),
+            c3p_voronoi(p + vec3(2.3, 6.5, 0.9))
+        ) * 2.0 - 1.0;
+    }
+    if (mode == 3) {
+        return vec3(
+            c3p_fbm(p),
+            c3p_fbm(p + vec3(5.2, 1.3, 2.7)),
+            c3p_fbm(p + vec3(1.7, 9.2, 4.4))
+        ) * 2.0 - 1.0;
+    }
+    // mode == 0: classic sin hash
+    return vec3(
+        fract(sin(dot(p,             vec3(127.1,311.7, 74.7)))*43758.5453),
+        fract(sin(dot(p + 1.0,       vec3(269.5,183.3,246.1)))*43758.5453),
+        fract(sin(dot(p + vec3(2.0), vec3(113.5,271.9,124.6)))*43758.5453)
+    ) * 2.0 - 1.0;
+}
+`;
+
+export const Chladni3DParticlesNode: NodeDefinition = {
+  type: 'chladni3dParticles',
+  label: 'Chladni 3D Particles',
+  category: 'Science',
+  description: 'Orbital-style turbulent particle cloud for 3D Chladni fields. Particles drift on a noise field but concentrate near f=0 nodal surfaces — like electron probability density. 4 noise algorithms: hash, value, voronoi, fBm.',
+  inputs: {
+    uv:          { type: 'vec2',  label: 'UV'         },
+    time:        { type: 'float', label: 'Time'        },
+    m:           { type: 'float', label: 'm'           },
+    n:           { type: 'float', label: 'n'           },
+    l:           { type: 'float', label: 'l'           },
+    orbit_angle: { type: 'float', label: 'Orbit Angle' },
+  },
+  outputs: {
+    color:   { type: 'vec3',  label: 'Color'   },
+    density: { type: 'float', label: 'Density' },
+  },
+  glslFunction: CHLADNI3D_PARTICLES_GLSL_FN,
+  defaultParams: {
+    m:            0.75,
+    n:            1.0,
+    l:            0.5,
+    scale:        1.2,
+    steps:        60,
+    turbulence:   0.18,
+    noise_speed:  0.4,
+    surface_pull: 6.0,
+    brightness:   3.0,
+    orbit_speed:  0.25,
+    orbit_pitch:  0.4,
+    cam_dist:     2.2,
+    noise_mode:   'hash',
+    color_mode:   'field',
+  },
+  paramDefs: {
+    m:            { label: 'm',              type: 'float',  min: -2,    max: 2,    step: 0.01  },
+    n:            { label: 'n',              type: 'float',  min: -2,    max: 2,    step: 0.01  },
+    l:            { label: 'l',              type: 'float',  min: -2,    max: 2,    step: 0.01  },
+    scale:        { label: 'Scale',          type: 'float',  min: 0.5,   max: 3.0,  step: 0.05  },
+    steps:        { label: 'March Steps',    type: 'float',  min: 20,    max: 120,  step: 4     },
+    turbulence:   { label: 'Turbulence',     type: 'float',  min: 0.0,   max: 0.6,  step: 0.005 },
+    noise_speed:  { label: 'Noise Speed',    type: 'float',  min: 0.0,   max: 2.0,  step: 0.05  },
+    surface_pull: { label: 'Surface Pull',   type: 'float',  min: 0.5,   max: 20.0, step: 0.5   },
+    brightness:   { label: 'Brightness',     type: 'float',  min: 0.1,   max: 10.0, step: 0.1   },
+    orbit_speed:  { label: 'Orbit Speed',    type: 'float',  min: -2.0,  max: 2.0,  step: 0.05  },
+    orbit_pitch:  { label: 'Orbit Pitch',    type: 'float',  min: -1.5,  max: 1.5,  step: 0.05  },
+    cam_dist:     { label: 'Cam Dist',       type: 'float',  min: 1.0,   max: 5.0,  step: 0.1   },
+    noise_mode: {
+      label: 'Noise Algorithm', type: 'select',
+      options: [
+        { value: 'hash',  label: 'Hash (classic)'   },
+        { value: 'value', label: 'Value (smooth)'   },
+        { value: 'cell',  label: 'Voronoi (clumpy)' },
+        { value: 'fbm',   label: 'fBm (fractal)'    },
+      ],
+    },
+    color_mode: {
+      label: 'Color Mode', type: 'select',
+      options: [
+        { value: 'field',  label: 'Field sign'    },
+        { value: 'depth',  label: 'Depth tinted'  },
+        { value: 'normal', label: 'Normal map'    },
+        { value: 'hot',    label: 'Hot (density)' },
+      ],
+    },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uv          = inputVars.uv          ?? 'vec2(0.0)';
+    const timeVar     = inputVars.time        ?? '0.0';
+    const mVal        = inputVars.m           ?? f(typeof node.params.m     === 'number' ? node.params.m     : 0.75);
+    const nVal        = inputVars.n           ?? f(typeof node.params.n     === 'number' ? node.params.n     : 1.0);
+    const lVal        = inputVars.l           ?? f(typeof node.params.l     === 'number' ? node.params.l     : 0.5);
+    const scale       = f(typeof node.params.scale        === 'number' ? node.params.scale        : 1.2);
+    const steps       = Math.round(typeof node.params.steps === 'number' ? node.params.steps       : 60);
+    const turbulence  = f(typeof node.params.turbulence   === 'number' ? node.params.turbulence    : 0.18);
+    const noiseSpeed  = f(typeof node.params.noise_speed  === 'number' ? node.params.noise_speed   : 0.4);
+    const surfPull    = f(typeof node.params.surface_pull === 'number' ? node.params.surface_pull  : 6.0);
+    const brightness  = f(typeof node.params.brightness   === 'number' ? node.params.brightness    : 3.0);
+    const orbitSpeed  = f(typeof node.params.orbit_speed  === 'number' ? node.params.orbit_speed   : 0.25);
+    const orbitPitch  = f(typeof node.params.orbit_pitch  === 'number' ? node.params.orbit_pitch   : 0.4);
+    const camDist     = f(typeof node.params.cam_dist     === 'number' ? node.params.cam_dist      : 2.2);
+    const noiseMode   = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'hash';
+    const colorMode   = typeof node.params.color_mode === 'string' ? node.params.color_mode : 'field';
+
+    const noiseModeInt = noiseMode === 'value' ? 1 : noiseMode === 'cell' ? 2 : noiseMode === 'fbm' ? 3 : 0;
+
+    const hasOrbitInput = !!inputVars.orbit_angle;
+    const angleExpr = hasOrbitInput
+      ? inputVars.orbit_angle!
+      : `${timeVar} * ${orbitSpeed}`;
+
+    let colorExpr: string;
+    if (colorMode === 'depth') {
+      colorExpr = `mix(vec3(0.05,0.12,0.45), vec3(1.0,0.95,0.85), clamp(${id}_depthW, 0.0, 1.0))`;
+    } else if (colorMode === 'normal') {
+      colorExpr = `${id}_normW * 0.5 + 0.5`;
+    } else if (colorMode === 'hot') {
+      colorExpr = `vec3(clamp(${id}_dens*2.0,0.0,1.0), clamp(${id}_dens*2.0-0.5,0.0,1.0), clamp(${id}_dens*3.0-2.0,0.0,1.0))`;
+    } else {
+      // field sign — warm vs cool by which side of the surface
+      colorExpr = `mix(vec3(0.3,0.6,1.0), vec3(1.0,0.55,0.2), ${id}_signW * 0.5 + 0.5)`;
+    }
+
+    const code = `
+    // ── Chladni3DParticles: camera ───────────────────────────────────────────
+    float ${id}_ang  = ${angleExpr};
+    float ${id}_cp   = cos(${orbitPitch}), ${id}_sp = sin(${orbitPitch});
+    vec3  ${id}_ro   = vec3(cos(${id}_ang)*${id}_cp, ${id}_sp, sin(${id}_ang)*${id}_cp) * ${camDist};
+    mat3  ${id}_cm   = chladni3dCam(${id}_ro, vec3(0.0));
+    vec3  ${id}_rd   = normalize(${id}_cm * vec3(${uv}.x, ${uv}.y * (u_resolution.y / u_resolution.x), 1.5));
+
+    // ── Particle density march ────────────────────────────────────────────────
+    float ${id}_m     = ${mVal};
+    float ${id}_n_    = ${nVal};
+    float ${id}_l_    = ${lVal};
+    float ${id}_tFar  = 4.0;
+    float ${id}_dt    = ${id}_tFar / float(${steps});
+    float ${id}_dens  = 0.0;
+    float ${id}_wSum  = 0.0;
+    float ${id}_depthW = 0.0;
+    vec3  ${id}_normW  = vec3(0.0);
+    float ${id}_signW  = 0.0;
+    float ${id}_t      = 0.0;
+    float ${id}_fv     = 0.0;
+    float ${id}_fvP    = 0.0;
+    float ${id}_w      = 0.0;
+    vec3  ${id}_ps     = vec3(0.0);
+    vec3  ${id}_pn     = vec3(0.0);
+    vec3  ${id}_nn     = vec3(0.0);
+    for (int ${id}_i = 0; ${id}_i < ${steps}; ${id}_i++) {
+        ${id}_t  = float(${id}_i) * ${id}_dt;
+        ${id}_ps = ${id}_ro + ${id}_rd * ${id}_t;
+        if (any(greaterThan(abs(${id}_ps), vec3(${scale})))) { continue; }
+        // Perturb sample by noise — particles drift but concentrate near f=0
+        ${id}_pn  = ${id}_ps + c3p_noise3(${id}_ps * 3.0 + ${timeVar} * ${noiseSpeed}, ${noiseModeInt}) * ${turbulence};
+        ${id}_fvP = chladni3d(${id}_pn * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
+        // Gaussian density peaked at f=0 (surface_pull = sharpness/inverse width)
+        ${id}_w   = exp(-${id}_fvP * ${id}_fvP * ${surfPull} * ${surfPull});
+        ${id}_dens    += ${id}_w * ${id}_dt;
+        // Unperturbed values for surface colour metadata
+        ${id}_fv  = chladni3d(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
+        ${id}_nn  = chladni3dNormal(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n_, ${id}_l_);
+        ${id}_normW  += ${id}_nn          * ${id}_w;
+        ${id}_depthW += (${id}_t / ${id}_tFar) * ${id}_w;
+        ${id}_signW  += sign(${id}_fv)    * ${id}_w;
+        ${id}_wSum   += ${id}_w;
+    }
+    if (${id}_wSum > 0.001) {
+        ${id}_normW  = normalize(${id}_normW);
+        ${id}_depthW = ${id}_depthW / ${id}_wSum;
+        ${id}_signW  = ${id}_signW  / ${id}_wSum;
+    }
+    ${id}_dens = clamp(${id}_dens * ${brightness}, 0.0, 1.0);
+
+    // ── Colour ───────────────────────────────────────────────────────────────
+    vec3  ${id}_color   = (${colorExpr}) * ${id}_dens;
+    float ${id}_density = ${id}_dens;
+`;
+
+    return {
+      code,
+      outputVars: {
+        color:   `${id}_color`,
+        density: `${id}_density`,
+      },
+    };
+  },
+};
