@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
+import { saveTextFile, openTextFile } from '../utils/fileIO';
 
 // Module-level debounce timer for recompilation triggered by param edits.
 // Structure changes (connect/disconnect/add/remove) still compile immediately.
@@ -60,8 +61,9 @@ interface NodeGraphState {
   getSavedGraphNames: () => string[];
   loadSavedGraph: (name: string) => void;
   deleteSavedGraph: (name: string) => void;
-  exportGraph: () => void;
+  exportGraph: () => Promise<void>;
   importGraph: (json: string) => void;
+  importGraphFromFile: () => Promise<void>;
 }
 
 // ─── Example graph data ───────────────────────────────────────────────────────
@@ -1697,15 +1699,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     localStorage.removeItem(`shader-studio:${name}`);
   },
 
-  exportGraph: () => {
+  exportGraph: async () => {
     const { nodes } = get();
     const json = JSON.stringify({ nodes }, null, 2);
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    const a = Object.assign(document.createElement('a'), { href: url, download: 'shader-graph.json' });
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    await saveTextFile(json, 'shader-graph.json');
   },
 
   importGraph: (json: string) => {
@@ -1716,5 +1713,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         get().compile();
       }
     } catch {}
+  },
+
+  importGraphFromFile: async () => {
+    const json = await openTextFile('.json');
+    if (json) get().importGraph(json);
   },
 }));

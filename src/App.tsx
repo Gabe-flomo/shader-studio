@@ -42,7 +42,7 @@ const btnStyle = (active = false): React.CSSProperties => ({
 function App() {
   const {
     loadExampleGraph, compilationErrors, glslErrors, pixelSample, fragmentShader,
-    saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraph,
+    saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
   } = useNodeGraphStore();
 
   const bp = useBreakpoint();
@@ -69,8 +69,6 @@ function App() {
   const [showLoadPanel, setShowLoadPanel] = useState(false);
   const [saveNameInput, setSaveNameInput] = useState('');
   const [savedNames, setSavedNames]       = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
   const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -166,17 +164,7 @@ function App() {
           <button onClick={handleOpenSave} style={btnStyle(showSavePanel)}>💾</button>
           <button onClick={handleOpenLoad} style={btnStyle(showLoadPanel)}>📂</button>
           <button onClick={exportGraph} style={btnStyle()}>⬇</button>
-          <label style={{ ...btnStyle(), display: 'inline-flex', alignItems: 'center' }}>
-            ⬆
-            <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }}
-              onChange={e => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                file.text().then(json => importGraph(json));
-                if (fileInputRef.current) fileInputRef.current.value = '';
-              }}
-            />
-          </label>
+          <button onClick={importGraphFromFile} style={btnStyle()}>⬆</button>
         </>
       )}
     </div>
@@ -560,17 +548,7 @@ function App() {
             <button onClick={handleOpenSave} style={btnStyle(showSavePanel)}>💾 Save</button>
             <button onClick={handleOpenLoad} style={btnStyle(showLoadPanel)}>📂 Load</button>
             <button onClick={exportGraph} style={btnStyle()}>⬇ Export</button>
-            <label style={{ ...btnStyle(), display: 'inline-flex', alignItems: 'center' }}>
-              ⬆ Import
-              <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }}
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  file.text().then(json => importGraph(json));
-                  if (fileInputRef.current) fileInputRef.current.value = '';
-                }}
-              />
-            </label>
+            <button onClick={importGraphFromFile} style={btnStyle()}>⬆ Import</button>
             <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
             <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Export animation as video">
               🎬 Record
