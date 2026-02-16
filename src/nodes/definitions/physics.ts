@@ -346,7 +346,7 @@ export const ElectronOrbitalNode: NodeDefinition = {
 
 const CHLADNI3D_GLSL_FN = `
 float chladni3d(vec3 p, float m, float n, float l) {
-    float PI = 3.14159265;
+    // PI is already defined in the shader preamble as #define PI 3.1415926538
     return cos(n*PI*p.x)*cos(m*PI*p.y)*cos(l*PI*p.z)
          - cos(m*PI*p.x)*cos(l*PI*p.y)*cos(n*PI*p.z);
 }
@@ -467,34 +467,33 @@ export const Chladni3DNode: NodeDefinition = {
     float ${id}_m      = ${mVal};
     float ${id}_n      = ${nVal};
     float ${id}_l      = ${lVal};
-    float ${id}_tNear  = 0.0;
     float ${id}_tFar   = 4.0;
-    float ${id}_dt     = (${id}_tFar - ${id}_tNear) / float(${steps});
+    float ${id}_dt     = ${id}_tFar / float(${steps});
     float ${id}_glow   = 0.0;
     float ${id}_depth  = 0.0;
     vec3  ${id}_norm   = vec3(0.0);
     float ${id}_phase  = 0.0;
-    float ${id}_prevF  = 0.0;
-    float ${id}_prevT  = 0.0;
+    float ${id}_t      = 0.0;
+    float ${id}_pss    = 0.0;
+    float ${id}_fv     = 0.0;
+    float ${id}_fg     = 0.0;
+    vec3  ${id}_ps     = vec3(0.0);
+    vec3  ${id}_nn     = vec3(0.0);
     for (int ${id}_i = 0; ${id}_i < ${steps}; ${id}_i++) {
-        float ${id}_t  = ${id}_tNear + float(${id}_i) * ${id}_dt;
-        vec3  ${id}_ps = ${id}_ro + ${id}_rd * ${id}_t;
+        ${id}_t  = float(${id}_i) * ${id}_dt;
+        ${id}_ps = ${id}_ro + ${id}_rd * ${id}_t;
         // Clip to unit cube [-scale, scale]^3
-        if (any(greaterThan(abs(${id}_ps), vec3(${scale})))) { ${id}_prevT = ${id}_t; ${id}_prevF = 0.0; continue; }
-        float ${id}_pss = ${id}_ps.x + ${id}_ps.y + ${id}_ps.z;
-        float ${id}_fv = chladni3d(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n, ${id}_l);
-        // Soft glow contribution proportional to how near f=0
-        float ${id}_fg = exp(-abs(${id}_fv) * ${glowFalloff} * ${lineWidth});
-        if (${id}_fg > 0.001) {
-            ${id}_glow  += ${id}_fg * ${id}_dt;
-            // Accumulate weighted depth and normal
-            vec3 ${id}_nn = chladni3dNormal(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n, ${id}_l);
-            ${id}_norm   += ${id}_nn * ${id}_fg;
-            ${id}_depth  += ${id}_t  * ${id}_fg;
-            ${id}_phase  += ${id}_pss * ${id}_fg;
-        }
-        ${id}_prevF = ${id}_fv;
-        ${id}_prevT = ${id}_t;
+        if (any(greaterThan(abs(${id}_ps), vec3(${scale})))) { continue; }
+        ${id}_pss = ${id}_ps.x + ${id}_ps.y + ${id}_ps.z;
+        ${id}_fv  = chladni3d(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n, ${id}_l);
+        // Soft glow contribution proportional to how close to f=0
+        ${id}_fg  = exp(-abs(${id}_fv) * ${glowFalloff} * ${lineWidth});
+        ${id}_glow  += ${id}_fg * ${id}_dt;
+        // Accumulate weighted normal, depth, phase
+        ${id}_nn     = chladni3dNormal(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n, ${id}_l);
+        ${id}_norm  += ${id}_nn  * ${id}_fg;
+        ${id}_depth += ${id}_t   * ${id}_fg;
+        ${id}_phase += ${id}_pss * ${id}_fg;
     }
     // Normalise accumulators
     if (${id}_glow > 0.001) {
