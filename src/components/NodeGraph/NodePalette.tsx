@@ -61,7 +61,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 // Preferred display order for categories (unlisted categories fall at the end alphabetically)
 const CATEGORY_ORDER = [
   'Sources', 'Spaces', 'Transforms', 'Math', 'Color', 'Noise',
-  'Effects', '2D Primitives', 'SDF', 'Combiners',
+  'Effects', 'Loops', '2D Primitives', 'SDF', 'Combiners',
   'Science', 'Presets', 'Output',
 ];
 

@@ -13,7 +13,7 @@ export interface CompilationResult {
   nodeOutputVars: Map<string, Record<string, string>>;
 }
 
-/** Returns the set of node IDs that are referenced as loop steps — they are
+/** Returns the set of node IDs that are referenced as loop steps (modal Loop node) —
  *  compiled inline inside the loop body and skipped in the main pass. */
 function collectLoopInternalIds(nodes: GraphNode[]): Set<string> {
   const ids = new Set<string>();
@@ -26,16 +26,67 @@ function collectLoopInternalIds(nodes: GraphNode[]): Set<string> {
   return ids;
 }
 
+/**
+ * For the wired Loop Start/End pair system:
+ * Walk backwards from each loopEnd's carry input, following the connection chain
+ * until we hit a loopStart.  All intermediate nodes are "loop-pair-internal" —
+ * they are compiled inline inside the unroll and skipped in the main pass.
+ *
+ * Returns a Map from loopEnd node ID → ordered array of body node IDs
+ * (from loopStart output → loopEnd input order).
+ */
+function collectLoopPairChains(
+  nodes: GraphNode[],
+): Map<string, string[]> {
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const chains = new Map<string, string[]>();
+
+  const loopEnds = nodes.filter(n => n.type === 'loopEnd');
+  for (const endNode of loopEnds) {
+    const bodyIds: string[] = [];
+    // Walk backwards from loopEnd's carry input
+    let currentInput = endNode.inputs['carry']?.connection;
+    while (currentInput) {
+      const srcNode = nodeMap.get(currentInput.nodeId);
+      if (!srcNode) break;
+      if (srcNode.type === 'loopStart') break; // reached the start — stop
+      bodyIds.unshift(srcNode.id); // prepend so order = start→end
+      // Continue backwards: follow the first carry-type input of this body node
+      // that doesn't have a loopStart as its source
+      const nextConn = Object.values(srcNode.inputs).find(i => i.connection)?.connection;
+      currentInput = nextConn ?? undefined;
+    }
+    chains.set(endNode.id, bodyIds);
+  }
+  return chains;
+}
+
+/** Returns set of all body node IDs across all loop-pair chains (excluded from main pass). */
+function collectLoopPairInternalIds(chains: Map<string, string[]>): Set<string> {
+  const ids = new Set<string>();
+  for (const bodyIds of chains.values()) {
+    for (const id of bodyIds) ids.add(id);
+  }
+  return ids;
+}
+
 export function compileGraph(graph: NodeGraph): CompilationResult {
   const emptyNodeOutputVars = new Map<string, Record<string, string>>();
   try {
     const { nodes } = graph;
 
-    // Collect node IDs used as loop steps — they are excluded from the main pass
+    // Collect node IDs used as modal loop steps — excluded from main pass
     const loopInternalIds = collectLoopInternalIds(nodes);
 
-    // 1. Validate graph (excluding loop-internal nodes)
-    const validation = validateGraph(nodes, loopInternalIds);
+    // Collect wired loop-pair body nodes — also excluded from main pass
+    const loopPairChains   = collectLoopPairChains(nodes);
+    const loopPairInternal = collectLoopPairInternalIds(loopPairChains);
+
+    // Merge both exclusion sets
+    const allInternalIds = new Set<string>([...loopInternalIds, ...loopPairInternal]);
+
+    // 1. Validate graph (excluding all loop-internal nodes)
+    const validation = validateGraph(nodes, allInternalIds);
     if (!validation.valid) {
       return {
         vertexShader: '',
@@ -46,11 +97,11 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       };
     }
 
-    // 2. Topological sort (execution order), excluding loop-internal nodes
-    const sortedNodes = topologicalSort(nodes, loopInternalIds);
+    // 2. Topological sort (execution order), excluding all loop-internal nodes
+    const sortedNodes = topologicalSort(nodes, allInternalIds);
 
     // 3. Generate GLSL code + capture nodeOutputVars
-    const { fragmentShader, nodeOutputVars } = generateFragmentShader(sortedNodes, nodes, loopInternalIds);
+    const { fragmentShader, nodeOutputVars } = generateFragmentShader(sortedNodes, nodes, allInternalIds, loopPairChains);
     const vertexShader = VERTEX_SHADER;
 
     return {
@@ -124,6 +175,8 @@ function validateGraph(nodes: GraphNode[], loopInternalIds = new Set<string>()):
 
         // Skip type validation for customFn nodes — their sockets are dynamic
         if (node.type === 'customFn') continue;
+        // Skip type validation for loopStart/loopEnd — carry type is inferred from wire
+        if (node.type === 'loopStart' || node.type === 'loopEnd') continue;
 
         const targetInput = def.inputs[inputKey];
         if (!targetInput) continue; // dynamic socket not in def, skip
@@ -223,6 +276,7 @@ function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
   _loopInternalIds: Set<string>,
+  loopPairChains: Map<string, string[]> = new Map(),
 ): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>> } {
   const nodeMap = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
@@ -360,6 +414,116 @@ function generateFragmentShader(
           const firstOutKey = Object.keys(stepResult.outputVars)[0];
           if (firstOutKey) {
             iterCarry = `${stepId}_L${n}_${firstOutKey}`;
+          }
+        }
+        loopCode += `    ${id}_val = ${iterCarry};\n`;
+      }
+
+      mainCode.push(loopCode);
+      nodeOutputs.set(node.id, { result: `${id}_val` });
+      continue;
+    }
+
+    // ── Loop Start: pass-through (outputs current carry var for downstream) ──
+    if (node.type === 'loopStart') {
+      // Emit the carry as-is — body nodes will inject their own carry from nodeOutputs
+      const carryVar = inputVars['carry'] ?? defaultGlslVal(
+        (Object.values(node.outputs)[0]?.type as DataType) ?? 'vec2'
+      );
+      const outType = (Object.values(node.outputs)[0]?.type as DataType) ?? 'vec2';
+      const varName = `${node.id}_carry`;
+      mainCode.push(`    ${outType} ${varName} = ${carryVar};\n`);
+      nodeOutputs.set(node.id, { carry: varName });
+      continue;
+    }
+
+    // ── Loop End: unroll the body chain N times ───────────────────────────────
+    if (node.type === 'loopEnd') {
+      const bodyIds = loopPairChains.get(node.id) ?? [];
+      const iters   = Math.max(1, Math.min(16, Math.round(
+        typeof node.params.iterations === 'number' ? node.params.iterations : 4
+      )));
+      const id = node.id;
+
+      // Determine carry type from the inbound wire (loopEnd's carry input)
+      const carryConn = node.inputs['carry']?.connection;
+      let carryType: DataType = 'vec2';
+      if (carryConn) {
+        const srcNode = allNodeMap.get(carryConn.nodeId);
+        const srcType = srcNode?.outputs[carryConn.outputKey]?.type;
+        if (srcType === 'float' || srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4') {
+          carryType = srcType as DataType;
+        }
+      }
+
+      // Initial carry value: whatever the loopStart (or last body node) resolved to
+      const initialCarry = inputVars['carry'] ?? defaultGlslVal(carryType);
+
+      // Collect glslFunctions from body nodes
+      for (const bodyId of bodyIds) {
+        const bodyNode = allNodeMap.get(bodyId);
+        if (!bodyNode) continue;
+        const bodyDef = getNodeDefinition(bodyNode.type);
+        if (bodyDef?.glslFunction) functions.add(bodyDef.glslFunction);
+        if (bodyNode.type === 'customFn' && typeof bodyNode.params.glslFunctions === 'string') {
+          const h = (bodyNode.params.glslFunctions as string).trim();
+          if (h) functions.add(h);
+        }
+      }
+
+      let loopCode = `    ${carryType} ${id}_val = ${initialCarry};\n`;
+
+      for (let n = 0; n < iters; n++) {
+        let iterCarry = `${id}_val`;
+        for (const bodyId of bodyIds) {
+          const bodyNode = allNodeMap.get(bodyId);
+          if (!bodyNode) continue;
+          const bodyDef = getNodeDefinition(bodyNode.type);
+          if (!bodyDef) continue;
+
+          // Resolve body node inputs:
+          // - sockets of carryType with no external connection → inject iterCarry
+          // - sockets with an external connection → resolve from nodeOutputs
+          // - customFn slider params → from node.params
+          // - defaultValue → use that
+          const bodyInputVars: Record<string, string> = {};
+          for (const [k, sock] of Object.entries(bodyNode.inputs)) {
+            if (!sock.connection && (sock.type as string) === (carryType as string)) {
+              bodyInputVars[k] = iterCarry;
+            } else if (sock.connection) {
+              // External connection (e.g. time, UV, params from outside the loop)
+              const srcOutputs = nodeOutputs.get(sock.connection.nodeId);
+              bodyInputVars[k] = srcOutputs?.[sock.connection.outputKey] ?? defaultGlslVal(sock.type);
+            } else if (bodyNode.type === 'customFn' && typeof bodyNode.params[k] === 'number') {
+              const cfInputs = (bodyNode.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
+              const cfInp = cfInputs.find(c => c.name === k);
+              if (cfInp?.slider != null) {
+                const v = bodyNode.params[k] as number;
+                bodyInputVars[k] = Number.isInteger(v) ? `${v}.0` : `${v}`;
+              }
+            } else if (sock.defaultValue !== undefined) {
+              if (typeof sock.defaultValue === 'number') {
+                const sv = sock.defaultValue;
+                bodyInputVars[k] = Number.isInteger(sv) ? `${sv}.0` : `${sv}`;
+              } else if (Array.isArray(sock.defaultValue)) {
+                const vals = sock.defaultValue.map((v: number) => v.toFixed(1)).join(', ');
+                bodyInputVars[k] = `${sock.type}(${vals})`;
+              }
+            }
+          }
+
+          // Generate body GLSL, prefix all vars with iteration suffix to avoid collisions
+          const bodyResult = bodyDef.generateGLSL(bodyNode, bodyInputVars);
+          const prefixed   = bodyResult.code.replace(
+            new RegExp(`\\b${bodyId}_`, 'g'),
+            `${bodyId}_P${n}_`,
+          );
+          loopCode += prefixed;
+
+          // First output of this body node becomes the next iterCarry
+          const firstOutKey = Object.keys(bodyResult.outputVars)[0];
+          if (firstOutKey) {
+            iterCarry = `${bodyId}_P${n}_${firstOutKey}`;
           }
         }
         loopCode += `    ${id}_val = ${iterCarry};\n`;

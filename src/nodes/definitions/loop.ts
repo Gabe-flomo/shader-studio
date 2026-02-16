@@ -10,7 +10,7 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 export const LoopNode: NodeDefinition = {
   type: 'loop',
   label: 'Loop',
-  category: 'Effects',
+  category: 'Loops',
   description: 'Chains selected graph nodes and repeats them N times, feeding output back as input each iteration. Open the editor to pick steps and set carry type.',
 
   // Carry type + iterations are dynamic — sockets rebuilt by LoopModal via updateNodeSockets

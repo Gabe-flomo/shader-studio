@@ -38,6 +38,7 @@ export {
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
 export { LoopNode } from './loop';
+export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode } from './loopPair';
 
 // Noise
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
@@ -92,6 +93,7 @@ import {
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
 import { LoopNode } from './loop';
+import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode } from './loopPair';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
 import { MandelbrotNode, IFSNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
@@ -171,6 +173,13 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gravitationalLens: GravitationalLensNode,
   floatWarp: FloatWarpNode,
   loop: LoopNode,
+  // Loops (wired pair system)
+  loopStart:             LoopStartNode,
+  loopEnd:               LoopEndNode,
+  loopRippleStep:        LoopRippleStepNode,
+  loopRotateStep:        LoopRotateStepNode,
+  loopDomainFold:        LoopDomainFoldNode,
+  loopFloatAccumulate:   LoopFloatAccumulateNode,
   // Noise
   fbm: FBMNode,
   voronoi: VoronoiNode,
