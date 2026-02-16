@@ -897,6 +897,34 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Chladni 3D demo ───────────────────────────────────────────────────────
+  chladni3dDemo: {
+    label: 'Chladni 3D (n=3 m=4 l=2)',
+    counter: 3,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 240 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 420 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ch3_2', type: 'chladni3d', position: { x: 300, y: 180 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: {
+          color: { type: 'vec3',  label: 'Color' },
+          glow:  { type: 'float', label: 'Glow'  },
+          depth: { type: 'float', label: 'Depth' },
+        },
+        params: { m: 3.0, n: 4.0, l: 2.0, scale: 1.2, steps: 60, line_width: 1.8, brightness: 2.5, glow_falloff: 2.5, orbit_speed: 0.3, orbit_pitch: 0.4, cam_dist: 2.2, color_mode: 'normal' },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 620, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ch3_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
   // ── Electron Orbital demo ─────────────────────────────────────────────────
   electronOrbitalDemo: {
     label: 'Electron Orbital (2px)',

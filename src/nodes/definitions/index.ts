@@ -45,7 +45,7 @@ export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } f
 export { MandelbrotNode, IFSNode } from './fractals';
 
 // Physics
-export { ChladniNode, ElectronOrbitalNode } from './physics';
+export { ChladniNode, ElectronOrbitalNode, Chladni3DNode } from './physics';
 
 // 3D / Volumetric
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
@@ -92,7 +92,7 @@ import {
 } from './effects';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
 import { MandelbrotNode, IFSNode } from './fractals';
-import { ChladniNode, ElectronOrbitalNode } from './physics';
+import { ChladniNode, ElectronOrbitalNode, Chladni3DNode } from './physics';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
 import { PaletteNode, PalettePresetNode, GradientNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
@@ -179,6 +179,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   ifs: IFSNode,
   // Physics
   chladni: ChladniNode,
+  chladni3d: Chladni3DNode,
   electronOrbital: ElectronOrbitalNode,
   // 3D / Volumetric
   raymarch3d: RaymarchNode,

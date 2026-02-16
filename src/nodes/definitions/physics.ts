@@ -333,3 +333,189 @@ export const ElectronOrbitalNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Chladni 3D (Volumetric Nodal Surfaces) ───────────────────────────────────
+//
+// Extends the 2D Chladni formula to 3D:
+//   f(x,y,z) = cos(n·π·x)·cos(m·π·y)·cos(l·π·z)
+//            - cos(m·π·x)·cos(l·π·y)·cos(n·π·z)
+//
+// Raymarches a unit cube, accumulates glow wherever f≈0 (nodal surfaces).
+// Lit by surface normal for depth. Camera orbits automatically or can be
+// driven by orbit_angle input. l adds a 3rd mode axis for full 3D symmetry.
+
+const CHLADNI3D_GLSL_FN = `
+float chladni3d(vec3 p, float m, float n, float l) {
+    float PI = 3.14159265;
+    return cos(n*PI*p.x)*cos(m*PI*p.y)*cos(l*PI*p.z)
+         - cos(m*PI*p.x)*cos(l*PI*p.y)*cos(n*PI*p.z);
+}
+vec3 chladni3dNormal(vec3 p, float m, float n, float l) {
+    float e = 0.01;
+    return normalize(vec3(
+        chladni3d(p+vec3(e,0,0),m,n,l) - chladni3d(p-vec3(e,0,0),m,n,l),
+        chladni3d(p+vec3(0,e,0),m,n,l) - chladni3d(p-vec3(0,e,0),m,n,l),
+        chladni3d(p+vec3(0,0,e),m,n,l) - chladni3d(p-vec3(0,0,e),m,n,l)
+    ));
+}
+mat3 chladni3dCam(vec3 ro, vec3 ta) {
+    vec3 cw = normalize(ta - ro);
+    vec3 cu = normalize(cross(cw, vec3(0.0, 1.0, 0.0)));
+    vec3 cv = cross(cu, cw);
+    return mat3(cu, cv, cw);
+}`;
+
+export const Chladni3DNode: NodeDefinition = {
+  type: 'chladni3d',
+  label: 'Chladni 3D',
+  category: 'Science',
+  description: 'Volumetric 3D Chladni nodal surfaces. Raymarches a cube and glows wherever cos(n·π·x)·cos(m·π·y)·cos(l·π·z) − cos(m·π·x)·cos(l·π·y)·cos(n·π·z) = 0. m, n, l are wirable — animate them for morphing resonance.',
+  inputs: {
+    uv:          { type: 'vec2',  label: 'UV'          },
+    time:        { type: 'float', label: 'Time'         },
+    m:           { type: 'float', label: 'm'            },
+    n:           { type: 'float', label: 'n'            },
+    l:           { type: 'float', label: 'l'            },
+    orbit_angle: { type: 'float', label: 'Orbit Angle'  },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color'       },
+    glow:  { type: 'float', label: 'Glow'         },
+    depth: { type: 'float', label: 'Depth'        },
+  },
+  glslFunction: CHLADNI3D_GLSL_FN,
+  defaultParams: {
+    m:           3.0,
+    n:           4.0,
+    l:           2.0,
+    scale:       1.2,
+    steps:       60,
+    line_width:  1.8,
+    brightness:  2.5,
+    glow_falloff: 2.5,
+    orbit_speed: 0.3,
+    orbit_pitch: 0.4,
+    cam_dist:    2.2,
+    color_mode:  'normal',
+  },
+  paramDefs: {
+    m:            { label: 'm',            type: 'float',  min: -20,  max: 20,   step: 0.1  },
+    n:            { label: 'n',            type: 'float',  min: -20,  max: 20,   step: 0.1  },
+    l:            { label: 'l',            type: 'float',  min: -20,  max: 20,   step: 0.1  },
+    scale:        { label: 'Scale',        type: 'float',  min: 0.5,  max: 3.0,  step: 0.05 },
+    steps:        { label: 'March Steps',  type: 'float',  min: 20,   max: 120,  step: 4    },
+    line_width:   { label: 'Line Width',   type: 'float',  min: 0.2,  max: 6.0,  step: 0.1  },
+    brightness:   { label: 'Brightness',   type: 'float',  min: 0.1,  max: 8.0,  step: 0.1  },
+    glow_falloff: { label: 'Glow Falloff', type: 'float',  min: 0.5,  max: 6.0,  step: 0.1  },
+    orbit_speed:  { label: 'Orbit Speed',  type: 'float',  min: -2.0, max: 2.0,  step: 0.05 },
+    orbit_pitch:  { label: 'Orbit Pitch',  type: 'float',  min: -1.5, max: 1.5,  step: 0.05 },
+    cam_dist:     { label: 'Cam Dist',     type: 'float',  min: 1.0,  max: 5.0,  step: 0.1  },
+    color_mode:   {
+      label: 'Color Mode', type: 'select',
+      options: [
+        { value: 'normal',   label: 'Normal map'    },
+        { value: 'white',    label: 'White glow'    },
+        { value: 'depth',    label: 'Depth tinted'  },
+        { value: 'rainbow',  label: 'Rainbow phase' },
+      ],
+    },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uv          = inputVars.uv          ?? 'vec2(0.0)';
+    const timeVar     = inputVars.time        ?? '0.0';
+    const mVal        = inputVars.m           ?? f(typeof node.params.m     === 'number' ? node.params.m     : 3.0);
+    const nVal        = inputVars.n           ?? f(typeof node.params.n     === 'number' ? node.params.n     : 4.0);
+    const lVal        = inputVars.l           ?? f(typeof node.params.l     === 'number' ? node.params.l     : 2.0);
+    const scale       = f(typeof node.params.scale        === 'number' ? node.params.scale        : 1.2);
+    const steps       = Math.round(typeof node.params.steps === 'number' ? node.params.steps : 60);
+    const lineWidth   = f(typeof node.params.line_width   === 'number' ? node.params.line_width   : 1.8);
+    const brightness  = f(typeof node.params.brightness   === 'number' ? node.params.brightness   : 2.5);
+    const glowFalloff = f(typeof node.params.glow_falloff === 'number' ? node.params.glow_falloff : 2.5);
+    const orbitSpeed  = f(typeof node.params.orbit_speed  === 'number' ? node.params.orbit_speed  : 0.3);
+    const orbitPitch  = f(typeof node.params.orbit_pitch  === 'number' ? node.params.orbit_pitch  : 0.4);
+    const camDist     = f(typeof node.params.cam_dist     === 'number' ? node.params.cam_dist     : 2.2);
+    const colorMode   = typeof node.params.color_mode === 'string' ? node.params.color_mode : 'normal';
+
+    const hasOrbitInput = !!inputVars.orbit_angle;
+    const angleExpr = hasOrbitInput
+      ? inputVars.orbit_angle!
+      : `${timeVar} * ${orbitSpeed}`;
+
+    // Build colour expression based on mode
+    let colorExpr: string;
+    if (colorMode === 'white') {
+      colorExpr = `vec3(${id}_glow)`;
+    } else if (colorMode === 'depth') {
+      colorExpr = `mix(vec3(0.05,0.1,0.3), vec3(0.9,0.95,1.0), ${id}_glow) * ${id}_glow`;
+    } else if (colorMode === 'rainbow') {
+      colorExpr = `(0.5 + 0.5*sin(vec3(0.0,2.094,4.189) + ${id}_phase * 6.28318)) * ${id}_glow`;
+    } else {
+      // normal — tint by surface normal (RGB ↔ XYZ)
+      colorExpr = `(${id}_norm * 0.5 + 0.5) * ${id}_glow`;
+    }
+
+    const code = `
+    // ── Chladni3D: camera ────────────────────────────────────────────────────
+    float ${id}_ang   = ${angleExpr};
+    float ${id}_cp    = cos(${orbitPitch}), ${id}_sp = sin(${orbitPitch});
+    vec3  ${id}_ro    = vec3(cos(${id}_ang)*${id}_cp, ${id}_sp, sin(${id}_ang)*${id}_cp) * ${camDist};
+    mat3  ${id}_cm    = chladni3dCam(${id}_ro, vec3(0.0));
+    vec3  ${id}_rd    = normalize(${id}_cm * vec3(${uv}.x, ${uv}.y * (u_resolution.y / u_resolution.x), 1.5));
+
+    // ── Raymarch ─────────────────────────────────────────────────────────────
+    float ${id}_m      = ${mVal};
+    float ${id}_n      = ${nVal};
+    float ${id}_l      = ${lVal};
+    float ${id}_tNear  = 0.0;
+    float ${id}_tFar   = 4.0;
+    float ${id}_dt     = (${id}_tFar - ${id}_tNear) / float(${steps});
+    float ${id}_glow   = 0.0;
+    float ${id}_depth  = 0.0;
+    vec3  ${id}_norm   = vec3(0.0);
+    float ${id}_phase  = 0.0;
+    float ${id}_prevF  = 0.0;
+    float ${id}_prevT  = 0.0;
+    for (int ${id}_i = 0; ${id}_i < ${steps}; ${id}_i++) {
+        float ${id}_t  = ${id}_tNear + float(${id}_i) * ${id}_dt;
+        vec3  ${id}_ps = ${id}_ro + ${id}_rd * ${id}_t;
+        // Clip to unit cube [-scale, scale]^3
+        if (any(greaterThan(abs(${id}_ps), vec3(${scale})))) { ${id}_prevT = ${id}_t; ${id}_prevF = 0.0; continue; }
+        float ${id}_pss = ${id}_ps.x + ${id}_ps.y + ${id}_ps.z;
+        float ${id}_fv = chladni3d(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n, ${id}_l);
+        // Soft glow contribution proportional to how near f=0
+        float ${id}_fg = exp(-abs(${id}_fv) * ${glowFalloff} * ${lineWidth});
+        if (${id}_fg > 0.001) {
+            ${id}_glow  += ${id}_fg * ${id}_dt;
+            // Accumulate weighted depth and normal
+            vec3 ${id}_nn = chladni3dNormal(${id}_ps * (1.0/${scale}), ${id}_m, ${id}_n, ${id}_l);
+            ${id}_norm   += ${id}_nn * ${id}_fg;
+            ${id}_depth  += ${id}_t  * ${id}_fg;
+            ${id}_phase  += ${id}_pss * ${id}_fg;
+        }
+        ${id}_prevF = ${id}_fv;
+        ${id}_prevT = ${id}_t;
+    }
+    // Normalise accumulators
+    if (${id}_glow > 0.001) {
+        ${id}_norm  = normalize(${id}_norm);
+        ${id}_depth = ${id}_depth / ${id}_glow;
+        ${id}_phase = ${id}_phase / ${id}_glow;
+    }
+    ${id}_glow = clamp(${id}_glow * ${brightness}, 0.0, 1.0);
+    ${id}_depth = ${id}_depth / ${id}_tFar; // normalise 0-1
+
+    // ── Colour ───────────────────────────────────────────────────────────────
+    vec3  ${id}_color = ${colorExpr};
+`;
+
+    return {
+      code,
+      outputVars: {
+        color: `${id}_color`,
+        glow:  `${id}_glow`,
+        depth: `${id}_depth`,
+      },
+    };
+  },
+};
