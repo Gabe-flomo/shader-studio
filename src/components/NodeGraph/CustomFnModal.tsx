@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -76,9 +76,16 @@ interface Props {
 }
 
 export function CustomFnModal({ node, onClose }: Props) {
-  const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
+  const { updateNodeParams, updateNodeSockets, saveCustomFn } = useNodeGraphStore();
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fnRef   = useRef<HTMLTextAreaElement | null>(null);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  const handleSavePreset = () => {
+    saveCustomFn(node.id);
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1500);
+  };
 
   // Read current params
   const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
@@ -233,12 +240,29 @@ export function CustomFnModal({ node, onClose }: Props) {
               }}
             />
           </div>
-          <button
-            onClick={onClose}
-            style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', padding: '0 4px' }}
-          >
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              onClick={handleSavePreset}
+              title="Save this function as a reusable preset in the palette"
+              style={{
+                ...BTN,
+                background: savedFlash ? '#a6e3a122' : '#1a2e1a',
+                border: `1px solid ${savedFlash ? '#a6e3a1' : '#a6e3a133'}`,
+                color: savedFlash ? '#a6e3a1' : '#a6e3a1aa',
+                transition: 'all 0.2s',
+                fontSize: '11px',
+                padding: '3px 10px',
+              }}
+            >
+              {savedFlash ? '✓ Saved' : '↑ Save Preset'}
+            </button>
+            <button
+              onClick={onClose}
+              style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', padding: '0 4px' }}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Inputs section */}

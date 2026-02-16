@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useState, useEffect } from 'react';
+import { useNodeGraphStore, loadCustomFns } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
 import type { NodeDefinition } from '../../types/nodeGraph';
+import type { CustomFnPreset } from '../../types/customFnPreset';
 
 // ── Math node ordering: simple → complex ──────────────────────────────────────
 const MATH_ORDER: string[] = [
@@ -115,7 +116,8 @@ const VORONOI_GLSL = `vec2 voronoi(vec2 x) {
   return vec2(sqrt(md), dot(mr, mr));
 }`;
 
-interface CustomFnPreset {
+// Local type for the hardcoded presets (no id/savedAt needed)
+interface BuiltinPreset {
   label: string;
   inputs: Array<{ name: string; type: string }>;
   outputType: string;
@@ -123,7 +125,7 @@ interface CustomFnPreset {
   glslFunctions: string;
 }
 
-const CUSTOMFN_PRESETS: CustomFnPreset[] = [
+const CUSTOMFN_PRESETS: BuiltinPreset[] = [
   {
     label: 'FBM Noise',
     inputs: [{ name: 'p', type: 'vec2' }],
@@ -166,7 +168,7 @@ interface NodePaletteProps {
 }
 
 export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
-  const { addNode } = useNodeGraphStore();
+  const { addNode, deleteCustomFn, exportCustomFns, importCustomFnsFromFile } = useNodeGraphStore();
   // Sort categories by preferred order; unknown categories appended alphabetically
   const rawCategories = getAllCategories();
   const categories = [
@@ -182,6 +184,19 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
 
   // Import GLSL modal
   const [showImport, setShowImport] = useState(false);
+
+  // User-saved custom function presets
+  const [userPresets, setUserPresets] = useState<CustomFnPreset[]>(() => loadCustomFns());
+  // ID of preset being hovered (for showing delete button)
+  const [hoverPresetId, setHoverPresetId] = useState<string | null>(null);
+  // Refresh presets from localStorage
+  const refreshPresets = () => setUserPresets(loadCustomFns());
+
+  // Refresh on window focus (in case another tab saved a preset)
+  useEffect(() => {
+    window.addEventListener('focus', refreshPresets);
+    return () => window.removeEventListener('focus', refreshPresets);
+  }, []);
 
   const toggleCategory = (cat: string) => {
     setOpen(prev => {
@@ -385,6 +400,115 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
         </div>
       )}
 
+
+      {/* ── My Functions ── */}
+      {!isSearching && (
+        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            marginBottom: '4px',
+          }}>
+            <div style={{
+              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: '#89dceb',
+              paddingLeft: '4px', flex: 1,
+            }}>
+              My Functions
+            </div>
+            {/* Export / Import buttons — only show when presets exist or always for import */}
+            {userPresets.length > 0 && (
+              <button
+                onClick={() => exportCustomFns()}
+                title="Export saved functions to a JSON file"
+                style={{
+                  background: 'none', border: '1px solid #313244', color: '#6c7086',
+                  borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
+                }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+              >
+                ↑
+              </button>
+            )}
+            <button
+              onClick={async () => { await importCustomFnsFromFile(); refreshPresets(); }}
+              title="Import saved functions from a JSON file"
+              style={{
+                background: 'none', border: '1px solid #313244', color: '#6c7086',
+                borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+            >
+              ↓
+            </button>
+          </div>
+
+          {userPresets.length === 0 ? (
+            <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
+              Open a Custom Fn node and click "↑ Save Preset"
+            </div>
+          ) : (
+            userPresets.map(preset => (
+              <div
+                key={preset.id}
+                style={{ position: 'relative', marginBottom: '2px' }}
+                onMouseEnter={() => setHoverPresetId(preset.id)}
+                onMouseLeave={() => setHoverPresetId(null)}
+              >
+                <button
+                  onClick={() => {
+                    const x = 200 + Math.random() * 120;
+                    const y = 120 + Math.random() * 200;
+                    addNode('customFn', { x, y }, {
+                      label: preset.label,
+                      inputs: preset.inputs,
+                      outputType: preset.outputType,
+                      body: preset.body,
+                      glslFunctions: preset.glslFunctions,
+                    });
+                    onNodeAdded?.();
+                  }}
+                  title={`Add "${preset.label}" as a Custom Fn node`}
+                  style={{
+                    display: 'block', width: '100%',
+                    padding: '5px 28px 5px 10px',
+                    background: '#1a2535',
+                    border: '1px solid #89dceb33',
+                    color: '#89dceb', cursor: 'pointer',
+                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1e3040')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
+                >
+                  ƒ {preset.label}
+                </button>
+                {/* Delete button — shown on hover */}
+                {hoverPresetId === preset.id && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      deleteCustomFn(preset.id);
+                      refreshPresets();
+                    }}
+                    title="Remove this preset"
+                    style={{
+                      position: 'absolute', right: '4px', top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none', border: 'none',
+                      color: '#f38ba8', cursor: 'pointer',
+                      fontSize: '13px', padding: '0 4px', lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* ── Import GLSL button ── */}
       <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>

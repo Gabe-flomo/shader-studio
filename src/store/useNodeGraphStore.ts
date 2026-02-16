@@ -1,8 +1,26 @@
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
+import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile } from '../utils/fileIO';
+
+// ── Custom-fn preset helpers ───────────────────────────────────────────────────
+const CFP_PREFIX = 'shader-studio:cfp:';
+
+/** Read all saved custom-fn presets from localStorage. */
+export function loadCustomFns(): CustomFnPreset[] {
+  const out: CustomFnPreset[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k?.startsWith(CFP_PREFIX)) continue;
+    try {
+      const p = JSON.parse(localStorage.getItem(k)!) as CustomFnPreset;
+      if (p?.id) out.push(p);
+    } catch {}
+  }
+  return out.sort((a, b) => a.savedAt - b.savedAt);
+}
 
 // Module-level debounce timer for recompilation triggered by param edits.
 // Structure changes (connect/disconnect/add/remove) still compile immediately.
@@ -98,6 +116,13 @@ interface NodeGraphState {
   exportGraph: () => Promise<void>;
   importGraph: (json: string) => void;
   importGraphFromFile: () => Promise<void>;
+
+  // Custom-fn presets
+  saveCustomFn: (nodeId: string) => void;
+  deleteCustomFn: (id: string) => void;
+  exportCustomFns: () => Promise<void>;
+  importCustomFns: (json: string) => void;
+  importCustomFnsFromFile: () => Promise<void>;
 }
 
 // ─── Example graph data ───────────────────────────────────────────────────────
@@ -1811,5 +1836,49 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   importGraphFromFile: async () => {
     const json = await openTextFile('.json');
     if (json) get().importGraph(json);
+  },
+
+  // ─── Custom-fn presets ──────────────────────────────────────────────────────
+
+  saveCustomFn: (nodeId) => {
+    const node = get().nodes.find(n => n.id === nodeId);
+    if (!node || node.type !== 'customFn') return;
+    const preset: CustomFnPreset = {
+      id: `cfp_${Date.now()}`,
+      label: (node.params.label as string) || 'Custom Fn',
+      inputs: (node.params.inputs as CustomFnPreset['inputs']) ?? [],
+      outputType: (node.params.outputType as CustomFnPreset['outputType']) ?? 'float',
+      body: (node.params.body as string) ?? '0.0',
+      glslFunctions: (node.params.glslFunctions as string) ?? '',
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
+  },
+
+  deleteCustomFn: (id) => {
+    localStorage.removeItem(`${CFP_PREFIX}${id}`);
+  },
+
+  exportCustomFns: async () => {
+    const presets = loadCustomFns();
+    const payload: CustomFnPresetExport = { version: 1, presets };
+    await saveTextFile(JSON.stringify(payload, null, 2), 'custom-fns.json');
+  },
+
+  importCustomFns: (json) => {
+    try {
+      const payload = JSON.parse(json) as CustomFnPresetExport;
+      if (payload.version !== 1 || !Array.isArray(payload.presets)) return;
+      const existing = new Set(loadCustomFns().map(p => p.id));
+      for (const preset of payload.presets) {
+        if (!preset.id || existing.has(preset.id)) continue;
+        localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
+      }
+    } catch {}
+  },
+
+  importCustomFnsFromFile: async () => {
+    const json = await openTextFile('.json');
+    if (json) get().importCustomFns(json);
   },
 }));
