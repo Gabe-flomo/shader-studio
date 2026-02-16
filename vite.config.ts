@@ -2,8 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-// base is set to '/shader-studio/' for GitHub Pages hosting.
-// If you're hosting at a custom domain root, change base to '/'.
+// base switches automatically: '/' for Tauri desktop, '/shader-studio/' for GitHub Pages.
+// TAURI_ENV_DEBUG is set automatically by the Tauri CLI during tauri dev / tauri build.
+const isTauri = process.env.TAURI_ENV_DEBUG !== undefined;
+
 export default defineConfig({
   plugins: [
     react(),
@@ -19,7 +21,7 @@ export default defineConfig({
       },
     },
   ],
-  base: '/shader-studio/',
+  base: isTauri ? '/' : '/shader-studio/',
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
   },
