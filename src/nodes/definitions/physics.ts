@@ -250,7 +250,7 @@ export const ElectronOrbitalNode: NodeDefinition = {
     n:          { label: 'n (shell)',    type: 'float', min: 1,    max: 6,    step: 1     },
     l:          { label: 'l (subshell)', type: 'float', min: 0,    max: 5,    step: 1     },
     m_q:        { label: 'm (magnetic)', type: 'float', min: -5,   max: 5,    step: 1     },
-    a0:         { label: 'Bohr radius',  type: 'float', min: -0.2, max: 0.2,  step: 0.001 },
+    a0:         { label: 'Bohr radius',  type: 'float', min: 0.001, max: 0.3,  step: 0.001 },
     scale:      { label: 'Scale',        type: 'float', min: 0.5,  max: 12.0, step: 0.05  },
     slice_z:    { label: 'Slice Z',      type: 'float', min: -3.0, max: 3.0,  step: 0.01  },
     brightness: { label: 'Brightness',    type: 'float', min: 0.1,  max: 20.0, step: 0.1   },
@@ -268,8 +268,9 @@ export const ElectronOrbitalNode: NodeDefinition = {
     const l          = f(typeof node.params.l          === 'number' ? node.params.l          : 1.0);
     const mq         = f(typeof node.params.m_q        === 'number' ? node.params.m_q        : 0.0);
     const a0Raw      = typeof node.params.a0           === 'number' ? node.params.a0         : 0.05;
-    // a0 must not be exactly 0 — clamp away from zero
-    const a0         = f(Math.abs(a0Raw) < 0.001 ? 0.001 : a0Raw);
+    // a0 must be strictly positive — a zero or negative Bohr radius makes rho negative
+    // which collapses pow(rho, l) to 0 for non-integer l → all black
+    const a0         = f(Math.max(Math.abs(a0Raw), 0.001));
     const scale      = f(typeof node.params.scale      === 'number' ? node.params.scale      : 3.0);
     const sliceZ     = f(typeof node.params.slice_z    === 'number' ? node.params.slice_z    : 0.0);
     const brightness = f(typeof node.params.brightness === 'number' ? node.params.brightness : 3.0);
