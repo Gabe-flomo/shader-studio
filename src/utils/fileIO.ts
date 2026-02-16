@@ -50,6 +50,62 @@ export async function saveTextFile(
   }
 }
 
+// ─── Directory helpers (Tauri-only) ───────────────────────────────────────────
+
+/**
+ * Open a native folder-picker dialog.
+ * Returns the chosen directory path, or null if cancelled / running on web.
+ */
+export async function pickDirectory(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const result = await open({ directory: true, multiple: false });
+  return typeof result === 'string' ? result : null;
+}
+
+/**
+ * Read all `.json` files from a directory.
+ * Returns an array of { name, content } objects, or [] on web.
+ */
+export async function readJsonFilesFromDir(
+  dirPath: string,
+): Promise<Array<{ name: string; content: string }>> {
+  if (!isTauri()) return [];
+  const { readDir, readTextFile } = await import('@tauri-apps/plugin-fs');
+  const entries = await readDir(dirPath);
+  const results: Array<{ name: string; content: string }> = [];
+  for (const entry of entries) {
+    if (!entry.name?.endsWith('.json')) continue;
+    try {
+      const content = await readTextFile(`${dirPath}/${entry.name}`);
+      results.push({ name: entry.name, content });
+    } catch {}
+  }
+  return results;
+}
+
+/**
+ * Write text content to an absolute file path.
+ * No-op on web.
+ */
+export async function writeTextFileAtPath(filePath: string, content: string): Promise<void> {
+  if (!isTauri()) return;
+  const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+  await writeTextFile(filePath, content);
+}
+
+/**
+ * Delete a file at an absolute path.
+ * No-op on web or if file doesn't exist.
+ */
+export async function deleteFileAtPath(filePath: string): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { remove } = await import('@tauri-apps/plugin-fs');
+    await remove(filePath);
+  } catch {}
+}
+
 // ─── Open ─────────────────────────────────────────────────────────────────────
 
 /**

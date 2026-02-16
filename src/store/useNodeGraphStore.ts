@@ -3,10 +3,27 @@ import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
-import { saveTextFile, openTextFile } from '../utils/fileIO';
+import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
 
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX = 'shader-studio:cfp:';
+const CFP_DIR_KEY = 'shader-studio:settings:customFnDir';
+
+/** Get the user-configured presets folder path (or '' if not set). */
+export function getCustomFnDir(): string {
+  return localStorage.getItem(CFP_DIR_KEY) ?? '';
+}
+
+/** Persist the presets folder path. */
+export function setCustomFnDir(path: string): void {
+  if (path) localStorage.setItem(CFP_DIR_KEY, path);
+  else localStorage.removeItem(CFP_DIR_KEY);
+}
+
+/** Convert a label to a filesystem-safe slug. */
+function labelToSlug(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'fn';
+}
 
 /** Read all saved custom-fn presets from localStorage. */
 export function loadCustomFns(): CustomFnPreset[] {
@@ -123,6 +140,8 @@ interface NodeGraphState {
   exportCustomFns: () => Promise<void>;
   importCustomFns: (json: string) => void;
   importCustomFnsFromFile: () => Promise<void>;
+  setCustomFnPresetsDir: (path: string) => void;
+  loadCustomFnsFromDisk: () => Promise<CustomFnPreset[]>;
 }
 
 // ─── Example graph data ───────────────────────────────────────────────────────
@@ -1852,11 +1871,28 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       glslFunctions: (node.params.glslFunctions as string) ?? '',
       savedAt: Date.now(),
     };
+    // Always save to localStorage (belt-and-suspenders)
     localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
+    // Also write to disk if a folder is configured
+    const dir = getCustomFnDir();
+    if (dir) {
+      const slug = labelToSlug(preset.label);
+      const filename = `${slug}_${preset.id}.json`;
+      writeTextFileAtPath(`${dir}/${filename}`, JSON.stringify(preset, null, 2));
+    }
   },
 
   deleteCustomFn: (id) => {
+    // Remove from localStorage
     localStorage.removeItem(`${CFP_PREFIX}${id}`);
+    // Remove from disk if folder is set — find by matching id in filename
+    const dir = getCustomFnDir();
+    if (dir) {
+      readJsonFilesFromDir(dir).then(files => {
+        const match = files.find(f => f.name.endsWith(`_${id}.json`));
+        if (match) deleteFileAtPath(`${dir}/${match.name}`);
+      });
+    }
   },
 
   exportCustomFns: async () => {
@@ -1870,9 +1906,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const payload = JSON.parse(json) as CustomFnPresetExport;
       if (payload.version !== 1 || !Array.isArray(payload.presets)) return;
       const existing = new Set(loadCustomFns().map(p => p.id));
+      const dir = getCustomFnDir();
       for (const preset of payload.presets) {
         if (!preset.id || existing.has(preset.id)) continue;
         localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
+        // Also write to disk folder if set
+        if (dir) {
+          const slug = labelToSlug(preset.label);
+          writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
+        }
       }
     } catch {}
   },
@@ -1880,5 +1922,32 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   importCustomFnsFromFile: async () => {
     const json = await openTextFile('.json');
     if (json) get().importCustomFns(json);
+  },
+
+  setCustomFnPresetsDir: (path) => {
+    setCustomFnDir(path);
+    // Immediately sync localStorage from disk so palette refreshes
+    get().loadCustomFnsFromDisk().then(diskPresets => {
+      const existing = new Set(loadCustomFns().map(p => p.id));
+      for (const p of diskPresets) {
+        if (!existing.has(p.id)) {
+          localStorage.setItem(`${CFP_PREFIX}${p.id}`, JSON.stringify(p));
+        }
+      }
+    });
+  },
+
+  loadCustomFnsFromDisk: async () => {
+    const dir = getCustomFnDir();
+    if (!dir) return [];
+    const files = await readJsonFilesFromDir(dir);
+    const out: CustomFnPreset[] = [];
+    for (const { content } of files) {
+      try {
+        const p = JSON.parse(content) as CustomFnPreset;
+        if (p?.id) out.push(p);
+      } catch {}
+    }
+    return out.sort((a, b) => a.savedAt - b.savedAt);
   },
 }));

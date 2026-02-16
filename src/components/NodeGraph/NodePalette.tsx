@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNodeGraphStore, loadCustomFns } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, getCustomFnDir } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
+import { pickDirectory } from '../../utils/fileIO';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 
@@ -168,7 +169,7 @@ interface NodePaletteProps {
 }
 
 export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
-  const { addNode, deleteCustomFn, exportCustomFns, importCustomFnsFromFile } = useNodeGraphStore();
+  const { addNode, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk } = useNodeGraphStore();
   // Sort categories by preferred order; unknown categories appended alphabetically
   const rawCategories = getAllCategories();
   const categories = [
@@ -189,14 +190,38 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   const [userPresets, setUserPresets] = useState<CustomFnPreset[]>(() => loadCustomFns());
   // ID of preset being hovered (for showing delete button)
   const [hoverPresetId, setHoverPresetId] = useState<string | null>(null);
-  // Refresh presets from localStorage
-  const refreshPresets = () => setUserPresets(loadCustomFns());
+  // Current presets folder path (for display)
+  const [presetsDir, setPresetsDir] = useState<string>(() => getCustomFnDir());
 
-  // Refresh on window focus (in case another tab saved a preset)
+  // Merge localStorage presets with disk presets (dedup by id)
+  const refreshPresets = async () => {
+    const local = loadCustomFns();
+    const disk = await loadCustomFnsFromDisk();
+    // Merge: disk takes precedence, then fill in from local
+    const seen = new Set<string>();
+    const merged: CustomFnPreset[] = [];
+    for (const p of [...disk, ...local]) {
+      if (!seen.has(p.id)) { seen.add(p.id); merged.push(p); }
+    }
+    merged.sort((a, b) => a.savedAt - b.savedAt);
+    setUserPresets(merged);
+  };
+
+  // Load from disk on mount + refresh on window focus
   useEffect(() => {
+    refreshPresets();
     window.addEventListener('focus', refreshPresets);
     return () => window.removeEventListener('focus', refreshPresets);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handlePickFolder = async () => {
+    const dir = await pickDirectory();
+    if (!dir) return;
+    setCustomFnPresetsDir(dir);
+    setPresetsDir(dir);
+    await refreshPresets();
+  };
 
   const toggleCategory = (cat: string) => {
     setOpen(prev => {
@@ -415,6 +440,21 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
             }}>
               My Functions
             </div>
+            {/* Folder picker */}
+            <button
+              onClick={handlePickFolder}
+              title={presetsDir ? `Saving to: ${presetsDir}` : 'Pick a folder to save presets on disk'}
+              style={{
+                background: presetsDir ? '#89dceb18' : 'none',
+                border: `1px solid ${presetsDir ? '#89dceb55' : '#313244'}`,
+                color: presetsDir ? '#89dceb' : '#6c7086',
+                borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = presetsDir ? '#89dceb' : '#6c7086')}
+            >
+              📁
+            </button>
             {/* Export / Import buttons — only show when presets exist or always for import */}
             {userPresets.length > 0 && (
               <button
@@ -431,7 +471,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </button>
             )}
             <button
-              onClick={async () => { await importCustomFnsFromFile(); refreshPresets(); }}
+              onClick={async () => { await importCustomFnsFromFile(); await refreshPresets(); }}
               title="Import saved functions from a JSON file"
               style={{
                 background: 'none', border: '1px solid #313244', color: '#6c7086',
@@ -443,6 +483,19 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               ↓
             </button>
           </div>
+
+          {/* Folder path display */}
+          {presetsDir && (
+            <div style={{
+              fontSize: '9px', color: '#45475a', paddingLeft: '4px', marginBottom: '4px',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              fontFamily: 'monospace',
+            }}
+              title={presetsDir}
+            >
+              {presetsDir.split('/').pop() ?? presetsDir}
+            </div>
+          )}
 
           {userPresets.length === 0 ? (
             <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
