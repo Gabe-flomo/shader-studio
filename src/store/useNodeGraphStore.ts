@@ -95,6 +95,17 @@ interface NodeGraphState {
 
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
+  /**
+   * Spawn a pre-wired subgraph from a descriptor.
+   * `origin` is the top-left anchor in canvas space.
+   * Each entry in `nodes` has `type`, `relPos` (offset from origin), optional `params`.
+   * `edges` wires output → input by local array index.
+   */
+  spawnGraph: (
+    origin: { x: number; y: number },
+    nodes: Array<{ type: string; relPos: { x: number; y: number }; params?: Record<string, unknown> }>,
+    edges: Array<{ from: number; fromKey: string; to: number; toKey: string }>,
+  ) => void;
   removeNode: (nodeId: string) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
@@ -1543,6 +1554,67 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
 
     set(state => ({ nodes: [...state.nodes, newNode] }));
+    get().compile();
+  },
+
+  spawnGraph: (origin, nodeSpecs, edges) => {
+    pushHistory(get().nodes);
+    const assignedIds: string[] = [];
+    const newNodes: GraphNode[] = [];
+
+    // First pass: create all nodes (no connections yet)
+    for (const spec of nodeSpecs) {
+      const def = getNodeDefinition(spec.type);
+      if (!def) { console.error(`spawnGraph: Unknown node type: ${spec.type}`); continue; }
+
+      const nodeId = `node_${nodeIdCounter++}`;
+      assignedIds.push(nodeId);
+
+      const mergedParams = { ...(def.defaultParams ?? {}), ...(spec.params ?? {}) };
+
+      const inputs: Record<string, InputSocket> = {};
+      for (const [key, socket] of Object.entries(def.inputs)) {
+        inputs[key] = {
+          ...socket,
+          defaultValue: def.paramDefs?.[key]
+            ? undefined
+            : def.defaultParams?.[key] as number | number[] | undefined,
+        };
+      }
+
+      const outputType = (mergedParams.outputType as DataType | undefined) ?? 'float';
+      const outputs = spec.type === 'customFn' && spec.params?.outputType
+        ? { result: { type: outputType, label: 'Result' } }
+        : { ...def.outputs };
+
+      newNodes.push({
+        id: nodeId,
+        type: spec.type,
+        position: { x: origin.x + spec.relPos.x, y: origin.y + spec.relPos.y },
+        inputs,
+        outputs,
+        params: mergedParams,
+      });
+    }
+
+    // Second pass: wire edges using assigned IDs
+    for (const edge of edges) {
+      const srcId  = assignedIds[edge.from];
+      const tgtId  = assignedIds[edge.to];
+      const tgtIdx = newNodes.findIndex(n => n.id === tgtId);
+      if (srcId == null || tgtIdx < 0) continue;
+      const input = newNodes[tgtIdx].inputs[edge.toKey];
+      if (!input) continue;
+      newNodes[tgtIdx] = {
+        ...newNodes[tgtIdx],
+        inputs: {
+          ...newNodes[tgtIdx].inputs,
+          [edge.toKey]: { ...input, connection: { nodeId: srcId, outputKey: edge.fromKey } },
+        },
+      };
+    }
+
+    set(state => ({ nodes: [...state.nodes, ...newNodes] }));
     get().compile();
   },
 

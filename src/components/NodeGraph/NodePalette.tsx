@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNodeGraphStore, loadCustomFns, getCustomFnDir } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
@@ -49,6 +49,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Color:           '#fab387',  // orange
   Noise:           '#74c7ec',  // sky blue
   Effects:         '#f38ba8',  // pink
+  Loops:           '#89dceb',  // cyan
   '2D Primitives': '#f9e2af',  // yellow
   SDF:             '#f5c2e7',  // light pink
   Combiners:       '#cba6f7',  // purple
@@ -161,6 +162,101 @@ const CUSTOMFN_PRESETS: BuiltinPreset[] = [
 ];
 
 
+// ─── Loop Example graphs ───────────────────────────────────────────────────────
+// Each example is a pre-wired subgraph (Loop Start + body nodes + Loop End).
+// nodes[] → relative positions; edges[] → connections by local index.
+// Indices: 0 = UV, 1 = Loop Start, 2..N-2 = body, N-1 = Loop End
+
+interface LoopExample {
+  label: string;
+  description: string;
+  /** nodes in spawn order; index 0 is always a uv node, last is always loopEnd */
+  nodes: Array<{ type: string; relPos: { x: number; y: number }; params?: Record<string, unknown> }>;
+  edges: Array<{ from: number; fromKey: string; to: number; toKey: string }>;
+}
+
+const LOOP_EXAMPLES: LoopExample[] = [
+  {
+    label: 'Ripple Warp',
+    description: 'UV → Loop Start → Ripple Step (×6) → Loop End → (connect to color). Classic sin/cos UV feedback warp.',
+    nodes: [
+      { type: 'uv',             relPos: { x: 0,   y: 0   } },
+      { type: 'loopStart',      relPos: { x: 260, y: 0   } },
+      { type: 'loopRippleStep', relPos: { x: 520, y: 0   }, params: { scale: 3.5, speed: 0.8, strength: 0.1 } },
+      { type: 'loopEnd',        relPos: { x: 780, y: 0   }, params: { iterations: 6 } },
+    ],
+    edges: [
+      { from: 0, fromKey: 'uv',    to: 1, toKey: 'carry' },
+      { from: 1, fromKey: 'carry', to: 2, toKey: 'uv'    },
+      { from: 2, fromKey: 'uv',    to: 3, toKey: 'carry' },
+    ],
+  },
+  {
+    label: 'Spiral Zoom',
+    description: 'UV → Loop Start → Rotate Step (×8) → Loop End. Each iteration rotates + scales UV, producing a fractal spiral.',
+    nodes: [
+      { type: 'uv',             relPos: { x: 0,   y: 0   } },
+      { type: 'loopStart',      relPos: { x: 260, y: 0   } },
+      { type: 'loopRotateStep', relPos: { x: 520, y: 0   }, params: { angle: 0.4, scale: 1.05 } },
+      { type: 'loopEnd',        relPos: { x: 780, y: 0   }, params: { iterations: 8 } },
+    ],
+    edges: [
+      { from: 0, fromKey: 'uv',    to: 1, toKey: 'carry' },
+      { from: 1, fromKey: 'carry', to: 2, toKey: 'uv'    },
+      { from: 2, fromKey: 'uv',    to: 3, toKey: 'carry' },
+    ],
+  },
+  {
+    label: 'IFS Fractal',
+    description: 'UV → Loop Start → Domain Fold (×8) → Loop End. Iterated abs()-fold creates Menger-sponge-like fractal domain.',
+    nodes: [
+      { type: 'uv',              relPos: { x: 0,   y: 0   } },
+      { type: 'loopStart',       relPos: { x: 260, y: 0   } },
+      { type: 'loopDomainFold',  relPos: { x: 520, y: 0   }, params: { scale: 1.8, offsetX: 0.5, offsetY: 0.3 } },
+      { type: 'loopEnd',         relPos: { x: 780, y: 0   }, params: { iterations: 8 } },
+    ],
+    edges: [
+      { from: 0, fromKey: 'uv',    to: 1, toKey: 'carry' },
+      { from: 1, fromKey: 'carry', to: 2, toKey: 'uv'    },
+      { from: 2, fromKey: 'uv',    to: 3, toKey: 'carry' },
+    ],
+  },
+  {
+    label: 'Ripple + Fold',
+    description: 'UV → Loop Start → Ripple → Domain Fold (×6) → Loop End. Combines warp + fold for complex turbulent patterns.',
+    nodes: [
+      { type: 'uv',              relPos: { x: 0,   y: 0   } },
+      { type: 'loopStart',       relPos: { x: 260, y: 0   } },
+      { type: 'loopRippleStep',  relPos: { x: 520, y: 0   }, params: { scale: 2.5, speed: 0.6, strength: 0.08 } },
+      { type: 'loopDomainFold',  relPos: { x: 780, y: 0   }, params: { scale: 1.6, offsetX: 0.4, offsetY: 0.2 } },
+      { type: 'loopEnd',         relPos: { x: 1040, y: 0  }, params: { iterations: 6 } },
+    ],
+    edges: [
+      { from: 0, fromKey: 'uv',    to: 1, toKey: 'carry' },
+      { from: 1, fromKey: 'carry', to: 2, toKey: 'uv'    },
+      { from: 2, fromKey: 'uv',    to: 3, toKey: 'uv'    },
+      { from: 3, fromKey: 'uv',    to: 4, toKey: 'carry' },
+    ],
+  },
+  {
+    label: 'Rotate + Ripple',
+    description: 'UV → Loop Start → Rotate Step → Ripple Step (×8) → Loop End. Rotation + warp per iteration makes a hypnotic vortex.',
+    nodes: [
+      { type: 'uv',              relPos: { x: 0,    y: 0   } },
+      { type: 'loopStart',       relPos: { x: 260,  y: 0   } },
+      { type: 'loopRotateStep',  relPos: { x: 520,  y: 0   }, params: { angle: 0.25, scale: 1.0 } },
+      { type: 'loopRippleStep',  relPos: { x: 780,  y: 0   }, params: { scale: 4.0, speed: 1.2, strength: 0.07 } },
+      { type: 'loopEnd',         relPos: { x: 1040, y: 0   }, params: { iterations: 8 } },
+    ],
+    edges: [
+      { from: 0, fromKey: 'uv',    to: 1, toKey: 'carry' },
+      { from: 1, fromKey: 'carry', to: 2, toKey: 'uv'    },
+      { from: 2, fromKey: 'uv',    to: 3, toKey: 'uv'    },
+      { from: 3, fromKey: 'uv',    to: 4, toKey: 'carry' },
+    ],
+  },
+];
+
 interface NodePaletteProps {
   /** 'full' = normal left sidebar; 'drawer' = fills container (used in mobile bottom sheet) */
   mode?: 'full' | 'drawer';
@@ -169,7 +265,9 @@ interface NodePaletteProps {
 }
 
 export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
-  const { addNode, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk } = useNodeGraphStore();
+  const { addNode, spawnGraph, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk } = useNodeGraphStore();
+  const [hoveredExampleIdx, setHoveredExampleIdx] = useState<number | null>(null);
+  const exampleTooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Sort categories by preferred order; unknown categories appended alphabetically
   const rawCategories = getAllCategories();
   const categories = [
@@ -375,6 +473,95 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               {isOpen && (
                 <div style={{ marginTop: '2px', paddingLeft: '4px' }}>
                   {nodes.map(def => nodeBtn(def.type, def.label, def.description))}
+
+                  {/* ── Loop Examples sub-section (only in Loops category) ── */}
+                  {category === 'Loops' && (
+                    <div style={{ marginTop: '8px', borderTop: '1px solid #89dceb22', paddingTop: '6px' }}>
+                      <div style={{
+                        fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em',
+                        textTransform: 'uppercase', color: '#89dceb88',
+                        paddingLeft: '2px', marginBottom: '5px',
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                      }}>
+                        <span>⚡</span> Examples
+                        <span style={{ color: '#585b70', fontSize: '8px', fontWeight: 400, letterSpacing: 0, textTransform: 'none' }}>
+                          — click to spawn pre-wired graph
+                        </span>
+                      </div>
+                      {LOOP_EXAMPLES.map((ex, i) => (
+                        <div
+                          key={ex.label}
+                          style={{ position: 'relative', marginBottom: '3px' }}
+                          onMouseEnter={() => {
+                            if (exampleTooltipTimer.current) clearTimeout(exampleTooltipTimer.current);
+                            exampleTooltipTimer.current = setTimeout(() => setHoveredExampleIdx(i), 400);
+                          }}
+                          onMouseLeave={() => {
+                            if (exampleTooltipTimer.current) clearTimeout(exampleTooltipTimer.current);
+                            setHoveredExampleIdx(null);
+                          }}
+                        >
+                          <button
+                            onClick={() => {
+                              const ox = 200 + Math.random() * 80;
+                              const oy = 120 + Math.random() * 160;
+                              spawnGraph({ x: ox, y: oy }, ex.nodes, ex.edges);
+                              onNodeAdded?.();
+                            }}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              padding: '5px 8px 5px 10px',
+                              background: '#0d2020',
+                              border: '1px solid #89dceb33',
+                              color: '#89dceb',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              borderRadius: '5px',
+                              fontSize: '11px',
+                              transition: 'background 0.1s',
+                            }}
+                            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0d3030')}
+                            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0d2020')}
+                          >
+                            <span style={{ fontSize: '10px', marginRight: '5px', opacity: 0.6 }}>⟳</span>
+                            {ex.label}
+                            <span style={{ fontSize: '9px', color: '#89dceb55', marginLeft: '5px' }}>
+                              ×{(ex.nodes.find(n => n.type === 'loopEnd')?.params?.iterations as number) ?? 4}
+                            </span>
+                          </button>
+                          {/* Tooltip on hover delay */}
+                          {hoveredExampleIdx === i && (
+                            <div style={{
+                              position: 'absolute',
+                              left: '100%',
+                              top: 0,
+                              marginLeft: '6px',
+                              zIndex: 200,
+                              background: '#1e1e2e',
+                              border: '1px solid #89dceb44',
+                              borderRadius: '6px',
+                              padding: '8px 10px',
+                              width: '220px',
+                              fontSize: '10px',
+                              color: '#cdd6f4',
+                              pointerEvents: 'none',
+                              boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+                              lineHeight: 1.5,
+                            }}>
+                              <div style={{ fontWeight: 700, color: '#89dceb', marginBottom: '4px', fontSize: '11px' }}>
+                                {ex.label}
+                              </div>
+                              <div style={{ color: '#a6adc8', marginBottom: '6px' }}>{ex.description}</div>
+                              <div style={{ color: '#585b70', fontSize: '9px' }}>
+                                Spawns {ex.nodes.length} nodes pre-wired. Connect the Loop End → result to your color/output nodes.
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
