@@ -23,13 +23,15 @@ export const LoopStartNode: NodeDefinition = {
   type: 'loopStart',
   label: 'Loop Start',
   category: 'Loops',
-  description: 'Marks the beginning of a wired loop chain. Connect its output through one or more nodes to a Loop End node. The carry type is determined by the wire.',
+  description: 'Marks the beginning of a wired loop chain. Set iterations here to control how many times the chain is repeated. Connect its output through one or more nodes to a Loop End node. The carry type is determined by the wire.',
 
   inputs:  { carry: { type: 'vec2', label: 'Initial value' } },
   outputs: { carry: { type: 'vec2', label: 'Carry →' } },
 
-  defaultParams: {},
-  paramDefs: {},
+  defaultParams: { iterations: 4 },
+  paramDefs: {
+    iterations: { label: 'Iterations', type: 'float', min: 1, max: 16, step: 1 },
+  },
 
   // Pass-through: output = input (the compiler handles the actual unrolling)
   generateGLSL: (node, inputVars) => {
@@ -50,7 +52,7 @@ export const LoopEndNode: NodeDefinition = {
   type: 'loopEnd',
   label: 'Loop End',
   category: 'Loops',
-  description: 'Marks the end of a wired loop chain. Set iterations to control how many times the chain between Loop Start and here is repeated. The result is the final carry value after all iterations.',
+  description: 'Marks the end of a wired loop chain. Iterations is now set on the Loop Start node. The result is the final carry value after all iterations.',
 
   inputs:  { carry: { type: 'vec2', label: '← Carry in' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },

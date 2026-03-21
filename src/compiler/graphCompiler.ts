@@ -337,6 +337,12 @@ function generateFragmentShader(
           const values = input.defaultValue.map((v: number) => v.toFixed(1)).join(', ');
           inputVars[inputKey] = `${type}(${values})`;
         }
+      } else if (input.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) {
+        // Implicit UV: unconnected UV/position sockets receive the global aspect-corrected UV
+        inputVars[inputKey] = 'g_uv';
+      } else if (input.type === 'float' && (inputKey === 'time' || inputKey === 't')) {
+        // Implicit time: unconnected time sockets receive u_time directly
+        inputVars[inputKey] = 'u_time';
       }
     }
 
@@ -398,6 +404,10 @@ function generateFragmentShader(
                 const vals = sock.defaultValue.map((v: number) => v.toFixed(1)).join(', ');
                 stepInputVars[k] = `${sock.type}(${vals})`;
               }
+            } else if (sock.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) {
+              stepInputVars[k] = 'g_uv';
+            } else if (sock.type === 'float' && (k === 'time' || k === 't')) {
+              stepInputVars[k] = 'u_time';
             }
           }
 
@@ -446,10 +456,11 @@ function generateFragmentShader(
     // ── Loop End: unroll the body chain N times ───────────────────────────────
     if (node.type === 'loopEnd') {
       const bodyIds = loopPairChains.get(node.id) ?? [];
-      const iters   = Math.max(1, Math.min(16, Math.round(
+      const id = node.id;
+      // iters resolved after we find startNodeId below; placeholder here
+      let iters = Math.max(1, Math.min(16, Math.round(
         typeof node.params.iterations === 'number' ? node.params.iterations : 4
       )));
-      const id = node.id;
 
       // Determine carry type from the inbound wire (loopEnd's carry input).
       // Walk backwards through the chain to find the loopStart node.
@@ -485,6 +496,14 @@ function generateFragmentShader(
           const wn2 = allNodeMap.get(walkId);
           const nextConn = wn2 ? Object.values(wn2.inputs).find(i => i.connection)?.connection : undefined;
           walkId = nextConn?.nodeId;
+        }
+      }
+
+      // Prefer iterations from loopStart (new behaviour); fall back to loopEnd for old graphs
+      if (startNodeId) {
+        const startNode = allNodeMap.get(startNodeId);
+        if (typeof startNode?.params.iterations === 'number') {
+          iters = Math.max(1, Math.min(16, Math.round(startNode.params.iterations)));
         }
       }
 
@@ -559,6 +578,10 @@ function generateFragmentShader(
                 const vals = sock.defaultValue.map((v: number) => v.toFixed(1)).join(', ');
                 bodyInputVars[k] = `${sock.type}(${vals})`;
               }
+            } else if (sock.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) {
+              bodyInputVars[k] = 'g_uv';
+            } else if (sock.type === 'float' && (k === 'time' || k === 't')) {
+              bodyInputVars[k] = 'u_time';
             }
           }
 
@@ -666,6 +689,8 @@ varying vec2 vUv;
 ${functionCode}
 
 void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
 ${mainCode.join('')}}`.trim();
 
   return { fragmentShader, nodeOutputVars: nodeOutputs };
