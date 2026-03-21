@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 
 // ─── Chladni Node ─────────────────────────────────────────────────────────────
 //
@@ -134,15 +134,15 @@ export const ChladniNode: NodeDefinition = {
     const uvVar      = inputVars.uv   ?? 'vec2(0.0)';
     const timeVar    = inputVars.time ?? '0.0';
     // m and n can come from wired inputs OR fall back to params
-    const mVal       = inputVars.m    ?? f(typeof node.params.m === 'number' ? node.params.m : 3.0);
-    const nVal       = inputVars.n    ?? f(typeof node.params.n === 'number' ? node.params.n : 4.0);
+    const mVal       = inputVars.m    ?? p(node.params.m, 3.0);
+    const nVal       = inputVars.n    ?? p(node.params.n, 4.0);
     const scale      = f(Math.min(typeof node.params.scale      === 'number' ? node.params.scale      : 1.0, 1.5));
-    const lineWidth  = f(typeof node.params.line_width === 'number' ? node.params.line_width : 1.5);
-    const aa         = f(typeof node.params.aa         === 'number' ? node.params.aa         : 1.0);
-    const turbulence = f(typeof node.params.turbulence === 'number' ? node.params.turbulence : 0.0);
-    const turbSpeed  = f(typeof node.params.turb_speed === 'number' ? node.params.turb_speed : 0.5);
+    const lineWidth  = p(node.params.line_width, 1.5);
+    const aa         = p(node.params.aa, 1.0);
+    const turbulence = p(node.params.turbulence, 0.0);
+    const turbSpeed  = p(node.params.turb_speed, 0.5);
     const noiseMode  = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'smooth';
-    const brightness = f(typeof node.params.brightness === 'number' ? node.params.brightness : 1.0);
+    const brightness = p(node.params.brightness, 1.0);
 
     const hasTurb = parseFloat(turbulence) > 0.0;
     // Map noise_mode string to int for ch2_noise2()
@@ -318,21 +318,21 @@ export const ElectronOrbitalNode: NodeDefinition = {
     const id         = node.id;
     const uvVar      = inputVars.uv   ?? 'vec2(0.0)';
     const timeVar    = inputVars.time ?? '0.0';
-    const n          = f(typeof node.params.n          === 'number' ? node.params.n          : 2.0);
-    const l          = f(typeof node.params.l          === 'number' ? node.params.l          : 1.0);
-    const mq         = f(typeof node.params.m_q        === 'number' ? node.params.m_q        : 0.0);
+    const n          = p(node.params.n, 2.0);
+    const l          = p(node.params.l, 1.0);
+    const mq         = p(node.params.m_q, 0.0);
     const a0Raw      = typeof node.params.a0           === 'number' ? node.params.a0         : 0.05;
     // a0 must be strictly positive — a zero or negative Bohr radius makes rho negative
     // which collapses pow(rho, l) to 0 for non-integer l → all black
     const a0         = f(Math.max(Math.abs(a0Raw), 0.001));
-    const scale      = f(typeof node.params.scale      === 'number' ? node.params.scale      : 3.0);
-    const sliceZ     = f(typeof node.params.slice_z    === 'number' ? node.params.slice_z    : 0.0);
-    const brightness = f(typeof node.params.brightness === 'number' ? node.params.brightness : 3.0);
+    const scale      = p(node.params.scale, 3.0);
+    const sliceZ     = p(node.params.slice_z, 0.0);
+    const brightness = p(node.params.brightness, 3.0);
     const gamma      = f(Math.max(typeof node.params.gamma === 'number' ? node.params.gamma : 0.5, 0.05));
-    const aa         = f(typeof node.params.aa         === 'number' ? node.params.aa         : 1.0);
-    const edgeSoft   = f(typeof node.params.edge_soft  === 'number' ? node.params.edge_soft  : 0.8);
-    const turbulence = f(typeof node.params.turbulence === 'number' ? node.params.turbulence : 0.0);
-    const turbSpeed  = f(typeof node.params.turb_speed === 'number' ? node.params.turb_speed : 0.3);
+    const aa         = p(node.params.aa, 1.0);
+    const edgeSoft   = p(node.params.edge_soft, 0.8);
+    const turbulence = p(node.params.turbulence, 0.0);
+    const turbSpeed  = p(node.params.turb_speed, 0.3);
     const noiseMode  = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'hash';
 
     const hasTurb   = parseFloat(turbulence) > 0.0;
@@ -481,17 +481,17 @@ export const Chladni3DNode: NodeDefinition = {
     const id = node.id;
     const uv          = inputVars.uv          ?? 'vec2(0.0)';
     const timeVar     = inputVars.time        ?? '0.0';
-    const mVal        = inputVars.m           ?? f(typeof node.params.m     === 'number' ? node.params.m     : 3.0);
-    const nVal        = inputVars.n           ?? f(typeof node.params.n     === 'number' ? node.params.n     : 4.0);
-    const lVal        = inputVars.l           ?? f(typeof node.params.l     === 'number' ? node.params.l     : 2.0);
-    const scale       = f(typeof node.params.scale          === 'number' ? node.params.scale          : 1.2);
+    const mVal        = inputVars.m           ?? p(node.params.m, 3.0);
+    const nVal        = inputVars.n           ?? p(node.params.n, 4.0);
+    const lVal        = inputVars.l           ?? p(node.params.l, 2.0);
+    const scale       = p(node.params.scale, 1.2);
     const steps       = Math.round(typeof node.params.steps === 'number' ? node.params.steps           : 80);
-    const surfWidth   = f(typeof node.params.surface_width  === 'number' ? node.params.surface_width   : 0.08);
-    const opacity     = f(typeof node.params.opacity        === 'number' ? node.params.opacity         : 0.92);
-    const orbitSpeed  = f(typeof node.params.orbit_speed    === 'number' ? node.params.orbit_speed     : 0.3);
-    const orbitPitch  = f(typeof node.params.orbit_pitch    === 'number' ? node.params.orbit_pitch     : 0.4);
-    const camDist     = f(typeof node.params.cam_dist       === 'number' ? node.params.cam_dist        : 2.2);
-    const bgDark      = f(typeof node.params.bg_dark        === 'number' ? node.params.bg_dark         : 0.04);
+    const surfWidth   = p(node.params.surface_width, 0.08);
+    const opacity     = p(node.params.opacity, 0.92);
+    const orbitSpeed  = p(node.params.orbit_speed, 0.3);
+    const orbitPitch  = p(node.params.orbit_pitch, 0.4);
+    const camDist     = p(node.params.cam_dist, 2.2);
+    const bgDark      = p(node.params.bg_dark, 0.04);
     const colorMode   = typeof node.params.color_mode === 'string' ? node.params.color_mode : 'depth';
 
     const hasOrbitInput = !!inputVars.orbit_angle;
@@ -796,18 +796,18 @@ export const Chladni3DParticlesNode: NodeDefinition = {
     const id = node.id;
     const uv          = inputVars.uv          ?? 'vec2(0.0)';
     const timeVar     = inputVars.time        ?? '0.0';
-    const mVal        = inputVars.m           ?? f(typeof node.params.m     === 'number' ? node.params.m     : 0.75);
-    const nVal        = inputVars.n           ?? f(typeof node.params.n     === 'number' ? node.params.n     : 1.0);
-    const lVal        = inputVars.l           ?? f(typeof node.params.l     === 'number' ? node.params.l     : 0.5);
-    const scale       = f(typeof node.params.scale        === 'number' ? node.params.scale        : 1.2);
+    const mVal        = inputVars.m           ?? p(node.params.m, 0.75);
+    const nVal        = inputVars.n           ?? p(node.params.n, 1.0);
+    const lVal        = inputVars.l           ?? p(node.params.l, 0.5);
+    const scale       = p(node.params.scale, 1.2);
     const steps       = Math.round(typeof node.params.steps === 'number' ? node.params.steps       : 60);
-    const turbulence  = f(typeof node.params.turbulence   === 'number' ? node.params.turbulence    : 0.18);
-    const noiseSpeed  = f(typeof node.params.noise_speed  === 'number' ? node.params.noise_speed   : 0.4);
-    const surfPull    = f(typeof node.params.surface_pull === 'number' ? node.params.surface_pull  : 6.0);
-    const brightness  = f(typeof node.params.brightness   === 'number' ? node.params.brightness    : 3.0);
-    const orbitSpeed  = f(typeof node.params.orbit_speed  === 'number' ? node.params.orbit_speed   : 0.25);
-    const orbitPitch  = f(typeof node.params.orbit_pitch  === 'number' ? node.params.orbit_pitch   : 0.4);
-    const camDist     = f(typeof node.params.cam_dist     === 'number' ? node.params.cam_dist      : 2.2);
+    const turbulence  = p(node.params.turbulence, 0.18);
+    const noiseSpeed  = p(node.params.noise_speed, 0.4);
+    const surfPull    = p(node.params.surface_pull, 6.0);
+    const brightness  = p(node.params.brightness, 3.0);
+    const orbitSpeed  = p(node.params.orbit_speed, 0.25);
+    const orbitPitch  = p(node.params.orbit_pitch, 0.4);
+    const camDist     = p(node.params.cam_dist, 2.2);
     const noiseMode   = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'hash';
     const colorMode   = typeof node.params.color_mode === 'string' ? node.params.color_mode : 'field';
 

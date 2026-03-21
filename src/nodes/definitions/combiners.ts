@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 
 // ── Basic SDF combiners ───────────────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ float smin(float a, float b, float k) {
     const outVar = `${node.id}_result`;
     const aVar = inputVars.a || '0.0';
     const bVar = inputVars.b || '0.0';
-    const kVar = inputVars.smoothness || f(typeof node.params.smoothness === 'number' ? node.params.smoothness : 0.5);
+    const kVar = inputVars.smoothness || p(node.params.smoothness, 0.5);
     return {
       code: `    float ${outVar} = smin(${aVar}, ${bVar}, ${kVar});\n`,
       outputVars: { result: outVar },
@@ -116,7 +116,7 @@ float smax(float a, float b, float k) {
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_result`;
-    const kVar = inputVars.smoothness || f(typeof node.params.smoothness === 'number' ? node.params.smoothness : 0.3);
+    const kVar = inputVars.smoothness || p(node.params.smoothness, 0.3);
     return {
       code: `    float ${outVar} = smax(${inputVars.a || '0.0'}, ${inputVars.b || '0.0'}, ${kVar});\n`,
       outputVars: { result: outVar },
@@ -146,7 +146,7 @@ float ssubtract(float a, float b, float k) {
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_result`;
-    const kVar = inputVars.smoothness || f(typeof node.params.smoothness === 'number' ? node.params.smoothness : 0.3);
+    const kVar = inputVars.smoothness || p(node.params.smoothness, 0.3);
     return {
       code: `    float ${outVar} = ssubtract(${inputVars.a || '0.0'}, ${inputVars.b || '0.0'}, ${kVar});\n`,
       outputVars: { result: outVar },
@@ -175,7 +175,7 @@ export const BlendNode: NodeDefinition = {
     const outVar  = `${node.id}_result`;
     const aVar    = inputVars.a      || 'vec3(0.0)';
     const bVar    = inputVars.b      || 'vec3(1.0)';
-    const tVar    = inputVars.factor || f(typeof node.params.factor === 'number' ? node.params.factor : 0.5);
+    const tVar    = inputVars.factor || p(node.params.factor, 0.5);
     return {
       code: `    vec3 ${outVar} = mix(${aVar}, ${bVar}, clamp(${tVar}, 0.0, 1.0));\n`,
       outputVars: { result: outVar },
@@ -206,8 +206,8 @@ export const MaskNode: NodeDefinition = {
     const aVar   = inputVars.a         || 'vec3(1.0)';
     const bVar   = inputVars.b         || 'vec3(0.0)';
     const mVar   = inputVars.mask      || '0.0';
-    const tVar   = inputVars.threshold || f(typeof node.params.threshold === 'number' ? node.params.threshold : 0.0);
-    const eVar   = inputVars.edge      || f(typeof node.params.edge      === 'number' ? node.params.edge      : 0.02);
+    const tVar   = inputVars.threshold || p(node.params.threshold, 0.0);
+    const eVar   = inputVars.edge      || p(node.params.edge, 0.02);
     return {
       code: [
         `    float ${node.id}_mf = 1.0 - smoothstep(${tVar} - ${eVar}, ${tVar} + ${eVar}, ${mVar});\n`,
@@ -237,7 +237,7 @@ export const AddColorNode: NodeDefinition = {
     const outVar  = `${node.id}_result`;
     const aVar    = inputVars.a     || 'vec3(0.0)';
     const bVar    = inputVars.b     || 'vec3(0.0)';
-    const sVar    = inputVars.scale || f(typeof node.params.scale === 'number' ? node.params.scale : 1.0);
+    const sVar    = inputVars.scale || p(node.params.scale, 1.0);
     return {
       code: `    vec3 ${outVar} = ${aVar} + ${bVar} * ${sVar};\n`,
       outputVars: { result: outVar },
@@ -289,8 +289,8 @@ export const GlowLayerNode: NodeDefinition = {
     const id      = node.id;
     const dVar    = inputVars.d         || '1.0';
     const cVar    = inputVars.color     || 'vec3(1.0)';
-    const iVar    = inputVars.intensity || f(typeof node.params.intensity === 'number' ? node.params.intensity : 0.01);
-    const pVar    = inputVars.power     || f(typeof node.params.power     === 'number' ? node.params.power     : 1.0);
+    const iVar    = inputVars.intensity || p(node.params.intensity, 0.01);
+    const pVar    = inputVars.power     || p(node.params.power, 1.0);
     return {
       code: [
         `    float ${id}_g = pow(${iVar} / max(abs(${dVar}), 0.0001), ${pVar});\n`,
@@ -324,8 +324,8 @@ export const SDFOutlineNode: NodeDefinition = {
     const dVar = inputVars.d           || '1.0';
     const fVar = inputVars.fillColor   || 'vec3(1.0)';
     const sVar = inputVars.strokeColor || 'vec3(0.0)';
-    const swVar= inputVars.strokeWidth || f(typeof node.params.strokeWidth === 'number' ? node.params.strokeWidth : 0.02);
-    const aaVar= inputVars.antialias   || f(typeof node.params.antialias   === 'number' ? node.params.antialias   : 0.005);
+    const swVar= inputVars.strokeWidth || p(node.params.strokeWidth, 0.02);
+    const aaVar= inputVars.antialias   || p(node.params.antialias, 0.005);
     return {
       code: [
         `    float ${id}_fill   = 1.0 - smoothstep(-${aaVar}, ${aaVar}, ${dVar});\n`,
@@ -359,7 +359,7 @@ export const SDFColorizeNode: NodeDefinition = {
     const dVar    = inputVars.d       || '0.0';
     const inVar   = inputVars.inside  || 'vec3(1.0)';
     const outVar2 = inputVars.outside || 'vec3(0.0)';
-    const eVar    = inputVars.edge    || f(typeof node.params.edge === 'number' ? node.params.edge : 0.01);
+    const eVar    = inputVars.edge    || p(node.params.edge, 0.01);
     return {
       code: [
         `    float ${id}_t = smoothstep(-${eVar}, ${eVar}, ${dVar});\n`,

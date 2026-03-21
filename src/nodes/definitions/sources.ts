@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 
 export const UVNode: NodeDefinition = {
   type: 'uv',
@@ -98,7 +98,7 @@ export const ConstantNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_value`;
-    const val = inputVars.value || f(typeof node.params.value === 'number' ? node.params.value : 1.0);
+    const val = inputVars.value || p(node.params.value, 1.0);
     return {
       code: `    float ${outVar} = ${val};\n`,
       outputVars: { value: outVar },

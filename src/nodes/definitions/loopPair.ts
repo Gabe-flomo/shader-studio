@@ -23,13 +23,15 @@ export const LoopStartNode: NodeDefinition = {
   type: 'loopStart',
   label: 'Loop Start',
   category: 'Loops',
-  description: 'Marks the beginning of a wired loop chain. Connect its output through one or more nodes to a Loop End node. The carry type is determined by the wire.',
+  description: 'Marks the beginning of a wired loop chain. Set iterations here to control how many times the chain is repeated. Connect its output through one or more nodes to a Loop End node. The carry type is determined by the wire.',
 
   inputs:  { carry: { type: 'vec2', label: 'Initial value' } },
   outputs: { carry: { type: 'vec2', label: 'Carry →' } },
 
-  defaultParams: {},
-  paramDefs: {},
+  defaultParams: { iterations: 4 },
+  paramDefs: {
+    iterations: { label: 'Iterations', type: 'float', min: 1, max: 16, step: 1 },
+  },
 
   // Pass-through: output = input (the compiler handles the actual unrolling)
   generateGLSL: (node, inputVars) => {
@@ -50,7 +52,7 @@ export const LoopEndNode: NodeDefinition = {
   type: 'loopEnd',
   label: 'Loop End',
   category: 'Loops',
-  description: 'Marks the end of a wired loop chain. Set iterations to control how many times the chain between Loop Start and here is repeated. The result is the final carry value after all iterations.',
+  description: 'Marks the end of a wired loop chain. Iterations is now set on the Loop Start node. The result is the final carry value after all iterations.',
 
   inputs:  { carry: { type: 'vec2', label: '← Carry in' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },
@@ -96,9 +98,9 @@ export const LoopRippleStepNode: NodeDefinition = {
 
   generateGLSL: (node, inputVars) => {
     const uv  = inputVars['uv'] ?? 'vec2(0.0)';
-    const sc  = typeof node.params.scale    === 'number' ? node.params.scale.toFixed(3)    : '3.000';
-    const sp  = typeof node.params.speed    === 'number' ? node.params.speed.toFixed(3)    : '1.000';
-    const str = typeof node.params.strength === 'number' ? node.params.strength.toFixed(4) : '0.1200';
+    const sc  = p(node.params.scale, 3.000, 3);
+    const sp  = p(node.params.speed, 1.000, 3);
+    const str = p(node.params.strength, 0.1200, 4);
     const id  = node.id;
     return {
       code: [
@@ -139,8 +141,8 @@ export const LoopRotateStepNode: NodeDefinition = {
 
   generateGLSL: (node, inputVars) => {
     const uv = inputVars['uv'] ?? 'vec2(0.0)';
-    const a  = typeof node.params.angle === 'number' ? node.params.angle.toFixed(5) : '0.30000';
-    const sc = typeof node.params.scale === 'number' ? node.params.scale.toFixed(4) : '1.0200';
+    const a  = p(node.params.angle, 0.30000, 5);
+    const sc = p(node.params.scale, 1.0200, 4);
     const id = node.id;
     return {
       code: [
@@ -179,9 +181,9 @@ export const LoopDomainFoldNode: NodeDefinition = {
 
   generateGLSL: (node, inputVars) => {
     const uv  = inputVars['uv'] ?? 'vec2(0.0)';
-    const sc  = typeof node.params.scale   === 'number' ? node.params.scale.toFixed(4)   : '1.8000';
-    const ox  = typeof node.params.offsetX === 'number' ? node.params.offsetX.toFixed(4) : '0.5000';
-    const oy  = typeof node.params.offsetY === 'number' ? node.params.offsetY.toFixed(4) : '0.3000';
+    const sc  = p(node.params.scale, 1.8000, 4);
+    const ox  = p(node.params.offsetX, 0.5000, 4);
+    const oy  = p(node.params.offsetY, 0.3000, 4);
     const id  = node.id;
     return {
       code: [
@@ -216,9 +218,9 @@ export const LoopFloatAccumulateNode: NodeDefinition = {
 
   generateGLSL: (node, inputVars) => {
     const v   = inputVars['value'] ?? '0.0';
-    const sc  = typeof node.params.scale     === 'number' ? node.params.scale.toFixed(3)     : '2.000';
-    const sp  = typeof node.params.speed     === 'number' ? node.params.speed.toFixed(3)     : '1.000';
-    const amp = typeof node.params.amplitude === 'number' ? node.params.amplitude.toFixed(4) : '0.1500';
+    const sc  = p(node.params.scale, 2.000, 3);
+    const sp  = p(node.params.speed, 1.000, 3);
+    const amp = p(node.params.amplitude, 0.1500, 4);
     const id  = node.id;
     return {
       code: `    float ${id}_value = ${v} + sin(${v} * ${sc} + u_time * ${sp}) * ${amp};\n`,

@@ -208,6 +208,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
   const isSelected         = selectedNodeId === node.id;
+
+  // Multi-select
+  const selectNode         = useNodeGraphStore(s => s.selectNode);
+  const selectedNodeIds    = useNodeGraphStore(s => s.selectedNodeIds);
+  const isMultiSelected    = selectedNodeIds.includes(node.id);
+  const groupNodes         = useNodeGraphStore(s => s.groupNodes);
+  const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
   // currentTime is only needed for the Time node live badge — subscribed below conditionally
   const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
 
@@ -233,6 +240,142 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
 
   if (!def) return null;
+
+  // ── Group node special card ──────────────────────────────────────────────────
+  if (node.type === 'group') {
+    const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+    const groupLabel = typeof node.params.label === 'string' ? node.params.label : 'Group';
+    const nodeCount = subgraph?.nodes.length ?? 0;
+    const inputPorts = subgraph?.inputPorts ?? [];
+    const outputPorts = subgraph?.outputPorts ?? [];
+
+    const handleGroupHeaderMouseDown = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      dragOffset.current = {
+        x: e.clientX / zoom - node.position.x,
+        y: e.clientY / zoom - node.position.y,
+      };
+      let hasDragged = false;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      document.body.style.userSelect = 'none';
+      const handleMove = (ev: MouseEvent) => {
+        if (!dragOffset.current) return;
+        if (!hasDragged && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) hasDragged = true;
+        updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
+      };
+      const handleUp = () => {
+        dragOffset.current = null;
+        document.body.style.userSelect = '';
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleUp);
+        if (!hasDragged) {
+          if (e.metaKey || e.ctrlKey) selectNode(node.id, true);
+          else { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }
+        }
+      };
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleUp);
+    };
+
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          left: node.position.x,
+          top: node.position.y,
+          background: '#1e1e2e',
+          border: isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '2px dashed #585b70',
+          borderRadius: '8px',
+          minWidth: '200px',
+          color: '#cdd6f4',
+          fontSize: '12px',
+          userSelect: 'none',
+          opacity: dimmed ? 0.2 : 1,
+          boxShadow: isMultiSelected ? '0 0 12px #cba6f755, 0 4px 12px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Group header */}
+        <div
+          onMouseDown={handleGroupHeaderMouseDown}
+          style={{
+            background: '#313244',
+            borderRadius: '6px 6px 0 0',
+            padding: '6px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'grab',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '14px' }}>⬡</span>
+            <span style={{ fontWeight: 600, color: '#cba6f7' }}>{groupLabel}</span>
+            <span style={{ fontSize: '10px', color: '#585b70' }}>({nodeCount} node{nodeCount !== 1 ? 's' : ''})</span>
+          </div>
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => ungroupNode(node.id)}
+            title="Dissolve group"
+            style={{
+              background: 'none',
+              border: '1px solid #585b70',
+              color: '#a6adc8',
+              borderRadius: '3px',
+              padding: '1px 5px',
+              fontSize: '10px',
+              cursor: 'pointer',
+            }}
+          >
+            Ungroup
+          </button>
+        </div>
+
+        {/* Port list */}
+        <div style={{ padding: '6px 10px', display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
+          {/* Inputs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {inputPorts.map((port, i) => (
+              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {/* Socket dot */}
+                <div
+                  ref={el => { if (el) registerSocket(el, node.id, port.key, 'input'); }}
+                  onMouseUp={() => onEndConnection(node.id, port.key)}
+                  style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: TYPE_COLORS[port.type] ?? '#888',
+                    cursor: 'crosshair',
+                    position: 'relative', left: -14,
+                  }}
+                />
+                <span style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14 }}>{port.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Outputs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+            {outputPorts.map(port => (
+              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{port.label}</span>
+                <div
+                  ref={el => { if (el) registerSocket(el, node.id, port.key, 'output'); }}
+                  onMouseDown={e => onStartConnection(node.id, port.key, e)}
+                  style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: TYPE_COLORS[port.type] ?? '#888',
+                    cursor: 'crosshair',
+                    position: 'relative', right: -14,
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -273,9 +416,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('selectstart', suppressSelect);
-      // If mouse didn't move, treat as a click — toggle selection
+      // If mouse didn't move, treat as a click — update selection
       if (!hasDragged) {
-        setSelectedNodeId(isSelected ? null : node.id);
+        if (e.metaKey || e.ctrlKey) {
+          // Cmd/Ctrl+click: toggle this node in the multi-selection
+          selectNode(node.id, true);
+        } else {
+          // Plain click: single-select for probe panel
+          setSelectedNodeId(isSelected ? null : node.id);
+          selectNode(node.id, false);
+        }
       }
     };
 
@@ -379,7 +529,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         left: node.position.x,
         top: node.position.y,
         background: '#1e1e2e',
-        border: isBypassed ? '1px solid #f9e2af55' : isPreviewActive ? '1px solid #a6e3a1' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
+        border: isBypassed ? '1px solid #f9e2af55' : isPreviewActive ? '1px solid #a6e3a1' : isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
         borderRadius: '8px',
         minWidth: '240px',
         color: '#cdd6f4',
@@ -389,6 +539,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         transition: 'opacity 0.2s ease',
         boxShadow: isPreviewActive
           ? '0 0 14px #a6e3a133, 0 4px 12px rgba(0,0,0,0.4)'
+          : isMultiSelected
+          ? '0 0 12px #cba6f755, 0 4px 12px rgba(0,0,0,0.4)'
           : isSelected
           ? '0 0 10px #89b4fa33, 0 4px 12px rgba(0,0,0,0.4)'
           : '0 4px 12px rgba(0,0,0,0.4)',

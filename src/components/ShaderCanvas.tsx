@@ -70,6 +70,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
 
   const vertexShader       = useNodeGraphStore((state) => state.vertexShader);
   const fragmentShader     = useNodeGraphStore((state) => state.fragmentShader);
+  const paramUniforms      = useNodeGraphStore((state) => state.paramUniforms);
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
@@ -390,14 +391,38 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     return unsub;
   }, []);
 
-  // Update shader when compiled output changes — flush old errors first
+  // Update shader when compiled output changes — flush old errors first.
+  // Also registers all param uniforms so THREE knows about them from the start.
   useEffect(() => {
     if (!materialRef.current || !vertexShader || !fragmentShader) return;
-    setGlslErrors([]); // clear stale errors before recompile
+    setGlslErrors([]);
     materialRef.current.vertexShader = vertexShader;
     materialRef.current.fragmentShader = fragmentShader;
-    materialRef.current.needsUpdate = true;
-  }, [vertexShader, fragmentShader]);
+    // Register param uniforms on the material (initial values from compilation)
+    const mat = materialRef.current;
+    for (const [name, value] of Object.entries(paramUniforms)) {
+      if (mat.uniforms[name]) {
+        mat.uniforms[name].value = value;
+      } else {
+        mat.uniforms[name] = { value };
+      }
+    }
+    mat.needsUpdate = true;
+  }, [vertexShader, fragmentShader]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hot-update param uniform values without recompiling — runs only when paramUniforms
+  // changes but fragmentShader has NOT changed (slider fast-path).
+  useEffect(() => {
+    const mat = materialRef.current;
+    if (!mat) return;
+    for (const [name, value] of Object.entries(paramUniforms)) {
+      if (mat.uniforms[name]) {
+        mat.uniforms[name].value = value;
+      }
+      // If the uniform isn't registered yet (e.g. shader just compiled), ignore —
+      // the fragmentShader effect above handles registration.
+    }
+  }, [paramUniforms]);
 
   return (
     <div

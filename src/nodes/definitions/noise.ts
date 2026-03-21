@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, vec3Str } from './helpers';
+import { f, p, vec3Str } from './helpers';
 
 // ─── Shared GLSL helpers ──────────────────────────────────────────────────────
 
@@ -66,11 +66,11 @@ export const FBMNode: NodeDefinition = {
     const id         = node.id;
     const uvVar      = inputVars.uv         ?? 'vec2(0.0)';
     const timeVar    = inputVars.time       ?? '0.0';
-    const scale      = inputVars.scale      ?? f(typeof node.params.scale      === 'number' ? node.params.scale      : 1.0);
-    const timeScale  = inputVars.time_scale ?? f(typeof node.params.time_scale === 'number' ? node.params.time_scale : 0.0);
+    const scale      = inputVars.scale      ?? p(node.params.scale, 1.0);
+    const timeScale  = inputVars.time_scale ?? p(node.params.time_scale, 0.0);
     const octaves    = Math.round(typeof node.params.octaves    === 'number' ? node.params.octaves    : 4);
-    const lacunarity = f(typeof node.params.lacunarity === 'number' ? node.params.lacunarity : 2.0);
-    const gain       = f(typeof node.params.gain       === 'number' ? node.params.gain       : 0.5);
+    const lacunarity = p(node.params.lacunarity, 2.0);
+    const gain       = p(node.params.gain, 0.5);
     const outVar     = `${id}_value`;
     // Animated UV: shift by time in a diagonal direction
     const animUV = parseFloat(timeScale) === 0.0
@@ -131,9 +131,9 @@ export const VoronoiNode: NodeDefinition = {
     const id        = node.id;
     const uvVar     = inputVars.uv         ?? 'vec2(0.0)';
     const timeVar   = inputVars.time       ?? '0.0';
-    const scale     = inputVars.scale      ?? f(typeof node.params.scale      === 'number' ? node.params.scale      : 5.0);
-    const jitter    = inputVars.jitter     ?? f(typeof node.params.jitter     === 'number' ? node.params.jitter     : 1.0);
-    const timeScale = inputVars.time_scale ?? f(typeof node.params.time_scale === 'number' ? node.params.time_scale : 0.0);
+    const scale     = inputVars.scale      ?? p(node.params.scale, 5.0);
+    const jitter    = inputVars.jitter     ?? p(node.params.jitter, 1.0);
+    const timeScale = inputVars.time_scale ?? p(node.params.time_scale, 0.0);
     const outVar    = `${id}_dist`;
     const animUV = parseFloat(timeScale) === 0.0
       ? `${uvVar} * ${scale}`
@@ -197,12 +197,12 @@ export const DomainWarpNode: NodeDefinition = {
     const id        = node.id;
     const uvVar     = inputVars.uv         ?? 'vec2(0.0)';
     const timeVar   = inputVars.time       ?? '0.0';
-    const strength  = inputVars.strength   ?? f(typeof node.params.strength   === 'number' ? node.params.strength   : 0.5);
-    const scale     = inputVars.scale      ?? f(typeof node.params.scale      === 'number' ? node.params.scale      : 1.0);
-    const timeScale = inputVars.time_scale ?? f(typeof node.params.time_scale === 'number' ? node.params.time_scale : 0.0);
+    const strength  = inputVars.strength   ?? p(node.params.strength, 0.5);
+    const scale     = inputVars.scale      ?? p(node.params.scale, 1.0);
+    const timeScale = inputVars.time_scale ?? p(node.params.time_scale, 0.0);
     const octaves   = Math.round(typeof node.params.octaves    === 'number' ? node.params.octaves    : 3);
-    const lacunarity= f(typeof node.params.lacunarity === 'number' ? node.params.lacunarity : 2.0);
-    const gain      = f(typeof node.params.gain       === 'number' ? node.params.gain       : 0.5);
+    const lacunarity= p(node.params.lacunarity, 2.0);
+    const gain      = p(node.params.gain, 0.5);
     const warpedVar  = `${id}_uv`;
     const offsetVar  = `${id}_offset`;
     const animUV = parseFloat(timeScale) === 0.0
@@ -327,15 +327,15 @@ export const FlowFieldNode: NodeDefinition = {
     const timeVar    = inputVars.time ?? '0.0';
     const curves     = Math.round(typeof node.params.curves     === 'number' ? node.params.curves     : 60);
     const steps      = Math.round(typeof node.params.steps      === 'number' ? node.params.steps      : 24);
-    const stepSize   = f(typeof node.params.step_size   === 'number' ? node.params.step_size   : 0.04);
-    const noiseScale = f(typeof node.params.noise_scale === 'number' ? node.params.noise_scale : 1.8);
-    const speed      = f(typeof node.params.speed       === 'number' ? node.params.speed       : 0.15);
-    const lineWidth  = f(typeof node.params.line_width  === 'number' ? node.params.line_width  : 0.006);
-    const lineSoft   = f(typeof node.params.line_softness === 'number' ? node.params.line_softness : 1.5);
+    const stepSize   = p(node.params.step_size, 0.04);
+    const noiseScale = p(node.params.noise_scale, 1.8);
+    const speed      = p(node.params.speed, 0.15);
+    const lineWidth  = p(node.params.line_width, 0.006);
+    const lineSoft   = p(node.params.line_softness, 1.5);
     const fieldMode  = typeof node.params.field_mode === 'string' ? node.params.field_mode : 'perlin';
     const quantN     = Math.max(typeof node.params.quant_steps === 'number' ? node.params.quant_steps : 10, 2);
     const quantAngle = f(Math.PI / quantN);
-    const palOff     = f(typeof node.params.palette_offset === 'number' ? node.params.palette_offset : 0.0);
+    const palOff     = p(node.params.palette_offset, 0.0);
     const pA = Array.isArray(node.params.palette_a) ? node.params.palette_a as number[] : [0.5,0.5,0.5];
     const pB = Array.isArray(node.params.palette_b) ? node.params.palette_b as number[] : [0.5,0.5,0.5];
     const pC = Array.isArray(node.params.palette_c) ? node.params.palette_c as number[] : [1.0,1.0,1.0];
@@ -461,13 +461,13 @@ export const CirclePackNode: NodeDefinition = {
     const uvVar      = inputVars.uv   ?? 'vec2(0.0)';
     const timeVar    = inputVars.time ?? '0.0';
     const circles    = Math.round(typeof node.params.circles    === 'number' ? node.params.circles    : 80);
-    const minR       = f(typeof node.params.min_radius  === 'number' ? node.params.min_radius  : 0.03);
-    const maxR       = f(typeof node.params.max_radius  === 'number' ? node.params.max_radius  : 0.15);
-    const padding    = f(typeof node.params.padding     === 'number' ? node.params.padding     : 0.01);
+    const minR       = p(node.params.min_radius, 0.03);
+    const maxR       = p(node.params.max_radius, 0.15);
+    const padding    = p(node.params.padding, 0.01);
     const circMode   = typeof node.params.circle_mode === 'string' ? node.params.circle_mode : 'gradient';
-    const edgeSoft   = f(typeof node.params.edge_softness === 'number' ? node.params.edge_softness : 1.0);
-    const animate    = f(typeof node.params.animate     === 'number' ? node.params.animate     : 0.0);
-    const palOff     = f(typeof node.params.palette_offset === 'number' ? node.params.palette_offset : 0.0);
+    const edgeSoft   = p(node.params.edge_softness, 1.0);
+    const animate    = p(node.params.animate, 0.0);
+    const palOff     = p(node.params.palette_offset, 0.0);
     const pA = Array.isArray(node.params.palette_a) ? node.params.palette_a as number[] : [0.5,0.5,0.5];
     const pB = Array.isArray(node.params.palette_b) ? node.params.palette_b as number[] : [0.5,0.5,0.5];
     const pC = Array.isArray(node.params.palette_c) ? node.params.palette_c as number[] : [1.0,1.0,1.0];

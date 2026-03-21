@@ -8,6 +8,7 @@ import { LearnPage } from './components/LearnPage';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ShortcutsPage } from './components/ShortcutsPage';
+import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useNodeGraphStore, EXAMPLE_GRAPHS } from './store/useNodeGraphStore';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
@@ -48,6 +49,7 @@ function App() {
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
     addNode, setNodeHighlightFilter, _fitViewCallback, undo,
     nodeProbeValues, selectedNodeId, nodes: graphNodes,
+    selectedNodeIds, groupNodes, deselectAll,
   } = useNodeGraphStore();
 
   // Build probe display for selected node — shown in status bar instead of "hover for color"
@@ -92,6 +94,8 @@ function App() {
   const [showExport, setShowExport]           = useState(false);
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
+  // Node search palette
+  const [showSearchPalette, setShowSearchPalette] = useState(false);
   const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const offlineRenderRef = useRef<OfflineRenderHandle | null>(null);
   const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
@@ -114,7 +118,11 @@ function App() {
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
-    addNode:        () => {/* palette open handled in NodeGraph via store */},
+    addNode:        () => setShowSearchPalette(true),
+    groupSelected:  () => {
+      const ids = useNodeGraphStore.getState().selectedNodeIds;
+      if (ids.length >= 2) { groupNodes(ids); deselectAll(); }
+    },
     addUV:          () => addRandomNode('uv'),
     addTime:        () => addRandomNode('time'),
     addFloat:       () => addRandomNode('float'),
@@ -128,7 +136,7 @@ function App() {
     filterUVInputs: () => setNodeHighlightFilter('uv-in'),
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
-  }), [undo, addRandomNode, exportGraph, importGraphFromFile, _fitViewCallback, setNodeHighlightFilter]);
+  }), [undo, addRandomNode, exportGraph, importGraphFromFile, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
   const holdHandlers = useMemo(() => ({
@@ -445,6 +453,7 @@ function App() {
           <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
         )}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <NodeSearchPalette open={showSearchPalette} onClose={() => setShowSearchPalette(false)} />
       </div>
     );
   }
@@ -575,6 +584,7 @@ function App() {
         </div>
         {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <NodeSearchPalette open={showSearchPalette} onClose={() => setShowSearchPalette(false)} />
       </div>
   );
   }
@@ -682,6 +692,7 @@ function App() {
         <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      <NodeSearchPalette open={showSearchPalette} onClose={() => setShowSearchPalette(false)} />
     </div>
   );
 }

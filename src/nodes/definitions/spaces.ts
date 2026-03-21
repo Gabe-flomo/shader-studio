@@ -6,7 +6,7 @@
  * automatically lives in the new geometry.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -34,8 +34,8 @@ export const PolarSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
     const inVar  = inputVars.input       || 'vec2(0.0)';
-    const twist  = inputVars.twist       || f(typeof node.params.twist       === 'number' ? node.params.twist       : 0.0);
-    const rscale = inputVars.radialScale || f(typeof node.params.radialScale === 'number' ? node.params.radialScale : 1.0);
+    const twist  = inputVars.twist       || p(node.params.twist, 0.0);
+    const rscale = inputVars.radialScale || p(node.params.radialScale, 1.0);
     return {
       code: [
         `    float ${id}_r = length(${inVar}) * ${rscale};\n`,
@@ -78,7 +78,7 @@ export const LogPolarSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const inVar = inputVars.input || 'vec2(0.0)';
-    const scale = inputVars.scale || f(typeof node.params.scale === 'number' ? node.params.scale : 1.0);
+    const scale = inputVars.scale || p(node.params.scale, 1.0);
     return {
       code: [
         `    float ${id}_r = length(${inVar});\n`,
@@ -121,7 +121,7 @@ vec2 hyperbolicSpace(vec2 p, float k) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
     const inVar     = inputVars.input     || 'vec2(0.0)';
-    const curvature = inputVars.curvature || f(typeof node.params.curvature === 'number' ? node.params.curvature : 0.7);
+    const curvature = inputVars.curvature || p(node.params.curvature, 0.7);
     return {
       code: `    vec2 ${id}_output = hyperbolicSpace(${inVar}, ${curvature});\n`,
       outputVars: { output: `${id}_output` },
@@ -150,7 +150,7 @@ export const InversionSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
     const inVar  = inputVars.input  || 'vec2(0.0)';
-    const radius = inputVars.radius || f(typeof node.params.radius === 'number' ? node.params.radius : 1.0);
+    const radius = inputVars.radius || p(node.params.radius, 1.0);
     return {
       code: [
         `    float ${id}_d2 = dot(${inVar}, ${inVar});\n`,
@@ -198,9 +198,9 @@ vec2 mobiusSpace(vec2 z, vec2 pole, float ang) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const inVar = inputVars.input || 'vec2(0.0)';
-    const px    = inputVars.poleX || f(typeof node.params.poleX === 'number' ? node.params.poleX : 0.5);
-    const py    = inputVars.poleY || f(typeof node.params.poleY === 'number' ? node.params.poleY : 0.0);
-    const ang   = inputVars.angle || f(typeof node.params.angle === 'number' ? node.params.angle : 0.0);
+    const px    = inputVars.poleX || p(node.params.poleX, 0.5);
+    const py    = inputVars.poleY || p(node.params.poleY, 0.0);
+    const ang   = inputVars.angle || p(node.params.angle, 0.0);
     return {
       code: `    vec2 ${id}_output = mobiusSpace(${inVar}, vec2(${px}, ${py}), ${ang});\n`,
       outputVars: { output: `${id}_output` },
@@ -231,8 +231,8 @@ export const SwirlSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
     const inVar    = inputVars.input    || 'vec2(0.0)';
-    const strength = inputVars.strength || f(typeof node.params.strength === 'number' ? node.params.strength : 2.0);
-    const falloff  = inputVars.falloff  || f(typeof node.params.falloff  === 'number' ? node.params.falloff  : 1.0);
+    const strength = inputVars.strength || p(node.params.strength, 2.0);
+    const falloff  = inputVars.falloff  || p(node.params.falloff, 1.0);
     return {
       code: [
         `    float ${id}_r  = length(${inVar});\n`,
@@ -269,8 +269,8 @@ export const KaleidoSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
     const inVar  = inputVars.input    || 'vec2(0.0)';
-    const segs   = inputVars.segments || f(typeof node.params.segments === 'number' ? node.params.segments : 6.0);
-    const rot    = inputVars.rotate   || f(typeof node.params.rotate   === 'number' ? node.params.rotate   : 0.0);
+    const segs   = inputVars.segments || p(node.params.segments, 6.0);
+    const rot    = inputVars.rotate   || p(node.params.rotate, 0.0);
     return {
       code: [
         `    float ${id}_a  = atan(${inVar}.y, ${inVar}.x) + ${rot};\n`,
@@ -305,7 +305,7 @@ export const SphericalSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
     const inVar    = inputVars.input    || 'vec2(0.0)';
-    const strength = inputVars.strength || f(typeof node.params.strength === 'number' ? node.params.strength : 0.5);
+    const strength = inputVars.strength || p(node.params.strength, 0.5);
     return {
       code: [
         `    float ${id}_r = length(${inVar});\n`,
@@ -348,10 +348,10 @@ export const RippleSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const inVar = inputVars.input || 'vec2(0.0)';
-    const fX    = inputVars.freqX || f(typeof node.params.freqX === 'number' ? node.params.freqX : 5.0);
-    const fY    = inputVars.freqY || f(typeof node.params.freqY === 'number' ? node.params.freqY : 5.0);
-    const aX    = inputVars.ampX  || f(typeof node.params.ampX  === 'number' ? node.params.ampX  : 0.1);
-    const aY    = inputVars.ampY  || f(typeof node.params.ampY  === 'number' ? node.params.ampY  : 0.1);
+    const fX    = inputVars.freqX || p(node.params.freqX, 5.0);
+    const fY    = inputVars.freqY || p(node.params.freqY, 5.0);
+    const aX    = inputVars.ampX  || p(node.params.ampX, 0.1);
+    const aY    = inputVars.ampY  || p(node.params.ampY, 0.1);
     const t     = inputVars.time  || '0.0';
     return {
       code: [
@@ -388,8 +388,8 @@ export const InfiniteRepeatSpaceNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const inVar = inputVars.input || 'vec2(0.0)';
-    const cX    = inputVars.cellX || f(typeof node.params.cellX === 'number' ? node.params.cellX : 1.0);
-    const cY    = inputVars.cellY || f(typeof node.params.cellY === 'number' ? node.params.cellY : 1.0);
+    const cX    = inputVars.cellX || p(node.params.cellX, 1.0);
+    const cY    = inputVars.cellY || p(node.params.cellY, 1.0);
     const cell  = `vec2(${cX}, ${cY})`;
     return {
       code: [
