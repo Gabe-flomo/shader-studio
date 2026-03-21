@@ -39,6 +39,8 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'addOutput',         label: 'Add Output node',       group: 'Add Nodes',  defaultCombo: 'o',           description: 'Instantly add an Output node' },
   { id: 'addMix',            label: 'Add Mix node',          group: 'Add Nodes',  defaultCombo: 'm',           description: 'Instantly add a Mix node' },
   { id: 'addColor',          label: 'Add Color node',        group: 'Add Nodes',  defaultCombo: 'c',           description: 'Instantly add a Color constant node' },
+  // Node graph — group / multi-select
+  { id: 'groupSelected',     label: 'Group selected nodes',  group: 'Graph',      defaultCombo: 'cmd+g',       description: 'Collapse selected nodes into a group' },
   // Node graph — select/filter/highlight
   { id: 'selectAll',         label: 'Show all nodes',        group: 'Filter',     defaultCombo: 'cmd+a',       description: 'Clear filter — show all nodes normally' },
   { id: 'filterFloat',       label: 'Highlight float nodes', group: 'Filter',     defaultCombo: '1',           description: 'Hold to highlight nodes that output float' },

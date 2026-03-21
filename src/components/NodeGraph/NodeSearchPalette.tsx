@@ -1,0 +1,373 @@
+/**
+ * NodeSearchPalette — floating fuzzy-search popup for adding nodes.
+ *
+ * Opens on the 'a' shortcut (or via setSearchPaletteOpen from store).
+ * Type to fuzzy-filter node types, arrow keys to navigate, Enter/click to place.
+ * Escape closes without placing.
+ */
+
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { NODE_REGISTRY } from '../../nodes/definitions';
+import type { NodeDefinition } from '../../types/nodeGraph';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+
+// ── Category accent colours (matches NodePalette) ─────────────────────────────
+const CATEGORY_COLORS: Record<string, string> = {
+  Sources:         '#89b4fa',
+  Transforms:      '#a6e3a1',
+  Math:            '#b4befe',
+  Color:           '#fab387',
+  Noise:           '#74c7ec',
+  Effects:         '#f38ba8',
+  Loops:           '#89dceb',
+  '2D Primitives': '#f9e2af',
+  SDF:             '#f5c2e7',
+  Combiners:       '#cba6f7',
+  Spaces:          '#f2cdcd',
+  Science:         '#94e2d5',
+  Presets:         '#f9e2af',
+  Output:          '#94e2d5',
+};
+
+// ── Types to hide from the palette (internal / special) ───────────────────────
+const HIDDEN_TYPES = new Set(['group', 'loopStart', 'loopEnd']);
+
+// ── Build searchable list once ─────────────────────────────────────────────────
+interface SearchEntry {
+  type: string;
+  def: NodeDefinition;
+  searchKey: string; // label + type + category + description, lowercased
+}
+
+const ALL_ENTRIES: SearchEntry[] = Object.entries(NODE_REGISTRY)
+  .filter(([type]) => !HIDDEN_TYPES.has(type))
+  .map(([type, def]) => ({
+    type,
+    def,
+    searchKey: [def.label, type, def.category, def.description ?? ''].join(' ').toLowerCase(),
+  }));
+
+// ── Simple fuzzy scorer ────────────────────────────────────────────────────────
+function scoreEntry(entry: SearchEntry, query: string): number {
+  if (!query) return 1;
+  const q = query.toLowerCase();
+  const { searchKey, def } = entry;
+  // Exact label prefix → highest score
+  if (def.label.toLowerCase().startsWith(q)) return 100;
+  // Label contains query
+  if (def.label.toLowerCase().includes(q)) return 80;
+  // Type contains query
+  if (entry.type.toLowerCase().includes(q)) return 60;
+  // Category matches
+  if (def.category.toLowerCase().includes(q)) return 40;
+  // All chars present in order (fuzzy)
+  let idx = 0;
+  for (const ch of q) {
+    const found = searchKey.indexOf(ch, idx);
+    if (found === -1) return 0;
+    idx = found + 1;
+  }
+  return 20;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  /** Where to place the node — centre of the current viewport if not provided */
+  spawnPosition?: { x: number; y: number };
+}
+
+export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
+  const { addNode } = useNodeGraphStore();
+
+  const [query, setQuery]       = useState('');
+  const [activeIdx, setActiveIdx] = useState(0);
+  const inputRef  = useRef<HTMLInputElement>(null);
+  const listRef   = useRef<HTMLUListElement>(null);
+
+  // Filtered + ranked results
+  const results = useMemo<SearchEntry[]>(() => {
+    if (!query) return ALL_ENTRIES.slice(0, 80); // show all (scrollable)
+    return ALL_ENTRIES
+      .map(e => ({ entry: e, score: scoreEntry(e, query) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.entry.def.label.localeCompare(b.entry.def.label))
+      .map(({ entry }) => entry);
+  }, [query]);
+
+  // Group results by category
+  const grouped = useMemo(() => {
+    const map = new Map<string, SearchEntry[]>();
+    for (const e of results) {
+      const arr = map.get(e.def.category) ?? [];
+      arr.push(e);
+      map.set(e.def.category, arr);
+    }
+    return map;
+  }, [results]);
+
+  // Flat list for keyboard navigation (same order as rendered)
+  const flatList = useMemo(() => results, [results]);
+
+  // Reset on open
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      setActiveIdx(0);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [open]);
+
+  // Clamp activeIdx when results change
+  useEffect(() => {
+    setActiveIdx(i => Math.min(i, Math.max(0, flatList.length - 1)));
+  }, [flatList]);
+
+  // Scroll active item into view
+  useEffect(() => {
+    const item = listRef.current?.querySelector<HTMLLIElement>('[data-active="true"]');
+    item?.scrollIntoView({ block: 'nearest' });
+  }, [activeIdx]);
+
+  const place = useCallback((type: string) => {
+    const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
+    addNode(type, pos);
+    onClose();
+  }, [addNode, spawnPosition, onClose]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') { onClose(); return; }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, flatList.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const entry = flatList[activeIdx];
+      if (entry) place(entry.type);
+    }
+  }, [flatList, activeIdx, onClose, place]);
+
+  if (!open) return null;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 900,
+        }}
+      />
+
+      {/* Palette panel */}
+      <div
+        style={{
+          position: 'fixed',
+          top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 901,
+          width: '420px',
+          maxWidth: 'calc(100vw - 32px)',
+          background: '#1e1e2e',
+          border: '1px solid #45475a',
+          borderRadius: '12px',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          maxHeight: 'min(600px, 80vh)',
+        }}
+      >
+        {/* Search input */}
+        <div style={{
+          padding: '12px 14px',
+          borderBottom: '1px solid #313244',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}>
+          <span style={{ color: '#585b70', fontSize: '15px' }}>🔍</span>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => { setQuery(e.target.value); setActiveIdx(0); }}
+            onKeyDown={handleKeyDown}
+            placeholder="Search nodes…"
+            spellCheck={false}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: '#cdd6f4',
+              fontSize: '14px',
+              fontFamily: 'inherit',
+            }}
+          />
+          <span style={{ fontSize: '11px', color: '#45475a', whiteSpace: 'nowrap' }}>
+            {flatList.length} node{flatList.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {/* Results list */}
+        <ul
+          ref={listRef}
+          style={{
+            margin: 0,
+            padding: '6px 0',
+            listStyle: 'none',
+            overflowY: 'auto',
+            flex: 1,
+          }}
+        >
+          {flatList.length === 0 && (
+            <li style={{ padding: '24px 16px', textAlign: 'center', color: '#585b70', fontSize: '13px' }}>
+              No nodes match "{query}"
+            </li>
+          )}
+          {query
+            // Flat list when searching
+            ? flatList.map((entry, idx) => (
+                <NodeRow
+                  key={entry.type}
+                  entry={entry}
+                  active={idx === activeIdx}
+                  onHover={() => setActiveIdx(idx)}
+                  onSelect={() => place(entry.type)}
+                />
+              ))
+            // Grouped list when browsing
+            : Array.from(grouped.entries()).map(([category, entries]) => (
+                <li key={category}>
+                  <div style={{
+                    padding: '6px 14px 2px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: CATEGORY_COLORS[category] ?? '#585b70',
+                  }}>
+                    {category}
+                  </div>
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                    {entries.map(entry => {
+                      const idx = flatList.indexOf(entry);
+                      return (
+                        <NodeRow
+                          key={entry.type}
+                          entry={entry}
+                          active={idx === activeIdx}
+                          onHover={() => setActiveIdx(idx)}
+                          onSelect={() => place(entry.type)}
+                        />
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))
+          }
+        </ul>
+
+        {/* Footer hint */}
+        <div style={{
+          padding: '7px 14px',
+          borderTop: '1px solid #313244',
+          display: 'flex',
+          gap: '14px',
+          fontSize: '10px',
+          color: '#45475a',
+        }}>
+          <span><kbd style={kbdStyle}>↑↓</kbd> navigate</span>
+          <span><kbd style={kbdStyle}>↵</kbd> place</span>
+          <span><kbd style={kbdStyle}>Esc</kbd> close</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Row subcomponent ───────────────────────────────────────────────────────────
+
+interface RowProps {
+  entry: SearchEntry;
+  active: boolean;
+  onHover: () => void;
+  onSelect: () => void;
+}
+
+function NodeRow({ entry, active, onHover, onSelect }: RowProps) {
+  const accent = CATEGORY_COLORS[entry.def.category] ?? '#585b70';
+  return (
+    <li
+      data-active={active ? 'true' : undefined}
+      onMouseEnter={onHover}
+      onClick={onSelect}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        padding: '5px 14px',
+        cursor: 'pointer',
+        background: active ? '#313244' : 'transparent',
+        transition: 'background 0.08s',
+      }}
+    >
+      {/* Colour dot */}
+      <span style={{
+        width: '8px', height: '8px',
+        borderRadius: '50%',
+        background: accent,
+        flexShrink: 0,
+        boxShadow: active ? `0 0 6px ${accent}88` : 'none',
+      }} />
+
+      {/* Label + description */}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: '13px', color: '#cdd6f4' }}>{entry.def.label}</span>
+        {entry.def.description && (
+          <span style={{
+            fontSize: '11px',
+            color: '#585b70',
+            marginLeft: '8px',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          }}>
+            {entry.def.description}
+          </span>
+        )}
+      </span>
+
+      {/* Category tag */}
+      <span style={{
+        fontSize: '10px',
+        color: accent,
+        opacity: 0.7,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}>
+        {entry.def.category}
+      </span>
+    </li>
+  );
+}
+
+// ── Keyboard hint style ────────────────────────────────────────────────────────
+
+const kbdStyle: React.CSSProperties = {
+  display: 'inline-block',
+  background: '#313244',
+  border: '1px solid #45475a',
+  borderRadius: '4px',
+  padding: '1px 5px',
+  fontSize: '10px',
+  fontFamily: 'inherit',
+  color: '#cdd6f4',
+  marginRight: '3px',
+};

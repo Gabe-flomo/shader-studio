@@ -71,6 +71,58 @@ export interface NodeDefinition {
 
   // Editable param metadata — drives inline UI controls on the node card
   paramDefs?: Record<string, ParamDef>;
+
+  /**
+   * Schema version for this node definition.  Increment whenever the shape of
+   * `defaultParams` / `paramDefs` changes in a way that could break saved graphs
+   * (e.g. a param is renamed, removed, or its semantics change).
+   * Omit or set to 1 for the initial version.
+   */
+  version?: number;
+
+  /**
+   * Migrate a node's params from an older schema version to the current one.
+   * Called by the store when loading a saved graph whose node's `_schemaVersion`
+   * is less than `version`.
+   *
+   * @param params      - The raw params from the saved graph
+   * @param fromVersion - The schema version stored with the saved node (0 if absent)
+   * @returns The migrated params (may be the same object mutated in-place)
+   */
+  migrateParams?: (
+    params: Record<string, unknown>,
+    fromVersion: number,
+  ) => Record<string, unknown>;
+}
+
+// ── Helper: run migrations on a node's params ─────────────────────────────────
+
+/**
+ * Given a loaded graph node, look up its definition and run `migrateParams`
+ * if the node's saved schema version is behind the current definition version.
+ * Returns the node with updated params and `_schemaVersion` stamped.
+ */
+export function migrateNodeParams(
+  node: GraphNode,
+  getDef: (type: string) => NodeDefinition | undefined,
+): GraphNode {
+  const def = getDef(node.type);
+  if (!def) return node;
+
+  const currentVersion  = def.version ?? 1;
+  const savedVersion    = (node.params._schemaVersion as number | undefined) ?? 0;
+
+  if (!def.migrateParams || savedVersion >= currentVersion) {
+    // Stamp the current version so it's always present in saved graphs
+    if (savedVersion !== currentVersion) {
+      return { ...node, params: { ...node.params, _schemaVersion: currentVersion } };
+    }
+    return node;
+  }
+
+  const migratedParams = def.migrateParams({ ...node.params }, savedVersion);
+  migratedParams._schemaVersion = currentVersion;
+  return { ...node, params: migratedParams };
 }
 
 // The entire graph
