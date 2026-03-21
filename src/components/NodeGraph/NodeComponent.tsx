@@ -213,7 +213,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const selectNode         = useNodeGraphStore(s => s.selectNode);
   const selectedNodeIds    = useNodeGraphStore(s => s.selectedNodeIds);
   const isMultiSelected    = selectedNodeIds.includes(node.id);
-  const groupNodes         = useNodeGraphStore(s => s.groupNodes);
   const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
   // currentTime is only needed for the Time node live badge — subscribed below conditionally
   const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
@@ -336,11 +335,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         <div style={{ padding: '6px 10px', display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
           {/* Inputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {inputPorts.map((port, i) => (
+            {inputPorts.map(port => (
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* Socket dot */}
                 <div
-                  ref={el => { if (el) registerSocket(el, node.id, port.key, 'input'); }}
+                  ref={el => registerSocket(node.id, 'in', port.key, el)}
                   onMouseUp={() => onEndConnection(node.id, port.key)}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',
@@ -360,7 +359,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '10px', color: '#a6adc8' }}>{port.label}</span>
                 <div
-                  ref={el => { if (el) registerSocket(el, node.id, port.key, 'output'); }}
+                  ref={el => registerSocket(node.id, 'out', port.key, el)}
                   onMouseDown={e => onStartConnection(node.id, port.key, e)}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',

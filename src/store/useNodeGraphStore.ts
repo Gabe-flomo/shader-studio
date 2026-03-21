@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { EXAMPLE_GRAPHS } from './exampleGraphs';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams } from '../types/nodeGraph';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
@@ -833,7 +834,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Backfill any input sockets that exist in the live NodeDefinition but are
     // missing from the serialized graph (handles schema evolution across iterations).
-    const nodes = rawNodes.map(node => {
+    const nodes = rawNodes.map((node: GraphNode) => {
       const def = getNodeDefinition(node.type);
       if (!def) return node;
       const mergedInputs: Record<string, InputSocket> = { ...node.inputs };

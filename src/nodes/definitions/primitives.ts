@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p } from './helpers';
+import { p } from './helpers';
 
 export const CircleSDFNode: NodeDefinition = {
   type: 'circleSDF',
@@ -238,7 +238,7 @@ export const ShapeSDFNode: NodeDefinition = {
   glslFunction: SHAPE_SDF_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_distance`;
-    const p  = inputVars.p  ?? 'vec2(0.0)';
+    const pv  = inputVars.p  ?? 'vec2(0.0)';
     const shape = (node.params.shape as string) ?? 'circle';
 
     const r  = inputVars.r  ?? p(node.params.r, 0.3);
@@ -259,16 +259,16 @@ export const ShapeSDFNode: NodeDefinition = {
 
     let call: string;
     switch (shape) {
-      case 'box':        call = `sdBox(${p}, ${bVec})`;                        break;
-      case 'roundedBox': call = `sdRoundedBox(${p}, ${bVec}, ${rnd})`;         break;
-      case 'segment':    call = `sdSegment(${p}, ${aVec}, ${b2Vec})`;          break;
-      case 'triangle':   call = `sdEquilateralTriangle(${p}, ${r})`;           break;
-      case 'hexagon':    call = `sdHexagon(${p}, ${r})`;                       break;
-      case 'star':       call = `sdStar5(${p}, ${r}, ${rf})`;                  break;
-      case 'pie':        call = `sdPie(${p}, ${cVec}, ${r})`;                  break;
-      case 'ring':       call = `sdRing2(${p}, ${nVec}, ${r}, ${th})`;         break;
-      case 'cross':      call = `sdCross(${p}, ${bVec}, ${rnd})`;              break;
-      default:           call = `sdCircle2(${p}, ${r})`;                       break;
+      case 'box':        call = `sdBox(${pv}, ${bVec})`;                        break;
+      case 'roundedBox': call = `sdRoundedBox(${pv}, ${bVec}, ${rnd})`;         break;
+      case 'segment':    call = `sdSegment(${pv}, ${aVec}, ${b2Vec})`;          break;
+      case 'triangle':   call = `sdEquilateralTriangle(${pv}, ${r})`;           break;
+      case 'hexagon':    call = `sdHexagon(${pv}, ${r})`;                       break;
+      case 'star':       call = `sdStar5(${pv}, ${r}, ${rf})`;                  break;
+      case 'pie':        call = `sdPie(${pv}, ${cVec}, ${r})`;                  break;
+      case 'ring':       call = `sdRing2(${pv}, ${nVec}, ${r}, ${th})`;         break;
+      case 'cross':      call = `sdCross(${pv}, ${bVec}, ${rnd})`;              break;
+      default:           call = `sdCircle2(${pv}, ${r})`;                       break;
     }
 
     return {
@@ -308,7 +308,7 @@ export const SimpleSDFNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_distance`;
-    const p      = inputVars.p ?? 'vec2(0.0)';
+    const pv     = inputVars.p ?? 'vec2(0.0)';
     const shape  = (node.params.shape as string) ?? 'circle';
     const r      = inputVars.r ?? p(node.params.r, 0.3);
     const wx     = p(node.params.wx, 0.3);
@@ -317,9 +317,9 @@ export const SimpleSDFNode: NodeDefinition = {
 
     let call: string;
     switch (shape) {
-      case 'box':  call = `sdBox(${p}, ${bVec})`;          break;
-      case 'ring': call = `abs(length(${p}) - ${r})`;      break;
-      default:     call = `length(${p}) - ${r}`;           break;
+      case 'box':  call = `sdBox(${pv}, ${bVec})`;          break;
+      case 'ring': call = `abs(length(${pv}) - ${r})`;      break;
+      default:     call = `length(${pv}) - ${r}`;           break;
     }
     return {
       code: `    float ${outVar} = ${call};\n`,
