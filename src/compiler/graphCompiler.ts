@@ -1,4 +1,4 @@
-import type { GraphNode, NodeGraph, DataType } from '../types/nodeGraph';
+import type { GraphNode, NodeGraph, DataType, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 
 export interface CompilationResult {
@@ -11,6 +11,12 @@ export interface CompilationResult {
    * Used by ShaderCanvas to probe runtime values via 1-pixel render targets.
    */
   nodeOutputVars: Map<string, Record<string, string>>;
+  /**
+   * Maps uniform name (e.g. "u_p_nodeId_scale") → current numeric value.
+   * These are float params extracted from paramDefs as GPU uniforms so that
+   * slider changes can update them without a full shader recompile.
+   */
+  paramUniforms: Record<string, number>;
 }
 
 /** Returns the set of node IDs that are referenced as loop steps (modal Loop node) —
@@ -94,14 +100,15 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
         success: false,
         errors: validation.errors,
         nodeOutputVars: emptyNodeOutputVars,
+        paramUniforms: {},
       };
     }
 
     // 2. Topological sort (execution order), excluding all loop-internal nodes
     const sortedNodes = topologicalSort(nodes, allInternalIds);
 
-    // 3. Generate GLSL code + capture nodeOutputVars
-    const { fragmentShader, nodeOutputVars } = generateFragmentShader(sortedNodes, nodes, allInternalIds, loopPairChains);
+    // 3. Generate GLSL code + capture nodeOutputVars and paramUniforms
+    const { fragmentShader, nodeOutputVars, paramUniforms } = generateFragmentShader(sortedNodes, nodes, allInternalIds, loopPairChains);
     const vertexShader = VERTEX_SHADER;
 
     return {
@@ -109,6 +116,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       fragmentShader,
       success: true,
       nodeOutputVars,
+      paramUniforms,
     };
   } catch (error) {
     return {
@@ -117,6 +125,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       success: false,
       errors: [error instanceof Error ? error.message : 'Unknown error'],
       nodeOutputVars: emptyNodeOutputVars,
+      paramUniforms: {},
     };
   }
 }
@@ -272,16 +281,49 @@ function defaultGlslVal(type: DataType | string): string {
   return '0.0';
 }
 
+// Nodes whose params must stay as baked compile-time constants (loop unroll counts, etc.)
+const SKIP_UNIFORM_TYPES = new Set(['loopStart', 'loopEnd', 'loop', 'forLoop']);
+
+/**
+ * Patch a node's params so that eligible float paramDef entries become uniform
+ * name strings (e.g. 'u_p_nodeId_scale').  The p() helper in node defs treats
+ * strings as pre-resolved GLSL expressions and passes them through unchanged.
+ *
+ * Returns { patchedNode, uniforms } where uniforms maps name → current value.
+ * Integer-step params and non-float paramDefs are left as baked constants.
+ */
+function patchNodeParamsForUniforms(
+  node: GraphNode,
+  def: import('../types/nodeGraph').NodeDefinition,
+): { patchedNode: GraphNode; uniforms: Record<string, number> } {
+  const uniforms: Record<string, number> = {};
+  if (SKIP_UNIFORM_TYPES.has(node.type) || !def.paramDefs) {
+    return { patchedNode: node, uniforms };
+  }
+  const patchedParams = { ...node.params };
+  for (const [key, paramDef] of Object.entries(def.paramDefs)) {
+    if (paramDef.type !== 'float') continue;           // only scalar floats
+    if (paramDef.step === 1) continue;                  // integer param — keep baked
+    const val = node.params[key];
+    if (typeof val !== 'number') continue;
+    const uniformName = `u_p_${node.id}_${key}`;
+    patchedParams[key] = uniformName;                   // inject uniform name as string
+    uniforms[uniformName] = val;
+  }
+  return { patchedNode: { ...node, params: patchedParams }, uniforms };
+}
+
 function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
   _loopInternalIds: Set<string>,
   loopPairChains: Map<string, string[]> = new Map(),
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>> } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number> } {
   const nodeMap = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
   const functions = new Set<string>();
   const mainCode: string[] = [];
+  const paramUniforms: Record<string, number> = {};
 
   // Track output variables from each node (returned alongside the shader)
   const nodeOutputs = new Map<string, Record<string, string>>();
@@ -607,6 +649,94 @@ function generateFragmentShader(
       continue;
     }
 
+    // ── Group: compile the subgraph inline ────────────────────────────────────
+    if (node.type === 'group') {
+      const subgraph = node.params.subgraph as SubgraphData | undefined;
+      if (!subgraph || subgraph.nodes.length === 0) {
+        nodeOutputs.set(node.id, {});
+        continue;
+      }
+
+      const prefix = `${node.id}_g_`;
+
+      // Map "originalSubNodeId:inputKey" → outer resolved GLSL variable (from inputPorts)
+      const portInputOverrides = new Map<string, string>();
+      for (const port of subgraph.inputPorts) {
+        const outerVar = inputVars[port.key];
+        if (outerVar) portInputOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
+      }
+
+      // Clone subgraph nodes with prefixed IDs, remapping internal connections
+      const prefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => ({
+        ...subNode,
+        id: prefix + subNode.id,
+        inputs: Object.fromEntries(
+          Object.entries(subNode.inputs).map(([k, inp]) => [
+            k,
+            inp.connection
+              ? { ...inp, connection: { nodeId: prefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
+              : inp,
+          ])
+        ),
+      }));
+
+      // Sort and compile subgraph nodes
+      const sortedSub = topologicalSort(prefixedNodes);
+      for (const subNode of sortedSub) {
+        const subDef = getNodeDefinition(subNode.type);
+        if (!subDef) continue;
+        if (subDef.glslFunction) functions.add(subDef.glslFunction);
+
+        // Resolve input vars for this subgraph node
+        const subInputVars: Record<string, string> = {};
+        const originalId = subNode.id.slice(prefix.length);
+        for (const [k, inp] of Object.entries(subNode.inputs)) {
+          const portKey = `${originalId}:${k}`;
+          if (portInputOverrides.has(portKey)) {
+            subInputVars[k] = portInputOverrides.get(portKey)!;
+          } else if (inp.connection) {
+            const srcOutputs = nodeOutputs.get(inp.connection.nodeId);
+            if (srcOutputs?.[inp.connection.outputKey]) {
+              subInputVars[k] = srcOutputs[inp.connection.outputKey];
+            }
+          }
+          // Implicit UV / time fallbacks
+          if (!subInputVars[k]) {
+            if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) {
+              subInputVars[k] = 'g_uv';
+            } else if (inp.type === 'float' && (k === 'time' || k === 't')) {
+              subInputVars[k] = 'u_time';
+            } else if (inp.defaultValue !== undefined) {
+              if (typeof inp.defaultValue === 'number') {
+                subInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+              } else if (Array.isArray(inp.defaultValue)) {
+                subInputVars[k] = `${inp.type}(${inp.defaultValue.map((v: number) => v.toFixed(1)).join(', ')})`;
+              }
+            }
+          }
+        }
+
+        const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(subNode, subDef);
+        Object.assign(paramUniforms, subUniforms);
+
+        const subResult = subDef.generateGLSL(patchedSub, subInputVars);
+        mainCode.push(subResult.code);
+        nodeOutputs.set(subNode.id, subResult.outputVars);
+      }
+
+      // Map group output ports to resolved subgraph vars
+      const groupOutputVars: Record<string, string> = {};
+      for (const port of subgraph.outputPorts) {
+        const prefixedFromId = prefix + port.fromNodeId;
+        const fromOutputs = nodeOutputs.get(prefixedFromId);
+        if (fromOutputs?.[port.fromOutputKey]) {
+          groupOutputVars[port.key] = fromOutputs[port.fromOutputKey];
+        }
+      }
+      nodeOutputs.set(node.id, groupOutputVars);
+      continue;
+    }
+
     // ── Bypass: pass the primary input through to each output ────────────────
     if (node.bypassed) {
       // Find the first connected input variable (or any resolved inputVar)
@@ -661,21 +791,30 @@ function generateFragmentShader(
       continue;
     }
 
+    // Patch eligible float params to uniform names and collect them
+    const { patchedNode, uniforms: nodeUniforms } = patchNodeParamsForUniforms(node, def);
+    Object.assign(paramUniforms, nodeUniforms);
+
     // If node has a __codeOverride, use it verbatim (derive outputVars from normal generateGLSL)
     const override = typeof node.params.__codeOverride === 'string' ? (node.params.__codeOverride as string).trim() : null;
     if (override) {
-      const placeholderResult = def.generateGLSL(node, inputVars);
+      const placeholderResult = def.generateGLSL(patchedNode, inputVars);
       mainCode.push(override + '\n');
       nodeOutputs.set(node.id, placeholderResult.outputVars);
     } else {
       // Generate code for this node
-      const result = def.generateGLSL(node, inputVars);
+      const result = def.generateGLSL(patchedNode, inputVars);
       mainCode.push(result.code);
       nodeOutputs.set(node.id, result.outputVars);
     }
   }
 
   const functionCode = Array.from(functions).join('\n');
+
+  // Emit one `uniform float` declaration per extracted param uniform
+  const paramUniformDecls = Object.keys(paramUniforms)
+    .map(name => `uniform float ${name};`)
+    .join('\n');
 
   const fragmentShader = `precision mediump float;
 #define PI 3.1415926538
@@ -684,7 +823,7 @@ function generateFragmentShader(
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
-
+${paramUniformDecls ? paramUniformDecls + '\n' : ''}
 varying vec2 vUv;
 ${functionCode}
 
@@ -693,7 +832,7 @@ void main() {
     g_uv.x *= u_resolution.x / u_resolution.y;
 ${mainCode.join('')}}`.trim();
 
-  return { fragmentShader, nodeOutputVars: nodeOutputs };
+  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms };
 }
 
 const VERTEX_SHADER = `varying vec2 vUv;

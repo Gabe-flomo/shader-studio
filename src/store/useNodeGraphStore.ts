@@ -66,6 +66,13 @@ interface NodeGraphState {
   vertexShader: string;
   fragmentShader: string;
   compilationErrors: string[];
+  /**
+   * Uniform name → current value for all float params extracted by the compiler.
+   * Updated in-place (without recompile) when sliders change eligible float params.
+   */
+  paramUniforms: Record<string, number>;
+  /** Push param uniform value changes to ShaderCanvas without triggering a recompile. */
+  updateParamUniforms: (updates: Record<string, number>) => void;
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
@@ -127,6 +134,13 @@ interface NodeGraphState {
     outputType: DataType
   ) => void;
 
+  /**
+   * Collapse the given node IDs into a single group node.
+   * Dangling input connections become group input ports; outputs wired outside
+   * the selection become group output ports.  Returns the new group node ID or
+   * null if the selection was invalid.
+   */
+  groupNodes: (nodeIds: string[], label?: string) => string | null;
   undo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => void;
@@ -1465,6 +1479,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   vertexShader: '',
   fragmentShader: '',
   compilationErrors: [],
+  paramUniforms: {},
   glslErrors: [],
   pixelSample: null,
   currentTime: 0,
@@ -1477,6 +1492,136 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
+
+  groupNodes: (nodeIds, label?) => {
+    const { nodes } = get();
+    if (nodeIds.length < 1) return null;
+
+    const selectedSet = new Set(nodeIds);
+    const selectedNodes = nodes.filter(n => selectedSet.has(n.id));
+    if (selectedNodes.length === 0) return null;
+
+    // Reject if any output nodes are in the selection
+    if (selectedNodes.some(n => n.type === 'output' || n.type === 'vec4Output')) return null;
+
+    pushHistory(nodes);
+
+    // ── Discover dangling connections ────────────────────────────────────────
+    const inputPorts: import('../types/nodeGraph').GroupInputPort[] = [];
+    const outputPorts: import('../types/nodeGraph').GroupOutputPort[] = [];
+    // Track which outer connections feed into the group (for group node's input sockets)
+    const groupInputSockets: Record<string, import('../types/nodeGraph').InputSocket> = {};
+    // Track which outer nodes need their connections updated to point at the group
+    const outerReplacements: Array<{ nodeId: string; inputKey: string; newConnection: { nodeId: string; outputKey: string } }> = [];
+
+    let portIdx = 0;
+
+    // INPUT PORTS: selected node inputs wired to non-selected nodes
+    for (const sn of selectedNodes) {
+      for (const [key, inp] of Object.entries(sn.inputs)) {
+        if (!inp.connection) continue;
+        if (selectedSet.has(inp.connection.nodeId)) continue;
+        // This is a dangling input — create an input port
+        const portKey = `in${portIdx++}`;
+        inputPorts.push({
+          key: portKey,
+          type: inp.type,
+          label: key,
+          toNodeId: sn.id,
+          toInputKey: key,
+        });
+        groupInputSockets[portKey] = {
+          type: inp.type,
+          label: key,
+          connection: { ...inp.connection },
+        };
+      }
+    }
+
+    // OUTPUT PORTS: non-selected nodes wired to selected node outputs
+    const seenOutputs = new Set<string>(); // "fromNodeId:fromOutputKey"
+    for (const n of nodes) {
+      if (selectedSet.has(n.id)) continue;
+      for (const [key, inp] of Object.entries(n.inputs)) {
+        if (!inp.connection) continue;
+        if (!selectedSet.has(inp.connection.nodeId)) continue;
+        const sig = `${inp.connection.nodeId}:${inp.connection.outputKey}`;
+        let portKey: string;
+        const existing = outputPorts.find(p => `${p.fromNodeId}:${p.fromOutputKey}` === sig);
+        if (existing) {
+          portKey = existing.key;
+        } else {
+          // Determine the output type from the source node definition
+          const srcNode = selectedNodes.find(sn => sn.id === inp.connection!.nodeId);
+          const srcDef = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+          const outType: import('../types/nodeGraph').DataType =
+            srcNode?.outputs[inp.connection.outputKey]?.type ??
+            srcDef?.outputs[inp.connection.outputKey]?.type ??
+            'float';
+          portKey = `out${portIdx++}`;
+          outputPorts.push({
+            key: portKey,
+            type: outType,
+            label: inp.connection.outputKey,
+            fromNodeId: inp.connection.nodeId,
+            fromOutputKey: inp.connection.outputKey,
+          });
+          seenOutputs.add(sig);
+        }
+        outerReplacements.push({ nodeId: n.id, inputKey: key, newConnection: { nodeId: '__group__', outputKey: portKey } });
+      }
+    }
+
+    // Build group output sockets
+    const groupOutputSockets: Record<string, import('../types/nodeGraph').OutputSocket> = {};
+    for (const p of outputPorts) {
+      groupOutputSockets[p.key] = { type: p.type, label: p.label };
+    }
+
+    // Place group at bounding box centre of selected nodes
+    const xs = selectedNodes.map(n => n.position.x);
+    const ys = selectedNodes.map(n => n.position.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+    const groupId = `group_${Date.now()}`;
+    const subgraph: import('../types/nodeGraph').SubgraphData = {
+      nodes: selectedNodes,
+      inputPorts,
+      outputPorts,
+    };
+    const groupNode: import('../types/nodeGraph').GraphNode = {
+      id: groupId,
+      type: 'group',
+      position: { x: cx, y: cy },
+      inputs: groupInputSockets,
+      outputs: groupOutputSockets,
+      params: {
+        label: label ?? 'Group',
+        subgraph,
+      },
+    };
+
+    // Replace outer connections that pointed into the group
+    const updatedNodes = nodes
+      .filter(n => !selectedSet.has(n.id))
+      .map(n => {
+        const replacements = outerReplacements.filter(r => r.nodeId === n.id);
+        if (replacements.length === 0) return n;
+        const newInputs = { ...n.inputs };
+        for (const r of replacements) {
+          newInputs[r.inputKey] = {
+            ...newInputs[r.inputKey],
+            connection: { nodeId: groupId, outputKey: r.newConnection.outputKey },
+          };
+        }
+        return { ...n, inputs: newInputs };
+      });
+
+    set({ nodes: [...updatedNodes, groupNode] });
+    get().compile();
+    return groupId;
+  },
 
   undo: () => {
     const prev = _history.pop();
@@ -1660,8 +1805,25 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n
       ),
     }));
+
+    // Optimisation: if every changed param already has a compiled uniform entry,
+    // push the new values directly to ShaderCanvas via paramUniforms — no recompile.
     if (options?.immediate) {
-      // Sliders, selects, and reset: recompile immediately with no debounce
+      const currentUniforms = get().paramUniforms;
+      const uniformUpdates: Record<string, number> = {};
+      let allAreUniforms = true;
+      for (const [key, val] of Object.entries(params)) {
+        if (typeof val !== 'number') { allAreUniforms = false; break; }
+        const uniformName = `u_p_${nodeId}_${key}`;
+        if (!(uniformName in currentUniforms)) { allAreUniforms = false; break; }
+        uniformUpdates[uniformName] = val;
+      }
+      if (allAreUniforms && Object.keys(uniformUpdates).length > 0) {
+        // Fast path: update uniforms only, skip shader recompile entirely
+        get().updateParamUniforms(uniformUpdates);
+        return;
+      }
+      // Slow path: structural change or non-uniform param — full recompile
       if (_compileTimer) { clearTimeout(_compileTimer); _compileTimer = null; }
       get().compile();
     } else {
@@ -1753,9 +1915,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       fragmentShader: result.fragmentShader,
       compilationErrors: result.errors ?? [],
       nodeOutputVarMap: result.nodeOutputVars,
+      paramUniforms: result.paramUniforms,
       // Clear stale probe values when graph recompiles
       nodeProbeValues: null,
     });
+  },
+
+  updateParamUniforms: (updates) => {
+    set(state => ({ paramUniforms: { ...state.paramUniforms, ...updates } }));
   },
 
   autoLayout: () => {

@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 
 export const CircleSDFNode: NodeDefinition = {
   type: 'circleSDF',
@@ -27,9 +27,9 @@ float circleSDF(vec2 point, float size) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_dist`;
     const posVar = inputVars.position || 'vec2(0.0)';
-    const radiusVar = inputVars.radius || f(typeof node.params.radius === 'number' ? node.params.radius : 0.3);
-    const px = f(typeof node.params.posX === 'number' ? node.params.posX : 0.0);
-    const py = f(typeof node.params.posY === 'number' ? node.params.posY : 0.0);
+    const radiusVar = inputVars.radius || p(node.params.radius, 0.3);
+    const px = p(node.params.posX, 0.0);
+    const py = p(node.params.posY, 0.0);
     const offsetVar = inputVars.offset || `vec2(${px}, ${py})`;
     const offsetPos = `(${posVar} - ${offsetVar})`;
     return {
@@ -67,11 +67,11 @@ float boxSDF(in vec2 position, in vec2 dimensions) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_dist`;
     const posVar = inputVars.position || 'vec2(0.0)';
-    const w = f(typeof node.params.width === 'number' ? node.params.width : 0.5);
-    const h = f(typeof node.params.height === 'number' ? node.params.height : 0.5);
+    const w = p(node.params.width, 0.5);
+    const h = p(node.params.height, 0.5);
     const dimsVar = inputVars.dimensions || `vec2(${w}, ${h})`;
-    const px = f(typeof node.params.posX === 'number' ? node.params.posX : 0.0);
-    const py = f(typeof node.params.posY === 'number' ? node.params.posY : 0.0);
+    const px = p(node.params.posX, 0.0);
+    const py = p(node.params.posY, 0.0);
     const offsetVar = inputVars.offset || `vec2(${px}, ${py})`;
     const offsetPos = `(${posVar} - ${offsetVar})`;
     return {
@@ -108,9 +108,9 @@ float ringSDF(vec2 point, float size) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_dist`;
     const posVar = inputVars.position || 'vec2(0.0)';
-    const radiusVar = inputVars.radius || f(typeof node.params.radius === 'number' ? node.params.radius : 0.3);
-    const px = f(typeof node.params.posX === 'number' ? node.params.posX : 0.0);
-    const py = f(typeof node.params.posY === 'number' ? node.params.posY : 0.0);
+    const radiusVar = inputVars.radius || p(node.params.radius, 0.3);
+    const px = p(node.params.posX, 0.0);
+    const py = p(node.params.posY, 0.0);
     const offsetVar = inputVars.offset || `vec2(${px}, ${py})`;
     const offsetPos = `(${posVar} - ${offsetVar})`;
     return {
@@ -241,16 +241,16 @@ export const ShapeSDFNode: NodeDefinition = {
     const p  = inputVars.p  ?? 'vec2(0.0)';
     const shape = (node.params.shape as string) ?? 'circle';
 
-    const r  = inputVars.r  ?? f(typeof node.params.r  === 'number' ? node.params.r  : 0.3);
-    const rx = f(typeof node.params.rx === 'number' ? node.params.rx : 0.3);
-    const ry = f(typeof node.params.ry === 'number' ? node.params.ry : 0.3);
-    const rnd= f(typeof node.params.roundness === 'number' ? node.params.roundness : 0.05);
-    const rf = inputVars.rf ?? f(typeof node.params.rf === 'number' ? node.params.rf : 0.5);
-    const th = inputVars.th ?? f(typeof node.params.th === 'number' ? node.params.th : 0.05);
-    const nx = f(typeof node.params.nx === 'number' ? node.params.nx : 0.0);
-    const ny = f(typeof node.params.ny === 'number' ? node.params.ny : 1.0);
-    const cx = f(typeof node.params.cx === 'number' ? node.params.cx : 0.866);
-    const cy = f(typeof node.params.cy === 'number' ? node.params.cy : 0.5);
+    const r  = inputVars.r  ?? p(node.params.r, 0.3);
+    const rx = p(node.params.rx, 0.3);
+    const ry = p(node.params.ry, 0.3);
+    const rnd= p(node.params.roundness, 0.05);
+    const rf = inputVars.rf ?? p(node.params.rf, 0.5);
+    const th = inputVars.th ?? p(node.params.th, 0.05);
+    const nx = p(node.params.nx, 0.0);
+    const ny = p(node.params.ny, 1.0);
+    const cx = p(node.params.cx, 0.866);
+    const cy = p(node.params.cy, 0.5);
     const bVec  = inputVars.b  ?? `vec2(${rx}, ${ry})`;
     const aVec  = inputVars.a  ?? 'vec2(-0.5, 0.0)';
     const b2Vec = inputVars.b2 ?? 'vec2(0.5, 0.0)';
@@ -310,9 +310,9 @@ export const SimpleSDFNode: NodeDefinition = {
     const outVar = `${node.id}_distance`;
     const p      = inputVars.p ?? 'vec2(0.0)';
     const shape  = (node.params.shape as string) ?? 'circle';
-    const r      = inputVars.r ?? f(typeof node.params.r  === 'number' ? node.params.r  : 0.3);
-    const wx     = f(typeof node.params.wx === 'number' ? node.params.wx : 0.3);
-    const wy     = f(typeof node.params.wy === 'number' ? node.params.wy : 0.3);
+    const r      = inputVars.r ?? p(node.params.r, 0.3);
+    const wx     = p(node.params.wx, 0.3);
+    const wy     = p(node.params.wy, 0.3);
     const bVec   = inputVars.b ?? `vec2(${wx}, ${wy})`;
 
     let call: string;

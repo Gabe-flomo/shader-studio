@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 import { PALETTE_GLSL_FN, PALETTE_PRESET_OPTIONS } from './color';
 
 // ─── Shared GLSL helpers for fractal nodes ────────────────────────────────────
@@ -123,21 +123,21 @@ export const MandelbrotNode: NodeDefinition = {
     const mode      = (node.params.mode as string) ?? 'mandelbrot';
     const power     = Math.max(2, Math.round(typeof node.params.power    === 'number' ? node.params.power    : 2));
     const maxIter   = Math.max(20, Math.round(typeof node.params.max_iter === 'number' ? node.params.max_iter : 150));
-    const bailout   = f(typeof node.params.bailout   === 'number' ? node.params.bailout   : 256.0);
+    const bailout   = p(node.params.bailout, 256.0);
     // zoom_exp (log₂ scale) takes priority over zoom if > 0, enabling deep zoom via a compact slider
     const zoomRaw   = typeof node.params.zoom     === 'number' ? node.params.zoom     : 1.0;
     const zoomExp   = typeof node.params.zoom_exp === 'number' ? node.params.zoom_exp : 0.0;
     const zoom      = zoomExp > 0 ? `pow(2.0, ${f(zoomExp)})` : f(zoomRaw);
-    const offsetX   = f(typeof node.params.offset_x  === 'number' ? node.params.offset_x  : 0.0);
-    const offsetY   = f(typeof node.params.offset_y  === 'number' ? node.params.offset_y  : 0.0);
-    const cx        = f(typeof node.params.cx        === 'number' ? node.params.cx        : -0.7269);
-    const cy        = f(typeof node.params.cy        === 'number' ? node.params.cy        : 0.1889);
+    const offsetX   = p(node.params.offset_x, 0.0);
+    const offsetY   = p(node.params.offset_y, 0.0);
+    const cx        = p(node.params.cx, -0.7269);
+    const cy        = p(node.params.cy, 0.1889);
     const orbitTrap = (node.params.orbit_trap as string) ?? 'none';
-    const trapX     = f(typeof node.params.trap_x    === 'number' ? node.params.trap_x    : 0.0);
-    const trapY     = f(typeof node.params.trap_y    === 'number' ? node.params.trap_y    : 0.0);
-    const trapR     = f(typeof node.params.trap_r    === 'number' ? node.params.trap_r    : 0.5);
-    const colorScale  = f(typeof node.params.color_scale  === 'number' ? node.params.color_scale  : 0.3);
-    const colorOffset = f(typeof node.params.color_offset === 'number' ? node.params.color_offset : 0.0);
+    const trapX     = p(node.params.trap_x, 0.0);
+    const trapY     = p(node.params.trap_y, 0.0);
+    const trapR     = p(node.params.trap_r, 0.5);
+    const colorScale  = p(node.params.color_scale, 0.3);
+    const colorOffset = p(node.params.color_offset, 0.0);
     const presIdx = parseInt((node.params.palette_preset as string) ?? '1', 10);
     const pres = FRACTAL_PALETTE_PRESETS[Math.min(presIdx, FRACTAL_PALETTE_PRESETS.length - 1)] ?? FRACTAL_PALETTE_PRESETS[1];
     const pA = paletteVec(pres.a); const pB = paletteVec(pres.b);
@@ -392,13 +392,13 @@ export const IFSNode: NodeDefinition = {
 
     const preset    = (node.params.preset as string) ?? 'fern';
     const iters     = Math.max(10, Math.round(typeof node.params.iterations === 'number' ? node.params.iterations : 40));
-    const glowVal   = f(typeof node.params.glow         === 'number' ? node.params.glow         : 0.004);
-    const scale     = f(typeof node.params.scale        === 'number' ? node.params.scale        : 1.0);
-    const offX      = f(typeof node.params.offset_x     === 'number' ? node.params.offset_x     : 0.0);
-    const offY      = f(typeof node.params.offset_y     === 'number' ? node.params.offset_y     : -0.5);
-    const animSpeed = f(typeof node.params.anim_speed   === 'number' ? node.params.anim_speed   : 0.0);
-    const colorScale  = f(typeof node.params.color_scale  === 'number' ? node.params.color_scale  : 1.0);
-    const colorOffset = f(typeof node.params.color_offset === 'number' ? node.params.color_offset : 0.0);
+    const glowVal   = p(node.params.glow, 0.004);
+    const scale     = p(node.params.scale, 1.0);
+    const offX      = p(node.params.offset_x, 0.0);
+    const offY      = p(node.params.offset_y, -0.5);
+    const animSpeed = p(node.params.anim_speed, 0.0);
+    const colorScale  = p(node.params.color_scale, 1.0);
+    const colorOffset = p(node.params.color_offset, 0.0);
     const presIdx = parseInt((node.params.palette_preset as string) ?? '7', 10);
     const pres = FRACTAL_PALETTE_PRESETS[Math.min(presIdx, FRACTAL_PALETTE_PRESETS.length - 1)] ?? FRACTAL_PALETTE_PRESETS[7];
     const pA = paletteVec(pres.a); const pB = paletteVec(pres.b);

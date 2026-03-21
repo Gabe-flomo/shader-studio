@@ -77,3 +77,30 @@ export interface NodeDefinition {
 export interface NodeGraph {
   nodes: GraphNode[];
 }
+
+// ── Group / subgraph node types ───────────────────────────────────────────────
+
+/** A port that maps an outer connection into a specific socket inside the subgraph. */
+export interface GroupInputPort {
+  key: string;          // socket key on the group node's inputs
+  type: DataType;
+  label: string;
+  toNodeId: string;     // subgraph node that receives this value
+  toInputKey: string;   // which input socket on that node
+}
+
+/** A port that maps a subgraph node's output to the group node's outputs. */
+export interface GroupOutputPort {
+  key: string;           // socket key on the group node's outputs
+  type: DataType;
+  label: string;
+  fromNodeId: string;    // subgraph node that provides the value
+  fromOutputKey: string; // which output socket on that node
+}
+
+/** Payload stored in node.params.subgraph for group nodes. */
+export interface SubgraphData {
+  nodes: GraphNode[];
+  inputPorts: GroupInputPort[];
+  outputPorts: GroupOutputPort[];
+}

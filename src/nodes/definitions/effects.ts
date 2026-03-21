@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, vec3Str } from './helpers';
+import { f, p, vec3Str } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
 
 export const MakeLightNode: NodeDefinition = {
@@ -26,7 +26,7 @@ float make_light(float dist, float brightness) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_glow`;
     const distVar = inputVars.distance || '0.0';
-    const brightVar = inputVars.brightness || f(typeof node.params.brightness === 'number' ? node.params.brightness : 10.0);
+    const brightVar = inputVars.brightness || p(node.params.brightness, 10.0);
     return {
       code: `    float ${outVar} = make_light(${distVar}, ${brightVar});\n`,
       outputVars: { glow: outVar },
@@ -137,8 +137,8 @@ vec3 applyGrain(vec3 color, vec2 uv, float amount, float seed) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const colorVar  = inputVars.color ?? 'vec3(0.0)';
     const uvVar     = inputVars.uv    ?? 'vec2(0.0)';
-    const amount    = f(typeof node.params.amount === 'number' ? node.params.amount : 0.05);
-    const seed      = inputVars.seed  ?? f(typeof node.params.seed === 'number' ? node.params.seed : 0.0);
+    const amount    = p(node.params.amount, 0.05);
+    const seed      = inputVars.seed  ?? p(node.params.seed, 0.0);
     const outVar    = `${node.id}_color`;
     return {
       code: `    vec3 ${outVar} = applyGrain(${colorVar}, ${uvVar}, ${amount}, ${seed});\n`,
@@ -182,9 +182,9 @@ float simpleLight(float d, float brightness) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar   = `${node.id}_glow`;
     const distVar  = inputVars.distance   ?? '0.0';
-    const brightVar = inputVars.brightness ?? f(typeof node.params.brightness === 'number' ? node.params.brightness : 10.0);
+    const brightVar = inputVars.brightness ?? p(node.params.brightness, 10.0);
     const mode     = (node.params.mode as string) ?? 'glow';
-    const ringFreq = f(typeof node.params.ringFreq === 'number' ? node.params.ringFreq : 8.0);
+    const ringFreq = p(node.params.ringFreq, 8.0);
 
     let code: string;
     if (mode === 'ring') {
@@ -253,13 +253,13 @@ export const FractalLoopNode: NodeDefinition = {
     const uvVar     = inputVars.uv   || 'vec2(0.0)';
     const timeVar   = inputVars.time || '0.0';
     const iters     = Math.round(typeof node.params.iterations  === 'number' ? node.params.iterations  : 4);
-    const scale     = inputVars.fract_scale ?? f(typeof node.params.fract_scale === 'number' ? node.params.fract_scale : 1.5);
-    const scaleExp  = inputVars.scale_exp   ?? f(typeof node.params.scale_exp   === 'number' ? node.params.scale_exp   : 1.0);
-    const freq      = inputVars.freq        ?? f(typeof node.params.freq        === 'number' ? node.params.freq        : 8.0);
-    const glow      = inputVars.glow        ?? f(typeof node.params.glow        === 'number' ? node.params.glow        : 0.01);
-    const glowPow   = inputVars.glow_pow    ?? f(typeof node.params.glow_pow    === 'number' ? node.params.glow_pow    : 1.0);
-    const iterOff   = inputVars.iter_offset ?? f(typeof node.params.iter_offset === 'number' ? node.params.iter_offset : 0.4);
-    const timeScale = inputVars.time_scale  ?? f(typeof node.params.time_scale  === 'number' ? node.params.time_scale  : 0.4);
+    const scale     = inputVars.fract_scale ?? p(node.params.fract_scale, 1.5);
+    const scaleExp  = inputVars.scale_exp   ?? p(node.params.scale_exp, 1.0);
+    const freq      = inputVars.freq        ?? p(node.params.freq, 8.0);
+    const glow      = inputVars.glow        ?? p(node.params.glow, 0.01);
+    const glowPow   = inputVars.glow_pow    ?? p(node.params.glow_pow, 1.0);
+    const iterOff   = inputVars.iter_offset ?? p(node.params.iter_offset, 0.4);
+    const timeScale = inputVars.time_scale  ?? p(node.params.time_scale, 0.4);
     const a = Array.isArray(node.params.a) ? node.params.a as number[] : [0.5, 0.5, 0.5];
     const b = Array.isArray(node.params.b) ? node.params.b as number[] : [0.5, 0.5, 0.5];
     const c = Array.isArray(node.params.c) ? node.params.c as number[] : [1.0, 1.0, 1.0];
@@ -325,17 +325,17 @@ export const RotatingLinesLoopNode: NodeDefinition = {
     const uvVar    = inputVars.uv   || 'vec2(0.0)';
     const timeVar  = inputVars.time || '0.0';
     const iters    = Math.round(typeof node.params.iterations   === 'number' ? node.params.iterations   : 20);
-    const uvScale  = f(typeof node.params.uv_scale     === 'number' ? node.params.uv_scale     : 0.1);
-    const scrollY  = f(typeof node.params.scroll_y     === 'number' ? node.params.scroll_y     : 0.2);
-    const boxHalfY = f(typeof node.params.box_half_y   === 'number' ? node.params.box_half_y   : 0.2);
-    const glow     = f(typeof node.params.glow         === 'number' ? node.params.glow         : 0.001);
-    const cFreq    = f(typeof node.params.color_freq   === 'number' ? node.params.color_freq   : 0.1);
-    const pR       = f(typeof node.params.phase_r      === 'number' ? node.params.phase_r      : 0.0);
-    const pG       = f(typeof node.params.phase_g      === 'number' ? node.params.phase_g      : 1.0);
-    const pB       = f(typeof node.params.phase_b      === 'number' ? node.params.phase_b      : 2.0);
-    const pA       = f(typeof node.params.phase_a      === 'number' ? node.params.phase_a      : 3.0);
-    const rot1     = f(typeof node.params.rot_offset_1 === 'number' ? node.params.rot_offset_1 : 33.0);
-    const rot2     = f(typeof node.params.rot_offset_2 === 'number' ? node.params.rot_offset_2 : 11.0);
+    const uvScale  = p(node.params.uv_scale, 0.1);
+    const scrollY  = p(node.params.scroll_y, 0.2);
+    const boxHalfY = p(node.params.box_half_y, 0.2);
+    const glow     = p(node.params.glow, 0.001);
+    const cFreq    = p(node.params.color_freq, 0.1);
+    const pR       = p(node.params.phase_r, 0.0);
+    const pG       = p(node.params.phase_g, 1.0);
+    const pB       = p(node.params.phase_b, 2.0);
+    const pA       = p(node.params.phase_a, 3.0);
+    const rot1     = p(node.params.rot_offset_1, 33.0);
+    const rot2     = p(node.params.rot_offset_2, 11.0);
     const code = [
       `    vec4 ${id}_color = vec4(0.0);\n`,
       `    vec2 ${id}_b = vec2(0.0, ${boxHalfY});\n`,
@@ -421,15 +421,15 @@ export const AccumulateLoopNode: NodeDefinition = {
     const uvVar    = inputVars.uv   || 'vec2(0.5)';
     const timeVar  = inputVars.time || '0.0';
     const iters    = Math.round(typeof node.params.iterations  === 'number' ? node.params.iterations  : 50);
-    const tScale   = inputVars.time_scale ?? f(typeof node.params.time_scale   === 'number' ? node.params.time_scale   : 0.2);
-    const freq     = inputVars.freq       ?? f(typeof node.params.freq         === 'number' ? node.params.freq         : 60.0);
-    const glow     = inputVars.glow       ?? f(typeof node.params.glow         === 'number' ? node.params.glow         : 0.0003);
-    const phR      = f(typeof node.params.color_phase_r === 'number' ? node.params.color_phase_r : 0.0);
-    const phG      = f(typeof node.params.color_phase_g === 'number' ? node.params.color_phase_g : 2.0);
-    const phB      = f(typeof node.params.color_phase_b === 'number' ? node.params.color_phase_b : 4.0);
-    const posScale = inputVars.pos_scale ?? f(typeof node.params.pos_scale    === 'number' ? node.params.pos_scale    : 0.05);
-    const posFreq  = inputVars.pos_freq  ?? f(typeof node.params.pos_freq     === 'number' ? node.params.pos_freq     : 0.31);
-    const posPhase = inputVars.pos_phase ?? f(typeof node.params.pos_phase    === 'number' ? node.params.pos_phase    : 5.0);
+    const tScale   = inputVars.time_scale ?? p(node.params.time_scale, 0.2);
+    const freq     = inputVars.freq       ?? p(node.params.freq, 60.0);
+    const glow     = inputVars.glow       ?? p(node.params.glow, 0.0003);
+    const phR      = p(node.params.color_phase_r, 0.0);
+    const phG      = p(node.params.color_phase_g, 2.0);
+    const phB      = p(node.params.color_phase_b, 4.0);
+    const posScale = inputVars.pos_scale ?? p(node.params.pos_scale, 0.05);
+    const posFreq  = inputVars.pos_freq  ?? p(node.params.pos_freq, 0.31);
+    const posPhase = inputVars.pos_phase ?? p(node.params.pos_phase, 5.0);
     const posMode   = typeof node.params.position_mode === 'string' ? node.params.position_mode : 'sinusoidal';
     const distMode  = typeof node.params.distance_mode === 'string' ? node.params.distance_mode : 'circle';
     const attenMode = typeof node.params.atten_mode    === 'string' ? node.params.atten_mode    : 'inverse';
@@ -681,16 +681,16 @@ export const GravitationalLensNode: NodeDefinition = {
     const timeVar       = inputVars.time         ?? '0.0';
 
     const lensType      = (node.params.lens_type      as string) ?? 'gravity';
-    const strength      = f(typeof node.params.strength       === 'number' ? node.params.strength       : 0.002);
-    const einsteinR     = f(typeof node.params.einstein_radius === 'number' ? node.params.einstein_radius : 0.12);
-    const horizonRadius = f(typeof node.params.horizon_radius  === 'number' ? node.params.horizon_radius  : 0.05);
-    const softening     = f(typeof node.params.softening      === 'number' ? node.params.softening      : 0.0001);
+    const strength      = p(node.params.strength, 0.002);
+    const einsteinR     = p(node.params.einstein_radius, 0.12);
+    const horizonRadius = p(node.params.horizon_radius, 0.05);
+    const softening     = p(node.params.softening, 0.0001);
     const aspectCorr    = (node.params.aspect_correct as string) ?? 'yes';
-    const rippleFreq    = f(typeof node.params.ripple_freq    === 'number' ? node.params.ripple_freq    : 20.0);
-    const rippleSpeed   = f(typeof node.params.ripple_speed   === 'number' ? node.params.ripple_speed   : 2.0);
-    const spin          = f(typeof node.params.spin           === 'number' ? node.params.spin           : 0.0);
-    const redshiftPow   = f(typeof node.params.redshift_power === 'number' ? node.params.redshift_power : 2.0);
-    const photonWidth   = f(typeof node.params.photon_width   === 'number' ? node.params.photon_width   : 0.008);
+    const rippleFreq    = p(node.params.ripple_freq, 20.0);
+    const rippleSpeed   = p(node.params.ripple_speed, 2.0);
+    const spin          = p(node.params.spin, 0.0);
+    const redshiftPow   = p(node.params.redshift_power, 2.0);
+    const photonWidth   = p(node.params.photon_width, 0.008);
 
     // Kerr frame-dragging: rotate displacement direction by spin * time
     const spinVal = typeof node.params.spin === 'number' ? node.params.spin : 0;

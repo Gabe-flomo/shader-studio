@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 
 export const FractNode: NodeDefinition = {
   type: 'fract',
@@ -20,7 +20,7 @@ export const FractNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_output`;
     const inVar = inputVars.input || 'vec2(0.0)';
-    const scale = inputVars.scale || f(typeof node.params.scale === 'number' ? node.params.scale : 3.0);
+    const scale = inputVars.scale || p(node.params.scale, 3.0);
     return {
       code: `    vec2 ${outVar} = fract(${inVar} * ${scale}) - 0.5;\n`,
       outputVars: { output: outVar },
@@ -54,7 +54,7 @@ vec2 rotate(vec2 v, float angle) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_output`;
     const inVar = inputVars.input || 'vec2(0.0)';
-    const angleVar = inputVars.angle || f(typeof node.params.angle === 'number' ? node.params.angle : 0.0);
+    const angleVar = inputVars.angle || p(node.params.angle, 0.0);
     return {
       code: `    vec2 ${outVar} = rotate(${inVar}, ${angleVar});\n`,
       outputVars: { output: outVar },

@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f } from './helpers';
+import { f, p } from './helpers';
 
 export const AddNode: NodeDefinition = {
   type: 'add', label: 'Add', category: 'Math', description: 'Add two float values (a + b)',
@@ -9,7 +9,7 @@ export const AddNode: NodeDefinition = {
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '0.0'} + ${inputVars.b || f(typeof node.params.b === 'number' ? node.params.b : 0.0)};\n`, outputVars: { result: o } };
+    return { code: `    float ${o} = ${inputVars.a || '0.0'} + ${inputVars.b || p(node.params.b, 0.0)};\n`, outputVars: { result: o } };
   },
 };
 
@@ -21,7 +21,7 @@ export const SubtractNode: NodeDefinition = {
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '0.0'} - ${inputVars.b || f(typeof node.params.b === 'number' ? node.params.b : 0.0)};\n`, outputVars: { result: o } };
+    return { code: `    float ${o} = ${inputVars.a || '0.0'} - ${inputVars.b || p(node.params.b, 0.0)};\n`, outputVars: { result: o } };
   },
 };
 
@@ -33,7 +33,7 @@ export const MultiplyNode: NodeDefinition = {
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '1.0'} * ${inputVars.b || f(typeof node.params.b === 'number' ? node.params.b : 1.0)};\n`, outputVars: { result: o } };
+    return { code: `    float ${o} = ${inputVars.a || '1.0'} * ${inputVars.b || p(node.params.b, 1.0)};\n`, outputVars: { result: o } };
   },
 };
 
@@ -45,7 +45,7 @@ export const DivideNode: NodeDefinition = {
   paramDefs: { b: { label: 'B (divisor)', type: 'float', min: 0.0001, max: 10, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '0.0'} / max(${inputVars.b || f(typeof node.params.b === 'number' ? node.params.b : 1.0)}, 0.0001);\n`, outputVars: { result: o } };
+    return { code: `    float ${o} = ${inputVars.a || '0.0'} / max(${inputVars.b || p(node.params.b, 1.0)}, 0.0001);\n`, outputVars: { result: o } };
   },
 };
 
@@ -57,8 +57,8 @@ export const SinNode: NodeDefinition = {
   paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
-    const freq = inputVars.freq || f(typeof node.params.freq === 'number' ? node.params.freq : 1.0);
-    const amp  = inputVars.amp  || f(typeof node.params.amp  === 'number' ? node.params.amp  : 1.0);
+    const freq = inputVars.freq || p(node.params.freq, 1.0);
+    const amp  = inputVars.amp  || p(node.params.amp, 1.0);
     return { code: `    float ${o} = ${amp} * sin(${inputVars.input || '0.0'} * ${freq});\n`, outputVars: { output: o } };
   },
 };
@@ -71,8 +71,8 @@ export const CosNode: NodeDefinition = {
   paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
-    const freq = inputVars.freq || f(typeof node.params.freq === 'number' ? node.params.freq : 1.0);
-    const amp  = inputVars.amp  || f(typeof node.params.amp  === 'number' ? node.params.amp  : 1.0);
+    const freq = inputVars.freq || p(node.params.freq, 1.0);
+    const amp  = inputVars.amp  || p(node.params.amp, 1.0);
     return { code: `    float ${o} = ${amp} * cos(${inputVars.input || '0.0'} * ${freq});\n`, outputVars: { output: o } };
   },
 };
@@ -85,7 +85,7 @@ export const ExpNode: NodeDefinition = {
   paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
-    const s = inputVars.scale || f(typeof node.params.scale === 'number' ? node.params.scale : 1.0);
+    const s = inputVars.scale || p(node.params.scale, 1.0);
     return { code: `    float ${o} = exp(${inputVars.input || '0.0'} * ${s});\n`, outputVars: { output: o } };
   },
 };
@@ -98,7 +98,7 @@ export const PowNode: NodeDefinition = {
   paramDefs: { exponent: { label: 'Exponent', type: 'float', min: 0, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    const e = inputVars.exponent || f(typeof node.params.exponent === 'number' ? node.params.exponent : 1.2);
+    const e = inputVars.exponent || p(node.params.exponent, 1.2);
     return { code: `    float ${o} = pow(max(${inputVars.base || '1.0'}, 0.0), ${e});\n`, outputVars: { result: o } };
   },
 };
@@ -120,7 +120,7 @@ export const LengthNode: NodeDefinition = {
   paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
-    const s = inputVars.scale || f(typeof node.params.scale === 'number' ? node.params.scale : 1.0);
+    const s = inputVars.scale || p(node.params.scale, 1.0);
     return { code: `    float ${o} = length(${inputVars.input || 'vec2(0.0)'}) * ${s};\n`, outputVars: { output: o } };
   },
 };
@@ -133,7 +133,7 @@ export const MultiplyVec3Node: NodeDefinition = {
   paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    const s = inputVars.scale || f(typeof node.params.scale === 'number' ? node.params.scale : 1.0);
+    const s = inputVars.scale || p(node.params.scale, 1.0);
     return { code: `    vec3 ${o} = ${inputVars.color || 'vec3(1.0)'} * ${s};\n`, outputVars: { result: o } };
   },
 };
@@ -165,7 +165,7 @@ export const MaxNode: NodeDefinition = {
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = max(${inputVars.a || '0.0'}, ${inputVars.b || f(typeof node.params.b === 'number' ? node.params.b : 0.0)});\n`, outputVars: { result: o } };
+    return { code: `    float ${o} = max(${inputVars.a || '0.0'}, ${inputVars.b || p(node.params.b, 0.0)});\n`, outputVars: { result: o } };
   },
 };
 
@@ -177,8 +177,8 @@ export const ClampNode: NodeDefinition = {
   paramDefs: { lo: { label: 'Min', type: 'float', min: -10, max: 10, step: 0.01 }, hi: { label: 'Max', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    const lo = inputVars.lo || f(typeof node.params.lo === 'number' ? node.params.lo : 0.0);
-    const hi = inputVars.hi || f(typeof node.params.hi === 'number' ? node.params.hi : 1.0);
+    const lo = inputVars.lo || p(node.params.lo, 0.0);
+    const hi = inputVars.hi || p(node.params.hi, 1.0);
     return { code: `    float ${o} = clamp(${inputVars.input || '0.0'}, ${lo}, ${hi});\n`, outputVars: { result: o } };
   },
 };
@@ -191,7 +191,7 @@ export const MixNode: NodeDefinition = {
   paramDefs: { t: { label: 'T', type: 'float', min: 0, max: 1, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    const t = inputVars.t || f(typeof node.params.t === 'number' ? node.params.t : 0.5);
+    const t = inputVars.t || p(node.params.t, 0.5);
     return { code: `    float ${o} = mix(${inputVars.a || '0.0'}, ${inputVars.b || '1.0'}, ${t});\n`, outputVars: { result: o } };
   },
 };
@@ -204,7 +204,7 @@ export const ModNode: NodeDefinition = {
   paramDefs: { period: { label: 'Period', type: 'float', min: 0.001, max: 10, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
-    const p = inputVars.period || f(typeof node.params.period === 'number' ? node.params.period : 1.0);
+    const p = inputVars.period || p(node.params.period, 1.0);
     return { code: `    float ${o} = mod(${inputVars.input || '0.0'}, ${p});\n`, outputVars: { output: o } };
   },
 };
@@ -273,8 +273,8 @@ export const MakeVec2Node: NodeDefinition = {
   paramDefs: { x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01 }, y: { label: 'Y', type: 'float', min: -2, max: 2, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_xy`;
-    const x = inputVars.x || f(typeof node.params.x === 'number' ? node.params.x : 0.0);
-    const y = inputVars.y || f(typeof node.params.y === 'number' ? node.params.y : 0.0);
+    const x = inputVars.x || p(node.params.x, 0.0);
+    const y = inputVars.y || p(node.params.y, 0.0);
     return { code: `    vec2 ${o} = vec2(${x}, ${y});\n`, outputVars: { xy: o } };
   },
 };
@@ -305,9 +305,9 @@ export const MakeVec3Node: NodeDefinition = {
   paramDefs: { r: { label: 'R', type: 'float', min: 0, max: 1, step: 0.01 }, g: { label: 'G', type: 'float', min: 0, max: 1, step: 0.01 }, b: { label: 'B', type: 'float', min: 0, max: 1, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_rgb`;
-    const r = inputVars.r || f(typeof node.params.r === 'number' ? node.params.r : 0.0);
-    const g = inputVars.g || f(typeof node.params.g === 'number' ? node.params.g : 0.0);
-    const b = inputVars.b || f(typeof node.params.b === 'number' ? node.params.b : 0.0);
+    const r = inputVars.r || p(node.params.r, 0.0);
+    const g = inputVars.g || p(node.params.g, 0.0);
+    const b = inputVars.b || p(node.params.b, 0.0);
     return { code: `    vec3 ${o} = vec3(${r}, ${g}, ${b});\n`, outputVars: { rgb: o } };
   },
 };
@@ -338,8 +338,8 @@ export const SmoothstepNode: NodeDefinition = {
   paramDefs: { edge0: { label: 'Edge 0', type: 'float', min: -2, max: 2, step: 0.001 }, edge1: { label: 'Edge 1', type: 'float', min: -2, max: 2, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    const e0 = inputVars.edge0 || f(typeof node.params.edge0 === 'number' ? node.params.edge0 : 0.0);
-    const e1 = inputVars.edge1 || f(typeof node.params.edge1 === 'number' ? node.params.edge1 : 1.0);
+    const e0 = inputVars.edge0 || p(node.params.edge0, 0.0);
+    const e1 = inputVars.edge1 || p(node.params.edge1, 1.0);
     return { code: `    float ${o} = smoothstep(${e0}, ${e1}, ${inputVars.value || '0.0'});\n`, outputVars: { result: o } };
   },
 };
@@ -362,7 +362,7 @@ export const MultiplyVec2Node: NodeDefinition = {
   paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
-    const s = inputVars.scale || f(typeof node.params.scale === 'number' ? node.params.scale : 1.0);
+    const s = inputVars.scale || p(node.params.scale, 1.0);
     return { code: `    vec2 ${o} = (${inputVars.v || 'vec2(0.0)'}) * ${s};\n`, outputVars: { result: o } };
   },
 };

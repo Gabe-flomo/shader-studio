@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, vec3Str } from './helpers';
+import { f, p, vec3Str } from './helpers';
 import { PALETTE_GLSL_FN, PALETTE_PRESET_OPTIONS } from './color';
 
 // ─── Shared 3D GLSL helpers ───────────────────────────────────────────────────
@@ -205,28 +205,28 @@ export const RaymarchNode: NodeDefinition = {
     // Inputs (wirable, else fall back to params)
     const uvVar      = inputVars.uv          ?? 'vec2(0.0)';
     const timeVar    = inputVars.time        ?? '0.0';
-    const camDist    = inputVars.cam_dist    ?? f(typeof node.params.cam_dist    === 'number' ? node.params.cam_dist    : 4.0);
-    const camHeight  = inputVars.cam_height  ?? f(typeof node.params.cam_height  === 'number' ? node.params.cam_height  : 1.5);
-    const camSpeed   = inputVars.cam_speed   ?? f(typeof node.params.cam_speed   === 'number' ? node.params.cam_speed   : 0.3);
-    const shapeR     = inputVars.shape_r     ?? f(typeof node.params.shape_r     === 'number' ? node.params.shape_r     : 0.8);
-    const blendK     = inputVars.blend_k     ?? f(typeof node.params.blend_k     === 'number' ? node.params.blend_k     : 0.3);
-    const fogDist    = inputVars.fog_dist    ?? f(typeof node.params.fog_dist    === 'number' ? node.params.fog_dist    : 15.0);
-    const noiseScale = inputVars.noise_scale ?? f(typeof node.params.noise_scale === 'number' ? node.params.noise_scale : 1.5);
+    const camDist    = inputVars.cam_dist    ?? p(node.params.cam_dist, 4.0);
+    const camHeight  = inputVars.cam_height  ?? p(node.params.cam_height, 1.5);
+    const camSpeed   = inputVars.cam_speed   ?? p(node.params.cam_speed, 0.3);
+    const shapeR     = inputVars.shape_r     ?? p(node.params.shape_r, 0.8);
+    const blendK     = inputVars.blend_k     ?? p(node.params.blend_k, 0.3);
+    const fogDist    = inputVars.fog_dist    ?? p(node.params.fog_dist, 15.0);
+    const noiseScale = inputVars.noise_scale ?? p(node.params.noise_scale, 1.5);
 
     // Params (non-wirable)
     const scene        = (node.params.scene as string) ?? 'spheres';
     const maxSteps     = Math.max(20, Math.round(typeof node.params.max_steps     === 'number' ? node.params.max_steps     : 80));
-    const maxDist      = f(typeof node.params.max_dist      === 'number' ? node.params.max_dist      : 30.0);
-    const surfDist     = f(typeof node.params.surf_dist     === 'number' ? node.params.surf_dist     : 0.001);
-    const camFov       = f(typeof node.params.cam_fov       === 'number' ? node.params.cam_fov       : 1.5);
-    const repX         = f(typeof node.params.repeat_x      === 'number' ? node.params.repeat_x      : 3.0);
-    const repZ         = f(typeof node.params.repeat_z      === 'number' ? node.params.repeat_z      : 3.0);
-    const lightX       = f(typeof node.params.light_x       === 'number' ? node.params.light_x       : 2.0);
-    const lightY       = f(typeof node.params.light_y       === 'number' ? node.params.light_y       : 5.0);
-    const lightZ       = f(typeof node.params.light_z       === 'number' ? node.params.light_z       : 3.0);
-    const ambient      = f(typeof node.params.ambient       === 'number' ? node.params.ambient       : 0.05);
-    const specPow      = f(typeof node.params.specular      === 'number' ? node.params.specular      : 32.0);
-    const noiseStrength= f(typeof node.params.noise_strength === 'number' ? node.params.noise_strength : 0.3);
+    const maxDist      = p(node.params.max_dist, 30.0);
+    const surfDist     = p(node.params.surf_dist, 0.001);
+    const camFov       = p(node.params.cam_fov, 1.5);
+    const repX         = p(node.params.repeat_x, 3.0);
+    const repZ         = p(node.params.repeat_z, 3.0);
+    const lightX       = p(node.params.light_x, 2.0);
+    const lightY       = p(node.params.light_y, 5.0);
+    const lightZ       = p(node.params.light_z, 3.0);
+    const ambient      = p(node.params.ambient, 0.05);
+    const specPow      = p(node.params.specular, 32.0);
+    const noiseStrength= p(node.params.noise_strength, 0.3);
     const aoSteps      = Math.round(typeof node.params.ao_steps       === 'number' ? node.params.ao_steps       : 5);
 
     const fogColorArr  = Array.isArray(node.params.fog_color) ? node.params.fog_color as number[] : [0.7, 0.75, 0.85];
@@ -431,18 +431,18 @@ export const VolumeCloudsNode: NodeDefinition = {
 
     const uvVar      = inputVars.uv        ?? 'vec2(0.0)';
     const timeVar    = inputVars.time      ?? '0.0';
-    const camSpeed   = inputVars.cam_speed ?? f(typeof node.params.cam_speed   === 'number' ? node.params.cam_speed   : 0.1);
-    const coverage   = inputVars.coverage  ?? f(typeof node.params.coverage    === 'number' ? node.params.coverage    : 0.3);
-    const densityIn  = inputVars.density   ?? f(typeof node.params.density_scale === 'number' ? node.params.density_scale : 0.8);
-    const sunAngle   = inputVars.sun_angle ?? f(typeof node.params.sun_angle   === 'number' ? node.params.sun_angle   : 0.5);
+    const camSpeed   = inputVars.cam_speed ?? p(node.params.cam_speed, 0.1);
+    const coverage   = inputVars.coverage  ?? p(node.params.coverage, 0.3);
+    const densityIn  = inputVars.density   ?? p(node.params.density_scale, 0.8);
+    const sunAngle   = inputVars.sun_angle ?? p(node.params.sun_angle, 0.5);
 
     const steps      = Math.max(8, Math.round(typeof node.params.steps      === 'number' ? node.params.steps      : 40));
-    const cloudMinY  = f(typeof node.params.cloud_min_y  === 'number' ? node.params.cloud_min_y  : 1.5);
-    const cloudMaxY  = f(typeof node.params.cloud_max_y  === 'number' ? node.params.cloud_max_y  : 5.0);
-    const puffiness  = f(typeof node.params.puffiness    === 'number' ? node.params.puffiness    : 0.6);
-    const cloudScale = f(typeof node.params.cloud_scale  === 'number' ? node.params.cloud_scale  : 0.4);
-    const scatter    = f(typeof node.params.scatter      === 'number' ? node.params.scatter      : 0.3);
-    const sunSize    = f(typeof node.params.sun_size     === 'number' ? node.params.sun_size     : 0.03);
+    const cloudMinY  = p(node.params.cloud_min_y, 1.5);
+    const cloudMaxY  = p(node.params.cloud_max_y, 5.0);
+    const puffiness  = p(node.params.puffiness, 0.6);
+    const cloudScale = p(node.params.cloud_scale, 0.4);
+    const scatter    = p(node.params.scatter, 0.3);
+    const sunSize    = p(node.params.sun_size, 0.03);
 
     const skyTop    = Array.isArray(node.params.sky_top)     ? node.params.sky_top     as number[] : [0.1, 0.2, 0.5];
     const skyHoriz  = Array.isArray(node.params.sky_horizon) ? node.params.sky_horizon as number[] : [0.8, 0.5, 0.3];
@@ -562,8 +562,8 @@ export const ChromaticAberrationNode: NodeDefinition = {
     const id = node.id;
     const uvVar      = inputVars.uv       ?? 'vec2(0.0)';
     const timeVar    = inputVars.time     ?? '0.0';
-    const strengthIn = inputVars.strength ?? f(typeof node.params.strength   === 'number' ? node.params.strength   : 0.03);
-    const animSpeed  = f(typeof node.params.anim_speed === 'number' ? node.params.anim_speed : 0.5);
+    const strengthIn = inputVars.strength ?? p(node.params.strength, 0.03);
+    const animSpeed  = p(node.params.anim_speed, 0.5);
     const mode       = (node.params.mode    as string) ?? 'radial';
     const animate    = (node.params.animate as string) ?? 'false';
 
@@ -845,21 +845,21 @@ export const OrbitalVolume3DNode: NodeDefinition = {
     // orbit_angle input overrides cam_angle param when wired
     const orbitAngleIn = inputVars.orbit_angle;
 
-    const n            = f(typeof node.params.n             === 'number' ? node.params.n             : 2.0);
-    const l            = f(typeof node.params.l             === 'number' ? node.params.l             : 1.0);
-    const m            = f(typeof node.params.m             === 'number' ? node.params.m             : 0.0);
-    const a0           = f(typeof node.params.a0            === 'number' ? node.params.a0            : 0.5);
+    const n            = p(node.params.n, 2.0);
+    const l            = p(node.params.l, 1.0);
+    const m            = p(node.params.m, 0.0);
+    const a0           = p(node.params.a0, 0.5);
     const scale        = f(Math.max(typeof node.params.scale === 'number' ? node.params.scale : 0.3, 0.001));
     const steps        = Math.round(typeof node.params.steps === 'number' ? node.params.steps : 80);
-    const stepSize     = f(typeof node.params.step_size     === 'number' ? node.params.step_size     : 0.04);
-    const densScale    = f(typeof node.params.density_scale === 'number' ? node.params.density_scale : 6.0);
+    const stepSize     = p(node.params.step_size, 0.04);
+    const densScale    = p(node.params.density_scale, 6.0);
     const gamma        = f(Math.max(typeof node.params.gamma === 'number' ? node.params.gamma : 0.4, 0.05));
-    const edgeSoft     = f(typeof node.params.edge_softness === 'number' ? node.params.edge_softness : 0.6);
-    const turbulence   = f(typeof node.params.turbulence    === 'number' ? node.params.turbulence    : 0.0);
-    const turbSpeed    = f(typeof node.params.turb_speed    === 'number' ? node.params.turb_speed    : 0.3);
-    const camDist      = f(typeof node.params.cam_dist      === 'number' ? node.params.cam_dist      : 2.5);
-    const camSpeed     = f(typeof node.params.cam_speed     === 'number' ? node.params.cam_speed     : 0.2);
-    const camAngle     = f(typeof node.params.cam_angle     === 'number' ? node.params.cam_angle     : 0.0);
+    const edgeSoft     = p(node.params.edge_softness, 0.6);
+    const turbulence   = p(node.params.turbulence, 0.0);
+    const turbSpeed    = p(node.params.turb_speed, 0.3);
+    const camDist      = p(node.params.cam_dist, 2.5);
+    const camSpeed     = p(node.params.cam_speed, 0.2);
+    const camAngle     = p(node.params.cam_angle, 0.0);
     // cam_pitch: vertical angle in radians — 0=equatorial, π/2=top-down
     // Legacy cam_height kept as fallback if cam_pitch absent
     const camPitch     = f(typeof node.params.cam_pitch     === 'number' ? node.params.cam_pitch

@@ -100,6 +100,7 @@ import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
 import { PaletteNode, PalettePresetNode, GradientNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
+import { GroupNode } from './group';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, ExpNode, PowNode, NegateNode, LengthNode,
@@ -207,6 +208,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Output
   output: OutputNode,
   vec4Output: Vec4OutputNode,
+  // Utility
+  group: GroupNode,
   // Math
   add: AddNode,
   subtract: SubtractNode,

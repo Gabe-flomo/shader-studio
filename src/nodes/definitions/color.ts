@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, vec3Str } from './helpers';
+import { f, p, vec3Str } from './helpers';
 
 // Shared palette GLSL function — referenced by both PaletteNode and FractalLoopNode
 // so the compiler's Set-based deduplication keeps exactly one copy in the shader.
@@ -136,7 +136,7 @@ export const GradientNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
     const uvVar    = inputVars.uv       ?? 'vec2(0.0)';
-    const tOffset  = inputVars.t_offset ?? f(typeof node.params.t_offset === 'number' ? node.params.t_offset : 0.0);
+    const tOffset  = inputVars.t_offset ?? p(node.params.t_offset, 0.0);
     const modeStr  = (node.params.mode as string) ?? 'linear_x';
     const modeMap: Record<string, number> = { linear_x: 0, linear_y: 1, radial: 2, angular: 3, diagonal: 4 };
     const modeInt  = modeMap[modeStr] ?? 0;
