@@ -4,59 +4,59 @@ import { f, p, vec3Str } from './helpers';
 // Shared palette GLSL function — referenced by both PaletteNode and FractalLoopNode
 // so the compiler's Set-based deduplication keeps exactly one copy in the shader.
 export const PALETTE_GLSL_FN = `
-vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
-    return a + b * cos(6.28318 * (c * t + d));
+vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
+    return offset + amplitude * cos(6.28318 * (freq * t + phase));
 }`;
 
 export const PaletteNode: NodeDefinition = {
   type: 'palette',
   label: 'Palette',
   category: 'Color',
-  description: 'Cosine-based color palette. Wire float nodes to a_r/a_g/a_b etc. to animate palette coefficients, or use the vec3 sliders as static fallbacks.',
+  description: 'Cosine-based color palette. Wire float nodes to offset_r/offset_g/offset_b etc. to animate palette coefficients, or use the vec3 sliders as static fallbacks.',
   inputs: {
-    t:   { type: 'float', label: 'T' },
-    a_r: { type: 'float', label: 'a.r' },
-    a_g: { type: 'float', label: 'a.g' },
-    a_b: { type: 'float', label: 'a.b' },
-    b_r: { type: 'float', label: 'b.r' },
-    b_g: { type: 'float', label: 'b.g' },
-    b_b: { type: 'float', label: 'b.b' },
-    c_r: { type: 'float', label: 'c.r' },
-    c_g: { type: 'float', label: 'c.g' },
-    c_b: { type: 'float', label: 'c.b' },
-    d_r: { type: 'float', label: 'd.r' },
-    d_g: { type: 'float', label: 'd.g' },
-    d_b: { type: 'float', label: 'd.b' },
+    t:           { type: 'float', label: 'T' },
+    offset_r:    { type: 'float', label: 'offset.r' },
+    offset_g:    { type: 'float', label: 'offset.g' },
+    offset_b:    { type: 'float', label: 'offset.b' },
+    amplitude_r: { type: 'float', label: 'amplitude.r' },
+    amplitude_g: { type: 'float', label: 'amplitude.g' },
+    amplitude_b: { type: 'float', label: 'amplitude.b' },
+    freq_r:      { type: 'float', label: 'freq.r' },
+    freq_g:      { type: 'float', label: 'freq.g' },
+    freq_b:      { type: 'float', label: 'freq.b' },
+    phase_r:     { type: 'float', label: 'phase.r' },
+    phase_g:     { type: 'float', label: 'phase.g' },
+    phase_b:     { type: 'float', label: 'phase.b' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
   },
   defaultParams: {
-    a: [0.5, 0.5, 0.5],
-    b: [0.5, 0.5, 0.5],
-    c: [1.0, 1.0, 1.0],
-    d: [0.0, 0.33, 0.67],
+    offset:    [0.5, 0.5, 0.5],
+    amplitude: [0.5, 0.5, 0.5],
+    freq:      [1.0, 1.0, 1.0],
+    phase:     [0.0, 0.33, 0.67],
   },
   paramDefs: {
-    a: { label: 'A (offset)',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    b: { label: 'B (amplitude)', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    c: { label: 'C (frequency)', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    d: { label: 'D (phase)',     type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
+    offset:    { label: 'Offset',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
+    amplitude: { label: 'Amplitude', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
+    freq:      { label: 'Freq',      type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
+    phase:     { label: 'Phase',     type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
   },
   glslFunction: PALETTE_GLSL_FN,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
     const tVar = inputVars.t || '0.0';
-    const aV = Array.isArray(node.params.a) ? node.params.a as number[] : [0.5, 0.5, 0.5];
-    const bV = Array.isArray(node.params.b) ? node.params.b as number[] : [0.5, 0.5, 0.5];
-    const cV = Array.isArray(node.params.c) ? node.params.c as number[] : [1.0, 1.0, 1.0];
-    const dV = Array.isArray(node.params.d) ? node.params.d as number[] : [0.0, 0.33, 0.67];
-    const aR = inputVars.a_r || f(aV[0]); const aG = inputVars.a_g || f(aV[1]); const aB = inputVars.a_b || f(aV[2]);
-    const bR = inputVars.b_r || f(bV[0]); const bG = inputVars.b_g || f(bV[1]); const bB = inputVars.b_b || f(bV[2]);
-    const cR = inputVars.c_r || f(cV[0]); const cG = inputVars.c_g || f(cV[1]); const cB = inputVars.c_b || f(cV[2]);
-    const dR = inputVars.d_r || f(dV[0]); const dG = inputVars.d_g || f(dV[1]); const dB = inputVars.d_b || f(dV[2]);
+    const oV = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
+    const aV = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
+    const fV = Array.isArray(node.params.freq)      ? node.params.freq      as number[] : [1.0, 1.0, 1.0];
+    const phV = Array.isArray(node.params.phase)    ? node.params.phase     as number[] : [0.0, 0.33, 0.67];
+    const oR = inputVars.offset_r    || f(oV[0]);  const oG = inputVars.offset_g    || f(oV[1]);  const oB = inputVars.offset_b    || f(oV[2]);
+    const aR = inputVars.amplitude_r || f(aV[0]);  const aG = inputVars.amplitude_g || f(aV[1]);  const aB = inputVars.amplitude_b || f(aV[2]);
+    const fR = inputVars.freq_r      || f(fV[0]);  const fG = inputVars.freq_g      || f(fV[1]);  const fB = inputVars.freq_b      || f(fV[2]);
+    const pR = inputVars.phase_r     || f(phV[0]); const pG = inputVars.phase_g     || f(phV[1]); const pB = inputVars.phase_b     || f(phV[2]);
     return {
-      code: `    vec3 ${outVar} = palette(${tVar}, vec3(${aR},${aG},${aB}), vec3(${bR},${bG},${bB}), vec3(${cR},${cG},${cB}), vec3(${dR},${dG},${dB}));\n`,
+      code: `    vec3 ${outVar} = palette(${tVar}, vec3(${oR},${oG},${oB}), vec3(${aR},${aG},${aB}), vec3(${fR},${fG},${fB}), vec3(${pR},${pG},${pB}));\n`,
       outputVars: { color: outVar },
     };
   },
@@ -66,23 +66,23 @@ export const PaletteNode: NodeDefinition = {
 
 interface PalettePreset {
   name: string;
-  a: [number, number, number];
-  b: [number, number, number];
-  c: [number, number, number];
-  d: [number, number, number];
+  offset:    [number, number, number];
+  amplitude: [number, number, number];
+  freq:      [number, number, number];
+  phase:     [number, number, number];
 }
 
 const PALETTE_PRESETS: PalettePreset[] = [
-  { name: 'IQ Blue-Teal',  a:[0.5,0.5,0.5], b:[0.5,0.5,0.5], c:[1.0,1.0,1.0], d:[0.0,0.1,0.2] },
-  { name: 'IQ Rainbow',    a:[0.5,0.5,0.5], b:[0.5,0.5,0.5], c:[1.0,1.0,1.0], d:[0.0,0.33,0.67] },
-  { name: 'IQ Warm',       a:[0.5,0.5,0.5], b:[0.5,0.5,0.5], c:[1.0,1.0,1.0], d:[0.3,0.2,0.2] },
-  { name: 'IQ Lemon',      a:[0.5,0.5,0.5], b:[0.5,0.5,0.5], c:[1.0,1.0,0.5], d:[0.8,0.9,0.3] },
-  { name: 'Sunset',        a:[0.5,0.5,0.5], b:[0.4431,0.4235,0.4235], c:[1.0,0.7,0.4], d:[0.0,0.15,0.2] },
-  { name: 'Fire',          a:[0.5,0.5,0.5], b:[0.4431,0.4235,0.4235], c:[2.0,1.0,0.0], d:[0.5,0.2,0.25] },
-  { name: 'Forest',        a:[0.8,0.5,0.4], b:[0.2,0.4,0.2], c:[2.0,1.0,1.0], d:[0.0,0.25,0.25] },
-  { name: 'Purple Haze',   a:[0.721,0.328,0.542], b:[0.659,0.181,0.896], c:[0.612,0.14,0.196], d:[0.538,0.978,0.7] },
-  { name: 'Deep Purple',   a:[0.412,0.102,0.491], b:[0.397,0.13,0.485],  c:[0.612,0.14,0.196], d:[0.538,0.978,0.7] },
-  { name: 'Psychedelic',   a:[0.412,0.202,0.491], b:[0.397,0.13,0.485],  c:[1.147,1.557,1.197], d:[1.956,5.039,2.541] },
+  { name: 'IQ Blue-Teal',  offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.1,0.2] },
+  { name: 'IQ Rainbow',    offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.33,0.67] },
+  { name: 'IQ Warm',       offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.3,0.2,0.2] },
+  { name: 'IQ Lemon',      offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,0.5], phase:[0.8,0.9,0.3] },
+  { name: 'Sunset',        offset:[0.5,0.5,0.5], amplitude:[0.4431,0.4235,0.4235], freq:[1.0,0.7,0.4], phase:[0.0,0.15,0.2] },
+  { name: 'Fire',          offset:[0.5,0.5,0.5], amplitude:[0.4431,0.4235,0.4235], freq:[2.0,1.0,0.0], phase:[0.5,0.2,0.25] },
+  { name: 'Forest',        offset:[0.8,0.5,0.4], amplitude:[0.2,0.4,0.2], freq:[2.0,1.0,1.0], phase:[0.0,0.25,0.25] },
+  { name: 'Purple Haze',   offset:[0.721,0.328,0.542], amplitude:[0.659,0.181,0.896], freq:[0.612,0.14,0.196], phase:[0.538,0.978,0.7] },
+  { name: 'Deep Purple',   offset:[0.412,0.102,0.491], amplitude:[0.397,0.13,0.485],  freq:[0.612,0.14,0.196], phase:[0.538,0.978,0.7] },
+  { name: 'Psychedelic',   offset:[0.412,0.202,0.491], amplitude:[0.397,0.13,0.485],  freq:[1.147,1.557,1.197], phase:[1.956,5.039,2.541] },
 ];
 
 export const PALETTE_PRESET_OPTIONS = PALETTE_PRESETS.map((p, i) => ({ value: String(i), label: p.name }));
@@ -171,19 +171,19 @@ export const PalettePresetNode: NodeDefinition = {
     const outVar = `${node.id}_color`;
     const tVar = inputVars.t || '0.0';
     const idx = parseInt((node.params.preset as string) ?? '1', 10);
-    const p = PALETTE_PRESETS[Math.min(idx, PALETTE_PRESETS.length - 1)] ?? PALETTE_PRESETS[1];
+    const preset = PALETTE_PRESETS[Math.min(idx, PALETTE_PRESETS.length - 1)] ?? PALETTE_PRESETS[1];
     const fv = (v: number) => v.toFixed(6);
-    const av = `vec3(${fv(p.a[0])},${fv(p.a[1])},${fv(p.a[2])})`;
-    const bv = `vec3(${fv(p.b[0])},${fv(p.b[1])},${fv(p.b[2])})`;
-    const cv = `vec3(${fv(p.c[0])},${fv(p.c[1])},${fv(p.c[2])})`;
-    const dv = `vec3(${fv(p.d[0])},${fv(p.d[1])},${fv(p.d[2])})`;
+    const ov = `vec3(${fv(preset.offset[0])},${fv(preset.offset[1])},${fv(preset.offset[2])})`;
+    const av = `vec3(${fv(preset.amplitude[0])},${fv(preset.amplitude[1])},${fv(preset.amplitude[2])})`;
+    const frv = `vec3(${fv(preset.freq[0])},${fv(preset.freq[1])},${fv(preset.freq[2])})`;
+    const phv = `vec3(${fv(preset.phase[0])},${fv(preset.phase[1])},${fv(preset.phase[2])})`;
     return {
       code: [
         `    vec3 ${outVar};\n`,
         `    {\n`,
-        `        vec3 _pa = ${av}; vec3 _pb = ${bv};\n`,
-        `        vec3 _pc = ${cv}; vec3 _pd = ${dv};\n`,
-        `        ${outVar} = _pa + _pb * cos(6.283185 * (_pc * ${tVar} + _pd));\n`,
+        `        vec3 _po = ${ov}; vec3 _pa = ${av};\n`,
+        `        vec3 _pf = ${frv}; vec3 _pph = ${phv};\n`,
+        `        ${outVar} = _po + _pa * cos(6.283185 * (_pf * ${tVar} + _pph));\n`,
         `    }\n`,
       ].join(''),
       outputVars: { color: outVar },
