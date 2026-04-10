@@ -75,6 +75,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
   const setNodeProbeValues = useNodeGraphStore((state) => state.setNodeProbeValues);
+  const setScopeProbeValues = useNodeGraphStore((state) => state.setScopeProbeValues);
   // Only broadcast currentTime when a Time node is in the graph — avoids 10fps
   // re-renders of all NodeComponents on graphs that don't use time at all.
   const hasTimeNode        = useNodeGraphStore((state) => state.nodes.some(n => n.type === 'time'));
@@ -198,6 +199,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     let lastProbedNodeId: string | null = null;
     let lastProbeFs: string | null = null;   // invalidate cache when shader recompiles
     const probeMatCache = new Map<string, THREE.ShaderMaterial>();
+    const scopeMatCache = new Map<string, THREE.ShaderMaterial>();
+    let lastScopeFs: string | null = null;
 
     // Build a 1-px probe shader: full frag shader but gl_FragColor = packed varName
     const buildProbeShader = (fs: string, varName: string, varType: string): string => {
@@ -211,6 +214,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
         default:      packed = `vec4(0.0)`; break;
       }
       return `${stripped}  gl_FragColor = ${packed};\n}`;
+    };
+
+    // Build a scope probe shader: normalizes the float value to [0,1] using min/max
+    const buildScopeProbeShader = (fs: string, varName: string, minVal: number, maxVal: number): string => {
+      const stripped = fs.replace(/gl_FragColor\s*=\s*[^;]+;[^}]*\}(\s*)$/, '');
+      const range = (maxVal - minVal) || 1.0;
+      return `${stripped}  gl_FragColor = vec4((${varName} - ${minVal.toFixed(6)}) / ${range.toFixed(6)}, 0.0, 0.0, 1.0);\n}`;
     };
 
     const ro = new ResizeObserver((entries) => {
@@ -338,6 +348,58 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
           lastProbedNodeId = null;
           setNodeProbeValues(null);
         }
+
+        // ── Always probe scope nodes ──────────────────────────────────────────
+        const scopeNodes = nodesRef.current.filter(n => n.type === 'scope');
+        if (scopeNodes.length > 0) {
+          const curScopeFs = useNodeGraphStore.getState().fragmentShader;
+          const curScopeVs = useNodeGraphStore.getState().vertexShader;
+          if (curScopeFs && curScopeVs) {
+            // Clear scope material cache if shader recompiled
+            if (lastScopeFs !== curScopeFs) {
+              scopeMatCache.forEach(m => m.dispose());
+              scopeMatCache.clear();
+              lastScopeFs = curScopeFs;
+            }
+            const scopeResults: Record<string, number> = {};
+            for (const scopeNode of scopeNodes) {
+              const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
+              if (!outputVars?.value) continue;
+              const varName = outputVars.value;
+              const scopeMin = typeof scopeNode.params.min === 'number' ? scopeNode.params.min : -1.0;
+              const scopeMax = typeof scopeNode.params.max === 'number' ? scopeNode.params.max : 1.0;
+              const cacheKey = `${varName}::${scopeMin}::${scopeMax}`;
+              let pm = scopeMatCache.get(cacheKey);
+              if (!pm) {
+                const probeFs = buildScopeProbeShader(curScopeFs, varName, scopeMin, scopeMax);
+                // Clone all uniforms from the main material so param uniforms work
+                const clonedUniforms: Record<string, { value: unknown }> = {};
+                for (const [k, u] of Object.entries(material.uniforms)) {
+                  clonedUniforms[k] = { value: u.value };
+                }
+                pm = new THREE.ShaderMaterial({
+                  vertexShader: curScopeVs,
+                  fragmentShader: probeFs,
+                  uniforms: clonedUniforms,
+                });
+                scopeMatCache.set(cacheKey, pm);
+              }
+              // Sync uniforms
+              for (const [k, u] of Object.entries(material.uniforms)) {
+                if (pm.uniforms[k]) pm.uniforms[k].value = u.value;
+              }
+              probeMesh.material = pm;
+              renderer.setRenderTarget(probeRT);
+              renderer.render(probeScene, camera);
+              renderer.setRenderTarget(null);
+              renderer.readRenderTargetPixels(probeRT, 0, 0, 1, 1, probeBuf);
+              // R channel encodes (value - min) / (max - min) in [0,1]
+              scopeResults[scopeNode.id] = probeBuf[0] / 255;
+            }
+            probeMesh.material = probeDummy;
+            setScopeProbeValues(scopeResults);
+          }
+        }
       }
     }
     animate();
@@ -367,6 +429,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       probeGeo.dispose();
       probeDummy.dispose();
       probeMatCache.forEach(m => m.dispose());
+      scopeMatCache.forEach(m => m.dispose());
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };

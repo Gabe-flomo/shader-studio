@@ -273,18 +273,29 @@ export function generateFragmentShader(
 
       /** Compile one pass of the subgraph using the given port overrides and ID prefix. */
       const compileSubgraphPass = (iterPrefix: string, portInputOverrides: Map<string, string>) => {
-        const prefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => ({
-          ...subNode,
-          id: iterPrefix + subNode.id,
-          inputs: Object.fromEntries(
-            Object.entries(subNode.inputs).map(([k, inp]) => [
-              k,
-              inp.connection
-                ? { ...inp, connection: { nodeId: iterPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
-                : inp,
-            ]),
-          ),
-        }));
+        const prefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
+          // Apply group-level param overrides: group.params stores `innerNodeId::paramKey` → value
+          const overridePrefix = `${subNode.id}::`;
+          const paramOverrides: Record<string, unknown> = {};
+          for (const [key, val] of Object.entries(node.params)) {
+            if (key.startsWith(overridePrefix)) {
+              paramOverrides[key.slice(overridePrefix.length)] = val;
+            }
+          }
+          return {
+            ...subNode,
+            id: iterPrefix + subNode.id,
+            params: Object.keys(paramOverrides).length > 0 ? { ...subNode.params, ...paramOverrides } : subNode.params,
+            inputs: Object.fromEntries(
+              Object.entries(subNode.inputs).map(([k, inp]) => [
+                k,
+                inp.connection
+                  ? { ...inp, connection: { nodeId: iterPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
+                  : inp,
+              ]),
+            ),
+          };
+        });
         const sortedSub = topologicalSort(prefixedNodes);
         for (const subNode of sortedSub) {
           const subDef = getNodeDefinition(subNode.type);

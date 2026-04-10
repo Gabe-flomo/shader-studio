@@ -99,6 +99,9 @@ interface NodeGraphState {
   nodeProbeValues: Record<string, number[]> | null;
   setSelectedNodeId: (id: string | null) => void;
   setNodeProbeValues: (values: Record<string, number[]> | null) => void;
+  /** Live-sampled normalized [0,1] values for all scope nodes: nodeId → number */
+  scopeProbeValues: Record<string, number>;
+  setScopeProbeValues: (vals: Record<string, number>) => void;
 
   // Preview mode — isolates a single node's output for focused editing
   previewNodeId: string | null;
@@ -268,6 +271,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   selectedNodeIds: [],
   nodeOutputVarMap: new Map(),
   nodeProbeValues: null,
+  scopeProbeValues: {},
   previewNodeId: null,
   nodeHighlightFilter: null,
   _fitViewCallback: null,
@@ -866,6 +870,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setCurrentTime: (t) => set({ currentTime: t }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
   setNodeProbeValues: (values) => set({ nodeProbeValues: values }),
+  setScopeProbeValues: (vals) => set({ scopeProbeValues: vals }),
 
   selectNode: (id, addToSelection = false) => set(state => {
     if (addToSelection) {
