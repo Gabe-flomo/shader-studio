@@ -5,6 +5,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { registerSocket } from './socketRegistry';
+import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
 
 interface Props {
   node: GraphNode;
@@ -236,52 +237,23 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
 
-  // Scope node: rolling waveform buffer + probe subscription (hooks must be before any early returns)
+  // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
   const scopeCanvasRef = useRef<HTMLCanvasElement>(null);
-  const scopeBufferRef = useRef<number[]>(new Array(200).fill(0.5));
-  const scopeProbeVal = useNodeGraphStore(s =>
-    node.type === 'scope' ? (s.scopeProbeValues[node.id] ?? null) : null
-  );
   const scopeMin = node.type === 'scope' ? (typeof node.params.min === 'number' ? node.params.min : -1.0) : -1.0;
   const scopeMax = node.type === 'scope' ? (typeof node.params.max === 'number' ? node.params.max : 1.0) : 1.0;
 
-  // Draw scope waveform whenever a new sample arrives
+  // Register / unregister this canvas in the global scope registry so ShaderCanvas
+  // can draw directly without going through React state (eliminates setState→re-render lag).
   React.useEffect(() => {
-    if (node.type !== 'scope' || scopeProbeVal === null) return;
-    const buf = scopeBufferRef.current;
-    buf.push(scopeProbeVal);
-    if (buf.length > 200) buf.shift();
+    if (node.type !== 'scope') return;
     const canvas = scopeCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = '#0d0d0d';
-    ctx.fillRect(0, 0, W, H);
-    // Grid lines
-    ctx.strokeStyle = '#1e1e2e';
-    ctx.lineWidth = 1;
-    for (let g = 1; g < 4; g++) {
-      const y = (g / 4) * H;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-    // Zero line (where value == 0 maps to)
-    const zeroNorm = (0 - scopeMin) / ((scopeMax - scopeMin) || 1);
-    const zeroY = (1 - Math.max(0, Math.min(1, zeroNorm))) * H;
-    ctx.strokeStyle = '#313244';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(W, zeroY); ctx.stroke();
-    // Signal
-    ctx.strokeStyle = '#89b4fa';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < buf.length; i++) {
-      const x = (i / (buf.length - 1)) * W;
-      const y = (1 - buf[i]) * H; // buf values are already 0-1 normalized
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }, [scopeProbeVal, scopeMin, scopeMax]);
+    if (canvas) scopeCanvasRegistry.set(node.id, canvas);
+    return () => {
+      scopeCanvasRegistry.delete(node.id);
+      scopeBufferRegistry.delete(node.id);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.type, node.id]);
 
   if (!def) return null;
 
@@ -358,7 +330,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           ref={scopeCanvasRef}
           width={220}
           height={80}
-          style={{ display: 'block', borderBottom: '1px solid #313244' }}
+          style={{ display: 'block', width: '100%', height: '80px', borderBottom: '1px solid #313244' }}
         />
 
         {/* Min/Max params */}
@@ -379,21 +351,37 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         </div>
 
         {/* Input / Output sockets */}
-        <div style={{ padding: '4px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div style={{ padding: '3px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 10px 0 0' }}>
             <div
               ref={el => { registerSocket(node.id, 'in', 'value', el); }}
-              onMouseUp={() => onEndConnection(node.id, 'value')}
-              style={{ width: 10, height: 10, borderRadius: '50%', background: TYPE_COLORS['float'], cursor: 'crosshair', position: 'relative', left: -14 }}
+              onMouseUp={e => {
+                e.stopPropagation();
+                if (node.inputs.value?.connection) {
+                  disconnectInput(node.id, 'value');
+                } else {
+                  onEndConnection(node.id, 'value');
+                }
+              }}
+              style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: node.inputs.value?.connection ? TYPE_COLORS['float'] : '#333',
+                border: `2px solid ${TYPE_COLORS['float']}`,
+                cursor: 'crosshair', flexShrink: 0, marginLeft: '-6px',
+              }}
             />
-            <span style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14 }}>value</span>
+            <span style={{ fontSize: '10px', color: '#a6adc8' }}>value</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 0 0 10px' }}>
             <span style={{ fontSize: '10px', color: '#a6adc8' }}>value</span>
             <div
               ref={el => { registerSocket(node.id, 'out', 'value', el); }}
-              onMouseDown={e => onStartConnection(node.id, 'value', e)}
-              style={{ width: 10, height: 10, borderRadius: '50%', background: TYPE_COLORS['float'], cursor: 'crosshair', position: 'relative', right: -14 }}
+              onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, 'value', e); }}
+              style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: TYPE_COLORS['float'], border: `2px solid ${TYPE_COLORS['float']}`,
+                cursor: 'crosshair', flexShrink: 0, marginRight: '-6px',
+              }}
             />
           </div>
         </div>
