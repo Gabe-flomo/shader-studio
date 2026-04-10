@@ -76,13 +76,13 @@ vec2 ch2_noise2(vec2 p, float t, float spd, int mode) {
         float ny = fract(sin(dot(p*4.0+qt+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
         return (vec2(nx,ny)*2.0-1.0);
     }
-    // mode 0: smooth jitter at high frequency — grain-like particles, no directional bias.
-    // Uses value noise at high scale so each pixel gets an independent smooth displacement.
-    float scale8 = 8.0;
-    return vec2(
-        ch2_valueNoise(p * scale8 + t * spd),
-        ch2_valueNoise(p * scale8 + t * spd + vec2(31.7, 17.3))
-    ) * 2.0 - 1.0;
+    // mode 0: per-cell hash jitter — discrete particle look, no directional bias.
+    // floor() quantizes to cells so each particle gets a constant random displacement.
+    // x and y are hashed with different coefficient pairs so their level sets don't align.
+    vec2 cell = floor(p * 10.0 + t * spd);
+    float hx = fract(sin(cell.x * 127.1 + cell.y * 43.3) * 43758.5453);
+    float hy = fract(sin(cell.y * 311.7 + cell.x * 59.7) * 43758.5453);
+    return vec2(hx, hy) * 2.0 - 1.0;
 }`;
 
 export const ChladniNode: NodeDefinition = {
