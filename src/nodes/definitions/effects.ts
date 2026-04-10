@@ -208,7 +208,7 @@ export const FractalLoopNode: NodeDefinition = {
     time:        { type: 'float', label: 'Time'         },
     fract_scale: { type: 'float', label: 'Tile Scale'   },
     scale_exp:   { type: 'float', label: 'Scale Growth' },
-    freq:        { type: 'float', label: 'Ring Freq'    },
+    ring_freq:   { type: 'float', label: 'Ring Freq'    },
     glow:        { type: 'float', label: 'Glow'         },
     glow_pow:    { type: 'float', label: 'Glow Power'   },
     iter_offset: { type: 'float', label: 'Layer Offset' },
@@ -224,29 +224,29 @@ export const FractalLoopNode: NodeDefinition = {
     iterations:  4,
     fract_scale: 1.5,
     scale_exp:   1.0,
-    freq:        8.0,
+    ring_freq:   8.0,
     glow:        0.01,
     glow_pow:    1.0,
     iter_offset: 0.4,
     time_scale:  0.4,
-    a: [0.5,  0.5,  0.5 ],
-    b: [0.5,  0.5,  0.5 ],
-    c: [1.0,  1.0,  1.0 ],
-    d: [0.0,  0.33, 0.67],
+    offset:    [0.5,  0.5,  0.5 ],
+    amplitude: [0.5,  0.5,  0.5 ],
+    freq:      [1.0,  1.0,  1.0 ],
+    phase:     [0.0,  0.33, 0.67],
   },
   paramDefs: {
     iterations:  { label: 'Iterations',   type: 'float', min: 1,     max: 8,    step: 1     },
     fract_scale: { label: 'Tile Scale',   type: 'float', min: 0.01,  max: 10.0, step: 0.01  },
     scale_exp:   { label: 'Scale Growth', type: 'float', min: 0.0,   max: 2.0,  step: 0.01  },
-    freq:        { label: 'Ring Freq',    type: 'float', min: 1.0,   max: 20.0, step: 0.1   },
+    ring_freq:   { label: 'Ring Freq',    type: 'float', min: 1.0,   max: 20.0, step: 0.1   },
     glow:        { label: 'Glow',         type: 'float', min: 0.001, max: 0.1,  step: 0.001 },
     glow_pow:    { label: 'Glow Power',   type: 'float', min: 0.5,   max: 5.0,  step: 0.1   },
     iter_offset: { label: 'Layer Offset', type: 'float', min: 0.0,   max: 1.0,  step: 0.01  },
     time_scale:  { label: 'Anim Speed',   type: 'float', min: 0.0,   max: 2.0,  step: 0.01  },
-    a: { label: 'Palette A', type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
-    b: { label: 'Palette B', type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
-    c: { label: 'Palette C', type: 'vec3', min: 0.0, max: 2.0, step: 0.01 },
-    d: { label: 'Palette D', type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
+    offset:    { label: 'Offset',    type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
+    amplitude: { label: 'Amplitude', type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
+    freq:      { label: 'Freq',      type: 'vec3', min: 0.0, max: 2.0, step: 0.01 },
+    phase:     { label: 'Phase',     type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -255,15 +255,15 @@ export const FractalLoopNode: NodeDefinition = {
     const iters     = Math.round(typeof node.params.iterations  === 'number' ? node.params.iterations  : 4);
     const scale     = inputVars.fract_scale ?? p(node.params.fract_scale, 1.5);
     const scaleExp  = inputVars.scale_exp   ?? p(node.params.scale_exp, 1.0);
-    const freq      = inputVars.freq        ?? p(node.params.freq, 8.0);
+    const freq      = inputVars.ring_freq   ?? p(node.params.ring_freq, 8.0);
     const glow      = inputVars.glow        ?? p(node.params.glow, 0.01);
     const glowPow   = inputVars.glow_pow    ?? p(node.params.glow_pow, 1.0);
     const iterOff   = inputVars.iter_offset ?? p(node.params.iter_offset, 0.4);
     const timeScale = inputVars.time_scale  ?? p(node.params.time_scale, 0.4);
-    const a = Array.isArray(node.params.a) ? node.params.a as number[] : [0.5, 0.5, 0.5];
-    const b = Array.isArray(node.params.b) ? node.params.b as number[] : [0.5, 0.5, 0.5];
-    const c = Array.isArray(node.params.c) ? node.params.c as number[] : [1.0, 1.0, 1.0];
-    const d = Array.isArray(node.params.d) ? node.params.d as number[] : [0.0, 0.33, 0.67];
+    const a = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
+    const b = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
+    const c = Array.isArray(node.params.freq)      ? node.params.freq      as number[] : [1.0, 1.0, 1.0];
+    const d = Array.isArray(node.params.phase)     ? node.params.phase     as number[] : [0.0, 0.33, 0.67];
     const scaleExpr = (scaleExp === '1.0' || scaleExp === '1') ? scale : `(${scale} * pow(${scaleExp}, ${id}_i))`;
     const glowExpr = (glowPow === '1.0' || glowPow === '1')
       ? `${glow} / max(${id}_d, 0.0001)`
