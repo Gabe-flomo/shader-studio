@@ -190,3 +190,115 @@ export const PalettePresetNode: NodeDefinition = {
     };
   },
 };
+
+// ─── HSV ↔ RGB ────────────────────────────────────────────────────────────────
+
+const HSV_GLSL = `
+vec3 rgb2hsv(vec3 c) {
+    vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    return vec3(abs(q.z + (q.w - q.y) / (6.0*d + 0.0001)), d / (q.x + 0.0001), q.x);
+}
+vec3 hsv2rgb(vec3 c) {
+    vec3 p = abs(fract(c.x + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}`;
+
+export const HSVNode: NodeDefinition = {
+  type: 'hsv',
+  label: 'RGB ↔ HSV',
+  category: 'Color',
+  description: 'Convert between RGB and HSV. HSV → RGB lets you wire hue/saturation/value as floats for per-channel animation. RGB → HSV extracts those channels from a color.',
+  inputs:  { color: { type: 'vec3', label: 'Color' } },
+  outputs: { color: { type: 'vec3', label: 'Color' }, h: { type: 'float', label: 'H' }, s: { type: 'float', label: 'S' }, v: { type: 'float', label: 'V' } },
+  defaultParams: { direction: 'rgb2hsv' },
+  paramDefs: {
+    direction: { label: 'Direction', type: 'select', options: [
+      { value: 'rgb2hsv', label: 'RGB → HSV' },
+      { value: 'hsv2rgb', label: 'HSV → RGB' },
+    ]},
+  },
+  glslFunction: HSV_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const c  = inputVars.color ?? 'vec3(0.5)';
+    const fn = node.params.direction === 'hsv2rgb' ? 'hsv2rgb' : 'rgb2hsv';
+    return {
+      code: [
+        `    vec3  ${id}_color = ${fn}(${c});\n`,
+        `    float ${id}_h = ${id}_color.x;\n`,
+        `    float ${id}_s = ${id}_color.y;\n`,
+        `    float ${id}_v = ${id}_color.z;\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color`, h: `${id}_h`, s: `${id}_s`, v: `${id}_v` },
+    };
+  },
+};
+
+// ─── Posterize ────────────────────────────────────────────────────────────────
+
+export const PosterizeNode: NodeDefinition = {
+  type: 'posterize',
+  label: 'Posterize',
+  category: 'Color',
+  description: 'Quantize color to discrete levels — cel-shading, retro, and paint-like looks. Levels=2 → pure black/white. Wire a Noise Float to levels for organic dithering.',
+  inputs:  { color: { type: 'vec3', label: 'Color' }, levels: { type: 'float', label: 'Levels' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { levels: 8.0 },
+  paramDefs: { levels: { label: 'Levels', type: 'float', min: 2, max: 64, step: 1 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const c  = inputVars.color  ?? 'vec3(0.5)';
+    const lv = inputVars.levels ?? p(node.params.levels, 8.0);
+    return {
+      code: `    vec3 ${id}_color = floor(${c} * ${lv}) / max(${lv}, 1.0);\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ─── Invert ───────────────────────────────────────────────────────────────────
+
+export const InvertNode: NodeDefinition = {
+  type: 'invert',
+  label: 'Invert',
+  category: 'Color',
+  description: 'Invert a color (1 − color). Also works for inverting SDF signs or float ranges.',
+  inputs:  { color: { type: 'vec3', label: 'Color' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const c  = inputVars.color ?? 'vec3(0.5)';
+    return {
+      code: `    vec3 ${id}_color = 1.0 - ${c};\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ─── Desaturate ───────────────────────────────────────────────────────────────
+
+export const DesaturateNode: NodeDefinition = {
+  type: 'desaturate',
+  label: 'Desaturate',
+  category: 'Color',
+  description: 'Blend toward grayscale. Amount=1 → full grayscale, Amount=0 → original color. Wire a Noise Float to Amount for per-pixel variation.',
+  inputs:  { color: { type: 'vec3', label: 'Color' }, amount: { type: 'float', label: 'Amount' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { amount: 1.0 },
+  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 1.0, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const c   = inputVars.color  ?? 'vec3(0.5)';
+    const amt = inputVars.amount ?? p(node.params.amount, 1.0);
+    return {
+      code: [
+        `    float ${id}_lum   = dot(${c}, vec3(0.299, 0.587, 0.114));\n`,
+        `    vec3  ${id}_color = mix(${c}, vec3(${id}_lum), ${amt});\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};

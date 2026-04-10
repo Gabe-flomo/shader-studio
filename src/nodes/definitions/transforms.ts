@@ -1,6 +1,17 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { f, p } from './helpers';
 
+const UV_WARP_GLSL = `
+// Fast hash-based UV displacement — grain/jitter feel per element
+vec2 uvWarpHash(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return fract(sin(p) * 43758.5453) * 2.0 - 1.0;
+}
+vec2 uvWarpOffset(vec2 uv, float scale, float t, float speed) {
+    vec2 p = uv * scale + t * speed;
+    return uvWarpHash(floor(p) + 0.5) * fract(p + 0.5);
+}`;
+
 export const FractNode: NodeDefinition = {
   type: 'fract',
   label: 'Fract / Tile',
@@ -24,6 +35,39 @@ export const FractNode: NodeDefinition = {
     return {
       code: `    vec2 ${outVar} = fract(${inVar} * ${scale}) - 0.5;\n`,
       outputVars: { output: outVar },
+    };
+  },
+};
+
+export const UVWarpNode: NodeDefinition = {
+  type: 'uvWarp',
+  label: 'UV Warp',
+  category: 'Transforms',
+  description: 'Displaces UV by a fast hash-based noise — grain-like jitter with no smooth blending. Wire between UV and any SDF or space node to add turbulence to just that element. Scale controls frequency, Strength controls displacement amount.',
+  inputs: {
+    input: { type: 'vec2', label: 'UV' },
+    time:  { type: 'float', label: 'Time' },
+  },
+  outputs: {
+    output: { type: 'vec2', label: 'UV out' },
+  },
+  defaultParams: { strength: 0.05, scale: 8.0, speed: 1.0 },
+  paramDefs: {
+    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 0.5,  step: 0.001 },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1   },
+    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01  },
+  },
+  glslFunction: UV_WARP_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const uv       = inputVars.input || 'vec2(0.0)';
+    const timeVar  = inputVars.time  || '0.0';
+    const str      = p(node.params.strength, 0.05);
+    const scale    = p(node.params.scale, 8.0);
+    const speed    = p(node.params.speed, 1.0);
+    return {
+      code: `    vec2 ${id}_output = ${uv} + uvWarpOffset(${uv}, ${scale}, ${timeVar}, ${speed}) * ${str};\n`,
+      outputVars: { output: `${id}_output` },
     };
   },
 };

@@ -19,7 +19,6 @@ import type { NodeGraph } from '../types/nodeGraph';
 import type { CompilationResult } from './types';
 import { VERTEX_SHADER } from './types';
 import {
-  collectLoopInternalIds,
   collectLoopPairChains,
   collectLoopPairInternalIds,
   topologicalSort,
@@ -34,10 +33,8 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
     const { nodes } = graph;
 
     // 1. Determine which node IDs are loop-internal (excluded from main pass)
-    const loopInternalIds  = collectLoopInternalIds(nodes);
     const loopPairChains   = collectLoopPairChains(nodes);
-    const loopPairInternal = collectLoopPairInternalIds(loopPairChains);
-    const allInternalIds   = new Set([...loopInternalIds, ...loopPairInternal]);
+    const allInternalIds   = collectLoopPairInternalIds(loopPairChains);
 
     // 2. Validate
     const validation = validateGraph(nodes, allInternalIds);

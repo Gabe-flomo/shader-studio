@@ -22,6 +22,14 @@ export default defineConfig({
     },
   ],
   base: isTauri ? '/' : '/shader-studio/',
+  server: {
+    watch: {
+      awaitWriteFinish: {
+        stabilityThreshold: 500,
+        pollInterval: 100,
+      },
+    },
+  },
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
   },

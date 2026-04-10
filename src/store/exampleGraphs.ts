@@ -1233,6 +1233,290 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Fractal Rings (Group Loop) — ring step iterated via group node ──────────
+  // The group carries two values across iterations: vec2 UV and vec3 color.
+  // Each pass folds UV with fract, computes a ring glow, and accumulates color.
+  fractalRingsGroup: {
+    label: 'Fractal Rings (Group)',
+    counter: 4,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 240 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 240, y: 180 },
+        inputs: {
+          in0: { type: 'vec2', label: 'UV',    connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          // in1 (vec3 color) has no external connection — starts at vec3(0.0)
+        },
+        outputs: {
+          out0: { type: 'vec2', label: 'UV' },
+          out1: { type: 'vec3', label: 'Color' },
+        },
+        params: {
+          label: 'Ring Step',
+          iterations: 4,
+          subgraph: {
+            nodes: [
+              {
+                id: 'ring_a', type: 'loopRingStep',
+                position: { x: 100, y: 100 },
+                inputs: {
+                  uv:    { type: 'vec2', label: 'UV' },
+                  color: { type: 'vec3', label: 'Color in' },
+                },
+                outputs: {
+                  uv:    { type: 'vec2', label: 'UV out' },
+                  color: { type: 'vec3', label: 'Color out' },
+                },
+                params: { scale: 1.5, freq: 8.0, glow: 0.01, timeScale: 0.4 },
+              },
+            ],
+            inputPorts: [
+              { key: 'in0', type: 'vec2', label: 'UV',    toNodeId: 'ring_a', toInputKey: 'uv'    },
+              { key: 'in1', type: 'vec3', label: 'Color', toNodeId: 'ring_a', toInputKey: 'color' },
+            ],
+            outputPorts: [
+              { key: 'out0', type: 'vec2', label: 'UV',    fromNodeId: 'ring_a', fromOutputKey: 'uv'    },
+              { key: 'out1', type: 'vec3', label: 'Color', fromNodeId: 'ring_a', fromOutputKey: 'color' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'out_2', type: 'output', position: { x: 520, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out1' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Fractal Rings (Wired Loop) — ring step via LoopStart → LoopEnd ──────────
+  // The wired loop carries vec2 UV. Ring Step folds each iteration.
+  // Color is accumulated by Ring Step using its persistent carry (via wired chain).
+  fractalRingsWired: {
+    label: 'Fractal Rings (Wired)',
+    counter: 5,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 220 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'start_1', type: 'loopStart', position: { x: 220, y: 180 },
+        inputs: { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' } },
+        params: { iterations: 4 },
+      },
+      {
+        id: 'ring_2', type: 'loopRingStep', position: { x: 420, y: 160 },
+        inputs: {
+          uv:    { type: 'vec2', label: 'UV',       connection: { nodeId: 'start_1', outputKey: 'carry' } },
+          color: { type: 'vec3', label: 'Color in' },
+        },
+        outputs: {
+          uv:    { type: 'vec2', label: 'UV out' },
+          color: { type: 'vec3', label: 'Color out' },
+        },
+        params: { scale: 1.5, freq: 8.0, glow: 0.01, timeScale: 0.4 },
+      },
+      {
+        id: 'end_3', type: 'loopEnd', position: { x: 660, y: 180 },
+        inputs: { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'ring_2', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: { iterations: 4 },
+      },
+      {
+        id: 'len_4', type: 'length', position: { x: 840, y: 200 },
+        inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_3', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { scale: 1.0 },
+      },
+      {
+        id: 'pal_5', type: 'palette', position: { x: 1020, y: 180 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'len_4', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.33, 0.67] },
+      },
+      {
+        id: 'out_6', type: 'output', position: { x: 1220, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_5', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── UV Warp — organic jitter on a specific element ────────────────────────
+  // Shows how UV Warp adds grain-like turbulence to just one shape's edges,
+  // while a second clean circle remains unaffected.
+  uvWarpDemo: {
+    label: 'UV Warp — Element Turbulence',
+    counter: 10,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 500 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Warp UV for the jittery ring — only this element gets turbulence
+      {
+        id: 'warp_2', type: 'uvWarp', position: { x: 260, y: 180 },
+        inputs: {
+          input: { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'UV out' } },
+        params: { strength: 0.025, scale: 14.0, speed: 1.2 },
+      },
+      // Noise float drives glow brightness — wired into brightness socket
+      {
+        id: 'noise_3', type: 'noiseFloat', position: { x: 260, y: 440 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value (0–1)' }, signed: { type: 'float', label: 'Signed (−1–1)' } },
+        params: { scale: 3.0, speed: 0.4, mode: 'smooth' },
+      },
+      // Warped ring — edges jitter with turbulence
+      {
+        id: 'ring_4', type: 'ringSDF', position: { x: 520, y: 160 },
+        inputs: {
+          position:  { type: 'vec2',  label: 'Position',  connection: { nodeId: 'warp_2',  outputKey: 'output' } },
+          offset:    { type: 'vec2',  label: 'Offset'   },
+          radius:    { type: 'float', label: 'Radius'   },
+          thickness: { type: 'float', label: 'Thickness'},
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.45, thickness: 0.04 },
+      },
+      // Clean circle — no warp
+      {
+        id: 'circle_5', type: 'circleSDF', position: { x: 520, y: 380 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.12, x: 0.0, y: 0.0 },
+      },
+      // Merge both distances
+      {
+        id: 'smin_6', type: 'smoothMin', position: { x: 760, y: 270 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'ring_4',   outputKey: 'distance' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'circle_5', outputKey: 'distance' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { smoothness: 0.05 },
+      },
+      // Glow — brightness modulated by noise float
+      {
+        id: 'light_7', type: 'makeLight', position: { x: 960, y: 240 },
+        inputs: {
+          distance:   { type: 'float', label: 'Distance',   connection: { nodeId: 'smin_6', outputKey: 'result' } },
+          brightness: { type: 'float', label: 'Brightness', connection: { nodeId: 'noise_3', outputKey: 'value' } },
+        },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params: { brightness: 20.0 },
+      },
+      // Palette coloring
+      {
+        id: 'pal_8', type: 'palettePreset', position: { x: 960, y: 420 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '4' },
+      },
+      {
+        id: 'mul_9', type: 'multiplyVec3', position: { x: 1160, y: 320 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_8',   outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_7', outputKey: 'glow'  } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'out_10', type: 'output', position: { x: 1360, y: 320 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_9', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Animation Showcase — time-driven shape animation ─────────────────────
+  // Demonstrates: wiring time into sin/cos to animate radius, position, rotation.
+  // Three orbiting circles with pulsing glow, palette-colored by angle.
+  animationShowcase: {
+    label: 'Animation Showcase',
+    counter: 14,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 400 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 600 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+
+      // Orbit positions: time → expr → vec2 orbit offsets
+      { id: 'orb1_2', type: 'expr', position: { x: 260, y: 100 },
+        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: { expr: 'vec2(cos(t*0.7), sin(t*0.7)) * 0.42', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
+      { id: 'orb2_3', type: 'expr', position: { x: 260, y: 280 },
+        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: { expr: 'vec2(cos(t*1.1+2.09), sin(t*1.1+2.09)) * 0.38', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
+      { id: 'orb3_4', type: 'expr', position: { x: 260, y: 460 },
+        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: { expr: 'vec2(cos(t*1.4+4.19), sin(t*1.4+4.19)) * 0.34', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
+
+      // Pulsing radius: sin(time) remapped to 0.06–0.14
+      { id: 'sinR_5', type: 'sin', position: { x: 260, y: 640 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { scale: 2.0 } },
+      { id: 'remap_6', type: 'remap', position: { x: 460, y: 640 },
+        inputs: {
+          value:  { type: 'float', label: 'Value',  connection: { nodeId: 'sinR_5', outputKey: 'output' } },
+          inMin:  { type: 'float', label: 'In Min'  },
+          inMax:  { type: 'float', label: 'In Max'  },
+          outMin: { type: 'float', label: 'Out Min' },
+          outMax: { type: 'float', label: 'Out Max' },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { inMin: -1.0, inMax: 1.0, outMin: 0.06, outMax: 0.14, smooth: 'smoothstep' } },
+
+      // SDFs with shared animated radius
+      { id: 'c1_7', type: 'circleSDF', position: { x: 560, y: 80 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } }, offset: { type: 'vec2', label: 'Offset', connection: { nodeId: 'orb1_2', outputKey: 'result' } }, radius: { type: 'float', label: 'Radius', connection: { nodeId: 'remap_6', outputKey: 'result' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.1, x: 0.0, y: 0.0 } },
+      { id: 'c2_8', type: 'circleSDF', position: { x: 560, y: 280 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } }, offset: { type: 'vec2', label: 'Offset', connection: { nodeId: 'orb2_3', outputKey: 'result' } }, radius: { type: 'float', label: 'Radius', connection: { nodeId: 'remap_6', outputKey: 'result' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.1, x: 0.0, y: 0.0 } },
+      { id: 'c3_9', type: 'circleSDF', position: { x: 560, y: 480 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } }, offset: { type: 'vec2', label: 'Offset', connection: { nodeId: 'orb3_4', outputKey: 'result' } }, radius: { type: 'float', label: 'Radius', connection: { nodeId: 'remap_6', outputKey: 'result' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.1, x: 0.0, y: 0.0 } },
+
+      // Merge all three with smooth union
+      { id: 'sm1_10', type: 'smoothMin', position: { x: 780, y: 180 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'c1_7', outputKey: 'distance' } }, b: { type: 'float', label: 'B', connection: { nodeId: 'c2_8', outputKey: 'distance' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { smoothness: 0.15 } },
+      { id: 'sm2_11', type: 'smoothMin', position: { x: 780, y: 400 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'sm1_10', outputKey: 'result' } }, b: { type: 'float', label: 'B', connection: { nodeId: 'c3_9', outputKey: 'distance' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { smoothness: 0.15 } },
+
+      // Glow + palette
+      { id: 'light_12', type: 'makeLight', position: { x: 980, y: 300 },
+        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'sm2_11', outputKey: 'result' } }, brightness: { type: 'float', label: 'Brightness' } },
+        outputs: { glow: { type: 'float', label: 'Glow' } }, params: { brightness: 25.0 } },
+      { id: 'pal_13', type: 'palettePreset', position: { x: 980, y: 480 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '2' } },
+      { id: 'mul_14', type: 'multiplyVec3', position: { x: 1180, y: 380 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_13',  outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_12', outputKey: 'glow'  } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_15', type: 'output', position: { x: 1380, y: 380 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_14', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

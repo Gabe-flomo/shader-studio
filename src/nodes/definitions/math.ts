@@ -375,3 +375,44 @@ export const NormalizeVec2Node: NodeDefinition = {
     return { code: `    vec2 ${o} = normalize(${inputVars.v || 'vec2(1.0, 0.0)'});\n`, outputVars: { result: o } };
   },
 };
+
+export const RemapNode: NodeDefinition = {
+  type: 'remap',
+  label: 'Remap',
+  category: 'Math',
+  description: 'Re-map a value from [inMin, inMax] to [outMin, outMax]. Smoothstep mode eases in/out. Great for turning a 0–1 noise into any range you need.',
+  inputs: {
+    value:  { type: 'float', label: 'Value'      },
+    inMin:  { type: 'float', label: 'In Min'     },
+    inMax:  { type: 'float', label: 'In Max'     },
+    outMin: { type: 'float', label: 'Out Min'    },
+    outMax: { type: 'float', label: 'Out Max'    },
+  },
+  outputs: { result: { type: 'float', label: 'Result' } },
+  defaultParams: { inMin: 0.0, inMax: 1.0, outMin: 0.0, outMax: 1.0, smooth: 'linear' },
+  paramDefs: {
+    inMin:  { label: 'In Min',  type: 'float', min: -10, max: 10, step: 0.01 },
+    inMax:  { label: 'In Max',  type: 'float', min: -10, max: 10, step: 0.01 },
+    outMin: { label: 'Out Min', type: 'float', min: -10, max: 10, step: 0.01 },
+    outMax: { label: 'Out Max', type: 'float', min: -10, max: 10, step: 0.01 },
+    smooth: { label: 'Mode', type: 'select', options: [
+      { value: 'linear',      label: 'Linear'      },
+      { value: 'smoothstep',  label: 'Smoothstep'  },
+    ]},
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id     = node.id;
+    const val    = inputVars.value  ?? '0.0';
+    const inMin  = inputVars.inMin  ?? p(node.params.inMin,  0.0);
+    const inMax  = inputVars.inMax  ?? p(node.params.inMax,  1.0);
+    const outMin = inputVars.outMin ?? p(node.params.outMin, 0.0);
+    const outMax = inputVars.outMax ?? p(node.params.outMax, 1.0);
+    const smooth = node.params.smooth === 'smoothstep';
+    const tExpr  = `clamp((${val} - ${inMin}) / max(${inMax} - ${inMin}, 0.0001), 0.0, 1.0)`;
+    const normT  = smooth ? `smoothstep(0.0, 1.0, ${tExpr})` : tExpr;
+    return {
+      code: `    float ${id}_result = mix(${outMin}, ${outMax}, ${normT});\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};

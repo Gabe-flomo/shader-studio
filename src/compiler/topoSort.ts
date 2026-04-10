@@ -3,21 +3,6 @@ import type { GraphNode } from '../types/nodeGraph';
 // ── Loop-internal ID collection ───────────────────────────────────────────────
 
 /**
- * Returns the set of node IDs referenced as modal-loop steps.
- * These are compiled inline inside the loop body and excluded from the main pass.
- */
-export function collectLoopInternalIds(nodes: GraphNode[]): Set<string> {
-  const ids = new Set<string>();
-  for (const node of nodes) {
-    if (node.type === 'loop') {
-      const steps = (node.params.steps as string[]) ?? [];
-      for (const id of steps) ids.add(id);
-    }
-  }
-  return ids;
-}
-
-/**
  * Walks backwards from each loopEnd's carry input to discover the ordered body
  * node chain (from loopStart output → loopEnd input).
  *

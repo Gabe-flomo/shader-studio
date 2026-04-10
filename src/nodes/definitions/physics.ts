@@ -144,17 +144,14 @@ export const ChladniNode: NodeDefinition = {
     const noiseMode  = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'smooth';
     const brightness = p(node.params.brightness, 1.0);
 
-    const hasTurb = parseFloat(turbulence) > 0.0;
     // Map noise_mode string to int for ch2_noise2()
     // 0=hash(smooth), 1=value, 2=voronoi, 3=fbm, 4=swirl, 5=jump
     const noiseModeInt2d = noiseMode === 'value' ? 1 : noiseMode === 'voronoi' ? 2 : noiseMode === 'fbm' ? 3 : noiseMode === 'swirl' ? 4 : noiseMode === 'jump' ? 5 : 0;
-    const turbLines = hasTurb ? [
-      `    ${id}_p += ch2_noise2(${id}_p, ${timeVar}, ${turbSpeed}, ${noiseModeInt2d}) * ${turbulence};\n`,
-    ] : [];
 
     const code = [
       `    vec2  ${id}_p = ${uvVar} * ${scale};\n`,
-      ...turbLines,
+      // Turbulence: always emitted — multiply by 0 is a no-op when disabled
+      `    ${id}_p += ch2_noise2(${id}_p, ${timeVar}, ${turbSpeed}, ${noiseModeInt2d}) * ${turbulence};\n`,
       // Use runtime variables for m and n so wired inputs work
       `    float ${id}_m     = ${mVal};\n`,
       `    float ${id}_n     = ${nVal};\n`,
@@ -188,6 +185,63 @@ export const ChladniNode: NodeDefinition = {
 //   the full 3D orbital shape — for p/d/f orbitals this reveals the inner rings.
 
 const ORBITAL_GLSL = `
+// ── 2D noise helpers for orbital turbulence ──────────────────────────────────
+float orb_hash1(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p.yx + 19.19);
+    return fract((p.x + p.y) * p.x);
+}
+float orb_valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(
+        mix(orb_hash1(i+vec2(0,0)), orb_hash1(i+vec2(1,0)), u.x),
+        mix(orb_hash1(i+vec2(0,1)), orb_hash1(i+vec2(1,1)), u.x),
+        u.y);
+}
+float orb_voronoi(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    float minD = 10.0;
+    for (int orb_y = -1; orb_y <= 1; orb_y++) {
+        for (int orb_x = -1; orb_x <= 1; orb_x++) {
+            vec2 nb = vec2(float(orb_x), float(orb_y));
+            vec2 pt = vec2(orb_hash1(i+nb), orb_hash1(i+nb+0.1));
+            vec2 df = nb + pt - f;
+            float d = dot(df, df);
+            if (d < minD) minD = d;
+        }
+    }
+    return sqrt(minD);
+}
+float orb_fbm(vec2 p) {
+    float v = 0.0; float a = 0.5;
+    for (int orb_i = 0; orb_i < 4; orb_i++) {
+        v += a * orb_valueNoise(p);
+        p = p * 2.1 + vec2(5.2, 1.3); a *= 0.5;
+    }
+    return v;
+}
+// Returns a 2D noise offset. mode: 0=hash, 1=value, 2=voronoi, 3=fbm, 4=swirl
+vec2 orb_noise2(vec2 p, float t, float spd, int mode) {
+    if (mode == 1) {
+        return vec2(orb_valueNoise(p*3.0+t*spd), orb_valueNoise(p*3.0+t*spd+vec2(7.3,2.1)))*2.0-1.0;
+    }
+    if (mode == 2) {
+        return vec2(orb_voronoi(p*3.0+t*spd), orb_voronoi(p*3.0+t*spd+vec2(4.1,1.7)))*2.0-1.0;
+    }
+    if (mode == 3) {
+        return vec2(orb_fbm(p*3.0+t*spd), orb_fbm(p*3.0+t*spd+vec2(5.2,1.3)))*2.0-1.0;
+    }
+    if (mode == 4) {
+        float nx = fract(sin(dot(p*3.0+t*spd,       vec2(127.1,311.7)))*43758.5453);
+        float ny = fract(sin(dot(p*3.0+t*spd+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
+        return vec2(ny, -nx);
+    }
+    float nx = fract(sin(dot(p*3.0+t*spd,       vec2(127.1,311.7)))*43758.5453);
+    float ny = fract(sin(dot(p*3.0+t*spd+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
+    return (vec2(nx,ny)*2.0-1.0);
+}
+
 // Associated Laguerre polynomial L_p^alpha(x), exact for p = 0..5
 float laguerre(int p, float alpha, float x) {
     if (p <= 0) return 1.0;
@@ -252,7 +306,7 @@ float orbitalPsi3(vec3 p, float n, float l, float mq, float a0) {
     float rho  = 2.0 * r / max(n * a0, 0.0001);
     int   lInt = int(clamp(l, 0.0, 4.0));
     int   mInt = int(clamp(mq, -4.0, 4.0));
-    int   lagp = min(max(int(n) - lInt - 1, 0), 5);
+    int   lagp = int(clamp(n - float(lInt) - 1.0, 0.0, 5.0));
     float R    = pow(max(rho, 0.00001), l) * exp(-rho * 0.5)
                  * laguerre(lagp, 2.0*l + 1.0, rho);
     float Y    = realSH2d(lInt, mInt, cosT, sinT, phi);
@@ -335,10 +389,7 @@ export const ElectronOrbitalNode: NodeDefinition = {
     const turbSpeed  = p(node.params.turb_speed, 0.3);
     const noiseMode  = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'hash';
 
-    const hasTurb   = parseFloat(turbulence) > 0.0;
-    const hasAA     = parseFloat(aa) > 0.0;
-    const hasEdge   = parseFloat(edgeSoft) > 0.0;
-    // Map noise_mode to int for ch2_noise2(): 0=hash, 1=value, 2=voronoi, 3=fbm, 4=swirl
+    // Map noise_mode to int for orb_noise2(): 0=hash, 1=value, 2=voronoi, 3=fbm, 4=swirl
     const noiseModeIntOrb = noiseMode === 'value' ? 1 : noiseMode === 'voronoi' ? 2 : noiseMode === 'fbm' ? 3 : noiseMode === 'swirl' ? 4 : 0;
 
     const code = [
@@ -346,31 +397,24 @@ export const ElectronOrbitalNode: NodeDefinition = {
       `    vec2  ${id}_uv2 = ${uvVar} * ${scale};\n`,
       `    vec3  ${id}_p   = vec3(${id}_uv2.x, ${id}_uv2.y, ${sliceZ});\n`,
 
-      ...(hasTurb ? [
-        `    ${id}_p.xy += ch2_noise2(${id}_p.xy * 2.0, ${timeVar}, ${turbSpeed}, ${noiseModeIntOrb}) * ${turbulence};\n`,
-      ] : []),
+      // Turbulence: always emitted — multiply by 0 is a no-op when disabled
+      `    ${id}_p.xy += orb_noise2(${id}_p.xy * 2.0, ${timeVar}, ${turbSpeed}, ${noiseModeIntOrb}) * ${turbulence};\n`,
 
       `    float ${id}_psi     = orbitalPsi3(${id}_p, ${n}, ${l}, ${mq}, ${a0});\n`,
       `    float ${id}_density = ${id}_psi * ${id}_psi;\n`,
 
-      ...(hasAA ? [
-        `    float ${id}_fw     = max(fwidth(${id}_density), 1e-6);\n`,
-        `    float ${id}_densAA = ${id}_density / (${id}_density + ${id}_fw * ${aa});\n`,
-      ] : [
-        `    float ${id}_densAA = ${id}_density;\n`,
-      ]),
+      // AA: always emitted; when aa=0 formula collapses to hard edge (density/density = 1)
+      `    float ${id}_fw     = max(fwidth(${id}_density), 1e-6);\n`,
+      `    float ${id}_densAA = ${id}_density / max(${id}_density + ${id}_fw * max(${aa}, 0.0), 1e-7);\n`,
 
-      // Radial gradient falloff: denser at centre, disperses toward edges
-      // Edge noise gives irregular/particle-like boundary instead of hard circle
-      ...(hasEdge ? [
-        `    float ${id}_r     = length(${id}_uv2);\n`,
-        `    float ${id}_enoise = fract(sin(dot(${id}_p.xy, vec2(127.1, 311.7))) * 43758.5453);\n`,
-        `    float ${id}_efade = exp(-${id}_r * ${edgeSoft} * (1.0 + ${id}_enoise * 0.6));\n`,
-        `    ${id}_densAA *= ${id}_efade;\n`,
-      ] : []),
+      // Edge softness: always emitted — when edgeSoft=0, exp(0)=1 → no fade
+      `    float ${id}_r      = length(${id}_uv2);\n`,
+      `    float ${id}_enoise = fract(sin(dot(${id}_p.xy, vec2(127.1, 311.7))) * 43758.5453);\n`,
+      `    float ${id}_efade  = exp(-${id}_r * ${edgeSoft} * (1.0 + ${id}_enoise * 0.6));\n`,
+      `    ${id}_densAA *= ${id}_efade;\n`,
 
       `    float ${id}_vis   = pow(clamp(${id}_densAA, 0.0, 1.0), ${gamma}) * ${brightness};\n`,
-      `    ${id}_vis         = ${id}_vis / (${id}_vis + 0.5);\n`,  // soft Reinhard — no hard clip
+      `    ${id}_vis         = ${id}_vis / (${id}_vis + 0.5);\n`,
 
       // Subtle warm/cool tint by lobe sign
       `    float ${id}_sign  = sign(${id}_psi);\n`,

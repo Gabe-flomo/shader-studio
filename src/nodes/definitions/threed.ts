@@ -868,7 +868,6 @@ export const OrbitalVolume3DNode: NodeDefinition = {
     const pA = Array.isArray(node.params.color_a) ? node.params.color_a as number[] : [0.3, 0.6, 1.0];
     const pB = Array.isArray(node.params.color_b) ? node.params.color_b as number[] : [1.0, 0.4, 0.2];
 
-    const hasTurb = parseFloat(turbulence) > 0.0;
     // If orbit_angle is wired in, use it directly (+ cam_angle offset); otherwise animate with time
     const angleExpr = orbitAngleIn
       ? `(${orbitAngleIn} + ${camAngle})`
@@ -896,13 +895,11 @@ export const OrbitalVolume3DNode: NodeDefinition = {
         if (${id}_alpha >= 0.98) break;
         vec3  ${id}_p  = ${id}_ro + ${id}_rd * ${id}_t;
         vec3  ${id}_ps = ${id}_p * ${scale};
-        ${hasTurb ? `
-        // Turbulence: jitter sample position with per-octave hash noise
+        // Turbulence: always emitted — multiply by 0 is a no-op when disabled
         float ${id}_tnx = fract(sin(dot(${id}_ps + ${time} * ${turbSpeed}, vec3(127.1, 311.7, 74.7))) * 43758.5453);
         float ${id}_tny = fract(sin(dot(${id}_ps + ${time} * ${turbSpeed} + vec3(5.2,1.3,9.7), vec3(269.5,183.3,341.1))) * 43758.5453);
         float ${id}_tnz = fract(sin(dot(${id}_ps + ${time} * ${turbSpeed} + vec3(3.1,7.4,2.9), vec3(113.5,271.9,93.3))) * 43758.5453);
         ${id}_ps += (vec3(${id}_tnx, ${id}_tny, ${id}_tnz) * 2.0 - 1.0) * ${turbulence};
-        ` : ''}
         float ${id}_d  = orbital3d(${id}_ps, ${n}, ${l}, ${m}, ${a0});
         // Edge softness: radial gradient so outer extent disperses like real clouds
         // Adds noise-like irregularity proportional to edge_softness

@@ -4,7 +4,6 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
-import { LoopModal } from './LoopModal';
 import { registerSocket } from './socketRegistry';
 
 interface Props {
@@ -233,7 +232,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
-  const [showLoopModal, setShowLoopModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -248,6 +246,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
     const nodeCount = subgraph?.nodes.length ?? 0;
     const inputPorts = subgraph?.inputPorts ?? [];
     const outputPorts = subgraph?.outputPorts ?? [];
+    const groupIters = typeof node.params.iterations === 'number' ? node.params.iterations : 1;
 
     const handleGroupHeaderMouseDown = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -314,6 +313,33 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
             <span style={{ fontWeight: 600, color: '#cba6f7' }}>{groupLabel}</span>
             <span style={{ fontSize: '10px', color: '#585b70' }}>({nodeCount} node{nodeCount !== 1 ? 's' : ''})</span>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '10px', color: '#585b70' }}>×</span>
+            <input
+              type="number"
+              min={1}
+              max={16}
+              step={1}
+              value={groupIters}
+              onMouseDown={e => e.stopPropagation()}
+              onChange={e => {
+                const v = Math.max(1, Math.min(16, Math.round(Number(e.target.value))));
+                if (!isNaN(v)) updateNodeParams(node.id, { iterations: v }, { immediate: true });
+              }}
+              title="Iterations"
+              style={{
+                width: '32px',
+                background: '#11111b',
+                border: '1px solid #45475a',
+                color: '#cdd6f4',
+                borderRadius: '3px',
+                padding: '1px 3px',
+                fontSize: '11px',
+                textAlign: 'center',
+                outline: 'none',
+              }}
+            />
+          </div>
           <button
             onMouseDown={e => e.stopPropagation()}
             onClick={() => ungroupNode(node.id)}
@@ -340,7 +366,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* Socket dot */}
                 <div
-                  ref={el => { if (el) registerSocket(el, node.id, port.key, 'input'); }}
+                  ref={el => { registerSocket(node.id, 'in', port.key, el); }}
                   onMouseUp={() => onEndConnection(node.id, port.key)}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',
@@ -360,7 +386,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '10px', color: '#a6adc8' }}>{port.label}</span>
                 <div
-                  ref={el => { if (el) registerSocket(el, node.id, port.key, 'output'); }}
+                  ref={el => { registerSocket(node.id, 'out', port.key, el); }}
                   onMouseDown={e => onStartConnection(node.id, port.key, e)}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',
@@ -655,26 +681,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               }}
             >
               ƒ
-            </button>
-          )}
-          {/* Loop modal button — only shown on loop nodes */}
-          {node.type === 'loop' && (
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => setShowLoopModal(v => !v)}
-              title="Open Loop editor"
-              style={{
-                background: showLoopModal ? '#89dceb22' : 'none',
-                border: showLoopModal ? '1px solid #89dceb55' : 'none',
-                color: showLoopModal ? '#89dceb' : '#585b70',
-                cursor: 'pointer',
-                fontSize: '13px',
-                lineHeight: 1,
-                padding: '1px 4px',
-                borderRadius: '3px',
-              }}
-            >
-              ⟳
             </button>
           )}
           {/* Reset params button — only shown if node has paramDefs */}
@@ -1221,11 +1227,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       {/* ── CustomFn modal ── */}
       {showCustomFnModal && node.type === 'customFn' && (
         <CustomFnModal node={node} onClose={() => setShowCustomFnModal(false)} />
-      )}
-
-      {/* ── Loop modal ── */}
-      {showLoopModal && node.type === 'loop' && (
-        <LoopModal node={node} onClose={() => setShowLoopModal(false)} />
       )}
 
       {/* ── Generated GLSL code (editable, hidden when collapsed) ── */}
