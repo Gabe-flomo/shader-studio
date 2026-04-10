@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p } from './helpers';
+import { p } from './helpers';
 
 export const AddNode: NodeDefinition = {
   type: 'add', label: 'Add', category: 'Math', description: 'Add two float values (a + b)',
@@ -204,8 +204,8 @@ export const ModNode: NodeDefinition = {
   paramDefs: { period: { label: 'Period', type: 'float', min: 0.001, max: 10, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
-    const p = inputVars.period || p(node.params.period, 1.0);
-    return { code: `    float ${o} = mod(${inputVars.input || '0.0'}, ${p});\n`, outputVars: { output: o } };
+    const period = inputVars.period || p(node.params.period, 1.0);
+    return { code: `    float ${o} = mod(${inputVars.input || '0.0'}, ${period});\n`, outputVars: { output: o } };
   },
 };
 

@@ -49,7 +49,7 @@ function App() {
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
     addNode, setNodeHighlightFilter, _fitViewCallback, undo,
     nodeProbeValues, selectedNodeId, nodes: graphNodes,
-    selectedNodeIds, groupNodes, deselectAll,
+    groupNodes, deselectAll,
   } = useNodeGraphStore();
 
   // Build probe display for selected node — shown in status bar instead of "hover for color"

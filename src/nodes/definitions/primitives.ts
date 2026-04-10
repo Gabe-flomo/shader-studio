@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p } from './helpers';
+import { p } from './helpers';
 
 export const CircleSDFNode: NodeDefinition = {
   type: 'circleSDF',
@@ -238,7 +238,7 @@ export const ShapeSDFNode: NodeDefinition = {
   glslFunction: SHAPE_SDF_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_distance`;
-    const p  = inputVars.p  ?? 'vec2(0.0)';
+    const posVar = inputVars.p  ?? 'vec2(0.0)';
     const shape = (node.params.shape as string) ?? 'circle';
 
     const r  = inputVars.r  ?? p(node.params.r, 0.3);
@@ -259,16 +259,16 @@ export const ShapeSDFNode: NodeDefinition = {
 
     let call: string;
     switch (shape) {
-      case 'box':        call = `sdBox(${p}, ${bVec})`;                        break;
-      case 'roundedBox': call = `sdRoundedBox(${p}, ${bVec}, ${rnd})`;         break;
-      case 'segment':    call = `sdSegment(${p}, ${aVec}, ${b2Vec})`;          break;
-      case 'triangle':   call = `sdEquilateralTriangle(${p}, ${r})`;           break;
-      case 'hexagon':    call = `sdHexagon(${p}, ${r})`;                       break;
-      case 'star':       call = `sdStar5(${p}, ${r}, ${rf})`;                  break;
-      case 'pie':        call = `sdPie(${p}, ${cVec}, ${r})`;                  break;
-      case 'ring':       call = `sdRing2(${p}, ${nVec}, ${r}, ${th})`;         break;
-      case 'cross':      call = `sdCross(${p}, ${bVec}, ${rnd})`;              break;
-      default:           call = `sdCircle2(${p}, ${r})`;                       break;
+      case 'box':        call = `sdBox(${posVar}, ${bVec})`;                        break;
+      case 'roundedBox': call = `sdRoundedBox(${posVar}, ${bVec}, ${rnd})`;         break;
+      case 'segment':    call = `sdSegment(${posVar}, ${aVec}, ${b2Vec})`;          break;
+      case 'triangle':   call = `sdEquilateralTriangle(${posVar}, ${r})`;           break;
+      case 'hexagon':    call = `sdHexagon(${posVar}, ${r})`;                       break;
+      case 'star':       call = `sdStar5(${posVar}, ${r}, ${rf})`;                  break;
+      case 'pie':        call = `sdPie(${posVar}, ${cVec}, ${r})`;                  break;
+      case 'ring':       call = `sdRing2(${posVar}, ${nVec}, ${r}, ${th})`;         break;
+      case 'cross':      call = `sdCross(${posVar}, ${bVec}, ${rnd})`;              break;
+      default:           call = `sdCircle2(${posVar}, ${r})`;                       break;
     }
 
     return {

@@ -1,27 +1,6 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { f, p, vec3Str } from './helpers';
 
-// ─── Shared GLSL helpers ──────────────────────────────────────────────────────
-
-const NOISE_HELPERS = `
-// 2D value noise helpers (shared by FBM, Voronoi, DomainWarp)
-vec2 noiseHash2(vec2 p) {
-    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
-}
-float noiseHash1(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-float valueNoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(noiseHash1(i + vec2(0.0,0.0)),
-                   noiseHash1(i + vec2(1.0,0.0)), u.x),
-               mix(noiseHash1(i + vec2(0.0,1.0)),
-                   noiseHash1(i + vec2(1.0,1.0)), u.x), u.y);
-}`;
-
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
 // noiseHash1/noiseHash2/valueNoise are in the shader preamble — no need to re-emit.
