@@ -73,10 +73,13 @@ vec2 ch2_noise2(vec2 p, float t, float spd, int mode) {
         float ny = fract(sin(dot(p*4.0+qt+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
         return (vec2(nx,ny)*2.0-1.0);
     }
-    // mode 0: classic hash drift
-    float nx = fract(sin(dot(p*3.0+t*spd,       vec2(127.1,311.7)))*43758.5453);
-    float ny = fract(sin(dot(p*3.0+t*spd+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
-    return (vec2(nx,ny)*2.0-1.0);
+    // mode 0: per-cell hash — blocky particle look, no directional bias.
+    // floor() before hashing gives each grid cell a constant random offset
+    // instead of a continuous dot-product that creates diagonal streaks.
+    vec2 q = floor(p * 4.0 + t * spd);
+    float ch2_h1 = fract(sin(q.x * 127.1 + q.y * 311.7) * 43758.5453);
+    float ch2_h2 = fract(sin(q.x * 269.5 + q.y * 183.3) * 43758.5453);
+    return vec2(ch2_h1, ch2_h2) * 2.0 - 1.0;
 }`;
 
 export const ChladniNode: NodeDefinition = {
@@ -136,7 +139,7 @@ export const ChladniNode: NodeDefinition = {
     // m and n can come from wired inputs OR fall back to params
     const mVal       = inputVars.m    ?? p(node.params.m, 3.0);
     const nVal       = inputVars.n    ?? p(node.params.n, 4.0);
-    const scale      = f(Math.min(typeof node.params.scale      === 'number' ? node.params.scale      : 1.0, 1.5));
+    const scale      = p(node.params.scale, 1.0);
     const lineWidth  = p(node.params.line_width, 1.5);
     const aa         = p(node.params.aa, 1.0);
     const turbulence = p(node.params.turbulence, 0.0);

@@ -587,7 +587,18 @@ export const NoiseFloatNode: NodeDefinition = {
       ],
     },
   },
-  glslFunction: NOISE_HELPERS,
+  // Self-contained helpers with nf_ prefix — avoids conflicts when FBM/DomainWarp
+  // are also in the graph (those embed NOISE_HELPERS verbatim in their glslFunction).
+  glslFunction: `
+float nf_hash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float nf_valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(nf_hash1(i), nf_hash1(i+vec2(1,0)), u.x),
+               mix(nf_hash1(i+vec2(0,1)), nf_hash1(i+vec2(1,1)), u.x), u.y);
+}`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
     const uv      = inputVars.uv   || 'vec2(0.0)';
@@ -597,8 +608,8 @@ export const NoiseFloatNode: NodeDefinition = {
     const mode    = typeof node.params.mode === 'string' ? node.params.mode : 'smooth';
 
     const sampleExpr = mode === 'hash'
-      ? `noiseHash1(${uv} * ${scale} + ${timeVar} * ${speed})`
-      : `valueNoise(${uv} * ${scale} + ${timeVar} * ${speed})`;
+      ? `nf_hash1(${uv} * ${scale} + ${timeVar} * ${speed})`
+      : `nf_valueNoise(${uv} * ${scale} + ${timeVar} * ${speed})`;
 
     return {
       code: [
