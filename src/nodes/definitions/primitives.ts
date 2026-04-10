@@ -308,7 +308,7 @@ export const SimpleSDFNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_distance`;
-    const p      = inputVars.p ?? 'vec2(0.0)';
+    const posVar = inputVars.p ?? 'vec2(0.0)';
     const shape  = (node.params.shape as string) ?? 'circle';
     const r      = inputVars.r ?? p(node.params.r, 0.3);
     const wx     = p(node.params.wx, 0.3);
@@ -317,9 +317,9 @@ export const SimpleSDFNode: NodeDefinition = {
 
     let call: string;
     switch (shape) {
-      case 'box':  call = `sdBox(${p}, ${bVec})`;          break;
-      case 'ring': call = `abs(length(${p}) - ${r})`;      break;
-      default:     call = `length(${p}) - ${r}`;           break;
+      case 'box':  call = `sdBox(${posVar}, ${bVec})`;          break;
+      case 'ring': call = `abs(length(${posVar}) - ${r})`;      break;
+      default:     call = `length(${posVar}) - ${r}`;           break;
     }
     return {
       code: `    float ${outVar} = ${call};\n`,

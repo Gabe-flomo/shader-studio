@@ -6,7 +6,7 @@
  * automatically lives in the new geometry.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p } from './helpers';
+import { p } from './helpers';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
