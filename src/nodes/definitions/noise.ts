@@ -24,7 +24,8 @@ float valueNoise(vec2 p) {
 
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
-const FBM_GLSL = NOISE_HELPERS + `
+// noiseHash1/noiseHash2/valueNoise are in the shader preamble — no need to re-emit.
+const FBM_GLSL = `
 float fbm(vec2 p, int octaves, float lacunarity, float gain) {
     float value = 0.0;
     float amp = 0.5;
@@ -85,7 +86,7 @@ export const FBMNode: NodeDefinition = {
 
 // ─── Voronoi — Worley/cell noise ─────────────────────────────────────────────
 
-const VORONOI_GLSL = NOISE_HELPERS + `
+const VORONOI_GLSL = `
 // IQ-style 2D Voronoi returning minimum distance
 float voronoi(vec2 p, float jitter) {
     vec2 i = floor(p);
@@ -147,8 +148,8 @@ export const VoronoiNode: NodeDefinition = {
 
 // ─── Domain Warp — UV distortion via noise ────────────────────────────────────
 
-// DomainWarp needs fbm too — combine the GLSL
-const DOMAIN_WARP_FULL_GLSL = NOISE_HELPERS + `
+// DomainWarp needs fbm too — helpers are in preamble, just define unique functions
+const DOMAIN_WARP_FULL_GLSL = `
 float fbmW(vec2 p, int octaves, float lacunarity, float gain) {
     float value = 0.0;
     float amp = 0.5;
@@ -234,7 +235,7 @@ export const DomainWarpNode: NodeDefinition = {
 //   curl      — noise gradient rotated 90°, creates organic swirling loops
 //   quantized — angles snapped to multiples of π/steps, rocky/angular forms
 //
-const FLOW_FIELD_GLSL = NOISE_HELPERS + `
+const FLOW_FIELD_GLSL = `
 // FBM variant for flow field (avoids name collision with standalone FBMNode)
 float fbmFF(vec2 p, int octaves, float lacunarity, float gain) {
     float value = 0.0; float amp = 0.5; float freq = 1.0;
@@ -419,7 +420,7 @@ export const CirclePackNode: NodeDefinition = {
     centers:  { type: 'vec2',  label: 'Nearest Centre' },
     uv:       { type: 'vec2',  label: 'UV (pass-through)' },
   },
-  glslFunction: NOISE_HELPERS,   // reuses noiseHash1/noiseHash2/valueNoise
+  // noiseHash1/noiseHash2/valueNoise are in the shader preamble
   defaultParams: {
     circles:       80,
     min_radius:    0.03,
@@ -559,3 +560,57 @@ export const CirclePackNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Noise Float ─────────────────────────────────────────────────────────────
+
+export const NoiseFloatNode: NodeDefinition = {
+  type: 'noiseFloat',
+  label: 'Noise Float',
+  category: 'Noise',
+  description: 'Outputs a float noise value (0–1) based on UV position and time. Wire into any float input — radius, brightness, angle, mix amount — to inject per-pixel randomness. Smooth=value noise (organic), Hash=raw hash (grain-like).',
+  inputs: {
+    uv:   { type: 'vec2',  label: 'UV'   },
+    time: { type: 'float', label: 'Time' },
+  },
+  outputs: {
+    value: { type: 'float', label: 'Value (0–1)' },
+    signed: { type: 'float', label: 'Signed (−1–1)' },
+  },
+  defaultParams: { scale: 4.0, speed: 0.5, mode: 'smooth' },
+  paramDefs: {
+    scale: { label: 'Scale', type: 'float', min: 0.1, max: 40.0, step: 0.1 },
+    speed: { label: 'Speed', type: 'float', min: 0.0, max: 5.0,  step: 0.01 },
+    mode:  {
+      label: 'Mode', type: 'select',
+      options: [
+        { value: 'smooth', label: 'Smooth (value noise)' },
+        { value: 'hash',   label: 'Hash (grain-like)'    },
+      ],
+    },
+  },
+  // noiseHash1/valueNoise are in the shader preamble — no glslFunction needed
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const uv      = inputVars.uv   || 'vec2(0.0)';
+    const timeVar = inputVars.time || '0.0';
+    const scale   = p(node.params.scale, 4.0);
+    const speed   = p(node.params.speed, 0.5);
+    const mode    = typeof node.params.mode === 'string' ? node.params.mode : 'smooth';
+
+    const sampleExpr = mode === 'hash'
+      ? `noiseHash1(${uv} * ${scale} + ${timeVar} * ${speed})`
+      : `valueNoise(${uv} * ${scale} + ${timeVar} * ${speed})`;
+
+    return {
+      code: [
+        `    float ${id}_value  = ${sampleExpr};\n`,
+        `    float ${id}_signed = ${id}_value * 2.0 - 1.0;\n`,
+      ].join(''),
+      outputVars: {
+        value:  `${id}_value`,
+        signed: `${id}_signed`,
+      },
+    };
+  },
+};
+

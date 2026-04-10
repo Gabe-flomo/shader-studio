@@ -5,6 +5,7 @@ import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPres
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
+import { EXAMPLE_GRAPHS } from './exampleGraphs';
 
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX = 'shader-studio:cfp:';

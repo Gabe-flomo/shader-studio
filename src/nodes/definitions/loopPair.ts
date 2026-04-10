@@ -1,4 +1,6 @@
 import type { NodeDefinition } from '../../types/nodeGraph';
+import { p } from './helpers';
+import { PALETTE_GLSL_FN } from './color';
 
 /**
  * Loop Start / Loop End pair nodes.
@@ -225,6 +227,67 @@ export const LoopFloatAccumulateNode: NodeDefinition = {
     return {
       code: `    float ${id}_value = ${v} + sin(${v} * ${sc} + u_time * ${sp}) * ${amp};\n`,
       outputVars: { value: `${id}_value` },
+    };
+  },
+};
+
+/**
+ * Loop Ring Step — one iteration of the classic fractal rings effect.
+ *
+ * Each pass:
+ *   1. Folds UV: uv = fract(uv * scale) - 0.5
+ *   2. Computes a ring glow: glow / |sin(length(uv) * freq + time)|
+ *   3. Adds palette(distance + time) * glow to the accumulated color
+ *
+ * Wire inside a Loop Start → Loop End chain (vec2 carry for UV).
+ * OR use inside a group node with two carry pairs:
+ *   in0 (vec2 UV) / out0 (vec2 UV)
+ *   in1 (vec3 color, unconnected = starts at 0) / out1 (vec3 color)
+ */
+export const LoopRingStepNode: NodeDefinition = {
+  type: 'loopRingStep',
+  label: 'Ring Step',
+  category: 'Loops',
+  description: 'One iteration of the fractal rings effect: folds UV with fract, computes a ring glow, and accumulates palette color. Use inside a Loop Start/End chain or an iterated group with UV+color carries.',
+
+  inputs: {
+    uv:    { type: 'vec2', label: 'UV' },
+    color: { type: 'vec3', label: 'Color in' },
+  },
+  outputs: {
+    uv:    { type: 'vec2', label: 'UV out' },
+    color: { type: 'vec3', label: 'Color out' },
+  },
+
+  defaultParams: { scale: 1.5, freq: 8.0, glow: 0.01, timeScale: 0.4 },
+  paramDefs: {
+    scale:     { label: 'Scale',      type: 'float', min: 0.5,   max: 5.0,  step: 0.01 },
+    freq:      { label: 'Freq',       type: 'float', min: 1.0,   max: 20.0, step: 0.1  },
+    glow:      { label: 'Glow',       type: 'float', min: 0.001, max: 0.5,  step: 0.001 },
+    timeScale: { label: 'Time Scale', type: 'float', min: 0.0,   max: 2.0,  step: 0.01 },
+  },
+
+  glslFunction: PALETTE_GLSL_FN,
+
+  generateGLSL: (node, inputVars) => {
+    const uv    = inputVars['uv']    ?? 'vec2(0.0)';
+    const color = inputVars['color'] ?? 'vec3(0.0)';
+    const sc = p(node.params.scale,     1.5000, 4);
+    const fr = p(node.params.freq,      8.0000, 4);
+    const gl = p(node.params.glow,      0.0100, 4);
+    const ts = p(node.params.timeScale, 0.4000, 4);
+    const id = node.id;
+    return {
+      code: [
+        `    vec2  ${id}_uv   = fract(${uv} * ${sc}) - 0.5;`,
+        `    float ${id}_d    = length(${id}_uv);`,
+        `    float ${id}_ring = sin(${id}_d * ${fr} + u_time * ${ts}) / ${fr};`,
+        `    float ${id}_g    = ${gl} / abs(${id}_ring);`,
+        `    vec3  ${id}_col  = palette(${id}_d + u_time * ${ts}, vec3(0.5), vec3(0.5), vec3(1.0), vec3(0.0, 0.33, 0.67));`,
+        `    vec3  ${id}_color = ${color} + ${id}_col * ${id}_g;`,
+        '',
+      ].join('\n'),
+      outputVars: { uv: `${id}_uv`, color: `${id}_color` },
     };
   },
 };

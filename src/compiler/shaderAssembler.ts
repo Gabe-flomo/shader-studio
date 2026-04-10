@@ -153,39 +153,6 @@ export function generateFragmentShader(
 
     const inputVars = resolveInputVars(node, nodeOutputs, nodeMap);
 
-    // ── Modal loop node ───────────────────────────────────────────────────────
-    if (node.type === 'loop') {
-      const steps     = (node.params.steps as string[]) ?? [];
-      const carryType = ((node.params.carryType as DataType) ?? 'vec2') as DataType;
-      const iters     = Math.max(1, Math.min(16, Math.round(
-        typeof node.params.iterations === 'number' ? node.params.iterations : 4,
-      )));
-      const carryVar = inputVars['carry'] ?? defaultGlslVal(carryType);
-      const id = node.id;
-
-      collectFunctions(steps, allNodeMap, functions);
-
-      let loopCode = `    ${carryType} ${id}_val = ${carryVar};\n`;
-      for (let n = 0; n < iters; n++) {
-        let iterCarry = `${id}_val`;
-        for (const stepId of steps) {
-          const stepNode = allNodeMap.get(stepId);
-          if (!stepNode) continue;
-          const stepDef = getNodeDefinition(stepNode.type);
-          if (!stepDef) continue;
-          const stepInputVars = resolveLoopBodyInputVars(stepNode, carryType, iterCarry, nodeOutputs, new Set([id]));
-          const stepResult = stepDef.generateGLSL(stepNode, stepInputVars);
-          loopCode += stepResult.code.replace(new RegExp(`\\b${stepId}_`, 'g'), `${stepId}_L${n}_`);
-          const firstOutKey = Object.keys(stepResult.outputVars)[0];
-          if (firstOutKey) iterCarry = `${stepId}_L${n}_${firstOutKey}`;
-        }
-        loopCode += `    ${id}_val = ${iterCarry};\n`;
-      }
-      mainCode.push(loopCode);
-      nodeOutputs.set(node.id, { result: `${id}_val` });
-      continue;
-    }
-
     // ── Loop Start: emit carry init var ──────────────────────────────────────
     if (node.type === 'loopStart') {
       let startType: DataType = 'vec2';
@@ -292,7 +259,7 @@ export function generateFragmentShader(
       continue;
     }
 
-    // ── Group: compile the subgraph inline ────────────────────────────────────
+    // ── Group: compile the subgraph inline (with optional iteration unrolling) ─
     if (node.type === 'group') {
       const subgraph = node.params.subgraph as SubgraphData | undefined;
       if (!subgraph || subgraph.nodes.length === 0) {
@@ -300,80 +267,136 @@ export function generateFragmentShader(
         continue;
       }
 
-      const prefix = `${node.id}_g_`;
+      const iters = Math.max(1, Math.min(16, Math.round(
+        typeof node.params.iterations === 'number' ? node.params.iterations : 1,
+      )));
 
-      // Build override map: "originalSubNodeId:inputKey" → outer resolved GLSL var
-      const portInputOverrides = new Map<string, string>();
-      for (const port of subgraph.inputPorts) {
-        const outerVar = inputVars[port.key];
-        if (outerVar) portInputOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
-      }
-
-      // Clone subgraph nodes with prefixed IDs and remapped internal connections
-      const prefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => ({
-        ...subNode,
-        id: prefix + subNode.id,
-        inputs: Object.fromEntries(
-          Object.entries(subNode.inputs).map(([k, inp]) => [
-            k,
-            inp.connection
-              ? { ...inp, connection: { nodeId: prefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
-              : inp,
-          ]),
-        ),
-      }));
-
-      const sortedSub = topologicalSort(prefixedNodes);
-      for (const subNode of sortedSub) {
-        const subDef = getNodeDefinition(subNode.type);
-        if (!subDef) continue;
-        if (subDef.glslFunction) functions.add(subDef.glslFunction);
-
-        const originalId = subNode.id.slice(prefix.length);
-        const subInputVars: Record<string, string> = {};
-
-        for (const [k, inp] of Object.entries(subNode.inputs)) {
-          const portKey = `${originalId}:${k}`;
-          if (portInputOverrides.has(portKey)) {
-            subInputVars[k] = portInputOverrides.get(portKey)!;
-          } else if (inp.connection) {
-            const srcOutputs = nodeOutputs.get(inp.connection.nodeId);
-            if (srcOutputs?.[inp.connection.outputKey]) {
-              subInputVars[k] = srcOutputs[inp.connection.outputKey];
+      /** Compile one pass of the subgraph using the given port overrides and ID prefix. */
+      const compileSubgraphPass = (iterPrefix: string, portInputOverrides: Map<string, string>) => {
+        const prefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => ({
+          ...subNode,
+          id: iterPrefix + subNode.id,
+          inputs: Object.fromEntries(
+            Object.entries(subNode.inputs).map(([k, inp]) => [
+              k,
+              inp.connection
+                ? { ...inp, connection: { nodeId: iterPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
+                : inp,
+            ]),
+          ),
+        }));
+        const sortedSub = topologicalSort(prefixedNodes);
+        for (const subNode of sortedSub) {
+          const subDef = getNodeDefinition(subNode.type);
+          if (!subDef) continue;
+          if (subDef.glslFunction) functions.add(subDef.glslFunction);
+          const originalId = subNode.id.slice(iterPrefix.length);
+          const subInputVars: Record<string, string> = {};
+          for (const [k, inp] of Object.entries(subNode.inputs)) {
+            const portKey = `${originalId}:${k}`;
+            if (portInputOverrides.has(portKey)) {
+              subInputVars[k] = portInputOverrides.get(portKey)!;
+            } else if (inp.connection) {
+              const srcOutputs = nodeOutputs.get(inp.connection.nodeId);
+              if (srcOutputs?.[inp.connection.outputKey]) subInputVars[k] = srcOutputs[inp.connection.outputKey];
             }
-          }
-          if (!subInputVars[k]) {
-            if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) {
-              subInputVars[k] = 'g_uv';
-            } else if (inp.type === 'float' && (k === 'time' || k === 't')) {
-              subInputVars[k] = 'u_time';
-            } else if (inp.defaultValue !== undefined) {
-              if (typeof inp.defaultValue === 'number') {
-                subInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-              } else if (Array.isArray(inp.defaultValue)) {
-                subInputVars[k] = `${inp.type}(${inp.defaultValue.map((v: number) => v.toFixed(1)).join(', ')})`;
+            if (!subInputVars[k]) {
+              if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) subInputVars[k] = 'g_uv';
+              else if (inp.type === 'float' && (k === 'time' || k === 't')) subInputVars[k] = 'u_time';
+              else if (inp.defaultValue !== undefined) {
+                if (typeof inp.defaultValue === 'number') subInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                else if (Array.isArray(inp.defaultValue)) subInputVars[k] = `${inp.type}(${inp.defaultValue.map((v: number) => v.toFixed(1)).join(', ')})`;
               }
             }
           }
+          const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(subNode, subDef);
+          Object.assign(paramUniforms, subUniforms);
+          const subResult = subDef.generateGLSL(patchedSub, subInputVars);
+          mainCode.push(subResult.code);
+          nodeOutputs.set(subNode.id, subResult.outputVars);
+        }
+      };
+
+      if (iters <= 1) {
+        // ── Single pass (original behavior) ──────────────────────────────────
+        const prefix = `${node.id}_g_`;
+        const portInputOverrides = new Map<string, string>();
+        for (const port of subgraph.inputPorts) {
+          const outerVar = inputVars[port.key];
+          if (outerVar) portInputOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
+        }
+        compileSubgraphPass(prefix, portInputOverrides);
+        const groupOutputVars: Record<string, string> = {};
+        for (const port of subgraph.outputPorts) {
+          const fromOutputs = nodeOutputs.get(prefix + port.fromNodeId);
+          if (fromOutputs?.[port.fromOutputKey]) groupOutputVars[port.key] = fromOutputs[port.fromOutputKey];
+        }
+        nodeOutputs.set(node.id, groupOutputVars);
+      } else {
+        // ── Iterated group: emit a GLSL for loop ──────────────────────────────
+        // Carry pairs: outputPorts[i] ↔ inputPorts[i] where types match.
+        // Carry vars are declared outside the loop and persist across iterations.
+        // Non-matched inputs are "fixed" — use the outer var every iteration.
+        const carryPairs: Array<{ inPort: SubgraphData['inputPorts'][0]; outPort: SubgraphData['outputPorts'][0] }> = [];
+        const minLen = Math.min(subgraph.inputPorts.length, subgraph.outputPorts.length);
+        for (let i = 0; i < minLen; i++) {
+          if (subgraph.inputPorts[i].type === subgraph.outputPorts[i].type) {
+            carryPairs.push({ inPort: subgraph.inputPorts[i], outPort: subgraph.outputPorts[i] });
+          }
+        }
+        const carryInKeys = new Set(carryPairs.map(cp => cp.inPort.key));
+
+        // 1. Declare carry variables outside the loop
+        const carryVarNames: Record<string, string> = {};
+        for (const { inPort } of carryPairs) {
+          const varName = `${node.id}_c${inPort.key}`;
+          carryVarNames[inPort.key] = varName;
+          const initVal = inputVars[inPort.key] ?? defaultGlslVal(inPort.type as DataType);
+          mainCode.push(`    ${inPort.type} ${varName} = ${initVal};\n`);
         }
 
-        const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(subNode, subDef);
-        Object.assign(paramUniforms, subUniforms);
+        // 2. Open the for loop
+        const loopVar = `${node.id}_i`;
+        mainCode.push(`    for (float ${loopVar} = 0.0; ${loopVar} < ${iters}.0; ${loopVar}++) {\n`);
 
-        const subResult = subDef.generateGLSL(patchedSub, subInputVars);
-        mainCode.push(subResult.code);
-        nodeOutputs.set(subNode.id, subResult.outputVars);
-      }
-
-      // Map output ports to the group node's output keys
-      const groupOutputVars: Record<string, string> = {};
-      for (const port of subgraph.outputPorts) {
-        const fromOutputs = nodeOutputs.get(prefix + port.fromNodeId);
-        if (fromOutputs?.[port.fromOutputKey]) {
-          groupOutputVars[port.key] = fromOutputs[port.fromOutputKey];
+        // 3. Compile subgraph body (same prefix every iteration — vars are loop-scoped)
+        const prefix = `${node.id}_g_`;
+        const portInputOverrides = new Map<string, string>();
+        for (const port of subgraph.inputPorts) {
+          const outerVar = carryInKeys.has(port.key)
+            ? carryVarNames[port.key]   // carry: use the persistent carry var
+            : inputVars[port.key];      // fixed: same outer var every iteration
+          if (outerVar) portInputOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
         }
+        compileSubgraphPass(prefix, portInputOverrides);
+
+        // 4. Update carry vars from this iteration's outputs (inside the loop)
+        for (const { inPort, outPort } of carryPairs) {
+          const fromOutputs = nodeOutputs.get(prefix + outPort.fromNodeId);
+          if (fromOutputs?.[outPort.fromOutputKey]) {
+            mainCode.push(`    ${carryVarNames[inPort.key]} = ${fromOutputs[outPort.fromOutputKey]};\n`);
+          }
+        }
+
+        // 5. Close the for loop
+        mainCode.push(`    }\n`);
+
+        // 6. Map group outputs: carry pairs use their persistent vars; others use last compiled value
+        const groupOutputVars: Record<string, string> = {};
+        const carryOutKeys = new Set(carryPairs.map(cp => cp.outPort.key));
+        for (const port of subgraph.outputPorts) {
+          if (carryOutKeys.has(port.key)) {
+            // Carry output: use the persistent carry var of the matching input
+            const matchPair = carryPairs.find(cp => cp.outPort.key === port.key);
+            if (matchPair) groupOutputVars[port.key] = carryVarNames[matchPair.inPort.key];
+          } else {
+            // Non-carry output: use last iteration's compiled value (still in scope for single-pass)
+            const fromOutputs = nodeOutputs.get(prefix + port.fromNodeId);
+            if (fromOutputs?.[port.fromOutputKey]) groupOutputVars[port.key] = fromOutputs[port.fromOutputKey];
+          }
+        }
+        nodeOutputs.set(node.id, groupOutputVars);
       }
-      nodeOutputs.set(node.id, groupOutputVars);
       continue;
     }
 
@@ -454,6 +477,23 @@ uniform float u_time;
 uniform vec2 u_mouse;
 ${paramUniformDecls ? paramUniformDecls + '\n' : ''}
 varying vec2 vUv;
+
+// ── Built-in noise helpers (always available to all nodes) ────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 ${functionCode}
 
 void main() {

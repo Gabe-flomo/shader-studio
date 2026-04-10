@@ -8,7 +8,7 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './sources';
 
 // Transforms
-export { FractNode, Rotate2DNode } from './transforms';
+export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 
 // Spaces
 export {
@@ -37,11 +37,10 @@ export {
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
-export { LoopNode } from './loop';
-export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode } from './loopPair';
+export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode } from './loopPair';
 
 // Noise
-export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
+export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 
 // Fractals
 export { MandelbrotNode, IFSNode } from './fractals';
@@ -53,7 +52,7 @@ export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
 
 // Color
-export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode } from './color';
+export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode } from './color';
 
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
@@ -68,12 +67,13 @@ export {
   MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
+  RemapNode,
 } from './math';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './sources';
-import { FractNode, Rotate2DNode } from './transforms';
+import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
   MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
@@ -92,13 +92,12 @@ import {
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
-import { LoopNode } from './loop';
-import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode } from './loopPair';
-import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode } from './noise';
+import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode } from './loopPair';
+import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 import { MandelbrotNode, IFSNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
-import { PaletteNode, PalettePresetNode, GradientNode } from './color';
+import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import {
@@ -110,6 +109,7 @@ import {
   MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
+  RemapNode,
 } from './math';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -122,6 +122,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,
+  uvWarp: UVWarpNode,
+  smoothWarp: SmoothWarpNode,
+  curlWarp: CurlWarpNode,
+  swirlWarp: SwirlWarpNode,
+  displace: DisplaceNode,
   // Spaces
   polarSpace: PolarSpaceNode,
   logPolarSpace: LogPolarSpaceNode,
@@ -173,7 +178,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   customFn: CustomFnNode,
   gravitationalLens: GravitationalLensNode,
   floatWarp: FloatWarpNode,
-  loop: LoopNode,
   // Loops (wired pair system)
   loopStart:             LoopStartNode,
   loopEnd:               LoopEndNode,
@@ -181,12 +185,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   loopRotateStep:        LoopRotateStepNode,
   loopDomainFold:        LoopDomainFoldNode,
   loopFloatAccumulate:   LoopFloatAccumulateNode,
+  loopRingStep:          LoopRingStepNode,
   // Noise
   fbm: FBMNode,
   voronoi: VoronoiNode,
   domainWarp: DomainWarpNode,
   flowField: FlowFieldNode,
   circlePack: CirclePackNode,
+  noiseFloat: NoiseFloatNode,
   // Fractals
   mandelbrot: MandelbrotNode,
   ifs: IFSNode,
@@ -205,6 +211,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   palette: PaletteNode,
   palettePreset: PalettePresetNode,
   gradient: GradientNode,
+  hsv: HSVNode,
+  posterize: PosterizeNode,
+  invert: InvertNode,
+  desaturate: DesaturateNode,
   // Output
   output: OutputNode,
   vec4Output: Vec4OutputNode,
@@ -244,6 +254,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   addVec2: AddVec2Node,
   multiplyVec2: MultiplyVec2Node,
   normalizeVec2: NormalizeVec2Node,
+  remap: RemapNode,
 };
 
 export function getNodeDefinition(type: string): NodeDefinition | undefined {
