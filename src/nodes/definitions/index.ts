@@ -8,7 +8,7 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './sources';
 
 // Transforms
-export { FractNode, Rotate2DNode, UVWarpNode } from './transforms';
+export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 
 // Spaces
 export {
@@ -73,7 +73,7 @@ export {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './sources';
-import { FractNode, Rotate2DNode, UVWarpNode } from './transforms';
+import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
   MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
@@ -123,6 +123,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   fract: FractNode,
   rotate2d: Rotate2DNode,
   uvWarp: UVWarpNode,
+  smoothWarp: SmoothWarpNode,
+  curlWarp: CurlWarpNode,
+  swirlWarp: SwirlWarpNode,
+  displace: DisplaceNode,
   // Spaces
   polarSpace: PolarSpaceNode,
   logPolarSpace: LogPolarSpaceNode,

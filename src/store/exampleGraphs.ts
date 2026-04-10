@@ -1517,6 +1517,194 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Smooth Warp — flowing noise displaces a ring ─────────────────────────
+  smoothWarpDemo: {
+    label: 'Smooth Warp — Flowing Ring',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 180 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Smooth warp displaces UV before feeding the ring SDF
+      { id: 'warp_2', type: 'smoothWarp', position: { x: 260, y: 180 },
+        inputs: {
+          input: { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'UV out' } },
+        params: { strength: 0.18, scale: 3.5, speed: 0.5 } },
+      // Ring SDF on warped UV
+      { id: 'ring_3', type: 'ringSDF', position: { x: 520, y: 180 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'warp_2', outputKey: 'output' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.35, thickness: 0.04 } },
+      // Glow
+      { id: 'light_4', type: 'makeLight', position: { x: 720, y: 180 },
+        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'ring_3', outputKey: 'distance' } } },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params: { brightness: 30.0 } },
+      // Palette driven by time
+      { id: 'pal_5', type: 'palettePreset', position: { x: 720, y: 360 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '3' } },
+      { id: 'mul_6', type: 'multiplyVec3', position: { x: 940, y: 270 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_5',   outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_4', outputKey: 'glow'  } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_7', type: 'output', position: { x: 1140, y: 270 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_6', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Curl Warp — fluid smoke field ─────────────────────────────────────────
+  curlWarpDemo: {
+    label: 'Curl Warp — Fluid Smoke',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Curl warp → feed into FBM for layered smoke look
+      { id: 'curl_2', type: 'curlWarp', position: { x: 270, y: 200 },
+        inputs: {
+          input: { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'UV out' } },
+        params: { strength: 0.35, scale: 2.5, speed: 0.3 } },
+      // FBM over warped UV gives smoke density
+      { id: 'fbm_3', type: 'fbm', position: { x: 520, y: 200 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'curl_2', outputKey: 'output' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time'   } },
+        },
+        outputs: { fbm: { type: 'float', label: 'FBM' } },
+        params: { octaves: 5, lacunarity: 2.0, gain: 0.5, scale: 3.0, speed: 0.0 } },
+      // Palette maps density to color
+      { id: 'pal_4', type: 'palettePreset', position: { x: 740, y: 340 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_3', outputKey: 'fbm' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '5' } },
+      { id: 'mul_5', type: 'multiplyVec3', position: { x: 940, y: 270 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_4', outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'fbm_3', outputKey: 'fbm'   } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_6', type: 'output', position: { x: 1140, y: 270 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_5', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Swirl Warp — spinning vortex with FBM background ─────────────────────
+  swirlWarpDemo: {
+    label: 'Swirl Warp — Vortex',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Swirl warp
+      { id: 'swirl_2', type: 'swirlWarp', position: { x: 270, y: 200 },
+        inputs: {
+          input: { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'UV out' } },
+        params: { strength: 4.0, falloff: 3.5, cx: 0.0, cy: 0.0, speed: 0.25 } },
+      // Polar space on warped UV → rings appear to spin
+      { id: 'polar_3', type: 'polarSpace', position: { x: 500, y: 200 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'swirl_2', outputKey: 'output' } } },
+        outputs: { uv: { type: 'vec2', label: 'UV' } },
+        params: { scale: 1.0 } },
+      { id: 'ring_4', type: 'ringSDF', position: { x: 700, y: 200 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'polar_3', outputKey: 'uv' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.3, thickness: 0.03 } },
+      { id: 'light_5', type: 'makeLight', position: { x: 900, y: 200 },
+        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'ring_4', outputKey: 'distance' } } },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params: { brightness: 25.0 } },
+      { id: 'pal_6', type: 'palettePreset', position: { x: 900, y: 380 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '1' } },
+      { id: 'mul_7', type: 'multiplyVec3', position: { x: 1100, y: 290 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_6',   outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_5', outputKey: 'glow'  } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_8', type: 'output', position: { x: 1300, y: 290 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_7', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Displace — custom warp: noise drives a vec2 displacement ─────────────
+  displaceDemo: {
+    label: 'Displace — Custom Warp',
+    counter: 10,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Two noise floats at different phases build the X and Y components
+      { id: 'nx_2', type: 'noiseFloat', position: { x: 270, y: 100 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, signed: { type: 'float', label: 'Signed' } },
+        params: { scale: 3.0, speed: 0.4, mode: 'smooth' } },
+      { id: 'ny_3', type: 'noiseFloat', position: { x: 270, y: 320 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, signed: { type: 'float', label: 'Signed' } },
+        params: { scale: 2.5, speed: 0.6, mode: 'smooth' } },
+      // Combine signed noise into a displacement vec2
+      { id: 'mkv_4', type: 'makeVec2', position: { x: 510, y: 200 },
+        inputs: {
+          x: { type: 'float', label: 'X', connection: { nodeId: 'nx_2', outputKey: 'signed' } },
+          y: { type: 'float', label: 'Y', connection: { nodeId: 'ny_3', outputKey: 'signed' } },
+        },
+        outputs: { result: { type: 'vec2', label: 'Result' } }, params: {} },
+      // Displace node wires the vec2 as the warp field
+      { id: 'disp_5', type: 'displace', position: { x: 710, y: 200 },
+        inputs: {
+          input:  { type: 'vec2',  label: 'UV',      connection: { nodeId: 'uv_0',  outputKey: 'uv'     } },
+          offset: { type: 'vec2',  label: 'Offset',  connection: { nodeId: 'mkv_4', outputKey: 'result' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'UV out' } },
+        params: { amount: 0.2 } },
+      // SDF on displaced UV
+      { id: 'circ_6', type: 'circleSDF', position: { x: 920, y: 200 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'disp_5', outputKey: 'output' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.3, x: 0.0, y: 0.0 } },
+      { id: 'light_7', type: 'makeLight', position: { x: 1100, y: 200 },
+        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'circ_6', outputKey: 'distance' } } },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params: { brightness: 20.0 } },
+      { id: 'pal_8', type: 'palettePreset', position: { x: 1100, y: 380 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '4' } },
+      { id: 'mul_9', type: 'multiplyVec3', position: { x: 1300, y: 290 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_8',   outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_7', outputKey: 'glow'  } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_10', type: 'output', position: { x: 1500, y: 290 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_9', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
