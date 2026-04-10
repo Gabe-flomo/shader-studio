@@ -24,7 +24,8 @@ float valueNoise(vec2 p) {
 
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
-const FBM_GLSL = NOISE_HELPERS + `
+// noiseHash1/noiseHash2/valueNoise are in the shader preamble — no need to re-emit.
+const FBM_GLSL = `
 float fbm(vec2 p, int octaves, float lacunarity, float gain) {
     float value = 0.0;
     float amp = 0.5;
@@ -85,7 +86,7 @@ export const FBMNode: NodeDefinition = {
 
 // ─── Voronoi — Worley/cell noise ─────────────────────────────────────────────
 
-const VORONOI_GLSL = NOISE_HELPERS + `
+const VORONOI_GLSL = `
 // IQ-style 2D Voronoi returning minimum distance
 float voronoi(vec2 p, float jitter) {
     vec2 i = floor(p);
@@ -147,8 +148,8 @@ export const VoronoiNode: NodeDefinition = {
 
 // ─── Domain Warp — UV distortion via noise ────────────────────────────────────
 
-// DomainWarp needs fbm too — combine the GLSL
-const DOMAIN_WARP_FULL_GLSL = NOISE_HELPERS + `
+// DomainWarp needs fbm too — helpers are in preamble, just define unique functions
+const DOMAIN_WARP_FULL_GLSL = `
 float fbmW(vec2 p, int octaves, float lacunarity, float gain) {
     float value = 0.0;
     float amp = 0.5;
@@ -234,7 +235,7 @@ export const DomainWarpNode: NodeDefinition = {
 //   curl      — noise gradient rotated 90°, creates organic swirling loops
 //   quantized — angles snapped to multiples of π/steps, rocky/angular forms
 //
-const FLOW_FIELD_GLSL = NOISE_HELPERS + `
+const FLOW_FIELD_GLSL = `
 // FBM variant for flow field (avoids name collision with standalone FBMNode)
 float fbmFF(vec2 p, int octaves, float lacunarity, float gain) {
     float value = 0.0; float amp = 0.5; float freq = 1.0;
@@ -419,7 +420,7 @@ export const CirclePackNode: NodeDefinition = {
     centers:  { type: 'vec2',  label: 'Nearest Centre' },
     uv:       { type: 'vec2',  label: 'UV (pass-through)' },
   },
-  glslFunction: NOISE_HELPERS,   // reuses noiseHash1/noiseHash2/valueNoise
+  // noiseHash1/noiseHash2/valueNoise are in the shader preamble
   defaultParams: {
     circles:       80,
     min_radius:    0.03,
@@ -587,18 +588,7 @@ export const NoiseFloatNode: NodeDefinition = {
       ],
     },
   },
-  // Self-contained helpers with nf_ prefix — avoids conflicts when FBM/DomainWarp
-  // are also in the graph (those embed NOISE_HELPERS verbatim in their glslFunction).
-  glslFunction: `
-float nf_hash1(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-float nf_valueNoise(vec2 p) {
-    vec2 i = floor(p); vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(nf_hash1(i), nf_hash1(i+vec2(1,0)), u.x),
-               mix(nf_hash1(i+vec2(0,1)), nf_hash1(i+vec2(1,1)), u.x), u.y);
-}`,
+  // noiseHash1/valueNoise are in the shader preamble — no glslFunction needed
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
     const uv      = inputVars.uv   || 'vec2(0.0)';
@@ -608,8 +598,8 @@ float nf_valueNoise(vec2 p) {
     const mode    = typeof node.params.mode === 'string' ? node.params.mode : 'smooth';
 
     const sampleExpr = mode === 'hash'
-      ? `nf_hash1(${uv} * ${scale} + ${timeVar} * ${speed})`
-      : `nf_valueNoise(${uv} * ${scale} + ${timeVar} * ${speed})`;
+      ? `noiseHash1(${uv} * ${scale} + ${timeVar} * ${speed})`
+      : `valueNoise(${uv} * ${scale} + ${timeVar} * ${speed})`;
 
     return {
       code: [

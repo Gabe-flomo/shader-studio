@@ -63,9 +63,12 @@ vec2 ch2_noise2(vec2 p, float t, float spd, int mode) {
         return vec2(ch2_fbm(p*3.0+t*spd), ch2_fbm(p*3.0+t*spd+vec2(5.2,1.3)))*2.0-1.0;
     }
     if (mode == 4) {
-        float nx = fract(sin(dot(p*3.0+t*spd,       vec2(127.1,311.7)))*43758.5453);
-        float ny = fract(sin(dot(p*3.0+t*spd+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
-        return vec2(ny, -nx); // curl: perpendicular → swirl
+        // Smooth curl via finite differences of value noise — gradual speed modulation
+        float eps = 0.08;
+        vec2 q = p * 3.0 + t * spd;
+        float dy = ch2_valueNoise(q + vec2(eps, 0.0)) - ch2_valueNoise(q - vec2(eps, 0.0));
+        float dx = ch2_valueNoise(q + vec2(0.0, eps)) - ch2_valueNoise(q - vec2(0.0, eps));
+        return vec2(dy, -dx) * (1.0 / eps) * 0.5;
     }
     if (mode == 5) {
         float qt = floor(t*spd)/spd;
@@ -73,13 +76,13 @@ vec2 ch2_noise2(vec2 p, float t, float spd, int mode) {
         float ny = fract(sin(dot(p*4.0+qt+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
         return (vec2(nx,ny)*2.0-1.0);
     }
-    // mode 0: per-cell hash — blocky particle look, no directional bias.
-    // floor() before hashing gives each grid cell a constant random offset
-    // instead of a continuous dot-product that creates diagonal streaks.
-    vec2 q = floor(p * 4.0 + t * spd);
-    float ch2_h1 = fract(sin(q.x * 127.1 + q.y * 311.7) * 43758.5453);
-    float ch2_h2 = fract(sin(q.x * 269.5 + q.y * 183.3) * 43758.5453);
-    return vec2(ch2_h1, ch2_h2) * 2.0 - 1.0;
+    // mode 0: smooth jitter at high frequency — grain-like particles, no directional bias.
+    // Uses value noise at high scale so each pixel gets an independent smooth displacement.
+    float scale8 = 8.0;
+    return vec2(
+        ch2_valueNoise(p * scale8 + t * spd),
+        ch2_valueNoise(p * scale8 + t * spd + vec2(31.7, 17.3))
+    ) * 2.0 - 1.0;
 }`;
 
 export const ChladniNode: NodeDefinition = {
