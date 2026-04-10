@@ -239,8 +239,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
 
   // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
   const scopeCanvasRef = useRef<HTMLCanvasElement>(null);
-  const scopeMin = node.type === 'scope' ? (typeof node.params.min === 'number' ? node.params.min : -1.0) : -1.0;
-  const scopeMax = node.type === 'scope' ? (typeof node.params.max === 'number' ? node.params.max : 1.0) : 1.0;
 
   // Register / unregister this canvas in the global scope registry so ShaderCanvas
   // can draw directly without going through React state (eliminates setState→re-render lag).
@@ -555,7 +553,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           const innerDef = getNodeDefinition(innerNode.type);
           const innerParamDefs = innerDef?.paramDefs ?? {};
           const paramEntries = Object.entries(innerParamDefs).filter(([, pd]) =>
-            pd.type === 'float' || pd.type === 'vec3' || pd.type === 'bool'
+            pd.type === 'float' || pd.type === 'vec3'
           );
           if (paramEntries.length === 0) return null;
           const innerLabel = typeof innerNode.params.label === 'string'
