@@ -5,6 +5,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { registerSocket } from './socketRegistry';
+import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
 
 interface Props {
   node: GraphNode;
@@ -236,7 +237,157 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
 
+  // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
+  const scopeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const scopeMin = node.type === 'scope' ? (typeof node.params.min === 'number' ? node.params.min : -1.0) : -1.0;
+  const scopeMax = node.type === 'scope' ? (typeof node.params.max === 'number' ? node.params.max : 1.0) : 1.0;
+
+  // Register / unregister this canvas in the global scope registry so ShaderCanvas
+  // can draw directly without going through React state (eliminates setState→re-render lag).
+  React.useEffect(() => {
+    if (node.type !== 'scope') return;
+    const canvas = scopeCanvasRef.current;
+    if (canvas) scopeCanvasRegistry.set(node.id, canvas);
+    return () => {
+      scopeCanvasRegistry.delete(node.id);
+      scopeBufferRegistry.delete(node.id);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.type, node.id]);
+
   if (!def) return null;
+
+  const handleScopeHeaderMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    dragOffset.current = {
+      x: e.clientX / zoom - node.position.x,
+      y: e.clientY / zoom - node.position.y,
+    };
+    let hasDragged = false;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    document.body.style.userSelect = 'none';
+    const handleMove = (ev: MouseEvent) => {
+      if (!dragOffset.current) return;
+      if (!hasDragged && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) hasDragged = true;
+      updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
+    };
+    const handleUp = () => {
+      dragOffset.current = null;
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      if (!hasDragged) {
+        if (e.metaKey || e.ctrlKey) selectNode(node.id, true);
+        else { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }
+      }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  };
+
+  // ── Scope node special card ──────────────────────────────────────────────────
+  if (node.type === 'scope') {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          left: node.position.x,
+          top: node.position.y,
+          background: '#1e1e2e',
+          border: isSelected ? '1px solid #89b4fa' : '1px solid #444',
+          borderRadius: '8px',
+          width: '220px',
+          color: '#cdd6f4',
+          fontSize: '12px',
+          userSelect: 'none',
+          opacity: dimmed ? 0.2 : 1,
+          boxShadow: isSelected ? '0 0 10px #89b4fa33, 0 4px 12px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Header */}
+        <div
+          onMouseDown={handleScopeHeaderMouseDown}
+          style={{
+            background: '#313244', borderRadius: '6px 6px 0 0',
+            padding: '5px 10px', display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', cursor: 'grab',
+          }}
+        >
+          <span style={{ fontWeight: 600, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ opacity: 0.7 }}>⌇</span> Scope
+          </span>
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => removeNode(node.id)}
+            style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+          >✕</button>
+        </div>
+
+        {/* Waveform canvas */}
+        <canvas
+          ref={scopeCanvasRef}
+          width={220}
+          height={80}
+          style={{ display: 'block', width: '100%', height: '80px', borderBottom: '1px solid #313244' }}
+        />
+
+        {/* Min/Max params */}
+        <div style={{ padding: '4px 10px', display: 'flex', gap: '8px', alignItems: 'center' }}
+             onMouseDown={e => e.stopPropagation()}>
+          {(['min', 'max'] as const).map(key => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+              <span style={{ color: '#6c7086', fontSize: '10px', minWidth: '22px' }}>{key}</span>
+              <input
+                type="number"
+                value={typeof node.params[key] === 'number' ? node.params[key] as number : (key === 'min' ? -1 : 1)}
+                step={0.1}
+                onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) || 0 })}
+                style={{ ...INPUT_STYLE, width: '48px', fontSize: '10px', padding: '1px 4px' }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Input / Output sockets */}
+        <div style={{ padding: '3px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 10px 0 0' }}>
+            <div
+              ref={el => { registerSocket(node.id, 'in', 'value', el); }}
+              onMouseUp={e => {
+                e.stopPropagation();
+                if (node.inputs.value?.connection) {
+                  disconnectInput(node.id, 'value');
+                } else {
+                  onEndConnection(node.id, 'value');
+                }
+              }}
+              style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: node.inputs.value?.connection ? TYPE_COLORS['float'] : '#333',
+                border: `2px solid ${TYPE_COLORS['float']}`,
+                cursor: 'crosshair', flexShrink: 0, marginLeft: '-6px',
+              }}
+            />
+            <span style={{ fontSize: '10px', color: '#a6adc8' }}>value</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 0 0 10px' }}>
+            <span style={{ fontSize: '10px', color: '#a6adc8' }}>value</span>
+            <div
+              ref={el => { registerSocket(node.id, 'out', 'value', el); }}
+              onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, 'value', e); }}
+              style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: TYPE_COLORS['float'], border: `2px solid ${TYPE_COLORS['float']}`,
+                cursor: 'crosshair', flexShrink: 0, marginRight: '-6px',
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Group node special card ──────────────────────────────────────────────────
   if (node.type === 'group') {
@@ -398,6 +549,56 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
             ))}
           </div>
         </div>
+
+        {/* Inner node exposed params */}
+        {subgraph && subgraph.nodes.map(innerNode => {
+          const innerDef = getNodeDefinition(innerNode.type);
+          const innerParamDefs = innerDef?.paramDefs ?? {};
+          const paramEntries = Object.entries(innerParamDefs).filter(([, pd]) =>
+            pd.type === 'float' || pd.type === 'vec3' || pd.type === 'bool'
+          );
+          if (paramEntries.length === 0) return null;
+          const innerLabel = typeof innerNode.params.label === 'string'
+            ? innerNode.params.label
+            : (innerDef?.label ?? innerNode.type);
+          return (
+            <div key={innerNode.id} style={{ borderTop: '1px solid #313244' }}>
+              <div style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em' }}>
+                {innerLabel.toUpperCase()}
+              </div>
+              {paramEntries.map(([paramKey, paramDef]) => {
+                if (paramDef.type !== 'float') return null; // only float for now
+                const overrideKey = `${innerNode.id}::${paramKey}`;
+                const rawVal = node.params[overrideKey] ?? innerNode.params[paramKey];
+                const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
+                const min = paramDef.min ?? 0;
+                const max = paramDef.max ?? 1;
+                const step = paramDef.step ?? 0.01;
+                return (
+                  <div
+                    key={paramKey}
+                    style={{ padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    onMouseDown={e => e.stopPropagation()}
+                  >
+                    <span style={{ color: '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
+                    <input
+                      type="range"
+                      min={min}
+                      max={max}
+                      step={step}
+                      value={currentVal}
+                      onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) })}
+                      style={{ flex: 1, accentColor: '#89b4fa', cursor: 'pointer' }}
+                    />
+                    <span style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     );
   }

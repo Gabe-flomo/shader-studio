@@ -57,6 +57,9 @@ export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
 
+// Utility
+export { ScopeNode } from './utility';
+
 // Math
 export {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
@@ -100,6 +103,7 @@ import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
+import { ScopeNode } from './utility';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, ExpNode, PowNode, NegateNode, LengthNode,
@@ -220,6 +224,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   vec4Output: Vec4OutputNode,
   // Utility
   group: GroupNode,
+  scope: ScopeNode,
   // Math
   add: AddNode,
   subtract: SubtractNode,

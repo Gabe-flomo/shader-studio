@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { drawScopeCanvas } from '../lib/scopeRegistry';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
 
@@ -75,6 +76,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
   const setNodeProbeValues = useNodeGraphStore((state) => state.setNodeProbeValues);
+  // (scope probe values are written directly to canvas via scopeRegistry — no React state)
   // Only broadcast currentTime when a Time node is in the graph — avoids 10fps
   // re-renders of all NodeComponents on graphs that don't use time at all.
   const hasTimeNode        = useNodeGraphStore((state) => state.nodes.some(n => n.type === 'time'));
@@ -198,10 +200,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     let lastProbedNodeId: string | null = null;
     let lastProbeFs: string | null = null;   // invalidate cache when shader recompiles
     const probeMatCache = new Map<string, THREE.ShaderMaterial>();
+    const scopeMatCache = new Map<string, THREE.ShaderMaterial>();
+    let lastScopeFs: string | null = null;
 
-    // Build a 1-px probe shader: full frag shader but gl_FragColor = packed varName
+    // Build a 1-px probe shader: insert a new gl_FragColor at the very end of main()
+    // using lastIndexOf('}') so it works even when nodes compile after the output node's
+    // gl_FragColor (i.e. when the scope node isn't connected to the Output node).
     const buildProbeShader = (fs: string, varName: string, varType: string): string => {
-      const stripped = fs.replace(/gl_FragColor\s*=\s*[^;]+;[^}]*\}(\s*)$/, '');
       let packed: string;
       switch (varType) {
         case 'float': packed = `vec4(${varName}, ${varName}, ${varName}, 1.0)`; break;
@@ -210,7 +215,15 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
         case 'vec4':  packed = varName; break;
         default:      packed = `vec4(0.0)`; break;
       }
-      return `${stripped}  gl_FragColor = ${packed};\n}`;
+      const end = fs.lastIndexOf('}');
+      return fs.slice(0, end) + `  gl_FragColor = ${packed};\n}`;
+    };
+
+    // Build a scope probe shader: normalizes float to [0,1] via min/max, inserted at end of main()
+    const buildScopeProbeShader = (fs: string, varName: string, minVal: number, maxVal: number): string => {
+      const range = (maxVal - minVal) || 1.0;
+      const end = fs.lastIndexOf('}');
+      return fs.slice(0, end) + `  gl_FragColor = vec4((${varName} - ${minVal.toFixed(6)}) / ${range.toFixed(6)}, 0.0, 0.0, 1.0);\n}`;
     };
 
     const ro = new ResizeObserver((entries) => {
@@ -338,6 +351,55 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
           lastProbedNodeId = null;
           setNodeProbeValues(null);
         }
+
+      }
+
+      // ── Scope nodes: sample every frame, draw directly to canvas (no React state) ──
+      const scopeNodes = nodesRef.current.filter(n => n.type === 'scope');
+      if (scopeNodes.length > 0) {
+        const curScopeFs = useNodeGraphStore.getState().fragmentShader;
+        const curScopeVs = useNodeGraphStore.getState().vertexShader;
+        if (curScopeFs && curScopeVs) {
+          if (lastScopeFs !== curScopeFs) {
+            scopeMatCache.forEach(m => m.dispose());
+            scopeMatCache.clear();
+            lastScopeFs = curScopeFs;
+          }
+          for (const scopeNode of scopeNodes) {
+            const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
+            if (!outputVars?.value) continue;
+            const varName = outputVars.value;
+            const scopeMin = typeof scopeNode.params.min === 'number' ? scopeNode.params.min : -1.0;
+            const scopeMax = typeof scopeNode.params.max === 'number' ? scopeNode.params.max : 1.0;
+            // Cache key includes min/max so probe shader is rebuilt when range changes
+            const cacheKey = `${varName}::${scopeMin}::${scopeMax}`;
+            let pm = scopeMatCache.get(cacheKey);
+            if (!pm) {
+              const probeFs = buildScopeProbeShader(curScopeFs, varName, scopeMin, scopeMax);
+              const clonedUniforms: Record<string, { value: unknown }> = {};
+              for (const [k, u] of Object.entries(material.uniforms)) {
+                clonedUniforms[k] = { value: u.value };
+              }
+              pm = new THREE.ShaderMaterial({
+                vertexShader: curScopeVs,
+                fragmentShader: probeFs,
+                uniforms: clonedUniforms,
+              });
+              scopeMatCache.set(cacheKey, pm);
+            }
+            for (const [k, u] of Object.entries(material.uniforms)) {
+              if (pm.uniforms[k]) pm.uniforms[k].value = u.value;
+            }
+            probeMesh.material = pm;
+            renderer.setRenderTarget(probeRT);
+            renderer.render(probeScene, camera);
+            renderer.setRenderTarget(null);
+            renderer.readRenderTargetPixels(probeRT, 0, 0, 1, 1, probeBuf);
+            // Draw directly to the registered canvas — no React state, no re-render
+            drawScopeCanvas(scopeNode.id, probeBuf[0] / 255, scopeMin, scopeMax);
+          }
+          probeMesh.material = probeDummy;
+        }
       }
     }
     animate();
@@ -367,6 +429,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       probeGeo.dispose();
       probeDummy.dispose();
       probeMatCache.forEach(m => m.dispose());
+      scopeMatCache.forEach(m => m.dispose());
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
