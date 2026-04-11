@@ -71,7 +71,7 @@ export function resolveInputVars(
 /** Resolve input vars for a node inside a loop body (modal or wired pair). */
 function resolveLoopBodyInputVars(
   bodyNode: GraphNode,
-  carryType: DataType,
+  _carryType: DataType,
   iterCarry: string,
   nodeOutputs: Map<string, Record<string, string>>,
   chainNodeIds: Set<string>,
