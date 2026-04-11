@@ -6,6 +6,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
 import { EXAMPLE_GRAPHS } from './exampleGraphs';
+import { typesCompatible } from '../lib/typesCompatible';
 
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX = 'shader-studio:cfp:';
@@ -591,8 +592,51 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   removeNode: (nodeId) => {
     pushHistory(get().nodes);
+    const { nodes } = get();
+    const deletedNode = nodes.find(n => n.id === nodeId);
+
+    // ── Collect bridge info before removing ────────────────────────────────
+    // Upstream: what was wired INTO the deleted node
+    type Src = { sourceNodeId: string; sourceOutputKey: string; sourceType: string };
+    const upstream: Src[] = [];
+    if (deletedNode) {
+      for (const input of Object.values(deletedNode.inputs)) {
+        if (!input.connection) continue;
+        const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
+        const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+        const srcType = srcDef?.outputs[input.connection!.outputKey]?.type ?? '';
+        if (srcType) upstream.push({ sourceNodeId: input.connection.nodeId, sourceOutputKey: input.connection.outputKey, sourceType: srcType });
+      }
+    }
+
+    // Downstream: what the deleted node was wired INTO
+    type Tgt = { targetNodeId: string; targetInputKey: string; targetType: string };
+    const downstream: Tgt[] = [];
+    for (const n of nodes) {
+      if (n.id === nodeId) continue;
+      for (const [inputKey, input] of Object.entries(n.inputs)) {
+        if (input.connection?.nodeId !== nodeId) continue;
+        const tgtDef  = getNodeDefinition(n.type);
+        const tgtType = tgtDef?.inputs[inputKey]?.type ?? '';
+        downstream.push({ targetNodeId: n.id, targetInputKey: inputKey, targetType: tgtType });
+      }
+    }
+
+    // Bridge: for each orphaned downstream input, pick the first compatible upstream source
+    type Bridge = { sourceNodeId: string; sourceOutputKey: string; targetNodeId: string; targetInputKey: string };
+    const bridges: Bridge[] = [];
+    for (const tgt of downstream) {
+      for (const src of upstream) {
+        if (typesCompatible(src.sourceType as DataType, tgt.targetType as DataType)) {
+          bridges.push({ sourceNodeId: src.sourceNodeId, sourceOutputKey: src.sourceOutputKey, targetNodeId: tgt.targetNodeId, targetInputKey: tgt.targetInputKey });
+          break;
+        }
+      }
+    }
+
     set(state => {
-      const newNodes = state.nodes
+      // Remove the node and clear any connections that pointed to it
+      let newNodes = state.nodes
         .filter(n => n.id !== nodeId)
         .map(n => ({
           ...n,
@@ -605,7 +649,24 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             ])
           ),
         }));
-      // Exit preview if the previewed node was removed
+
+      // Re-wire bridged connections
+      for (const bridge of bridges) {
+        newNodes = newNodes.map(n => {
+          if (n.id !== bridge.targetNodeId) return n;
+          return {
+            ...n,
+            inputs: {
+              ...n.inputs,
+              [bridge.targetInputKey]: {
+                ...n.inputs[bridge.targetInputKey],
+                connection: { nodeId: bridge.sourceNodeId, outputKey: bridge.sourceOutputKey },
+              },
+            },
+          };
+        });
+      }
+
       const previewNodeId = state.previewNodeId === nodeId ? null : state.previewNodeId;
       return { nodes: newNodes, previewNodeId };
     });

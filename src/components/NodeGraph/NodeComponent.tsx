@@ -6,6 +6,7 @@ import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
+import { typesCompatible } from '../../lib/typesCompatible';
 
 interface Props {
   node: GraphNode;
@@ -42,9 +43,6 @@ const RANGE_STYLE: React.CSSProperties = {
 };
 
 // ─── Type compatibility check (mirrors graphCompiler.ts logic) ───────────────
-function typesCompatible(sourceType: DataType, targetType: DataType): boolean {
-  return sourceType === targetType || (sourceType === 'float' && targetType === 'vec3');
-}
 
 // ─── Find compatible source sockets in the current graph for a given target type ─
 function getCompatibleSources(
