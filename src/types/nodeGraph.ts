@@ -63,8 +63,9 @@ export interface NodeDefinition {
     outputVars: Record<string, string>;
   };
 
-  // Optional GLSL function to include in shader
+  // Optional GLSL function(s) to include in shader
   glslFunction?: string;
+  glslFunctions?: string[];
 
   // Default parameter values
   defaultParams?: Record<string, unknown>;
