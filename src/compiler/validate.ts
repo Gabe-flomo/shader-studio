@@ -74,7 +74,7 @@ export function validateGraph(
 
       if (!compatible) {
         errors.push(
-          `Node ${node.id}: type mismatch on input "${inputKey}". ` +
+          `Node ${node.id} [source:${sourceNode.id}]: type mismatch on input "${inputKey}". ` +
           `Expected ${targetInput.type}, got ${sourceOutputType}`,
         );
       }

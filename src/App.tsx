@@ -124,6 +124,10 @@ function App() {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
       if (ids.length >= 2) { groupNodes(ids); deselectAll(); }
     },
+    wrapInLoop:     () => {
+      const ids = useNodeGraphStore.getState().selectedNodeIds;
+      if (ids.length >= 1) useNodeGraphStore.getState().wrapInLoop(ids);
+    },
     addUV:          () => addRandomNode('uv'),
     addTime:        () => addRandomNode('time'),
     addFloat:       () => addRandomNode('float'),

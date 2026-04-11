@@ -498,6 +498,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const sec4Ref = useRef<HTMLDivElement>(null);
   const sec5Ref = useRef<HTMLDivElement>(null);
   const sec6Ref = useRef<HTMLDivElement>(null);
+  const sec7Ref = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   function tryExample(key: string) {
@@ -581,6 +582,13 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
         <TocLink label="Field Modes" targetRef={sec6Ref} />
         <TocLink label="Circle Packing" targetRef={sec6Ref} />
         <TocLink label="Combining Both" targetRef={sec6Ref} />
+
+        <span style={S.tocSection}>7. Wired Loops</span>
+        <TocLink label="The Carry" targetRef={sec7Ref} />
+        <TocLink label="UV Transformation" targetRef={sec7Ref} />
+        <TocLink label="Color Accumulation" targetRef={sec7Ref} />
+        <TocLink label="iter_index" targetRef={sec7Ref} />
+        <TocLink label="Animating Params" targetRef={sec7Ref} />
         </>}
       </nav>
 
@@ -1814,6 +1822,213 @@ while placed < target AND failures < 2000:
             Circle Pack are both plain <TypeBadge type="float" /> values — they compose with any math node.
             Think of them as painterly alpha channels: multiply, mix, add, threshold however you want.
           </Tip>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 7 — WIRED LOOP SYSTEM
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec7Ref as React.RefObject<HTMLDivElement>}>
+          <h2 style={S.sectionTitle}>7 · Wired Loops</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            The <strong style={{ color: T.textBold }}>Loop Start / Loop End</strong> pair lets you run any chain of nodes
+            multiple times. Unlike the compound loop nodes, you can see and control every step — each body node is a real
+            node in the graph, with editable params and animatable inputs.
+          </p>
+
+          {/* ── The Carry ── */}
+          <h3 style={S.subTitle}>The Carry: a Value That Travels Through Time</h3>
+          <p style={S.p}>
+            Every loop needs a running value — something each iteration reads, transforms, and passes to the next. This is
+            called the <strong style={{ color: T.textBold }}>carry</strong>. It starts at your initial value, flows through
+            all body nodes once per iteration, and whatever comes out the end becomes the input for the next pass.
+          </p>
+
+          {/* Carry type table */}
+          <DataTable rows={[
+            ['vec2', 'A 2D coordinate — transform UV space each iteration', 'ripple, fold, rotate'],
+            ['vec3', 'Accumulated color — add color each iteration', 'fractal rings, glow layers'],
+            ['float', 'Accumulated scalar — oscillate a number each iteration', 'float accumulate'],
+            ['vec4', 'Color + alpha, or any 4D state', 'advanced custom loops'],
+          ]} />
+
+          <p style={S.p}>
+            Set the carry type on <strong style={{ color: T.textBold }}>Loop Start</strong> using the{' '}
+            <em>Carry Type</em> dropdown. The type flows through all body nodes for that iteration count.
+          </p>
+
+          {/* Visual diagram of the loop structure */}
+          <div style={{
+            background: T.surface2,
+            border: `1px solid ${T.border}`,
+            borderRadius: '8px',
+            padding: '16px 20px',
+            marginBottom: '16px',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            color: T.dim,
+            lineHeight: 2,
+          }}>
+            <div style={{ color: T.dim2, fontSize: '10px', marginBottom: '8px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>How a loop runs</div>
+            <div>
+              <span style={{ color: T.green }}>initial value</span>
+              <span style={{ color: T.dim2 }}> ──→ </span>
+              <span style={{ color: T.blue, background: T.blue + '15', borderRadius: '4px', padding: '1px 8px' }}>Loop Start</span>
+              <span style={{ color: T.dim2 }}> ──carry──→ </span>
+              <span style={{ color: T.mauve, background: T.mauve + '15', borderRadius: '4px', padding: '1px 8px' }}>Body A</span>
+              <span style={{ color: T.dim2 }}> ──→ </span>
+              <span style={{ color: T.mauve, background: T.mauve + '15', borderRadius: '4px', padding: '1px 8px' }}>Body B</span>
+              <span style={{ color: T.dim2 }}> ──carry──→ </span>
+              <span style={{ color: T.blue, background: T.blue + '15', borderRadius: '4px', padding: '1px 8px' }}>Loop End</span>
+              <span style={{ color: T.dim2 }}> ──→ </span>
+              <span style={{ color: T.green }}>result</span>
+            </div>
+            <div style={{ marginTop: '6px', color: T.dim2, fontSize: '11px' }}>
+              ↑ this entire body runs N times — the output of each pass feeds the next
+            </div>
+          </div>
+
+          {/* ── Pattern 1: UV Transformation ── */}
+          <h3 style={S.subTitle}>Pattern 1 · UV Transformation (vec2 carry)</h3>
+          <p style={S.p}>
+            Use a <TypeBadge type="vec2" /> carry when you want to <strong style={{ color: T.textBold }}>warp or fold UV
+            coordinates</strong> across multiple passes. Each iteration transforms the position further. After the loop,
+            the result is a heavily distorted coordinate — feed it into a palette or SDF for the final color.
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['vec2'] },
+              { label: 'Loop Start', type: 'transform', inputs: ['carry: vec2'], outputs: ['carry →', 'iter index'] },
+              { label: 'Ripple Step', type: 'effect', inputs: ['uv (carry)'], outputs: ['uv out'] },
+              { label: 'Loop End', type: 'transform', inputs: ['carry in'], outputs: ['result: vec2'] },
+              { label: 'Length', type: 'effect', outputs: ['float'] },
+              { label: 'Palette', type: 'color', outputs: ['vec3'] },
+              { label: 'Output', type: 'output' },
+            ]}
+            caption="vec2 carry: UV is warped 6× — the folded coordinate drives the final color"
+          />
+
+          <TryIt exampleKey="loopRippleWarp" label="Loop: Ripple Warp" onTry={tryExample} />
+          <TryIt exampleKey="loopRotateSpiral" label="Loop: Rotate Spiral" onTry={tryExample} />
+          <TryIt exampleKey="loopChainedBody" label="Loop: Chained Body (fold + ripple per pass)" onTry={tryExample} />
+
+          <Tip>
+            You can chain multiple body nodes inside one loop. Connect{' '}
+            <C>Loop Start → Domain Fold → Ripple Step → Loop End</C> and both transformations run every iteration.
+            The output of each body feeds directly into the next.
+          </Tip>
+
+          {/* ── Pattern 2: Color Accumulation ── */}
+          <h3 style={S.subTitle}>Pattern 2 · Color Accumulation (vec3 carry)</h3>
+          <p style={S.p}>
+            Use a <TypeBadge type="vec3" /> carry when you want to <strong style={{ color: T.textBold }}>build up color
+            across iterations</strong>. Each pass adds something to the running color total. Leave{' '}
+            <em>Initial value</em> on Loop Start unwired — it starts at black (<C>vec3(0.0)</C>) and fills up
+            iteration by iteration.
+          </p>
+          <p style={S.p}>
+            This is how <strong style={{ color: T.textBold }}>Color Ring Step</strong> works: each iteration folds UV
+            at a different scale (using <C>iter_index</C>), computes a ring glow, and adds a palette color to the
+            carry. After 8 passes you have 8 layered ring contributions — that's the fractal rings effect.
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'Loop Start', type: 'transform', inputs: ['no input → vec3(0)'], outputs: ['carry: vec3', 'iter index'] },
+              { label: 'Color Ring Step', type: 'effect', inputs: ['color (carry)', 'UV Scale', 'Glow…'], outputs: ['color out'] },
+              { label: 'Loop End', type: 'transform', inputs: ['carry in'], outputs: ['result: vec3'] },
+              { label: 'Output', type: 'output' },
+            ]}
+            caption="vec3 carry: starts at black, each of 8 iterations adds one ring layer of color"
+          />
+
+          <TryIt exampleKey="fractalRingsNewWired" label="Fractal Rings (New Loop)" onTry={tryExample} />
+
+          <Tip>
+            The key difference from UV loops: the carry is <em>color</em>, not position. The loop doesn't move through
+            space — it paints into an accumulator. Think of it as stamping 8 ring patterns on top of each other, each
+            one a slightly different color and fold scale.
+          </Tip>
+
+          {/* ── iter_index ── */}
+          <h3 style={S.subTitle}>iter_index: The Iteration Counter</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Loop Start</strong> has an <C>Iter Index</C> output — a{' '}
+            <TypeBadge type="float" /> that counts <C>0.0, 1.0, 2.0…</C> as the loop runs. Body nodes receive
+            this automatically as <C>iter_index</C> in their internal GLSL — no wiring needed inside the loop.
+          </p>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Color Ring Step</strong> uses it to:
+          </p>
+          <ul style={{ ...S.p, paddingLeft: '20px', marginTop: '-8px' }}>
+            <li style={{ marginBottom: '4px' }}>
+              Scale UV differently each pass: <C>fract(uv × (iter + 1) × scale)</C> — iteration 0 folds once, iteration 7 folds 8×
+            </li>
+            <li style={{ marginBottom: '4px' }}>
+              Shift palette hue each pass: <C>palette(d + iter × phaseStep + time × timeScale)</C> — each ring layer is a different color
+            </li>
+          </ul>
+          <p style={S.p}>
+            You can also wire <C>Iter Index</C> to any <TypeBadge type="float" /> param socket on a body node to
+            create explicit per-iteration variation — for example, ramping up <em>Strength</em> on a Ripple Step
+            as the loop progresses.
+          </p>
+
+          {/* ── Animating params ── */}
+          <h3 style={S.subTitle}>Animating Parameters</h3>
+          <p style={S.p}>
+            Every numeric param on loop body nodes (scale, frequency, glow, strength, etc.) has a matching{' '}
+            <TypeBadge type="float" /> input socket. When connected, the socket <strong style={{ color: T.textBold }}>overrides
+            the slider</strong> for that value — the slider shows a "wired ↑" indicator and becomes inactive.
+            Disconnect the wire and the slider takes over again.
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'Sine LFO', type: 'source', outputs: ['float'] },
+              { label: 'Ripple Step', type: 'effect', inputs: ['uv (carry)', 'scale ← LFO'], outputs: ['uv out'] },
+            ]}
+            caption="Sine LFO → scale socket: scale oscillates smoothly, slider is inactive"
+          />
+
+          <Tip>
+            Good params to animate: <C>scale</C> for morphing geometry, <C>phaseStep</C> for color cycling, <C>timeScale</C>
+            for speed control. The <C>glow</C> param on Color Ring Step is very sensitive — values between{' '}
+            <C>0.001</C> and <C>0.005</C> look best.
+          </Tip>
+
+          {/* ── Quick reference ── */}
+          <h3 style={S.subTitle}>Quick Reference</h3>
+          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                {['You want to…', 'Use', 'Carry type'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Warp UV with ripples', 'Ripple Step', 'vec2'],
+                ['Rotate / spiral UV', 'Rotate Step', 'vec2'],
+                ['Fold fractal space', 'Domain Fold', 'vec2'],
+                ['Stack two transforms per pass', 'Domain Fold → Ripple Step', 'vec2'],
+                ['Build layered ring colors', 'Color Ring Step', 'vec3'],
+                ['Oscillate a scalar', 'Float Accumulate', 'float'],
+              ].map(([want, use, type], i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{want}</td>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{use}</td>
+                  <td style={{ padding: '6px 10px' }}><TypeBadge type={type} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <TryIt exampleKey="loopFloatDemo" label="Loop: Float Accumulate" onTry={tryExample} />
+
         </div>
 
         {/* Bottom padding */}

@@ -1,6 +1,7 @@
 import type { GraphNode, DataType, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { topologicalSort } from './topoSort';
+import type { LoopPairChain } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 
 // ── Input-variable resolution ─────────────────────────────────────────────────
@@ -77,8 +78,11 @@ function resolveLoopBodyInputVars(
 ): Record<string, string> {
   const inputVars: Record<string, string> = {};
   for (const [k, sock] of Object.entries(bodyNode.inputs)) {
+    // Only inject the carry for sockets explicitly wired to a chain node.
+    // Type-match inference was removed: it would falsely inject carry into float
+    // param sockets on nodes that use a float carry type.
     const isCarryConn = sock.connection && chainNodeIds.has(sock.connection.nodeId);
-    if (isCarryConn || (!sock.connection && (sock.type as string) === (carryType as string))) {
+    if (isCarryConn) {
       inputVars[k] = iterCarry;
     } else if (sock.connection) {
       const src = nodeOutputs.get(sock.connection.nodeId);
@@ -131,14 +135,26 @@ export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
   _loopInternalIds: Set<string>,
-  loopPairChains: Map<string, string[]> = new Map(),
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number> } {
+  loopPairChains: Map<string, LoopPairChain> = new Map(),
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; isStateful: boolean } {
   const nodeMap    = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
   const functions  = new Set<string>();
   const mainCode: string[] = [];
   const paramUniforms: Record<string, number> = {};
+  const textureUniforms: Record<string, string> = {};  // uniformName → nodeId
   const nodeOutputs = new Map<string, Record<string, string>>();
+
+  // Pre-scan for textureInput and prevFrame nodes — their uniforms go in the preamble
+  let isStateful = false;
+  for (const node of sortedNodes) {
+    if (node.type === 'textureInput') {
+      textureUniforms[`u_tex_${node.id}`] = node.id;
+    }
+    if (node.type === 'prevFrame') {
+      isStateful = true;
+    }
+  }
 
   for (const node of sortedNodes) {
     const def = getNodeDefinition(node.type);
@@ -153,109 +169,85 @@ export function generateFragmentShader(
 
     const inputVars = resolveInputVars(node, nodeOutputs, nodeMap);
 
-    // ── Loop Start: emit carry init var ──────────────────────────────────────
+    // ── Loop Start: register carry var — loopEnd owns the actual GLSL emission ─
     if (node.type === 'loopStart') {
-      let startType: DataType = 'vec2';
-      const startConn = node.inputs['carry']?.connection;
-      if (startConn) {
-        const srcNode = nodeMap.get(startConn.nodeId);
-        const srcType = srcNode?.outputs[startConn.outputKey]?.type;
-        if (srcType === 'float' || srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4') {
-          startType = srcType as DataType;
-        }
+      // Resolve the correct carryType from the paired chain so the default matches
+      let startCarryType: DataType = 'vec2';
+      for (const chain of loopPairChains.values()) {
+        if (chain.startNodeId === node.id) { startCarryType = chain.carryType; break; }
       }
-      const carryVar = inputVars['carry'] ?? defaultGlslVal(startType);
-      const varName = `${node.id}_carry`;
-      mainCode.push(`    ${startType} ${varName} = ${carryVar};\n`);
-      nodeOutputs.set(node.id, { carry: varName });
+      const carryVar = inputVars['carry'] ?? defaultGlslVal(startCarryType);
+      nodeOutputs.set(node.id, { carry: carryVar, iter_index: '0.0' });
       continue;
     }
 
-    // ── Loop End: unroll the body chain N times ───────────────────────────────
+    // ── Loop End: emit a real GLSL for loop over the body chain ─────────────
     if (node.type === 'loopEnd') {
-      const bodyIds = loopPairChains.get(node.id) ?? [];
+      const chain = loopPairChains.get(node.id);
+      if (!chain) {
+        nodeOutputs.set(node.id, { result: 'vec2(0.0)' });
+        continue;
+      }
+
+      const { bodyIds, startNodeId, carryType, iterations: iters } = chain;
       const id = node.id;
-      let iters = Math.max(1, Math.min(16, Math.round(
-        typeof node.params.iterations === 'number' ? node.params.iterations : 4,
-      )));
 
-      const loopEndCarryConn = node.inputs['carry']?.connection;
-      let carryType: DataType = 'vec2';
-      let startNodeId: string | null = null;
-
-      if (loopEndCarryConn) {
-        let walkId: string | undefined = loopEndCarryConn.nodeId;
-        while (walkId) {
-          const wn = allNodeMap.get(walkId);
-          if (!wn) break;
-          if (wn.type === 'loopStart') {
-            startNodeId = wn.id;
-            const stConn = wn.inputs['carry']?.connection;
-            if (stConn) {
-              const stSrc = allNodeMap.get(stConn.nodeId);
-              const stType = stSrc?.outputs[stConn.outputKey]?.type;
-              if (stType === 'float' || stType === 'vec2' || stType === 'vec3' || stType === 'vec4') {
-                carryType = stType as DataType;
-              }
-            }
-            break;
-          }
-          const srcNode = allNodeMap.get(walkId);
-          if (srcNode) {
-            const outType = srcNode.outputs[loopEndCarryConn.outputKey]?.type;
-            if (outType === 'float' || outType === 'vec2' || outType === 'vec3' || outType === 'vec4') {
-              carryType = outType as DataType;
-            }
-          }
-          const wn2 = allNodeMap.get(walkId);
-          const nextConn = wn2
-            ? Object.values(wn2.inputs).find(i => i.connection)?.connection
-            : undefined;
-          walkId = nextConn?.nodeId;
-        }
-      }
-
-      if (startNodeId) {
-        const startNode = allNodeMap.get(startNodeId);
-        if (typeof startNode?.params.iterations === 'number') {
-          iters = Math.max(1, Math.min(16, Math.round(startNode.params.iterations)));
-        }
-      }
-
-      const chainNodeIds = new Set<string>(bodyIds);
-      if (startNodeId) chainNodeIds.add(startNodeId);
-
-      let initialCarry = defaultGlslVal(carryType);
-      if (startNodeId) {
-        const startOutputs = nodeOutputs.get(startNodeId);
-        if (startOutputs) {
-          const firstKey = Object.keys(startOutputs)[0];
-          if (firstKey) initialCarry = startOutputs[firstKey];
-        }
-      } else {
-        initialCarry = inputVars['carry'] ?? defaultGlslVal(carryType);
-      }
+      // Initial carry value comes from the loopStart's registered carry var
+      const initialCarry = startNodeId
+        ? (nodeOutputs.get(startNodeId)?.['carry'] ?? defaultGlslVal(carryType))
+        : (inputVars['carry'] ?? defaultGlslVal(carryType));
 
       collectFunctions(bodyIds, allNodeMap, functions);
 
-      let loopCode = `    ${carryType} ${id}_val = ${initialCarry};\n`;
-      for (let n = 0; n < iters; n++) {
-        let iterCarry = `${id}_val`;
-        for (const bodyId of bodyIds) {
-          const bodyNode = allNodeMap.get(bodyId);
-          if (!bodyNode) continue;
-          const bodyDef = getNodeDefinition(bodyNode.type);
-          if (!bodyDef) continue;
-          const bodyInputVars = resolveLoopBodyInputVars(bodyNode, carryType, iterCarry, nodeOutputs, chainNodeIds);
-          const bodyResult = bodyDef.generateGLSL(bodyNode, bodyInputVars);
-          loopCode += bodyResult.code.replace(new RegExp(`\\b${bodyId}_`, 'g'), `${bodyId}_P${n}_`);
-          const firstOutKey = Object.keys(bodyResult.outputVars)[0];
-          if (firstOutKey) iterCarry = `${bodyId}_P${n}_${firstOutKey}`;
+      const carryVar  = `${id}_val`;
+      const indexVar  = `${id}_i`;
+      const chainNodeIds = new Set<string>(bodyIds);
+      if (startNodeId) chainNodeIds.add(startNodeId);
+
+      let code = '';
+
+      // Declare and initialise the carry accumulator outside the loop
+      code += `    ${carryType} ${carryVar} = ${initialCarry};\n`;
+
+      // Emit a real GLSL for loop — one copy of the body, GPU iterates
+      code += `    for (int ${indexVar} = 0; ${indexVar} < ${iters}; ${indexVar}++) {\n`;
+
+      for (const bodyId of bodyIds) {
+        const bodyNode = allNodeMap.get(bodyId);
+        if (!bodyNode) continue;
+        const bodyDef = getNodeDefinition(bodyNode.type);
+        if (!bodyDef) continue;
+
+        const bodyInputVars = resolveLoopBodyInputVars(
+          bodyNode, carryType, carryVar, nodeOutputs, chainNodeIds,
+        );
+        // Inject the iteration index so body nodes can use it via a float input
+        bodyInputVars['iter_index'] = `float(${indexVar})`;
+
+        const bodyResult = bodyDef.generateGLSL(bodyNode, bodyInputVars);
+
+        // Prefix all vars with loop ID to avoid collisions with the outer scope
+        const prefixed = bodyResult.code.replace(
+          new RegExp(`\\b${bodyId}_`, 'g'),
+          `${id}_b_${bodyId}_`,
+        );
+        code += prefixed;
+
+        // Update the carry accumulator from this body node's first output
+        const firstOutKey = Object.keys(bodyResult.outputVars)[0];
+        if (firstOutKey) {
+          const rawVar = bodyResult.outputVars[firstOutKey];
+          const prefixedVar = rawVar.replace(
+            new RegExp(`\\b${bodyId}_`, 'g'),
+            `${id}_b_${bodyId}_`,
+          );
+          code += `        ${carryVar} = ${prefixedVar};\n`;
         }
-        loopCode += `    ${id}_val = ${iterCarry};\n`;
       }
-      mainCode.push(loopCode);
-      nodeOutputs.set(node.id, { result: `${id}_val` });
+
+      code += `    }\n`;
+      mainCode.push(code);
+      nodeOutputs.set(node.id, { result: carryVar });
       continue;
     }
 
@@ -478,6 +470,10 @@ export function generateFragmentShader(
   const paramUniformDecls = Object.keys(paramUniforms)
     .map(name => `uniform float ${name};`)
     .join('\n');
+  const textureUniformDecls = [
+    ...Object.keys(textureUniforms).map(name => `uniform sampler2D ${name};`),
+    ...(isStateful ? ['uniform sampler2D u_prevFrame;'] : []),
+  ].join('\n');
 
   const fragmentShader = `precision mediump float;
 #define PI 3.1415926538
@@ -486,7 +482,7 @@ export function generateFragmentShader(
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
-${paramUniformDecls ? paramUniformDecls + '\n' : ''}
+${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}
 varying vec2 vUv;
 
 // ── Built-in noise helpers (always available to all nodes) ────────────────
@@ -512,5 +508,5 @@ void main() {
     g_uv.x *= u_resolution.x / u_resolution.y;
 ${mainCode.join('')}}`.trim();
 
-  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms };
+  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, isStateful };
 }

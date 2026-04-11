@@ -64,6 +64,12 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   const animFrameRef = useRef<number>(0);
   const rtRef = useRef<THREE.WebGLRenderTarget | null>(null);
+  // Ping-pong render targets for stateful shaders (PrevFrame node)
+  const pingPongA   = useRef<THREE.WebGLRenderTarget | null>(null);
+  const pingPongB   = useRef<THREE.WebGLRenderTarget | null>(null);
+  const pingPongIdx = useRef<0 | 1>(0);  // 0 = A is read target, B is write; 1 = vice versa
+  // Ref mirrors for stateful flag so rAF loop sees latest without re-boot
+  const isStatefulRef = useRef(false);
   // Track mouse pixel position in canvas — null when mouse is not over canvas
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
   // Ref mirror for hasTimeNode so the rAF loop always sees the latest value
@@ -72,6 +78,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   const vertexShader       = useNodeGraphStore((state) => state.vertexShader);
   const fragmentShader     = useNodeGraphStore((state) => state.fragmentShader);
   const paramUniforms      = useNodeGraphStore((state) => state.paramUniforms);
+  const textureUniforms    = useNodeGraphStore((state) => state.textureUniforms);
+  const nodeTextures       = useNodeGraphStore((state) => state.nodeTextures);
+  const isStateful         = useNodeGraphStore((state) => state.isStateful);
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
@@ -81,9 +90,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   // re-renders of all NodeComponents on graphs that don't use time at all.
   const hasTimeNode        = useNodeGraphStore((state) => state.nodes.some(n => n.type === 'time'));
   // Node probe: ref-mirrors updated by a separate effect so the rAF loop sees latest
-  const selectedNodeIdRef  = useRef<string | null>(null);
+  const selectedNodeIdRef   = useRef<string | null>(null);
+  const previewNodeIdRef    = useRef<string | null>(null);
   const nodeOutputVarMapRef = useRef<Map<string, Record<string, string>>>(new Map());
-  const nodesRef           = useRef<import('../types/nodeGraph').GraphNode[]>([]);
+  const nodesRef            = useRef<import('../types/nodeGraph').GraphNode[]>([]);
 
   // Boot Three.js once
   useEffect(() => {
@@ -95,8 +105,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     rendererRef.current = renderer;
     onCanvasReady?.(renderer.domElement);
 
-    // Intercept WebGL compile errors
+    // Enable parallel shader compilation — keeps previous frame rendering while new shader compiles
     const gl = renderer.getContext();
+    gl.getExtension('KHR_parallel_shader_compile');
     const flushGlErrors = captureGlslErrors(gl);
 
     const scene = new THREE.Scene();
@@ -109,9 +120,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       vertexShader: vs || FALLBACK_VERTEX,
       fragmentShader: fs || FALLBACK_FRAGMENT,
       uniforms: {
-        u_time: { value: 0 },
+        u_time:       { value: 0 },
         u_resolution: { value: new THREE.Vector2(1, 1) },
-        u_mouse: { value: new THREE.Vector2(0, 0) },
+        u_mouse:      { value: new THREE.Vector2(0, 0) },
+        u_prevFrame:  { value: null },
       },
     });
     materialRef.current = material;
@@ -202,6 +214,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     const probeMatCache = new Map<string, THREE.ShaderMaterial>();
     const scopeMatCache = new Map<string, THREE.ShaderMaterial>();
     let lastScopeFs: string | null = null;
+    const previewScopeMatCache = new Map<string, THREE.ShaderMaterial>();
+    let lastPreviewScopeFs: string | null = null;
 
     // Build a 1-px probe shader: insert a new gl_FragColor at the very end of main()
     // using lastIndexOf('}') so it works even when nodes compile after the output node's
@@ -232,8 +246,28 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       renderer.setSize(width, height);
       material.uniforms.u_resolution.value.set(width, height);
       rt.setSize(width, height);
+      // Resize ping-pong RTs and reset state
+      if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
+      if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
+      pingPongIdx.current = 0;
+      if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = null;
     });
     ro.observe(container);
+
+    // Helper to lazily create ping-pong targets at current canvas size
+    const ensurePingPong = () => {
+      const w = renderer.domElement.width  || 1;
+      const h = renderer.domElement.height || 1;
+      if (!pingPongA.current) {
+        const opts = { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false };
+        pingPongA.current = new THREE.WebGLRenderTarget(w, h, opts);
+        pingPongB.current = new THREE.WebGLRenderTarget(w, h, opts);
+        // Clear both to black
+        renderer.setRenderTarget(pingPongA.current); renderer.clear();
+        renderer.setRenderTarget(pingPongB.current); renderer.clear();
+        renderer.setRenderTarget(null);
+      }
+    };
 
     const clock = new THREE.Clock();
     let frameCount = 0;
@@ -242,7 +276,25 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     function animate() {
       animFrameRef.current = requestAnimationFrame(animate);
       material.uniforms.u_time.value = clock.getElapsedTime();
-      renderer.render(scene, camera);
+
+      if (isStatefulRef.current) {
+        // Ping-pong: read from one RT, write to the other, then blit to screen
+        ensurePingPong();
+        const rtA = pingPongA.current!;
+        const rtB = pingPongB.current!;
+        const readRT  = pingPongIdx.current === 0 ? rtA : rtB;
+        const writeRT = pingPongIdx.current === 0 ? rtB : rtA;
+        if (material.uniforms.u_prevFrame) {
+          material.uniforms.u_prevFrame.value = readRT.texture;
+        }
+        renderer.setRenderTarget(writeRT);
+        renderer.render(scene, camera);
+        renderer.setRenderTarget(null);
+        renderer.render(scene, camera);  // blit to screen
+        pingPongIdx.current = pingPongIdx.current === 0 ? 1 : 0;
+      } else {
+        renderer.render(scene, camera);
+      }
 
       // Check for GLSL errors after first few renders
       const newErrors = flushGlErrors();
@@ -354,8 +406,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
 
       }
 
-      // ── Scope nodes: sample every frame, draw directly to canvas (no React state) ──
-      const scopeNodes = nodesRef.current.filter(n => n.type === 'scope');
+      // ── Scope + LFO nodes: sample every frame, draw waveform directly to canvas ──
+      const SCOPE_LIKE_TYPES = new Set(['scope', 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
+      const scopeNodes = nodesRef.current.filter(n => SCOPE_LIKE_TYPES.has(n.type));
       if (scopeNodes.length > 0) {
         const curScopeFs = useNodeGraphStore.getState().fragmentShader;
         const curScopeVs = useNodeGraphStore.getState().vertexShader;
@@ -369,8 +422,18 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
             const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
             if (!outputVars?.value) continue;
             const varName = outputVars.value;
-            const scopeMin = typeof scopeNode.params.min === 'number' ? scopeNode.params.min : -1.0;
-            const scopeMax = typeof scopeNode.params.max === 'number' ? scopeNode.params.max : 1.0;
+            // Scope node uses min/max params; LFO nodes derive range from offset ± amplitude
+            let scopeMin: number;
+            let scopeMax: number;
+            if (scopeNode.type === 'scope') {
+              scopeMin = typeof scopeNode.params.min === 'number' ? scopeNode.params.min : -1.0;
+              scopeMax = typeof scopeNode.params.max === 'number' ? scopeNode.params.max : 1.0;
+            } else {
+              const amp = typeof scopeNode.params.amplitude === 'number' ? scopeNode.params.amplitude : 1.0;
+              const off = typeof scopeNode.params.offset    === 'number' ? scopeNode.params.offset    : 0.0;
+              scopeMin = off - amp;
+              scopeMax = off + amp;
+            }
             // Cache key includes min/max so probe shader is rebuilt when range changes
             const cacheKey = `${varName}::${scopeMin}::${scopeMax}`;
             let pm = scopeMatCache.get(cacheKey);
@@ -399,6 +462,51 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
             drawScopeCanvas(scopeNode.id, probeBuf[0] / 255, scopeMin, scopeMax);
           }
           probeMesh.material = probeDummy;
+        }
+      }
+
+      // ── Preview scope: waveform for float-output nodes when 👁 is active ──
+      const previewId = previewNodeIdRef.current;
+      if (previewId) {
+        const previewNode = nodesRef.current.find(n => n.id === previewId);
+        const floatOutputKey = previewNode
+          ? Object.entries(previewNode.outputs).find(([, s]) => s.type === 'float')?.[0]
+          : null;
+        if (floatOutputKey) {
+          const outputVars = nodeOutputVarMapRef.current.get(previewId);
+          const varName    = outputVars?.[floatOutputKey];
+          if (varName) {
+            const curFs = useNodeGraphStore.getState().fragmentShader;
+            const curVs = useNodeGraphStore.getState().vertexShader;
+            if (curFs && curVs) {
+              if (lastPreviewScopeFs !== curFs) {
+                previewScopeMatCache.forEach(m => m.dispose());
+                previewScopeMatCache.clear();
+                lastPreviewScopeFs = curFs;
+              }
+              const cacheKey = `${varName}::-1::1`;
+              let pm = previewScopeMatCache.get(cacheKey);
+              if (!pm) {
+                const probeFs = buildScopeProbeShader(curFs, varName, -1, 1);
+                const clonedUniforms: Record<string, { value: unknown }> = {};
+                for (const [k, u] of Object.entries(material.uniforms)) {
+                  clonedUniforms[k] = { value: u.value };
+                }
+                pm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: probeFs, uniforms: clonedUniforms });
+                previewScopeMatCache.set(cacheKey, pm);
+              }
+              for (const [k, u] of Object.entries(material.uniforms)) {
+                if (pm.uniforms[k]) pm.uniforms[k].value = u.value;
+              }
+              probeMesh.material = pm;
+              renderer.setRenderTarget(probeRT);
+              renderer.render(probeScene, camera);
+              renderer.setRenderTarget(null);
+              renderer.readRenderTargetPixels(probeRT, 0, 0, 1, 1, probeBuf);
+              drawScopeCanvas(`__preview__${previewId}`, probeBuf[0] / 255, -1, 1);
+              probeMesh.material = probeDummy;
+            }
+          }
         }
       }
     }
@@ -430,27 +538,44 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       probeDummy.dispose();
       probeMatCache.forEach(m => m.dispose());
       scopeMatCache.forEach(m => m.dispose());
+      previewScopeMatCache.forEach(m => m.dispose());
+      pingPongA.current?.dispose();
+      pingPongB.current?.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
   }, []);
 
-  // Keep ref in sync so the rAF loop always sees the latest value without
+  // Keep refs in sync so the rAF loop always sees the latest value without
   // needing to restart the animation loop on every graph change.
   useEffect(() => { hasTimeNodeRef.current = hasTimeNode; }, [hasTimeNode]);
+  useEffect(() => {
+    isStatefulRef.current = isStateful;
+    // When switching to stateful, ensure u_prevFrame uniform exists on the material
+    const mat = materialRef.current;
+    if (mat && isStateful && !mat.uniforms.u_prevFrame) {
+      mat.uniforms.u_prevFrame = { value: null };
+    }
+    // When switching to non-stateful, reset ping-pong state
+    if (!isStateful) {
+      pingPongIdx.current = 0;
+    }
+  }, [isStateful]);
 
   // Sync probe refs from store so the rAF loop sees updates without re-running the effect
   useEffect(() => {
     const unsub = useNodeGraphStore.subscribe(state => {
-      selectedNodeIdRef.current  = state.selectedNodeId;
+      selectedNodeIdRef.current   = state.selectedNodeId;
+      previewNodeIdRef.current    = state.previewNodeId;
       nodeOutputVarMapRef.current = state.nodeOutputVarMap;
-      nodesRef.current           = state.nodes;
+      nodesRef.current            = state.nodes;
     });
     // Initialize immediately
     const s = useNodeGraphStore.getState();
-    selectedNodeIdRef.current  = s.selectedNodeId;
+    selectedNodeIdRef.current   = s.selectedNodeId;
+    previewNodeIdRef.current    = s.previewNodeId;
     nodeOutputVarMapRef.current = s.nodeOutputVarMap;
-    nodesRef.current           = s.nodes;
+    nodesRef.current            = s.nodes;
     return unsub;
   }, []);
 
@@ -470,8 +595,39 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
         mat.uniforms[name] = { value };
       }
     }
+    // Register sampler2D texture uniforms (initial value null — filled by texture effect)
+    const currentTextureUniforms = useNodeGraphStore.getState().textureUniforms;
+    for (const uniformName of Object.keys(currentTextureUniforms)) {
+      if (!mat.uniforms[uniformName]) {
+        mat.uniforms[uniformName] = { value: null };
+      }
+    }
     mat.needsUpdate = true;
+    // On structural recompile, reset ping-pong state to prevent stale frame bleed
+    if (pingPongA.current && pingPongB.current) {
+      const r = rendererRef.current;
+      if (r) {
+        r.setRenderTarget(pingPongA.current); r.clear();
+        r.setRenderTarget(pingPongB.current); r.clear();
+        r.setRenderTarget(null);
+      }
+      pingPongIdx.current = 0;
+    }
   }, [vertexShader, fragmentShader]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bind sampler2D texture uniforms — runs when textureUniforms or nodeTextures change.
+  useEffect(() => {
+    const mat = materialRef.current;
+    if (!mat) return;
+    for (const [uniformName, nodeId] of Object.entries(textureUniforms)) {
+      const tex = nodeTextures[nodeId] ?? null;
+      if (mat.uniforms[uniformName]) {
+        mat.uniforms[uniformName].value = tex;
+      } else {
+        mat.uniforms[uniformName] = { value: tex };
+      }
+    }
+  }, [textureUniforms, nodeTextures]);
 
   // Hot-update param uniform values without recompiling — runs only when paramUniforms
   // changes but fragmentShader has NOT changed (slider fast-path).

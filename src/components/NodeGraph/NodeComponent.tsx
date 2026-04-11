@@ -1,5 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
+import * as THREE from 'three';
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
+import { renderNodePreview } from '../../lib/nodePreviewRenderer';
+import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
@@ -16,7 +19,17 @@ interface Props {
   zoom?: number;
   /** When a highlight filter is active, non-matching nodes are dimmed */
   dimmed?: boolean;
+  /** Called when user double-clicks a group node header to drill into it */
+  onEnterGroup?: (groupId: string) => void;
+  /** Node has a compilation error — show red ring */
+  hasError?: boolean;
 }
+
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput']);
+let zCounter = 10; // incremented each time a node is brought to front
+const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
+// Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
+const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap']);
 
 const TYPE_COLORS: Record<string, string> = {
   float: '#f0a',
@@ -193,10 +206,11 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType, zoom = 1, dimmed = false }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
+  const isPreviewActive = previewNodeId === node.id;
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams   = useNodeGraphStore(s => s.updateNodeParams);
@@ -219,6 +233,33 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const isSwapTarget       = swapTargetNodeId === node.id;
   // currentTime is only needed for the Time node live badge — subscribed below conditionally
   const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
+  // Texture input
+  const setNodeTexture     = useNodeGraphStore(s => s.setNodeTexture);
+  const nodeTexture        = useNodeGraphStore(s => node.type === 'textureInput' ? s.nodeTextures[node.id] : null);
+
+  // Node preview thumbnail — rendered at 200×200 when the 👁 preview mode is active
+  const setNodePreview  = useNodeGraphStore(s => s.setNodePreview);
+  const previewDataUrl  = useNodeGraphStore(s => s.nodePreviews[node.id] ?? null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Render a 200×200 preview whenever preview mode is activated for this node
+  useEffect(() => {
+    if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
+    let cancelled = false;
+    const currentNodes = useNodeGraphStore.getState().nodes;
+    const fs = compileNodePreviewShader(node.id, currentNodes);
+    if (!fs) return;
+    setPreviewLoading(true);
+    renderNodePreview(node.id, fs, { u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } }, 200)
+      .then(url => { if (!cancelled) { setNodePreview(node.id, url); setPreviewLoading(false); } })
+      .catch(() => { if (!cancelled) setPreviewLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreviewActive, node.id, node.type]);
+
+  // Placeholder handlers so we don't break the existing onMouseEnter/Leave wiring
+  const handleCardMouseEnter = useCallback(() => {}, []);
+  const handleCardMouseLeave = useCallback(() => {}, []);
 
   // Memoize the shader line split so getSourceExpr / extractNodeCodeFromShader
   // don't re-split the full shader string on every render for every wired input.
@@ -227,7 +268,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
     [fragmentShader],
   );
 
-  const isPreviewActive = previewNodeId === node.id;
   const def = getNodeDefinition(node.type);
   const isBypassed = !!node.bypassed;
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
@@ -239,14 +279,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [zIndex, setZIndex] = useState(1);
 
   // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
-  const scopeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const scopeCanvasRef        = useRef<HTMLCanvasElement>(null);
+  const previewScopeCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Register / unregister this canvas in the global scope registry so ShaderCanvas
   // can draw directly without going through React state (eliminates setState→re-render lag).
   React.useEffect(() => {
-    if (node.type !== 'scope') return;
+    if (node.type !== 'scope' && !LFO_TYPES.has(node.type)) return;
     const canvas = scopeCanvasRef.current;
     if (canvas) scopeCanvasRegistry.set(node.id, canvas);
     return () => {
@@ -256,9 +299,106 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.type, node.id]);
 
+  // Determine if the primary output is float (for preview scope vs shader thumbnail)
+  const primaryOutputIsFloat = !!def && Object.values(def.outputs).some(s => s.type === 'float');
+
+  // Register preview scope canvas when 👁 is active and output is float
+  React.useEffect(() => {
+    if (!isPreviewActive || !primaryOutputIsFloat) return;
+    const canvas = previewScopeCanvasRef.current;
+    const key = `__preview__${node.id}`;
+    if (canvas) scopeCanvasRegistry.set(key, canvas);
+    return () => {
+      scopeCanvasRegistry.delete(key);
+      scopeBufferRegistry.delete(key);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreviewActive, primaryOutputIsFloat, node.id]);
+
   if (!def) return null;
 
+  // ── Texture Input node special card ─────────────────────────────────────────
+  if (node.type === 'textureInput') {
+    const thumbnailUrl = node.params._thumbnailUrl as string | undefined;
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const loader = new THREE.TextureLoader();
+      loader.load(url, (tex) => {
+        setNodeTexture(node.id, tex);
+        // Store thumbnail URL in params for display
+        updateNodeParams(node.id, { _thumbnailUrl: url }, { immediate: true });
+      });
+    };
+
+    return (
+      <div
+        style={{
+          position: 'absolute', left: node.position.x, top: node.position.y,
+          background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
+          borderRadius: '8px', width: '200px', color: '#cdd6f4', fontSize: '12px',
+          userSelect: 'none', opacity: dimmed ? 0.2 : 1,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Header */}
+        <div
+          onMouseDown={(e) => {
+            if (e.button === 2) return;
+            e.stopPropagation();
+            dragOffset.current = { x: e.clientX / zoom - node.position.x, y: e.clientY / zoom - node.position.y };
+            const onMove = (ev: MouseEvent) => {
+              if (!dragOffset.current) return;
+              updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
+            };
+            const onUp = () => {
+              dragOffset.current = null;
+              window.removeEventListener('mousemove', onMove);
+              window.removeEventListener('mouseup', onUp);
+              setSelectedNodeId(isSelected ? null : node.id);
+            };
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+          }}
+          style={{ background: '#313244', borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+        >
+          <span style={{ fontWeight: 600, fontSize: '11px' }}>Texture Input</span>
+          <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+        </div>
+
+        {/* Thumbnail or placeholder */}
+        <div style={{ padding: '8px 10px', display: 'flex', gap: '8px', alignItems: 'center' }} onMouseDown={e => e.stopPropagation()}>
+          {thumbnailUrl ? (
+            <img src={thumbnailUrl} alt="texture" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: '4px', border: '1px solid #45475a', flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 48, height: 48, background: '#313244', borderRadius: '4px', border: '1px dashed #45475a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🖼</div>
+          )}
+          <label style={{ fontSize: '10px', color: '#89b4fa', cursor: 'pointer', border: '1px solid #89b4fa55', borderRadius: '3px', padding: '3px 7px' }}>
+            {nodeTexture ? 'Change' : 'Load Image'}
+            <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+          </label>
+        </div>
+
+        {/* Output sockets */}
+        <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+          {Object.entries(node.outputs).map(([key, out]) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+              <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+              <div
+                ref={el => { registerSocket(node.id, 'out', key, el); }}
+                onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                style={{ width: 12, height: 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: '-6px' }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const handleScopeHeaderMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 2) return;
     e.stopPropagation();
     e.preventDefault();
     dragOffset.current = {
@@ -400,6 +540,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
     const groupIters = typeof node.params.iterations === 'number' ? node.params.iterations : 1;
 
     const handleGroupHeaderMouseDown = (e: React.MouseEvent) => {
+      if (e.button === 2) return;
       e.stopPropagation();
       e.preventDefault();
       dragOffset.current = {
@@ -431,6 +572,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
 
     return (
       <div
+        data-node-id={node.id}
         style={{
           position: 'absolute',
           left: node.position.x,
@@ -449,6 +591,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         {/* Group header */}
         <div
           onMouseDown={handleGroupHeaderMouseDown}
+          onDoubleClick={() => onEnterGroup?.(node.id)}
           style={{
             background: '#313244',
             borderRadius: '6px 6px 0 0',
@@ -605,6 +748,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   }
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
+    // Right-click is handled by the context menu — don't interfere with selection
+    if (e.button === 2) return;
+
     e.stopPropagation();
     e.preventDefault(); // Prevent browser text-selection during drag
 
@@ -758,12 +904,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
 
   return (
     <div
+      onMouseEnter={handleCardMouseEnter}
+      onMouseLeave={handleCardMouseLeave}
+      onMouseDown={() => setZIndex(++zCounter)}
       style={{
         position: 'absolute',
         left: node.position.x,
         top: node.position.y,
+        zIndex,
         background: '#1e1e2e',
-        border: isBypassed ? '1px solid #f9e2af55' : isSwapTarget ? '2px solid #f9e2af' : isPreviewActive ? '1px solid #a6e3a1' : isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
+        border: isBypassed ? '1px solid #f9e2af55' : isSwapTarget ? '2px solid #f9e2af' : isPreviewActive ? '1px solid #a6e3a1' : hasError ? '1px solid #f38ba8' : isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
         borderRadius: '8px',
         minWidth: '240px',
         color: '#cdd6f4',
@@ -775,6 +925,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           ? '0 0 14px #f9e2af66, 0 4px 12px rgba(0,0,0,0.4)'
           : isPreviewActive
           ? '0 0 14px #a6e3a133, 0 4px 12px rgba(0,0,0,0.4)'
+          : hasError
+          ? '0 0 12px #f38ba855, 0 4px 12px rgba(0,0,0,0.4)'
           : isMultiSelected
           ? '0 0 12px #cba6f755, 0 4px 12px rgba(0,0,0,0.4)'
           : isSelected
@@ -785,8 +937,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       {/* Header */}
       <div
         onMouseDown={handleHeaderMouseDown}
-        onMouseEnter={() => setShowNodeTooltip(true)}
-        onMouseLeave={() => setShowNodeTooltip(false)}
+        onMouseEnter={() => {
+          tooltipTimerRef.current = setTimeout(() => setShowNodeTooltip(true), 1200);
+        }}
+        onMouseLeave={() => {
+          if (tooltipTimerRef.current) { clearTimeout(tooltipTimerRef.current); tooltipTimerRef.current = null; }
+          setShowNodeTooltip(false);
+        }}
         style={{
           background: '#313244',
           borderRadius: showCode ? '8px 8px 0 0' : '8px 8px 0 0',
@@ -802,8 +959,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         }}
       >
         <span
-          onClick={e => { e.stopPropagation(); setCollapsed(v => !v); }}
-          title={collapsed ? 'Expand node' : 'Collapse node'}
+          onDoubleClick={e => { e.stopPropagation(); setCollapsed(v => !v); }}
+          title={collapsed ? 'Double-click to expand' : 'Double-click to collapse'}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', userSelect: 'none' }}
         >
           <span style={{ fontSize: '9px', opacity: 0.5, lineHeight: 1 }}>{collapsed ? '▶' : '▼'}</span>
@@ -955,6 +1112,84 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           </button>
         </div>
       </div>
+
+      {/* ── Always-visible LFO waveform ── */}
+      {LFO_TYPES.has(node.type) && (
+        <canvas
+          ref={scopeCanvasRef}
+          width={240}
+          height={64}
+          style={{ display: 'block', width: '100%', height: '64px', borderBottom: '1px solid #313244' }}
+        />
+      )}
+
+      {/* ── Always-visible Remap range bars ── */}
+      {node.type === 'remap' && (() => {
+        const inMin  = typeof node.params.inMin  === 'number' ? node.params.inMin  : 0;
+        const inMax  = typeof node.params.inMax  === 'number' ? node.params.inMax  : 1;
+        const outMin = typeof node.params.outMin === 'number' ? node.params.outMin : 0;
+        const outMax = typeof node.params.outMax === 'number' ? node.params.outMax : 1;
+        const lo = Math.min(inMin, inMax, outMin, outMax);
+        const hi = Math.max(inMin, inMax, outMin, outMax);
+        const range = hi - lo || 1;
+        const toPercent = (v: number) => `${((v - lo) / range) * 100}%`;
+        const barLeft  = (a: number, b: number) => toPercent(Math.min(a, b));
+        const barWidth = (a: number, b: number) => `${(Math.abs(b - a) / range) * 100}%`;
+        const rows: Array<[string, number, number, string]> = [
+          ['In',  inMin,  inMax,  '#89b4fa'],
+          ['Out', outMin, outMax, '#a6e3a1'],
+        ];
+        return (
+          <div style={{ padding: '6px 10px 4px', borderBottom: '1px solid #313244', display: 'flex', flexDirection: 'column', gap: '5px' }}
+               onMouseDown={e => e.stopPropagation()}>
+            {rows.map(([label, mn, mx, color]) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '9px', color: '#6c7086', width: '20px', flexShrink: 0 }}>{label}</span>
+                <div style={{ flex: 1, height: '8px', background: '#11111b', borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', left: barLeft(mn, mx), width: barWidth(mn, mx), height: '100%', background: color, borderRadius: '4px', opacity: 0.7 }} />
+                </div>
+                <span style={{ fontSize: '9px', color: '#6c7086', width: '60px', textAlign: 'right', flexShrink: 0 }}>
+                  {mn.toFixed(2)} → {mx.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* ── In-card preview (visible when 👁 is active, skipped for nodes with always-viz) ── */}
+      {isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && (
+        <div style={{ width: '100%', borderBottom: '1px solid #313244' }}>
+          {primaryOutputIsFloat ? (
+            /* Float output → live waveform scope */
+            <canvas
+              ref={previewScopeCanvasRef}
+              width={240}
+              height={80}
+              style={{ display: 'block', width: '100%', height: '80px' }}
+            />
+          ) : (
+            /* Vec3/vec4 output → rendered shader thumbnail */
+            <div style={{ width: '100%', height: 160, background: '#11111b', overflow: 'hidden', position: 'relative' }}>
+              {previewLoading && !previewDataUrl ? (
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#585b70', fontSize: '12px' }}>
+                  rendering…
+                </div>
+              ) : previewDataUrl ? (
+                <img
+                  src={previewDataUrl}
+                  alt="node preview"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#585b70', fontSize: '11px' }}>
+                  no preview
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ padding: '6px 0 4px' }}>
         {/* ── Inputs (always visible) ── */}
