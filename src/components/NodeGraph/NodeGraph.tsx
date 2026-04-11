@@ -44,6 +44,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const previewNodeId         = useNodeGraphStore(s => s.previewNodeId);
   const nodeHighlightFilter   = useNodeGraphStore(s => s.nodeHighlightFilter);
   const registerFitView       = useNodeGraphStore(s => s.registerFitView);
+  const addNode               = useNodeGraphStore(s => s.addNode);
+  const setSearchPaletteOpen  = useNodeGraphStore(s => s.setSearchPaletteOpen);
 
   const previewNode  = previewNodeId ? nodes.find(n => n.id === previewNodeId) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
@@ -97,6 +99,11 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT'
           && document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
+        if (e.shiftKey) {
+          // Shift+Space → open node search palette
+          setSearchPaletteOpen(true);
+          return;
+        }
         spaceDown.current = true;
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
       }
@@ -324,6 +331,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       onMouseUp={handleMouseUp}
       onMouseDown={handleCanvasMouseDown}
       onWheel={handleWheel}
+      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+      onDrop={e => {
+        e.preventDefault();
+        const type = e.dataTransfer.getData('application/shader-studio-node');
+        if (type) {
+          const worldPos = screenToWorld(e.clientX, e.clientY);
+          addNode(type, worldPos);
+        }
+      }}
       style={{
         position: 'relative',
         width: '100%',

@@ -6,6 +6,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
 import { EXAMPLE_GRAPHS } from './exampleGraphs';
+import { typesCompatible } from '../lib/typesCompatible';
 
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX = 'shader-studio:cfp:';
@@ -114,6 +115,15 @@ interface NodeGraphState {
   // Fit-view callback — registered by NodeGraph so App/shortcuts can trigger it
   _fitViewCallback: (() => void) | null;
   registerFitView: (cb: () => void) => void;
+
+  // Swap mode — user shift-clicked a node; next palette click replaces it
+  swapTargetNodeId: string | null;
+  setSwapTargetNodeId: (id: string | null) => void;
+  swapNode: (nodeId: string, newType: string) => void;
+
+  // In-canvas node search palette (Shift+Space)
+  searchPaletteOpen: boolean;
+  setSearchPaletteOpen: (open: boolean) => void;
 
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
@@ -275,9 +285,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   previewNodeId: null,
   nodeHighlightFilter: null,
   _fitViewCallback: null,
+  swapTargetNodeId: null,
+  searchPaletteOpen: false,
 
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
+  setSwapTargetNodeId: (id) => set({ swapTargetNodeId: id }),
+  setSearchPaletteOpen: (open) => set({ searchPaletteOpen: open }),
 
   groupNodes: (nodeIds, label?) => {
     const { nodes } = get();
@@ -449,6 +463,97 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  swapNode: (nodeId, newType) => {
+    const { nodes } = get();
+    const oldNode = nodes.find(n => n.id === nodeId);
+    if (!oldNode) return;
+    const def = getNodeDefinition(newType);
+    if (!def) return;
+
+    pushHistory(nodes);
+    const newId = `node_${nodeIdCounter++}`;
+
+    // Build new inputs, carrying over connections where types are compatible
+    const newInputs: Record<string, InputSocket> = {};
+    for (const [key, socket] of Object.entries(def.inputs)) {
+      const newSocket: InputSocket = {
+        ...socket,
+        defaultValue: def.paramDefs?.[key]
+          ? undefined
+          : def.defaultParams?.[key] as number | number[] | undefined,
+      };
+
+      // Priority 1: exact key match with compatible source type
+      const oldSock = oldNode.inputs[key];
+      if (oldSock?.connection) {
+        const srcNode = nodes.find(n => n.id === oldSock.connection!.nodeId);
+        const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
+        const srcType = srcDef?.outputs[oldSock.connection!.outputKey]?.type;
+        if (srcType && typesCompatible(srcType, socket.type)) {
+          newSocket.connection = oldSock.connection;
+        }
+      }
+
+      // Priority 2: any connected old input whose source type is compatible
+      if (!newSocket.connection) {
+        for (const oldS of Object.values(oldNode.inputs)) {
+          if (!oldS.connection) continue;
+          const srcNode = nodes.find(n => n.id === oldS.connection!.nodeId);
+          const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
+          const srcType = srcDef?.outputs[oldS.connection!.outputKey]?.type;
+          if (srcType && typesCompatible(srcType, socket.type)) {
+            newSocket.connection = oldS.connection;
+            break;
+          }
+        }
+      }
+
+      newInputs[key] = newSocket;
+    }
+
+    const newNodeObj: GraphNode = {
+      id: newId,
+      type: newType,
+      position: { ...oldNode.position },
+      inputs: newInputs,
+      outputs: { ...def.outputs },
+      params: { ...(def.defaultParams ?? {}) },
+    };
+
+    set(state => {
+      const updated = state.nodes
+        .filter(n => n.id !== nodeId)
+        .map(n => {
+          // Reroute downstream connections that pointed to oldNode's outputs
+          let changed = false;
+          const updatedInputs = { ...n.inputs };
+          for (const [key, sock] of Object.entries(n.inputs)) {
+            if (sock.connection?.nodeId !== nodeId) continue;
+            const oldOutputKey = sock.connection.outputKey;
+            let newOutputKey: string | null = null;
+            // Try same key first
+            if (newNodeObj.outputs[oldOutputKey]
+                && typesCompatible(newNodeObj.outputs[oldOutputKey].type, sock.type)) {
+              newOutputKey = oldOutputKey;
+            } else {
+              // First compatible output
+              for (const [outKey, out] of Object.entries(newNodeObj.outputs)) {
+                if (typesCompatible(out.type, sock.type)) { newOutputKey = outKey; break; }
+              }
+            }
+            updatedInputs[key] = newOutputKey
+              ? { ...sock, connection: { nodeId: newId, outputKey: newOutputKey } }
+              : { ...sock, connection: undefined };
+            changed = true;
+          }
+          return changed ? { ...n, inputs: updatedInputs } : n;
+        });
+      return { nodes: [...updated, newNodeObj], swapTargetNodeId: null };
+    });
+
+    get().compile();
+  },
+
   undo: () => {
     const prev = _history.pop();
     if (!prev) return;
@@ -591,8 +696,51 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   removeNode: (nodeId) => {
     pushHistory(get().nodes);
+    const { nodes } = get();
+    const deletedNode = nodes.find(n => n.id === nodeId);
+
+    // ── Collect bridge info before removing ────────────────────────────────
+    // Upstream: what was wired INTO the deleted node
+    type Src = { sourceNodeId: string; sourceOutputKey: string; sourceType: string };
+    const upstream: Src[] = [];
+    if (deletedNode) {
+      for (const input of Object.values(deletedNode.inputs)) {
+        if (!input.connection) continue;
+        const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
+        const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+        const srcType = srcDef?.outputs[input.connection!.outputKey]?.type ?? '';
+        if (srcType) upstream.push({ sourceNodeId: input.connection.nodeId, sourceOutputKey: input.connection.outputKey, sourceType: srcType });
+      }
+    }
+
+    // Downstream: what the deleted node was wired INTO
+    type Tgt = { targetNodeId: string; targetInputKey: string; targetType: string };
+    const downstream: Tgt[] = [];
+    for (const n of nodes) {
+      if (n.id === nodeId) continue;
+      for (const [inputKey, input] of Object.entries(n.inputs)) {
+        if (input.connection?.nodeId !== nodeId) continue;
+        const tgtDef  = getNodeDefinition(n.type);
+        const tgtType = tgtDef?.inputs[inputKey]?.type ?? '';
+        downstream.push({ targetNodeId: n.id, targetInputKey: inputKey, targetType: tgtType });
+      }
+    }
+
+    // Bridge: for each orphaned downstream input, pick the first compatible upstream source
+    type Bridge = { sourceNodeId: string; sourceOutputKey: string; targetNodeId: string; targetInputKey: string };
+    const bridges: Bridge[] = [];
+    for (const tgt of downstream) {
+      for (const src of upstream) {
+        if (typesCompatible(src.sourceType as DataType, tgt.targetType as DataType)) {
+          bridges.push({ sourceNodeId: src.sourceNodeId, sourceOutputKey: src.sourceOutputKey, targetNodeId: tgt.targetNodeId, targetInputKey: tgt.targetInputKey });
+          break;
+        }
+      }
+    }
+
     set(state => {
-      const newNodes = state.nodes
+      // Remove the node and clear any connections that pointed to it
+      let newNodes = state.nodes
         .filter(n => n.id !== nodeId)
         .map(n => ({
           ...n,
@@ -605,7 +753,24 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             ])
           ),
         }));
-      // Exit preview if the previewed node was removed
+
+      // Re-wire bridged connections
+      for (const bridge of bridges) {
+        newNodes = newNodes.map(n => {
+          if (n.id !== bridge.targetNodeId) return n;
+          return {
+            ...n,
+            inputs: {
+              ...n.inputs,
+              [bridge.targetInputKey]: {
+                ...n.inputs[bridge.targetInputKey],
+                connection: { nodeId: bridge.sourceNodeId, outputKey: bridge.sourceOutputKey },
+              },
+            },
+          };
+        });
+      }
+
       const previewNodeId = state.previewNodeId === nodeId ? null : state.previewNodeId;
       return { nodes: newNodes, previewNodeId };
     });

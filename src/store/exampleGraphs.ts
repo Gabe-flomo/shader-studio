@@ -524,7 +524,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           dist:  { type: 'float', label: 'Distance (SDF)' },
           trap:  { type: 'float', label: 'Orbit Trap'     },
         },
-        params: { mode: 'mandelbrot', power: 2, max_iter: 150, bailout: 256, zoom: 1.0, offset_x: -0.5, offset_y: 0.0, cx: -0.7269, cy: 0.1889, orbit_trap: 'none', trap_x: 0.0, trap_y: 0.0, trap_r: 0.5, palette_preset: '1', color_scale: 0.15, color_offset: 0.0 },
+        params: { mode: 'mandelbrot', precision: 'standard', power: 2, max_iter: 256, bailout: 256, zoom: 1.0, zoom_exp: 0.0, center_x: -0.5, center_y: 0.0, cx: -0.7269, cy: 0.1889, orbit_trap: 'none', trap_x: 0.0, trap_y: 0.0, trap_r: 0.5, palette_preset: '1', color_scale: 3.0, color_offset: 0.0 },
       },
       {
         id: 'output_2', type: 'output', position: { x: 640, y: 220 },
@@ -558,7 +558,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           dist:  { type: 'float', label: 'Distance (SDF)' },
           trap:  { type: 'float', label: 'Orbit Trap'     },
         },
-        params: { mode: 'julia', power: 2, max_iter: 150, bailout: 256, zoom: 1.5, offset_x: 0.0, offset_y: 0.0, cx: -0.7269, cy: 0.1889, orbit_trap: 'cross', trap_x: 0.0, trap_y: 0.0, trap_r: 0.5, palette_preset: '7', color_scale: 0.15, color_offset: 0.0 },
+        params: { mode: 'julia', precision: 'standard', power: 2, max_iter: 256, bailout: 256, zoom: 1.5, zoom_exp: 0.0, center_x: 0.0, center_y: 0.0, cx: -0.7269, cy: 0.1889, orbit_trap: 'cross', trap_x: 0.0, trap_y: 0.0, trap_r: 0.5, palette_preset: '7', color_scale: 3.0, color_offset: 0.0 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 880, y: 220 },
@@ -698,7 +698,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           dist:  { type: 'float', label: 'Distance (SDF)' },
           trap:  { type: 'float', label: 'Orbit Trap'     },
         },
-        params: { mode: 'mandelbrot', power: 2, max_iter: 150, bailout: 256, zoom: 1.0, zoom_exp: 0, offset_x: 0, offset_y: 0, orbit_trap: 'none', trap_x: 0, trap_y: 0, trap_r: 0.5, palette_preset: '1', color_scale: 0.3, color_offset: 0 },
+        params: { mode: 'mandelbrot', precision: 'standard', power: 2, max_iter: 256, bailout: 256, zoom: 1.0, zoom_exp: 0, center_x: -0.5, center_y: 0, orbit_trap: 'none', trap_x: 0, trap_y: 0, trap_r: 0.5, palette_preset: '1', color_scale: 3.0, color_offset: 0 },
       },
       {
         id: 'output_6', type: 'output', position: { x: 940, y: 200 },
@@ -795,7 +795,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           dist:  { type: 'float', label: 'Distance (SDF)' },
           trap:  { type: 'float', label: 'Orbit Trap'     },
         },
-        params: { mode: 'mandelbrot', power: 2, max_iter: 150, bailout: 256, zoom: 1.0, offset_x: -0.5, offset_y: 0.0, cx: -0.7269, cy: 0.1889, orbit_trap: 'none', trap_x: 0.0, trap_y: 0.0, trap_r: 0.5, palette_preset: '1', color_scale: 0.15, color_offset: 0.0 },
+        params: { mode: 'mandelbrot', precision: 'standard', power: 2, max_iter: 256, bailout: 256, zoom: 1.0, zoom_exp: 0.0, center_x: -0.5, center_y: 0.0, cx: -0.7269, cy: 0.1889, orbit_trap: 'none', trap_x: 0.0, trap_y: 0.0, trap_r: 0.5, palette_preset: '1', color_scale: 3.0, color_offset: 0.0 },
       },
       {
         id: 'output_2', type: 'output', position: { x: 640, y: 220 },

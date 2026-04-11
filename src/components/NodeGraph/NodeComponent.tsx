@@ -6,6 +6,7 @@ import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
+import { typesCompatible } from '../../lib/typesCompatible';
 
 interface Props {
   node: GraphNode;
@@ -42,9 +43,6 @@ const RANGE_STYLE: React.CSSProperties = {
 };
 
 // ─── Type compatibility check (mirrors graphCompiler.ts logic) ───────────────
-function typesCompatible(sourceType: DataType, targetType: DataType): boolean {
-  return sourceType === targetType || (sourceType === 'float' && targetType === 'vec3');
-}
 
 // ─── Find compatible source sockets in the current graph for a given target type ─
 function getCompatibleSources(
@@ -214,6 +212,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const selectedNodeIds    = useNodeGraphStore(s => s.selectedNodeIds);
   const isMultiSelected    = selectedNodeIds.includes(node.id);
   const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
+
+  // Swap mode
+  const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
+  const setSwapTargetNodeId = useNodeGraphStore(s => s.setSwapTargetNodeId);
+  const isSwapTarget       = swapTargetNodeId === node.id;
   // currentTime is only needed for the Time node live badge — subscribed below conditionally
   const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
 
@@ -604,6 +607,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault(); // Prevent browser text-selection during drag
+
+    // Shift+click → enter swap mode (select this node for type replacement)
+    if (e.shiftKey) {
+      setSwapTargetNodeId(isSwapTarget ? null : node.id);
+      return;
+    }
+
     // Store offset in world-space units (divide by zoom to compensate for canvas scale)
     dragOffset.current = {
       x: e.clientX / zoom - node.position.x,
@@ -753,7 +763,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         left: node.position.x,
         top: node.position.y,
         background: '#1e1e2e',
-        border: isBypassed ? '1px solid #f9e2af55' : isPreviewActive ? '1px solid #a6e3a1' : isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
+        border: isBypassed ? '1px solid #f9e2af55' : isSwapTarget ? '2px solid #f9e2af' : isPreviewActive ? '1px solid #a6e3a1' : isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
         borderRadius: '8px',
         minWidth: '240px',
         color: '#cdd6f4',
@@ -761,7 +771,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         userSelect: 'none',
         opacity: dimmed ? 0.2 : isBypassed ? 0.55 : 1,
         transition: 'opacity 0.2s ease',
-        boxShadow: isPreviewActive
+        boxShadow: isSwapTarget
+          ? '0 0 14px #f9e2af66, 0 4px 12px rgba(0,0,0,0.4)'
+          : isPreviewActive
           ? '0 0 14px #a6e3a133, 0 4px 12px rgba(0,0,0,0.4)'
           : isMultiSelected
           ? '0 0 12px #cba6f755, 0 4px 12px rgba(0,0,0,0.4)'

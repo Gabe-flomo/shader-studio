@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNodeGraphStore, loadCustomFns, getCustomFnDir } from '../../store/useNodeGraphStore';
-import { getAllCategories, getNodesByCategory, NODE_REGISTRY } from '../../nodes/definitions';
+import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
 import type { NodeDefinition } from '../../types/nodeGraph';
@@ -265,7 +265,8 @@ interface NodePaletteProps {
 }
 
 export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
-  const { addNode, spawnGraph, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk } = useNodeGraphStore();
+  const { addNode, spawnGraph, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk,
+    swapTargetNodeId, setSwapTargetNodeId, swapNode, nodes: graphNodes } = useNodeGraphStore();
   const [hoveredExampleIdx, setHoveredExampleIdx] = useState<number | null>(null);
   const exampleTooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Sort categories by preferred order; unknown categories appended alphabetically
@@ -330,11 +331,25 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   };
 
   const handleAdd = (type: string) => {
+    if (swapTargetNodeId) {
+      swapNode(swapTargetNodeId, type);
+      onNodeAdded?.();
+      return;
+    }
     const x = 200 + Math.random() * 120;
     const y = 120 + Math.random() * 200;
     addNode(type, { x, y });
     onNodeAdded?.();
   };
+
+  // Label of the node currently targeted for swap
+  const swapTargetLabel = swapTargetNodeId
+    ? (() => {
+        const n = graphNodes.find(nd => nd.id === swapTargetNodeId);
+        if (!n) return null;
+        return getNodeDefinition(n.type)?.label ?? n.type;
+      })()
+    : null;
 
   // Search mode: show all matching nodes across categories, ungrouped
   const trimmed = query.trim().toLowerCase();
@@ -352,7 +367,12 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     <button
       key={type}
       onClick={() => handleAdd(type)}
-      title={description}
+      title={description ?? `Drag to canvas or click to ${swapTargetNodeId ? 'replace' : 'add'}`}
+      draggable={!swapTargetNodeId}
+      onDragStart={e => {
+        e.dataTransfer.setData('application/shader-studio-node', type);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
       style={{
         display: 'block',
         width: '100%',
@@ -361,7 +381,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
         background: '#313244',
         border: '1px solid #45475a',
         color: '#cdd6f4',
-        cursor: 'pointer',
+        cursor: swapTargetNodeId ? 'pointer' : 'grab',
         textAlign: 'left',
         borderRadius: '6px',
         fontSize: isDrawer ? '13px' : '12px',
@@ -399,8 +419,40 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     >
       {/* Title */}
       <div style={{ fontWeight: 700, fontSize: '13px', paddingLeft: '4px', color: '#89b4fa', marginBottom: '6px' }}>
-        Add Node
+        {swapTargetNodeId ? 'Replace Node' : 'Add Node'}
       </div>
+
+      {/* Swap mode banner */}
+      {swapTargetNodeId && (
+        <div style={{
+          background: '#f9e2af22',
+          border: '1px solid #f9e2af55',
+          borderRadius: '6px',
+          padding: '6px 10px',
+          fontSize: '11px',
+          color: '#f9e2af',
+          marginBottom: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '6px',
+        }}>
+          <span>↔ Replace <strong>{swapTargetLabel}</strong></span>
+          <button
+            onClick={() => setSwapTargetNodeId(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#f9e2af',
+              cursor: 'pointer',
+              fontSize: '11px',
+              padding: '0 2px',
+              opacity: 0.7,
+            }}
+            title="Cancel swap"
+          >✕</button>
+        </div>
+      )}
 
       {/* Search */}
       <input
