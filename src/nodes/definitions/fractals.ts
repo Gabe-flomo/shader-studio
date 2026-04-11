@@ -48,9 +48,9 @@ vec2 cpow_polar(vec2 z, float k) {
 // Works on GLSL ES 1.00 (no fma, no double).
 const DS_GLSL_HELPERS = `
 // Veltkamp splitter: split a into (hi, lo) such that a = hi + lo exactly.
-// Uses the factor 2^13+1 = 8193 for float32 (24-bit mantissa → split at bit 12).
+// Uses the factor 2^12+1 = 4097 for float32 (24-bit mantissa → split at bit 12).
 vec2 ds_split(float a) {
-    float c = 8193.0 * a;
+    float c = 4097.0 * a;
     float ahi = c - (c - a);
     float alo = a - ahi;
     return vec2(ahi, alo);
@@ -135,6 +135,7 @@ export const MandelbrotNode: NodeDefinition = {
     palette_preset: '1',
     color_scale:    3.0,   // 3 palette cycles over [0, max_iter]
     color_offset:   0.0,
+    dist_shade:     0.0,   // 0 = off; darken near-set boundary using distance estimation
   },
   paramDefs: {
     mode: { label: 'Mode', type: 'select', options: [
@@ -167,6 +168,7 @@ export const MandelbrotNode: NodeDefinition = {
     palette_preset: { label: 'Palette',         type: 'select', options: PALETTE_PRESET_OPTIONS },
     color_scale:    { label: 'Color Cycles',    type: 'float', min: 0.1,   max: 20,   step: 0.1  },
     color_offset:   { label: 'Color Offset',    type: 'float', min: 0.0,   max: 1.0,  step: 0.01 },
+    dist_shade:     { label: 'Edge Shading',    type: 'float', min: 0.0,   max: 20,   step: 0.1  },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -205,6 +207,7 @@ export const MandelbrotNode: NodeDefinition = {
     const trapR     = p(node.params.trap_r, 0.5);
     const colorScale  = p(node.params.color_scale, 0.3);
     const colorOffset = p(node.params.color_offset, 0.0);
+    const distShade   = (node.params.dist_shade as number) || 0.0;
     const presIdx = parseInt((node.params.palette_preset as string) ?? '1', 10);
     const pres = FRACTAL_PALETTE_PRESETS[Math.min(presIdx, FRACTAL_PALETTE_PRESETS.length - 1)] ?? FRACTAL_PALETTE_PRESETS[1];
     const pA = paletteVec(pres.a); const pB = paletteVec(pres.b);
@@ -360,7 +363,11 @@ export const MandelbrotNode: NodeDefinition = {
       `    if (${id}_n >= ${maxIter}.0) {\n`,
       `        ${id}_iter = ${maxIter}.0;\n`,
       `    } else {\n`,
-      `        ${id}_iter = ${id}_n - log(log(max(${id}_lz2, 1.0)) * 0.5) / log(${power}.0);\n`,
+      // IQ smooth iteration formula with bailout correction:
+      // μ = n - log(log(|z|²)·0.5 / log(B)) / log(d)
+      // The /log(B) term normalises the offset so the value is exactly 0
+      // when |z|² = B² at escape (no discontinuity at the boundary).
+      `        ${id}_iter = ${id}_n - log(log(max(${id}_lz2, 1.0)) * 0.5 / log(${bailout})) / log(${power}.0);\n`,
       `    }\n`,
       `    float ${id}_dist = 0.0;\n`,
       `    float ${id}_ldz2 = dot(${id}_dz, ${id}_dz);\n`,
@@ -378,6 +385,19 @@ export const MandelbrotNode: NodeDefinition = {
       `        ${id}_color = palette(${id}_t, ${pA}, ${pB}, ${pC}, ${pD});\n`,
       `    }\n`,
     );
+
+    // IQ distance estimation shading: darken exterior near the set boundary.
+    // dist is in world-space; multiplying by zoom converts to ~pixel-space so
+    // the shading strength is consistent regardless of zoom level.
+    // dist_shade = 0 disables it entirely (no-op branch).
+    if (distShade > 0) {
+      code.push(
+        `    if (${id}_n < ${maxIter}.0 && ${id}_dist > 0.0) {\n`,
+        `        float ${id}_shade = 1.0 - exp(-${f(distShade)} * ${id}_dist * ${zoom});\n`,
+        `        ${id}_color *= clamp(${id}_shade, 0.0, 1.0);\n`,
+        `    }\n`,
+      );
+    }
 
     if (orbitTrap !== 'none') {
       code.push(
