@@ -39,8 +39,57 @@ vec2 cpow_polar(vec2 z, float k) {
     return pow(max(r, 0.00001), k) * vec2(cos(k*a), sin(k*a));
 }`;
 
+// ─── Double-Single (DS) arithmetic helpers ────────────────────────────────────
+// Represents an extended-precision number as (hi + lo) where hi is the main
+// float32 value and lo is the rounding error term.  Gives ~48 bits of mantissa
+// (≈14-15 decimal digits) using only float32 operations — no float64 needed.
+//
+// Implements the Dekker / Veltkamp algorithms (Knuth 1969, Dekker 1971).
+// Works on GLSL ES 1.00 (no fma, no double).
+const DS_GLSL_HELPERS = `
+// Veltkamp splitter: split a into (hi, lo) such that a = hi + lo exactly.
+// Uses the factor 2^13+1 = 8193 for float32 (24-bit mantissa → split at bit 12).
+vec2 ds_split(float a) {
+    float c = 8193.0 * a;
+    float ahi = c - (c - a);
+    float alo = a - ahi;
+    return vec2(ahi, alo);
+}
+
+// DS addition: (a.x + a.y) + (b.x + b.y) → result.x + result.y (exact to DS precision)
+vec2 ds_add(vec2 a, vec2 b) {
+    float s = a.x + b.x;
+    float v = s - a.x;
+    float e = (a.x - (s - v)) + (b.x - v) + a.y + b.y;
+    return vec2(s, e);
+}
+
+// DS subtraction
+vec2 ds_sub(vec2 a, vec2 b) {
+    float s = a.x - b.x;
+    float v = s - a.x;
+    float e = (a.x - (s - v)) + (-b.x - v) + a.y - b.y;
+    return vec2(s, e);
+}
+
+// DS multiplication: uses Veltkamp splitting to recover the rounding error of a.x*b.x
+vec2 ds_mul(vec2 a, vec2 b) {
+    float p = a.x * b.x;
+    vec2 sa = ds_split(a.x);
+    vec2 sb = ds_split(b.x);
+    float e = ((sa.x * sb.x - p) + sa.x * sb.y + sa.y * sb.x) + sa.y * sb.y;
+    e += a.x * b.y + a.y * b.x;
+    return vec2(p, e);
+}
+
+// Multiply DS number by 2.0 exactly (power-of-2 scale is always exact)
+vec2 ds_scale2(vec2 a) { return vec2(a.x * 2.0, a.y * 2.0); }
+
+// Convert float to DS (lo = 0)
+vec2 ds_float(float a) { return vec2(a, 0.0); }`;
+
 // Combine with PALETTE_GLSL_FN so the compiler deduplicates the palette fn
-const MANDELBROT_GLSL = FRACTAL_GLSL_HELPERS + '\n' + PALETTE_GLSL_FN;
+const MANDELBROT_GLSL = FRACTAL_GLSL_HELPERS + '\n' + DS_GLSL_HELPERS + '\n' + PALETTE_GLSL_FN;
 
 // ─── MandelbrotNode ───────────────────────────────────────────────────────────
 
@@ -69,6 +118,7 @@ export const MandelbrotNode: NodeDefinition = {
   glslFunction: MANDELBROT_GLSL,
   defaultParams: {
     mode:           'mandelbrot',
+    precision:      'standard',
     power:          2,
     max_iter:       150,
     bailout:        256.0,
@@ -76,8 +126,8 @@ export const MandelbrotNode: NodeDefinition = {
     cy:              0.1889,
     zoom:           1.0,
     zoom_exp:       0.0,
-    offset_x:       0.0,
-    offset_y:       0.0,
+    center_x:       -0.5,
+    center_y:        0.0,
     orbit_trap:     'none',
     trap_x:         0.0,
     trap_y:         0.0,
@@ -91,13 +141,17 @@ export const MandelbrotNode: NodeDefinition = {
       { value: 'mandelbrot', label: 'Mandelbrot' },
       { value: 'julia',      label: 'Julia'      },
     ]},
+    precision: { label: 'Precision', type: 'select', options: [
+      { value: 'standard', label: 'Standard (fast, zoom ≤ 10⁶)' },
+      { value: 'high',     label: 'High (DS, zoom ≤ 10¹²)'     },
+    ]},
     power:          { label: 'Power (k)',       type: 'float', min: 2,     max: 8,    step: 1    },
     max_iter:       { label: 'Max Iterations',  type: 'float', min: 20,    max: 500,  step: 5    },
     bailout:        { label: 'Bailout Radius',  type: 'float', min: 2,     max: 1000, step: 10   },
     zoom:           { label: 'Zoom',            type: 'float', min: 0.01,  max: 50000, step: 0.05 },
-    zoom_exp:       { label: 'Zoom (log₂)',     type: 'float', min: 0,     max: 20,   step: 0.05 },
-    offset_x:       { label: 'Offset X',        type: 'float', min: -3,    max: 3,    step: 0.01 },
-    offset_y:       { label: 'Offset Y',        type: 'float', min: -3,    max: 3,    step: 0.01 },
+    zoom_exp:       { label: 'Zoom (log₂)',     type: 'float', min: 0,     max: 40,   step: 0.1  },
+    center_x:       { label: 'Center X',        type: 'float', min: -3,    max: 3,    step: 0.0001 },
+    center_y:       { label: 'Center Y',        type: 'float', min: -3,    max: 3,    step: 0.0001 },
     cx:             { label: 'Julia c.x',       type: 'float', min: -2,    max: 2,    step: 0.001 },
     cy:             { label: 'Julia c.y',       type: 'float', min: -2,    max: 2,    step: 0.001 },
     orbit_trap:     { label: 'Orbit Trap',  type: 'select', options: [
@@ -121,15 +175,26 @@ export const MandelbrotNode: NodeDefinition = {
     const cPosVar = inputVars.c_pos ?? 'vec2(0.0)';
 
     const mode      = (node.params.mode as string) ?? 'mandelbrot';
+    const precision = (node.params.precision as string) ?? 'standard';
+    const useDS     = precision === 'high';
     const power     = Math.max(2, Math.round(typeof node.params.power    === 'number' ? node.params.power    : 2));
     const maxIter   = Math.max(20, Math.round(typeof node.params.max_iter === 'number' ? node.params.max_iter : 150));
     const bailout   = p(node.params.bailout, 256.0);
-    // zoom_exp (log₂ scale) takes priority over zoom if > 0, enabling deep zoom via a compact slider
+
+    // zoom_exp (log₂ scale) takes priority over zoom if > 0
     const zoomRaw   = typeof node.params.zoom     === 'number' ? node.params.zoom     : 1.0;
     const zoomExp   = typeof node.params.zoom_exp === 'number' ? node.params.zoom_exp : 0.0;
     const zoom      = zoomExp > 0 ? `pow(2.0, ${f(zoomExp)})` : f(zoomRaw);
-    const offsetX   = p(node.params.offset_x, 0.0);
-    const offsetY   = p(node.params.offset_y, 0.0);
+
+    // Center coordinates — stored as full JS float64, split into DS pairs for high precision mode.
+    // Math.fround() rounds to nearest float32; the difference is the lo (error) term.
+    const centerXf64 = typeof node.params.center_x === 'number' ? node.params.center_x : -0.5;
+    const centerYf64 = typeof node.params.center_y === 'number' ? node.params.center_y :  0.0;
+    const cxHi = Math.fround(centerXf64);
+    const cxLo = centerXf64 - cxHi;
+    const cyHi = Math.fround(centerYf64);
+    const cyLo = centerYf64 - cyHi;
+
     const cx        = p(node.params.cx, -0.7269);
     const cy        = p(node.params.cy, 0.1889);
     const orbitTrap = (node.params.orbit_trap as string) ?? 'none';
@@ -143,7 +208,9 @@ export const MandelbrotNode: NodeDefinition = {
     const pA = paletteVec(pres.a); const pB = paletteVec(pres.b);
     const pC = paletteVec(pres.c); const pD = paletteVec(pres.d);
 
-    // Choose cpow variant inline
+    const isJulia = mode === 'julia';
+
+    // ── Standard float32 iteration path ───────────────────────────────────────
     let zpow: string;
     if (power === 2) {
       zpow = `cpow2(${id}_z)`;
@@ -153,11 +220,6 @@ export const MandelbrotNode: NodeDefinition = {
       zpow = `cpow_polar(${id}_z, ${power}.0)`;
     }
 
-    // Derivative step — for distance estimation
-    // dz_{n+1} = k * z^{k-1} * dz_n  (+ 1 for Mandelbrot)
-    // For k=2: k*z^{k-1} = 2*z, so: dz = cmul(2.0*z, dz)
-    // For k=3: k*z^{k-1} = 3*z^2, so: dz = cmul(3.0*cpow2(z), dz)
-    // For k≥4: k*z^{k-1} = k * polar(z, k-1), so: dz = cmul(k.0*cpow_polar(z, k-1), dz)
     let dzMul: string;
     if (power === 2) {
       dzMul = `cmul(2.0 * ${id}_z, ${id}_dz)`;
@@ -167,72 +229,153 @@ export const MandelbrotNode: NodeDefinition = {
       dzMul = `cmul(${power}.0 * cpow_polar(${id}_z, ${power - 1}.0), ${id}_dz)`;
     }
 
-    // Orbit trap expression inside loop
+    // Orbit trap update (reads float z components)
     let trapExpr = '';
     if (orbitTrap === 'point') {
-      trapExpr = `    ${id}_trap = min(${id}_trap, length(${id}_z - vec2(${trapX}, ${trapY})));\n`;
+      trapExpr = `${id}_trap = min(${id}_trap, length(${id}_z - vec2(${trapX}, ${trapY})));`;
     } else if (orbitTrap === 'line') {
-      trapExpr = `    ${id}_trap = min(${id}_trap, abs(${id}_z.y - ${trapY}));\n`;
+      trapExpr = `${id}_trap = min(${id}_trap, abs(${id}_z.y - ${trapY}));`;
     } else if (orbitTrap === 'ring') {
-      trapExpr = `    ${id}_trap = min(${id}_trap, abs(length(${id}_z - vec2(${trapX}, ${trapY})) - ${trapR}));\n`;
+      trapExpr = `${id}_trap = min(${id}_trap, abs(length(${id}_z - vec2(${trapX}, ${trapY})) - ${trapR}));`;
     } else if (orbitTrap === 'cross') {
-      trapExpr = `    ${id}_trap = min(${id}_trap, min(abs(${id}_z.x - ${trapX}), abs(${id}_z.y - ${trapY})));\n`;
+      trapExpr = `${id}_trap = min(${id}_trap, min(abs(${id}_z.x - ${trapX}), abs(${id}_z.y - ${trapY})));`;
+    }
+    const trapLine = trapExpr ? `        ${trapExpr}\n` : '';
+
+    const code: string[] = [];
+
+    if (!useDS) {
+      // ── Standard mode: float32 Mandelbrot ────────────────────────────────────
+      const cExpr = isJulia
+        ? (inputVars.c_pos ? cPosVar : `vec2(${cx}, ${cy})`)
+        : `${id}_c`;
+      const z0    = isJulia ? `${uvVar} / ${zoom} + vec2(${f(cxHi)}, ${f(cyHi)})` : `vec2(0.0)`;
+      const c0    = isJulia ? cExpr  : `${uvVar} / ${zoom} + vec2(${f(cxHi)}, ${f(cyHi)})`;
+      const dzInit = isJulia ? `vec2(1.0, 0.0)` : `vec2(0.0)`;
+      const dzMandelbrotAdd = isJulia ? '' : `        ${id}_dz += vec2(1.0, 0.0);\n`;
+
+      code.push(
+        `    // Mandelbrot/Julia (standard float32, ${mode}, power=${power})\n`,
+        `    vec2 ${id}_c  = ${c0};\n`,
+        `    vec2 ${id}_z  = ${z0};\n`,
+        `    vec2 ${id}_dz = ${dzInit};\n`,
+        `    float ${id}_n = 0.0, ${id}_trap = 1e20;\n`,
+        `    float ${id}_B2 = ${bailout} * ${bailout};\n`,
+        `    for (float ${id}_i = 0.0; ${id}_i < ${maxIter}.0; ${id}_i++) {\n`,
+        `        ${id}_dz = ${dzMul};\n`,
+        dzMandelbrotAdd,
+        `        ${id}_z = ${zpow} + ${id}_c;\n`,
+        trapLine,
+        `        if (dot(${id}_z, ${id}_z) > ${id}_B2) break;\n`,
+        `        ${id}_n += 1.0;\n`,
+        `    }\n`,
+      );
+    } else {
+      // ── High precision mode: DS (double-single) arithmetic ────────────────────
+      // c is computed as a DS pair: center (hi+lo) + uv/zoom
+      // The iteration runs entirely in DS so precision holds to zoom ~10^12.
+      //
+      // DS layout: vec2(hi, lo) where true value = hi + lo.
+      //
+      // For Julia mode the c constant doesn't benefit from DS (it's wired in as
+      // float), but z still uses DS which helps when zoom is large.
+
+      const scaleExpr = zoomExp > 0 ? `pow(2.0, -${f(zoomExp)})` : `1.0 / ${f(zoomRaw)}`;
+
+      code.push(
+        `    // Mandelbrot/Julia (DS high-precision, ${mode}, power=${power})\n`,
+        // Compute scale (1/zoom) — power-of-2 scales are exact in float32
+        `    float ${id}_scale = ${scaleExpr};\n`,
+      );
+
+      if (isJulia) {
+        // Julia: c is wired input (float), z starts at UV position in DS
+        const juliaCExpr = inputVars.c_pos ? cPosVar : `vec2(${cx}, ${cy})`;
+        code.push(
+          // z0 = center + uv * scale  in DS
+          `    vec2 ${id}_cx_ds = ds_add(vec2(${f(cxHi)}, ${f(cxLo)}), ds_float((${uvVar}).x * ${id}_scale));\n`,
+          `    vec2 ${id}_cy_ds = ds_add(vec2(${f(cyHi)}, ${f(cyLo)}), ds_float((${uvVar}).y * ${id}_scale));\n`,
+          // z and c
+          `    vec2 ${id}_zx = ${id}_cx_ds;\n`,
+          `    vec2 ${id}_zy = ${id}_cy_ds;\n`,
+          `    vec2 ${id}_cx_c = ds_float((${juliaCExpr}).x);\n`,
+          `    vec2 ${id}_cy_c = ds_float((${juliaCExpr}).y);\n`,
+        );
+      } else {
+        // Mandelbrot: c = center + uv * scale, z starts at 0
+        code.push(
+          `    vec2 ${id}_cx_c = ds_add(vec2(${f(cxHi)}, ${f(cxLo)}), ds_float((${uvVar}).x * ${id}_scale));\n`,
+          `    vec2 ${id}_cy_c = ds_add(vec2(${f(cyHi)}, ${f(cyLo)}), ds_float((${uvVar}).y * ${id}_scale));\n`,
+          `    vec2 ${id}_zx = vec2(0.0, 0.0);\n`,
+          `    vec2 ${id}_zy = vec2(0.0, 0.0);\n`,
+        );
+      }
+
+      // Derivative for distance estimation runs in float32 (close enough)
+      const dzInitDS  = isJulia ? `vec2(1.0, 0.0)` : `vec2(0.0)`;
+      const dzAddLine = isJulia ? '' : `        ${id}_dz += vec2(1.0, 0.0);\n`;
+
+      code.push(
+        `    vec2 ${id}_dz = ${dzInitDS};\n`,
+        `    float ${id}_n = 0.0, ${id}_trap = 1e20;\n`,
+        `    float ${id}_B2 = ${bailout} * ${bailout};\n`,
+        `    for (float ${id}_i = 0.0; ${id}_i < ${maxIter}.0; ${id}_i++) {\n`,
+        // DS squaring: z_new_x = zx^2 - zy^2 + cx
+        //              z_new_y = 2*zx*zy + cy
+        `        vec2 ${id}_zx2 = ds_mul(${id}_zx, ${id}_zx);\n`,
+        `        vec2 ${id}_zy2 = ds_mul(${id}_zy, ${id}_zy);\n`,
+        `        vec2 ${id}_zxy = ds_mul(${id}_zx, ${id}_zy);\n`,
+        power === 2
+          ? `        vec2 ${id}_nx = ds_add(ds_sub(${id}_zx2, ${id}_zy2), ${id}_cx_c);\n` +
+            `        vec2 ${id}_ny = ds_add(ds_scale2(${id}_zxy), ${id}_cy_c);\n`
+          : // Higher powers fall back to float (DS for power>2 would be very expensive)
+            `        vec2 ${id}_zfloat = vec2(${id}_zx.x, ${id}_zy.x);\n` +
+            `        vec2 ${id}_zpowed = ${power === 3 ? `cpow3(${id}_zfloat)` : `cpow_polar(${id}_zfloat, ${power}.0)`};\n` +
+            `        vec2 ${id}_nx = ds_add(ds_float(${id}_zpowed.x), ${id}_cx_c);\n` +
+            `        vec2 ${id}_ny = ds_add(ds_float(${id}_zpowed.y), ${id}_cy_c);\n`,
+        `        ${id}_zx = ${id}_nx;\n`,
+        `        ${id}_zy = ${id}_ny;\n`,
+        // Derivative + trap use float z alias (hi component only — close enough)
+        // Use _zhi suffix to avoid any redeclaration conflicts across GLSL drivers
+        `        vec2 ${id}_zhi = vec2(${id}_zx.x, ${id}_zy.x);\n`,
+        `        ${id}_dz = ${dzMul.replace(new RegExp(`${id}_z\\b`, 'g'), `${id}_zhi`)};\n`,
+        dzAddLine,
+        trapLine ? `        ${trapLine.trim().replace(new RegExp(`${id}_z\\b`, 'g'), `${id}_zhi`)}\n` : '',
+        // Bailout test on hi components
+        `        float ${id}_r2 = ${id}_zx.x * ${id}_zx.x + ${id}_zy.x * ${id}_zy.x;\n`,
+        `        if (${id}_r2 > ${id}_B2) break;\n`,
+        `        ${id}_n += 1.0;\n`,
+        `    }\n`,
+        // Final float z for smooth iter / distance code
+        `    vec2 ${id}_z = vec2(${id}_zx.x, ${id}_zy.x);\n`,
+      );
     }
 
-    // Build the code block
-    const isJulia = mode === 'julia';
-    const cExpr = isJulia
-      ? (inputVars.c_pos ? cPosVar : `vec2(${cx}, ${cy})`)
-      : `${id}_c`;   // Mandelbrot: c = UV position
-    const z0Expr = isJulia ? `${uvVar} / ${zoom} + vec2(${offsetX}, ${offsetY})` : `vec2(0.0)`;
-    const c0Expr = isJulia ? cExpr   : `${uvVar} / ${zoom} + vec2(${offsetX}, ${offsetY})`;
-    const dzInit = isJulia ? `vec2(1.0, 0.0)` : `vec2(0.0)`;
-    const dzMandelbrotAdd = isJulia ? '' : `    ${id}_dz += vec2(1.0, 0.0);\n`;
-
-    const code = [
-      `    // Mandelbrot/Julia node (${mode}, power=${power}, maxIter=${maxIter})\n`,
-      `    vec2 ${id}_c  = ${c0Expr};\n`,
-      `    vec2 ${id}_z  = ${z0Expr};\n`,
-      `    vec2 ${id}_dz = ${dzInit};\n`,
-      `    float ${id}_n    = 0.0;\n`,
-      `    float ${id}_trap = 1e20;\n`,
-      `    float ${id}_B2   = ${bailout} * ${bailout};\n`,
-      `    for (float ${id}_i = 0.0; ${id}_i < ${maxIter}.0; ${id}_i++) {\n`,
-      `        ${id}_dz = ${dzMul};\n`,
-      dzMandelbrotAdd ? `        ${id}_dz += vec2(1.0, 0.0);\n` : '',
-      `        ${id}_z  = ${zpow} + ${id}_c;\n`,
-      trapExpr ? `        ${trapExpr.replace(/^\s{4}/, '        ')}` : '',
-      `        if (dot(${id}_z, ${id}_z) > ${id}_B2) break;\n`,
-      `        ${id}_n += 1.0;\n`,
-      `    }\n`,
-      // Smooth iteration count (IQ formula, generalized)
+    // ── Shared: smooth iter count, distance estimation, coloring ──────────────
+    code.push(
       `    float ${id}_iter;\n`,
       `    float ${id}_lz2 = dot(${id}_z, ${id}_z);\n`,
       `    if (${id}_n >= ${maxIter}.0) {\n`,
       `        ${id}_iter = ${maxIter}.0;\n`,
       `    } else {\n`,
-      `        ${id}_iter = ${id}_n - log(log(${id}_lz2) * 0.5) / log(${power}.0);\n`,
+      `        ${id}_iter = ${id}_n - log(log(max(${id}_lz2, 1.0)) * 0.5) / log(${power}.0);\n`,
       `    }\n`,
-      // Distance estimation (IQ formula)
       `    float ${id}_dist = 0.0;\n`,
       `    float ${id}_ldz2 = dot(${id}_dz, ${id}_dz);\n`,
       `    if (${id}_ldz2 > 0.0 && ${id}_lz2 > 0.0) {\n`,
       `        ${id}_dist = sqrt(${id}_lz2 / ${id}_ldz2) * 0.5 * log(${id}_lz2);\n`,
       `    }\n`,
-      // Built-in coloring with palette
       `    float ${id}_t = ${id}_iter * ${colorScale} + ${colorOffset};\n`,
       `    vec3 ${id}_color;\n`,
       `    if (${id}_n >= ${maxIter}.0) {\n`,
-      `        ${id}_color = vec3(0.0);\n`,   // inside the set = black
+      `        ${id}_color = vec3(0.0);\n`,
       `    } else {\n`,
       `        ${id}_color = palette(${id}_t, ${pA}, ${pB}, ${pC}, ${pD});\n`,
       `    }\n`,
-    ];
+    );
 
-    // Orbit trap coloring blend (if enabled, modulate color by trap distance)
     if (orbitTrap !== 'none') {
       code.push(
-        `    // Orbit trap blend\n`,
         `    float ${id}_trapNorm = clamp(${id}_trap * 2.0, 0.0, 1.0);\n`,
         `    ${id}_color = mix(${id}_color, palette(${id}_trap * ${colorScale}, ${pA}, ${pB}, ${pC}, ${pD}), 1.0 - ${id}_trapNorm);\n`,
       );
