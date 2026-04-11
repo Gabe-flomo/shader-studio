@@ -174,16 +174,18 @@ export const MandelbrotNode: NodeDefinition = {
     const uvVar   = inputVars.uv    ?? 'vec2(0.0)';
     const cPosVar = inputVars.c_pos ?? 'vec2(0.0)';
 
+    // Note: 'mandelbrot' is in SKIP_UNIFORM_TYPES so all params arrive here as
+    // raw numbers (never replaced with uniform name strings by the patcher).
     const mode      = (node.params.mode as string) ?? 'mandelbrot';
     const precision = (node.params.precision as string) ?? 'standard';
     const useDS     = precision === 'high';
-    const power     = Math.max(2, Math.round(typeof node.params.power    === 'number' ? node.params.power    : 2));
-    const maxIter   = Math.max(20, Math.round(typeof node.params.max_iter === 'number' ? node.params.max_iter : 150));
-    const bailout   = p(node.params.bailout, 256.0);
+    const power     = Math.max(2, Math.round((node.params.power    as number) || 2));
+    const maxIter   = Math.max(20, Math.round((node.params.max_iter as number) || 150));
+    const bailout   = f((node.params.bailout as number) || 256.0);
 
-    // zoom_exp (log₂ scale) takes priority over zoom if > 0
-    const zoomRaw   = typeof node.params.zoom     === 'number' ? node.params.zoom     : 1.0;
-    const zoomExp   = typeof node.params.zoom_exp === 'number' ? node.params.zoom_exp : 0.0;
+    // zoom_exp (log₂ scale) takes priority over zoom if non-zero
+    const zoomRaw   = (node.params.zoom     as number) || 1.0;
+    const zoomExp   = (node.params.zoom_exp as number) || 0.0;
     const zoom      = zoomExp > 0 ? `pow(2.0, ${f(zoomExp)})` : f(zoomRaw);
 
     // Center coordinates — stored as full JS float64, split into DS pairs for high precision mode.

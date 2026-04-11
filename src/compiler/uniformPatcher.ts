@@ -1,7 +1,18 @@
 import type { GraphNode, NodeDefinition, DataType } from '../types/nodeGraph';
 
-/** Node types whose params must remain as baked compile-time constants. */
-export const SKIP_UNIFORM_TYPES = new Set(['loopStart', 'loopEnd', 'loop', 'forLoop']);
+/** Node types whose params must remain as baked compile-time constants.
+ *
+ * Add a type here when its generateGLSL uses param values in JS-side conditionals
+ * (e.g. to decide loop bounds, choose formula branches, or split DS pairs) rather
+ * than just passing them through p() into the emitted GLSL.  Params on these nodes
+ * always trigger a full shader recompile on change instead of a uniform update.
+ */
+export const SKIP_UNIFORM_TYPES = new Set([
+  'loopStart', 'loopEnd', 'loop', 'forLoop',
+  // Mandelbrot/Julia: zoom, max_iter, center_x/y, precision all affect code structure
+  // and the center coordinates need JS-side DS splitting — must stay baked.
+  'mandelbrot',
+]);
 
 /** Default GLSL zero literal for a given type. */
 export function defaultGlslVal(type: DataType | string): string {
