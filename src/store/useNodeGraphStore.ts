@@ -116,6 +116,15 @@ interface NodeGraphState {
   _fitViewCallback: (() => void) | null;
   registerFitView: (cb: () => void) => void;
 
+  // Swap mode — user shift-clicked a node; next palette click replaces it
+  swapTargetNodeId: string | null;
+  setSwapTargetNodeId: (id: string | null) => void;
+  swapNode: (nodeId: string, newType: string) => void;
+
+  // In-canvas node search palette (Shift+Space)
+  searchPaletteOpen: boolean;
+  setSearchPaletteOpen: (open: boolean) => void;
+
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
   /**
@@ -276,9 +285,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   previewNodeId: null,
   nodeHighlightFilter: null,
   _fitViewCallback: null,
+  swapTargetNodeId: null,
+  searchPaletteOpen: false,
 
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
+  setSwapTargetNodeId: (id) => set({ swapTargetNodeId: id }),
+  setSearchPaletteOpen: (open) => set({ searchPaletteOpen: open }),
 
   groupNodes: (nodeIds, label?) => {
     const { nodes } = get();
@@ -447,6 +460,97 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       });
 
     set({ nodes: [...updatedOuter, ...restoredNodes] });
+    get().compile();
+  },
+
+  swapNode: (nodeId, newType) => {
+    const { nodes } = get();
+    const oldNode = nodes.find(n => n.id === nodeId);
+    if (!oldNode) return;
+    const def = getNodeDefinition(newType);
+    if (!def) return;
+
+    pushHistory(nodes);
+    const newId = `node_${nodeIdCounter++}`;
+
+    // Build new inputs, carrying over connections where types are compatible
+    const newInputs: Record<string, InputSocket> = {};
+    for (const [key, socket] of Object.entries(def.inputs)) {
+      const newSocket: InputSocket = {
+        ...socket,
+        defaultValue: def.paramDefs?.[key]
+          ? undefined
+          : def.defaultParams?.[key] as number | number[] | undefined,
+      };
+
+      // Priority 1: exact key match with compatible source type
+      const oldSock = oldNode.inputs[key];
+      if (oldSock?.connection) {
+        const srcNode = nodes.find(n => n.id === oldSock.connection!.nodeId);
+        const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
+        const srcType = srcDef?.outputs[oldSock.connection!.outputKey]?.type;
+        if (srcType && typesCompatible(srcType, socket.type)) {
+          newSocket.connection = oldSock.connection;
+        }
+      }
+
+      // Priority 2: any connected old input whose source type is compatible
+      if (!newSocket.connection) {
+        for (const oldS of Object.values(oldNode.inputs)) {
+          if (!oldS.connection) continue;
+          const srcNode = nodes.find(n => n.id === oldS.connection!.nodeId);
+          const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
+          const srcType = srcDef?.outputs[oldS.connection!.outputKey]?.type;
+          if (srcType && typesCompatible(srcType, socket.type)) {
+            newSocket.connection = oldS.connection;
+            break;
+          }
+        }
+      }
+
+      newInputs[key] = newSocket;
+    }
+
+    const newNodeObj: GraphNode = {
+      id: newId,
+      type: newType,
+      position: { ...oldNode.position },
+      inputs: newInputs,
+      outputs: { ...def.outputs },
+      params: { ...(def.defaultParams ?? {}) },
+    };
+
+    set(state => {
+      const updated = state.nodes
+        .filter(n => n.id !== nodeId)
+        .map(n => {
+          // Reroute downstream connections that pointed to oldNode's outputs
+          let changed = false;
+          const updatedInputs = { ...n.inputs };
+          for (const [key, sock] of Object.entries(n.inputs)) {
+            if (sock.connection?.nodeId !== nodeId) continue;
+            const oldOutputKey = sock.connection.outputKey;
+            let newOutputKey: string | null = null;
+            // Try same key first
+            if (newNodeObj.outputs[oldOutputKey]
+                && typesCompatible(newNodeObj.outputs[oldOutputKey].type, sock.type)) {
+              newOutputKey = oldOutputKey;
+            } else {
+              // First compatible output
+              for (const [outKey, out] of Object.entries(newNodeObj.outputs)) {
+                if (typesCompatible(out.type, sock.type)) { newOutputKey = outKey; break; }
+              }
+            }
+            updatedInputs[key] = newOutputKey
+              ? { ...sock, connection: { nodeId: newId, outputKey: newOutputKey } }
+              : { ...sock, connection: undefined };
+            changed = true;
+          }
+          return changed ? { ...n, inputs: updatedInputs } : n;
+        });
+      return { nodes: [...updated, newNodeObj], swapTargetNodeId: null };
+    });
+
     get().compile();
   },
 

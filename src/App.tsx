@@ -50,6 +50,7 @@ function App() {
     addNode, setNodeHighlightFilter, _fitViewCallback, undo,
     nodeProbeValues, selectedNodeId, nodes: graphNodes,
     groupNodes, deselectAll,
+    searchPaletteOpen, setSearchPaletteOpen,
   } = useNodeGraphStore();
 
   // Build probe display for selected node — shown in status bar instead of "hover for color"
@@ -95,7 +96,7 @@ function App() {
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   // Node search palette
-  const [showSearchPalette, setShowSearchPalette] = useState(false);
+  // showSearchPalette is now in the store (searchPaletteOpen / setSearchPaletteOpen)
   const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const offlineRenderRef = useRef<OfflineRenderHandle | null>(null);
   const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
@@ -118,7 +119,7 @@ function App() {
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
-    addNode:        () => setShowSearchPalette(true),
+    addNode:        () => setSearchPaletteOpen(true),
     groupSelected:  () => {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
       if (ids.length >= 2) { groupNodes(ids); deselectAll(); }
@@ -453,7 +454,7 @@ function App() {
           <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
         )}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
-        <NodeSearchPalette open={showSearchPalette} onClose={() => setShowSearchPalette(false)} />
+        <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} />
       </div>
     );
   }
@@ -584,7 +585,7 @@ function App() {
         </div>
         {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
-        <NodeSearchPalette open={showSearchPalette} onClose={() => setShowSearchPalette(false)} />
+        <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} />
       </div>
   );
   }
@@ -692,7 +693,7 @@ function App() {
         <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
-      <NodeSearchPalette open={showSearchPalette} onClose={() => setShowSearchPalette(false)} />
+      <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} />
     </div>
   );
 }
