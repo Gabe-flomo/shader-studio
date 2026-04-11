@@ -120,7 +120,7 @@ export const MandelbrotNode: NodeDefinition = {
     mode:           'mandelbrot',
     precision:      'standard',
     power:          2,
-    max_iter:       150,
+    max_iter:       256,
     bailout:        256.0,
     cx:             -0.7269,
     cy:              0.1889,
@@ -133,7 +133,7 @@ export const MandelbrotNode: NodeDefinition = {
     trap_y:         0.0,
     trap_r:         0.5,
     palette_preset: '1',
-    color_scale:    0.3,
+    color_scale:    3.0,   // 3 palette cycles over [0, max_iter]
     color_offset:   0.0,
   },
   paramDefs: {
@@ -165,7 +165,7 @@ export const MandelbrotNode: NodeDefinition = {
     trap_y:         { label: 'Trap Y',          type: 'float', min: -2,    max: 2,    step: 0.01 },
     trap_r:         { label: 'Trap Radius',     type: 'float', min: 0.0,   max: 2,    step: 0.01 },
     palette_preset: { label: 'Palette',         type: 'select', options: PALETTE_PRESET_OPTIONS },
-    color_scale:    { label: 'Color Scale',     type: 'float', min: 0.01,  max: 5,    step: 0.01 },
+    color_scale:    { label: 'Color Cycles',    type: 'float', min: 0.1,   max: 20,   step: 0.1  },
     color_offset:   { label: 'Color Offset',    type: 'float', min: 0.0,   max: 1.0,  step: 0.01 },
   },
 
@@ -367,7 +367,10 @@ export const MandelbrotNode: NodeDefinition = {
       `    if (${id}_ldz2 > 0.0 && ${id}_lz2 > 0.0) {\n`,
       `        ${id}_dist = sqrt(${id}_lz2 / ${id}_ldz2) * 0.5 * log(${id}_lz2);\n`,
       `    }\n`,
-      `    float ${id}_t = ${id}_iter * ${colorScale} + ${colorOffset};\n`,
+      // Normalize iter by max_iter before applying color_scale.
+      // This makes color_scale zoom-independent: 1.0 = one full palette cycle
+      // over the entire [0, max_iter] range regardless of how deep you've zoomed.
+      `    float ${id}_t = (${id}_iter / ${maxIter}.0) * ${colorScale} + ${colorOffset};\n`,
       `    vec3 ${id}_color;\n`,
       `    if (${id}_n >= ${maxIter}.0) {\n`,
       `        ${id}_color = vec3(0.0);\n`,
@@ -379,7 +382,7 @@ export const MandelbrotNode: NodeDefinition = {
     if (orbitTrap !== 'none') {
       code.push(
         `    float ${id}_trapNorm = clamp(${id}_trap * 2.0, 0.0, 1.0);\n`,
-        `    ${id}_color = mix(${id}_color, palette(${id}_trap * ${colorScale}, ${pA}, ${pB}, ${pC}, ${pD}), 1.0 - ${id}_trapNorm);\n`,
+        `    ${id}_color = mix(${id}_color, palette((${id}_trap / ${maxIter}.0) * ${colorScale}, ${pA}, ${pB}, ${pC}, ${pD}), 1.0 - ${id}_trapNorm);\n`,
       );
     }
 
