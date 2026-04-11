@@ -111,7 +111,7 @@ export const RingSDFNode: NodeDefinition = {
 //   - round(x) replaced with floor(x+0.5) where needed
 //   - mat2 used instead of mat2x2
 
-const SHAPE_SDF_GLSL = `
+export const SHAPE_SDF_GLSL = `
 float dot2(vec2 v) { return dot(v, v); }
 
 // ── Basic ──
@@ -530,23 +530,98 @@ float sdCircleWave(in vec2 p, in float tb, in float ra) {
 // All shapes in one dropdown — irrelevant params hidden via showWhen.
 
 // Shapes that show each param group:
-const WITH_R    = ['circle','pentagon','octagon','hexagram','pentagram','triangle','hexagon','star5','starN','pie','ring','unevenCapsule','cutDisk','moon','arc','horseshoe','circleWave','roundedCross'];
-const WITH_R2   = ['unevenCapsule','moon','trapezoid'];
-const WITH_RXRY = ['box','roundedBox','chamferBox','cross','rhombus','ellipse','tunnel','stairs','isoTriangle','horseshoe','vesica','roundedX'];
-const WITH_RY   = ['box','roundedBox','chamferBox','cross','rhombus','ellipse','tunnel','stairs'];
-const WITH_RND  = ['roundedBox','cross','roundedX'];
-const WITH_RF   = ['star5'];
-const WITH_TH   = ['ring','arc'];
-const WITH_N    = ['ring'];
-const WITH_CXY  = ['pie','arc','horseshoe'];
-const WITH_HE   = ['isoTriangle','unevenCapsule','trapezoid','parallelogram','parabolaSeg','blobbyCross','vesica'];
-const WITH_SK   = ['parallelogram'];
-const WITH_K    = ['parabola','hyperbola'];
-const WITH_D    = ['moon'];
-const WITH_TB   = ['circleWave'];
-const WITH_NPTS = ['starN','stairs'];
-const WITH_MPTS = ['starN'];
-const WITH_CHF  = ['chamferBox'];
+export const WITH_R    = ['circle','pentagon','octagon','hexagram','pentagram','triangle','hexagon','star5','starN','pie','ring','unevenCapsule','cutDisk','moon','arc','horseshoe','circleWave','roundedCross'];
+export const WITH_R2   = ['unevenCapsule','moon','trapezoid'];
+export const WITH_RXRY = ['box','roundedBox','chamferBox','cross','rhombus','ellipse','tunnel','stairs','isoTriangle','horseshoe','vesica','roundedX'];
+export const WITH_RY   = ['box','roundedBox','chamferBox','cross','rhombus','ellipse','tunnel','stairs'];
+export const WITH_RND  = ['roundedBox','cross','roundedX'];
+export const WITH_RF   = ['star5'];
+export const WITH_TH   = ['ring','arc'];
+export const WITH_N    = ['ring'];
+export const WITH_CXY  = ['pie','arc','horseshoe'];
+export const WITH_HE   = ['isoTriangle','unevenCapsule','trapezoid','parallelogram','parabolaSeg','blobbyCross','vesica'];
+export const WITH_SK   = ['parallelogram'];
+export const WITH_K    = ['parabola','hyperbola'];
+export const WITH_D    = ['moon'];
+export const WITH_TB   = ['circleWave'];
+export const WITH_NPTS = ['starN','stairs'];
+export const WITH_MPTS = ['starN'];
+export const WITH_CHF  = ['chamferBox'];
+
+/** Build the GLSL SDF call for the given shape, using params from a node's param map. */
+export function buildShapeSdfCall(
+  shape: string,
+  posVar: string,
+  params: Record<string, unknown>,
+  inputVars: Record<string, string> = {},
+): string {
+  const r    = inputVars.r  ?? p(params.r,   0.3);
+  const r2   =                 p(params.r2,  0.15);
+  const rx   = inputVars.rx ?? p(params.rx,  0.3);
+  const ry   = inputVars.ry ?? p(params.ry,  0.3);
+  const rnd  =                 p(params.roundness, 0.05);
+  const chf  =                 p(params.chamfer,   0.05);
+  const rf   = inputVars.rf ?? p(params.rf,  0.5);
+  const th   = inputVars.th ?? p(params.th,  0.05);
+  const nx   =                 p(params.nx,  0.0);
+  const ny   =                 p(params.ny,  1.0);
+  const cx   =                 p(params.cx,  0.866);
+  const cy   =                 p(params.cy,  0.5);
+  const he   =                 p(params.he,  0.3);
+  const sk   =                 p(params.sk,  0.2);
+  const k    =                 p(params.k,   2.0);
+  const d    =                 p(params.d,   0.3);
+  const tb   =                 p(params.tb,  0.5);
+  const npts =                 p(params.n_pts, 5.0);
+  const mpts =                 p(params.m_pts, 2.0);
+  const bVec = inputVars.b   ?? `vec2(${rx}, ${ry})`;
+  const cVec = inputVars.c   ?? `vec2(${cx}, ${cy})`;
+  const nVec = inputVars.n   ?? `vec2(${nx}, ${ny})`;
+  const aVec = inputVars.a   ?? 'vec2(-0.5, 0.0)';
+  const b2Vec= inputVars.b2  ?? 'vec2( 0.5, 0.0)';
+
+  switch (shape) {
+    case 'heart':         return `sdHeart(${posVar})`;
+    case 'roundedCross':  return `sdRoundedCross(${posVar}, ${he})`;
+    case 'quadCircle':    return `sdQuadraticCircle(${posVar})`;
+    case 'coolS':         return `sdCoolS(${posVar})`;
+    case 'box':           return `sdBox(${posVar}, ${bVec})`;
+    case 'roundedBox':    return `sdRoundedBox(${posVar}, ${bVec}, ${rnd})`;
+    case 'chamferBox':    return `sdChamferBox(${posVar}, ${bVec}, ${chf})`;
+    case 'cross':         return `sdCross(${posVar}, ${bVec}, ${rnd})`;
+    case 'roundedX':      return `sdRoundedX(${posVar}, ${rx}, ${rnd})`;
+    case 'triangle':      return `sdEquilateralTriangle(${posVar}, ${r})`;
+    case 'isoTriangle':   return `sdTriangleIsosceles(${posVar}, vec2(${rx}, ${he}))`;
+    case 'pentagon':      return `sdPentagon(${posVar}, ${r})`;
+    case 'hexagon':       return `sdHexagon(${posVar}, ${r})`;
+    case 'octagon':       return `sdOctogon(${posVar}, ${r})`;
+    case 'hexagram':      return `sdHexagram(${posVar}, ${r})`;
+    case 'pentagram':     return `sdPentagram(${posVar}, ${r})`;
+    case 'rhombus':       return `sdRhombus(${posVar}, ${bVec})`;
+    case 'trapezoid':     return `sdTrapezoid(${posVar}, ${r}, ${r2}, ${he})`;
+    case 'parallelogram': return `sdParallelogram(${posVar}, ${rx}, ${he}, ${sk})`;
+    case 'star5':         return `sdStar5(${posVar}, ${r}, ${rf})`;
+    case 'starN':         return `sdStarN(${posVar}, ${r}, ${npts}, ${mpts})`;
+    case 'segment':       return `sdSegment(${posVar}, ${aVec}, ${b2Vec})`;
+    case 'ellipse':       return `sdEllipse(${posVar}, ${bVec})`;
+    case 'parabola':      return `sdParabola(${posVar}, ${k})`;
+    case 'parabolaSeg':   return `sdParabolaSeg(${posVar}, ${rx}, ${he})`;
+    case 'hyperbola':     return `sdHyperbola(${posVar}, ${k}, ${he})`;
+    case 'pie':           return `sdPie(${posVar}, ${cVec}, ${r})`;
+    case 'arc':           return `sdArc(${posVar}, ${cVec}, ${r}, ${th})`;
+    case 'ring':          return `sdRing2(${posVar}, ${nVec}, ${r}, ${th})`;
+    case 'circleWave':    return `sdCircleWave(${posVar}, ${tb}, ${r})`;
+    case 'unevenCapsule': return `sdUnevenCapsule(${posVar}, ${r}, ${r2}, ${he})`;
+    case 'cutDisk':       return `sdCutDisk(${posVar}, ${r}, ${he})`;
+    case 'moon':          return `sdMoon(${posVar}, ${d}, ${r}, ${r2})`;
+    case 'vesica':        return `sdVesicaShape(${posVar}, ${rx}, ${he})`;
+    case 'horseshoe':     return `sdHorseshoe(${posVar}, ${cVec}, ${r}, vec2(${rx}, ${ry}))`;
+    case 'tunnel':        return `sdTunnel(${posVar}, ${bVec})`;
+    case 'stairs':        return `sdStairs(${posVar}, ${bVec}, ${npts})`;
+    case 'blobbyCross':   return `sdBlobbyCross(${posVar}, ${he})`;
+    default:              return `sdCircle2(${posVar}, ${r})`;
+  }
+}
 
 export const ShapeSDFNode: NodeDefinition = {
   type: 'shapeSDF',

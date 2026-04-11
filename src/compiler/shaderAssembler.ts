@@ -122,6 +122,7 @@ function collectFunctions(
     if (!n) continue;
     const def = getNodeDefinition(n.type);
     if (def?.glslFunction) functions.add(def.glslFunction);
+    def?.glslFunctions?.forEach(f => functions.add(f));
     if (n.type === 'customFn' && typeof n.params.glslFunctions === 'string') {
       const h = (n.params.glslFunctions as string).trim();
       if (h) functions.add(h);
@@ -162,6 +163,7 @@ export function generateFragmentShader(
 
     // Collect GLSL helper functions (deduplicated)
     if (def.glslFunction) functions.add(def.glslFunction);
+    def.glslFunctions?.forEach(f => functions.add(f));
     if (node.type === 'customFn' && typeof node.params.glslFunctions === 'string') {
       const h = (node.params.glslFunctions as string).trim();
       if (h) functions.add(h);
@@ -171,11 +173,15 @@ export function generateFragmentShader(
 
     // ── Loop Start: register carry var — loopEnd owns the actual GLSL emission ─
     if (node.type === 'loopStart') {
-      // Resolve the correct carryType from the paired chain so the default matches
+      // Resolve the correct carryType: prefer chain lookup, then node's own
+      // carryType param.  The param fallback is needed when the paired loopEnd
+      // is absent from the subgraph (e.g. node-preview compilation).
       let startCarryType: DataType = 'vec2';
       for (const chain of loopPairChains.values()) {
         if (chain.startNodeId === node.id) { startCarryType = chain.carryType; break; }
       }
+      const cp = node.params.carryType;
+      if (cp === 'float' || cp === 'vec3' || cp === 'vec4') startCarryType = cp as DataType;
       const carryVar = inputVars['carry'] ?? defaultGlslVal(startCarryType);
       nodeOutputs.set(node.id, { carry: carryVar, iter_index: '0.0' });
       continue;
@@ -293,6 +299,7 @@ export function generateFragmentShader(
           const subDef = getNodeDefinition(subNode.type);
           if (!subDef) continue;
           if (subDef.glslFunction) functions.add(subDef.glslFunction);
+          subDef.glslFunctions?.forEach(f => functions.add(f));
           const originalId = subNode.id.slice(iterPrefix.length);
           const subInputVars: Record<string, string> = {};
           for (const [k, inp] of Object.entries(subNode.inputs)) {
