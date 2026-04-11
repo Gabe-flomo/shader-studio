@@ -51,6 +51,12 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const addNode               = useNodeGraphStore(s => s.addNode);
   const setSearchPaletteOpen  = useNodeGraphStore(s => s.setSearchPaletteOpen);
 
+  // Detect touch device once on mount
+  const isTouchDevice = useRef(
+    typeof window !== 'undefined' &&
+    ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  );
+
   const previewNode  = previewNodeId ? nodes.find(n => n.id === previewNodeId) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
   const previewLabel = previewDef
@@ -289,6 +295,53 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         ?.outputs[dragConnection.sourceOutputKey]?.type ?? null)
     : null;
 
+  // ── Mobile tap-to-connect ───────────────────────────────────────────────────
+  // Two-tap flow: tap output socket → pending, tap input socket → connect.
+  const [pendingMobileConnection, setPendingMobileConnection] = useState<{
+    sourceNodeId: string;
+    sourceOutputKey: string;
+    fromPos: { x: number; y: number };
+  } | null>(null);
+
+  const pendingMobileType = pendingMobileConnection
+    ? (getNodeDefinition(nodes.find(n => n.id === pendingMobileConnection.sourceNodeId)?.type ?? '')
+        ?.outputs[pendingMobileConnection.sourceOutputKey]?.type ?? null)
+    : null;
+
+  const handleTapOutputSocket = useCallback((nodeId: string, outputKey: string) => {
+    // Tapping same source again cancels
+    if (
+      pendingMobileConnection?.sourceNodeId === nodeId &&
+      pendingMobileConnection?.sourceOutputKey === outputKey
+    ) {
+      setPendingMobileConnection(null);
+      return;
+    }
+    const canvas = canvasRef.current;
+    let fromPos = getSocketPos(nodeId, 'out', outputKey, canvas, zoomRef.current, panRef.current);
+    if (!fromPos) {
+      const nd = nodes.find(n => n.id === nodeId);
+      if (!nd) return;
+      fromPos = { x: nd.position.x + NODE_WIDTH, y: nd.position.y + 80 };
+    }
+    setPendingMobileConnection({ sourceNodeId: nodeId, sourceOutputKey: outputKey, fromPos });
+  }, [pendingMobileConnection, nodes]);
+
+  const handleTapInputSocket = useCallback((targetNodeId: string, targetInputKey: string) => {
+    if (!pendingMobileConnection) return;
+    connectNodes(
+      pendingMobileConnection.sourceNodeId,
+      pendingMobileConnection.sourceOutputKey,
+      targetNodeId,
+      targetInputKey,
+    );
+    setPendingMobileConnection(null);
+  }, [pendingMobileConnection, connectNodes]);
+
+  // Touch pan state (single finger on canvas background)
+  const touchPanStart  = useRef<{ x: number; y: number } | null>(null);
+  const touchPanOrigin = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
   // Convert screen coords to world space
   const screenToWorld = useCallback((sx: number, sy: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -350,6 +403,38 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     }
     setDragConnection(null);
   };
+
+  // ── Canvas touch handlers (pan + connection cancel) ──────────────────────
+  const handleCanvasTouchStart = useCallback((e: React.TouchEvent) => {
+    // Don't start pan when touching a node or socket
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-node-id]')) return;
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchPanStart.current  = { x: t.clientX, y: t.clientY };
+      touchPanOrigin.current = { ...panRef.current };
+    }
+  }, []);
+
+  const handleCanvasTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1 && touchPanStart.current) {
+      const t = e.touches[0];
+      setPan({
+        x: touchPanOrigin.current.x + (t.clientX - touchPanStart.current.x),
+        y: touchPanOrigin.current.y + (t.clientY - touchPanStart.current.y),
+      });
+    }
+  }, []);
+
+  const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
+    // If the touch ended on the raw canvas background (not a node/socket), cancel pending
+    const target = e.target as HTMLElement;
+    if (!target.closest('[data-node-id]') && !target.closest('[data-socket]')) {
+      setPendingMobileConnection(null);
+    }
+    touchPanStart.current = null;
+  }, []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -416,6 +501,9 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
       onClick={() => setContextMenu(null)}
+      onTouchStart={handleCanvasTouchStart}
+      onTouchMove={handleCanvasTouchMove}
+      onTouchEnd={handleCanvasTouchEnd}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
       onDrop={e => {
         e.preventDefault();
@@ -480,6 +568,52 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         </div>
       )}
 
+      {/* Mobile pending-connection banner — shown when waiting for second tap */}
+      {pendingMobileConnection && isTouchDevice.current && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 54,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(30,30,46,0.92)',
+            border: `1px solid ${pendingMobileType ? ('#' + (pendingMobileType === 'float' ? 'f0a0aa' : pendingMobileType === 'vec2' ? '0af0f0' : pendingMobileType === 'vec3' ? '00fa80' : 'fa8000')) : '#89b4fa'}55`,
+            color: '#cdd6f4',
+            padding: '8px 16px',
+            borderRadius: '10px',
+            fontSize: '12px',
+            zIndex: 30,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            userSelect: 'none',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span style={{ opacity: 0.7, fontSize: '14px' }}>⟶</span>
+          <span>Tap an <strong>input</strong> to connect</span>
+          <button
+            onTouchEnd={e => { e.stopPropagation(); setPendingMobileConnection(null); }}
+            onClick={() => setPendingMobileConnection(null)}
+            style={{
+              background: 'none',
+              border: '1px solid #45475a',
+              color: '#585b70',
+              cursor: 'pointer',
+              fontSize: '11px',
+              padding: '2px 7px',
+              borderRadius: '5px',
+              touchAction: 'manipulation',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Toolbar — top-right, always in screen space */}
       <div
         style={{
@@ -496,7 +630,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         <button
           onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
           title="Reset zoom to 100%"
-          style={toolbarBtnStyle}
+          style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
           onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
           onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
         >
@@ -506,32 +640,36 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         <button
           onClick={handleFitView}
           title="Fit all nodes in view"
-          style={toolbarBtnStyle}
+          style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
           onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
           onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
         >
           ⊡ Fit
         </button>
 
-        <button
-          onClick={autoLayout}
-          title="Automatically arrange nodes left-to-right by data flow"
-          style={toolbarBtnStyle}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
-        >
-          ⊞ Auto Layout
-        </button>
+        {!isTouchDevice.current && (
+          <button
+            onClick={autoLayout}
+            title="Automatically arrange nodes left-to-right by data flow"
+            style={toolbarBtnStyle}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+          >
+            ⊞ Auto Layout
+          </button>
+        )}
 
-        <button
-          onClick={toggleMinimap}
-          title={showMinimap ? 'Hide minimap' : 'Show minimap'}
-          style={{ ...toolbarBtnStyle, opacity: showMinimap ? 1 : 0.45 }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
-        >
-          [M]
-        </button>
+        {!isTouchDevice.current && (
+          <button
+            onClick={toggleMinimap}
+            title={showMinimap ? 'Hide minimap' : 'Show minimap'}
+            style={{ ...toolbarBtnStyle, opacity: showMinimap ? 1 : 0.45 }}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+          >
+            [M]
+          </button>
+        )}
       </div>
 
       {/* Breadcrumb when inside a group */}
@@ -627,8 +765,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         </div>
       )}
 
-      {/* Minimap overlay — screen space, bottom-right */}
-      {showMinimap && (
+      {/* Minimap overlay — screen space, bottom-right (hidden on touch devices) */}
+      {showMinimap && !isTouchDevice.current && (
         <Minimap
           nodes={nodes}
           pan={pan}
@@ -741,6 +879,21 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               dataType={draggingType ?? undefined}
             />
           )}
+
+          {/* Pending mobile connection — static line to a ghost endpoint near the source */}
+          {pendingMobileConnection && !dragConnection && (() => {
+            const toPos = {
+              x: pendingMobileConnection.fromPos.x + 60,
+              y: pendingMobileConnection.fromPos.y,
+            };
+            return (
+              <ConnectionLine
+                from={pendingMobileConnection.fromPos}
+                to={toPos}
+                dataType={pendingMobileType ?? undefined}
+              />
+            );
+          })()}
         </svg>
 
         {/* Node cards — positioned in world space */}
@@ -750,7 +903,12 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             node={node}
             onStartConnection={handleStartConnection}
             onEndConnection={handleEndConnection}
+            onTapOutputSocket={handleTapOutputSocket}
+            onTapInputSocket={handleTapInputSocket}
+            pendingMobileConnection={pendingMobileConnection}
+            pendingMobileType={pendingMobileType}
             draggingType={draggingType}
+            isTouchDevice={isTouchDevice.current}
             zoom={zoom}
             dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
             onEnterGroup={setActiveGroupId}
@@ -783,4 +941,19 @@ const toolbarBtnStyle: React.CSSProperties = {
   fontSize: '11px',
   cursor: 'pointer',
   letterSpacing: '0.02em',
+};
+
+// Larger touch target for toolbar buttons on touch devices
+const touchToolbarBtnStyle: React.CSSProperties = {
+  background: 'rgba(49,50,68,0.85)',
+  border: '1px solid #45475a',
+  color: '#cdd6f4',
+  borderRadius: '8px',
+  padding: '10px 14px',
+  fontSize: '13px',
+  cursor: 'pointer',
+  letterSpacing: '0.02em',
+  touchAction: 'manipulation',
+  backdropFilter: 'blur(6px)',
+  WebkitBackdropFilter: 'blur(6px)',
 };
