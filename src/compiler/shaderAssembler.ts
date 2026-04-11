@@ -173,11 +173,15 @@ export function generateFragmentShader(
 
     // ── Loop Start: register carry var — loopEnd owns the actual GLSL emission ─
     if (node.type === 'loopStart') {
-      // Resolve the correct carryType from the paired chain so the default matches
+      // Resolve the correct carryType: prefer chain lookup, then node's own
+      // carryType param.  The param fallback is needed when the paired loopEnd
+      // is absent from the subgraph (e.g. node-preview compilation).
       let startCarryType: DataType = 'vec2';
       for (const chain of loopPairChains.values()) {
         if (chain.startNodeId === node.id) { startCarryType = chain.carryType; break; }
       }
+      const cp = node.params.carryType;
+      if (cp === 'float' || cp === 'vec3' || cp === 'vec4') startCarryType = cp as DataType;
       const carryVar = inputVars['carry'] ?? defaultGlslVal(startCarryType);
       nodeOutputs.set(node.id, { carry: carryVar, iter_index: '0.0' });
       continue;
