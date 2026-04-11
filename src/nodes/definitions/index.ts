@@ -5,7 +5,7 @@
 import type { NodeDefinition } from '../../types/nodeGraph';
 
 // Sources
-export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './sources';
+export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode } from './sources';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
@@ -37,7 +37,7 @@ export {
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
-export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode } from './loopPair';
+export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 
 // Noise
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
@@ -60,6 +60,9 @@ export { OutputNode, Vec4OutputNode } from './output';
 // Utility
 export { ScopeNode } from './utility';
 
+// Animation
+export { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
+
 // Math
 export {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
@@ -75,7 +78,7 @@ export {
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode } from './sources';
+import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode } from './sources';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -95,7 +98,7 @@ import {
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
-import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode } from './loopPair';
+import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 import { MandelbrotNode, IFSNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
@@ -104,6 +107,7 @@ import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, I
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
+import { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, ExpNode, PowNode, NegateNode, LengthNode,
@@ -123,6 +127,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   time: TimeNode,
   constant: ConstantNode,
   mouse: MouseNode,
+  textureInput: TextureInputNode,
+  prevFrame: PrevFrameNode,
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,
@@ -190,6 +196,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   loopDomainFold:        LoopDomainFoldNode,
   loopFloatAccumulate:   LoopFloatAccumulateNode,
   loopRingStep:          LoopRingStepNode,
+  loopColorRingStep:     LoopColorRingStepNode,
   // Noise
   fbm: FBMNode,
   voronoi: VoronoiNode,
@@ -260,6 +267,12 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   multiplyVec2: MultiplyVec2Node,
   normalizeVec2: NormalizeVec2Node,
   remap: RemapNode,
+  // Animation
+  sineLFO: SineLFONode,
+  squareLFO: SquareLFONode,
+  sawtoothLFO: SawtoothLFONode,
+  triangleLFO: TriangleLFONode,
+  bpmSync: BPMSyncNode,
 };
 
 export function getNodeDefinition(type: string): NodeDefinition | undefined {

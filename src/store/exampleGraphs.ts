@@ -1310,8 +1310,8 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'start_2', type: 'loopStart', position: { x: 220, y: 220 },
         inputs: { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
-        outputs: { carry: { type: 'vec2', label: 'Carry →' } },
-        params: { iterations: 7 },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params: { iterations: 7, carryType: 'vec2' },
       },
       {
         id: 'fold_3', type: 'loopDomainFold', position: { x: 420, y: 200 },
@@ -1323,7 +1323,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         id: 'end_4', type: 'loopEnd', position: { x: 620, y: 220 },
         inputs: { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'fold_3', outputKey: 'uv' } } },
         outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { iterations: 7 },
+        params: {},
       },
       // length of folded UV → ring SDF pattern
       {
@@ -2025,6 +2025,673 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
       { id: 'out_10', type: 'output', position: { x: 1500, y: 290 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_9', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+
+  // ── Sine LFO — oscillating FBM scale driven by a Sine LFO ─────────────────
+  sineLFODemo: {
+    label: 'Sine LFO',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 420 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // SineLFO oscillates at 0.5Hz, remapped to [1.5, 6] for FBM scale
+      { id: 'lfo_2',  type: 'sineLFO', position: { x: 280, y: 420 },
+        inputs:  { time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params:  { freq: 0.5, phase: 0.0, amplitude: 1.0, offset: 0.0 } },
+      { id: 'remap_3', type: 'remap', position: { x: 520, y: 420 },
+        inputs:  { value: { type: 'float', label: 'Value', connection: { nodeId: 'lfo_2', outputKey: 'value' } },
+                   inMin: { type: 'float', label: 'In Min' }, inMax: { type: 'float', label: 'In Max' },
+                   outMin: { type: 'float', label: 'Out Min' }, outMax: { type: 'float', label: 'Out Max' } },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params:  { inMin: -1.0, inMax: 1.0, outMin: 1.5, outMax: 6.0 } },
+      { id: 'fbm_4', type: 'fbm', position: { x: 520, y: 200 },
+        inputs:  { uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',    outputKey: 'uv'    } },
+                   time:  { type: 'float', label: 'Time',  connection: { nodeId: 'time_1',  outputKey: 'time'  } },
+                   scale: { type: 'float', label: 'Scale', connection: { nodeId: 'remap_3', outputKey: 'value' } } },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params:  { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 3.0, time_scale: 0.1 } },
+      { id: 'pal_5', type: 'palettePreset', position: { x: 800, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_4', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '2' } },
+      { id: 'out_6', type: 'output', position: { x: 1060, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_5', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Prev Frame Trails — persistence/motion-blur via PrevFrame ping-pong ────
+  // prevColor * 0.95 + newColor * 0.05 = 95% previous frame bleeds into current
+  prevFrameTrails: {
+    label: 'Prev Frame Trails',
+    counter: 10,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 440 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Animated Voronoi generates moving cell content each frame
+      { id: 'vor_2', type: 'voronoi', position: { x: 280, y: 160 },
+        inputs:  { uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+                   time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { dist: { type: 'float', label: 'Distance' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params:  { scale: 4.0, jitter: 1.0, time_scale: 0.4 } },
+      { id: 'pal_3', type: 'palettePreset', position: { x: 540, y: 160 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'vor_2', outputKey: 'dist' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '1' } },
+      // PrevFrame samples the previous rendered output
+      { id: 'prev_4', type: 'prevFrame', position: { x: 280, y: 440 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params:  {} },
+      // prevColor * 0.95
+      { id: 'mulPrev_5', type: 'multiplyVec3', position: { x: 800, y: 400 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'prev_4', outputKey: 'color' } },
+                   scale: { type: 'float', label: 'Scale' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params:  { scale: 0.95 } },
+      // newColor * 0.05
+      { id: 'mulNew_6', type: 'multiplyVec3', position: { x: 800, y: 180 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_3', outputKey: 'color' } },
+                   scale: { type: 'float', label: 'Scale' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params:  { scale: 0.05 } },
+      // prev*0.95 + new*0.05
+      { id: 'add_7', type: 'addVec3', position: { x: 1060, y: 280 },
+        inputs:  { a: { type: 'vec3', label: 'A', connection: { nodeId: 'mulPrev_5', outputKey: 'result' } },
+                   b: { type: 'vec3', label: 'B', connection: { nodeId: 'mulNew_6',  outputKey: 'result' } } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params:  {} },
+      { id: 'out_8', type: 'output', position: { x: 1300, y: 280 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_7', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Breathing Glow — sineLFO drives circle radius for a pulsing organic effect ─
+  breathingGlow: {
+    label: 'Breathing Glow',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Slow sineLFO: breathes at 0.4 Hz
+      { id: 'lfo_2', type: 'sineLFO', position: { x: 280, y: 400 },
+        inputs:  { time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params:  { freq: 0.4, phase: 0.0, amplitude: 1.0, offset: 0.0 } },
+      // Remap [-1,1] → [0.15, 0.55] for circle radius
+      { id: 'remap_3', type: 'remap', position: { x: 520, y: 400 },
+        inputs:  { value: { type: 'float', label: 'Value', connection: { nodeId: 'lfo_2', outputKey: 'value' } },
+                   inMin: { type: 'float', label: 'In Min' }, inMax: { type: 'float', label: 'In Max' },
+                   outMin: { type: 'float', label: 'Out Min' }, outMax: { type: 'float', label: 'Out Max' } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params:  { inMin: -1.0, inMax: 1.0, outMin: 0.15, outMax: 0.55 } },
+      // Circle SDF — radius wired from the remapped LFO
+      { id: 'circle_4', type: 'circleSDF', position: { x: 280, y: 180 },
+        inputs:  { position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'uv_0',    outputKey: 'uv'     } },
+                   radius:   { type: 'float', label: 'Radius',   connection: { nodeId: 'remap_3', outputKey: 'result' } },
+                   offset:   { type: 'vec2',  label: 'Offset' } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params:  { radius: 0.35, posX: 0.0, posY: 0.0 } },
+      { id: 'light_5', type: 'makeLight', position: { x: 520, y: 180 },
+        inputs:  { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'circle_4', outputKey: 'distance' } },
+                   brightness: { type: 'float', label: 'Brightness' } },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params:  { brightness: 12.0 } },
+      { id: 'pal_6', type: 'palettePreset', position: { x: 520, y: 560 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '0' } },
+      { id: 'mul_7', type: 'multiplyVec3', position: { x: 760, y: 280 },
+        inputs:  { color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_6',   outputKey: 'color' } },
+                   scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_5', outputKey: 'glow'  } } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params:  {} },
+      { id: 'tone_8', type: 'toneMap', position: { x: 980, y: 280 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_7', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { mode: 'aces' } },
+      { id: 'out_9', type: 'output', position: { x: 1200, y: 280 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_8', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Warp Dance — triangleLFO animates UV warp amount for flowing noise ────────
+  warpDance: {
+    label: 'Warp Dance',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Slow triangle LFO: 0 → 1 → 0 at 0.2 Hz — controls warp intensity
+      { id: 'lfo_2', type: 'triangleLFO', position: { x: 280, y: 400 },
+        inputs:  { time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params:  { freq: 0.2, amplitude: 1.0, offset: 0.0 } },
+      // Remap [-1,1] → [0, 2.5]: warp amount swells in and out
+      { id: 'remap_3', type: 'remap', position: { x: 520, y: 400 },
+        inputs:  { value: { type: 'float', label: 'Value', connection: { nodeId: 'lfo_2', outputKey: 'value' } },
+                   inMin: { type: 'float', label: 'In Min' }, inMax: { type: 'float', label: 'In Max' },
+                   outMin: { type: 'float', label: 'Out Min' }, outMax: { type: 'float', label: 'Out Max' } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params:  { inMin: -1.0, inMax: 1.0, outMin: 0.0, outMax: 2.5 } },
+      // Domain warp fed by the LFO amount
+      { id: 'warp_4', type: 'domainWarp', position: { x: 280, y: 180 },
+        inputs:  { uv:     { type: 'vec2',  label: 'UV',     connection: { nodeId: 'uv_0',    outputKey: 'uv'     } },
+                   time:   { type: 'float', label: 'Time',   connection: { nodeId: 'time_1',  outputKey: 'time'   } },
+                   amount: { type: 'float', label: 'Amount', connection: { nodeId: 'remap_3', outputKey: 'result' } } },
+        outputs: { uv: { type: 'vec2', label: 'Warped UV' } },
+        params:  { amount: 1.0, freq: 2.0, time_scale: 0.3 } },
+      { id: 'fbm_5', type: 'fbm', position: { x: 560, y: 180 },
+        inputs:  { uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'warp_4', outputKey: 'uv'   } },
+                   time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params:  { octaves: 5, lacunarity: 2.0, gain: 0.5, scale: 3.0, time_scale: 0.08 } },
+      { id: 'pal_6', type: 'palettePreset', position: { x: 800, y: 180 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_5', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '3' } },
+      { id: 'out_7', type: 'output', position: { x: 1040, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Square Pulse — squareLFO creates hard on/off brightness pulses on rings ──
+  squarePulse: {
+    label: 'Square Pulse',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 420 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Fast square LFO: hard on/off at 2 Hz
+      { id: 'lfo_2', type: 'squareLFO', position: { x: 280, y: 420 },
+        inputs:  { time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params:  { freq: 2.0, amplitude: 1.0, offset: 0.0 } },
+      // Remap square wave [-1,1] → [4, 12] for ring frequency modulation
+      { id: 'remap_3', type: 'remap', position: { x: 520, y: 420 },
+        inputs:  { value:  { type: 'float', label: 'Value', connection: { nodeId: 'lfo_2', outputKey: 'value' } },
+                   inMin:  { type: 'float', label: 'In Min' }, inMax:  { type: 'float', label: 'In Max' },
+                   outMin: { type: 'float', label: 'Out Min' }, outMax: { type: 'float', label: 'Out Max' } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params:  { inMin: -1.0, inMax: 1.0, outMin: 4.0, outMax: 12.0 } },
+      // Polar space → rings via fract
+      { id: 'polar_4', type: 'polarSpace', position: { x: 280, y: 200 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { uv: { type: 'vec2', label: 'Polar UV' }, r: { type: 'float', label: 'Radius' }, theta: { type: 'float', label: 'Angle' } },
+        params:  {} },
+      // Multiply radius by LFO-driven frequency
+      { id: 'mul_5', type: 'multiply', position: { x: 520, y: 200 },
+        inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'polar_4', outputKey: 'r'      } },
+                   b: { type: 'float', label: 'B', connection: { nodeId: 'remap_3', outputKey: 'result' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params:  {} },
+      // fract creates the concentric ring bands
+      { id: 'fract_6', type: 'fractRaw', position: { x: 760, y: 200 },
+        inputs:  { value: { type: 'float', label: 'Value', connection: { nodeId: 'mul_5', outputKey: 'result' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params:  {} },
+      { id: 'pal_7', type: 'palettePreset', position: { x: 980, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'fract_6', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '1' } },
+      { id: 'out_8', type: 'output', position: { x: 1200, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_7', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Loop: Ripple Warp — UV warped iteratively via LoopRippleStep ─────────────
+  // Shows the simplest wired loop: UV in → carry through ripple steps → UV out.
+  // The final warped UV drives a palette, giving a layered liquid distortion.
+  loopRippleWarp: {
+    label: 'Loop: Ripple Warp',
+    counter: 6,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 240 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'start_1', type: 'loopStart', position: { x: 220, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 6, carryType: 'vec2' },
+      },
+      {
+        id: 'ripple_2', type: 'loopRippleStep', position: { x: 430, y: 200 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'start_1', outputKey: 'carry' } } },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { scale: 3.0, speed: 1.0, strength: 0.12 },
+      },
+      {
+        id: 'end_3', type: 'loopEnd', position: { x: 640, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'ripple_2', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params:  {},
+      },
+      // Warped UV → length → palette
+      {
+        id: 'len_4', type: 'length', position: { x: 820, y: 240 },
+        inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_3', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params:  { scale: 1.0 },
+      },
+      {
+        id: 'pal_5', type: 'palettePreset', position: { x: 1000, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'len_4', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '3' },
+      },
+      {
+        id: 'out_6', type: 'output', position: { x: 1200, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_5', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Loop: Rotate Spiral — UV rotated + scaled each iteration ─────────────────
+  // LoopStart (vec2 UV) → LoopRotateStep (8×) → LoopEnd → length → palette.
+  // Produces a tight spiral that unwinds outward. Tweak angle and scale to taste.
+  loopRotateSpiral: {
+    label: 'Loop: Rotate Spiral',
+    counter: 6,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 240 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'start_1', type: 'loopStart', position: { x: 220, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 8, carryType: 'vec2' },
+      },
+      {
+        id: 'rot_2', type: 'loopRotateStep', position: { x: 430, y: 200 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'start_1', outputKey: 'carry' } } },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { angle: 0.3, scale: 1.02 },
+      },
+      {
+        id: 'end_3', type: 'loopEnd', position: { x: 640, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'rot_2', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params:  {},
+      },
+      {
+        id: 'len_4', type: 'length', position: { x: 820, y: 240 },
+        inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_3', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params:  { scale: 1.0 },
+      },
+      {
+        id: 'pal_5', type: 'palettePreset', position: { x: 1000, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'len_4', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '1' },
+      },
+      {
+        id: 'out_6', type: 'output', position: { x: 1200, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_5', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Loop: Float Accumulate — scalar build-up over iterations ──────────────────
+  // Demonstrates float carry: LoopStart (float, no input = starts at 0) →
+  // LoopFloatAccumulate (6×) → LoopEnd → palette.
+  // The float grows each iteration via sin(carry × scale + time × speed),
+  // producing a slowly oscillating scalar that drives palette hue.
+  loopFloatDemo: {
+    label: 'Loop: Float Accumulate',
+    counter: 5,
+    nodes: [
+      {
+        id: 'start_0', type: 'loopStart', position: { x: 80, y: 220 },
+        // No carry input — starts at float(0.0)
+        inputs:  { carry: { type: 'float', label: 'Initial value' } },
+        outputs: { carry: { type: 'float', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 6, carryType: 'float' },
+      },
+      {
+        id: 'acc_1', type: 'loopFloatAccumulate', position: { x: 300, y: 200 },
+        inputs:  { value: { type: 'float', label: 'Value', connection: { nodeId: 'start_0', outputKey: 'carry' } } },
+        outputs: { value: { type: 'float', label: 'Value out' } },
+        params:  { scale: 2.0, speed: 1.0, amplitude: 0.15 },
+      },
+      {
+        id: 'end_2', type: 'loopEnd', position: { x: 520, y: 220 },
+        inputs:  { carry: { type: 'float', label: '← Carry in', connection: { nodeId: 'acc_1', outputKey: 'value' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params:  {},
+      },
+      {
+        id: 'pal_3', type: 'palettePreset', position: { x: 720, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'end_2', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '2' },
+      },
+      {
+        id: 'out_4', type: 'output', position: { x: 940, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Loop: Chained Body — fold then ripple each iteration ─────────────────────
+  // Shows that multiple body nodes can be chained inside one loop.
+  // Each iteration: DomainFold collapses the space, then RippleStep warps it.
+  // The combined effect is much richer than either node alone.
+  loopChainedBody: {
+    label: 'Loop: Chained Body',
+    counter: 7,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 240 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'start_1', type: 'loopStart', position: { x: 220, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 5, carryType: 'vec2' },
+      },
+      // Body node 1: fold the domain
+      {
+        id: 'fold_2', type: 'loopDomainFold', position: { x: 420, y: 180 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'start_1', outputKey: 'carry' } } },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { scale: 1.8, offsetX: 0.5, offsetY: 0.3 },
+      },
+      // Body node 2: ripple the folded UV
+      {
+        id: 'ripple_3', type: 'loopRippleStep', position: { x: 620, y: 200 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'fold_2', outputKey: 'uv' } } },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { scale: 2.5, speed: 0.8, strength: 0.08 },
+      },
+      {
+        id: 'end_4', type: 'loopEnd', position: { x: 830, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'ripple_3', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params:  {},
+      },
+      {
+        id: 'len_5', type: 'length', position: { x: 1010, y: 240 },
+        inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_4', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params:  { scale: 1.0 },
+      },
+      {
+        id: 'pal_6', type: 'palettePreset', position: { x: 1190, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'len_5', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '4' },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1390, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Fractal Rings (New Loop) — color accumulation via LoopStart/End ──────────
+  // Uses LoopColorRingStep with a vec3 carry so color accumulates across iterations.
+  // Each iteration folds g_uv by (iter_index + 1) × scale, computes a ring glow,
+  // and adds palette color shifted by iter_index — true fractal rings via the
+  // wired pair system.  iter_index is auto-injected by the assembler, no wiring needed.
+  fractalRingsNewWired: {
+    label: 'Fractal Rings (New Loop)',
+    counter: 4,
+    nodes: [
+      {
+        id: 'start_0', type: 'loopStart', position: { x: 80, y: 220 },
+        inputs: { carry: { type: 'vec3', label: 'Initial value' } },
+        outputs: { carry: { type: 'vec3', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params: { iterations: 8, carryType: 'vec3' },
+      },
+      {
+        id: 'step_1', type: 'loopColorRingStep', position: { x: 320, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color in', connection: { nodeId: 'start_0', outputKey: 'carry' } } },
+        outputs: { color: { type: 'vec3', label: 'Color out' } },
+        params: { scale: 1.5, freq: 8.0, glow: 0.01, timeScale: 0.4, phaseStep: 0.4 },
+      },
+      {
+        id: 'end_2', type: 'loopEnd', position: { x: 560, y: 220 },
+        inputs:  { carry: { type: 'vec3', label: '← Carry in', connection: { nodeId: 'step_1', outputKey: 'color' } } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'out_3', type: 'output', position: { x: 780, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'end_2', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Loop: Zoom Tunnel — pure domain-fold zoom, no warp ───────────────────────
+  // Each iteration applies fract(uv * 1.8 + offset) - 0.5, doubling spatial
+  // frequency.  8 iterations produce a fractal zoom/tunnel without any ripple or
+  // rotation.  The slight asymmetric offset (0.3, 0.1) breaks the grid symmetry.
+  loopZoomTunnel: {
+    label: 'Loop: Zoom Tunnel',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 40, y: 240 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'start_1', type: 'loopStart', position: { x: 220, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 8, carryType: 'vec2' } },
+      { id: 'fold_2', type: 'loopDomainFold', position: { x: 430, y: 200 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'start_1', outputKey: 'carry' } } },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { scale: 1.8, offsetX: 0.3, offsetY: 0.1 } },
+      { id: 'end_3', type: 'loopEnd', position: { x: 640, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'fold_2', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } }, params: {} },
+      { id: 'len_4', type: 'length', position: { x: 830, y: 240 },
+        inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_3', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: { scale: 1.0 } },
+      { id: 'pal_5', type: 'palettePreset', position: { x: 1020, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'len_4', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '2' } },
+      { id: 'out_6', type: 'output', position: { x: 1220, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_5', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Loop: Animated Spin — Time wired to RotateStep angle ──────────────────────
+  // Demonstrates wiring an external value (Time) into a loop body's param socket.
+  // Each iteration rotates UV by the current time value, stacking rotations that
+  // evolve continuously — the pattern spins and morphs over time.
+  loopAnimatedSpin: {
+    label: 'Loop: Animated Spin',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 40, y: 200 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 },
+        inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'start_2', type: 'loopStart', position: { x: 240, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 6, carryType: 'vec2' } },
+      { id: 'rot_3', type: 'loopRotateStep', position: { x: 460, y: 200 },
+        inputs:  {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'start_2', outputKey: 'carry' } },
+          angle: { type: 'float', label: 'Angle', connection: { nodeId: 'time_1',  outputKey: 'time'  } },
+        },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { angle: 0.3, scale: 0.98 } },
+      { id: 'end_4', type: 'loopEnd', position: { x: 680, y: 220 },
+        inputs:  { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'rot_3', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } }, params: {} },
+      { id: 'len_5', type: 'length', position: { x: 870, y: 240 },
+        inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_4', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: { scale: 1.0 } },
+      { id: 'pal_6', type: 'palettePreset', position: { x: 1060, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'len_5', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '3' } },
+      { id: 'out_7', type: 'output', position: { x: 1260, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Loop: Two-Stage — RotateStep loop feeds UV into ColorRingStep loop ─────────
+  // Shows two chained loops where the first loop's output (warped UV) is fed as the
+  // UV source into the second loop's body.  Loop 1: vec2 carry, rotates UV 4×.
+  // Loop 2: vec3 carry, renders color rings on the warped UV 6×.
+  // The topo-sort correctly orders Loop1End before Loop2 processes its body.
+  loopTwoStage: {
+    label: 'Loop: Two-Stage',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 40, y: 220 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // ── Loop 1: rotate UV ──────────────────────────────────────────────────
+      { id: 'start1_1', type: 'loopStart', position: { x: 220, y: 200 },
+        inputs:  { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 4, carryType: 'vec2' } },
+      { id: 'rot_2', type: 'loopRotateStep', position: { x: 420, y: 180 },
+        inputs:  { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'start1_1', outputKey: 'carry' } } },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { angle: 0.4, scale: 0.97 } },
+      { id: 'end1_3', type: 'loopEnd', position: { x: 620, y: 200 },
+        inputs:  { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'rot_2', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } }, params: {} },
+      // ── Loop 2: color rings on warped UV ───────────────────────────────────
+      { id: 'start2_4', type: 'loopStart', position: { x: 820, y: 200 },
+        inputs:  { carry: { type: 'vec3', label: 'Initial value' } },
+        outputs: { carry: { type: 'vec3', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 6, carryType: 'vec3' } },
+      { id: 'ring_5', type: 'loopColorRingStep', position: { x: 1040, y: 180 },
+        inputs:  {
+          color: { type: 'vec3', label: 'Color in', connection: { nodeId: 'start2_4', outputKey: 'carry' } },
+          uv:    { type: 'vec2', label: 'UV',       connection: { nodeId: 'end1_3',   outputKey: 'result' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color out' } },
+        params:  { scale: 1.6, freq: 8.0, glow: 0.006, timeScale: 0.3, phaseStep: 0.5 } },
+      { id: 'end2_6', type: 'loopEnd', position: { x: 1280, y: 200 },
+        inputs:  { carry: { type: 'vec3', label: '← Carry in', connection: { nodeId: 'ring_5', outputKey: 'color' } } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_7', type: 'output', position: { x: 1500, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'end2_6', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Loop: Spatial Float — UV length seeds the float carry ──────────────────────
+  // UV distance (length of UV vector) becomes the initial carry value, so every
+  // pixel starts its accumulation from a different place.  The FloatAccumulate
+  // compounds sin oscillations from that seed, producing concentric patterns that
+  // morph over time.  Visually distinct from the uniform float demo.
+  loopSpatialFloat: {
+    label: 'Loop: Spatial Float',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 40, y: 220 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'len_1', type: 'length', position: { x: 220, y: 220 },
+        inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: { scale: 1.0 } },
+      { id: 'start_2', type: 'loopStart', position: { x: 420, y: 200 },
+        inputs:  { carry: { type: 'float', label: 'Initial value', connection: { nodeId: 'len_1', outputKey: 'output' } } },
+        outputs: { carry: { type: 'float', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 6, carryType: 'float' } },
+      { id: 'acc_3', type: 'loopFloatAccumulate', position: { x: 630, y: 180 },
+        inputs:  { value: { type: 'float', label: 'Value', connection: { nodeId: 'start_2', outputKey: 'carry' } } },
+        outputs: { value: { type: 'float', label: 'Value out' } },
+        params:  { scale: 2.5, speed: 0.6, amplitude: 0.12 } },
+      { id: 'end_4', type: 'loopEnd', position: { x: 840, y: 200 },
+        inputs:  { carry: { type: 'float', label: '← Carry in', connection: { nodeId: 'acc_3', outputKey: 'value' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
+      { id: 'pal_5', type: 'palettePreset', position: { x: 1040, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'end_4', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '1' } },
+      { id: 'out_6', type: 'output', position: { x: 1240, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_5', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Loop: Dense Rings — 14 iterations of ColorRingStep, tight spacing ──────────
+  // More iterations with higher frequency and tighter glow than fractalRingsNewWired.
+  // The higher phaseStep shifts palette hue rapidly across iterations producing
+  // a dense rainbow ring cloud.
+  loopDenseRings: {
+    label: 'Loop: Dense Rings',
+    counter: 4,
+    nodes: [
+      { id: 'start_0', type: 'loopStart', position: { x: 80, y: 220 },
+        inputs:  { carry: { type: 'vec3', label: 'Initial value' } },
+        outputs: { carry: { type: 'vec3', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 14, carryType: 'vec3' } },
+      { id: 'step_1', type: 'loopColorRingStep', position: { x: 310, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color in', connection: { nodeId: 'start_0', outputKey: 'carry' } } },
+        outputs: { color: { type: 'vec3', label: 'Color out' } },
+        params:  { scale: 2.0, freq: 14.0, glow: 0.003, timeScale: 0.15, phaseStep: 0.9 } },
+      { id: 'end_2', type: 'loopEnd', position: { x: 560, y: 220 },
+        inputs:  { carry: { type: 'vec3', label: '← Carry in', connection: { nodeId: 'step_1', outputKey: 'color' } } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_3', type: 'output', position: { x: 780, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'end_2', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Loop: Iter-Driven Scale — iter_index wired to DomainFold scale ─────────────
+  // Each iteration of the fold uses a DIFFERENT scale: iter_index + 1.2 (via an
+  // Add node), so early iterations fold loosely and later ones fold tightly.
+  // This creates a layered structure that differs fundamentally from a fixed scale.
+  loopIterScale: {
+    label: 'Loop: Iter-Driven Scale',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 40, y: 220 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'start_1', type: 'loopStart', position: { x: 220, y: 200 },
+        inputs:  { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
+        params:  { iterations: 7, carryType: 'vec2' } },
+      // Add 1.2 to iter_index so scale goes 1.2, 2.2, 3.2 … each iteration
+      { id: 'add_2', type: 'add', position: { x: 420, y: 340 },
+        inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'start_1', outputKey: 'iter_index' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params:  { b: 1.2 } },
+      { id: 'fold_3', type: 'loopDomainFold', position: { x: 440, y: 180 },
+        inputs:  {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'start_1', outputKey: 'carry'  } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'add_2',   outputKey: 'result' } },
+        },
+        outputs: { uv: { type: 'vec2', label: 'UV out' } },
+        params:  { scale: 1.8, offsetX: 0.2, offsetY: 0.15 } },
+      { id: 'end_4', type: 'loopEnd', position: { x: 660, y: 200 },
+        inputs:  { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'fold_3', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } }, params: {} },
+      { id: 'len_5', type: 'length', position: { x: 850, y: 240 },
+        inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_4', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: { scale: 1.0 } },
+      { id: 'pal_6', type: 'palettePreset', position: { x: 1040, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'len_5', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '4' } },
+      { id: 'out_7', type: 'output', position: { x: 1240, y: 200 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
         outputs: {}, params: {} },
     ],
   },

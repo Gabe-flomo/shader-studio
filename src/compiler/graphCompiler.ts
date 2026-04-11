@@ -46,14 +46,17 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
         errors: validation.errors,
         nodeOutputVars: EMPTY_OUTPUT_VARS,
         paramUniforms: {},
+        textureUniforms: {},
+        isStateful: false,
       };
     }
 
     // 3. Topological sort (main-pass nodes only)
-    const sortedNodes = topologicalSort(nodes, allInternalIds);
+    // Pass loopPairChains so loopStart is always ordered before its loopEnd.
+    const sortedNodes = topologicalSort(nodes, allInternalIds, loopPairChains);
 
     // 4. Assemble fragment shader
-    const { fragmentShader, nodeOutputVars, paramUniforms } =
+    const { fragmentShader, nodeOutputVars, paramUniforms, textureUniforms, isStateful } =
       generateFragmentShader(sortedNodes, nodes, allInternalIds, loopPairChains);
 
     return {
@@ -62,6 +65,8 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       success: true,
       nodeOutputVars,
       paramUniforms,
+      textureUniforms,
+      isStateful,
     };
   } catch (error) {
     return {
@@ -71,6 +76,8 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       errors: [error instanceof Error ? error.message : 'Unknown compilation error'],
       nodeOutputVars: EMPTY_OUTPUT_VARS,
       paramUniforms: {},
+      textureUniforms: {},
+      isStateful: false,
     };
   }
 }

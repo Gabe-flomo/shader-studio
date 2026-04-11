@@ -1,9 +1,12 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
 import { socketRegistry } from './socketRegistry';
+import { Minimap } from './Minimap';
+import { collectLoopPairChains } from '../../compiler/topoSort';
+import { loadShortcutMap, displayCombo } from '../../hooks/useShortcuts';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 240;
@@ -38,6 +41,7 @@ const ZOOM_MAX = 2.5;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const nodes                 = useNodeGraphStore(s => s.nodes);
+  const compilationErrors     = useNodeGraphStore(s => s.compilationErrors);
   const connectNodes          = useNodeGraphStore(s => s.connectNodes);
   const autoLayout            = useNodeGraphStore(s => s.autoLayout);
   const setPreviewNodeId      = useNodeGraphStore(s => s.setPreviewNodeId);
@@ -54,6 +58,53 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         ? (previewNode.params.label as string) || previewDef.label
         : previewDef.label)
     : null;
+
+  const groupNodes          = useNodeGraphStore(s => s.groupNodes);
+  const wrapInLoop          = useNodeGraphStore(s => s.wrapInLoop);
+  const activeGroupId       = useNodeGraphStore(s => s.activeGroupId);
+  const setActiveGroupId    = useNodeGraphStore(s => s.setActiveGroupId);
+  const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
+  const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
+
+  // When drilling into a group, show its subgraph nodes instead
+  const displayNodes = React.useMemo(() => {
+    if (!activeGroupId) return nodes;
+    const groupNode = nodes.find(n => n.id === activeGroupId);
+    const subgraph = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+    return subgraph?.nodes ?? nodes;
+  }, [nodes, activeGroupId]);
+
+  // Compute loop regions for the visual overlay (dashed bounding boxes behind body nodes)
+  const loopRegions = useMemo(() => {
+    const chains = collectLoopPairChains(displayNodes);
+    return Array.from(chains.entries()).map(([endId, chain]) => ({
+      endId,
+      bodyIds:    chain.bodyIds,
+      iterations: chain.iterations,
+      carryType:  chain.carryType,
+    })).filter(r => r.bodyIds.length > 0);
+  }, [displayNodes]);
+
+  const errorNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const err of compilationErrors) {
+      // Format: "Node <id> [source:<sourceId>]: ..." or "Node <id>: ..."
+      const match = err.match(/^Node (\S+?)(?:\s+\[source:(\S+?)\])?:/);
+      if (match) {
+        ids.add(match[1]);
+        if (match[2]) ids.add(match[2]);
+      }
+    }
+    return ids;
+  }, [compilationErrors]);
+
+  const activeGroupLabel = React.useMemo(() => {
+    if (!activeGroupId) return null;
+    const g = nodes.find(n => n.id === activeGroupId);
+    return typeof g?.params?.label === 'string' ? g.params.label : 'Group';
+  }, [nodes, activeGroupId]);
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   // canvasEl is stored in state so getSocketPos always has a stable reference.
@@ -75,6 +126,19 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     const id = requestAnimationFrame(() => setTick(t => t + 1));
     return () => cancelAnimationFrame(id);
   }, [nodes]);
+
+  // ── Minimap toggle (persisted) ──────────────────────────────────────────────
+  const [showMinimap, setShowMinimap] = useState(() => {
+    try { return localStorage.getItem('shader-studio:minimap') !== 'false'; }
+    catch { return true; }
+  });
+  const toggleMinimap = useCallback(() => {
+    setShowMinimap(prev => {
+      const next = !prev;
+      try { localStorage.setItem('shader-studio:minimap', String(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   // ── Pan / zoom state ────────────────────────────────────────────────────────
   const [zoom, setZoom] = useState(1);
@@ -110,6 +174,16 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       if (e.code === 'AltLeft' || e.code === 'AltRight') {
         optionDown.current = true;
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+      }
+      // Ctrl/Cmd+G → group selected nodes
+      if ((e.metaKey || e.ctrlKey) && e.key === 'g'
+          && document.activeElement?.tagName !== 'INPUT'
+          && document.activeElement?.tagName !== 'TEXTAREA') {
+        const ids = useNodeGraphStore.getState().selectedNodeIds;
+        if (ids.length >= 2) {
+          e.preventDefault();
+          useNodeGraphStore.getState().groupNodes(ids, 'Group');
+        }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -277,6 +351,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     setDragConnection(null);
   };
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    // Determine if a group node was right-clicked
+    const target = e.target as HTMLElement;
+    const nodeEl = target.closest('[data-node-id]') as HTMLElement | null;
+    const nodeId = nodeEl?.dataset.nodeId ?? null;
+    setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
+  }, []);
+
   // ── Fit to screen helper ────────────────────────────────────────────────────
   const handleFitView = useCallback(() => {
     if (!nodes.length || !canvasRef.current) return;
@@ -305,7 +388,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const highlightedIds: Set<string> | null = React.useMemo(() => {
     if (!nodeHighlightFilter) return null;
     const matching = new Set<string>();
-    for (const node of nodes) {
+    for (const node of displayNodes) {
       const outputs = Object.values(node.outputs);
       const inputs  = Object.values(node.inputs);
       switch (nodeHighlightFilter) {
@@ -331,6 +414,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       onMouseUp={handleMouseUp}
       onMouseDown={handleCanvasMouseDown}
       onWheel={handleWheel}
+      onContextMenu={handleContextMenu}
+      onClick={() => setContextMenu(null)}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
       onDrop={e => {
         e.preventDefault();
@@ -437,7 +522,129 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         >
           ⊞ Auto Layout
         </button>
+
+        <button
+          onClick={toggleMinimap}
+          title={showMinimap ? 'Hide minimap' : 'Show minimap'}
+          style={{ ...toolbarBtnStyle, opacity: showMinimap ? 1 : 0.45 }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+        >
+          [M]
+        </button>
       </div>
+
+      {/* Breadcrumb when inside a group */}
+      {activeGroupId && activeGroupLabel && (
+        <div style={{
+          position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+          background: '#1e1e2e', border: '1px solid #cba6f755',
+          color: '#cba6f7', padding: '5px 14px', borderRadius: '8px',
+          fontSize: '11px', zIndex: 20, display: 'flex', alignItems: 'center',
+          gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+        }}>
+          <button
+            onClick={() => setActiveGroupId(null)}
+            style={{ background: 'none', border: 'none', color: '#89b4fa', cursor: 'pointer', fontSize: '11px', padding: 0 }}
+          >
+            Root
+          </button>
+          <span style={{ color: '#585b70' }}>›</span>
+          <strong>{activeGroupLabel}</strong>
+        </div>
+      )}
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'fixed', left: contextMenu.x, top: contextMenu.y,
+            background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+            padding: '4px 0', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+            minWidth: '160px', fontSize: '12px',
+          }}
+        >
+          {(() => {
+            const clickedNode = contextMenu.nodeId ? nodes.find(n => n.id === contextMenu.nodeId) : null;
+            const isGroup = clickedNode?.type === 'group';
+            const ids = useNodeGraphStore.getState().selectedNodeIds;
+            const canGroup = ids.length >= 2 && !activeGroupId;
+            const loopForbidden = ['output', 'vec4Output', 'loopStart', 'loopEnd'];
+            const canWrap = ids.length >= 1 && !activeGroupId &&
+              !ids.some(id => loopForbidden.includes(nodes.find(n => n.id === id)?.type ?? ''));
+            return (
+              <>
+                {canGroup && (
+                  <button style={ctxBtnStyle} onClick={() => {
+                    groupNodes(ids, 'Group');
+                    setContextMenu(null);
+                  }}>
+                    Group Selection <span style={{ color: '#585b70', fontSize: '10px' }}>⌘G</span>
+                  </button>
+                )}
+                {canWrap && (
+                  <button style={ctxBtnStyle} onClick={() => {
+                    wrapInLoop(ids);
+                    setContextMenu(null);
+                  }}>
+                    Wrap in Loop <span style={{ color: '#585b70', fontSize: '10px' }}>{displayCombo(loadShortcutMap()['wrapInLoop'] ?? 'cmd+l')}</span>
+                  </button>
+                )}
+                {isGroup && clickedNode && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      setActiveGroupId(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Enter Group
+                    </button>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      const label = window.prompt('Group name:', typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group');
+                      if (label !== null) updateNodeParams(clickedNode.id, { label });
+                      setContextMenu(null);
+                    }}>
+                      Rename Group
+                    </button>
+                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                      ungroupNode(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Ungroup
+                    </button>
+                  </>
+                )}
+                {!canGroup && !canWrap && !isGroup && (
+                  <div style={{ padding: '6px 12px', color: '#585b70', fontSize: '11px' }}>
+                    Select nodes to group or wrap
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Minimap overlay — screen space, bottom-right */}
+      {showMinimap && (
+        <Minimap
+          nodes={nodes}
+          pan={pan}
+          zoom={zoom}
+          viewportWidth={canvasEl?.clientWidth ?? 800}
+          viewportHeight={canvasEl?.clientHeight ?? 600}
+          onPanTo={(worldX, worldY) => {
+            const vw = canvasEl?.clientWidth  ?? 800;
+            const vh = canvasEl?.clientHeight ?? 600;
+            setPan({
+              x: -worldX * zoom + vw / 2,
+              y: -worldY * zoom + vh / 2,
+            });
+          }}
+        />
+      )}
 
       {/* ── World-space container — receives pan+zoom transform ── */}
       <div
@@ -463,10 +670,50 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             overflow: 'visible',
           }}
         >
-          {nodes.map(node =>
+          {/* Loop region overlays — drawn behind connection lines */}
+          {loopRegions.map(({ endId, bodyIds, iterations, carryType }) => {
+            const bodyNodes = displayNodes.filter(n => bodyIds.includes(n.id));
+            if (bodyNodes.length === 0) return null;
+            const pad = 20;
+            const nodeH = 180; // approximate node card height
+            const xs = bodyNodes.map(n => n.position.x);
+            const ys = bodyNodes.map(n => n.position.y);
+            const rx = Math.min(...xs) - pad;
+            const ry = Math.min(...ys) - pad;
+            const rw = Math.max(...xs) + NODE_WIDTH + pad - rx;
+            const rh = Math.max(...ys) + nodeH + pad - ry;
+            const color =
+              carryType === 'vec3' ? '#cba6f7' :
+              carryType === 'float' ? '#f9e2af' :
+              carryType === 'vec4' ? '#a6e3a1' :
+              '#89b4fa'; // vec2
+            return (
+              <g key={endId}>
+                <rect
+                  x={rx} y={ry} width={rw} height={rh}
+                  rx={10}
+                  fill={color + '0d'}
+                  stroke={color + '55'}
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                />
+                <text
+                  x={rx + 10} y={ry + 16}
+                  fontSize={10}
+                  fill={color + 'aa'}
+                  fontFamily="monospace"
+                  style={{ pointerEvents: 'none', userSelect: 'none' }}
+                >
+                  loop × {iterations}
+                </text>
+              </g>
+            );
+          })}
+
+          {displayNodes.map(node =>
             Object.entries(node.inputs).map(([inputKey, input]) => {
               if (!input.connection) return null;
-              const sourceNode = nodes.find(n => n.id === input.connection!.nodeId);
+              const sourceNode = displayNodes.find(n => n.id === input.connection!.nodeId);
               if (!sourceNode) return null;
 
               const fromPos = getSocketPos(input.connection.nodeId, 'out', input.connection.outputKey, canvasEl, zoom, pan);
@@ -497,7 +744,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         </svg>
 
         {/* Node cards — positioned in world space */}
-        {nodes.map(node => (
+        {displayNodes.map(node => (
           <NodeComponent
             key={node.id}
             node={node}
@@ -506,12 +753,26 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             draggingType={draggingType}
             zoom={zoom}
             dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
+            onEnterGroup={setActiveGroupId}
+            hasError={errorNodeIds.has(node.id)}
           />
         ))}
       </div>
     </div>
   );
 }
+
+const ctxBtnStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  background: 'none',
+  border: 'none',
+  color: '#cdd6f4',
+  padding: '6px 12px',
+  textAlign: 'left',
+  cursor: 'pointer',
+  fontSize: '12px',
+};
 
 const toolbarBtnStyle: React.CSSProperties = {
   background: '#313244',

@@ -12,6 +12,16 @@ export interface CompilationResult {
    * Slider changes push new values here instead of triggering a recompile.
    */
   paramUniforms: Record<string, number>;
+  /**
+   * Maps sampler2D uniform name (e.g. "u_tex_nodeId") → nodeId.
+   * ShaderCanvas uses this to bind THREE.Texture objects for TextureInput nodes.
+   */
+  textureUniforms: Record<string, string>;
+  /**
+   * True when any PrevFrame node exists in the graph — ShaderCanvas enables
+   * ping-pong render targets when this is set.
+   */
+  isStateful: boolean;
 }
 
 export const VERTEX_SHADER = `varying vec2 vUv;

@@ -81,6 +81,64 @@ export const MouseNode: NodeDefinition = {
   },
 };
 
+export const PrevFrameNode: NodeDefinition = {
+  type: 'prevFrame',
+  label: 'Prev Frame',
+  category: 'Sources',
+  description: 'Samples the previous frame\'s rendered output. Enables stateful effects like trails, reaction-diffusion, and fluid simulation.',
+  inputs: {
+    uv: { type: 'vec2', label: 'UV' },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+    uv:    { type: 'vec2',  label: 'UV (pass-through)' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const uvVar = inputVars.uv ?? 'g_uv';
+    // Convert centered UV back to [0,1] for texture sampling
+    const samplerUV = `(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
+    return {
+      code: [
+        `    vec4 ${id}_prev = texture2D(u_prevFrame, clamp(${samplerUV}, 0.0, 1.0));\n`,
+        `    vec3 ${id}_color = ${id}_prev.rgb;\n`,
+        `    float ${id}_alpha = ${id}_prev.a;\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar },
+    };
+  },
+};
+
+export const TextureInputNode: NodeDefinition = {
+  type: 'textureInput',
+  label: 'Texture Input',
+  category: 'Sources',
+  description: 'Samples an image texture loaded from a file. Wire to UV for sampling position.',
+  inputs: {
+    uv: { type: 'vec2', label: 'UV' },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+    uv:    { type: 'vec2',  label: 'UV (pass-through)' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uvVar = inputVars.uv ?? 'g_uv';
+    // Map from centered [-aspect,aspect] × [-1,1] UV back to [0,1] UV for texture sampling
+    const samplerUV = `(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
+    return {
+      code: [
+        `    vec4 ${id}_sample = texture2D(u_tex_${id}, clamp(${samplerUV}, 0.0, 1.0));\n`,
+        `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
+        `    float ${id}_alpha = ${id}_sample.a;\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar },
+    };
+  },
+};
+
 export const ConstantNode: NodeDefinition = {
   type: 'constant',
   label: 'Constant',

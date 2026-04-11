@@ -22,7 +22,8 @@ This document explores the technical foundations underlying each node type, the 
 4. [Distance Field Rendering](#distance-field-rendering)
 5. [Parametric Color Spaces](#parametric-color-spaces)
 6. [Iterative Accumulation Patterns](#iterative-accumulation-patterns)
-7. [Procedural Noise Techniques](#procedural-noise-techniques)
+7. [The Wired Loop System](#the-wired-loop-system)
+8. [Procedural Noise Techniques](#procedural-noise-techniques)
 8. [Domain Transformation Operations](#domain-transformation-operations)
 9. [Advanced Composition Techniques](#advanced-composition-techniques)
 10. [Complete Effect Architectures](#complete-effect-architectures)
@@ -876,6 +877,153 @@ g = 0.01 / abs(g);
 6. Output: `@color` contains accumulated result
 
 This is the escape hatch for completely custom iteration logic.
+
+---
+
+## The Wired Loop System
+
+The LoopStart / LoopEnd pair is the most flexible looping tool. Unlike the compound nodes (Fractal Loop, For Loop), it lets you visually wire any combination of body nodes together and see the exact data flow between iterations.
+
+### The Core Idea: The Carry
+
+Every loop needs a value that travels forward through time — a running state that each iteration reads, transforms, and hands to the next. In the wired loop system this is called the **carry**.
+
+```
+                ┌─────────────────────────────────────┐
+                │            one iteration             │
+                │                                      │
+  initial ──→ [LoopStart] ──carry──→ [Body A] ──→ [Body B] ──carry──→ [LoopEnd] ──→ result
+  value              ↑                                              │
+                     └──────────────────────────────────────────────┘
+                          carry fed back at start of next iteration
+```
+
+After N iterations the final carry value comes out of LoopEnd as `result`.
+
+**The carry type determines what kind of value travels through the loop:**
+
+| Carry Type | Use Case |
+|---|---|
+| `vec2` | UV coordinates — transform space each iteration |
+| `vec3` | Accumulated color — add color each iteration |
+| `float` | Accumulated scalar — sum/oscillate a number each iteration |
+| `vec4` | Color + alpha, or any 4-component state |
+
+Set the carry type on the **LoopStart** node via the *Carry Type* dropdown.
+
+---
+
+### Building a Loop: Step by Step
+
+**Step 1 — Add LoopStart**
+Set *Iterations* (how many times the body runs) and *Carry Type* (what value travels through).
+
+If you want to loop over UV space, wire a **UV** node into LoopStart's *Initial value* input and set Carry Type to `Vec2`.
+
+If you want to accumulate color from nothing, leave *Initial value* unwired (starts at zero) and set Carry Type to `Vec3`.
+
+**Step 2 — Add body nodes**
+These are the nodes that run *every iteration*. Wire LoopStart's *Carry →* output into the body node's carry input.
+
+**Step 3 — Chain body nodes (optional)**
+You can wire multiple body nodes in sequence. The output of each feeds the input of the next. All of them run once per iteration.
+
+```
+[LoopStart] ──→ [Domain Fold] ──→ [Ripple Step] ──→ [LoopEnd]
+```
+
+**Step 4 — Add LoopEnd**
+Wire the last body node's output into LoopEnd's *← Carry in*. The loop is complete.
+
+**Step 5 — Use the result**
+LoopEnd outputs `result` — the final carry value. Feed it into whatever comes next: a length node, a palette, the output node, etc.
+
+---
+
+### Pattern 1: UV Transformation (vec2 carry)
+
+Use this when you want to repeatedly warp or fold the UV coordinate space.
+
+```
+[UV] ──→ [LoopStart vec2, 6 iters] ──→ [Ripple Step] ──→ [LoopEnd]
+                                                                  ↓
+                                              [Length] ──→ [Palette] ──→ [Output]
+```
+
+Each iteration the UV is warped. After 6 passes the result is a heavily distorted coordinate. Taking the `length` of that folded UV and feeding it into a palette produces banded color patterns.
+
+**Body nodes for UV carry:** Ripple Step, Rotate Step, Domain Fold
+
+**What to expect:** These loops produce static patterns that evolve with time as the speed/warp parameters animate. The geometry is determined by the folding math; the color comes from what you do *after* the loop.
+
+---
+
+### Pattern 2: Color Accumulation (vec3 carry)
+
+Use this when you want each iteration to *add* something to a running color total.
+
+```
+[LoopStart vec3, 8 iters] ──→ [Color Ring Step] ──→ [LoopEnd] ──→ [Output]
+     (starts at black)                                    ↓
+                                                    accumulated color
+```
+
+Each iteration `Color Ring Step`:
+1. Folds the UV by `(iteration_number + 1) × scale` — a different fold each pass
+2. Computes a ring glow at the folded coordinate
+3. Adds that glow × palette color to the running carry
+
+After 8 iterations the carry holds the sum of all 8 contributions — a rich layered color field.
+
+**The key difference from UV loops:** The carry is color, not position. The loop doesn't transform space; it *paints* into an accumulator.
+
+---
+
+### iter_index: The Iteration Counter
+
+LoopStart has an **Iter Index** output — a float that counts `0, 1, 2, 3...` as the loop runs. Body nodes can read this to create per-iteration variation.
+
+`Color Ring Step` uses iter_index internally to:
+- Scale the UV fold differently each pass: `fract(uv × (iter + 1) × scale)`
+- Shift the palette phase each pass: `palette(d + iter × phaseStep + time × timeScale)`
+
+This is what makes each "ring layer" a different color rather than all the same.
+
+You can also wire iter_index to the animatable param sockets of any body node to create explicit per-iteration variation — for example, increasing `strength` on a Ripple Step as the loop progresses.
+
+---
+
+### Animating Parameters
+
+All body node params (scale, frequency, glow, etc.) have corresponding **float input sockets**. When a socket is connected, it overrides the slider for that value.
+
+This means you can drive any parameter with:
+- A **Sine LFO** for smooth oscillation
+- A **time**-based expression for fixed-rate change
+- Another node's output for complex relationships
+
+```
+[Sine LFO] ──scale──→ [Ripple Step] ──→ [LoopEnd]
+                              ↑
+                    scale slider becomes inactive
+                    (shows "wired ↑" indicator)
+```
+
+When the socket is disconnected the slider takes over again — no wiring cleanup needed.
+
+---
+
+### Choosing the Right Loop
+
+| You want to... | Use | Carry type |
+|---|---|---|
+| Warp / fold UV space | Ripple Step, Rotate Step, Domain Fold | `vec2` |
+| Build up layered color from rings | Color Ring Step | `vec3` |
+| Oscillate / accumulate a scalar | Float Accumulate | `float` |
+| Stack multiple transforms per pass | Chain body nodes | any |
+| Full control over GLSL | For Loop node | — |
+
+**Load the example graphs** ("Loop: Ripple Warp", "Loop: Rotate Spiral", "Loop: Float Accumulate", "Loop: Chained Body", "Fractal Rings (New Loop)") to see each pattern running.
 
 ---
 
