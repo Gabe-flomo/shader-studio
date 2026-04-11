@@ -15,6 +15,16 @@ interface Props {
   node: GraphNode;
   onStartConnection: (nodeId: string, outputKey: string, event: React.MouseEvent) => void;
   onEndConnection: (nodeId: string, inputKey: string) => void;
+  /** Mobile tap-to-connect: called when user taps an output socket */
+  onTapOutputSocket?: (nodeId: string, outputKey: string) => void;
+  /** Mobile tap-to-connect: called when user taps an input socket to complete a pending connection */
+  onTapInputSocket?: (nodeId: string, inputKey: string) => void;
+  /** Pending mobile connection in progress (for visual highlighting) */
+  pendingMobileConnection?: { sourceNodeId: string; sourceOutputKey: string; fromPos: { x: number; y: number } } | null;
+  /** Output type of the pending mobile connection (for compatibility highlighting) */
+  pendingMobileType?: DataType | null;
+  /** Whether the current device has touch input */
+  isTouchDevice?: boolean;
   draggingType?: DataType | null;
   zoom?: number;
   /** When a highlight filter is active, non-matching nodes are dimmed */
@@ -206,7 +216,7 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
@@ -386,9 +396,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
               <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
               <div
+                data-socket="out"
                 ref={el => { registerSocket(node.id, 'out', key, el); }}
                 onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                style={{ width: 12, height: 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: '-6px' }}
+                onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
+                style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation', boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key ? `0 0 0 3px ${TYPE_COLORS[out.type] ?? '#888'}, 0 0 12px ${TYPE_COLORS[out.type] ?? '#888'}` : undefined }}
               />
             </div>
           ))}
@@ -450,6 +462,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         {/* Header */}
         <div
           onMouseDown={handleScopeHeaderMouseDown}
+          onTouchStart={handleHeaderTouchStart}
           style={{
             background: '#313244', borderRadius: '6px 6px 0 0',
             padding: '5px 10px', display: 'flex', justifyContent: 'space-between',
@@ -516,12 +529,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 0 0 10px' }}>
             <span style={{ fontSize: '10px', color: '#a6adc8' }}>value</span>
             <div
+              data-socket="out"
               ref={el => { registerSocket(node.id, 'out', 'value', el); }}
               onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, 'value', e); }}
+              onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, 'value'); }}
               style={{
-                width: 12, height: 12, borderRadius: '50%',
+                width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%',
                 background: TYPE_COLORS['float'], border: `2px solid ${TYPE_COLORS['float']}`,
-                cursor: 'crosshair', flexShrink: 0, marginRight: '-6px',
+                cursor: 'crosshair', flexShrink: 0, marginRight: isTouchDevice ? '-11px' : '-6px',
+                touchAction: 'manipulation',
+                boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === 'value' ? `0 0 0 3px ${TYPE_COLORS['float']}, 0 0 12px ${TYPE_COLORS['float']}` : undefined,
               }}
             />
           </div>
@@ -680,13 +697,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '10px', color: '#a6adc8' }}>{port.label}</span>
                 <div
+                  data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', port.key, el); }}
                   onMouseDown={e => onStartConnection(node.id, port.key, e)}
+                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, port.key); }}
                   style={{
-                    width: 10, height: 10, borderRadius: '50%',
+                    width: isTouchDevice ? 20 : 10, height: isTouchDevice ? 20 : 10, borderRadius: '50%',
                     background: TYPE_COLORS[port.type] ?? '#888',
                     cursor: 'crosshair',
-                    position: 'relative', right: -14,
+                    position: 'relative', right: isTouchDevice ? -20 : -14,
+                    touchAction: 'manipulation',
+                    boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === port.key ? `0 0 0 3px ${TYPE_COLORS[port.type] ?? '#888'}, 0 0 10px ${TYPE_COLORS[port.type] ?? '#888'}` : undefined,
                   }}
                 />
               </div>
@@ -814,6 +835,47 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
     window.addEventListener('selectstart', suppressSelect);
   };
 
+  // Touch drag handler for node header (mobile node repositioning)
+  const handleHeaderTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    const touch = e.touches[0];
+    dragOffset.current = {
+      x: touch.clientX / zoom - node.position.x,
+      y: touch.clientY / zoom - node.position.y,
+    };
+    let hasDragged = false;
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+
+    const handleTouchMove = (ev: TouchEvent) => {
+      const t = ev.touches[0];
+      if (!t || !dragOffset.current) return;
+      if (!hasDragged && (Math.abs(t.clientX - startX) > 5 || Math.abs(t.clientY - startY) > 5)) {
+        hasDragged = true;
+      }
+      if (hasDragged) {
+        ev.preventDefault();
+        updateNodePosition(node.id, {
+          x: t.clientX / zoom - dragOffset.current.x,
+          y: t.clientY / zoom - dragOffset.current.y,
+        });
+      }
+    };
+
+    const handleTouchEnd = () => {
+      dragOffset.current = null;
+      if (!hasDragged) {
+        setSelectedNodeId(isSelected ? null : node.id);
+        selectNode(node.id, false);
+      }
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+  };
+
   const setFloat = (key: string, raw: string) => {
     const v = parseFloat(raw);
     if (!isNaN(v)) updateNodeParams(node.id, { [key]: v }, { immediate: true });
@@ -937,6 +999,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
       {/* Header */}
       <div
         onMouseDown={handleHeaderMouseDown}
+        onTouchStart={handleHeaderTouchStart}
         onMouseEnter={() => {
           tooltipTimerRef.current = setTimeout(() => setShowNodeTooltip(true), 1200);
         }}
@@ -947,7 +1010,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
         style={{
           background: '#313244',
           borderRadius: showCode ? '8px 8px 0 0' : '8px 8px 0 0',
-          padding: '6px 10px',
+          padding: isTouchDevice ? '10px 10px' : '6px 10px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -956,6 +1019,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
           fontSize: '12px',
           letterSpacing: '0.03em',
           position: 'relative',
+          minHeight: isTouchDevice ? '44px' : undefined,
         }}
       >
         <span
@@ -1219,30 +1283,44 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
             socketOpacity = compat ? 1 : 0.25;
             socketGlow = compat ? `0 0 8px ${TYPE_COLORS[input.type] || '#888'}` : undefined;
           }
+          // Mobile pending-connection highlight
+          const pendingCompat = pendingMobileType
+            ? typesCompatible(pendingMobileType as DataType, input.type as DataType)
+            : false;
+          if (pendingMobileConnection && !draggingType) {
+            socketOpacity = pendingCompat ? 1 : 0.25;
+            socketGlow = pendingCompat ? `0 0 10px ${TYPE_COLORS[input.type] || '#888'}` : undefined;
+          }
+
+          const socketSize = isTouchDevice ? '22px' : '12px';
+          const socketMarginLeft = isTouchDevice ? '-11px' : '-6px';
+          const socketMarginRight = isTouchDevice ? '8px' : '8px';
 
           const isHovered = hoveredInput === key;
 
           return (
             <div
               key={key}
-              style={{ display: 'flex', alignItems: 'center', padding: '3px 10px 3px 0', position: 'relative' }}
+              style={{ display: 'flex', alignItems: 'center', padding: isTouchDevice ? '6px 10px 6px 0' : '3px 10px 3px 0', position: 'relative' }}
             >
               {/* Socket dot + disconnect */}
               <div
+                data-socket="in"
                 ref={el => registerSocket(node.id, 'in', key, el)}
                 style={{
-                  width: '12px',
-                  height: '12px',
+                  width: socketSize,
+                  height: socketSize,
                   borderRadius: '50%',
                   background: isConnected ? (TYPE_COLORS[input.type] || '#888') : '#333',
                   border: `2px solid ${TYPE_COLORS[input.type] || '#888'}`,
-                  marginRight: '8px',
+                  marginRight: socketMarginRight,
                   flexShrink: 0,
-                  marginLeft: '-6px',
+                  marginLeft: socketMarginLeft,
                   cursor: 'pointer',
                   opacity: socketOpacity,
                   boxShadow: socketGlow,
                   transition: 'box-shadow 0.1s, opacity 0.1s',
+                  touchAction: 'manipulation',
                 }}
                 onMouseEnter={() => setHoveredInput(key)}
                 onMouseLeave={() => setHoveredInput(null)}
@@ -1252,6 +1330,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
                     disconnectInput(node.id, key);
                   } else {
                     onEndConnection(node.id, key);
+                  }
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (pendingMobileConnection) {
+                    // Complete the pending connection (replaces existing if connected)
+                    onTapInputSocket?.(node.id, key);
+                  } else if (isConnected) {
+                    disconnectInput(node.id, key);
                   }
                 }}
               />
@@ -1298,7 +1386,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
                 />
               ) : (
                 <span
-                  style={{ color: '#a6adc8', fontSize: '11px', cursor: 'pointer', flex: 1, opacity: socketOpacity }}
+                  style={{ color: '#a6adc8', fontSize: isTouchDevice ? '13px' : '11px', cursor: 'pointer', flex: 1, opacity: socketOpacity }}
                   onMouseUp={(e) => {
                     e.stopPropagation();
                     if (isConnected) {
@@ -1307,14 +1395,24 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
                       onEndConnection(node.id, key);
                     }
                   }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (pendingMobileConnection) {
+                      onTapInputSocket?.(node.id, key);
+                    } else if (isConnected) {
+                      disconnectInput(node.id, key);
+                    }
+                  }}
                 >
                   {slotName}
                 </span>
               )}
               {isConnected && (
                 <span
-                  style={{ marginLeft: 'auto', color: '#585b70', fontSize: '10px', paddingRight: '6px', cursor: 'pointer' }}
+                  style={{ marginLeft: 'auto', color: '#585b70', fontSize: isTouchDevice ? '14px' : '10px', padding: isTouchDevice ? '4px 8px' : '0 6px 0 0', cursor: 'pointer', touchAction: 'manipulation' }}
                   onMouseUp={(e) => { e.stopPropagation(); disconnectInput(node.id, key); }}
+                  onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); disconnectInput(node.id, key); }}
                 >
                   ×
                 </span>
@@ -1638,21 +1736,32 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, draggi
               )}
               <span style={{ color: '#a6adc8', fontSize: '11px' }}>{output.label}</span>
               <div
+                data-socket="out"
                 ref={el => registerSocket(node.id, 'out', key, el)}
                 onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                onTouchEnd={e => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onTapOutputSocket?.(node.id, key);
+                }}
                 onMouseEnter={() => setHoveredOutput(key)}
                 onMouseLeave={() => setHoveredOutput(null)}
                 title={`${output.label} (${output.type})`}
                 style={{
-                  width: '12px',
-                  height: '12px',
+                  width: isTouchDevice ? '22px' : '12px',
+                  height: isTouchDevice ? '22px' : '12px',
                   borderRadius: '50%',
                   background: TYPE_COLORS[output.type] || '#888',
                   border: `2px solid ${TYPE_COLORS[output.type] || '#888'}`,
                   marginLeft: '8px',
                   flexShrink: 0,
-                  marginRight: '-6px',
+                  marginRight: isTouchDevice ? '-11px' : '-6px',
                   cursor: 'crosshair',
+                  touchAction: 'manipulation',
+                  boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key
+                    ? `0 0 0 3px ${TYPE_COLORS[output.type] || '#888'}, 0 0 12px ${TYPE_COLORS[output.type] || '#888'}`
+                    : undefined,
+                  transition: 'box-shadow 0.15s',
                 }}
               />
               {/* Hover tooltip for output socket */}
