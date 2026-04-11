@@ -409,6 +409,47 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     );
   }
 
+  // Touch drag handler for node header — declared early so scope node can use it too
+  const handleHeaderTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    const touch = e.touches[0];
+    dragOffset.current = {
+      x: touch.clientX / zoom - node.position.x,
+      y: touch.clientY / zoom - node.position.y,
+    };
+    let hasDragged = false;
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+
+    const handleTouchMove = (ev: TouchEvent) => {
+      const t = ev.touches[0];
+      if (!t || !dragOffset.current) return;
+      if (!hasDragged && (Math.abs(t.clientX - startX) > 5 || Math.abs(t.clientY - startY) > 5)) {
+        hasDragged = true;
+      }
+      if (hasDragged) {
+        ev.preventDefault();
+        updateNodePosition(node.id, {
+          x: t.clientX / zoom - dragOffset.current.x,
+          y: t.clientY / zoom - dragOffset.current.y,
+        });
+      }
+    };
+
+    const handleTouchEnd = () => {
+      dragOffset.current = null;
+      if (!hasDragged) {
+        setSelectedNodeId(isSelected ? null : node.id);
+        selectNode(node.id, false);
+      }
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+  };
+
   const handleScopeHeaderMouseDown = (e: React.MouseEvent) => {
     if (e.button === 2) return;
     e.stopPropagation();
@@ -834,48 +875,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('selectstart', suppressSelect);
   };
-
-  // Touch drag handler for node header (mobile node repositioning)
-  const handleHeaderTouchStart = (e: React.TouchEvent) => {
-    e.stopPropagation();
-    const touch = e.touches[0];
-    dragOffset.current = {
-      x: touch.clientX / zoom - node.position.x,
-      y: touch.clientY / zoom - node.position.y,
-    };
-    let hasDragged = false;
-    const startX = touch.clientX;
-    const startY = touch.clientY;
-
-    const handleTouchMove = (ev: TouchEvent) => {
-      const t = ev.touches[0];
-      if (!t || !dragOffset.current) return;
-      if (!hasDragged && (Math.abs(t.clientX - startX) > 5 || Math.abs(t.clientY - startY) > 5)) {
-        hasDragged = true;
-      }
-      if (hasDragged) {
-        ev.preventDefault();
-        updateNodePosition(node.id, {
-          x: t.clientX / zoom - dragOffset.current.x,
-          y: t.clientY / zoom - dragOffset.current.y,
-        });
-      }
-    };
-
-    const handleTouchEnd = () => {
-      dragOffset.current = null;
-      if (!hasDragged) {
-        setSelectedNodeId(isSelected ? null : node.id);
-        selectNode(node.id, false);
-      }
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', handleTouchEnd);
-  };
-
   const setFloat = (key: string, raw: string) => {
     const v = parseFloat(raw);
     if (!isNaN(v)) updateNodeParams(node.id, { [key]: v }, { immediate: true });
