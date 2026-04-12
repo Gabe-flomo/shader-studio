@@ -10,7 +10,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { NODE_REGISTRY } from '../../nodes/definitions';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import type { GroupPreset } from '../../types/groupPreset';
 
 // ── Category accent colours (matches NodePalette) ─────────────────────────────
 const CATEGORY_COLORS: Record<string, string> = {

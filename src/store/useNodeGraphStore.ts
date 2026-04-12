@@ -1125,7 +1125,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       let allAreUniforms = true;
       for (const [key, val] of Object.entries(params)) {
         if (typeof val !== 'number') { allAreUniforms = false; break; }
-        const uniformName = `u_p_${nodeId}_${key}`;
+        // Group inner-node overrides are stored as `innerNodeId::paramKey` on the group node.
+        // The assembler prefixes the inner node as `groupNodeId_g_innerNodeId`, so the
+        // compiled uniform name is `u_p_groupNodeId_g_innerNodeId_paramKey`.
+        const uniformName = key.includes('::')
+          ? `u_p_${nodeId}_g_${key.replace('::', '_')}`
+          : `u_p_${nodeId}_${key}`;
         if (!(uniformName in currentUniforms)) { allAreUniforms = false; break; }
         uniformUpdates[uniformName] = val;
       }

@@ -862,7 +862,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       max={max}
                       step={step}
                       value={currentVal}
-                      onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) })}
+                      onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
                       style={{ flex: 1, accentColor: '#89b4fa', cursor: 'pointer' }}
                     />
                     <span style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
