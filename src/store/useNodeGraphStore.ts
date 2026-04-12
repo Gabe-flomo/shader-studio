@@ -272,6 +272,94 @@ export { EXAMPLE_GRAPHS, DEFAULT_EXAMPLE } from './exampleGraphs';
 
 
 // ─── Preview sub-graph builder ────────────────────────────────────────────────
+// Builds a preview graph for a node that lives inside a group's subgraph.
+// Patches the group node so its output port points to the target inner node,
+// then wraps the whole thing in a synthetic top-level output node.
+function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId: string): GraphNode[] {
+  const groupNode = nodes.find(n => n.id === groupId);
+  if (!groupNode) return nodes;
+  const subgraph = groupNode.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  if (!subgraph) return nodes;
+
+  const innerNode = subgraph.nodes.find(n => n.id === innerNodeId);
+  if (!innerNode) return nodes;
+
+  // Pick the best output to preview — prefer vec3, then vec4, then any
+  const outputEntries = Object.entries(innerNode.outputs);
+  const vec3Entry = outputEntries.find(([, s]) => s.type === 'vec3');
+  const vec4Entry = outputEntries.find(([, s]) => s.type === 'vec4');
+  const chosen = vec3Entry ?? vec4Entry ?? outputEntries[0];
+  if (!chosen) return nodes;
+
+  const [chosenKey, chosenSocket] = chosen;
+  const outType = (chosenSocket as { type: string }).type as import('../types/nodeGraph').DataType;
+  const isVec4 = outType === 'vec4';
+  const previewPortKey = '__preview_port__';
+
+  // Clone the group node with a patched subgraph: add a synthetic output port
+  // that routes the inner node's chosen output to the group's outputs.
+  const patchedGroupNode: GraphNode = {
+    ...groupNode,
+    params: {
+      ...groupNode.params,
+      subgraph: {
+        ...subgraph,
+        outputPorts: [
+          ...subgraph.outputPorts,
+          {
+            key: previewPortKey,
+            type: outType,
+            label: '__preview__',
+            fromNodeId: innerNodeId,
+            fromOutputKey: chosenKey,
+          },
+        ],
+      },
+    },
+    outputs: {
+      ...groupNode.outputs,
+      [previewPortKey]: { type: outType, label: '__preview__' },
+    },
+  };
+
+  // Replace the original group node with the patched one; keep all other top-level nodes
+  const patchedNodes = nodes.map(n => n.id === groupId ? patchedGroupNode : n);
+
+  // Now use buildPreviewGraph on the patched top-level nodes, treating the group as the target.
+  // We need a synthetic output node that reads the preview port from the group.
+  const syntheticOutput: GraphNode = {
+    id: '__preview_output__',
+    type: isVec4 ? 'vec4Output' : 'output',
+    position: { x: 0, y: 0 },
+    params: {},
+    inputs: {
+      color: {
+        type: isVec4 ? 'vec4' : 'vec3',
+        label: 'Color',
+        connection: { nodeId: groupId, outputKey: previewPortKey },
+      },
+    },
+    outputs: {},
+  };
+
+  // BFS from the group node to collect all its transitive dependencies
+  const included = new Set<string>();
+  const queue = [groupId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (included.has(id)) continue;
+    included.add(id);
+    const node = patchedNodes.find(n => n.id === id);
+    if (!node) continue;
+    for (const input of Object.values(node.inputs)) {
+      if (input.connection) queue.push(input.connection.nodeId);
+    }
+  }
+
+  const filteredNodes = patchedNodes.filter(n => included.has(n.id));
+  return [...filteredNodes, syntheticOutput];
+}
+
 // Builds a minimal graph containing the target node + all its transitive
 // input dependencies, plus a synthetic output node wired to the first
 // vec3/vec4 output of the target.
@@ -1801,10 +1889,24 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   compile: () => {
-    const { nodes, previewNodeId } = get();
-    const graphNodes = previewNodeId
-      ? buildPreviewGraph(nodes, previewNodeId)
-      : nodes;
+    const { nodes, previewNodeId, activeGroupId } = get();
+    let graphNodes: GraphNode[];
+    if (previewNodeId) {
+      // Check if the preview target lives inside a group's subgraph rather than at the top level
+      const isTopLevel = nodes.some(n => n.id === previewNodeId);
+      if (!isTopLevel && activeGroupId) {
+        const groupNode = nodes.find(n => n.id === activeGroupId);
+        const subgraph = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        const isInGroup = subgraph?.nodes.some(n => n.id === previewNodeId) ?? false;
+        graphNodes = isInGroup
+          ? buildGroupPreviewGraph(nodes, activeGroupId, previewNodeId)
+          : buildPreviewGraph(nodes, previewNodeId);
+      } else {
+        graphNodes = buildPreviewGraph(nodes, previewNodeId);
+      }
+    } else {
+      graphNodes = nodes;
+    }
     const result = compileGraph({ nodes: graphNodes });
     set({
       vertexShader: result.vertexShader,
