@@ -760,8 +760,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return;
     }
 
-    // Restore subgraph nodes (they carry their original connections)
-    const restoredNodes = subgraph.nodes;
+    // Restore subgraph nodes — exclude auto-injected sentinels (loopIndex) and
+    // strip the _groupOriginal flag so nodes are editable again.
+    const restoredNodes = subgraph.nodes
+      .filter(n => n.type !== 'loopIndex')
+      .map(n => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _groupOriginal, ...restParams } = n.params as Record<string, unknown>;
+        return { ...n, params: restParams };
+      });
 
     // Reconnect external nodes: replace connections pointing to groupId with
     // connections to the actual subgraph node from the outputPort mapping.

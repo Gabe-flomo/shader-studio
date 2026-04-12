@@ -309,6 +309,9 @@ export function generateFragmentShader(
         for (const subNode of sortedSub) {
           const subDef = getNodeDefinition(subNode.type);
           if (!subDef) continue;
+          // Skip nodes already pre-computed before this pass (e.g. loopIndex nodes
+          // whose output was pre-injected with the real loop variable before the pass ran).
+          if (nodeOutputs.has(subNode.id)) continue;
           if (subDef.glslFunction) functions.add(subDef.glslFunction);
           subDef.glslFunctions?.forEach(f => functions.add(f));
           const originalId = subNode.id.slice(iterPrefix.length);
