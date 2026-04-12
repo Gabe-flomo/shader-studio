@@ -3,7 +3,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
-import { socketRegistry } from './socketRegistry';
+import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
 import { collectLoopPairChains } from '../../compiler/topoSort';
 import { loadShortcutMap, displayCombo } from '../../hooks/useShortcuts';
@@ -68,6 +68,10 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         : previewDef.label)
     : null;
 
+  const setGroupOutput          = useNodeGraphStore(s => s.setGroupOutput);
+  const disconnectedNotice      = useNodeGraphStore(s => s.disconnectedNotice);
+  const clearDisconnectedNotice = useNodeGraphStore(s => s.clearDisconnectedNotice);
+
   const groupNodes          = useNodeGraphStore(s => s.groupNodes);
   const wrapInLoop          = useNodeGraphStore(s => s.wrapInLoop);
   const activeGroupId       = useNodeGraphStore(s => s.activeGroupId);
@@ -126,6 +130,22 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     return map;
   }, [nodes, activeGroupId]);
 
+  // Subgraph data for the active group (used by the Group Output terminal)
+  const activeSubgraph = React.useMemo(() => {
+    if (!activeGroupId) return null;
+    const gn = nodes.find(n => n.id === activeGroupId);
+    return (gn?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined) ?? null;
+  }, [nodes, activeGroupId]);
+
+  // Position the Group Output terminal to the right of all subgraph nodes
+  const groupOutputTerminalPos = React.useMemo(() => {
+    if (!activeGroupId || displayNodes.length === 0) return null;
+    const maxX = Math.max(...displayNodes.map(n => n.position.x)) + NODE_WIDTH + 80;
+    const ys   = displayNodes.map(n => n.position.y);
+    const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
+    return { x: maxX, y: midY };
+  }, [activeGroupId, displayNodes]);
+
   // Compute loop regions for the visual overlay (dashed bounding boxes behind body nodes)
   const loopRegions = useMemo(() => {
     const chains = collectLoopPairChains(displayNodes);
@@ -178,6 +198,13 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     const id = requestAnimationFrame(() => setTick(t => t + 1));
     return () => cancelAnimationFrame(id);
   }, [nodes]);
+
+  // Auto-clear disconnected-connection notice after 5s
+  useEffect(() => {
+    if (!disconnectedNotice) return;
+    const t = setTimeout(clearDisconnectedNotice, 5000);
+    return () => clearTimeout(t);
+  }, [disconnectedNotice, clearDisconnectedNotice]);
 
   // ── Minimap toggle (persisted) ──────────────────────────────────────────────
   const [showMinimap, setShowMinimap] = useState(() => {
@@ -384,14 +411,18 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   const handleTapInputSocket = useCallback((targetNodeId: string, targetInputKey: string) => {
     if (!pendingMobileConnection) return;
-    connectNodes(
-      pendingMobileConnection.sourceNodeId,
-      pendingMobileConnection.sourceOutputKey,
-      targetNodeId,
-      targetInputKey,
-    );
+    if (targetNodeId === '__group_output__' && activeGroupId) {
+      setGroupOutput(activeGroupId, targetInputKey, pendingMobileConnection.sourceNodeId, pendingMobileConnection.sourceOutputKey);
+    } else {
+      connectNodes(
+        pendingMobileConnection.sourceNodeId,
+        pendingMobileConnection.sourceOutputKey,
+        targetNodeId,
+        targetInputKey,
+      );
+    }
     setPendingMobileConnection(null);
-  }, [pendingMobileConnection, connectNodes]);
+  }, [pendingMobileConnection, connectNodes, setGroupOutput, activeGroupId]);
 
   // Touch pan state (single finger on canvas background)
   const touchPanStart  = useRef<{ x: number; y: number } | null>(null);
@@ -441,12 +472,11 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   const handleEndConnection = (targetNodeId: string, targetInputKey: string) => {
     if (dragConnection) {
-      connectNodes(
-        dragConnection.sourceNodeId,
-        dragConnection.sourceOutputKey,
-        targetNodeId,
-        targetInputKey
-      );
+      if (targetNodeId === '__group_output__' && activeGroupId) {
+        setGroupOutput(activeGroupId, targetInputKey, dragConnection.sourceNodeId, dragConnection.sourceOutputKey);
+      } else {
+        connectNodes(dragConnection.sourceNodeId, dragConnection.sourceOutputKey, targetNodeId, targetInputKey);
+      }
       setDragConnection(null);
     }
   };
@@ -765,6 +795,26 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         </div>
       )}
 
+      {/* Disconnected-connection notice — auto-hides after 5s */}
+      {disconnectedNotice && (
+        <div style={{
+          position: 'absolute',
+          top: compactToolbar ? 80 : 50,
+          left: '50%', transform: 'translateX(-50%)',
+          background: '#2d1b1b', border: '1px solid #f38ba855',
+          color: '#f38ba8', padding: '5px 14px', borderRadius: '8px',
+          fontSize: '11px', zIndex: 25, display: 'flex', alignItems: 'center',
+          gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          whiteSpace: 'nowrap',
+        }}>
+          <span>⚠ {disconnectedNotice}</span>
+          <button
+            onClick={clearDisconnectedNotice}
+            style={{ background: 'none', border: '1px solid #f38ba855', color: '#f38ba8', cursor: 'pointer', fontSize: '10px', padding: '1px 6px', borderRadius: '4px' }}
+          >×</button>
+        </div>
+      )}
+
       {/* Right-click context menu */}
       {contextMenu && (
         <div
@@ -945,6 +995,23 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             })
           )}
 
+          {/* Group output port edges — drawn from inner node outputs to the terminal */}
+          {activeSubgraph && activeSubgraph.outputPorts.map(port => {
+            const fromPos = getSocketPos(port.fromNodeId, 'out', port.fromOutputKey, canvasEl, zoom, pan);
+            const toPos   = getSocketPos('__group_output__', 'in', port.key, canvasEl, zoom, pan);
+            if (!fromPos || !toPos) return null;
+            const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
+            const lineType = srcNode?.outputs[port.fromOutputKey]?.type;
+            return (
+              <ConnectionLine
+                key={`gout-${port.key}`}
+                from={fromPos}
+                to={toPos}
+                dataType={lineType}
+              />
+            );
+          })}
+
           {dragConnection && (
             <ConnectionLine
               from={dragConnection.fromPos}
@@ -990,6 +1057,76 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             externalParamKeys={externalParamMap?.get(node.id)}
           />
         ))}
+
+        {/* Group Output terminal — shown when inside a group view */}
+        {activeGroupId && activeSubgraph && groupOutputTerminalPos && (
+          <div
+            data-node-id="__group_output__"
+            style={{
+              position: 'absolute',
+              left: groupOutputTerminalPos.x,
+              top: groupOutputTerminalPos.y,
+              width: 170,
+              background: '#1e1e2e',
+              border: '1px solid #cba6f755',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              userSelect: 'none',
+            }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              background: '#2a1f3d', padding: '6px 10px',
+              fontSize: '11px', color: '#cba6f7', fontWeight: 700,
+              letterSpacing: '0.04em',
+            }}>
+              ⊳ Group Output
+            </div>
+
+            {/* One row per output port */}
+            {activeSubgraph.outputPorts.map(port => {
+              const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
+              const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
+              const srcDef   = srcNode ? getNodeDefinition(srcNode.type) : null;
+              const srcLabel = typeof srcNode?.params?.label === 'string'
+                ? srcNode.params.label
+                : (srcDef?.label ?? srcNode?.type ?? '?');
+              const isDraggingCompatible = dragConnection
+                ? (() => { const src = displayNodes.find(n => n.id === dragConnection.sourceNodeId); return !!(src?.outputs[dragConnection.sourceOutputKey]); })()
+                : false;
+              return (
+                <div
+                  key={port.key}
+                  style={{
+                    padding: '5px 10px 5px 16px',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    position: 'relative',
+                    background: isDraggingCompatible ? '#cba6f711' : 'transparent',
+                  }}
+                >
+                  {/* Input socket dot */}
+                  <div
+                    ref={el => { registerSocket('__group_output__', 'in', port.key, el); }}
+                    onMouseUp={e => { e.stopPropagation(); handleEndConnection('__group_output__', port.key); }}
+                    style={{
+                      position: 'absolute', left: -5,
+                      width: 10, height: 10, borderRadius: '50%',
+                      background: TYPE_COLORS[port.type] ?? '#888',
+                      cursor: 'crosshair',
+                      border: isDraggingCompatible ? '2px solid white' : 'none',
+                    }}
+                  />
+                  <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '30px' }}>{port.label}</span>
+                  <span style={{ fontSize: '9px', color: '#585b70', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    {srcLabel}
+                  </span>
+                  <span style={{ fontSize: '9px', color: TYPE_COLORS[port.type] ?? '#888', flexShrink: 0 }}>{port.type}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
