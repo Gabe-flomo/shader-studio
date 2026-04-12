@@ -59,15 +59,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   );
 
-  // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
-  const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
-  const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
-  const previewLabel = previewDef
-    ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
-        ? (previewNode.params.label as string) || previewDef.label
-        : previewDef.label)
-    : null;
-
   const setGroupOutput          = useNodeGraphStore(s => s.setGroupOutput);
   const addGroupInput           = useNodeGraphStore(s => s.addGroupInput);
   const rerouteGroupInput       = useNodeGraphStore(s => s.rerouteGroupInput);
@@ -87,6 +78,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     const subgraph = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
     return subgraph?.nodes ?? nodes;
   }, [nodes, activeGroupId]);
+
+  // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
+  const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
+  const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
+  const previewLabel = previewDef
+    ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
+        ? (previewNode.params.label as string) || previewDef.label
+        : previewDef.label)
+    : null;
 
   // When inside a group, build a map of nodeId → Set<inputKey> for sockets
   // that are driven by external (group-level) input ports. These are locked/immutable.
