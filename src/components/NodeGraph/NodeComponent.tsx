@@ -279,7 +279,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   useEffect(() => {
     if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
     let cancelled = false;
-    const currentNodes = useNodeGraphStore.getState().nodes;
+    // When inside a group, preview against the subgraph nodes, not top-level
+    const state = useNodeGraphStore.getState();
+    const activeGroupId = state.activeGroupId;
+    let currentNodes = state.nodes;
+    if (activeGroupId) {
+      const groupNode = state.nodes.find(n => n.id === activeGroupId);
+      const sg = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+      if (sg) currentNodes = sg.nodes;
+    }
     const fs = compileNodePreviewShader(node.id, currentNodes);
     if (!fs) return;
     setPreviewLoading(true);
