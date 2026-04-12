@@ -62,7 +62,9 @@ export function GLSLPage() {
   const [renamingId, setRenamingId]     = useState<string | null>(null);
   const [renameVal, setRenameVal]       = useState('');
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  // Store last known selection so button clicks (which blur the textarea) can still read it
+  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
 
   // Apply the current code on mount and whenever it changes
   useEffect(() => {
@@ -90,8 +92,8 @@ export function GLSLPage() {
   // ── Snippet actions ──────────────────────────────────────────────────────
 
   const saveSnippet = () => {
-    const ta = textareaRef.current;
-    const sel = ta ? code.slice(ta.selectionStart, ta.selectionEnd).trim() : '';
+    const { start, end } = selectionRef.current;
+    const sel = code.slice(start, end).trim();
     const snippetCode = sel || code;
     const name = window.prompt('Snippet name:', sel ? 'Selection' : 'My Snippet');
     if (!name?.trim()) return;
@@ -209,6 +211,14 @@ export function GLSLPage() {
             value={code}
             onChange={e => setCode(e.target.value)}
             onKeyDown={handleKeyDown}
+            onSelect={e => {
+              const ta = e.currentTarget;
+              selectionRef.current = { start: ta.selectionStart, end: ta.selectionEnd };
+            }}
+            onKeyUp={e => {
+              const ta = e.currentTarget;
+              selectionRef.current = { start: ta.selectionStart, end: ta.selectionEnd };
+            }}
             spellCheck={false}
             style={{
               flex: 1, background: '#13131f', color: '#cdd6f4',
