@@ -169,6 +169,17 @@ interface NodeGraphState {
   clearDisconnectedNotice: () => void;
   /** Reassign a group output port to a different inner node's output */
   setGroupOutput: (groupId: string, outputPortKey: string, fromNodeId: string, fromOutputKey: string) => void;
+  /** Add a new dynamic input port to a group (from inside the group view) */
+  addGroupInput: (groupId: string, type: import('./types/nodeGraph').DataType, label: string) => void;
+  /** Reroute an existing group input port to a different inner node socket */
+  rerouteGroupInput: (groupId: string, portKey: string, toNodeId: string, toInputKey: string) => void;
+  /**
+   * Set the assignOp on a node (works for both top-level and subgraph nodes).
+   * Controls how its outputs accumulate across iterations in a loop group.
+   */
+  setNodeAssignOp: (nodeId: string, op: import('../types/nodeGraph').GraphNode['assignOp']) => void;
+  /** Toggle carry mode on a node inside an iterated group. */
+  toggleNodeCarryMode: (nodeId: string) => void;
 
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
@@ -1359,9 +1370,25 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               ...overrideUpdates,
               subgraph: {
                 ...sg,
-                nodes: sg.nodes.map(sn =>
-                  sn.id === nodeId ? { ...sn, params: { ...sn.params, ...params } } : sn
-                ),
+                nodes: sg.nodes.map(sn => {
+                  if (sn.id !== nodeId) return sn;
+                  const updated = { ...sn, params: { ...sn.params, ...params } };
+                  // loopCarry: auto-update socket types when dataType changes
+                  if (sn.type === 'loopCarry' && 'dataType' in params) {
+                    const t = params.dataType as import('../types/nodeGraph').DataType;
+                    return {
+                      ...updated,
+                      inputs: {
+                        init: { ...updated.inputs.init, type: t },
+                        next: { ...updated.inputs.next, type: t },
+                      },
+                      outputs: {
+                        value: { ...updated.outputs.value, type: t },
+                      },
+                    };
+                  }
+                  return updated;
+                }),
               },
             },
           };
@@ -1574,6 +1601,147 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  addGroupInput: (groupId, type, label) => {
+    pushHistory(get().nodes);
+    set(state => {
+      const groupNode = state.nodes.find(n => n.id === groupId);
+      if (!groupNode) return {};
+      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return {};
+      // Find next available port key
+      const existingKeys = new Set([
+        ...sg.inputPorts.map(p => p.key),
+        ...sg.outputPorts.map(p => p.key),
+      ]);
+      let idx = sg.inputPorts.length + sg.outputPorts.length;
+      while (existingKeys.has(`in${idx}`)) idx++;
+      const portKey = `in${idx}`;
+      const newPort: import('../types/nodeGraph').GroupInputPort = {
+        key: portKey,
+        type,
+        label,
+        toNodeId: '',
+        toInputKey: '',
+      };
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          return {
+            ...n,
+            inputs: {
+              ...n.inputs,
+              [portKey]: { type, label },
+            },
+            params: {
+              ...n.params,
+              subgraph: { ...sg, inputPorts: [...sg.inputPorts, newPort] },
+            },
+          };
+        }),
+      };
+    });
+    get().compile();
+  },
+
+  rerouteGroupInput: (groupId, portKey, toNodeId, toInputKey) => {
+    set(state => {
+      const groupNode = state.nodes.find(n => n.id === groupId);
+      if (!groupNode) return {};
+      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          return {
+            ...n,
+            params: {
+              ...n.params,
+              subgraph: {
+                ...sg,
+                inputPorts: sg.inputPorts.map(p =>
+                  p.key === portKey ? { ...p, toNodeId, toInputKey } : p
+                ),
+              },
+            },
+          };
+        }),
+      };
+    });
+    get().compile();
+  },
+
+  setNodeAssignOp: (nodeId, op) => {
+    const activeGroupId = get().activeGroupId;
+    set(state => {
+      if (activeGroupId) {
+        // Operating inside a group — update the subgraph node
+        const groupNode = state.nodes.find(n => n.id === activeGroupId);
+        if (!groupNode) return {};
+        const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return {};
+        return {
+          nodes: state.nodes.map(n => {
+            if (n.id !== activeGroupId) return n;
+            return {
+              ...n,
+              params: {
+                ...n.params,
+                subgraph: {
+                  ...sg,
+                  nodes: sg.nodes.map(sn =>
+                    sn.id === nodeId ? { ...sn, assignOp: op } : sn
+                  ),
+                },
+              },
+            };
+          }),
+        };
+      }
+      // Top-level node
+      return {
+        nodes: state.nodes.map(n =>
+          n.id === nodeId ? { ...n, assignOp: op } : n
+        ),
+      };
+    });
+    get().compile();
+  },
+
+  toggleNodeCarryMode: (nodeId) => {
+    const activeGroupId = get().activeGroupId;
+    set(state => {
+      if (activeGroupId) {
+        const groupNode = state.nodes.find(n => n.id === activeGroupId);
+        if (!groupNode) return {};
+        const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return {};
+        return {
+          nodes: state.nodes.map(n => {
+            if (n.id !== activeGroupId) return n;
+            return {
+              ...n,
+              params: {
+                ...n.params,
+                subgraph: {
+                  ...sg,
+                  nodes: sg.nodes.map(sn =>
+                    sn.id === nodeId ? { ...sn, carryMode: !sn.carryMode } : sn
+                  ),
+                },
+              },
+            };
+          }),
+        };
+      }
+      return {
+        nodes: state.nodes.map(n =>
+          n.id === nodeId ? { ...n, carryMode: !n.carryMode } : n
+        ),
+      };
+    });
+    get().compile();
+  },
+
   toggleBypass: (nodeId) => {
     pushHistory(get().nodes);
     set(state => ({
@@ -1656,83 +1824,120 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   autoLayout: () => {
-    const { nodes } = get();
+    const state = get();
+    const { nodes } = state;
     if (nodes.length === 0) return;
 
     // Layout constants
     const START_X = 40;
     const START_Y = 60;
 
-    // Build map of nodeId → set of upstream nodeIds (nodes that feed INTO this node)
-    const upstreamOf: Map<string, Set<string>> = new Map();
-    for (const node of nodes) {
-      if (!upstreamOf.has(node.id)) upstreamOf.set(node.id, new Set());
-      for (const input of Object.values(node.inputs)) {
-        if (input.connection) {
-          upstreamOf.get(node.id)!.add(input.connection.nodeId);
-        }
-      }
-    }
-
-    // Assign column = max(upstream columns) + 1, BFS order
-    const column: Map<string, number> = new Map();
-    const queue: string[] = [];
-
-    // Sources: nodes with no upstream
-    for (const node of nodes) {
-      if (upstreamOf.get(node.id)!.size === 0) {
-        column.set(node.id, 0);
-        queue.push(node.id);
-      }
-    }
-
-    // BFS
-    while (queue.length > 0) {
-      const id = queue.shift()!;
-      const col = column.get(id)!;
-      // Find all nodes that have id as upstream
-      for (const node of nodes) {
-        if (upstreamOf.get(node.id)?.has(id)) {
-          const prev = column.get(node.id) ?? -1;
-          if (col + 1 > prev) {
-            column.set(node.id, col + 1);
-            queue.push(node.id);
+    /** Run the BFS column-layout algorithm on any array of nodes and return a
+     *  position map: nodeId → { x, y }. */
+    function computeLayout(layoutNodes: import('../types/nodeGraph').GraphNode[]): Map<string, { x: number; y: number }> {
+      // Build map of nodeId → set of upstream nodeIds (nodes that feed INTO this node)
+      const upstreamOf: Map<string, Set<string>> = new Map();
+      for (const node of layoutNodes) {
+        if (!upstreamOf.has(node.id)) upstreamOf.set(node.id, new Set());
+        for (const input of Object.values(node.inputs)) {
+          if (input.connection) {
+            upstreamOf.get(node.id)!.add(input.connection.nodeId);
           }
         }
       }
-    }
 
-    // Any disconnected nodes not yet assigned get column 0
-    for (const node of nodes) {
-      if (!column.has(node.id)) column.set(node.id, 0);
-    }
+      // Assign column = max(upstream columns) + 1, BFS order
+      const column: Map<string, number> = new Map();
+      const queue: string[] = [];
 
-    // Group nodes by column, sort within column by id for stability
-    const cols: Map<number, string[]> = new Map();
-    for (const [id, col] of column.entries()) {
-      if (!cols.has(col)) cols.set(col, []);
-      cols.get(col)!.push(id);
-    }
-    for (const arr of cols.values()) arr.sort();
-
-    // Assign positions — accumulate y per column so taller nodes don't overlap
-    const newPositions: Map<string, { x: number; y: number }> = new Map();
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
-    for (const [col, ids] of cols.entries()) {
-      let y = START_Y;
-      for (const id of ids) {
-        newPositions.set(id, { x: START_X + col * 340, y });
-        const node = nodeMap.get(id);
-        y += (node ? estimateNodeHeight(node) : 210) + 24; // 24px gap between nodes
+      // Sources: nodes with no upstream
+      for (const node of layoutNodes) {
+        if (upstreamOf.get(node.id)!.size === 0) {
+          column.set(node.id, 0);
+          queue.push(node.id);
+        }
       }
+
+      // BFS
+      while (queue.length > 0) {
+        const id = queue.shift()!;
+        const col = column.get(id)!;
+        for (const node of layoutNodes) {
+          if (upstreamOf.get(node.id)?.has(id)) {
+            const prev = column.get(node.id) ?? -1;
+            if (col + 1 > prev) {
+              column.set(node.id, col + 1);
+              queue.push(node.id);
+            }
+          }
+        }
+      }
+
+      // Any disconnected nodes not yet assigned get column 0
+      for (const node of layoutNodes) {
+        if (!column.has(node.id)) column.set(node.id, 0);
+      }
+
+      // Group nodes by column, sort within column by id for stability
+      const cols: Map<number, string[]> = new Map();
+      for (const [id, col] of column.entries()) {
+        if (!cols.has(col)) cols.set(col, []);
+        cols.get(col)!.push(id);
+      }
+      for (const arr of cols.values()) arr.sort();
+
+      // Assign positions — accumulate y per column so taller nodes don't overlap
+      const newPositions: Map<string, { x: number; y: number }> = new Map();
+      const nodeMap = new Map(layoutNodes.map(n => [n.id, n]));
+      for (const [col, ids] of cols.entries()) {
+        let y = START_Y;
+        for (const id of ids) {
+          newPositions.set(id, { x: START_X + col * 340, y });
+          const node = nodeMap.get(id);
+          y += (node ? estimateNodeHeight(node) : 210) + 24; // 24px gap between nodes
+        }
+      }
+      return newPositions;
     }
 
-    set(state => ({
-      nodes: state.nodes.map(n => ({
-        ...n,
-        position: newPositions.get(n.id) ?? n.position,
-      })),
-    }));
+    const activeGroupId = state.activeGroupId;
+
+    if (activeGroupId) {
+      // Subgraph-aware: layout the inner nodes of the active group
+      const groupNode = nodes.find(n => n.id === activeGroupId);
+      const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg || sg.nodes.length === 0) return;
+      const newPositions = computeLayout(sg.nodes);
+      set(state2 => ({
+        nodes: state2.nodes.map(n => {
+          if (n.id !== activeGroupId) return n;
+          const sg2 = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg2) return n;
+          return {
+            ...n,
+            params: {
+              ...n.params,
+              subgraph: {
+                ...sg2,
+                nodes: sg2.nodes.map(sn => ({
+                  ...sn,
+                  position: newPositions.get(sn.id) ?? sn.position,
+                })),
+              },
+            },
+          };
+        }),
+      }));
+    } else {
+      // Top-level layout
+      const newPositions = computeLayout(nodes);
+      set(state2 => ({
+        nodes: state2.nodes.map(n => ({
+          ...n,
+          position: newPositions.get(n.id) ?? n.position,
+        })),
+      }));
+    }
   },
 
   loadExampleGraph: (name?: string) => {

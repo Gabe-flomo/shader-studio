@@ -251,6 +251,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
+  const setNodeAssignOp    = useNodeGraphStore(s => s.setNodeAssignOp);
+  const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
+  const activeGroupId      = useNodeGraphStore(s => s.activeGroupId);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
   const isSelected         = selectedNodeId === node.id;
@@ -314,6 +317,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   const def = getNodeDefinition(node.type);
   const isBypassed = !!node.bypassed;
+  const assignOp = node.assignOp ?? '=';
+  const isCarry = !!node.carryMode;
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -1030,9 +1035,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           if (paramEntries.length === 0) return null;
 
           // Filter out internally-driven params (have __param_ connection inside group)
-          const visibleParams = paramEntries.filter(([paramKey]) =>
-            !innerNode.inputs[`__param_${paramKey}`]?.connection
-          );
+          // Also hide when a regular input socket with the same name is wired
+          const visibleParams = paramEntries.filter(([paramKey]) => {
+            if (innerNode.inputs[`__param_${paramKey}`]?.connection) return false;
+            const matchingInput = Object.entries(innerNode.inputs).find(
+              ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
+            );
+            return !matchingInput;
+          });
           if (visibleParams.length === 0) return null;
 
           const innerLabel = typeof innerNode.params.label === 'string'
@@ -1443,6 +1453,57 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             >
               ↺
             </button>
+          )}
+          {/* Carry mode — only shown inside an iterated group; on nodes with vec2/vec3 transform semantics */}
+          {activeGroupId && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => toggleCarryMode(node.id)}
+              title={isCarry ? 'Carry mode ON — output feeds back as input each iteration. Click to disable.' : 'Enable carry mode — output feeds back as input each iteration (e.g. UV self-folding)'}
+              style={{
+                background: isCarry ? '#a6e3a122' : 'none',
+                border: isCarry ? '1px solid #a6e3a155' : '1px solid #31324466',
+                color: isCarry ? '#a6e3a1' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '11px',
+                lineHeight: 1,
+                padding: '1px 5px',
+                borderRadius: '3px',
+                fontFamily: 'monospace',
+              }}
+            >
+              ⟳
+            </button>
+          )}
+          {/* assignOp — only shown inside an iterated group */}
+          {activeGroupId && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
+            <select
+              onMouseDown={e => e.stopPropagation()}
+              value={assignOp}
+              onChange={e => setNodeAssignOp(node.id, e.target.value as import('../../types/nodeGraph').GraphNode['assignOp'])}
+              title="Assign operator: how this node's output combines across loop iterations"
+              style={{
+                background: assignOp !== '=' ? '#45475a' : 'none',
+                border: assignOp !== '=' ? '1px solid #89b4fa66' : '1px solid #31324466',
+                color: assignOp !== '=' ? '#89b4fa' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '10px',
+                borderRadius: '3px',
+                padding: '0 2px',
+                outline: 'none',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+                fontFamily: 'monospace',
+                width: '28px',
+                textAlign: 'center',
+              }}
+            >
+              <option value="=">  =</option>
+              <option value="+=">+=</option>
+              <option value="-=">-=</option>
+              <option value="*=">*=</option>
+              <option value="/=">/=</option>
+            </select>
           )}
           {/* Bypass toggle — skip node, pass input through to output */}
           {!['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type) && (

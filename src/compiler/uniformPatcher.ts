@@ -9,6 +9,8 @@ import type { GraphNode, NodeDefinition, DataType } from '../types/nodeGraph';
  */
 export const SKIP_UNIFORM_TYPES = new Set([
   'loopStart', 'loopEnd', 'loop', 'forLoop',
+  // loopCarry is handled specially by the compiler; no params to uniform-patch
+  'loopCarry',
   // Mandelbrot/Julia: zoom, max_iter, center_x/y, precision all affect code structure
   // and the center coordinates need JS-side DS splitting — must stay baked.
   'mandelbrot',

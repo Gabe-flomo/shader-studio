@@ -69,6 +69,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     : null;
 
   const setGroupOutput          = useNodeGraphStore(s => s.setGroupOutput);
+  const addGroupInput           = useNodeGraphStore(s => s.addGroupInput);
+  const rerouteGroupInput       = useNodeGraphStore(s => s.rerouteGroupInput);
   const disconnectedNotice      = useNodeGraphStore(s => s.disconnectedNotice);
   const clearDisconnectedNotice = useNodeGraphStore(s => s.clearDisconnectedNotice);
 
@@ -146,6 +148,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     return { x: maxX, y: midY };
   }, [activeGroupId, displayNodes]);
 
+  // Position the Group Input terminal to the left of all subgraph nodes
+  const groupInputTerminalPos = React.useMemo(() => {
+    if (!activeGroupId || displayNodes.length === 0) return null;
+    const minX = Math.min(...displayNodes.map(n => n.position.x)) - 220;
+    const ys   = displayNodes.map(n => n.position.y);
+    const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
+    return { x: minX, y: midY };
+  }, [activeGroupId, displayNodes]);
+
   // Compute loop regions for the visual overlay (dashed bounding boxes behind body nodes)
   const loopRegions = useMemo(() => {
     const chains = collectLoopPairChains(displayNodes);
@@ -177,6 +188,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   }, [nodes, activeGroupId]);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
+  const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   // canvasEl is stored in state so getSocketPos always has a stable reference.
@@ -372,10 +384,18 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     mousePos: { x: number; y: number };  // world space
   } | null>(null);
 
-  const draggingType = dragConnection
-    ? (getNodeDefinition(nodes.find(n => n.id === dragConnection.sourceNodeId)?.type ?? '')
-        ?.outputs[dragConnection.sourceOutputKey]?.type ?? null)
-    : null;
+  const draggingType = React.useMemo<import('../../types/nodeGraph').DataType | null>(() => {
+    if (!dragConnection) return null;
+    // Synthetic Group Input terminal
+    if (dragConnection.sourceNodeId === '__group_input__' && activeSubgraph) {
+      return activeSubgraph.inputPorts.find(p => p.key === dragConnection.sourceOutputKey)?.type ?? null;
+    }
+    const srcNode = displayNodes.find(n => n.id === dragConnection.sourceNodeId);
+    if (!srcNode) return null;
+    const srcDef = getNodeDefinition(srcNode.type);
+    return (srcNode.outputs[dragConnection.sourceOutputKey]?.type ??
+      srcDef?.outputs[dragConnection.sourceOutputKey]?.type ?? null) as import('../../types/nodeGraph').DataType | null;
+  }, [dragConnection, displayNodes, activeSubgraph]);
 
   // ── Mobile tap-to-connect ───────────────────────────────────────────────────
   // Two-tap flow: tap output socket → pending, tap input socket → connect.
@@ -474,6 +494,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     if (dragConnection) {
       if (targetNodeId === '__group_output__' && activeGroupId) {
         setGroupOutput(activeGroupId, targetInputKey, dragConnection.sourceNodeId, dragConnection.sourceOutputKey);
+      } else if (dragConnection.sourceNodeId === '__group_input__' && activeGroupId) {
+        rerouteGroupInput(activeGroupId, dragConnection.sourceOutputKey, targetNodeId, targetInputKey);
       } else {
         connectNodes(dragConnection.sourceNodeId, dragConnection.sourceOutputKey, targetNodeId, targetInputKey);
       }
@@ -532,13 +554,13 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   // ── Fit to screen helper ────────────────────────────────────────────────────
   const handleFitView = useCallback(() => {
-    if (!nodes.length || !canvasRef.current) return;
+    if (!displayNodes.length || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const pad = 60;
-    const minX = Math.min(...nodes.map(n => n.position.x)) - pad;
-    const minY = Math.min(...nodes.map(n => n.position.y)) - pad;
-    const maxX = Math.max(...nodes.map(n => n.position.x + NODE_WIDTH)) + pad;
-    const maxY = Math.max(...nodes.map(n => n.position.y + 200)) + pad;
+    const minX = Math.min(...displayNodes.map(n => n.position.x)) - pad;
+    const minY = Math.min(...displayNodes.map(n => n.position.y)) - pad;
+    const maxX = Math.max(...displayNodes.map(n => n.position.x + NODE_WIDTH)) + pad;
+    const maxY = Math.max(...displayNodes.map(n => n.position.y + 200)) + pad;
     const cw = canvas.clientWidth;
     const ch = canvas.clientHeight;
     const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
@@ -549,7 +571,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       y: (ch - (maxY + minY) * newZoom) / 2,
     });
     setZoom(newZoom);
-  }, [nodes]);
+  }, [displayNodes]);
 
   // Register fitView with the store so shortcuts / App.tsx can call it
   useEffect(() => { registerFitView(handleFitView); }, [registerFitView, handleFitView]);
@@ -832,9 +854,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             const isGroup = clickedNode?.type === 'group';
             const ids = useNodeGraphStore.getState().selectedNodeIds;
             const canGroup = ids.length >= 2 && !activeGroupId;
-            const loopForbidden = ['output', 'vec4Output', 'loopStart', 'loopEnd'];
-            const canWrap = ids.length >= 1 && !activeGroupId &&
-              !ids.some(id => loopForbidden.includes(nodes.find(n => n.id === id)?.type ?? ''));
             return (
               <>
                 {canGroup && (
@@ -843,14 +862,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     setContextMenu(null);
                   }}>
                     Group Selection <span style={{ color: '#585b70', fontSize: '10px' }}>⌘G</span>
-                  </button>
-                )}
-                {canWrap && (
-                  <button style={ctxBtnStyle} onClick={() => {
-                    wrapInLoop(ids);
-                    setContextMenu(null);
-                  }}>
-                    Wrap in Loop <span style={{ color: '#585b70', fontSize: '10px' }}>{displayCombo(loadShortcutMap()['wrapInLoop'] ?? 'cmd+l')}</span>
                   </button>
                 )}
                 {isGroup && clickedNode && (
@@ -877,9 +888,9 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     </button>
                   </>
                 )}
-                {!canGroup && !canWrap && !isGroup && (
+                {!canGroup && !isGroup && (
                   <div style={{ padding: '6px 12px', color: '#585b70', fontSize: '11px' }}>
-                    Select nodes to group or wrap
+                    Select nodes to group
                   </div>
                 )}
               </>
@@ -1012,6 +1023,21 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             );
           })}
 
+          {/* Group input port edges — drawn from the terminal to each routed inner node */}
+          {activeSubgraph && activeSubgraph.inputPorts.filter(p => p.toNodeId && p.toInputKey).map(port => {
+            const fromPos = getSocketPos('__group_input__', 'out', port.key, canvasEl, zoom, pan);
+            const toPos   = getSocketPos(port.toNodeId, 'in', port.toInputKey, canvasEl, zoom, pan);
+            if (!fromPos || !toPos) return null;
+            return (
+              <ConnectionLine
+                key={`gin-${port.key}`}
+                from={fromPos}
+                to={toPos}
+                dataType={port.type}
+              />
+            );
+          })}
+
           {dragConnection && (
             <ConnectionLine
               from={dragConnection.fromPos}
@@ -1125,6 +1151,124 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Group Input terminal — shown when inside a group view */}
+        {activeGroupId && activeSubgraph && groupInputTerminalPos && (
+          <div
+            data-node-id="__group_input__"
+            style={{
+              position: 'absolute',
+              left: groupInputTerminalPos.x,
+              top: groupInputTerminalPos.y,
+              width: 180,
+              background: '#1e1e2e',
+              border: '1px solid #89b4fa55',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              userSelect: 'none',
+            }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              background: '#1a2035', padding: '6px 10px',
+              fontSize: '11px', color: '#89b4fa', fontWeight: 700,
+              letterSpacing: '0.04em',
+            }}>
+              ⊲ Group Inputs
+            </div>
+
+            {/* One row per input port */}
+            {activeSubgraph.inputPorts.map(port => {
+              const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
+              const isDragging = !!dragConnection;
+              return (
+                <div
+                  key={port.key}
+                  style={{
+                    padding: '5px 14px 5px 10px',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    position: 'relative',
+                  }}
+                >
+                  <span style={{ fontSize: '10px', color: '#a6adc8', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
+                  <span style={{ fontSize: '9px', color: TYPE_COLORS[port.type] ?? '#888', flexShrink: 0 }}>{port.type}</span>
+                  {/* Output socket dot — drag FROM this to an inner node input */}
+                  <div
+                    ref={el => { registerSocket('__group_input__', 'out', port.key, el); }}
+                    onMouseDown={e => { e.stopPropagation(); handleStartConnection('__group_input__', port.key, e); }}
+                    style={{
+                      position: 'absolute', right: -5,
+                      width: 10, height: 10, borderRadius: '50%',
+                      background: TYPE_COLORS[port.type] ?? '#888',
+                      cursor: 'crosshair',
+                      border: isDragging ? '2px solid white' : 'none',
+                    }}
+                  />
+                </div>
+              );
+            })}
+
+            {/* Add input form / button */}
+            <div style={{ borderTop: '1px solid #313244', padding: '4px 8px' }}>
+              {addingGroupInput ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <input
+                    autoFocus
+                    placeholder="Input name"
+                    value={addingGroupInput.name}
+                    onChange={e => setAddingGroupInput(prev => prev ? { ...prev, name: e.target.value } : null)}
+                    onKeyDown={e => e.stopPropagation()}
+                    style={{
+                      fontSize: '10px', background: '#11111b', border: '1px solid #45475a',
+                      color: '#cdd6f4', borderRadius: '3px', padding: '2px 6px', outline: 'none',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    {(['float', 'vec2', 'vec3', 'vec4'] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
+                        style={{
+                          fontSize: '9px', padding: '1px 5px', borderRadius: '3px', cursor: 'pointer',
+                          border: '1px solid #45475a',
+                          background: addingGroupInput.type === t ? '#313244' : 'none',
+                          color: addingGroupInput.type === t ? '#cdd6f4' : '#585b70',
+                        }}
+                      >{t}</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => {
+                        if (addingGroupInput.name.trim() && activeGroupId) {
+                          addGroupInput(activeGroupId, addingGroupInput.type, addingGroupInput.name.trim());
+                        }
+                        setAddingGroupInput(null);
+                      }}
+                      style={{ flex: 1, fontSize: '10px', padding: '2px', background: '#313244', border: '1px solid #45475a', color: '#a6e3a1', borderRadius: '3px', cursor: 'pointer' }}
+                    >Add</button>
+                    <button
+                      onClick={() => setAddingGroupInput(null)}
+                      style={{ fontSize: '10px', padding: '2px 6px', background: 'none', border: '1px solid #45475a', color: '#585b70', borderRadius: '3px', cursor: 'pointer' }}
+                    >✕</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingGroupInput({ name: '', type: 'float' })}
+                  style={{
+                    width: '100%', fontSize: '10px', padding: '3px',
+                    background: 'none', border: '1px solid #45475a',
+                    color: '#89b4fa', borderRadius: '3px', cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#313244')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                >+ Add Input</button>
+              )}
+            </div>
           </div>
         )}
       </div>

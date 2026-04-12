@@ -29,6 +29,31 @@ export interface GraphNode {
   params: Record<string, unknown>;
   /** When true the node is skipped — inputs are passed through to outputs */
   bypassed?: boolean;
+  /**
+   * Assignment operator for this node's outputs when inside an iterated group.
+   * Controls how each iteration's result combines with previous iterations:
+   *   '='  — overwrite (default: only last iteration's value survives)
+   *   '+=' — add (accumulate across iterations, e.g. finalColor += col * d)
+   *   '-=' — subtract
+   *   '*=' — multiply
+   *   '/=' — divide
+   * Only meaningful inside an iterated group (iterations > 1).
+   */
+  assignOp?: '=' | '+=' | '-=' | '*=' | '/=';
+  /**
+   * Carry mode — when true inside an iterated group, this node's first output
+   * feeds back as its own first type-matching input each iteration.
+   *
+   * Classic use: enable on a Fract/Tile node to get  uv = fract(uv * 1.5) - 0.5
+   * without needing a separate LoopCarry node.
+   *
+   * The compiler:
+   *   1. Declares T carryVar = <initial input value> before the loop
+   *   2. Each iteration: feeds carryVar as this node's carry input
+   *   3. After the node runs: carryVar = this node's output
+   * Only meaningful inside an iterated group (iterations > 1).
+   */
+  carryMode?: boolean;
 }
 
 // Editable parameter definition (used to render inline controls on the node card)
