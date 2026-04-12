@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams } from '../types/nodeGraph';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
+import type { GroupPreset } from '../types/groupPreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
@@ -40,6 +41,22 @@ export function loadCustomFns(): CustomFnPreset[] {
     } catch {}
   }
   return out.sort((a, b) => a.savedAt - b.savedAt);
+}
+
+// ── Group preset helpers ───────────────────────────────────────────────────────
+const GP_PREFIX = 'shader-studio:gp:';
+
+function loadGroupPresets(): GroupPreset[] {
+  const presets: GroupPreset[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key?.startsWith(GP_PREFIX)) continue;
+    try {
+      const p = JSON.parse(localStorage.getItem(key)!) as GroupPreset;
+      if (p?.id && p?.subgraph) presets.push(p);
+    } catch {}
+  }
+  return presets.sort((a, b) => b.savedAt - a.savedAt);
 }
 
 // Module-level debounce timer for recompilation triggered by param edits.
@@ -186,6 +203,8 @@ interface NodeGraphState {
   groupNodes: (nodeIds: string[], label?: string) => string | null;
   /** Dissolve a group node — expand its subgraph back into the flat graph. */
   ungroupNode: (groupId: string) => void;
+  /** Rename an input or output port label on a group node. */
+  renameGroupPort: (nodeId: string, portKey: string, dir: 'in' | 'out', newLabel: string) => void;
   /**
    * Wrap selected nodes in a LoopStart / LoopEnd pair.
    * Carry type is inferred from the wire entering the first body node.
@@ -218,6 +237,12 @@ interface NodeGraphState {
   importCustomFnsFromFile: () => Promise<void>;
   setCustomFnPresetsDir: (path: string) => void;
   loadCustomFnsFromDisk: () => Promise<CustomFnPreset[]>;
+
+  // Group presets
+  groupPresets: GroupPreset[];
+  saveGroupPreset: (groupNodeId: string, label?: string) => void;
+  deleteGroupPreset: (presetId: string) => void;
+  instantiateGroupPreset: (presetId: string, position?: { x: number; y: number }) => string | null;
 }
 
 // ─── Example graph data ───────────────────────────────────────────────────────
@@ -292,6 +317,18 @@ function syncCounterFromNodes(nodes: GraphNode[]) {
   }
 }
 
+function estimateNodeHeight(node: GraphNode): number {
+  const def = getNodeDefinition(node.type);
+  const inputCount  = Object.keys(node.inputs).length;
+  const outputCount = Object.keys(node.outputs).length;
+  // Count only visible param defs (float or select — things that render sliders/dropdowns)
+  const paramCount = def ? Object.values(def.paramDefs ?? {}).filter(
+    pd => pd.type === 'float' || pd.type === 'select' || pd.type === 'vec3'
+  ).length : 0;
+  // Header ~36px, each socket row ~22px, each param ~34px, padding 16px
+  return 36 + (inputCount + outputCount) * 22 + paramCount * 34 + 16;
+}
+
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodes: [],
   vertexShader: '',
@@ -316,6 +353,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   textureUniforms: {},
   nodePreviews: {},
   isStateful: false,
+  groupPresets: loadGroupPresets(),
 
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   setActiveGroupId: (id) => set({ activeGroupId: id }),
@@ -630,6 +668,119 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     set({ nodes: [...updatedOuter, ...restoredNodes] });
     get().compile();
+  },
+
+  renameGroupPort: (nodeId, portKey, dir, newLabel) => {
+    set(state => ({
+      nodes: state.nodes.map(n => {
+        if (n.id !== nodeId || n.type !== 'group') return n;
+        const subgraph = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!subgraph) return n;
+        const updatedSubgraph: import('../types/nodeGraph').SubgraphData = {
+          ...subgraph,
+          inputPorts: dir === 'in'
+            ? subgraph.inputPorts.map(p => p.key === portKey ? { ...p, label: newLabel } : p)
+            : subgraph.inputPorts,
+          outputPorts: dir === 'out'
+            ? subgraph.outputPorts.map(p => p.key === portKey ? { ...p, label: newLabel } : p)
+            : subgraph.outputPorts,
+        };
+        const updatedInputs = dir === 'in' && n.inputs[portKey]
+          ? { ...n.inputs, [portKey]: { ...n.inputs[portKey], label: newLabel } }
+          : n.inputs;
+        const updatedOutputs = dir === 'out' && n.outputs[portKey]
+          ? { ...n.outputs, [portKey]: { ...n.outputs[portKey], label: newLabel } }
+          : n.outputs;
+        return { ...n, inputs: updatedInputs, outputs: updatedOutputs, params: { ...n.params, subgraph: updatedSubgraph } };
+      }),
+    }));
+  },
+
+  saveGroupPreset: (groupNodeId, label) => {
+    const { nodes } = get();
+    const groupNode = nodes.find(n => n.id === groupNodeId && n.type === 'group');
+    if (!groupNode) return;
+    const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+    if (!subgraph) return;
+    const preset: GroupPreset = {
+      id: `gp_${Date.now()}`,
+      label: label ?? (typeof groupNode.params.label === 'string' ? groupNode.params.label : 'Group'),
+      subgraph,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(`${GP_PREFIX}${preset.id}`, JSON.stringify(preset));
+    set({ groupPresets: loadGroupPresets() });
+  },
+
+  deleteGroupPreset: (presetId) => {
+    localStorage.removeItem(`${GP_PREFIX}${presetId}`);
+    set({ groupPresets: loadGroupPresets() });
+  },
+
+  instantiateGroupPreset: (presetId, position) => {
+    const { nodes } = get();
+    const preset = get().groupPresets.find(p => p.id === presetId);
+    if (!preset) return null;
+    pushHistory(nodes);
+
+    // Re-ID all subgraph nodes to avoid collisions
+    const idMap = new Map<string, string>();
+    const newSubNodes = preset.subgraph.nodes.map(n => {
+      const newId = `node_${nodeIdCounter++}`;
+      idMap.set(n.id, newId);
+      return { ...n, id: newId };
+    });
+
+    // Remap connections inside subgraph
+    const remappedSubNodes = newSubNodes.map(n => ({
+      ...n,
+      inputs: Object.fromEntries(
+        Object.entries(n.inputs).map(([k, v]) => [
+          k,
+          v.connection && idMap.has(v.connection.nodeId)
+            ? { ...v, connection: { ...v.connection, nodeId: idMap.get(v.connection.nodeId)! } }
+            : v,
+        ])
+      ),
+    }));
+
+    // Remap ports
+    const remappedInputPorts = preset.subgraph.inputPorts.map(p => ({
+      ...p, toNodeId: idMap.get(p.toNodeId) ?? p.toNodeId,
+    }));
+    const remappedOutputPorts = preset.subgraph.outputPorts.map(p => ({
+      ...p, fromNodeId: idMap.get(p.fromNodeId) ?? p.fromNodeId,
+    }));
+
+    const newSubgraph: import('../types/nodeGraph').SubgraphData = {
+      nodes: remappedSubNodes,
+      inputPorts: remappedInputPorts,
+      outputPorts: remappedOutputPorts,
+    };
+
+    const groupInputSockets: Record<string, import('../types/nodeGraph').InputSocket> = {};
+    for (const p of remappedInputPorts) {
+      groupInputSockets[p.key] = { type: p.type, label: p.label };
+    }
+    const groupOutputSockets: Record<string, import('../types/nodeGraph').OutputSocket> = {};
+    for (const p of remappedOutputPorts) {
+      groupOutputSockets[p.key] = { type: p.type, label: p.label };
+    }
+
+    const groupId = `group_${Date.now()}`;
+    const pos = position ?? { x: 200 + Math.random() * 100, y: 200 + Math.random() * 100 };
+    const groupNode: GraphNode = {
+      id: groupId,
+      type: 'group',
+      position: pos,
+      inputs: groupInputSockets,
+      outputs: groupOutputSockets,
+      params: { label: preset.label, subgraph: newSubgraph },
+    };
+
+    set(state => ({ nodes: [...state.nodes, groupNode] }));
+    get().compile();
+    return groupId;
   },
 
   swapNode: (nodeId, newType) => {
@@ -1092,8 +1243,6 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (nodes.length === 0) return;
 
     // Layout constants
-    const COL_W = 290;   // horizontal step between columns
-    const ROW_H = 210;   // vertical step between rows in same column
     const START_X = 40;
     const START_Y = 60;
 
@@ -1149,15 +1298,16 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     for (const arr of cols.values()) arr.sort();
 
-    // Assign positions
+    // Assign positions — accumulate y per column so taller nodes don't overlap
     const newPositions: Map<string, { x: number; y: number }> = new Map();
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
     for (const [col, ids] of cols.entries()) {
-      ids.forEach((id, row) => {
-        newPositions.set(id, {
-          x: START_X + col * COL_W,
-          y: START_Y + row * ROW_H,
-        });
-      });
+      let y = START_Y;
+      for (const id of ids) {
+        newPositions.set(id, { x: START_X + col * 340, y });
+        const node = nodeMap.get(id);
+        y += (node ? estimateNodeHeight(node) : 210) + 24; // 24px gap between nodes
+      }
     }
 
     set(state => ({
