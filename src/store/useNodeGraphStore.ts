@@ -400,9 +400,37 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         finalNodes = [...stampedNodes, loopIndexNode];
       }
 
+      // Migrate missing ps_ sockets for inner node float params
+      const groupNodeForMigration = state.nodes.find(n => n.id === id);
+      const hasPsSockets = groupNodeForMigration
+        ? Object.keys(groupNodeForMigration.inputs).some(k => k.startsWith('ps_'))
+        : false;
+      let updatedGroupInputs = groupNodeForMigration?.inputs ?? {};
+      if (!hasPsSockets && groupNodeForMigration) {
+        const newPsSockets: Record<string, import('../types/nodeGraph').InputSocket> = {};
+        for (const sn of finalNodes) {
+          const snDef = getNodeDefinition(sn.type);
+          const snParamDefs = snDef?.paramDefs ?? {};
+          for (const [paramKey, paramDef] of Object.entries(snParamDefs)) {
+            if (paramDef.type !== 'float') continue;
+            if (paramDef.step === 1) continue;
+            const psKey = `ps_${sn.id}_${paramKey}`;
+            newPsSockets[psKey] = {
+              type: 'float' as import('../types/nodeGraph').DataType,
+              label: paramDef.label,
+            };
+          }
+        }
+        updatedGroupInputs = { ...updatedGroupInputs, ...newPsSockets };
+      }
+
       const updatedNodes = state.nodes.map(n => {
         if (n.id !== id) return n;
-        return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: finalNodes } } };
+        return {
+          ...n,
+          inputs: updatedGroupInputs,
+          params: { ...n.params, subgraph: { ...sg, nodes: finalNodes } },
+        };
       });
       return { activeGroupId: id, nodes: updatedNodes };
     });
@@ -458,6 +486,21 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           type: inp.type,
           label: key,
           connection: { ...inp.connection },
+        };
+      }
+    }
+
+    // Add param input sockets for each inner node's float paramDefs
+    for (const sn of selectedNodes) {
+      const snDef = getNodeDefinition(sn.type);
+      const snParamDefs = snDef?.paramDefs ?? {};
+      for (const [paramKey, paramDef] of Object.entries(snParamDefs)) {
+        if (paramDef.type !== 'float') continue;
+        if (paramDef.step === 1) continue; // skip integer params
+        const psKey = `ps_${sn.id}_${paramKey}`;
+        groupInputSockets[psKey] = {
+          type: 'float' as import('../types/nodeGraph').DataType,
+          label: paramDef.label,
         };
       }
     }
@@ -1246,9 +1289,41 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(state => {
       // Top-level node
       if (state.nodes.some(n => n.id === nodeId)) {
+        const node = state.nodes.find(n => n.id === nodeId)!;
+        // If this is a group node being updated with override keys (innerNodeId::paramKey),
+        // also sync those values into the subgraph nodes' params
+        if (node.type === 'group') {
+          const sg = node.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (sg) {
+            let updatedSgNodes = sg.nodes;
+            let hasOverrides = false;
+            for (const [key, val] of Object.entries(params)) {
+              if (key.includes('::')) {
+                hasOverrides = true;
+                const sepIdx = key.indexOf('::');
+                const innerNodeId = key.slice(0, sepIdx);
+                const paramKey = key.slice(sepIdx + 2);
+                updatedSgNodes = updatedSgNodes.map(sn =>
+                  sn.id === innerNodeId
+                    ? { ...sn, params: { ...sn.params, [paramKey]: val } }
+                    : sn
+                );
+              }
+            }
+            if (hasOverrides) {
+              return {
+                nodes: state.nodes.map(n =>
+                  n.id === nodeId
+                    ? { ...n, params: { ...n.params, ...params, subgraph: { ...sg, nodes: updatedSgNodes } } }
+                    : n
+                ),
+              };
+            }
+          }
+        }
         return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n) };
       }
-      // Subgraph node (inside "enter group" view)
+      // Subgraph node — also sync to group node's override keys
       const groupId = state.activeGroupId;
       if (!groupId) return {};
       return {
@@ -1256,9 +1331,25 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           if (n.id !== groupId) return n;
           const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
           if (!sg) return n;
+          // Build override key updates for the group node (nodeId::paramKey)
+          const overrideUpdates: Record<string, unknown> = {};
+          for (const [key, val] of Object.entries(params)) {
+            if (!key.includes('::')) { // avoid double-syncing
+              overrideUpdates[`${nodeId}::${key}`] = val;
+            }
+          }
           return {
             ...n,
-            params: { ...n.params, subgraph: { ...sg, nodes: sg.nodes.map(sn => sn.id === nodeId ? { ...sn, params: { ...sn.params, ...params } } : sn) } },
+            params: {
+              ...n.params,
+              ...overrideUpdates,
+              subgraph: {
+                ...sg,
+                nodes: sg.nodes.map(sn =>
+                  sn.id === nodeId ? { ...sn, params: { ...sn.params, ...params } } : sn
+                ),
+              },
+            },
           };
         }),
       };
@@ -1298,34 +1389,113 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
     pushHistory(get().nodes);
-    set(state => ({
-      nodes: state.nodes.map(n => {
-        if (n.id !== targetNodeId) return n;
+    set(state => {
+      // Top-level connection
+      if (state.nodes.some(n => n.id === targetNodeId)) {
         return {
-          ...n,
-          inputs: {
-            ...n.inputs,
-            [targetInputKey]: {
-              ...n.inputs[targetInputKey],
-              connection: { nodeId: sourceNodeId, outputKey: sourceOutputKey },
-            },
-          },
+          nodes: state.nodes.map(n => {
+            if (n.id !== targetNodeId) return n;
+            return {
+              ...n,
+              inputs: {
+                ...n.inputs,
+                [targetInputKey]: {
+                  ...n.inputs[targetInputKey],
+                  connection: { nodeId: sourceNodeId, outputKey: sourceOutputKey },
+                },
+              },
+            };
+          }),
         };
-      }),
-    }));
+      }
+      // Subgraph connection (inside active group)
+      const groupId = state.activeGroupId;
+      if (!groupId) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          const targetSgNode = sg.nodes.find(sn => sn.id === targetNodeId);
+          if (!targetSgNode) return n;
+          // Determine type/label for __param_ virtual inputs
+          let socketType: import('../types/nodeGraph').DataType = targetSgNode.inputs[targetInputKey]?.type ?? 'float';
+          let socketLabel = targetSgNode.inputs[targetInputKey]?.label ?? targetInputKey;
+          if (targetInputKey.startsWith('__param_')) {
+            const paramKey = targetInputKey.slice('__param_'.length);
+            const def = getNodeDefinition(targetSgNode.type);
+            const pd = def?.paramDefs?.[paramKey];
+            if (pd) { socketType = (pd.type as import('../types/nodeGraph').DataType) ?? 'float'; socketLabel = pd.label; }
+          }
+          return {
+            ...n,
+            params: {
+              ...n.params,
+              subgraph: {
+                ...sg,
+                nodes: sg.nodes.map(sn => {
+                  if (sn.id !== targetNodeId) return sn;
+                  return {
+                    ...sn,
+                    inputs: {
+                      ...sn.inputs,
+                      [targetInputKey]: {
+                        type: socketType,
+                        label: socketLabel,
+                        connection: { nodeId: sourceNodeId, outputKey: sourceOutputKey },
+                      },
+                    },
+                  };
+                }),
+              },
+            },
+          };
+        }),
+      };
+    });
     get().compile();
   },
 
   disconnectInput: (nodeId, inputKey) => {
     pushHistory(get().nodes);
-    set(state => ({
-      nodes: state.nodes.map(n => {
-        if (n.id !== nodeId) return n;
-        const newInput = { ...n.inputs[inputKey] };
-        delete newInput.connection;
-        return { ...n, inputs: { ...n.inputs, [inputKey]: newInput } };
-      }),
-    }));
+    set(state => {
+      // Top-level
+      if (state.nodes.some(n => n.id === nodeId)) {
+        return {
+          nodes: state.nodes.map(n => {
+            if (n.id !== nodeId) return n;
+            const newInput = { ...n.inputs[inputKey] };
+            delete newInput.connection;
+            return { ...n, inputs: { ...n.inputs, [inputKey]: newInput } };
+          }),
+        };
+      }
+      // Subgraph
+      const groupId = state.activeGroupId;
+      if (!groupId) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return {
+            ...n,
+            params: {
+              ...n.params,
+              subgraph: {
+                ...sg,
+                nodes: sg.nodes.map(sn => {
+                  if (sn.id !== nodeId) return sn;
+                  const newInput = { ...sn.inputs[inputKey] };
+                  delete newInput.connection;
+                  return { ...sn, inputs: { ...sn.inputs, [inputKey]: newInput } };
+                }),
+              },
+            },
+          };
+        }),
+      };
+    });
     get().compile();
   },
 

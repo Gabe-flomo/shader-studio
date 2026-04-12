@@ -280,6 +280,17 @@ export function generateFragmentShader(
               paramOverrides[key.slice(overridePrefix.length)] = val;
             }
           }
+          // ps_ external socket connections override slider values with GLSL vars
+          const snDefForOverrides = getNodeDefinition(subNode.type);
+          if (snDefForOverrides?.paramDefs) {
+            for (const paramKey of Object.keys(snDefForOverrides.paramDefs)) {
+              const psKey = `ps_${subNode.id}_${paramKey}`;
+              const externalVar = inputVars[psKey];
+              if (externalVar) {
+                paramOverrides[paramKey] = externalVar;
+              }
+            }
+          }
           return {
             ...subNode,
             id: iterPrefix + subNode.id,
@@ -319,7 +330,18 @@ export function generateFragmentShader(
               }
             }
           }
-          const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(subNode, subDef);
+          // Apply __param_X input connections as param overrides (string GLSL vars skip uniform patching)
+          let effectiveSubNode = subNode;
+          for (const [k, v] of Object.entries(subInputVars)) {
+            if (k.startsWith('__param_') && v) {
+              const paramKey = k.slice('__param_'.length);
+              effectiveSubNode = {
+                ...effectiveSubNode,
+                params: { ...effectiveSubNode.params, [paramKey]: v },
+              };
+            }
+          }
+          const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(effectiveSubNode, subDef);
           Object.assign(paramUniforms, subUniforms);
           const subResult = subDef.generateGLSL(patchedSub, subInputVars);
           mainCode.push(subResult.code);

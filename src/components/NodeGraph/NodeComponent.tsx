@@ -54,6 +54,8 @@ interface Props {
    * the group editor.
    */
   externalInputKeys?: Set<string>;
+  /** When inside a group view, set of param keys that are driven by external ps_ connections */
+  externalParamKeys?: Set<string>;
 }
 
 const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput']);
@@ -237,10 +239,11 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
+  const activeGroupId   = useNodeGraphStore(s => s.activeGroupId);
   const isPreviewActive = previewNodeId === node.id;
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
@@ -1022,44 +1025,88 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const innerDef = getNodeDefinition(innerNode.type);
           const innerParamDefs = innerDef?.paramDefs ?? {};
           const paramEntries = Object.entries(innerParamDefs).filter(([, pd]) =>
-            pd.type === 'float' || pd.type === 'vec3'
+            pd.type === 'float' && pd.step !== 1
           );
           if (paramEntries.length === 0) return null;
+
+          // Filter out internally-driven params (have __param_ connection inside group)
+          const visibleParams = paramEntries.filter(([paramKey]) =>
+            !innerNode.inputs[`__param_${paramKey}`]?.connection
+          );
+          if (visibleParams.length === 0) return null;
+
           const innerLabel = typeof innerNode.params.label === 'string'
             ? innerNode.params.label
             : (innerDef?.label ?? innerNode.type);
+
           return (
             <div key={innerNode.id} style={{ borderTop: '1px solid #313244' }}>
               <div style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em' }}>
                 {innerLabel.toUpperCase()}
               </div>
-              {paramEntries.map(([paramKey, paramDef]) => {
-                if (paramDef.type !== 'float') return null; // only float for now
+              {visibleParams.map(([paramKey, paramDef]) => {
+                if (paramDef.type !== 'float') return null;
+                const psKey = `ps_${innerNode.id}_${paramKey}`;
+                const psSocket = node.inputs[psKey];
+                const externallyDriven = !!(psSocket?.connection);
                 const overrideKey = `${innerNode.id}::${paramKey}`;
                 const rawVal = node.params[overrideKey] ?? innerNode.params[paramKey];
                 const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
                 const min = paramDef.min ?? 0;
                 const max = paramDef.max ?? 1;
                 const step = paramDef.step ?? 0.01;
+
                 return (
                   <div
                     key={paramKey}
-                    style={{ padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
                     onMouseDown={e => e.stopPropagation()}
                   >
-                    <span style={{ color: '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
-                    <input
-                      type="range"
-                      min={min}
-                      max={max}
-                      step={step}
-                      value={currentVal}
-                      onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
-                      style={{ flex: 1, accentColor: '#89b4fa', cursor: 'pointer' }}
+                    {/* ps_ input socket dot — positioned on left edge */}
+                    <div
+                      ref={el => { registerSocket(node.id, 'in', psKey, el); }}
+                      onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, psKey); }}
+                      style={{
+                        position: 'absolute',
+                        left: isTouchDevice ? -6 : -5,
+                        width: isTouchDevice ? 16 : 8,
+                        height: isTouchDevice ? 16 : 8,
+                        borderRadius: '50%',
+                        background: externallyDriven ? '#f0a' : 'transparent',
+                        border: `1.5px solid ${externallyDriven ? '#f0a' : '#585b70'}`,
+                        cursor: 'crosshair',
+                        touchAction: 'manipulation',
+                      }}
                     />
-                    <span style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                    <span style={{ color: externallyDriven ? '#a6adc8' : '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
+                      {paramDef.label}
                     </span>
+                    {externallyDriven ? (
+                      <>
+                        <span style={{ flex: 1, fontSize: '10px', color: '#585b70', fontStyle: 'italic' }}>wired</span>
+                        <button
+                          onMouseDown={e => e.stopPropagation()}
+                          onClick={() => disconnectInput(node.id, psKey)}
+                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                          title="Disconnect"
+                        >×</button>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="range"
+                          min={min}
+                          max={max}
+                          step={step}
+                          value={currentVal}
+                          onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
+                          style={{ flex: 1, accentColor: '#89b4fa', cursor: 'pointer' }}
+                        />
+                        <span style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -1803,6 +1850,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             const socketConn = node.inputs[key]?.connection;
             const isSocketConnected = socketConn != null;
             const isParamExternal = externalInputKeys?.has(key) ?? false;
+            const isParamExternallyDriven = externalParamKeys?.has(key) ?? false;
+            const paramInputKey = `__param_${key}`;
+            const paramInputConn = node.inputs[paramInputKey]?.connection;
+            const isParamInternallyWired = paramInputConn != null;
             if (isSocketConnected) {
               const srcExpr = getSourceExpr(shaderLines, socketConn!.nodeId, socketConn!.outputKey);
               return (
@@ -1848,6 +1899,60 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 </div>
               );
             }
+            // When externally driven by a ps_ connection from outside the group — lock
+            if (isParamExternallyDriven) {
+              const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
+              return (
+                <div
+                  key={key}
+                  style={{ padding: '3px 10px 3px 16px', display: 'flex', alignItems: 'center', gap: '6px', opacity: 0.4, position: 'relative' }}
+                >
+                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
+                    {paramDef.label} <span style={{ fontSize: '8px' }}>🔒</span>
+                  </span>
+                  <span style={{ color: '#585b70', fontSize: '10px', fontFamily: 'monospace' }}>{val}</span>
+                </div>
+              );
+            }
+            // When internally wired via __param_ connection
+            if (isParamInternallyWired) {
+              const srcExpr = getSourceExpr(shaderLines, paramInputConn!.nodeId, paramInputConn!.outputKey);
+              return (
+                <div
+                  key={key}
+                  style={{ padding: '3px 10px 3px 16px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
+                  onMouseDown={e => e.stopPropagation()}
+                >
+                  {activeGroupId && (
+                    <div
+                      ref={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
+                      onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }}
+                      style={{
+                        position: 'absolute',
+                        left: isTouchDevice ? -6 : -5,
+                        width: isTouchDevice ? 16 : 8,
+                        height: isTouchDevice ? 16 : 8,
+                        borderRadius: '50%',
+                        background: '#f0a',
+                        border: '1.5px solid #f0a',
+                        cursor: 'crosshair',
+                      }}
+                    />
+                  )}
+                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
+                  <span style={{ color: '#89b4fa', fontSize: '9px', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    title={srcExpr}>
+                    = {srcExpr}
+                  </span>
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => disconnectInput(node.id, paramInputKey)}
+                    style={{ fontSize: '9px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                    title="Disconnect"
+                  >×</button>
+                </div>
+              );
+            }
             const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
             const min = paramDef.min ?? 0;
             const max = paramDef.max ?? 1;
@@ -1855,9 +1960,25 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             return (
               <div
                 key={key}
-                style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{ padding: '3px 10px 3px 16px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
                 onMouseDown={e => e.stopPropagation()}
               >
+                {activeGroupId && (
+                  <div
+                    ref={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
+                    onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }}
+                    style={{
+                      position: 'absolute',
+                      left: isTouchDevice ? -6 : -5,
+                      width: isTouchDevice ? 16 : 8,
+                      height: isTouchDevice ? 16 : 8,
+                      borderRadius: '50%',
+                      background: 'transparent',
+                      border: '1.5px solid #585b70',
+                      cursor: 'crosshair',
+                    }}
+                  />
+                )}
                 <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '60px' }}>{paramDef.label}</span>
                 <input
                   type="range"

@@ -99,6 +99,33 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     return map;
   }, [nodes, activeGroupId]);
 
+  // Map of innerNodeId → Set<paramKey> for params driven by external ps_ connections
+  const externalParamMap = React.useMemo(() => {
+    if (!activeGroupId) return null;
+    const groupNode = nodes.find(n => n.id === activeGroupId);
+    if (!groupNode) return null;
+    const map = new Map<string, Set<string>>();
+    for (const [key, socket] of Object.entries(groupNode.inputs)) {
+      if (!key.startsWith('ps_') || !socket.connection) continue;
+      // key format: ps_${innerNodeId}_${paramKey}
+      const withoutPrefix = key.slice('ps_'.length);
+      // Find the split point: innerNodeId ends where paramKey starts
+      // innerNodeIds can contain underscores, so we need to match by known inner node IDs
+      const sg = groupNode.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+      if (sg) {
+        for (const sn of sg.nodes) {
+          if (withoutPrefix.startsWith(sn.id + '_')) {
+            const paramKey = withoutPrefix.slice(sn.id.length + 1);
+            let set = map.get(sn.id);
+            if (!set) { set = new Set(); map.set(sn.id, set); }
+            set.add(paramKey);
+          }
+        }
+      }
+    }
+    return map;
+  }, [nodes, activeGroupId]);
+
   // Compute loop regions for the visual overlay (dashed bounding boxes behind body nodes)
   const loopRegions = useMemo(() => {
     const chains = collectLoopPairChains(displayNodes);
@@ -960,6 +987,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             onEnterGroup={setActiveGroupId}
             hasError={errorNodeIds.has(node.id)}
             externalInputKeys={externalPortMap?.get(node.id)}
+            externalParamKeys={externalParamMap?.get(node.id)}
           />
         ))}
       </div>
