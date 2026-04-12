@@ -277,6 +277,34 @@ function App() {
     </div>
   ) : null;
 
+  // ── Graph toolbar — shared by tablet + desktop layouts ────────────────────
+  // Collapses to icon-only on desktop-sm to avoid crowding the top strip.
+  const compact = bp === 'desktop-sm';
+  const graphToolbarEl = (
+    <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <button onClick={exportGraph} style={btnStyle()} title="Export graph">
+        {compact ? '⬇' : '⬇ Export'}
+      </button>
+      <button onClick={importGraphFromFile} style={btnStyle()} title="Import graph">
+        {compact ? '⬆' : '⬆ Import'}
+      </button>
+      <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 1px' }} />
+      <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Record animation">
+        {compact ? '🎬' : '🎬 Record'}
+      </button>
+      <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts">
+        {compact ? '⌨' : '⌨ Keys'}
+      </button>
+      <button
+        onClick={() => { if (window.confirm('Clear all nodes?')) loadExampleGraph('blank'); }}
+        style={{ ...btnStyle(), color: '#f38ba8' }}
+        title="Clear all nodes"
+      >
+        ✕
+      </button>
+    </div>
+  );
+
   // ══════════════════════════════════════════════════════════════════════════
   // MOBILE LAYOUT (< 768px)
   // Preview fills entire screen, floating nav + bottom action bar
@@ -492,25 +520,8 @@ function App() {
 
           {/* Center: Node Graph */}
           <div style={{ flex: 1, position: 'relative', minWidth: 0, userSelect: isDragging ? 'none' : undefined }}>
-            {/* Toolbar */}
-            <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <button onClick={exportGraph} style={btnStyle()}>⬇ Export</button>
-              <button onClick={importGraphFromFile} style={btnStyle()}>⬆ Import</button>
-              <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
-              <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Export animation">
-                🎬 Record
-              </button>
-              <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts">
-                ⌨ Keys
-              </button>
-              <button
-                onClick={() => { if (window.confirm('Clear all nodes and start fresh?')) loadExampleGraph('blank'); }}
-                style={{ ...btnStyle(), color: '#f38ba8' }}
-                title="Clear all nodes"
-              >
-                ✕ Clear
-              </button>
-            </div>
+            {/* Toolbar — collapses to icon-only on small screens */}
+            {graphToolbarEl}
             {savePanelEl}
             {loadPanelEl}
 
@@ -586,29 +597,8 @@ function App() {
         {/* Center: Node Graph Editor */}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
 
-          {/* Toolbar */}
-          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <button onClick={exportGraph} style={btnStyle()}>⬇ Export</button>
-            <button onClick={importGraphFromFile} style={btnStyle()}>⬆ Import</button>
-            <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
-            <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Export animation as video">
-              🎬 Record
-            </button>
-            <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts (?)">
-              ⌨ Keys
-            </button>
-            <button
-              onClick={() => {
-                if (window.confirm('Clear all nodes and start fresh?')) {
-                  loadExampleGraph('blank');
-                }
-              }}
-              style={{ ...btnStyle(), color: '#f38ba8' }}
-              title="Clear all nodes"
-            >
-              ✕ Clear
-            </button>
-          </div>
+          {/* Toolbar — collapses to icon-only on small screens */}
+          {graphToolbarEl}
 
 
           {/* Code toggle */}

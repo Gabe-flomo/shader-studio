@@ -7,6 +7,7 @@ import { socketRegistry } from './socketRegistry';
 import { Minimap } from './Minimap';
 import { collectLoopPairChains } from '../../compiler/topoSort';
 import { loadShortcutMap, displayCombo } from '../../hooks/useShortcuts';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 240;
@@ -40,6 +41,8 @@ const ZOOM_MIN = 0.15;
 const ZOOM_MAX = 2.5;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
+  const bp = useBreakpoint();
+  const compactToolbar = bp === 'desktop-sm';
   const nodes                 = useNodeGraphStore(s => s.nodes);
   const compilationErrors     = useNodeGraphStore(s => s.compilationErrors);
   const connectNodes          = useNodeGraphStore(s => s.connectNodes);
@@ -662,7 +665,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           >
             {Math.round(zoom * 100)}%
           </button>
-          {!isTouchDevice.current && (
+          {!isTouchDevice.current && !compactToolbar && (
             <input
               type="range"
               min={Math.round(ZOOM_MIN * 100)}
@@ -684,10 +687,10 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
           onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
         >
-          ⊡ Fit
+          {compactToolbar ? '⊡' : '⊡ Fit'}
         </button>
 
-        {!isTouchDevice.current && (
+        {!isTouchDevice.current && !compactToolbar && (
           <button
             onClick={autoLayout}
             title="Automatically arrange nodes left-to-right by data flow"
@@ -699,7 +702,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           </button>
         )}
 
-        {!isTouchDevice.current && (
+        {!isTouchDevice.current && !compactToolbar && (
           <button
             onClick={toggleMinimap}
             title={showMinimap ? 'Hide minimap' : 'Show minimap'}
@@ -715,11 +718,14 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       {/* Breadcrumb when inside a group */}
       {activeGroupId && activeGroupLabel && (
         <div style={{
-          position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute',
+          top: compactToolbar ? 46 : 10,
+          left: '50%', transform: 'translateX(-50%)',
           background: '#1e1e2e', border: '1px solid #cba6f755',
           color: '#cba6f7', padding: '5px 14px', borderRadius: '8px',
           fontSize: '11px', zIndex: 20, display: 'flex', alignItems: 'center',
           gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          whiteSpace: 'nowrap',
         }}>
           <button
             onClick={() => setActiveGroupId(null)}
