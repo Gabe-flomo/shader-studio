@@ -673,7 +673,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {/* Group header */}
         <div
           onMouseDown={handleGroupHeaderMouseDown}
-          onDoubleClick={() => onEnterGroup?.(node.id)}
+          onDoubleClick={() => { if (!savingMode) onEnterGroup?.(node.id); }}
           style={{
             background: '#313244',
             borderRadius: '6px 6px 0 0',

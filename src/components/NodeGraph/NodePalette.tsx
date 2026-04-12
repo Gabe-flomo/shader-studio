@@ -5,6 +5,7 @@ import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import type { CustomFnPreset } from '../../types/customFnPreset';
+import type { GroupPreset } from '../../types/groupPreset';
 
 // ── Math node ordering: simple → complex ──────────────────────────────────────
 const MATH_ORDER: string[] = [
@@ -64,101 +65,6 @@ const CATEGORY_ORDER = [
   'Sources', 'Spaces', 'Transforms', 'Math', 'Color', 'Noise',
   'Effects', 'Loops', '2D Primitives', 'SDF', 'Combiners',
   'Science', 'Presets', 'Output',
-];
-
-// ─── CustomFn presets ─────────────────────────────────────────────────────────
-
-const FBM_GLSL = `float hash21(vec2 p) {
-  p = fract(p * vec2(234.34, 435.345));
-  p += dot(p, p + 34.23);
-  return fract(p.x * p.y);
-}
-
-float fbm(vec2 p) {
-  float v = 0.0; float a = 0.5;
-  vec2 shift = vec2(100.0);
-  mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-  for(int i = 0; i < 5; i++){
-    v += a * (hash21(p) * 2.0 - 1.0);
-    p = rot * p * 2.0 + shift;
-    a *= 0.5;
-  }
-  return v;
-}`;
-
-const VALUE_NOISE_GLSL = `float hash21(vec2 p) {
-  p = fract(p * vec2(234.34, 435.345));
-  p += dot(p, p + 34.23);
-  return fract(p.x * p.y);
-}
-
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(hash21(i+vec2(0,0)), hash21(i+vec2(1,0)), u.x),
-    mix(hash21(i+vec2(0,1)), hash21(i+vec2(1,1)), u.x),
-    u.y
-  );
-}`;
-
-const VORONOI_GLSL = `vec2 voronoi(vec2 x) {
-  vec2 n = floor(x);
-  vec2 f = fract(x);
-  float md = 8.0; vec2 mr = vec2(0.0);
-  for(int j=-1; j<=1; j++)
-  for(int i=-1; i<=1; i++){
-    vec2 g = vec2(float(i), float(j));
-    vec2 o = fract(sin(vec2(dot(n+g,vec2(127.1,311.7)), dot(n+g,vec2(269.5,183.3))))*43758.5453);
-    vec2 r = g + o - f;
-    float d = dot(r,r);
-    if(d < md){ md = d; mr = r; }
-  }
-  return vec2(sqrt(md), dot(mr, mr));
-}`;
-
-// Local type for the hardcoded presets (no id/savedAt needed)
-interface BuiltinPreset {
-  label: string;
-  inputs: Array<{ name: string; type: string }>;
-  outputType: string;
-  body: string;
-  glslFunctions: string;
-}
-
-const CUSTOMFN_PRESETS: BuiltinPreset[] = [
-  {
-    label: 'FBM Noise',
-    inputs: [{ name: 'p', type: 'vec2' }],
-    outputType: 'float',
-    body: 'fbm(p)',
-    glslFunctions: FBM_GLSL,
-  },
-  {
-    label: 'Value Noise',
-    inputs: [{ name: 'p', type: 'vec2' }],
-    outputType: 'float',
-    body: 'noise(p)',
-    glslFunctions: VALUE_NOISE_GLSL,
-  },
-  {
-    label: 'Voronoi',
-    inputs: [{ name: 'p', type: 'vec2' }],
-    outputType: 'float',
-    body: 'voronoi(p).x',
-    glslFunctions: VORONOI_GLSL,
-  },
-  {
-    label: 'SDF Box',
-    inputs: [{ name: 'p', type: 'vec2' }, { name: 'b', type: 'vec2' }],
-    outputType: 'float',
-    body: 'sdBox(p, b)',
-    glslFunctions: `float sdBox(vec2 p, vec2 b) {
-  vec2 d = abs(p) - b;
-  return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
-}`,
-  },
 ];
 
 
@@ -267,6 +173,10 @@ interface NodePaletteProps {
 export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   const { addNode, spawnGraph, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk,
     swapTargetNodeId, setSwapTargetNodeId, swapNode, nodes: graphNodes } = useNodeGraphStore();
+  const groupPresets         = useNodeGraphStore(s => s.groupPresets);
+  const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
+  const deleteGroupPreset    = useNodeGraphStore(s => s.deleteGroupPreset);
+  const [hoverGroupPresetId, setHoverGroupPresetId] = useState<string | null>(null);
   const [hoveredExampleIdx, setHoveredExampleIdx] = useState<number | null>(null);
   const exampleTooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Sort categories by preferred order; unknown categories appended alphabetically
@@ -621,46 +531,72 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
         })
       )}
 
-      {/* ── CustomFn Presets ── */}
+      {/* ── Group Presets ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
           <div style={{
             fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: '#cba6f7',
+            textTransform: 'uppercase', color: '#f9e2af',
             paddingLeft: '4px', marginBottom: '4px',
           }}>
-            Presets
+            Group Presets
           </div>
-          {CUSTOMFN_PRESETS.map(preset => (
-            <button
-              key={preset.label}
-              onClick={() => {
-                const x = 200 + Math.random() * 120;
-                const y = 120 + Math.random() * 200;
-                addNode('customFn', { x, y }, {
-                  label: preset.label,
-                  inputs: preset.inputs,
-                  outputType: preset.outputType,
-                  body: preset.body,
-                  glslFunctions: preset.glslFunctions,
-                });
-              }}
-              title={`Add "${preset.label}" CustomFn node`}
-              style={{
-                display: 'block', width: '100%',
-                padding: '5px 10px', marginBottom: '2px',
-                background: '#2a1f3d',
-                border: '1px solid #cba6f733',
-                color: '#cba6f7', cursor: 'pointer',
-                textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#3a2550')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#2a1f3d')}
-            >
-              ƒ {preset.label}
-            </button>
-          ))}
+          {groupPresets.length === 0 ? (
+            <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '4px', fontStyle: 'italic', lineHeight: 1.6 }}>
+              Select a group node and click<br />⬇ Save to create a preset.
+            </div>
+          ) : (
+            groupPresets.map((preset: GroupPreset) => (
+              <div
+                key={preset.id}
+                style={{ position: 'relative', marginBottom: '2px' }}
+                onMouseEnter={() => setHoverGroupPresetId(preset.id)}
+                onMouseLeave={() => setHoverGroupPresetId(null)}
+              >
+                <button
+                  onClick={() => {
+                    const x = 200 + Math.random() * 120;
+                    const y = 120 + Math.random() * 200;
+                    instantiateGroupPreset(preset.id, { x, y });
+                    onNodeAdded?.();
+                  }}
+                  title={preset.description ?? `Add "${preset.label}" group`}
+                  style={{
+                    display: 'block', width: '100%',
+                    padding: '5px 28px 5px 10px', marginBottom: '0',
+                    background: '#1e1a0e',
+                    border: '1px solid #f9e2af33',
+                    color: '#f9e2af', cursor: 'pointer',
+                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#2a2412')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1e1a0e')}
+                >
+                  <div>⬡ {preset.label}</div>
+                  {preset.description && (
+                    <div style={{ fontSize: '10px', color: '#a89060', marginTop: '1px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {preset.description}
+                    </div>
+                  )}
+                </button>
+                {hoverGroupPresetId === preset.id && (
+                  <button
+                    onClick={e => { e.stopPropagation(); deleteGroupPreset(preset.id); }}
+                    title="Delete preset"
+                    style={{
+                      position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none',
+                      color: '#585b70', cursor: 'pointer',
+                      fontSize: '11px', padding: '2px 4px', lineHeight: 1,
+                    }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                  >✕</button>
+                )}
+              </div>
+            ))
+          )}
         </div>
       )}
 
