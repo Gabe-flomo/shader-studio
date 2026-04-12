@@ -458,9 +458,25 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
 
+    // Mark all original selected nodes as immutable within the group
+    const originalNodes = selectedNodes.map(n => ({
+      ...n,
+      params: { ...n.params, _groupOriginal: true },
+    }));
+
+    // Auto-inject a LoopIndex node so iteration counter `i` is always accessible
+    const loopIndexNode: import('../types/nodeGraph').GraphNode = {
+      id: `loopidx_${Date.now()}`,
+      type: 'loopIndex',
+      position: { x: Math.min(...xs) - 220, y: Math.min(...ys) },
+      inputs: {},
+      outputs: { i: { type: 'float', label: 'i' } },
+      params: { _groupOriginal: true },
+    };
+
     const groupId = `group_${Date.now()}`;
     const subgraph: import('../types/nodeGraph').SubgraphData = {
-      nodes: selectedNodes,
+      nodes: [...originalNodes, loopIndexNode],
       inputPorts,
       outputPorts,
     };
@@ -1029,8 +1045,43 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeNode: (nodeId) => {
+    const { nodes, activeGroupId } = get();
+
+    // When inside a group, handle subgraph node removal
+    if (activeGroupId) {
+      const groupNode = nodes.find(n => n.id === activeGroupId);
+      const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (sg) {
+        const sgNode = sg.nodes.find(n => n.id === nodeId);
+        // Block deletion of original (creation-time) nodes
+        if (sgNode?.params?._groupOriginal) return;
+        if (sgNode) {
+          pushHistory(nodes);
+          // Remove from subgraph and clear connections pointing to it
+          const newSgNodes = sg.nodes
+            .filter(n => n.id !== nodeId)
+            .map(n => ({
+              ...n,
+              inputs: Object.fromEntries(
+                Object.entries(n.inputs).map(([k, inp]) => [
+                  k,
+                  inp.connection?.nodeId === nodeId ? { ...inp, connection: undefined } : inp,
+                ]),
+              ),
+            }));
+          set(state => ({
+            nodes: state.nodes.map(n => {
+              if (n.id !== activeGroupId) return n;
+              return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes } } };
+            }),
+          }));
+          get().compile();
+          return;
+        }
+      }
+    }
+
     pushHistory(get().nodes);
-    const { nodes } = get();
     const deletedNode = nodes.find(n => n.id === nodeId);
 
     // ── Collect bridge info before removing ────────────────────────────────

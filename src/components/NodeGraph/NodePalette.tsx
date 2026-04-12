@@ -122,8 +122,8 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   // Search query
   const [query, setQuery] = useState('');
 
-  // Which categories are expanded (accordion). Default: Sources + Math open.
-  const [open, setOpen] = useState<Set<string>>(new Set(['Sources', 'Math']));
+  // Which categories are expanded (accordion). Default: all collapsed.
+  const [open, setOpen] = useState<Set<string>>(new Set());
 
   // Import GLSL modal
   const [showImport, setShowImport] = useState(false);
