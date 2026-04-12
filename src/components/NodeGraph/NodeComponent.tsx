@@ -847,12 +847,23 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 {/* Socket dot */}
                 <div
                   ref={el => { registerSocket(node.id, 'in', port.key, el); }}
-                  onMouseUp={() => onEndConnection(node.id, port.key)}
+                  onMouseUp={e => {
+                    e.stopPropagation();
+                    if (node.inputs[port.key]?.connection) {
+                      disconnectInput(node.id, port.key);
+                    } else {
+                      onEndConnection(node.id, port.key);
+                    }
+                  }}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',
-                    background: TYPE_COLORS[port.type] ?? '#888',
+                    background: node.inputs[port.key]?.connection
+                      ? (TYPE_COLORS[port.type] ?? '#888')
+                      : '#1e1e2e',
+                    border: `2px solid ${TYPE_COLORS[port.type] ?? '#888'}`,
                     cursor: 'crosshair',
                     position: 'relative', left: -14,
+                    boxSizing: 'border-box',
                   }}
                 />
                 {editingPortKey === port.key ? (

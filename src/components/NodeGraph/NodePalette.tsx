@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNodeGraphStore, loadCustomFns, getCustomFnDir } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
@@ -67,6 +67,19 @@ const CATEGORY_ORDER = [
   'Science', 'Presets', 'Output',
 ];
 
+// ── Example folders ───────────────────────────────────────────────────────────
+type ExKey = keyof typeof EXAMPLE_GRAPHS;
+
+const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
+  { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'] as ExKey[] },
+  { label: 'Loops',           color: '#89dceb', keys: ['loopRippleWarp','loopRotateSpiral','loopFloatDemo','loopChainedBody','loopZoomTunnel','loopAnimatedSpin','loopTwoStage','loopSpatialFloat','loopDenseRings','loopIterScale'] as ExKey[] },
+  { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal'] as ExKey[] },
+  { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','chladni3dDemo','chladni3dParticlesDemo','electronOrbitalDemo','orbitalVolume3dDemo','gravitationalLens'] as ExKey[] },
+  { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'] as ExKey[] },
+  { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','angularGradient','shapeShowcase'] as ExKey[] },
+  { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
+  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['raymarchSpheres','noiseFloatDemo','remapDemo'] as ExKey[] },
+];
 
 // ─── Loop Example graphs ───────────────────────────────────────────────────────
 // Each example is a pre-wired subgraph (Loop Start + body nodes + Loop End).
@@ -195,6 +208,11 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     ...CATEGORY_ORDER.filter(c => rawCategories.includes(c)),
     ...rawCategories.filter(c => !CATEGORY_ORDER.includes(c)).sort(),
   ];
+
+  const loadExampleGraph = useNodeGraphStore(s => s.loadExampleGraph);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+  const toggleFolder = (label: string) =>
+    setOpenFolders(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
 
   // Search query
   const [query, setQuery] = useState('');
@@ -393,6 +411,87 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
           boxSizing: 'border-box',
         }}
       />
+
+      {/* ── Examples browser ── */}
+      {!isSearching && (
+        <div style={{ marginBottom: '6px' }}>
+          <div style={{
+            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: '#585b70',
+            paddingLeft: '4px', marginBottom: '3px',
+          }}>
+            Examples
+          </div>
+          {EXAMPLE_FOLDERS.map(folder => {
+            const isOpen = openFolders.has(folder.label);
+            return (
+              <div key={folder.label} style={{ marginBottom: '1px' }}>
+                {/* Folder row */}
+                <button
+                  onClick={() => toggleFolder(folder.label)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    width: '100%', background: 'none', border: 'none',
+                    cursor: 'pointer', padding: '3px 4px', borderRadius: '4px',
+                    color: folder.color, fontSize: '11px', fontWeight: 600,
+                    textAlign: 'left', transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}
+                >
+                  <span style={{ fontSize: '8px', opacity: 0.6, width: '8px', flexShrink: 0 }}>
+                    {isOpen ? '▼' : '▶'}
+                  </span>
+                  <span style={{ fontSize: '12px', marginRight: '2px' }}>📁</span>
+                  {folder.label}
+                  <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.4 }}>
+                    {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).length}
+                  </span>
+                </button>
+
+                {/* Example items inside folder */}
+                {isOpen && (
+                  <div style={{ paddingLeft: '18px', paddingBottom: '2px' }}>
+                    {folder.keys
+                      .filter(k => EXAMPLE_GRAPHS[k])
+                      .map(k => {
+                        const ex = EXAMPLE_GRAPHS[k];
+                        return (
+                          <button
+                            key={k}
+                            onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }}
+                            style={{
+                              display: 'block', width: '100%',
+                              padding: '3px 8px', marginBottom: '1px',
+                              background: '#181825',
+                              border: `1px solid ${folder.color}22`,
+                              color: '#a6adc8', cursor: 'pointer',
+                              textAlign: 'left', borderRadius: '4px',
+                              fontSize: '11px', transition: 'background 0.1s',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}
+                            onMouseEnter={e => {
+                              (e.currentTarget as HTMLButtonElement).style.background = '#313244';
+                              (e.currentTarget as HTMLButtonElement).style.color = folder.color;
+                            }}
+                            onMouseLeave={e => {
+                              (e.currentTarget as HTMLButtonElement).style.background = '#181825';
+                              (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8';
+                            }}
+                            title={ex.label}
+                          >
+                            {ex.label}
+                          </button>
+                        );
+                      })
+                    }
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Search results */}
       {isSearching ? (
