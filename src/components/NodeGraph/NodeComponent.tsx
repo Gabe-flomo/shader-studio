@@ -236,6 +236,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const selectedNodeIds    = useNodeGraphStore(s => s.selectedNodeIds);
   const isMultiSelected    = selectedNodeIds.includes(node.id);
   const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
+  const renameGroupPort    = useNodeGraphStore(s => s.renameGroupPort);
+  const saveGroupPreset    = useNodeGraphStore(s => s.saveGroupPreset);
 
   // Swap mode
   const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
@@ -589,6 +591,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   }
 
   // ── Group node special card ──────────────────────────────────────────────────
+  const [editingPortKey, setEditingPortKey] = useState<string | null>(null);
+  const [editingPortLabel, setEditingPortLabel] = useState('');
+
   if (node.type === 'group') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
     const groupLabel = typeof node.params.label === 'string' ? node.params.label : 'Group';
@@ -694,6 +699,22 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           </div>
           <button
             onMouseDown={e => e.stopPropagation()}
+            onClick={() => saveGroupPreset(node.id)}
+            title="Save as preset"
+            style={{
+              background: 'none',
+              border: '1px solid #585b70',
+              color: '#a6adc8',
+              borderRadius: '3px',
+              padding: '1px 5px',
+              fontSize: '10px',
+              cursor: 'pointer',
+            }}
+          >
+            ⬇ Save
+          </button>
+          <button
+            onMouseDown={e => e.stopPropagation()}
             onClick={() => ungroupNode(node.id)}
             title="Dissolve group"
             style={{
@@ -727,7 +748,31 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     position: 'relative', left: -14,
                   }}
                 />
-                <span style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14 }}>{port.label}</span>
+                {editingPortKey === port.key ? (
+                  <input
+                    autoFocus
+                    value={editingPortLabel}
+                    onMouseDown={e => e.stopPropagation()}
+                    onChange={e => setEditingPortLabel(e.target.value)}
+                    onBlur={() => {
+                      if (editingPortLabel.trim()) {
+                        renameGroupPort(node.id, port.key, 'in', editingPortLabel.trim());
+                      }
+                      setEditingPortKey(null);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      if (e.key === 'Escape') setEditingPortKey(null);
+                    }}
+                    style={{ width: '70px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                  />
+                ) : (
+                  <span
+                    style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14, cursor: 'text' }}
+                    title="Double-click to rename"
+                    onDoubleClick={e => { e.stopPropagation(); setEditingPortKey(port.key); setEditingPortLabel(port.label); }}
+                  >{port.label}</span>
+                )}
               </div>
             ))}
           </div>
@@ -736,7 +781,31 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
             {outputPorts.map(port => (
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{port.label}</span>
+                {editingPortKey === ('out_' + port.key) ? (
+                  <input
+                    autoFocus
+                    value={editingPortLabel}
+                    onMouseDown={e => e.stopPropagation()}
+                    onChange={e => setEditingPortLabel(e.target.value)}
+                    onBlur={() => {
+                      if (editingPortLabel.trim()) {
+                        renameGroupPort(node.id, port.key, 'out', editingPortLabel.trim());
+                      }
+                      setEditingPortKey(null);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      if (e.key === 'Escape') setEditingPortKey(null);
+                    }}
+                    style={{ width: '70px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                  />
+                ) : (
+                  <span
+                    style={{ fontSize: '10px', color: '#a6adc8', cursor: 'text' }}
+                    title="Double-click to rename"
+                    onDoubleClick={e => { e.stopPropagation(); setEditingPortKey('out_' + port.key); setEditingPortLabel(port.label); }}
+                  >{port.label}</span>
+                )}
                 <div
                   data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', port.key, el); }}

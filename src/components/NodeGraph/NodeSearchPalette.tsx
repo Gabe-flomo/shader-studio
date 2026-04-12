@@ -10,6 +10,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { NODE_REGISTRY } from '../../nodes/definitions';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import type { GroupPreset } from '../../types/groupPreset';
 
 // ── Category accent colours (matches NodePalette) ─────────────────────────────
 const CATEGORY_COLORS: Record<string, string> = {
@@ -81,6 +82,9 @@ interface Props {
 
 export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
   const { addNode } = useNodeGraphStore();
+  const groupPresets = useNodeGraphStore(s => s.groupPresets);
+  const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
+  const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
 
   const [query, setQuery]       = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
@@ -226,6 +230,70 @@ export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
             flex: 1,
           }}
         >
+          {/* Saved Group Presets (always shown at top when not searching, or when query matches) */}
+          {groupPresets.length > 0 && (!query || groupPresets.some(p => p.label.toLowerCase().includes(query.toLowerCase()))) && (
+            <li>
+              <div style={{
+                padding: '6px 14px 2px',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: '#cba6f7',
+              }}>
+                Saved Groups
+              </div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {groupPresets
+                  .filter(p => !query || p.label.toLowerCase().includes(query.toLowerCase()))
+                  .map(preset => (
+                    <li
+                      key={preset.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '5px 14px',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#313244')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      onClick={() => {
+                        const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
+                        instantiateGroupPreset(preset.id, pos);
+                        onClose();
+                      }}
+                    >
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#cba6f7', flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: '13px', color: '#cdd6f4' }}>{preset.label}</span>
+                      <span style={{ fontSize: '10px', color: '#585b70' }}>
+                        {preset.subgraph.nodes.length} node{preset.subgraph.nodes.length !== 1 ? 's' : ''}
+                      </span>
+                      <button
+                        title="Delete preset"
+                        onMouseDown={e => e.stopPropagation()}
+                        onClick={e => {
+                          e.stopPropagation();
+                          deleteGroupPreset(preset.id);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#585b70',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          padding: '0 2px',
+                          lineHeight: 1,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            </li>
+          )}
+
           {flatList.length === 0 && (
             <li style={{ padding: '24px 16px', textAlign: 'center', color: '#585b70', fontSize: '13px' }}>
               No nodes match "{query}"

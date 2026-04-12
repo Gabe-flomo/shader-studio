@@ -212,6 +212,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     };
   }, []);
 
+  // ── Prevent browser-level pinch-zoom / ctrl+wheel zoom over the canvas ──────
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const prevent = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    el.addEventListener('wheel', prevent, { passive: false });
+    return () => el.removeEventListener('wheel', prevent);
+  }, []);
+
   // ── Wheel / trackpad handler (Ableton-style) ─────────────────────────────
   // • Two-finger scroll (no ctrl) → pan X + Y
   // • Pinch gesture / ctrl+wheel  → zoom toward cursor
@@ -626,16 +635,31 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           alignItems: 'center',
         }}
       >
-        {/* Zoom indicator + reset */}
-        <button
-          onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-          title="Reset zoom to 100%"
-          style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
-        >
-          {Math.round(zoom * 100)}%
-        </button>
+        {/* Zoom control: click to reset, drag slider to zoom */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button
+            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            title="Reset zoom to 100%"
+            style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          {!isTouchDevice.current && (
+            <input
+              type="range"
+              min={Math.round(ZOOM_MIN * 100)}
+              max={Math.round(ZOOM_MAX * 100)}
+              step={5}
+              value={Math.round(zoom * 100)}
+              onMouseDown={e => e.stopPropagation()}
+              onChange={e => setZoom(Number(e.target.value) / 100)}
+              title="Zoom level"
+              style={{ width: '60px', accentColor: '#89b4fa', cursor: 'pointer' }}
+            />
+          )}
+        </div>
 
         <button
           onClick={handleFitView}
