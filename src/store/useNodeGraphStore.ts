@@ -170,7 +170,7 @@ interface NodeGraphState {
   /** Reassign a group output port to a different inner node's output */
   setGroupOutput: (groupId: string, outputPortKey: string, fromNodeId: string, fromOutputKey: string) => void;
   /** Add a new dynamic input port to a group (from inside the group view) */
-  addGroupInput: (groupId: string, type: import('./types/nodeGraph').DataType, label: string) => void;
+  addGroupInput: (groupId: string, type: import('../types/nodeGraph').DataType, label: string) => void;
   /** Reroute an existing group input port to a different inner node socket */
   rerouteGroupInput: (groupId: string, portKey: string, toNodeId: string, toInputKey: string) => void;
   /**

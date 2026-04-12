@@ -253,7 +253,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
   const setNodeAssignOp    = useNodeGraphStore(s => s.setNodeAssignOp);
   const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
-  const activeGroupId      = useNodeGraphStore(s => s.activeGroupId);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
   const isSelected         = selectedNodeId === node.id;

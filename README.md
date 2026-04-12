@@ -152,6 +152,16 @@ Drop the repo in and set build command `npm run build`, publish directory `dist`
 
 ---
 
+## Docs
+
+Feature documentation lives in `docs/`:
+
+| File | Contents |
+|---|---|
+| [`docs/iterated-groups.md`](docs/iterated-groups.md) | `carryMode` and `assignOp` — per-node feedback and accumulation inside iterated groups |
+
+---
+
 ## License
 
 MIT
