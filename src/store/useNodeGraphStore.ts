@@ -160,6 +160,10 @@ interface NodeGraphState {
   // Stateful rendering — true when a PrevFrame node exists in the graph
   isStateful: boolean;
 
+  // Raw GLSL editor override — when set, ShaderCanvas uses this shader instead of the compiled graph
+  rawGlslShader: string | null;
+  setRawGlslShader: (shader: string | null) => void;
+
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
   /**
@@ -353,9 +357,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   textureUniforms: {},
   nodePreviews: {},
   isStateful: false,
+  rawGlslShader: null,
   groupPresets: loadGroupPresets(),
 
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
+  setRawGlslShader: (shader) => set({ rawGlslShader: shader }),
   setActiveGroupId: (id) => {
     if (!id) { set({ activeGroupId: null }); return; }
 

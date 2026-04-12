@@ -77,6 +77,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
 
   const vertexShader       = useNodeGraphStore((state) => state.vertexShader);
   const fragmentShader     = useNodeGraphStore((state) => state.fragmentShader);
+  const rawGlslShader      = useNodeGraphStore((state) => state.rawGlslShader);
+  const activeFragmentShader = rawGlslShader ?? fragmentShader;
   const paramUniforms      = useNodeGraphStore((state) => state.paramUniforms);
   const textureUniforms    = useNodeGraphStore((state) => state.textureUniforms);
   const nodeTextures       = useNodeGraphStore((state) => state.nodeTextures);
@@ -335,7 +337,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
         if (selId) {
           const outputVars = nodeOutputVarMapRef.current.get(selId);
           const selNode    = nodesRef.current.find(n => n.id === selId);
-          const curFs      = useNodeGraphStore.getState().fragmentShader;
+          const _curFs     = useNodeGraphStore.getState().fragmentShader;
+          const curFs      = useNodeGraphStore.getState().rawGlslShader ?? _curFs;
           const curVs      = useNodeGraphStore.getState().vertexShader;
 
           if (outputVars && selNode && curFs && curVs) {
@@ -410,7 +413,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       const SCOPE_LIKE_TYPES = new Set(['scope', 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
       const scopeNodes = nodesRef.current.filter(n => SCOPE_LIKE_TYPES.has(n.type));
       if (scopeNodes.length > 0) {
-        const curScopeFs = useNodeGraphStore.getState().fragmentShader;
+        const _curScopeFs = useNodeGraphStore.getState().fragmentShader;
+        const curScopeFs = useNodeGraphStore.getState().rawGlslShader ?? _curScopeFs;
         const curScopeVs = useNodeGraphStore.getState().vertexShader;
         if (curScopeFs && curScopeVs) {
           if (lastScopeFs !== curScopeFs) {
@@ -476,7 +480,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
           const outputVars = nodeOutputVarMapRef.current.get(previewId);
           const varName    = outputVars?.[floatOutputKey];
           if (varName) {
-            const curFs = useNodeGraphStore.getState().fragmentShader;
+            const _curFs2 = useNodeGraphStore.getState().fragmentShader;
+            const curFs = useNodeGraphStore.getState().rawGlslShader ?? _curFs2;
             const curVs = useNodeGraphStore.getState().vertexShader;
             if (curFs && curVs) {
               if (lastPreviewScopeFs !== curFs) {
@@ -582,10 +587,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   // Update shader when compiled output changes — flush old errors first.
   // Also registers all param uniforms so THREE knows about them from the start.
   useEffect(() => {
-    if (!materialRef.current || !vertexShader || !fragmentShader) return;
+    if (!materialRef.current || !vertexShader || !activeFragmentShader) return;
     setGlslErrors([]);
     materialRef.current.vertexShader = vertexShader;
-    materialRef.current.fragmentShader = fragmentShader;
+    materialRef.current.fragmentShader = activeFragmentShader;
     // Register param uniforms on the material (initial values from compilation)
     const mat = materialRef.current;
     for (const [name, value] of Object.entries(paramUniforms)) {
@@ -613,7 +618,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       }
       pingPongIdx.current = 0;
     }
-  }, [vertexShader, fragmentShader]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vertexShader, activeFragmentShader]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bind sampler2D texture uniforms — runs when textureUniforms or nodeTextures change.
   useEffect(() => {

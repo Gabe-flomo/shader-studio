@@ -1,6 +1,6 @@
 import { useBreakpoint, isMobile } from '../hooks/useBreakpoint';
 
-type Page = 'studio' | 'learn' | 'shortcuts';
+type Page = 'studio' | 'learn' | 'shortcuts' | 'glsl';
 
 interface TopNavProps {
   page: Page;
@@ -94,6 +94,14 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         onClick={() => onPageChange('shortcuts')}
         label={mobile ? '⌨' : '⌨ Keys'}
         title="Keyboard Shortcuts"
+      />
+
+      {/* GLSL editor tab */}
+      <TabButton
+        active={page === 'glsl'}
+        onClick={() => onPageChange('glsl')}
+        label={mobile ? '</>' : '</> GLSL'}
+        title="Raw GLSL Editor"
       />
     </div>
   );

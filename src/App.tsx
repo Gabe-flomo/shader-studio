@@ -8,6 +8,7 @@ import { LearnPage } from './components/LearnPage';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ShortcutsPage } from './components/ShortcutsPage';
+import { GLSLPage } from './components/GLSLPage';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useNodeGraphStore } from './store/useNodeGraphStore';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
@@ -76,7 +77,7 @@ function App() {
   const [previewWidth, setPreviewWidth] = useState(() => getDefaultPreviewWidth(bp));
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
-  const [page, setPage]                 = useState<'studio' | 'learn' | 'shortcuts'>('studio');
+  const [page, setPage]                 = useState<'studio' | 'learn' | 'shortcuts' | 'glsl'>('studio');
 
   // Mobile/tablet drawer state
   const [drawerOpen, setDrawerOpen]         = useState(false);
@@ -471,6 +472,15 @@ function App() {
     );
   }
 
+  if (mobile && page === 'glsl') {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+        <TopNav page={page} onPageChange={setPage} />
+        <GLSLPage />
+      </div>
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // TABLET LAYOUT (768–1024px)
   // 2-panel: collapsible palette strip | graph + preview side by side
@@ -482,6 +492,7 @@ function App() {
 
         {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
         {page === 'shortcuts' && <ShortcutsPage />}
+        {page === 'glsl' && <GLSLPage />}
 
         <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
 
@@ -587,32 +598,37 @@ function App() {
       {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
       {page === 'shortcuts' && <ShortcutsPage />}
 
-      <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined }}>
+      <div style={{ display: (page === 'studio' || page === 'glsl') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined }}>
 
-        {/* Left: Node Palette */}
-        <div style={{ width: paletteW, minWidth: paletteW, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
-          <NodePalette />
-        </div>
+        {/* Left: Node Palette — hidden on GLSL page */}
+        {page === 'studio' && (
+          <div style={{ width: paletteW, minWidth: paletteW, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
+            <NodePalette />
+          </div>
+        )}
 
-        {/* Center: Node Graph Editor */}
+        {/* Center content */}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          {page === 'studio' && (
+            <>
+              {/* Toolbar — collapses to icon-only on small screens */}
+              {graphToolbarEl}
 
-          {/* Toolbar — collapses to icon-only on small screens */}
-          {graphToolbarEl}
+              {/* Code toggle */}
+              <button
+                onClick={() => setShowCode(v => !v)}
+                style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode), fontFamily: 'monospace' }}
+                onMouseEnter={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#45475a'; }}
+                onMouseLeave={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#313244'; }}
+              >
+                {'{ } Code'}
+              </button>
 
-
-          {/* Code toggle */}
-          <button
-            onClick={() => setShowCode(v => !v)}
-            style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode), fontFamily: 'monospace' }}
-            onMouseEnter={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#45475a'; }}
-            onMouseLeave={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#313244'; }}
-          >
-            {'{ } Code'}
-          </button>
-
-          <NodeGraph />
-          {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} />}
+              <NodeGraph />
+              {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} />}
+            </>
+          )}
+          {page === 'glsl' && <GLSLPage />}
         </div>
 
         {/* Resize Divider */}
