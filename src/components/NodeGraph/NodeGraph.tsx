@@ -59,7 +59,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   );
 
-  const previewNode  = previewNodeId ? nodes.find(n => n.id === previewNodeId) : null;
+  // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
+  const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
   const previewLabel = previewDef
     ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
