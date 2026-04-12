@@ -2696,6 +2696,438 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+
+  // ── Group Carry: Classic IQ Rings — exact recreation of the reference fractal ─────
+  // UV carry via carryMode on FractNode (uv = fract(uv * 1.5) - 0.5 each iter)
+  // Color accumulates via assignOp += on ScaleColor (finalColor += col * d)
+  // Reference: https://www.shadertoy.com/view/mtyGWy
+  groupCarryRings: {
+    label: 'Group: Fractal Rings (Carry)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 240, y: 160 },
+        inputs: {
+          in_uv:  { type: 'vec2', label: 'UV',  connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          in_uv0: { type: 'vec2', label: 'UV0', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: { out_color: { type: 'vec3', label: 'Color' } },
+        params: {
+          label: 'Ring Iteration',
+          iterations: 4,
+          subgraph: {
+            nodes: [
+              // Fract Tile: fract(uv * 1.5) - 0.5
+              // carryMode=true → output feeds back as its own input each iteration
+              // Group input in_uv initialises the carry on the first iteration
+              {
+                id: 'fract_n', type: 'fract', position: { x: 120, y: 160 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'vec2', label: 'Output' } },
+                params:  { scale: 1.5 },
+                carryMode: true,
+              },
+              // Length of carried UV (mutates each iter)
+              {
+                id: 'len_c', type: 'length', position: { x: 320, y: 200 },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'fract_n', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              // Length of original UV0 (fixed — received via in_uv0 port each iter)
+              {
+                id: 'len_o', type: 'length', position: { x: 120, y: 340 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              // exp(-length(uv0)) — radial falloff from center
+              {
+                id: 'exp_n', type: 'exp', position: { x: 320, y: 360 },
+                inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'len_o', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: -1.0 },
+              },
+              // d = length(carry_uv) * exp(-length(uv0))
+              {
+                id: 'd_val', type: 'multiply', position: { x: 520, y: 280 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_c', outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'exp_n', outputKey: 'output' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              // Loop iteration index
+              { id: 'loop_i', type: 'loopIndex', position: { x: 120, y: 460 },
+                inputs: {}, outputs: { i: { type: 'float', label: 'i' } }, params: {} },
+              // Time
+              { id: 'time_n', type: 'time', position: { x: 120, y: 540 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              // i * 0.4
+              {
+                id: 'i_04', type: 'multiply', position: { x: 320, y: 460 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.4 },
+              },
+              // t * 0.4
+              {
+                id: 't_04', type: 'multiply', position: { x: 320, y: 540 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'time_n', outputKey: 'time' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.4 },
+              },
+              // i*0.4 + t*0.4
+              {
+                id: 'it_add', type: 'add', position: { x: 520, y: 500 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'i_04', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 't_04', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              // length(uv0) + i*0.4 + t*0.4  → palette driver
+              {
+                id: 'pal_t', type: 'add', position: { x: 720, y: 440 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_o', outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'it_add', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              // Cosine palette
+              {
+                id: 'palette', type: 'palettePreset', position: { x: 920, y: 400 },
+                inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
+                outputs: { color: { type: 'vec3', label: 'Color' } },
+                params:  { preset: '2' },
+              },
+              // Glow: pow(0.01 / abs(sin(d*8+t)/8), 1.2)
+              {
+                id: 'glow', type: 'expr', position: { x: 720, y: 280 },
+                inputs:  {
+                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'd_val', outputKey: 'result' } },
+                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {
+                  expr: 'pow(0.01 / abs(sin(d * 8.0 + time) / 8.0), 1.2)',
+                  outputType: 'float',
+                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
+                },
+              },
+              // col * d  — assignOp += accumulates color across all 4 iterations
+              {
+                id: 'col_d', type: 'multiplyVec3', position: { x: 1120, y: 360 },
+                inputs:  {
+                  color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette', outputKey: 'color' } },
+                  scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'vec3', label: 'Result' } },
+                params:  {},
+                assignOp: '+=',
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv',  type: 'vec2', label: 'UV',  toNodeId: 'fract_n', toInputKey: 'input'  },
+              { key: 'in_uv0', type: 'vec2', label: 'UV0', toNodeId: 'len_o',   toInputKey: 'input'  },
+            ],
+            outputPorts: [
+              { key: 'out_color', type: 'vec3', label: 'Color', fromNodeId: 'col_d', fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'out_2', type: 'output', position: { x: 560, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out_color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Group Carry: Zoom Rings — simplified carry with tighter fold, no falloff ─────
+  // Same UV carry pattern but without the exp(-len) falloff for a different look.
+  // Also shows that a single group input is enough when both UV roles are the same.
+  groupCarryZoom: {
+    label: 'Group: Zoom Rings (Carry)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 240, y: 160 },
+        inputs: {
+          in_uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: { out_color: { type: 'vec3', label: 'Color' } },
+        params: {
+          label: 'Zoom Ring Step',
+          iterations: 6,
+          subgraph: {
+            nodes: [
+              // UV carry: fract(uv * 2.0) - 0.5  (tighter fold)
+              {
+                id: 'fract_n', type: 'fract', position: { x: 120, y: 180 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'vec2', label: 'Output' } },
+                params:  { scale: 2.0 },
+                carryMode: true,
+              },
+              // d = length(carried UV) — simple, no falloff
+              {
+                id: 'len_c', type: 'length', position: { x: 320, y: 180 },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'fract_n', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              { id: 'loop_i', type: 'loopIndex', position: { x: 120, y: 340 },
+                inputs: {}, outputs: { i: { type: 'float', label: 'i' } }, params: {} },
+              { id: 'time_n', type: 'time', position: { x: 120, y: 420 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              // i * 0.3
+              {
+                id: 'i_03', type: 'multiply', position: { x: 320, y: 340 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.3 },
+              },
+              // t * 0.5
+              {
+                id: 't_05', type: 'multiply', position: { x: 320, y: 420 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'time_n', outputKey: 'time' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.5 },
+              },
+              // len + i*0.3 + t*0.5
+              {
+                id: 'it_add', type: 'add', position: { x: 520, y: 360 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'i_03', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 't_05', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'pal_t', type: 'add', position: { x: 720, y: 280 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_c', outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'it_add', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'palette', type: 'palettePreset', position: { x: 920, y: 240 },
+                inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
+                outputs: { color: { type: 'vec3', label: 'Color' } },
+                params:  { preset: '4' },
+              },
+              // Glow with different frequency (6 instead of 8)
+              {
+                id: 'glow', type: 'expr', position: { x: 520, y: 180 },
+                inputs:  {
+                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
+                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {
+                  expr: 'pow(0.01 / abs(sin(d * 6.0 + time) / 6.0), 1.0)',
+                  outputType: 'float',
+                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
+                },
+              },
+              {
+                id: 'col_d', type: 'multiplyVec3', position: { x: 1120, y: 220 },
+                inputs:  {
+                  color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette', outputKey: 'color' } },
+                  scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow',    outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'vec3', label: 'Result' } },
+                params:  {},
+                assignOp: '+=',
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv', type: 'vec2', label: 'UV', toNodeId: 'fract_n', toInputKey: 'input' },
+            ],
+            outputPorts: [
+              { key: 'out_color', type: 'vec3', label: 'Color', fromNodeId: 'col_d', fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'out_2', type: 'output', position: { x: 560, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out_color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Group Carry: Rotate + Fold — UV carry with rotation each iteration ─────────
+  // Rotate2D is the carry node: each iter rotates UV, then Fract folds it.
+  // The rotation + fold combo creates spiral, kaleidoscopic fractal rings.
+  groupCarryRotate: {
+    label: 'Group: Rotate + Fold (Carry)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 240, y: 160 },
+        inputs: {
+          in_uv:  { type: 'vec2', label: 'UV',  connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          in_uv0: { type: 'vec2', label: 'UV0', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: { out_color: { type: 'vec3', label: 'Color' } },
+        params: {
+          label: 'Rotate + Fold',
+          iterations: 5,
+          subgraph: {
+            nodes: [
+              // Rotate UV each iteration (carry: output feeds back as input)
+              {
+                id: 'rot_n', type: 'rotate2d', position: { x: 120, y: 160 },
+                inputs:  { uv: { type: 'vec2', label: 'UV' } },
+                outputs: { uv: { type: 'vec2', label: 'UV' } },
+                params:  { angle: 0.5 },
+                carryMode: true,
+              },
+              // Fold after rotation
+              {
+                id: 'fract_n', type: 'fract', position: { x: 320, y: 160 },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'rot_n', outputKey: 'uv' } } },
+                outputs: { output: { type: 'vec2', label: 'Output' } },
+                params:  { scale: 1.8 },
+              },
+              // Length of folded UV → d
+              {
+                id: 'len_c', type: 'length', position: { x: 520, y: 200 },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'fract_n', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              // Length of original UV (center falloff weight)
+              {
+                id: 'len_o', type: 'length', position: { x: 120, y: 320 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              // Falloff: exp(-len_o)
+              {
+                id: 'falloff', type: 'exp', position: { x: 320, y: 340 },
+                inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'len_o', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: -1.2 },
+              },
+              // d = len_c * falloff
+              {
+                id: 'd_val', type: 'multiply', position: { x: 720, y: 260 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_c',   outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'falloff', outputKey: 'output' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              { id: 'loop_i', type: 'loopIndex', position: { x: 120, y: 460 },
+                inputs: {}, outputs: { i: { type: 'float', label: 'i' } }, params: {} },
+              { id: 'time_n', type: 'time', position: { x: 120, y: 540 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              {
+                id: 'i_03', type: 'multiply', position: { x: 320, y: 460 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.35 },
+              },
+              {
+                id: 't_04', type: 'multiply', position: { x: 320, y: 540 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'time_n', outputKey: 'time' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.4 },
+              },
+              {
+                id: 'it_add', type: 'add', position: { x: 520, y: 500 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'i_03', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 't_04', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'pal_t', type: 'add', position: { x: 720, y: 440 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_o',  outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'it_add', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'palette', type: 'palettePreset', position: { x: 920, y: 400 },
+                inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
+                outputs: { color: { type: 'vec3', label: 'Color' } },
+                params:  { preset: '3' },
+              },
+              // Glow with tighter frequency for spiral feel
+              {
+                id: 'glow', type: 'expr', position: { x: 920, y: 260 },
+                inputs:  {
+                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'd_val',  outputKey: 'result' } },
+                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {
+                  expr: 'pow(0.008 / abs(sin(d * 10.0 + time) / 10.0), 1.3)',
+                  outputType: 'float',
+                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
+                },
+              },
+              // Accumulate: col * glow added each iteration
+              {
+                id: 'col_d', type: 'multiplyVec3', position: { x: 1120, y: 340 },
+                inputs:  {
+                  color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette', outputKey: 'color'  } },
+                  scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow',    outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'vec3', label: 'Result' } },
+                params:  {},
+                assignOp: '+=',
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv',  type: 'vec2', label: 'UV',  toNodeId: 'rot_n', toInputKey: 'uv'    },
+              { key: 'in_uv0', type: 'vec2', label: 'UV0', toNodeId: 'len_o', toInputKey: 'input' },
+            ],
+            outputPorts: [
+              { key: 'out_color', type: 'vec3', label: 'Color', fromNodeId: 'col_d', fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'out_2', type: 'output', position: { x: 560, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out_color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

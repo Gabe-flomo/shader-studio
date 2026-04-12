@@ -252,6 +252,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
   const setNodeAssignOp    = useNodeGraphStore(s => s.setNodeAssignOp);
+  const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
   const activeGroupId      = useNodeGraphStore(s => s.activeGroupId);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
@@ -317,6 +318,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const def = getNodeDefinition(node.type);
   const isBypassed = !!node.bypassed;
   const assignOp = node.assignOp ?? '=';
+  const isCarry = !!node.carryMode;
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -1450,6 +1452,27 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               }}
             >
               ↺
+            </button>
+          )}
+          {/* Carry mode — only shown inside an iterated group; on nodes with vec2/vec3 transform semantics */}
+          {activeGroupId && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => toggleCarryMode(node.id)}
+              title={isCarry ? 'Carry mode ON — output feeds back as input each iteration. Click to disable.' : 'Enable carry mode — output feeds back as input each iteration (e.g. UV self-folding)'}
+              style={{
+                background: isCarry ? '#a6e3a122' : 'none',
+                border: isCarry ? '1px solid #a6e3a155' : '1px solid #31324466',
+                color: isCarry ? '#a6e3a1' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '11px',
+                lineHeight: 1,
+                padding: '1px 5px',
+                borderRadius: '3px',
+                fontFamily: 'monospace',
+              }}
+            >
+              ⟳
             </button>
           )}
           {/* assignOp — only shown inside an iterated group */}
