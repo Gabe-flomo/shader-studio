@@ -366,15 +366,28 @@ export function generateFragmentShader(
           const subResult = subDef.generateGLSL(patchedSub, subInputVars);
           // For carry-mode nodes: strip the type from the declaration so we get
           // `    varName = f(varName);` instead of `    T varName = f(varName);`
+          // If the node also has an assignOp (e.g. *=), apply it to the carry assignment:
+          // `    varName *= f(varName);`
           // The variable was already forward-declared outside the loop.
           const naturalVar = carryModeNaturalVars.get(originalId);
           let codeToEmit = subResult.code;
           if (naturalVar) {
             const escaped = naturalVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            codeToEmit = codeToEmit.replace(
-              new RegExp(`^(\\s+)(?:float|vec2|vec3|vec4)\\s+(${escaped}\\s*=)`, 'm'),
-              '$1$2',
-            );
+            const snForCarryOp = subgraph.nodes.find(n => n.id === originalId);
+            const carryAssignOp = snForCarryOp?.assignOp && snForCarryOp.assignOp !== '=' ? snForCarryOp.assignOp : null;
+            if (carryAssignOp) {
+              // `    T varName = expr` → `    varName OP= expr`
+              codeToEmit = codeToEmit.replace(
+                new RegExp(`^(\\s+)(?:float|vec2|vec3|vec4)\\s+(${escaped})\\s*=`, 'm'),
+                `$1$2 ${carryAssignOp}`,
+              );
+            } else {
+              // `    T varName = expr` → `    varName = expr`
+              codeToEmit = codeToEmit.replace(
+                new RegExp(`^(\\s+)(?:float|vec2|vec3|vec4)\\s+(${escaped}\\s*=)`, 'm'),
+                '$1$2',
+              );
+            }
           }
           mainCode.push(codeToEmit);
           nodeOutputs.set(subNode.id, subResult.outputVars);
@@ -503,10 +516,13 @@ export function generateFragmentShader(
 
         // 1e. Declare outer accumulator vars for nodes with assignOp != '='
         //     These nodes' outputs persist across iterations and accumulate.
+        //     Carry-mode nodes are excluded: their assignOp is already applied directly
+        //     to the carry assignment inside the loop (handled in compileSubgraphPass above).
         const accumNodeVarNames: Record<string, Record<string, string>> = {};  // nodeId → { outKey → outerVarName }
         for (const sn of subgraph.nodes) {
           const op = sn.assignOp;
           if (!op || op === '=') continue;
+          if (sn.carryMode) continue;  // carry-mode nodes handle assignOp via the carry mechanism
           const def = getNodeDefinition(sn.type);
           if (!def) continue;
           // Neutral initializer: 0 for +/-, 1 for *//
@@ -582,9 +598,11 @@ export function generateFragmentShader(
         //     Emit `outerVar OP innerVar;` then update nodeOutputs to point to the outer var.
         //     Downstream nodes inside the loop see the inner (fresh) var; the group output
         //     sees the outer (accumulated) var.
+        //     Carry-mode nodes are excluded: their accumulation happens via the carry assignment.
         for (const sn of subgraph.nodes) {
           const op = sn.assignOp;
           if (!op || op === '=') continue;
+          if (sn.carryMode) continue;  // handled via carry mechanism
           const outVars = accumNodeVarNames[sn.id];
           if (!outVars) continue;
           const freshOutputs = nodeOutputs.get(prefix + sn.id);
