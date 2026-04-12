@@ -78,7 +78,7 @@ export {
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode } from './sources';
+import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode } from './sources';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -129,6 +129,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mouse: MouseNode,
   textureInput: TextureInputNode,
   prevFrame: PrevFrameNode,
+  loopIndex: LoopIndexNode,
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,

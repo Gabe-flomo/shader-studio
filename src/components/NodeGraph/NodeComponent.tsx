@@ -279,7 +279,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   useEffect(() => {
     if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
     let cancelled = false;
-    const currentNodes = useNodeGraphStore.getState().nodes;
+    // When inside a group, preview against the subgraph nodes, not top-level
+    const state = useNodeGraphStore.getState();
+    const activeGroupId = state.activeGroupId;
+    let currentNodes = state.nodes;
+    if (activeGroupId) {
+      const groupNode = state.nodes.find(n => n.id === activeGroupId);
+      const sg = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+      if (sg) currentNodes = sg.nodes;
+    }
     const fs = compileNodePreviewShader(node.id, currentNodes);
     if (!fs) return;
     setPreviewLoading(true);
@@ -349,6 +357,65 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   }, [isPreviewActive, primaryOutputIsFloat, node.id]);
 
   if (!def) return null;
+
+  // ── Loop Index node special card ─────────────────────────────────────────────
+  if (node.type === 'loopIndex') {
+    const nodeStyle: React.CSSProperties = {
+      position: 'absolute',
+      left: node.position.x,
+      top: node.position.y,
+      minWidth: '140px',
+      background: '#1e1e2e',
+      border: `1px solid ${isSelected || isMultiSelected ? '#cba6f7' : '#45475a'}`,
+      borderRadius: '8px',
+      boxShadow: isSelected || isMultiSelected ? '0 0 0 2px #cba6f744' : '0 2px 8px rgba(0,0,0,0.4)',
+      opacity: dimmed ? 0.3 : 1,
+      transition: 'opacity 0.15s',
+      cursor: 'default',
+      userSelect: 'none',
+    };
+    return (
+      <div
+        style={nodeStyle}
+        onMouseDown={e => {
+          e.stopPropagation();
+          setSelectedNodeId(node.id);
+          selectNode(node.id, e.shiftKey || e.metaKey);
+          const startX = e.clientX - node.position.x;
+          const startY = e.clientY - node.position.y;
+          const onMove = (me: MouseEvent) => updateNodePosition(node.id, { x: me.clientX - startX, y: me.clientY - startY });
+          const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        }}
+      >
+        {/* Header */}
+        <div style={{ background: '#181825', borderRadius: '8px 8px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}>
+          <span style={{ fontWeight: 700, fontSize: '11px', color: '#cba6f7', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ fontSize: '10px', opacity: 0.7 }}>⟳</span> Loop Index
+          </span>
+          <span style={{ fontSize: '9px', color: '#585b70', fontFamily: 'monospace' }}>🔒</span>
+        </div>
+        {/* Body */}
+        <div style={{ padding: '6px 0 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '3px 0 3px 10px' }}>
+            <span style={{ color: '#a6adc8', fontSize: '11px', marginRight: '6px', fontFamily: 'monospace', opacity: 0.6 }}>float i</span>
+            <div
+              data-socket="out"
+              ref={el => registerSocket(node.id, 'out', 'i', el)}
+              onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, 'i', e); }}
+              style={{
+                width: '12px', height: '12px', borderRadius: '50%',
+                background: TYPE_COLORS['float'] || '#f0a',
+                border: `2px solid ${TYPE_COLORS['float'] || '#f0a'}`,
+                marginRight: '-6px', flexShrink: 0, cursor: 'crosshair',
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Texture Input node special card ─────────────────────────────────────────
   if (node.type === 'textureInput') {
