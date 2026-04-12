@@ -9,7 +9,7 @@ import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ShortcutsPage } from './components/ShortcutsPage';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
-import { useNodeGraphStore, EXAMPLE_GRAPHS } from './store/useNodeGraphStore';
+import { useNodeGraphStore } from './store/useNodeGraphStore';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
 
@@ -77,7 +77,6 @@ function App() {
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
   const [page, setPage]                 = useState<'studio' | 'learn' | 'shortcuts'>('studio');
-  const [activeExample, setActiveExample] = useState('blank');
 
   // Mobile/tablet drawer state
   const [drawerOpen, setDrawerOpen]         = useState(false);
@@ -197,76 +196,6 @@ function App() {
     window.addEventListener('touchend', onEnd);
   }, []);
 
-  // ── Shared toolbar (examples + save/load/export/import) ───────────────────
-  const toolbar = (compact = false) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
-      {!compact && (
-        <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Example</span>
-      )}
-      <select
-        value={activeExample}
-        onChange={e => { setActiveExample(e.target.value); loadExampleGraph(e.target.value); }}
-        style={{
-          background: '#313244', border: '1px solid #45475a', color: '#cdd6f4',
-          borderRadius: '6px', padding: compact ? '5px 6px' : '4px 8px',
-          fontSize: '11px', cursor: 'pointer', outline: 'none',
-          maxWidth: compact ? '120px' : '140px',
-        }}
-      >
-        <option value="blank">[ New ]</option>
-        <optgroup label="── Rings">
-          {['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="── Loops">
-          {['loopRippleWarp','loopRotateSpiral','loopFloatDemo','loopChainedBody','loopZoomTunnel','loopAnimatedSpin','loopTwoStage','loopSpatialFloat','loopDenseRings','loopIterScale'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="── Fractals">
-          {['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="── Physics">
-          {['orbitals','chladniDemo','chladni3dDemo','chladni3dParticlesDemo','electronOrbitalDemo','orbitalVolume3dDemo','gravitationalLens'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="── Warping Space">
-          {['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="── Color &amp; Lighting">
-          {['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','angularGradient','shapeShowcase'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="── Animation">
-          {['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-        <optgroup label="── SDF &amp; 3D">
-          {['raymarchSpheres','noiseFloatDemo','remapDemo'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-            <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-          ))}
-        </optgroup>
-      </select>
-
-      {!compact && <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />}
-
-      {!compact && (
-        <>
-          <button onClick={exportGraph} style={btnStyle()}>⬇</button>
-          <button onClick={importGraphFromFile} style={btnStyle()}>⬆</button>
-          <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa' }} title="Keyboard shortcuts">⌨</button>
-        </>
-      )}
-    </div>
-  );
 
   // ── Error badge ───────────────────────────────────────────────────────────
   const errorCount = compilationErrors.length + glslErrors.length;
@@ -401,11 +330,6 @@ function App() {
           >
             ⬡ Nodes
           </button>
-
-          {/* Example picker */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {toolbar(true)}
-          </div>
 
           {/* Error badge */}
           {errorBadge}
@@ -653,55 +577,6 @@ function App() {
 
           {/* Toolbar */}
           <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.03em' }}>Example</span>
-            <select
-              value={activeExample}
-              onChange={e => { setActiveExample(e.target.value); loadExampleGraph(e.target.value); }}
-              style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', outline: 'none' }}
-            >
-                <option value="blank">[ New ]</option>
-              <optgroup label="── Rings">
-                {['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="── Loops">
-                {['loopRippleWarp','loopRotateSpiral','loopFloatDemo','loopChainedBody','loopZoomTunnel','loopAnimatedSpin','loopTwoStage','loopSpatialFloat','loopDenseRings','loopIterScale'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="── Fractals">
-                {['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="── Physics">
-                {['orbitals','chladniDemo','chladni3dDemo','chladni3dParticlesDemo','electronOrbitalDemo','orbitalVolume3dDemo','gravitationalLens'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="── Warping Space">
-                {['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="── Color &amp; Lighting">
-                {['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','angularGradient','shapeShowcase'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="── Animation">
-                {['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-              <optgroup label="── SDF &amp; 3D">
-                {['raymarchSpheres','noiseFloatDemo','remapDemo'].map(k => EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS] && (
-                  <option key={k} value={k}>{EXAMPLE_GRAPHS[k as keyof typeof EXAMPLE_GRAPHS].label}</option>
-                ))}
-              </optgroup>
-            </select>
-            <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
             <button onClick={exportGraph} style={btnStyle()}>⬇ Export</button>
             <button onClick={importGraphFromFile} style={btnStyle()}>⬆ Import</button>
             <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
@@ -715,7 +590,6 @@ function App() {
               onClick={() => {
                 if (window.confirm('Clear all nodes and start fresh?')) {
                   loadExampleGraph('blank');
-                  setActiveExample('blank');
                 }
               }}
               style={{ ...btnStyle(), color: '#f38ba8' }}

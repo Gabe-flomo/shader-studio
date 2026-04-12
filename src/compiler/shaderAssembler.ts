@@ -355,6 +355,7 @@ export function generateFragmentShader(
           }
         }
         const carryInKeys = new Set(carryPairs.map(cp => cp.inPort.key));
+        const carryOutKeys = new Set(carryPairs.map(cp => cp.outPort.key));
 
         // 1. Declare carry variables outside the loop
         const carryVarNames: Record<string, string> = {};
@@ -363,6 +364,19 @@ export function generateFragmentShader(
           carryVarNames[inPort.key] = varName;
           const initVal = inputVars[inPort.key] ?? defaultGlslVal(inPort.type as DataType);
           mainCode.push(`    ${inPort.type} ${varName} = ${initVal};\n`);
+        }
+
+        // 1b. Declare outer "result" vars for non-carry outputs so they survive the loop scope
+        //     We don't know the inner var names yet — fill them in after compileSubgraphPass.
+        //     Store placeholder names keyed by output port key.
+        const nonCarryOutVarNames: Record<string, string> = {};
+        for (const port of subgraph.outputPorts) {
+          if (!carryOutKeys.has(port.key)) {
+            const varName = `${node.id}_out_${port.key}`;
+            nonCarryOutVarNames[port.key] = varName;
+            // Type will be determined after compilation; use the port's declared type
+            mainCode.push(`    ${port.type} ${varName} = ${defaultGlslVal(port.type as DataType)};\n`);
+          }
         }
 
         // 2. Open the for loop
@@ -394,21 +408,28 @@ export function generateFragmentShader(
           }
         }
 
+        // 4b. Copy non-carry output vars to their outer counterparts (before closing brace)
+        for (const port of subgraph.outputPorts) {
+          if (!carryOutKeys.has(port.key)) {
+            const fromOutputs = nodeOutputs.get(prefix + port.fromNodeId);
+            const innerVar = fromOutputs?.[port.fromOutputKey];
+            if (innerVar) {
+              mainCode.push(`    ${nonCarryOutVarNames[port.key]} = ${innerVar};\n`);
+            }
+          }
+        }
+
         // 5. Close the for loop
         mainCode.push(`    }\n`);
 
-        // 6. Map group outputs: carry pairs use their persistent vars; others use last compiled value
+        // 6. Map group outputs: carry pairs use their persistent vars; non-carry use outer result vars
         const groupOutputVars: Record<string, string> = {};
-        const carryOutKeys = new Set(carryPairs.map(cp => cp.outPort.key));
         for (const port of subgraph.outputPorts) {
           if (carryOutKeys.has(port.key)) {
-            // Carry output: use the persistent carry var of the matching input
             const matchPair = carryPairs.find(cp => cp.outPort.key === port.key);
             if (matchPair) groupOutputVars[port.key] = carryVarNames[matchPair.inPort.key];
           } else {
-            // Non-carry output: use last iteration's compiled value (still in scope for single-pass)
-            const fromOutputs = nodeOutputs.get(prefix + port.fromNodeId);
-            if (fromOutputs?.[port.fromOutputKey]) groupOutputVars[port.key] = fromOutputs[port.fromOutputKey];
+            if (nonCarryOutVarNames[port.key]) groupOutputVars[port.key] = nonCarryOutVarNames[port.key];
           }
         }
         nodeOutputs.set(node.id, groupOutputVars);

@@ -80,6 +80,22 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     return subgraph?.nodes ?? nodes;
   }, [nodes, activeGroupId]);
 
+  // When inside a group, build a map of nodeId → Set<inputKey> for sockets
+  // that are driven by external (group-level) input ports. These are locked/immutable.
+  const externalPortMap = React.useMemo(() => {
+    if (!activeGroupId) return null;
+    const groupNode = nodes.find(n => n.id === activeGroupId);
+    const subgraph = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+    if (!subgraph) return null;
+    const map = new Map<string, Set<string>>();
+    for (const port of subgraph.inputPorts) {
+      let set = map.get(port.toNodeId);
+      if (!set) { set = new Set(); map.set(port.toNodeId, set); }
+      set.add(port.toInputKey);
+    }
+    return map;
+  }, [nodes, activeGroupId]);
+
   // Compute loop regions for the visual overlay (dashed bounding boxes behind body nodes)
   const loopRegions = useMemo(() => {
     const chains = collectLoopPairChains(displayNodes);
@@ -937,6 +953,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
             onEnterGroup={setActiveGroupId}
             hasError={errorNodeIds.has(node.id)}
+            externalInputKeys={externalPortMap?.get(node.id)}
           />
         ))}
       </div>
