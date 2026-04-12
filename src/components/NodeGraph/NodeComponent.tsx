@@ -1030,9 +1030,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           if (paramEntries.length === 0) return null;
 
           // Filter out internally-driven params (have __param_ connection inside group)
-          const visibleParams = paramEntries.filter(([paramKey]) =>
-            !innerNode.inputs[`__param_${paramKey}`]?.connection
-          );
+          // Also hide when a regular input socket with the same name is wired
+          const visibleParams = paramEntries.filter(([paramKey]) => {
+            if (innerNode.inputs[`__param_${paramKey}`]?.connection) return false;
+            const matchingInput = Object.entries(innerNode.inputs).find(
+              ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
+            );
+            return !matchingInput;
+          });
           if (visibleParams.length === 0) return null;
 
           const innerLabel = typeof innerNode.params.label === 'string'
