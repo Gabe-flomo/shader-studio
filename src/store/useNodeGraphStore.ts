@@ -1964,7 +1964,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     });
 
     syncCounterFromNodes(nodes);
-    set({ nodes, previewNodeId: null });
+    set({ nodes, previewNodeId: null, activeGroupId: null });
     get().compile();
   },
 
