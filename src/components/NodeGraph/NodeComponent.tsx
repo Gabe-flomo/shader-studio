@@ -1461,6 +1461,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ↺
             </button>
           )}
+          {/* Divider before loop-only controls */}
+          {isInsideLoop && (
+            <span style={{ width: '1px', height: '14px', background: '#45475a88', margin: '0 3px', flexShrink: 0 }} />
+          )}
           {/* Carry mode — only shown inside a group with iterations > 1 */}
           {isInsideLoop && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
             <button
@@ -1472,11 +1476,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 border: isCarry ? '1px solid #a6e3a155' : '1px solid #31324466',
                 color: isCarry ? '#a6e3a1' : '#585b70',
                 cursor: 'pointer',
-                fontSize: '11px',
+                fontSize: '12px',
                 lineHeight: 1,
-                padding: '1px 5px',
-                borderRadius: '3px',
+                padding: '2px 7px',
+                borderRadius: '4px',
                 fontFamily: 'monospace',
+                minWidth: '26px',
+                textAlign: 'center',
               }}
             >
               ⟳
@@ -1490,22 +1496,23 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onChange={e => setNodeAssignOp(node.id, e.target.value as import('../../types/nodeGraph').GraphNode['assignOp'])}
               title="Assign operator: how this node's output combines across loop iterations"
               style={{
-                background: assignOp !== '=' ? '#45475a' : 'none',
-                border: assignOp !== '=' ? '1px solid #89b4fa66' : '1px solid #31324466',
-                color: assignOp !== '=' ? '#89b4fa' : '#585b70',
+                background: assignOp !== '=' ? '#45475a' : '#1e1e2e',
+                border: assignOp !== '=' ? '1px solid #89b4fa88' : '1px solid #45475a',
+                color: assignOp !== '=' ? '#89b4fa' : '#6c7086',
                 cursor: 'pointer',
-                fontSize: '10px',
-                borderRadius: '3px',
-                padding: '0 2px',
+                fontSize: '11px',
+                borderRadius: '4px',
+                padding: '2px 4px',
                 outline: 'none',
                 appearance: 'none',
                 WebkitAppearance: 'none',
                 fontFamily: 'monospace',
-                width: '28px',
+                width: '34px',
+                minHeight: '22px',
                 textAlign: 'center',
               }}
             >
-              <option value="=">  =</option>
+              <option value="="> = </option>
               <option value="+=">+=</option>
               <option value="-=">-=</option>
               <option value="*=">*=</option>

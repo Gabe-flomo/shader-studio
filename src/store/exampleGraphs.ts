@@ -3447,6 +3447,284 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Group Carry: Additive UV Fold — fract carry with += instead of = ──────────
+  // Demonstrates assignOp '+=' on a carry-mode node.
+  // Instead of `uv = fract(uv*1.5)-0.5` each iter, we do `uv += fract(uv*1.5)-0.5`.
+  // The UV accumulates additively, producing a distinct spatial distortion.
+  // Color is also accumulated with +=, same as groupCarryRings.
+  groupAdditiveRings: {
+    label: 'Group: Additive UV Fold (+=)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 240, y: 160 },
+        inputs: {
+          in_uv:  { type: 'vec2', label: 'UV',  connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          in_uv0: { type: 'vec2', label: 'UV0', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: { out_color: { type: 'vec3', label: 'Color' } },
+        params: {
+          label: 'Additive UV Fold',
+          iterations: 4,
+          subgraph: {
+            nodes: [
+              // Additive UV fold: uv += fract(uv * 1.5) - 0.5  (assignOp += on carry)
+              {
+                id: 'fract_n', type: 'fract', position: { x: 120, y: 160 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'vec2', label: 'Output' } },
+                params:  { scale: 1.5 },
+                carryMode: true,
+                assignOp: '+=',
+              },
+              // Length of accumulated UV
+              {
+                id: 'len_c', type: 'length', position: { x: 320, y: 200 },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'fract_n', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              // Length of original UV (fixed)
+              {
+                id: 'len_o', type: 'length', position: { x: 120, y: 340 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              // exp(-len(uv0)) — radial falloff
+              {
+                id: 'exp_n', type: 'exp', position: { x: 320, y: 360 },
+                inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'len_o', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: -1.0 },
+              },
+              // d = len_c * exp_n
+              {
+                id: 'd_val', type: 'multiply', position: { x: 520, y: 280 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_c', outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'exp_n', outputKey: 'output' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              { id: 'loop_i', type: 'loopIndex', position: { x: 120, y: 460 },
+                inputs: {}, outputs: { i: { type: 'float', label: 'i' } }, params: {} },
+              { id: 'time_n', type: 'time', position: { x: 120, y: 540 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              {
+                id: 'i_04', type: 'multiply', position: { x: 320, y: 460 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.4 },
+              },
+              {
+                id: 't_04', type: 'multiply', position: { x: 320, y: 540 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'time_n', outputKey: 'time' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.4 },
+              },
+              {
+                id: 'it_add', type: 'add', position: { x: 520, y: 500 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'i_04', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 't_04', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'pal_t', type: 'add', position: { x: 720, y: 440 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_o',  outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'it_add', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'palette', type: 'palettePreset', position: { x: 920, y: 400 },
+                inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
+                outputs: { color: { type: 'vec3', label: 'Color' } },
+                params:  { preset: '3' },
+              },
+              {
+                id: 'glow', type: 'expr', position: { x: 720, y: 280 },
+                inputs:  {
+                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'd_val',  outputKey: 'result' } },
+                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {
+                  expr: 'pow(0.01 / abs(sin(d * 8.0 + time) / 8.0), 1.2)',
+                  outputType: 'float',
+                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
+                },
+              },
+              // col += palette * glow — additive color accumulation
+              {
+                id: 'col_d', type: 'multiplyVec3', position: { x: 1120, y: 360 },
+                inputs:  {
+                  color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette', outputKey: 'color'  } },
+                  scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow',    outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'vec3', label: 'Result' } },
+                params:  {},
+                assignOp: '+=',
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv',  type: 'vec2', label: 'UV',  toNodeId: 'fract_n', toInputKey: 'input' },
+              { key: 'in_uv0', type: 'vec2', label: 'UV0', toNodeId: 'len_o',   toInputKey: 'input' },
+            ],
+            outputPorts: [
+              { key: 'out_color', type: 'vec3', label: 'Color', fromNodeId: 'col_d', fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'out_2', type: 'output', position: { x: 560, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out_color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Group Carry: Product Accumulate Rings — *=  color resonance ───────────────
+  // Demonstrates assignOp '*=' on a non-carry color node.
+  // col_d starts at vec3(1.0) (neutral for *=) and each iteration multiplies by
+  // palette * soft_glow.  Only pixels bright across ALL iterations stay lit,
+  // creating resonance patterns at ring intersections.
+  groupProductRings: {
+    label: 'Group: Product Rings (*=)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 240, y: 160 },
+        inputs: {
+          in_uv:  { type: 'vec2', label: 'UV',  connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          in_uv0: { type: 'vec2', label: 'UV0', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: { out_color: { type: 'vec3', label: 'Color' } },
+        params: {
+          label: 'Product Rings',
+          iterations: 4,
+          subgraph: {
+            nodes: [
+              // Standard UV carry fold (= operator, no assignOp)
+              {
+                id: 'fract_n', type: 'fract', position: { x: 120, y: 160 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'vec2', label: 'Output' } },
+                params:  { scale: 1.5 },
+                carryMode: true,
+              },
+              {
+                id: 'len_c', type: 'length', position: { x: 320, y: 200 },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'fract_n', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              {
+                id: 'len_o', type: 'length', position: { x: 120, y: 340 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              { id: 'loop_i', type: 'loopIndex', position: { x: 120, y: 460 },
+                inputs: {}, outputs: { i: { type: 'float', label: 'i' } }, params: {} },
+              { id: 'time_n', type: 'time', position: { x: 120, y: 540 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              {
+                id: 'i_03', type: 'multiply', position: { x: 320, y: 460 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.3 },
+              },
+              {
+                id: 't_02', type: 'multiply', position: { x: 320, y: 540 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'time_n', outputKey: 'time' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.2 },
+              },
+              {
+                id: 'it_add', type: 'add', position: { x: 520, y: 500 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'i_03', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 't_02', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'pal_t', type: 'add', position: { x: 720, y: 440 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_o',  outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'it_add', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'palette', type: 'palettePreset', position: { x: 920, y: 400 },
+                inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
+                outputs: { color: { type: 'vec3', label: 'Color' } },
+                params:  { preset: '2' },
+              },
+              // Soft bounded glow — clamp keeps it in [0, 1] so *=  stays controlled
+              {
+                id: 'glow', type: 'expr', position: { x: 720, y: 280 },
+                inputs:  {
+                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
+                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {
+                  expr: 'clamp(0.04 / (abs(sin(d * 6.0 + time) / 6.0) + 0.02), 0.0, 1.0)',
+                  outputType: 'float',
+                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
+                },
+              },
+              // col *= palette * soft_glow — product accumulation (neutral: vec3(1.0))
+              // Only pixels where ALL iterations produce a bright ring remain lit.
+              {
+                id: 'col_d', type: 'multiplyVec3', position: { x: 1120, y: 360 },
+                inputs:  {
+                  color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette', outputKey: 'color'  } },
+                  scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow',    outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'vec3', label: 'Result' } },
+                params:  {},
+                assignOp: '*=',
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv',  type: 'vec2', label: 'UV',  toNodeId: 'fract_n', toInputKey: 'input' },
+              { key: 'in_uv0', type: 'vec2', label: 'UV0', toNodeId: 'len_o',   toInputKey: 'input' },
+            ],
+            outputPorts: [
+              { key: 'out_color', type: 'vec3', label: 'Color', fromNodeId: 'col_d', fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'out_2', type: 'output', position: { x: 560, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out_color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
