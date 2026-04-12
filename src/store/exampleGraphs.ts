@@ -3128,6 +3128,325 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+
+  // ── Group Carry: FBM Octaves — classic fractal Brownian motion via carry ──────
+  // frequency carry: each iter the UV is scaled *2 (doubles resolution).
+  // noise value accumulates via assignOp += (with decaying amplitude).
+  // Result: hand-rolled FBM entirely within the node graph.
+  groupCarryFBM: {
+    label: 'Group: FBM Octaves (Carry)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'time_0', type: 'time', position: { x: 40, y: 340 },
+        inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 260, y: 160 },
+        inputs: {
+          in_uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          in_time: { type: 'float', label: 'Time', connection: { nodeId: 'time_0', outputKey: 'time' } },
+        },
+        outputs: { out_value: { type: 'float', label: 'Value' } },
+        params: {
+          label: 'FBM Octave',
+          iterations: 5,
+          subgraph: {
+            nodes: [
+              // Carry: UV is scaled ×2 each iteration (doubles noise frequency)
+              {
+                id: 'uv_scale', type: 'multiplyVec2', position: { x: 120, y: 180 },
+                inputs:  { v: { type: 'vec2', label: 'Vec2' } },
+                outputs: { result: { type: 'vec2', label: 'Result' } },
+                params:  { scale: 2.0 },
+                carryMode: true,
+              },
+              // Animated time shift: time * 0.15
+              {
+                id: 't_shift', type: 'multiply', position: { x: 120, y: 300 },
+                inputs:  { a: { type: 'float', label: 'A' } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.15 },
+              },
+              // FBM single-octave: sample at current UV frequency
+              {
+                id: 'fbm_n', type: 'fbm', position: { x: 320, y: 180 },
+                inputs:  {
+                  uv:         { type: 'vec2',  label: 'UV',         connection: { nodeId: 'uv_scale', outputKey: 'result' } },
+                  time:       { type: 'float', label: 'Time',       connection: { nodeId: 't_shift',  outputKey: 'result' } },
+                  scale:      { type: 'float', label: 'Scale'      },
+                  time_scale: { type: 'float', label: 'Time Scale' },
+                },
+                outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+                params:  { octaves: 1, lacunarity: 2.0, gain: 0.5, scale: 1.0, time_scale: 0.0 },
+              },
+              // Loop index for decaying amplitude: amp = 0.5^i
+              {
+                id: 'loop_i', type: 'loopIndex', position: { x: 120, y: 420 },
+                inputs: {}, outputs: { i: { type: 'float', label: 'i' } }, params: {},
+              },
+              // amp = pow(0.5, i) — halve amplitude each octave
+              {
+                id: 'amp', type: 'expr', position: { x: 320, y: 380 },
+                inputs:  { in0: { type: 'float', label: 'i', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {
+                  expr: 'pow(0.5, i)',
+                  outputType: 'float',
+                  in0Name: 'i', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3',
+                },
+              },
+              // Weighted octave contribution: noise * amplitude — accumulated via +=
+              {
+                id: 'weighted', type: 'multiply', position: { x: 520, y: 280 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'fbm_n',  outputKey: 'value'  } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'amp',    outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+                assignOp: '+=',
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv',   type: 'vec2',  label: 'UV',   toNodeId: 'uv_scale', toInputKey: 'v'   },
+              { key: 'in_time', type: 'float', label: 'Time', toNodeId: 't_shift',  toInputKey: 'a'   },
+            ],
+            outputPorts: [
+              { key: 'out_value', type: 'float', label: 'Value', fromNodeId: 'weighted', fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+      // Map accumulated FBM value through a palette
+      {
+        id: 'palette_2', type: 'palettePreset', position: { x: 500, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'group_1', outputKey: 'out_value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '5' },
+      },
+      {
+        id: 'out_3', type: 'output', position: { x: 720, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Group Carry: Domain Warp — carry UV through successive smooth noise warps ─
+  // Each iteration: UV = UV + smoothWarpOffset(UV) — compound distortion stacks up.
+  // Color is painted from the final (most-warped) UV via FBM + palette.
+  groupCarryDomainWarp: {
+    label: 'Group: Domain Warp (Carry)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'time_0', type: 'time', position: { x: 40, y: 340 },
+        inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 260, y: 160 },
+        inputs: {
+          in_uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          in_time: { type: 'float', label: 'Time', connection: { nodeId: 'time_0', outputKey: 'time' } },
+        },
+        outputs: { out_uv: { type: 'vec2', label: 'UV' } },
+        params: {
+          label: 'Warp Step',
+          iterations: 4,
+          subgraph: {
+            nodes: [
+              // Carry: warped UV feeds back as input each iteration
+              {
+                id: 'warp_n', type: 'smoothWarp', position: { x: 120, y: 200 },
+                inputs:  {
+                  input:    { type: 'vec2',  label: 'UV' },
+                  time:     { type: 'float', label: 'Time' },
+                  strength: { type: 'float', label: 'Strength' },
+                },
+                outputs: { output: { type: 'vec2', label: 'UV out' } },
+                params:  { strength: 0.18, scale: 2.5, speed: 0.3 },
+                carryMode: true,
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv',   type: 'vec2',  label: 'UV',   toNodeId: 'warp_n', toInputKey: 'input' },
+              { key: 'in_time', type: 'float', label: 'Time', toNodeId: 'warp_n', toInputKey: 'time'  },
+            ],
+            outputPorts: [
+              { key: 'out_uv', type: 'vec2', label: 'UV', fromNodeId: 'warp_n', fromOutputKey: 'output' },
+            ],
+          },
+        },
+      },
+      // Sample FBM at the fully-warped UV for a turbulent color field
+      {
+        id: 'fbm_2', type: 'fbm', position: { x: 480, y: 200 },
+        inputs:  {
+          uv:         { type: 'vec2',  label: 'UV',         connection: { nodeId: 'group_1', outputKey: 'out_uv' } },
+          time:       { type: 'float', label: 'Time',       connection: { nodeId: 'time_0',  outputKey: 'time'   } },
+          scale:      { type: 'float', label: 'Scale'      },
+          time_scale: { type: 'float', label: 'Time Scale' },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params:  { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 2.5, time_scale: 0.05 },
+      },
+      {
+        id: 'palette_3', type: 'palettePreset', position: { x: 700, y: 200 },
+        inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params:  { preset: '1' },
+      },
+      {
+        id: 'out_4', type: 'output', position: { x: 920, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Group Carry: Power Fold — Mandelbox-style abs fold via carry + accumulate ─
+  // Each iter: uv = abs(uv * scale) - 1.0  (abs fold + scale + offset).
+  // Glow from length of folded UV accumulates with +=, yielding complex SDF rings.
+  groupCarryPowerFold: {
+    label: 'Group: Power Fold (Carry)',
+    counter: 3,
+    nodes: [
+      {
+        id: 'uv_0', type: 'uv', position: { x: 40, y: 260 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
+      },
+      {
+        id: 'group_1', type: 'group', position: { x: 260, y: 160 },
+        inputs: {
+          in_uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          in_uv0:  { type: 'vec2',  label: 'UV0',  connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+        },
+        outputs: { out_color: { type: 'vec3', label: 'Color' } },
+        params: {
+          label: 'Power Fold',
+          iterations: 5,
+          subgraph: {
+            nodes: [
+              // Carry: abs(uv * 1.6) - 0.9  (Mandelbox-style fold)
+              {
+                id: 'fold_n', type: 'expr', position: { x: 120, y: 180 },
+                inputs:  { in0: { type: 'vec2', label: 'uv' } },
+                outputs: { result: { type: 'vec2', label: 'Result' } },
+                params:  {
+                  expr: 'abs(uv * 1.6) - 0.9',
+                  outputType: 'vec2',
+                  in0Name: 'uv', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3',
+                },
+                carryMode: true,
+              },
+              // Length of folded UV
+              {
+                id: 'len_c', type: 'length', position: { x: 320, y: 200 },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'fold_n', outputKey: 'result' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              // Original UV length for center falloff
+              {
+                id: 'len_o', type: 'length', position: { x: 120, y: 360 },
+                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params:  { scale: 1.0 },
+              },
+              { id: 'loop_i', type: 'loopIndex', position: { x: 120, y: 480 },
+                inputs: {}, outputs: { i: { type: 'float', label: 'i' } }, params: {} },
+              { id: 'time_n', type: 'time', position: { x: 120, y: 560 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              // Palette driver: len_o + i*0.45 + time*0.35
+              {
+                id: 'i_045', type: 'multiply', position: { x: 320, y: 480 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'loop_i', outputKey: 'i'    } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.45 },
+              },
+              {
+                id: 't_035', type: 'multiply', position: { x: 320, y: 560 },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: 'time_n', outputKey: 'time' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  { b: 0.35 },
+              },
+              {
+                id: 'it_sum', type: 'add', position: { x: 520, y: 520 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'i_045', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 't_035', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'pal_t', type: 'add', position: { x: 720, y: 440 },
+                inputs:  {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'len_o',  outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'it_sum', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {},
+              },
+              {
+                id: 'palette', type: 'palettePreset', position: { x: 920, y: 400 },
+                inputs:  { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
+                outputs: { color: { type: 'vec3', label: 'Color' } },
+                params:  { preset: '0' },
+              },
+              // Glow from length of folded UV
+              {
+                id: 'glow', type: 'expr', position: { x: 520, y: 200 },
+                inputs:  {
+                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
+                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params:  {
+                  expr: 'pow(0.012 / abs(sin(d * 7.0 + time) / 7.0), 1.1)',
+                  outputType: 'float',
+                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
+                },
+              },
+              // Accumulate color across all fold iterations
+              {
+                id: 'col_acc', type: 'multiplyVec3', position: { x: 1120, y: 360 },
+                inputs:  {
+                  color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette', outputKey: 'color'  } },
+                  scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow',    outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'vec3', label: 'Result' } },
+                params:  {},
+                assignOp: '+=',
+              },
+            ],
+            inputPorts: [
+              { key: 'in_uv',  type: 'vec2', label: 'UV',  toNodeId: 'fold_n', toInputKey: 'in0'   },
+              { key: 'in_uv0', type: 'vec2', label: 'UV0', toNodeId: 'len_o',  toInputKey: 'input' },
+            ],
+            outputPorts: [
+              { key: 'out_color', type: 'vec3', label: 'Color', fromNodeId: 'col_acc', fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 560, y: 220 },
+        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out_color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
