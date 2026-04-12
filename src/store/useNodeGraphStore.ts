@@ -356,7 +356,51 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   groupPresets: loadGroupPresets(),
 
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
-  setActiveGroupId: (id) => set({ activeGroupId: id }),
+  setActiveGroupId: (id) => {
+    if (!id) { set({ activeGroupId: null }); return; }
+
+    // ── Migrate legacy groups on enter ───────────────────────────────────────
+    // Groups created before the _groupOriginal / auto-LoopIndex feature was
+    // added won't have those stamps. Detect and fix them now so the invariants
+    // hold regardless of when the group was created.
+    set(state => {
+      const groupNode = state.nodes.find(n => n.id === id);
+      const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return { activeGroupId: id };
+
+      const alreadyMigrated = sg.nodes.some(n => n.params?._groupOriginal);
+      const hasLoopIndex    = sg.nodes.some(n => n.type === 'loopIndex');
+
+      if (alreadyMigrated && hasLoopIndex) return { activeGroupId: id };
+
+      // Stamp all existing nodes as original
+      const stampedNodes = alreadyMigrated
+        ? sg.nodes
+        : sg.nodes.map(n => ({ ...n, params: { ...n.params, _groupOriginal: true } }));
+
+      // Inject a LoopIndex node if missing
+      let finalNodes = stampedNodes;
+      if (!hasLoopIndex) {
+        const xs = stampedNodes.map(n => n.position.x);
+        const ys = stampedNodes.map(n => n.position.y);
+        const loopIndexNode: import('../types/nodeGraph').GraphNode = {
+          id: `loopidx_${Date.now()}`,
+          type: 'loopIndex',
+          position: { x: Math.min(...xs) - 220, y: Math.min(...ys) },
+          inputs: {},
+          outputs: { i: { type: 'float', label: 'i' } },
+          params: { _groupOriginal: true },
+        };
+        finalNodes = [...stampedNodes, loopIndexNode];
+      }
+
+      const updatedNodes = state.nodes.map(n => {
+        if (n.id !== id) return n;
+        return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: finalNodes } } };
+      });
+      return { activeGroupId: id, nodes: updatedNodes };
+    });
+  },
   setNodeTexture: (nodeId, texture) => set(state => ({
     nodeTextures: { ...state.nodeTextures, [nodeId]: texture },
   })),
