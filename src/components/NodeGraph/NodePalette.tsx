@@ -72,6 +72,7 @@ type ExKey = keyof typeof EXAMPLE_GRAPHS;
 
 const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
   { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'] as ExKey[] },
+  { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupCarryRotate','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
   { label: 'Loops',           color: '#89dceb', keys: ['loopRippleWarp','loopRotateSpiral','loopFloatDemo','loopChainedBody','loopZoomTunnel','loopAnimatedSpin','loopTwoStage','loopSpatialFloat','loopDenseRings','loopIterScale'] as ExKey[] },
   { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal'] as ExKey[] },
   { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','chladni3dDemo','chladni3dParticlesDemo','electronOrbitalDemo','orbitalVolume3dDemo','gravitationalLens'] as ExKey[] },

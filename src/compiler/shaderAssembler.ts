@@ -461,9 +461,16 @@ export function generateFragmentShader(
           // Find first input with the same type as the primary output (the carry input).
           // Fall back to the first input for nodes like Expr where definition types
           // don't reflect the actual wired types (all Expr inputs are 'float' in the def).
-          const carryInputEntry =
-            Object.entries(def.inputs).find(([, s]) => s.type === actualOutType)
-            ?? Object.entries(def.inputs)[0];
+          // For CustomFn, def.inputs is empty — inputs are stored in params.inputs.
+          type InputEntry = [string, { type: DataType; label: string }];
+          let carryInputEntry: InputEntry | undefined =
+            (Object.entries(def.inputs).find(([, s]) => s.type === actualOutType)
+            ?? Object.entries(def.inputs)[0]) as InputEntry | undefined;
+          if (!carryInputEntry && sn.type === 'customFn') {
+            const cfInputs = (sn.params.inputs as Array<{ name: string; type: string }> | undefined) ?? [];
+            const match = cfInputs.find(ci => ci.type === actualOutType) ?? cfInputs[0];
+            if (match) carryInputEntry = [match.name, { type: match.type as DataType, label: match.name }];
+          }
           if (!carryInputEntry) continue;
           const [carryInputKey] = carryInputEntry;
 
