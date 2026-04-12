@@ -1413,7 +1413,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   exportGraph: async () => {
     const { nodes } = get();
     const json = JSON.stringify({ nodes }, null, 2);
-    await saveTextFile(json, 'shader-graph.json');
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    const name = isTauri ? 'shader-graph.json' : (window.prompt('File name:', 'shader-graph') ?? 'shader-graph');
+    await saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
   },
 
   importGraph: (json: string) => {

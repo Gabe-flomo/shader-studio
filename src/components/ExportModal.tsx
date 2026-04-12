@@ -113,6 +113,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const [resScale, setResScale]     = useState(1);
   const [codec, setCodec]           = useState<FfmpegCodec>('h264');
   const [mode, setMode]             = useState<RecordMode>(inTauri ? 'ffmpeg' : 'mediarecorder');
+  const [filename, setFilename]     = useState('shader-export');
 
   const [state, setState]                       = useState<RecordState>('idle');
   const [captureProgress, setCaptureProgress]   = useState(0);
@@ -177,13 +178,16 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     const recordCanvas = getRecordCanvas();
     if (!recordCanvas) return;
 
+    // Pre-populate offscreen canvas so the stream has initial content
+    if (resScale > 1) copyToOffscreen();
+
     try {
       const rec = new CanvasRecorder(recordCanvas, {
         format: 'mediarecorder',
         fps,
         duration: manualStop ? null : duration,
         videoBitsPerSecond: bitrate * 1_000_000,
-        name: `shader-export-${Date.now()}`,
+        name: filename || `shader-export-${Date.now()}`,
         verbose: false,
         autoDownload: true,
       });
@@ -281,6 +285,22 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
       await recorderRef.current?.stop();
       setTimeout(() => setState('done'), 400);
     }
+  };
+
+  const handleScreenshot = () => {
+    if (!canvas) return;
+    const name = filename || `screenshot-${Date.now()}`;
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    }, 'image/png');
   };
 
   // Clean up on unmount
@@ -478,6 +498,23 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                   </div>
                 )}
               </div>
+
+              {/* Filename */}
+              <div>
+                <div style={LABEL}>File Name</div>
+                <input
+                  value={filename}
+                  onChange={e => setFilename(e.target.value)}
+                  placeholder="shader-export"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    background: '#181825', border: '1px solid #45475a',
+                    color: '#cdd6f4', borderRadius: '6px',
+                    padding: '5px 10px', fontSize: '12px', outline: 'none',
+                    fontFamily: 'system-ui, sans-serif',
+                  }}
+                />
+              </div>
             </div>
 
             {mode === 'mediarecorder' && (
@@ -553,6 +590,15 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
           )}
           {state === 'idle' && (
             <button onClick={onClose} style={{ ...BTN_BASE, background: 'none', color: '#6c7086' }}>Cancel</button>
+          )}
+          {state === 'idle' && (
+            <button
+              onClick={handleScreenshot}
+              disabled={!canvas}
+              style={{ ...BTN_BASE, background: '#181825', color: '#a6e3a1', borderColor: '#a6e3a133', flex: 1 }}
+            >
+              📷 Screenshot
+            </button>
           )}
           {state === 'idle' && (
             <button

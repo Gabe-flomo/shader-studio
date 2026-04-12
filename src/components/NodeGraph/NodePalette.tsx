@@ -173,6 +173,16 @@ interface NodePaletteProps {
 export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   const { addNode, spawnGraph, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk,
     swapTargetNodeId, setSwapTargetNodeId, swapNode, nodes: graphNodes } = useNodeGraphStore();
+  const saveGraph           = useNodeGraphStore(s => s.saveGraph);
+  const getSavedGraphNames  = useNodeGraphStore(s => s.getSavedGraphNames);
+  const loadSavedGraph      = useNodeGraphStore(s => s.loadSavedGraph);
+  const deleteSavedGraph    = useNodeGraphStore(s => s.deleteSavedGraph);
+  const [savedNames, setSavedNames] = useState<string[]>(() => getSavedGraphNames());
+  const [graphSaveInput, setGraphSaveInput] = useState('');
+  const [showGraphSaveInput, setShowGraphSaveInput] = useState(false);
+  const [hoverSavedName, setHoverSavedName] = useState<string | null>(null);
+
+  const refreshSavedNames = () => setSavedNames(getSavedGraphNames());
   const groupPresets         = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
   const deleteGroupPreset    = useNodeGraphStore(s => s.deleteGroupPreset);
@@ -601,6 +611,123 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
       )}
 
 
+      {/* ── Saved Graphs ── */}
+      {!isSearching && (
+        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <div style={{
+              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: '#89b4fa',
+              paddingLeft: '4px', flex: 1,
+            }}>
+              Saved Graphs
+            </div>
+            <button
+              onClick={() => { setShowGraphSaveInput(v => !v); setGraphSaveInput(''); }}
+              title="Save current graph"
+              style={{
+                background: 'none', border: '1px solid #313244', color: '#6c7086',
+                borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+            >
+              +
+            </button>
+          </div>
+
+          {/* Inline save input */}
+          {showGraphSaveInput && (
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+              <input
+                autoFocus
+                value={graphSaveInput}
+                onChange={e => setGraphSaveInput(e.target.value)}
+                placeholder="Graph name…"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && graphSaveInput.trim()) {
+                    saveGraph(graphSaveInput.trim());
+                    refreshSavedNames();
+                    setShowGraphSaveInput(false);
+                    setGraphSaveInput('');
+                  }
+                  if (e.key === 'Escape') setShowGraphSaveInput(false);
+                }}
+                style={{
+                  flex: 1, background: '#181825', border: '1px solid #89b4fa',
+                  color: '#cdd6f4', borderRadius: '4px', padding: '3px 7px',
+                  fontSize: '11px', outline: 'none',
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (graphSaveInput.trim()) {
+                    saveGraph(graphSaveInput.trim());
+                    refreshSavedNames();
+                    setShowGraphSaveInput(false);
+                    setGraphSaveInput('');
+                  }
+                }}
+                disabled={!graphSaveInput.trim()}
+                style={{
+                  background: graphSaveInput.trim() ? '#89b4fa22' : 'none',
+                  border: `1px solid ${graphSaveInput.trim() ? '#89b4fa55' : '#313244'}`,
+                  color: graphSaveInput.trim() ? '#89b4fa' : '#45475a',
+                  borderRadius: '3px', fontSize: '10px', padding: '2px 6px', cursor: 'pointer',
+                }}
+              >✓</button>
+            </div>
+          )}
+
+          {savedNames.length === 0 && !showGraphSaveInput ? (
+            <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '4px', fontStyle: 'italic' }}>
+              Click + to save the current graph
+            </div>
+          ) : (
+            savedNames.map(name => (
+              <div
+                key={name}
+                style={{ position: 'relative', marginBottom: '2px' }}
+                onMouseEnter={() => setHoverSavedName(name)}
+                onMouseLeave={() => setHoverSavedName(null)}
+              >
+                <button
+                  onClick={() => { loadSavedGraph(name); onNodeAdded?.(); }}
+                  title={`Load "${name}"`}
+                  style={{
+                    display: 'block', width: '100%',
+                    padding: '5px 28px 5px 10px',
+                    background: '#181825',
+                    border: '1px solid #89b4fa22',
+                    color: '#89b4fa', cursor: 'pointer',
+                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#181825')}
+                >
+                  {name}
+                </button>
+                {hoverSavedName === name && (
+                  <button
+                    onClick={e => { e.stopPropagation(); deleteSavedGraph(name); refreshSavedNames(); }}
+                    title="Delete saved graph"
+                    style={{
+                      position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none',
+                      color: '#585b70', cursor: 'pointer',
+                      fontSize: '11px', padding: '2px 4px', lineHeight: 1,
+                    }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                  >✕</button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {/* ── My Functions ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
@@ -737,26 +864,6 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
           )}
         </div>
       )}
-
-      {/* ── Import GLSL button ── */}
-      <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-        <button
-          onClick={() => setShowImport(true)}
-          style={{
-            display: 'block', width: '100%',
-            padding: '6px 10px',
-            background: '#1e2a1e',
-            border: '1px solid #a6e3a133',
-            color: '#a6e3a1', cursor: 'pointer',
-            textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-            transition: 'background 0.1s',
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#2a3a2a')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1e2a1e')}
-        >
-          ↓ Import GLSL
-        </button>
-      </div>
 
       {/* Import GLSL modal */}
       {showImport && <ImportGlslModal onClose={() => setShowImport(false)} />}
