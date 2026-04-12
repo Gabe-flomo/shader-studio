@@ -494,10 +494,21 @@ function App() {
           <div style={{ flex: 1, position: 'relative', minWidth: 0, userSelect: isDragging ? 'none' : undefined }}>
             {/* Toolbar */}
             <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '5px' }}>
-              {toolbar(false)}
+              <button onClick={exportGraph} style={btnStyle()}>⬇ Export</button>
+              <button onClick={importGraphFromFile} style={btnStyle()}>⬆ Import</button>
               <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 2px' }} />
               <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Export animation">
                 🎬 Record
+              </button>
+              <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts">
+                ⌨ Keys
+              </button>
+              <button
+                onClick={() => { if (window.confirm('Clear all nodes and start fresh?')) loadExampleGraph('blank'); }}
+                style={{ ...btnStyle(), color: '#f38ba8' }}
+                title="Clear all nodes"
+              >
+                ✕ Clear
               </button>
             </div>
             {savePanelEl}
