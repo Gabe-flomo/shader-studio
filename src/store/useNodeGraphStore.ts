@@ -950,7 +950,20 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       params: mergedParams,
     };
 
-    set(state => ({ nodes: [...state.nodes, newNode] }));
+    const activeGroupId = get().activeGroupId;
+    if (activeGroupId) {
+      // Inside a group view — insert into the group's subgraph instead of top level
+      set(state => ({
+        nodes: state.nodes.map(n => {
+          if (n.id !== activeGroupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: [...sg.nodes, newNode] } } };
+        }),
+      }));
+    } else {
+      set(state => ({ nodes: [...state.nodes, newNode] }));
+    }
     get().compile();
   },
 

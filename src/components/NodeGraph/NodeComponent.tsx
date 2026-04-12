@@ -47,6 +47,13 @@ interface Props {
   onEnterGroup?: (groupId: string) => void;
   /** Node has a compilation error — show red ring */
   hasError?: boolean;
+  /**
+   * When inside a group view, the set of this node's input keys that are
+   * driven by an external (group-level) connection. These sockets are
+   * immutable — they cannot be disconnected or re-connected from within
+   * the group editor.
+   */
+  externalInputKeys?: Set<string>;
 }
 
 const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput']);
@@ -230,7 +237,7 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
@@ -1445,6 +1452,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {/* ── Inputs (always visible) ── */}
         {Object.entries(node.inputs).map(([key, input]) => {
           const isConnected = !!input.connection;
+          const isExternal = externalInputKeys?.has(key) ?? false;
 
           // CustomFn slider inputs are rendered as sliders below — skip socket row
           if (node.type === 'customFn') {
@@ -1462,9 +1470,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             : input.label;
 
           // Drag-highlight: compatible = glow, incompatible = dim
-          let socketOpacity = 1;
+          // External sockets block new connections entirely
+          let socketOpacity = isExternal ? 0.45 : 1;
           let socketGlow: string | undefined;
-          if (draggingType) {
+          if (!isExternal && draggingType) {
             const compat = typesCompatible(draggingType, input.type as DataType);
             socketOpacity = compat ? 1 : 0.25;
             socketGlow = compat ? `0 0 8px ${TYPE_COLORS[input.type] || '#888'}` : undefined;
@@ -1473,7 +1482,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const pendingCompat = pendingMobileType
             ? typesCompatible(pendingMobileType as DataType, input.type as DataType)
             : false;
-          if (pendingMobileConnection && !draggingType) {
+          if (!isExternal && pendingMobileConnection && !draggingType) {
             socketOpacity = pendingCompat ? 1 : 0.25;
             socketGlow = pendingCompat ? `0 0 10px ${TYPE_COLORS[input.type] || '#888'}` : undefined;
           }
@@ -1489,7 +1498,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               key={key}
               style={{ display: 'flex', alignItems: 'center', padding: isTouchDevice ? '6px 10px 6px 0' : '3px 10px 3px 0', position: 'relative' }}
             >
-              {/* Socket dot + disconnect */}
+              {/* Socket dot — locked for external inputs */}
               <div
                 data-socket="in"
                 ref={el => registerSocket(node.id, 'in', key, el)}
@@ -1498,13 +1507,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   height: socketSize,
                   borderRadius: '50%',
                   background: isConnected ? (TYPE_COLORS[input.type] || '#888') : '#333',
-                  border: `2px solid ${TYPE_COLORS[input.type] || '#888'}`,
+                  border: `2px solid ${isExternal ? '#585b70' : (TYPE_COLORS[input.type] || '#888')}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
                   marginLeft: socketMarginLeft,
-                  cursor: 'pointer',
+                  cursor: isExternal ? 'not-allowed' : 'pointer',
                   opacity: socketOpacity,
-                  boxShadow: socketGlow,
+                  boxShadow: isExternal ? 'none' : socketGlow,
                   transition: 'box-shadow 0.1s, opacity 0.1s',
                   touchAction: 'manipulation',
                 }}
@@ -1512,6 +1521,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseLeave={() => setHoveredInput(null)}
                 onMouseUp={(e) => {
                   e.stopPropagation();
+                  if (isExternal) return;
                   if (isConnected) {
                     disconnectInput(node.id, key);
                   } else {
@@ -1521,8 +1531,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onTouchEnd={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
+                  if (isExternal) return;
                   if (pendingMobileConnection) {
-                    // Complete the pending connection (replaces existing if connected)
                     onTapInputSocket?.(node.id, key);
                   } else if (isConnected) {
                     disconnectInput(node.id, key);
@@ -1531,10 +1541,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               />
               {/* Hover tooltip */}
               {isHovered && !draggingType && (
-                <SocketTooltip lines={buildInputTooltip(key)} side="left" />
+                <SocketTooltip
+                  lines={isExternal ? [`🔒 Wired from outside group`, `(${input.type})`] : buildInputTooltip(key)}
+                  side="left"
+                />
               )}
-              {/* When dragging: show a drop-here indicator on compatible sockets */}
-              {draggingType && typesCompatible(draggingType, input.type as DataType) && (
+              {/* When dragging: show a drop-here indicator on compatible sockets (not external) */}
+              {!isExternal && draggingType && typesCompatible(draggingType, input.type as DataType) && (
                 <div style={{
                   position: 'absolute',
                   left: '-3px',
@@ -1549,32 +1562,42 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }} />
               )}
               {isExprSlot ? (
-                // Expr node: editable name field + disconnect indicator
+                // Expr node: editable name field (read-only when external)
                 <input
                   type="text"
                   value={slotName}
-                  onChange={e => updateNodeParams(node.id, { [slotNameKey]: e.target.value })}
+                  onChange={e => { if (!isExternal) updateNodeParams(node.id, { [slotNameKey]: e.target.value }); }}
+                  readOnly={isExternal}
                   onMouseDown={e => e.stopPropagation()}
                   spellCheck={false}
                   placeholder={key}
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    borderBottom: '1px solid #313244',
-                    color: '#cdd6f4',
+                    borderBottom: `1px solid ${isExternal ? '#313244' : '#313244'}`,
+                    color: isExternal ? '#585b70' : '#cdd6f4',
                     fontSize: '11px',
                     fontFamily: 'monospace',
                     outline: 'none',
                     width: '80px',
                     padding: '0 2px',
                     opacity: socketOpacity,
+                    cursor: isExternal ? 'default' : undefined,
                   }}
                 />
               ) : (
                 <span
-                  style={{ color: '#a6adc8', fontSize: isTouchDevice ? '13px' : '11px', cursor: 'pointer', flex: 1, opacity: socketOpacity }}
+                  style={{
+                    color: isExternal ? '#585b70' : '#a6adc8',
+                    fontSize: isTouchDevice ? '13px' : '11px',
+                    cursor: isExternal ? 'default' : 'pointer',
+                    flex: 1,
+                    opacity: socketOpacity,
+                    fontStyle: isExternal ? 'italic' : undefined,
+                  }}
                   onMouseUp={(e) => {
                     e.stopPropagation();
+                    if (isExternal) return;
                     if (isConnected) {
                       disconnectInput(node.id, key);
                     } else {
@@ -1584,6 +1607,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   onTouchEnd={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
+                    if (isExternal) return;
                     if (pendingMobileConnection) {
                       onTapInputSocket?.(node.id, key);
                     } else if (isConnected) {
@@ -1592,15 +1616,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   }}
                 >
                   {slotName}
+                  {isExternal && <span style={{ marginLeft: '4px', fontSize: '9px', opacity: 0.6 }}>🔒</span>}
                 </span>
               )}
-              {isConnected && (
+              {isConnected && !isExternal && (
                 <span
                   style={{ marginLeft: 'auto', color: '#585b70', fontSize: isTouchDevice ? '14px' : '10px', padding: isTouchDevice ? '4px 8px' : '0 6px 0 0', cursor: 'pointer', touchAction: 'manipulation' }}
                   onMouseUp={(e) => { e.stopPropagation(); disconnectInput(node.id, key); }}
                   onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); disconnectInput(node.id, key); }}
                 >
                   ×
+                </span>
+              )}
+              {isConnected && isExternal && (
+                <span style={{ marginLeft: 'auto', color: '#45475a', fontSize: '9px', padding: '0 6px 0 0', fontFamily: 'monospace' }}>
+                  ext
                 </span>
               )}
             </div>
@@ -1703,6 +1733,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             // If a matching input socket exists and is connected, the slider has no effect — show a "wired" indicator with source expression
             const socketConn = node.inputs[key]?.connection;
             const isSocketConnected = socketConn != null;
+            const isParamExternal = externalInputKeys?.has(key) ?? false;
             if (isSocketConnected) {
               const srcExpr = getSourceExpr(shaderLines, socketConn!.nodeId, socketConn!.outputKey);
               return (
@@ -1710,10 +1741,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   key={key}
                   style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
+                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
+                    {paramDef.label}
+                    {isParamExternal && <span style={{ marginLeft: '3px', fontSize: '8px' }}>🔒</span>}
+                  </span>
                   <span
                     style={{
-                      color: '#89b4fa',
+                      color: isParamExternal ? '#45475a' : '#89b4fa',
                       fontSize: '9px',
                       fontFamily: 'monospace',
                       fontStyle: 'normal',
@@ -1727,6 +1761,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   >
                     = {srcExpr}
                   </span>
+                </div>
+              );
+            }
+            if (isParamExternal) {
+              // The socket has no connection yet but is reserved for external wiring — lock the slider
+              const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
+              return (
+                <div
+                  key={key}
+                  style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '6px', opacity: 0.4 }}
+                >
+                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
+                    {paramDef.label} <span style={{ fontSize: '8px' }}>🔒</span>
+                  </span>
+                  <span style={{ color: '#585b70', fontSize: '10px', fontFamily: 'monospace' }}>{val}</span>
                 </div>
               );
             }
