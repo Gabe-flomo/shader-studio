@@ -240,7 +240,7 @@ interface NodeGraphState {
 
   // Group presets
   groupPresets: GroupPreset[];
-  saveGroupPreset: (groupNodeId: string, label?: string) => void;
+  saveGroupPreset: (groupNodeId: string, label?: string, description?: string) => void;
   deleteGroupPreset: (presetId: string) => void;
   instantiateGroupPreset: (presetId: string, position?: { x: number; y: number }) => string | null;
 }
@@ -696,7 +696,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }));
   },
 
-  saveGroupPreset: (groupNodeId, label) => {
+  saveGroupPreset: (groupNodeId, label, description) => {
     const { nodes } = get();
     const groupNode = nodes.find(n => n.id === groupNodeId && n.type === 'group');
     if (!groupNode) return;
@@ -705,6 +705,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const preset: GroupPreset = {
       id: `gp_${Date.now()}`,
       label: label ?? (typeof groupNode.params.label === 'string' ? groupNode.params.label : 'Group'),
+      description: description || undefined,
       subgraph,
       savedAt: Date.now(),
     };

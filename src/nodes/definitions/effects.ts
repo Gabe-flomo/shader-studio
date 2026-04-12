@@ -201,7 +201,7 @@ float simpleLight(float d, float brightness) {
 export const FractalLoopNode: NodeDefinition = {
   type: 'fractalLoop',
   label: 'Fractal Loop',
-  category: 'Presets',
+  category: 'Effects',
   description: 'IQ-style iterated fractal with built-in palette. Each iteration tiles UV and accumulates glowing rings.',
   inputs: {
     uv:          { type: 'vec2',  label: 'UV'           },
@@ -290,7 +290,7 @@ export const FractalLoopNode: NodeDefinition = {
 export const RotatingLinesLoopNode: NodeDefinition = {
   type: 'rotatingLinesLoop',
   label: 'Rotating Lines',
-  category: 'Presets',
+  category: 'Effects',
   description: 'Iterated rotating box/line glow. Each layer builds a pseudo-random mat2 from cosines, tiles rotated space, and accumulates glowing horizontal stripes with an RGBA cosine palette.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV (Pixel)'  },
@@ -356,7 +356,7 @@ export const RotatingLinesLoopNode: NodeDefinition = {
 export const AccumulateLoopNode: NodeDefinition = {
   type: 'accumulateLoop',
   label: 'Accumulate Loop',
-  category: 'Presets',
+  category: 'Effects',
   description: 'General iterated accumulation loop. Configure position, distance, attenuation, color and tonemap modes to create stars, orbs, arc rings, plasma, and more.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },

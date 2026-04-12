@@ -1,5 +1,19 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
+
+// Inject save-flash keyframe once
+if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
+  const s = document.createElement('style');
+  s.id = 'gs-anim';
+  s.textContent = `
+    @keyframes groupSaveFlash {
+      0%   { background: rgba(166,227,161,0.5); border-color: #a6e3a1; color: #a6e3a1; box-shadow: 0 0 8px #a6e3a166; }
+      100% { background: none; border-color: #585b70; color: #a6adc8; box-shadow: none; }
+    }
+    .group-save-flash { animation: groupSaveFlash 0.7s ease-out forwards; }
+  `;
+  document.head.appendChild(s);
+}
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
 import { renderNodePreview } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
@@ -593,6 +607,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   // ── Group node special card ──────────────────────────────────────────────────
   const [editingPortKey, setEditingPortKey] = useState<string | null>(null);
   const [editingPortLabel, setEditingPortLabel] = useState('');
+  const [savingMode, setSavingMode] = useState(false);
+  const [saveLabel, setSaveLabel] = useState('');
+  const [saveDescription, setSaveDescription] = useState('');
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [saveHovered, setSaveHovered] = useState(false);
 
   if (node.type === 'group') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
@@ -697,38 +716,126 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               }}
             />
           </div>
-          <button
-            onMouseDown={e => e.stopPropagation()}
-            onClick={() => saveGroupPreset(node.id)}
-            title="Save as preset"
-            style={{
-              background: 'none',
-              border: '1px solid #585b70',
-              color: '#a6adc8',
-              borderRadius: '3px',
-              padding: '1px 5px',
-              fontSize: '10px',
-              cursor: 'pointer',
-            }}
-          >
-            ⬇ Save
-          </button>
-          <button
-            onMouseDown={e => e.stopPropagation()}
-            onClick={() => ungroupNode(node.id)}
-            title="Dissolve group"
-            style={{
-              background: 'none',
-              border: '1px solid #585b70',
-              color: '#a6adc8',
-              borderRadius: '3px',
-              padding: '1px 5px',
-              fontSize: '10px',
-              cursor: 'pointer',
-            }}
-          >
-            Ungroup
-          </button>
+          {savingMode ? (
+            // ── Save-as-preset inline form ───────────────────────────────────
+            <div
+              onMouseDown={e => e.stopPropagation()}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, marginLeft: '6px' }}
+            >
+              <input
+                autoFocus
+                value={saveLabel}
+                onChange={e => setSaveLabel(e.target.value)}
+                placeholder="Name…"
+                onMouseDown={e => e.stopPropagation()}
+                style={{
+                  width: '80px',
+                  background: '#11111b',
+                  border: '1px solid #89b4fa',
+                  color: '#cdd6f4',
+                  borderRadius: '3px',
+                  padding: '1px 4px',
+                  fontSize: '10px',
+                  outline: 'none',
+                }}
+              />
+              <input
+                value={saveDescription}
+                onChange={e => setSaveDescription(e.target.value)}
+                placeholder="Description…"
+                onMouseDown={e => e.stopPropagation()}
+                style={{
+                  flex: 1,
+                  minWidth: '60px',
+                  background: '#11111b',
+                  border: '1px solid #45475a',
+                  color: '#cdd6f4',
+                  borderRadius: '3px',
+                  padding: '1px 4px',
+                  fontSize: '10px',
+                  outline: 'none',
+                }}
+              />
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => {
+                  if (saveLabel.trim()) {
+                    saveGroupPreset(node.id, saveLabel.trim(), saveDescription.trim());
+                    setSavedFlash(true);
+                    setTimeout(() => setSavedFlash(false), 700);
+                  }
+                  setSavingMode(false);
+                }}
+                style={{
+                  background: '#a6e3a1',
+                  border: 'none',
+                  color: '#1e1e2e',
+                  borderRadius: '3px',
+                  padding: '1px 5px',
+                  fontSize: '10px',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >✓</button>
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => setSavingMode(false)}
+                style={{
+                  background: 'none',
+                  border: '1px solid #585b70',
+                  color: '#6c7086',
+                  borderRadius: '3px',
+                  padding: '1px 5px',
+                  fontSize: '10px',
+                  cursor: 'pointer',
+                }}
+              >✕</button>
+            </div>
+          ) : (
+            <>
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => {
+                  setSaveLabel(typeof node.params.label === 'string' ? node.params.label : 'Group');
+                  setSaveDescription('');
+                  setSavingMode(true);
+                }}
+                onMouseEnter={() => setSaveHovered(true)}
+                onMouseLeave={() => setSaveHovered(false)}
+                title="Save as preset"
+                className={savedFlash ? 'group-save-flash' : ''}
+                style={{
+                  background: saveHovered ? 'rgba(166,227,161,0.15)' : 'none',
+                  border: `1px solid ${saveHovered || savedFlash ? '#a6e3a1' : '#585b70'}`,
+                  color: saveHovered || savedFlash ? '#a6e3a1' : '#a6adc8',
+                  borderRadius: '3px',
+                  padding: '1px 5px',
+                  fontSize: '10px',
+                  cursor: 'pointer',
+                  transition: 'color 0.15s, border-color 0.15s, background 0.15s',
+                }}
+              >
+                ⬇ Save
+              </button>
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => ungroupNode(node.id)}
+                title="Dissolve group"
+                style={{
+                  background: 'none',
+                  border: '1px solid #585b70',
+                  color: '#a6adc8',
+                  borderRadius: '3px',
+                  padding: '2px 6px',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            </>
+          )}
         </div>
 
         {/* Port list */}

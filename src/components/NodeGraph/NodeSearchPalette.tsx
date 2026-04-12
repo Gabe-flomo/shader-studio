@@ -25,7 +25,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Combiners:       '#cba6f7',
   Spaces:          '#f2cdcd',
   Science:         '#94e2d5',
-  Presets:         '#f9e2af',
+  'Group Presets': '#f9e2af',
   Output:          '#94e2d5',
 };
 
@@ -229,8 +229,11 @@ export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
             flex: 1,
           }}
         >
-          {/* Saved Group Presets (always shown at top when not searching, or when query matches) */}
-          {groupPresets.length > 0 && (!query || groupPresets.some(p => p.label.toLowerCase().includes(query.toLowerCase()))) && (
+          {/* Group Presets (always shown at top when not searching, or when query matches) */}
+          {groupPresets.length > 0 && (!query || groupPresets.some(p =>
+            p.label.toLowerCase().includes(query.toLowerCase()) ||
+            p.description?.toLowerCase().includes(query.toLowerCase())
+          )) && (
             <li>
               <div style={{
                 padding: '6px 14px 2px',
@@ -238,13 +241,16 @@ export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
                 fontWeight: 700,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: '#cba6f7',
+                color: '#f9e2af',
               }}>
-                Saved Groups
+                Group Presets
               </div>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {groupPresets
-                  .filter(p => !query || p.label.toLowerCase().includes(query.toLowerCase()))
+                  .filter(p => !query ||
+                    p.label.toLowerCase().includes(query.toLowerCase()) ||
+                    p.description?.toLowerCase().includes(query.toLowerCase())
+                  )
                   .map(preset => (
                     <li
                       key={preset.id}
@@ -263,10 +269,25 @@ export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
                         onClose();
                       }}
                     >
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#cba6f7', flexShrink: 0 }} />
-                      <span style={{ flex: 1, fontSize: '13px', color: '#cdd6f4' }}>{preset.label}</span>
-                      <span style={{ fontSize: '10px', color: '#585b70' }}>
-                        {preset.subgraph.nodes.length} node{preset.subgraph.nodes.length !== 1 ? 's' : ''}
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f9e2af', flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: '13px', color: '#cdd6f4' }}>{preset.label}</span>
+                        {preset.description && (
+                          <span style={{
+                            display: 'block',
+                            fontSize: '10px',
+                            color: '#585b70',
+                            marginTop: '1px',
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
+                          }}>
+                            {preset.description}
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#45475a', flexShrink: 0 }}>
+                        {preset.subgraph.nodes.length}n
                       </span>
                       <button
                         title="Delete preset"
