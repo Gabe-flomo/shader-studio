@@ -34,21 +34,21 @@ void main() {
     gl_FragColor = vec4(vec3(0.0), 1.0);
 }`;
 
-const STORAGE_KEY   = 'shader-studio:glsl-editor';
-const SNIPPETS_KEY  = 'shader-studio:glsl-snippets';
+const EDITOR_KEY  = 'shader-studio:glsl-editor';
+const SHADERS_KEY = 'shader-studio:glsl-shaders';
 
-interface Snippet {
+interface SavedShader {
   id: string;
   name: string;
   code: string;
 }
 
-function loadSnippets(): Snippet[] {
-  try { return JSON.parse(localStorage.getItem(SNIPPETS_KEY) ?? '[]'); }
+function loadShaders(): SavedShader[] {
+  try { return JSON.parse(localStorage.getItem(SHADERS_KEY) ?? '[]'); }
   catch { return []; }
 }
-function persistSnippets(s: Snippet[]) {
-  try { localStorage.setItem(SNIPPETS_KEY, JSON.stringify(s)); } catch {}
+function persistShaders(list: SavedShader[]) {
+  try { localStorage.setItem(SHADERS_KEY, JSON.stringify(list)); } catch {}
 }
 
 export function GLSLPage() {
@@ -56,26 +56,22 @@ export function GLSLPage() {
   const nodeGraphShader  = useNodeGraphStore(s => s.fragmentShader);
   const glslErrors       = useNodeGraphStore(s => s.glslErrors);
 
-  const [code, setCode]           = useState<string>(() => localStorage.getItem(STORAGE_KEY) ?? BOILERPLATE);
-  const [snippets, setSnippets]   = useState<Snippet[]>(loadSnippets);
-  const [showSnippets, setShowSnippets] = useState(true);
-  const [renamingId, setRenamingId]     = useState<string | null>(null);
-  const [renameVal, setRenameVal]       = useState('');
+  const [code, setCode]         = useState<string>(() => localStorage.getItem(EDITOR_KEY) ?? BOILERPLATE);
+  const [shaders, setShaders]   = useState<SavedShader[]>(loadShaders);
+  const [showPanel, setShowPanel] = useState(true);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameVal, setRenameVal]   = useState('');
 
-  const textareaRef  = useRef<HTMLTextAreaElement>(null);
-  // Store last known selection so button clicks (which blur the textarea) can still read it
-  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Apply the current code on mount and whenever it changes
+  // Apply code to live preview whenever it changes
   useEffect(() => {
     setRawGlslShader(code);
-    localStorage.setItem(STORAGE_KEY, code);
+    localStorage.setItem(EDITOR_KEY, code);
   }, [code, setRawGlslShader]);
 
   // Clear override on unmount so node graph resumes
-  useEffect(() => {
-    return () => { setRawGlslShader(null); };
-  }, [setRawGlslShader]);
+  useEffect(() => () => { setRawGlslShader(null); }, [setRawGlslShader]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab') {
@@ -83,56 +79,46 @@ export function GLSLPage() {
       const ta = e.currentTarget;
       const start = ta.selectionStart;
       const end   = ta.selectionEnd;
-      const next  = code.slice(0, start) + '    ' + code.slice(end);
-      setCode(next);
+      setCode(code.slice(0, start) + '    ' + code.slice(end));
       requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 4; });
     }
   }, [code]);
 
-  // ── Snippet actions ──────────────────────────────────────────────────────
+  // ── Shader save / load ───────────────────────────────────────────────────
 
-  const saveSnippet = () => {
-    const { start, end } = selectionRef.current;
-    const sel = code.slice(start, end).trim();
-    const snippetCode = sel || code;
-    const name = window.prompt('Snippet name:', sel ? 'Selection' : 'My Snippet');
+  const saveShader = () => {
+    const name = window.prompt('Shader name:');
     if (!name?.trim()) return;
-    const next: Snippet[] = [...snippets, { id: `snip_${Date.now()}`, name: name.trim(), code: snippetCode }];
-    setSnippets(next);
-    persistSnippets(next);
+    // Update existing entry with same name, or append
+    const existing = shaders.find(s => s.name === name.trim());
+    const next: SavedShader[] = existing
+      ? shaders.map(s => s.id === existing.id ? { ...s, code } : s)
+      : [...shaders, { id: `sh_${Date.now()}`, name: name.trim(), code }];
+    setShaders(next);
+    persistShaders(next);
   };
 
-  const insertSnippet = (s: Snippet) => {
-    const ta = textareaRef.current;
-    if (!ta) { setCode(c => c + '\n' + s.code); return; }
-    const start = ta.selectionStart;
-    const end   = ta.selectionEnd;
-    const insert = (start === end ? '\n' : '') + s.code;
-    const next = code.slice(0, start) + insert + code.slice(end);
-    setCode(next);
-    requestAnimationFrame(() => {
-      ta.selectionStart = ta.selectionEnd = start + insert.length;
-      ta.focus();
-    });
+  const loadShader = (s: SavedShader) => {
+    setCode(s.code);
+    textareaRef.current?.focus();
   };
 
-  const deleteSnippet = (id: string) => {
-    const next = snippets.filter(s => s.id !== id);
-    setSnippets(next);
-    persistSnippets(next);
+  const deleteShader = (id: string) => {
+    const next = shaders.filter(s => s.id !== id);
+    setShaders(next);
+    persistShaders(next);
   };
 
   const commitRename = (id: string) => {
     if (!renameVal.trim()) { setRenamingId(null); return; }
-    const next = snippets.map(s => s.id === id ? { ...s, name: renameVal.trim() } : s);
-    setSnippets(next);
-    persistSnippets(next);
+    const next = shaders.map(s => s.id === id ? { ...s, name: renameVal.trim() } : s);
+    setShaders(next);
+    persistShaders(next);
     setRenamingId(null);
   };
 
   const lineCount = code.split('\n').length;
 
-  // ── Shared button styles ──────────────────────────────────────────────────
   const btnBase: React.CSSProperties = {
     borderRadius: '4px', padding: '2px 10px',
     fontSize: '10px', cursor: 'pointer', border: '1px solid #45475a',
@@ -141,10 +127,10 @@ export function GLSLPage() {
   return (
     <div style={{ display: 'flex', height: '100%', background: '#11111b', fontFamily: 'monospace', overflow: 'hidden' }}>
 
-      {/* ── Editor pane ─────────────────────────────────────────────────── */}
+      {/* ── Editor pane ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #313244', minWidth: 0 }}>
 
-        {/* Header bar */}
+        {/* Header */}
         <div style={{
           height: '36px', flexShrink: 0,
           background: '#1e1e2e', borderBottom: '1px solid #313244',
@@ -155,44 +141,33 @@ export function GLSLPage() {
           </span>
           <div style={{ flex: 1 }} />
 
-          {/* Save snippet / full shader */}
-          <button
-            onClick={saveSnippet}
-            title="Save selected text as a snippet — or whole shader if nothing is selected"
-            style={{ ...btnBase, background: '#1e1e2e', color: '#a6e3a1' }}
-          >
+          <button onClick={saveShader} title="Save current shader" style={{ ...btnBase, background: '#1e1e2e', color: '#a6e3a1' }}>
             + Save
           </button>
-
-          {/* From Graph */}
           <button
             onClick={() => setCode(nodeGraphShader || BOILERPLATE)}
-            title="Copy current node graph output into editor"
+            title="Copy compiled node graph into editor"
             style={{ ...btnBase, background: '#313244', color: '#89b4fa' }}
           >
             ← From Graph
           </button>
-
-          {/* Reset */}
           <button
             onClick={() => { if (window.confirm('Reset to boilerplate?')) setCode(BOILERPLATE); }}
             style={{ ...btnBase, background: 'none', color: '#585b70' }}
           >
             Reset
           </button>
-
-          {/* Toggle snippets panel */}
           <button
-            onClick={() => setShowSnippets(v => !v)}
-            title={showSnippets ? 'Hide snippets' : 'Show snippets'}
-            style={{ ...btnBase, background: showSnippets ? '#313244' : 'none', color: showSnippets ? '#cdd6f4' : '#585b70', padding: '2px 8px' }}
+            onClick={() => setShowPanel(v => !v)}
+            title={showPanel ? 'Hide shaders panel' : 'Show shaders panel'}
+            style={{ ...btnBase, background: showPanel ? '#313244' : 'none', color: showPanel ? '#cdd6f4' : '#585b70', padding: '2px 8px' }}
           >
-            {showSnippets ? '▶' : '◀'} Snippets
+            {showPanel ? '▶' : '◀'} Shaders
           </button>
         </div>
 
-        {/* Code editor area */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+        {/* Code area */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* Line numbers */}
           <div style={{
             width: '40px', flexShrink: 0,
@@ -205,20 +180,11 @@ export function GLSLPage() {
             {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i + 1}</div>)}
           </div>
 
-          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={code}
             onChange={e => setCode(e.target.value)}
             onKeyDown={handleKeyDown}
-            onSelect={e => {
-              const ta = e.currentTarget;
-              selectionRef.current = { start: ta.selectionStart, end: ta.selectionEnd };
-            }}
-            onKeyUp={e => {
-              const ta = e.currentTarget;
-              selectionRef.current = { start: ta.selectionStart, end: ta.selectionEnd };
-            }}
             spellCheck={false}
             style={{
               flex: 1, background: '#13131f', color: '#cdd6f4',
@@ -240,44 +206,42 @@ export function GLSLPage() {
         )}
       </div>
 
-      {/* ── Snippets panel ──────────────────────────────────────────────── */}
-      {showSnippets && (
+      {/* ── Saved shaders panel ───────────────────────────────────────── */}
+      {showPanel && (
         <div style={{
-          width: '220px', flexShrink: 0,
+          width: '200px', flexShrink: 0,
           display: 'flex', flexDirection: 'column',
-          background: '#13131f', borderLeft: '1px solid #313244',
+          background: '#13131f',
         }}>
-          {/* Panel header */}
           <div style={{
             height: '36px', flexShrink: 0,
             background: '#1e1e2e', borderBottom: '1px solid #313244',
-            display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px',
+            display: 'flex', alignItems: 'center', padding: '0 12px',
           }}>
             <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
-              Snippets
+              Shaders
             </span>
-            <span style={{ fontSize: '10px', color: '#45475a' }}>{snippets.length}</span>
+            <span style={{ fontSize: '10px', color: '#45475a' }}>{shaders.length}</span>
           </div>
 
-          {/* Snippet list */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
-            {snippets.length === 0 && (
-              <div style={{ padding: '12px 8px', fontSize: '11px', color: '#45475a', lineHeight: 1.5 }}>
-                Nothing saved yet.<br /><br />
-                Click <strong style={{ color: '#585b70' }}>+ Save</strong> to save the whole shader as a file, or select a portion of code first to save just that as a reusable snippet.
+            {shaders.length === 0 ? (
+              <div style={{ padding: '12px 8px', fontSize: '11px', color: '#45475a', lineHeight: 1.6 }}>
+                No saved shaders.<br />Click <strong style={{ color: '#585b70' }}>+ Save</strong> to save the current file.
               </div>
-            )}
-            {snippets.map(s => (
+            ) : shaders.map(s => (
               <div
                 key={s.id}
+                onDoubleClick={() => loadShader(s)}
+                title="Double-click to load"
                 style={{
                   marginBottom: '4px', borderRadius: '5px',
                   background: '#1e1e2e', border: '1px solid #313244',
-                  overflow: 'hidden',
+                  cursor: 'pointer', overflow: 'hidden',
                 }}
               >
-                {/* Snippet header row */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '5px 8px', gap: '4px' }}>
+                {/* Name row */}
+                <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', gap: '4px' }}>
                   {renamingId === s.id ? (
                     <input
                       autoFocus
@@ -288,6 +252,7 @@ export function GLSLPage() {
                         if (e.key === 'Enter') commitRename(s.id);
                         if (e.key === 'Escape') setRenamingId(null);
                       }}
+                      onClick={e => e.stopPropagation()}
                       style={{
                         flex: 1, fontSize: '11px', background: '#11111b',
                         border: '1px solid #89b4fa', color: '#cdd6f4',
@@ -296,69 +261,32 @@ export function GLSLPage() {
                     />
                   ) : (
                     <span
+                      onDoubleClick={e => { e.stopPropagation(); setRenamingId(s.id); setRenameVal(s.name); }}
                       title="Double-click to rename"
-                      onDoubleClick={() => { setRenamingId(s.id); setRenameVal(s.name); }}
-                      style={{ flex: 1, fontSize: '11px', color: '#cdd6f4', cursor: 'default', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      style={{
+                        flex: 1, fontSize: '11px', color: '#cdd6f4',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
                     >
                       {s.name}
                     </span>
                   )}
                   <button
-                    onClick={() => deleteSnippet(s.id)}
-                    title="Delete snippet"
-                    style={{ fontSize: '10px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
+                    onClick={e => { e.stopPropagation(); deleteShader(s.id); }}
+                    title="Delete"
+                    style={{ fontSize: '10px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
                   >×</button>
                 </div>
 
                 {/* Code preview */}
                 <div style={{
-                  padding: '4px 8px 6px',
-                  borderTop: '1px solid #313244',
-                  fontSize: '10px', color: '#585b70',
+                  padding: '3px 8px 6px', borderTop: '1px solid #313244',
+                  fontSize: '10px', color: '#45475a',
                   fontFamily: "'Fira Code', 'Consolas', monospace",
-                  whiteSpace: 'pre', overflow: 'hidden',
-                  maxHeight: '52px',
-                  lineHeight: 1.5,
-                  textOverflow: 'ellipsis',
+                  whiteSpace: 'pre', overflow: 'hidden', maxHeight: '46px', lineHeight: 1.5,
                 }}>
                   {s.code.split('\n').slice(0, 3).join('\n')}
                   {s.code.split('\n').length > 3 ? '\n…' : ''}
-                </div>
-
-                {/* Action buttons */}
-                <div style={{ display: 'flex', borderTop: '1px solid #313244' }}>
-                  <button
-                    onClick={() => insertSnippet(s)}
-                    title="Insert at current cursor position"
-                    style={{
-                      flex: 1, padding: '4px 6px',
-                      background: 'none', border: 'none', borderRight: '1px solid #313244',
-                      color: '#89b4fa', fontSize: '10px', cursor: 'pointer',
-                      fontFamily: 'inherit',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#313244')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    ↵ Insert
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (code.trim() && !window.confirm('Replace editor content with this shader?')) return;
-                      setCode(s.code);
-                      textareaRef.current?.focus();
-                    }}
-                    title="Replace editor with this full shader"
-                    style={{
-                      flex: 1, padding: '4px 6px',
-                      background: 'none', border: 'none',
-                      color: '#a6e3a1', fontSize: '10px', cursor: 'pointer',
-                      fontFamily: 'inherit',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#313244')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    ↺ Load
-                  </button>
                 </div>
               </div>
             ))}

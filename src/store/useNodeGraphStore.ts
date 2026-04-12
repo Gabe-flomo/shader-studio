@@ -1704,7 +1704,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   getSavedGraphNames: () =>
     Object.keys(localStorage)
-      .filter(k => k.startsWith('shader-studio:'))
+      .filter(k => {
+        if (!k.startsWith('shader-studio:')) return false;
+        try { return Array.isArray(JSON.parse(localStorage.getItem(k) ?? '').nodes); }
+        catch { return false; }
+      })
       .map(k => k.slice('shader-studio:'.length))
       .sort(),
 
