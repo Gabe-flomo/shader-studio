@@ -5,7 +5,7 @@
 import type { NodeDefinition } from '../../types/nodeGraph';
 
 // Sources
-export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode } from './sources';
+export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode } from './sources';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';

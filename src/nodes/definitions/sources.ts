@@ -1,6 +1,33 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p } from './helpers';
 
+/**
+ * Loop Index — outputs the current iteration counter `i` when placed inside
+ * an iterated group (iterations > 1).  The compiler replaces the placeholder
+ * GLSL with the actual loop variable at code-generation time.
+ * Outside an iterated group it safely outputs 0.0.
+ */
+export const LoopIndexNode: NodeDefinition = {
+  type: 'loopIndex',
+  label: 'Loop Index',
+  category: 'Sources',
+  description: 'Current iteration index (float i) — place inside a group with iterations > 1',
+  inputs: {},
+  outputs: {
+    i: { type: 'float', label: 'i' },
+  },
+  generateGLSL: (node: GraphNode) => {
+    // Default codegen (single-pass / preview context): emit 0.0.
+    // The iterated-group compiler overrides nodeOutputs for this node type
+    // before calling generateGLSL, so this fallback is rarely reached.
+    const outVar = `${node.id}_loopidx`;
+    return {
+      code: `    float ${outVar} = 0.0;\n`,
+      outputVars: { i: outVar },
+    };
+  },
+};
+
 export const UVNode: NodeDefinition = {
   type: 'uv',
   label: 'UV',

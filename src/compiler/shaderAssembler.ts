@@ -378,6 +378,12 @@ export function generateFragmentShader(
             : inputVars[port.key];      // fixed: same outer var every iteration
           if (outerVar) portInputOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
         }
+        // Pre-inject loop index for any loopIndex nodes in the subgraph
+        for (const sn of subgraph.nodes) {
+          if (sn.type === 'loopIndex') {
+            nodeOutputs.set(prefix + sn.id, { i: loopVar });
+          }
+        }
         compileSubgraphPass(prefix, portInputOverrides);
 
         // 4. Update carry vars from this iteration's outputs (inside the loop)

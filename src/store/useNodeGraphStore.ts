@@ -1099,9 +1099,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   updateNodePosition: (nodeId, position) => {
-    set(state => ({
-      nodes: state.nodes.map(n => n.id === nodeId ? { ...n, position } : n),
-    }));
+    set(state => {
+      // Fast path: top-level node
+      if (state.nodes.some(n => n.id === nodeId)) {
+        return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, position } : n) };
+      }
+      // Drill into active group's subgraph (handles drag inside "enter group" view)
+      const groupId = state.activeGroupId;
+      if (!groupId) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return {
+            ...n,
+            params: { ...n.params, subgraph: { ...sg, nodes: sg.nodes.map(sn => sn.id === nodeId ? { ...sn, position } : sn) } },
+          };
+        }),
+      };
+    });
   },
 
   updateNodeParams: (nodeId, params, options?) => {
@@ -1112,11 +1129,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     if (_historyParamTimer) clearTimeout(_historyParamTimer);
     _historyParamTimer = setTimeout(() => { _historyParamPending = false; }, 1000);
-    set(state => ({
-      nodes: state.nodes.map(n =>
-        n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n
-      ),
-    }));
+    set(state => {
+      // Top-level node
+      if (state.nodes.some(n => n.id === nodeId)) {
+        return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n) };
+      }
+      // Subgraph node (inside "enter group" view)
+      const groupId = state.activeGroupId;
+      if (!groupId) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return {
+            ...n,
+            params: { ...n.params, subgraph: { ...sg, nodes: sg.nodes.map(sn => sn.id === nodeId ? { ...sn, params: { ...sn.params, ...params } } : sn) } },
+          };
+        }),
+      };
+    });
 
     // Optimisation: if every changed param already has a compiled uniform entry,
     // push the new values directly to ShaderCanvas via paramUniforms — no recompile.
