@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
