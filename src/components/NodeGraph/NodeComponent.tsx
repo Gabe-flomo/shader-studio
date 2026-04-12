@@ -1350,23 +1350,25 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ⊘
             </button>
           )}
-          {/* Delete button */}
-          <button
-            onMouseDown={e => e.stopPropagation()}
-            onClick={() => removeNode(node.id)}
-            title="Remove node"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#f38ba8',
-              cursor: 'pointer',
-              fontSize: '14px',
-              lineHeight: 1,
-              padding: '0 2px',
-            }}
-          >
-            ✕
-          </button>
+          {/* Delete button — hidden for original group nodes (immutable) */}
+          {!node.params._groupOriginal && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => removeNode(node.id)}
+              title="Remove node"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#f38ba8',
+                cursor: 'pointer',
+                fontSize: '14px',
+                lineHeight: 1,
+                padding: '0 2px',
+              }}
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
