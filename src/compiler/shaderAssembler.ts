@@ -4,6 +4,21 @@ import { topologicalSort } from './topoSort';
 import type { LoopPairChain } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 
+// ── Runtime output-type helper ────────────────────────────────────────────────
+
+/**
+ * Get the actual GLSL output type for a node's output socket.
+ * For Expr and CustomFn nodes the output type is stored in `params.outputType`
+ * at runtime; their definition hardcodes `float` as a placeholder.
+ */
+function getNodeOutputType(node: GraphNode, defType: DataType): DataType {
+  if (node.type === 'expr' || node.type === 'customFn') {
+    const pt = node.params.outputType as string | undefined;
+    if (pt === 'float' || pt === 'vec2' || pt === 'vec3' || pt === 'vec4') return pt as DataType;
+  }
+  return defType;
+}
+
 // ── Input-variable resolution ─────────────────────────────────────────────────
 
 /**
@@ -441,8 +456,14 @@ export function generateFragmentShader(
           const firstOutEntry = Object.entries(def.outputs)[0];
           if (!firstOutEntry) continue;
           const [firstOutKey, firstOutSock] = firstOutEntry;
-          // Find first input with the same type as the primary output (the carry input)
-          const carryInputEntry = Object.entries(def.inputs).find(([, s]) => s.type === firstOutSock.type);
+          // Use the actual runtime output type (Expr/CustomFn store it in params.outputType)
+          const actualOutType = getNodeOutputType(sn, firstOutSock.type);
+          // Find first input with the same type as the primary output (the carry input).
+          // Fall back to the first input for nodes like Expr where definition types
+          // don't reflect the actual wired types (all Expr inputs are 'float' in the def).
+          const carryInputEntry =
+            Object.entries(def.inputs).find(([, s]) => s.type === actualOutType)
+            ?? Object.entries(def.inputs)[0];
           if (!carryInputEntry) continue;
           const [carryInputKey] = carryInputEntry;
 
@@ -451,7 +472,7 @@ export function generateFragmentShader(
           carryModeNaturalVars.set(sn.id, naturalVarName);
 
           // Resolve initial value: portInputOverrides takes priority, then subgraph connection
-          let initVar = defaultGlslVal(firstOutSock.type);
+          let initVar = defaultGlslVal(actualOutType);
           const portKey = `${sn.id}:${carryInputKey}`;
           if (portInputOverrides.has(portKey)) {
             initVar = portInputOverrides.get(portKey)!;
@@ -466,7 +487,7 @@ export function generateFragmentShader(
 
           // Forward-declare without init (T d;), then assign (d = init;)
           // This lets us reuse the same variable name inside the loop without re-declaring.
-          mainCode.push(`    ${firstOutSock.type} ${naturalVarName};\n`);
+          mainCode.push(`    ${actualOutType} ${naturalVarName};\n`);
           mainCode.push(`    ${naturalVarName} = ${initVar};\n`);
           // Feed the carry var as the carry input so the node uses it each iteration
           portInputOverrides.set(portKey, naturalVarName);
@@ -482,13 +503,15 @@ export function generateFragmentShader(
           const def = getNodeDefinition(sn.type);
           if (!def) continue;
           // Neutral initializer: 0 for +/-, 1 for *//
-          const neutralVal = (op === '*=' || op === '/=') ? '1.0' : '0.0';
+          const isMultiply = op === '*=' || op === '/=';
           const outVars: Record<string, string> = {};
           for (const [outKey, outSock] of Object.entries(def.outputs)) {
+            // Use the actual runtime type (Expr/CustomFn store it in params.outputType)
+            const actualType = getNodeOutputType(sn, outSock.type);
             const varName = `${node.id}_ao_${sn.id}_${outKey}`;
             outVars[outKey] = varName;
-            const neutral = neutralVal === '0.0' ? defaultGlslVal(outSock.type) : `${outSock.type}(1.0)`;
-            mainCode.push(`    ${outSock.type} ${varName} = ${neutral};\n`);
+            const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType);
+            mainCode.push(`    ${actualType} ${varName} = ${neutral};\n`);
           }
           accumNodeVarNames[sn.id] = outVars;
         }
