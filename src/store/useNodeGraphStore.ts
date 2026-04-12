@@ -164,6 +164,12 @@ interface NodeGraphState {
   rawGlslShader: string | null;
   setRawGlslShader: (shader: string | null) => void;
 
+  /** Brief notice shown when group output reassignment auto-disconnected incompatible outer connections */
+  disconnectedNotice: string | null;
+  clearDisconnectedNotice: () => void;
+  /** Reassign a group output port to a different inner node's output */
+  setGroupOutput: (groupId: string, outputPortKey: string, fromNodeId: string, fromOutputKey: string) => void;
+
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
   /**
@@ -358,6 +364,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodePreviews: {},
   isStateful: false,
   rawGlslShader: null,
+  disconnectedNotice: null,
   groupPresets: loadGroupPresets(),
 
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
@@ -753,8 +760,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return;
     }
 
-    // Restore subgraph nodes (they carry their original connections)
-    const restoredNodes = subgraph.nodes;
+    // Restore subgraph nodes — exclude auto-injected sentinels (loopIndex) and
+    // strip the _groupOriginal flag so nodes are editable again.
+    const restoredNodes = subgraph.nodes
+      .filter(n => n.type !== 'loopIndex')
+      .map(n => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _groupOriginal, ...restParams } = n.params as Record<string, unknown>;
+        return { ...n, params: restParams };
+      });
 
     // Reconnect external nodes: replace connections pointing to groupId with
     // connections to the actual subgraph node from the outputPort mapping.
@@ -1499,6 +1513,67 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  clearDisconnectedNotice: () => set({ disconnectedNotice: null }),
+
+  setGroupOutput: (groupId, outputPortKey, fromNodeId, fromOutputKey) => {
+    pushHistory(get().nodes);
+    set(state => {
+      const groupNode = state.nodes.find(n => n.id === groupId);
+      if (!groupNode) return {};
+      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return {};
+      const port = sg.outputPorts.find(p => p.key === outputPortKey);
+      if (!port) return {};
+
+      // Get the type from the source node's output
+      const sourceNode = sg.nodes.find(sn => sn.id === fromNodeId);
+      const newType = (sourceNode?.outputs[fromOutputKey]?.type ?? port.type) as import('../types/nodeGraph').DataType;
+      const typeChanged = newType !== port.type;
+
+      const newOutputPorts = sg.outputPorts.map(p =>
+        p.key === outputPortKey ? { ...p, fromNodeId, fromOutputKey, type: newType } : p
+      );
+      const newGroupOutputs = {
+        ...groupNode.outputs,
+        [outputPortKey]: { ...groupNode.outputs[outputPortKey], type: newType },
+      };
+
+      let disconnectedCount = 0;
+      const newNodes = state.nodes.map(n => {
+        if (n.id === groupId) {
+          return {
+            ...n,
+            outputs: newGroupOutputs,
+            params: { ...n.params, subgraph: { ...sg, outputPorts: newOutputPorts } },
+          };
+        }
+        if (!typeChanged) return n;
+        let changed = false;
+        const newInputs = { ...n.inputs };
+        for (const [key, inp] of Object.entries(n.inputs)) {
+          if (inp.connection?.nodeId === groupId && inp.connection?.outputKey === outputPortKey) {
+            if (!typesCompatible(newType, inp.type)) {
+              const newInp = { ...inp };
+              delete newInp.connection;
+              newInputs[key] = newInp;
+              disconnectedCount++;
+              changed = true;
+            }
+          }
+        }
+        return changed ? { ...n, inputs: newInputs } : n;
+      });
+
+      return {
+        nodes: newNodes,
+        disconnectedNotice: typeChanged && disconnectedCount > 0
+          ? `Output type changed to ${newType} — ${disconnectedCount} incompatible connection${disconnectedCount > 1 ? 's' : ''} removed`
+          : null,
+      };
+    });
+    get().compile();
+  },
+
   toggleBypass: (nodeId) => {
     pushHistory(get().nodes);
     set(state => ({
@@ -1511,29 +1586,49 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   updateNodeSockets: (nodeId, inputDefs, outputType) => {
     pushHistory(get().nodes);
-    set(state => ({
-      nodes: state.nodes.map(n => {
-        if (n.id !== nodeId) return n;
-        // Build new inputs record from inputDefs, preserving existing connections where names match
-        const newInputs: Record<string, InputSocket> = {};
-        for (const inp of inputDefs) {
-          const existing = n.inputs[inp.name];
-          // Slider inputs: no socket connection — value comes from node.params[name]
-          const hasSlider = inp.type === 'float' && inp.slider != null;
-          const paramVal = typeof n.params[inp.name] === 'number' ? (n.params[inp.name] as number) : 0;
-          newInputs[inp.name] = {
-            type: inp.type,
-            label: inp.name,
-            // Slider inputs: set defaultValue so compiler emits the param value as GLSL literal
-            defaultValue: hasSlider ? paramVal : undefined,
-            // Preserve connection only if socket name & type still match, and no slider override
-            connection: (!hasSlider && existing?.type === inp.type) ? existing.connection : undefined,
+
+    const buildUpdatedNode = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
+      const newInputs: Record<string, InputSocket> = {};
+      for (const inp of inputDefs) {
+        const existing = n.inputs[inp.name];
+        const hasSlider = inp.type === 'float' && inp.slider != null;
+        const paramVal = typeof n.params[inp.name] === 'number' ? (n.params[inp.name] as number) : 0;
+        newInputs[inp.name] = {
+          type: inp.type,
+          label: inp.name,
+          defaultValue: hasSlider ? paramVal : undefined,
+          connection: (!hasSlider && existing?.type === inp.type) ? existing.connection : undefined,
+        };
+      }
+      return { ...n, inputs: newInputs, outputs: { result: { type: outputType, label: 'Result' } } };
+    };
+
+    set(state => {
+      // Top-level node
+      if (state.nodes.some(n => n.id === nodeId)) {
+        return { nodes: state.nodes.map(n => n.id === nodeId ? buildUpdatedNode(n) : n) };
+      }
+      // Subgraph node (inside active group)
+      const groupId = state.activeGroupId;
+      if (!groupId) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return {
+            ...n,
+            params: {
+              ...n.params,
+              subgraph: {
+                ...sg,
+                nodes: sg.nodes.map(sn => sn.id === nodeId ? buildUpdatedNode(sn) : sn),
+              },
+            },
           };
-        }
-        const newOutputs = { result: { type: outputType, label: 'Result' } };
-        return { ...n, inputs: newInputs, outputs: newOutputs };
-      }),
-    }));
+        }),
+      };
+    });
     get().compile();
   },
 
