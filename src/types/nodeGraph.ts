@@ -29,6 +29,17 @@ export interface GraphNode {
   params: Record<string, unknown>;
   /** When true the node is skipped — inputs are passed through to outputs */
   bypassed?: boolean;
+  /**
+   * Assignment operator for this node's outputs when inside an iterated group.
+   * Controls how each iteration's result combines with previous iterations:
+   *   '='  — overwrite (default: only last iteration's value survives)
+   *   '+=' — add (accumulate across iterations, e.g. finalColor += col * d)
+   *   '-=' — subtract
+   *   '*=' — multiply
+   *   '/=' — divide
+   * Only meaningful inside an iterated group (iterations > 1).
+   */
+  assignOp?: '=' | '+=' | '-=' | '*=' | '/=';
 }
 
 // Editable parameter definition (used to render inline controls on the node card)

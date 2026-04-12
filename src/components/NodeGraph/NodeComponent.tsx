@@ -251,6 +251,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
+  const setNodeAssignOp    = useNodeGraphStore(s => s.setNodeAssignOp);
+  const activeGroupId      = useNodeGraphStore(s => s.activeGroupId);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
   const isSelected         = selectedNodeId === node.id;
@@ -314,6 +316,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   const def = getNodeDefinition(node.type);
   const isBypassed = !!node.bypassed;
+  const assignOp = node.assignOp ?? '=';
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -1448,6 +1451,36 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             >
               ↺
             </button>
+          )}
+          {/* assignOp — only shown inside an iterated group */}
+          {activeGroupId && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
+            <select
+              onMouseDown={e => e.stopPropagation()}
+              value={assignOp}
+              onChange={e => setNodeAssignOp(node.id, e.target.value as import('../../types/nodeGraph').GraphNode['assignOp'])}
+              title="Assign operator: how this node's output combines across loop iterations"
+              style={{
+                background: assignOp !== '=' ? '#45475a' : 'none',
+                border: assignOp !== '=' ? '1px solid #89b4fa66' : '1px solid #31324466',
+                color: assignOp !== '=' ? '#89b4fa' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '10px',
+                borderRadius: '3px',
+                padding: '0 2px',
+                outline: 'none',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+                fontFamily: 'monospace',
+                width: '28px',
+                textAlign: 'center',
+              }}
+            >
+              <option value="=">  =</option>
+              <option value="+=">+=</option>
+              <option value="-=">-=</option>
+              <option value="*=">*=</option>
+              <option value="/=">/=</option>
+            </select>
           )}
           {/* Bypass toggle — skip node, pass input through to output */}
           {!['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type) && (

@@ -404,6 +404,26 @@ export function generateFragmentShader(
           }
         }
 
+        // 1c. Declare outer accumulator vars for nodes with assignOp != '='
+        //     These nodes' outputs persist across iterations and accumulate.
+        const accumNodeVarNames: Record<string, Record<string, string>> = {};  // nodeId → { outKey → outerVarName }
+        for (const sn of subgraph.nodes) {
+          const op = sn.assignOp;
+          if (!op || op === '=') continue;
+          const def = getNodeDefinition(sn.type);
+          if (!def) continue;
+          // Neutral initializer: 0 for +/-, 1 for *//
+          const neutralVal = (op === '*=' || op === '/=') ? '1.0' : '0.0';
+          const outVars: Record<string, string> = {};
+          for (const [outKey, outSock] of Object.entries(def.outputs)) {
+            const varName = `${node.id}_ao_${sn.id}_${outKey}`;
+            outVars[outKey] = varName;
+            const neutral = neutralVal === '0.0' ? defaultGlslVal(outSock.type) : `${outSock.type}(1.0)`;
+            mainCode.push(`    ${outSock.type} ${varName} = ${neutral};\n`);
+          }
+          accumNodeVarNames[sn.id] = outVars;
+        }
+
         // 2. Open the for loop
         const loopVar = `${node.id}_i`;
         mainCode.push(`    for (float ${loopVar} = 0.0; ${loopVar} < ${iters}.0; ${loopVar}++) {\n`);
@@ -423,7 +443,70 @@ export function generateFragmentShader(
             nodeOutputs.set(prefix + sn.id, { i: loopVar });
           }
         }
+
+        // Pre-inject LoopCarry nodes — declare carry vars outside loop, inject current value
+        const loopCarryNodes = subgraph.nodes.filter(sn => sn.type === 'loopCarry');
+        const loopCarryVarNames: Record<string, string> = {};
+        for (const sn of loopCarryNodes) {
+          const carryType = (sn.params.dataType as string | undefined) ?? (sn.outputs.value?.type ?? 'vec2');
+          const carryVarName = `${node.id}_lc_${sn.id}`;
+          loopCarryVarNames[sn.id] = carryVarName;
+
+          // Resolve init value: check portInputOverrides for `init` input, then connection
+          let initVar = defaultGlslVal(carryType as import('../types/nodeGraph').DataType);
+          const initConn = sn.inputs['init']?.connection;
+          if (initConn) {
+            // init connected to another inner node already processed before loop
+            const srcOut = nodeOutputs.get(prefix + initConn.nodeId)?.[initConn.outputKey];
+            if (srcOut) initVar = srcOut;
+            // Also check portInputOverrides for this source node
+            const overrideKey = `${initConn.nodeId}:${initConn.outputKey}`;
+            if (portInputOverrides.has(overrideKey)) initVar = portInputOverrides.get(overrideKey)!;
+          }
+          // Check if portInputOverrides maps directly to this node's init input
+          const directKey = `${sn.id}:init`;
+          if (portInputOverrides.has(directKey)) initVar = portInputOverrides.get(directKey)!;
+
+          mainCode.push(`    ${carryType} ${carryVarName} = ${initVar};\n`);
+          // Pre-inject so compileSubgraphPass sees this node as already done
+          nodeOutputs.set(prefix + sn.id, { value: carryVarName });
+        }
+
         compileSubgraphPass(prefix, portInputOverrides);
+
+        // 3b. Update LoopCarry vars from their `next` inputs (end of iteration)
+        for (const sn of loopCarryNodes) {
+          const nextConn = sn.inputs['next']?.connection;
+          if (nextConn) {
+            const nextVar = nodeOutputs.get(prefix + nextConn.nodeId)?.[nextConn.outputKey];
+            if (nextVar) {
+              mainCode.push(`    ${loopCarryVarNames[sn.id]} = ${nextVar};\n`);
+            }
+          }
+        }
+
+        // 3c. Apply assignOp accumulations for nodes marked with += / -= / *= / /=
+        //     Emit `outerVar OP innerVar;` then update nodeOutputs to point to the outer var.
+        //     Downstream nodes inside the loop see the inner (fresh) var; the group output
+        //     sees the outer (accumulated) var.
+        for (const sn of subgraph.nodes) {
+          const op = sn.assignOp;
+          if (!op || op === '=') continue;
+          const outVars = accumNodeVarNames[sn.id];
+          if (!outVars) continue;
+          const freshOutputs = nodeOutputs.get(prefix + sn.id);
+          if (!freshOutputs) continue;
+          const updatedOutputs: Record<string, string> = {};
+          for (const [outKey, outerVarName] of Object.entries(outVars)) {
+            const freshVar = freshOutputs[outKey];
+            if (freshVar) {
+              mainCode.push(`    ${outerVarName} ${op} ${freshVar};\n`);
+            }
+            // Point nodeOutputs to the outer accumulated var for downstream reads
+            updatedOutputs[outKey] = outerVarName;
+          }
+          nodeOutputs.set(prefix + sn.id, updatedOutputs);
+        }
 
         // 4. Update carry vars from this iteration's outputs (inside the loop)
         for (const { inPort, outPort } of carryPairs) {

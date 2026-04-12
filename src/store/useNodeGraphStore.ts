@@ -173,6 +173,11 @@ interface NodeGraphState {
   addGroupInput: (groupId: string, type: import('./types/nodeGraph').DataType, label: string) => void;
   /** Reroute an existing group input port to a different inner node socket */
   rerouteGroupInput: (groupId: string, portKey: string, toNodeId: string, toInputKey: string) => void;
+  /**
+   * Set the assignOp on a node (works for both top-level and subgraph nodes).
+   * Controls how its outputs accumulate across iterations in a loop group.
+   */
+  setNodeAssignOp: (nodeId: string, op: import('../types/nodeGraph').GraphNode['assignOp']) => void;
 
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
@@ -1363,9 +1368,25 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               ...overrideUpdates,
               subgraph: {
                 ...sg,
-                nodes: sg.nodes.map(sn =>
-                  sn.id === nodeId ? { ...sn, params: { ...sn.params, ...params } } : sn
-                ),
+                nodes: sg.nodes.map(sn => {
+                  if (sn.id !== nodeId) return sn;
+                  const updated = { ...sn, params: { ...sn.params, ...params } };
+                  // loopCarry: auto-update socket types when dataType changes
+                  if (sn.type === 'loopCarry' && 'dataType' in params) {
+                    const t = params.dataType as import('../types/nodeGraph').DataType;
+                    return {
+                      ...updated,
+                      inputs: {
+                        init: { ...updated.inputs.init, type: t },
+                        next: { ...updated.inputs.next, type: t },
+                      },
+                      outputs: {
+                        value: { ...updated.outputs.value, type: t },
+                      },
+                    };
+                  }
+                  return updated;
+                }),
               },
             },
           };
@@ -1642,6 +1663,43 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             },
           };
         }),
+      };
+    });
+    get().compile();
+  },
+
+  setNodeAssignOp: (nodeId, op) => {
+    const activeGroupId = get().activeGroupId;
+    set(state => {
+      if (activeGroupId) {
+        // Operating inside a group — update the subgraph node
+        const groupNode = state.nodes.find(n => n.id === activeGroupId);
+        if (!groupNode) return {};
+        const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return {};
+        return {
+          nodes: state.nodes.map(n => {
+            if (n.id !== activeGroupId) return n;
+            return {
+              ...n,
+              params: {
+                ...n.params,
+                subgraph: {
+                  ...sg,
+                  nodes: sg.nodes.map(sn =>
+                    sn.id === nodeId ? { ...sn, assignOp: op } : sn
+                  ),
+                },
+              },
+            };
+          }),
+        };
+      }
+      // Top-level node
+      return {
+        nodes: state.nodes.map(n =>
+          n.id === nodeId ? { ...n, assignOp: op } : n
+        ),
       };
     });
     get().compile();
