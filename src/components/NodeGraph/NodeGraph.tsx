@@ -75,7 +75,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const clearDisconnectedNotice = useNodeGraphStore(s => s.clearDisconnectedNotice);
 
   const groupNodes          = useNodeGraphStore(s => s.groupNodes);
-  const wrapInLoop          = useNodeGraphStore(s => s.wrapInLoop);
+  const _wrapInLoop         = useNodeGraphStore(s => s.wrapInLoop); // kept for future toolbar use
   const activeGroupId       = useNodeGraphStore(s => s.activeGroupId);
   const setActiveGroupId    = useNodeGraphStore(s => s.setActiveGroupId);
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
