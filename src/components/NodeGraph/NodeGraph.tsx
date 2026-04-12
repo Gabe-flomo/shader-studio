@@ -6,7 +6,6 @@ import { ConnectionLine } from './ConnectionLine';
 import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
 import { collectLoopPairChains } from '../../compiler/topoSort';
-import { loadShortcutMap, displayCombo } from '../../hooks/useShortcuts';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
@@ -75,7 +74,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const clearDisconnectedNotice = useNodeGraphStore(s => s.clearDisconnectedNotice);
 
   const groupNodes          = useNodeGraphStore(s => s.groupNodes);
-  const _wrapInLoop         = useNodeGraphStore(s => s.wrapInLoop); // kept for future toolbar use
   const activeGroupId       = useNodeGraphStore(s => s.activeGroupId);
   const setActiveGroupId    = useNodeGraphStore(s => s.setActiveGroupId);
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
