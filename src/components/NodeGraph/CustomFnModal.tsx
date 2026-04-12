@@ -205,7 +205,7 @@ export function CustomFnModal({ node, onClose }: Props) {
           background: '#1e1e2e',
           border: '1px solid #45475a',
           borderRadius: '10px',
-          width: '700px',
+          width: 'min(700px, calc(100vw - 32px))',
           maxHeight: '88vh',
           overflowY: 'auto',
           padding: '16px 20px',
@@ -430,10 +430,12 @@ export function CustomFnModal({ node, onClose }: Props) {
             fontSize: '12px',
             fontFamily: 'monospace',
             width: '100%',
+            minHeight: '120px',
             resize: 'vertical',
             outline: 'none',
             boxSizing: 'border-box',
             lineHeight: 1.5,
+            display: 'block',
           }}
         />
 

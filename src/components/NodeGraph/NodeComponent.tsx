@@ -244,6 +244,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
   const activeGroupId   = useNodeGraphStore(s => s.activeGroupId);
+  // Check if the active group has iterations > 1 (assignOp / carryMode only meaningful in loops)
+  const activeGroupIterations = useNodeGraphStore(s => {
+    if (!s.activeGroupId) return 1;
+    const g = s.nodes.find(n => n.id === s.activeGroupId);
+    const iters = g?.params?.iterations;
+    return typeof iters === 'number' ? iters : 1;
+  });
+  const isInsideLoop = activeGroupId != null && activeGroupIterations > 1;
   const isPreviewActive = previewNodeId === node.id;
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
@@ -1453,8 +1461,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ↺
             </button>
           )}
-          {/* Carry mode — only shown inside an iterated group; on nodes with vec2/vec3 transform semantics */}
-          {activeGroupId && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
+          {/* Carry mode — only shown inside a group with iterations > 1 */}
+          {isInsideLoop && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => toggleCarryMode(node.id)}
@@ -1474,8 +1482,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ⟳
             </button>
           )}
-          {/* assignOp — only shown inside an iterated group */}
-          {activeGroupId && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
+          {/* assignOp — only shown inside a group with iterations > 1 */}
+          {isInsideLoop && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
             <select
               onMouseDown={e => e.stopPropagation()}
               value={assignOp}
