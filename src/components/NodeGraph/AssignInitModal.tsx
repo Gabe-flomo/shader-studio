@@ -3,11 +3,11 @@
  *
  * Opens when the user clicks the "init" chip on a node with assignOp != '='.
  * Provides a textarea + operator buttons + GLSL helpers + a Variables section
- * showing every GLSL variable computed before this node in the current shader.
+ * showing every GLSL variable computed before this node, grouped by type.
  */
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
+import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
@@ -43,6 +43,15 @@ const INIT_PALETTE: PaletteEntry[] = [
 
 const PALETTE_GROUPS = Array.from(new Set(INIT_PALETTE.map(e => e.group)));
 
+// Type display order + colours (match socket colours)
+const TYPE_ORDER: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
+const TYPE_COLOR: Record<DataType, string> = {
+  float: '#f0a0c0',
+  vec2:  '#00aaff',
+  vec3:  '#00ffaa',
+  vec4:  '#ffaa00',
+};
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const BTN: React.CSSProperties = {
@@ -55,13 +64,6 @@ const BTN: React.CSSProperties = {
   fontFamily: 'monospace',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
-};
-
-const VAR_BTN: React.CSSProperties = {
-  ...BTN,
-  background: '#1e1e2e',
-  border: '1px solid #89b4fa55',
-  color: '#89b4fa',
 };
 
 const SECTION: React.CSSProperties = {
@@ -89,63 +91,70 @@ export function AssignInitModal({ node, onClose }: Props) {
   const [expr, setExpr]   = useState(node.assignInit ?? '');
   const taRef             = useRef<HTMLTextAreaElement | null>(null);
 
-  // ── Collect available variables ─────────────────────────────────────────────
-  // Walk the map (insertion = execution order) until we hit the current node,
-  // collecting every output variable from nodes we pass.
-  // The map keys for subgraph nodes are prefixed; we find the current node
-  // by checking whether the key ends with the node id (covers both cases).
-
-  type VarEntry = { varName: string; nodeLabel: string; outputKey: string };
-  const availableVars: VarEntry[] = [];
-
-  // Build a lookup: nodeId → node label (check top-level + active group's subgraph)
-  const nodeLabelMap = new Map<string, string>();
-  for (const n of topNodes) {
-    const def = getNodeDefinition(n.type);
-    const lbl = typeof n.params.label === 'string' ? n.params.label : (def?.label ?? n.type);
-    nodeLabelMap.set(n.id, lbl);
-  }
+  // ── Build a flat list of all nodes we might need to look up ────────────────
+  const allKnownNodes: GraphNode[] = [...topNodes];
   if (activeGroupId) {
     const grp = topNodes.find(n => n.id === activeGroupId);
     const sg = grp?.params.subgraph as SubgraphData | undefined;
-    if (sg) {
-      for (const n of sg.nodes) {
-        const def = getNodeDefinition(n.type);
-        const lbl = typeof n.params.label === 'string' ? n.params.label : (def?.label ?? n.type);
-        nodeLabelMap.set(n.id, lbl);
-      }
-    }
+    if (sg) allKnownNodes.push(...sg.nodes);
   }
 
-  // Derive the map key prefix that corresponds to the current node
-  // (top-level: node.id; inside group: ${groupId}_g_${node.id})
-  const currentNodeKeySuffix = node.id;
+  // ── Collect available variables ─────────────────────────────────────────────
+  // Walk the map in execution order, stop when we reach the current node.
+
+  type VarEntry = {
+    varName: string;   // actual GLSL identifier to insert
+    displayKey: string;// short human name (outputKey)
+    nodeLabel: string; // source node label (for disambiguation)
+    type: DataType;    // GLSL type (for grouping)
+  };
+  const availableVars: VarEntry[] = [];
 
   for (const [mapKey, outVars] of nodeOutputVarMap) {
-    // Stop when we reach this node (key equals or ends with the node id)
-    if (mapKey === currentNodeKeySuffix || mapKey.endsWith(`_${currentNodeKeySuffix}`)) break;
+    // Stop when we reach THIS node's map entry
+    if (mapKey === node.id || mapKey.endsWith(`_${node.id}`)) break;
 
-    // Resolve a human label for this map entry
-    // The raw node id may be at the end of a prefixed key like `group_g_nodeId`
-    let nodeLabel = mapKey;
-    for (const [nId, lbl] of nodeLabelMap) {
-      if (mapKey === nId || mapKey.endsWith(`_${nId}`)) {
-        nodeLabel = lbl;
+    // Find the source GraphNode for this map key
+    let sourceNode: GraphNode | undefined;
+    for (const n of allKnownNodes) {
+      if (mapKey === n.id || mapKey.endsWith(`_${n.id}`)) {
+        sourceNode = n;
         break;
       }
     }
 
+    const def       = sourceNode ? getNodeDefinition(sourceNode.type) : undefined;
+    const nodeLabel = sourceNode
+      ? (typeof sourceNode.params.label === 'string' ? sourceNode.params.label : (def?.label ?? sourceNode.type))
+      : mapKey.split('_').pop() ?? mapKey; // fallback: last segment of prefixed key
+
     for (const [outputKey, varName] of Object.entries(outVars)) {
-      availableVars.push({ varName, nodeLabel, outputKey });
+      // Resolve GLSL type: check runtime outputs first (group nodes have dynamic sockets)
+      const runtimeType = sourceNode?.outputs?.[outputKey]?.type;
+      const defType     = def?.outputs?.[outputKey]?.type;
+      const type        = (runtimeType ?? defType ?? 'float') as DataType;
+
+      availableVars.push({ varName, displayKey: outputKey, nodeLabel, type });
     }
   }
 
-  // Group available vars by node label for display
-  const varGroups = new Map<string, VarEntry[]>();
-  for (const v of availableVars) {
-    if (!varGroups.has(v.nodeLabel)) varGroups.set(v.nodeLabel, []);
-    varGroups.get(v.nodeLabel)!.push(v);
-  }
+  // ── Disambiguate display names ──────────────────────────────────────────────
+  // If two vars share the same outputKey, prefix with a short node label.
+  const keyCount = new Map<string, number>();
+  for (const v of availableVars) keyCount.set(v.displayKey, (keyCount.get(v.displayKey) ?? 0) + 1);
+
+  const buttonLabel = (v: VarEntry): string => {
+    if ((keyCount.get(v.displayKey) ?? 1) > 1) {
+      const short = v.nodeLabel.length > 10 ? v.nodeLabel.slice(0, 10) + '…' : v.nodeLabel;
+      return `${short} · ${v.displayKey}`;
+    }
+    return v.displayKey;
+  };
+
+  // ── Group by type ───────────────────────────────────────────────────────────
+  const typeGroups = new Map<DataType, VarEntry[]>();
+  for (const t of TYPE_ORDER) typeGroups.set(t, []);
+  for (const v of availableVars) typeGroups.get(v.type)?.push(v);
 
   // ── Cursor-aware insert ─────────────────────────────────────────────────────
   const insertAtCursor = (text: string) => {
@@ -191,6 +200,8 @@ export function AssignInitModal({ node, onClose }: Props) {
     ? node.params.label
     : (nodeDef?.label ?? node.type);
 
+  const hasAnyVars = availableVars.length > 0;
+
   return createPortal(
     <div
       style={{
@@ -198,7 +209,7 @@ export function AssignInitModal({ node, onClose }: Props) {
         background: 'rgba(0,0,0,0.6)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
-      onMouseDown={e => { if (e.target === e.currentTarget) { handleApply(); } }}
+      onMouseDown={e => { if (e.target === e.currentTarget) handleApply(); }}
     >
       <div
         onMouseDown={e => e.stopPropagation()}
@@ -274,29 +285,49 @@ export function AssignInitModal({ node, onClose }: Props) {
           ))}
         </div>
 
-        {/* Variables section — only shown when there are prior vars */}
-        {varGroups.size > 0 && (
+        {/* Variables — grouped by GLSL type */}
+        {hasAnyVars && (
           <>
             <div style={SECTION}>Variables</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {Array.from(varGroups.entries()).map(([label, vars]) => (
-                <div key={label} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '9px', color: '#45475a', minWidth: '60px', textAlign: 'right', letterSpacing: '0.04em', flexShrink: 0 }}>
-                    {label}
-                  </span>
-                  {vars.map(v => (
-                    <button
-                      key={v.varName}
-                      style={VAR_BTN}
-                      title={`${label} → ${v.outputKey}`}
-                      onClick={() => insertAtCursor(v.varName)}
-                    >
-                      {v.varName}
-                    </button>
-                  ))}
+            {TYPE_ORDER.map(t => {
+              const vars = typeGroups.get(t) ?? [];
+              if (vars.length === 0) return null;
+              const color = TYPE_COLOR[t];
+              return (
+                <div key={t} style={{ marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      color,
+                      textTransform: 'uppercase',
+                      minWidth: '34px',
+                    }}>
+                      {t}
+                    </span>
+                    <div style={{ flex: 1, height: '1px', background: `${color}22` }} />
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    {vars.map(v => (
+                      <button
+                        key={v.varName}
+                        title={v.varName}
+                        onClick={() => insertAtCursor(v.varName)}
+                        style={{
+                          ...BTN,
+                          background: '#1e1e2e',
+                          border: `1px solid ${color}44`,
+                          color,
+                        }}
+                      >
+                        {buttonLabel(v)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </>
         )}
 
