@@ -18,6 +18,11 @@ export interface CompilationResult {
    */
   textureUniforms: Record<string, string>;
   /**
+   * Maps float uniform name (e.g. "u_audio_nodeId") → nodeId.
+   * ShaderCanvas pushes amplitude values each animation frame for AudioInput nodes.
+   */
+  audioUniforms: Record<string, string>;
+  /**
    * True when any PrevFrame node exists in the graph — ShaderCanvas enables
    * ping-pong render targets when this is set.
    */

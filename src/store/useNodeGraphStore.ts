@@ -8,6 +8,7 @@ import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
 import { EXAMPLE_GRAPHS } from './exampleGraphs';
 import { typesCompatible } from '../lib/typesCompatible';
+import { audioEngine } from '../lib/audioEngine';
 
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX = 'shader-studio:cfp:';
@@ -185,6 +186,11 @@ interface NodeGraphState {
   setNodeTexture: (nodeId: string, texture: import('three').Texture | null) => void;
   // textureUniforms from last compilation: uniformName → nodeId
   textureUniforms: Record<string, string>;
+  // audioUniforms from last compilation: uniformName → nodeId
+  audioUniforms: Record<string, string>;
+  // Master audio playback volume (0–1)
+  audioMasterVolume: number;
+  setAudioMasterVolume: (v: number) => void;
 
   // Per-node preview thumbnails — nodeId → data URL (jpeg)
   nodePreviews: Record<string, string>;
@@ -583,6 +589,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   activeGroupPath: [],
   nodeTextures: {},
   textureUniforms: {},
+  audioUniforms: {},
+  audioMasterVolume: 0.7,
   nodePreviews: {},
   isStateful: false,
   rawGlslShader: null,
@@ -776,6 +784,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setNodePreview: (nodeId, dataUrl) => set(state => ({
     nodePreviews: { ...state.nodePreviews, [nodeId]: dataUrl },
   })),
+  setAudioMasterVolume: (v) => {
+    // Side-effect: update the Web Audio gain node immediately
+    audioEngine.setMasterVolume(v);
+    set({ audioMasterVolume: Math.max(0, Math.min(1, v)) });
+  },
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
   setSwapTargetNodeId: (id) => set({ swapTargetNodeId: id }),
   setSearchPaletteOpen: (open) => set({ searchPaletteOpen: open }),
@@ -2230,6 +2243,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       nodeOutputVarMap: result.nodeOutputVars,
       paramUniforms: result.paramUniforms,
       textureUniforms: result.textureUniforms,
+      audioUniforms: result.audioUniforms,
       isStateful: result.isStateful,
       // Clear stale probe values when graph recompiles
       nodeProbeValues: null,

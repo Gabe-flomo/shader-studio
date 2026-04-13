@@ -166,6 +166,40 @@ export const TextureInputNode: NodeDefinition = {
   },
 };
 
+export const AudioInputNode: NodeDefinition = {
+  type: 'audioInput',
+  label: 'Audio Input',
+  category: 'Sources',
+  description: 'Load an audio file and output the amplitude of a frequency band as a float (0–1). Set freq_center + freq_range in Hz, or set mode=Full Spectrum for overall volume.',
+  inputs: {},
+  outputs: {
+    amplitude: { type: 'float', label: 'Amplitude' },
+  },
+  defaultParams: {
+    freq_center: 200.0,
+    freq_range:  200.0,
+    mode: 'band',
+    _fileName: '',
+    _hasFile: false,
+  },
+  paramDefs: {
+    freq_center: { label: 'Freq Center (Hz)', type: 'float', min: 20,  max: 20000, step: 1 },
+    freq_range:  { label: 'Freq Range (Hz)',  type: 'float', min: 0,   max: 10000, step: 1 },
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: 'band', label: 'Frequency Band' },
+      { value: 'full', label: 'Full Spectrum'  },
+    ]},
+  },
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    const outVar = `${id}_amplitude`;
+    return {
+      code: `    float ${outVar} = u_audio_${id};\n`,
+      outputVars: { amplitude: outVar },
+    };
+  },
+};
+
 export const ConstantNode: NodeDefinition = {
   type: 'constant',
   label: 'Constant',

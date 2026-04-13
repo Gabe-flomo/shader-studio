@@ -24,9 +24,11 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
-import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
+import { AudioInputModal } from './AudioInputModal';
+import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
+import { audioEngine } from '../../lib/audioEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
 
 interface Props {
@@ -62,11 +64,11 @@ interface Props {
   externalParamKeys?: Set<string>;
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
-const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap']);
+const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 
 const TYPE_COLORS: Record<string, string> = {
   float: '#f0a',
@@ -339,6 +341,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
+  const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -378,6 +381,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPreviewActive, primaryOutputIsFloat, node.id]);
+
+  // ── Audio Input: sync freq params to engine each time they change ────────────
+  React.useEffect(() => {
+    if (node.type !== 'audioInput') return;
+    const freqCenter = typeof node.params.freq_center === 'number' ? node.params.freq_center : 200;
+    const freqRange  = node.params.mode === 'full'
+      ? 0
+      : typeof node.params.freq_range === 'number' ? node.params.freq_range : 200;
+    audioEngine.updateFreqParams(node.id, freqCenter, freqRange);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, node.params.freq_center, node.params.freq_range, node.params.mode]);
+
+  // ── Audio Input: cleanup when node is removed ─────────────────────────────────
+  React.useEffect(() => {
+    if (node.type !== 'audioInput') return;
+    return () => {
+      audioEngine.removeAudio(node.id);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id]);
 
   if (!def) return null;
 
@@ -539,6 +562,120 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           ))}
         </div>
       </div>
+    );
+  }
+
+  // ── Audio Input node special card ────────────────────────────────────────────
+  if (node.type === 'audioInput') {
+    const hasFile  = !!(node.params._hasFile);
+    const fileName = (node.params._fileName as string) || '';
+
+    const handleAudioDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (!file.name.match(/\.(wav|mp3|ogg|aac|flac)$/i)) return;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const arrayBuffer = ev.target?.result as ArrayBuffer;
+        await audioEngine.loadAudio(node.id, arrayBuffer, file.name);
+        audioEngine.startAudio(node.id);
+        updateNodeParams(node.id, { _fileName: file.name, _hasFile: true }, { immediate: true });
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    return (
+      <>
+        <div
+          style={{
+            position: 'absolute', left: node.position.x, top: node.position.y,
+            background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
+            borderRadius: '8px', width: '200px', color: '#cdd6f4', fontSize: '12px',
+            userSelect: 'none', opacity: dimmed ? 0.2 : 1,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          }}
+        >
+          {/* Header */}
+          <div
+            onMouseDown={(e) => {
+              if (e.button === 2) return;
+              e.stopPropagation();
+              dragOffset.current = { x: e.clientX / zoom - node.position.x, y: e.clientY / zoom - node.position.y };
+              const onMove = (ev: MouseEvent) => {
+                if (!dragOffset.current) return;
+                updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
+              };
+              const onUp = () => {
+                dragOffset.current = null;
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+                setSelectedNodeId(isSelected ? null : node.id);
+              };
+              window.addEventListener('mousemove', onMove);
+              window.addEventListener('mouseup', onUp);
+            }}
+            style={{ background: '#313244', borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+          >
+            <span style={{ fontWeight: 600, fontSize: '11px', color: '#89dceb' }}>♫ Audio Input</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {/* Open analyzer modal */}
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => setShowAudioInputModal(v => !v)}
+                title="Open Audio analyzer"
+                style={{ background: 'none', border: 'none', color: showAudioInputModal ? '#89dceb' : '#585b70', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+              >◉</button>
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+            </div>
+          </div>
+
+          {/* File drop zone */}
+          <div
+            onDrop={handleAudioDrop}
+            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+            onMouseDown={e => e.stopPropagation()}
+            style={{
+              padding: '8px 10px',
+              border: '1px dashed #45475a',
+              borderRadius: '4px',
+              margin: '6px 8px',
+              textAlign: 'center',
+              cursor: 'default',
+              background: '#181825',
+            }}
+          >
+            {hasFile ? (
+              <span style={{ fontSize: '10px', color: '#89dceb', fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                ♫ {fileName}
+              </span>
+            ) : (
+              <span style={{ fontSize: '10px', color: '#585b70' }}>Drop WAV / MP3 / OGG</span>
+            )}
+          </div>
+
+          {/* Inline freq-range viz */}
+          <AudioFreqRangeViz node={node} />
+
+          {/* Output socket */}
+          <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+              <span style={{ fontSize: '10px', color: '#a6adc8' }}>Amplitude</span>
+              <div
+                data-socket="out"
+                ref={el => { registerSocket(node.id, 'out', 'amplitude', el); }}
+                onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, 'amplitude', e); }}
+                style={{ width: 12, height: 12, borderRadius: '50%', background: TYPE_COLORS['float'] ?? '#f0a', border: `2px solid ${TYPE_COLORS['float'] ?? '#f0a'}`, cursor: 'crosshair', marginRight: '-6px' }}
+              />
+            </div>
+          </div>
+        </div>
+        {/* Audio Input Modal (portal) */}
+        {showAudioInputModal && (
+          <AudioInputModal node={node} onClose={() => setShowAudioInputModal(false)} />
+        )}
+      </>
     );
   }
 

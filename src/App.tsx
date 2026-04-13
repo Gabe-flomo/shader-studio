@@ -44,6 +44,37 @@ const btnStyle = (active = false): React.CSSProperties => ({
   whiteSpace: 'nowrap' as const,
 });
 
+// ── Audio master volume widget — shown when any audioInput node is in the graph ─
+function AudioMasterVolumeWidget() {
+  const nodes        = useNodeGraphStore(s => s.nodes);
+  const masterVolume = useNodeGraphStore(s => s.audioMasterVolume);
+  const setVolume    = useNodeGraphStore(s => s.setAudioMasterVolume);
+  const hasAudio     = nodes.some(n => n.type === 'audioInput');
+  if (!hasAudio) return null;
+  return (
+    <div style={{
+      position: 'absolute', bottom: 12, right: 12, zIndex: 20,
+      background: 'rgba(17,17,27,0.92)', border: '1px solid #45475a',
+      borderRadius: '8px', padding: '6px 10px',
+      display: 'flex', alignItems: 'center', gap: '8px',
+      backdropFilter: 'blur(8px)',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+    }}>
+      <span style={{ fontSize: '11px', color: '#89dceb' }}>♫</span>
+      <input
+        type="range"
+        min={0} max={1} step={0.01}
+        value={masterVolume}
+        onChange={e => setVolume(parseFloat(e.target.value))}
+        style={{ width: 72, accentColor: '#89dceb', cursor: 'pointer' }}
+      />
+      <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
+        {Math.round(masterVolume * 100)}%
+      </span>
+    </div>
+  );
+}
+
 function App() {
   const {
     loadExampleGraph, compilationErrors, glslErrors, pixelSample, fragmentShader,
@@ -317,6 +348,7 @@ function App() {
         {/* Full-screen shader preview as background */}
         <div style={{ position: 'absolute', inset: 0 }}>
           <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+          <AudioMasterVolumeWidget />
         </div>
 
         {/* Floating TopNav */}
@@ -554,7 +586,7 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /></div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

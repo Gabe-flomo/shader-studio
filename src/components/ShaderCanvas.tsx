@@ -2,6 +2,8 @@ import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { drawScopeCanvas } from '../lib/scopeRegistry';
+import { audioEngine } from '../lib/audioEngine';
+import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
 
@@ -274,10 +276,37 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     const clock = new THREE.Clock();
     let frameCount = 0;
     const SAMPLE_EVERY = 6; // sample every 6 frames (~10fps if running at 60fps)
+    // Per-node Uint8Array buffers for audio FFT data — allocated once, reused each frame
+    const audioFreqBuffers = new Map<string, Uint8Array>();
 
     function animate() {
       animFrameRef.current = requestAnimationFrame(animate);
       material.uniforms.u_time.value = clock.getElapsedTime();
+
+      // ── Audio engine tick: push amplitude uniforms + draw live spectrum ──
+      const audioAmps = audioEngine.tick();
+      for (const [uName, amp] of audioAmps) {
+        if (material.uniforms[uName]) {
+          material.uniforms[uName].value = amp;
+        }
+      }
+      // Draw live spectrum into any open AudioInputModal canvases
+      const audioNodes = nodesRef.current.filter(n => n.type === 'audioInput');
+      for (const n of audioNodes) {
+        if (!audioSpectrumRegistry.has(n.id)) continue;
+        const analyser = audioEngine.getAnalyser(n.id);
+        if (!analyser) continue;
+        let freqBuf = audioFreqBuffers.get(n.id);
+        if (!freqBuf || freqBuf.length !== analyser.frequencyBinCount) {
+          freqBuf = new Uint8Array(analyser.frequencyBinCount);
+          audioFreqBuffers.set(n.id, freqBuf);
+        }
+        analyser.getByteFrequencyData(freqBuf as Uint8Array<ArrayBuffer>);
+        const freqCenter = typeof n.params.freq_center === 'number' ? n.params.freq_center : 200;
+        const freqRange  = typeof n.params.freq_range  === 'number' ? n.params.freq_range  : 200;
+        const mode       = (n.params.mode as string) ?? 'band';
+        drawSpectrumCanvas(n.id, freqBuf as Uint8Array<ArrayBuffer>, analyser.context.sampleRate, analyser.fftSize, freqCenter, freqRange, mode);
+      }
 
       if (isStatefulRef.current) {
         // Ping-pong: read from one RT, write to the other, then blit to screen
@@ -605,6 +634,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     for (const uniformName of Object.keys(currentTextureUniforms)) {
       if (!mat.uniforms[uniformName]) {
         mat.uniforms[uniformName] = { value: null };
+      }
+    }
+    // Register float audio uniforms (initial value 0 — updated each rAF frame)
+    const currentAudioUniforms = useNodeGraphStore.getState().audioUniforms;
+    for (const uniformName of Object.keys(currentAudioUniforms)) {
+      if (!mat.uniforms[uniformName]) {
+        mat.uniforms[uniformName] = { value: 0 };
       }
     }
     mat.needsUpdate = true;

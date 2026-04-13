@@ -152,20 +152,24 @@ export function generateFragmentShader(
   allNodes: GraphNode[],
   _loopInternalIds: Set<string>,
   loopPairChains: Map<string, LoopPairChain> = new Map(),
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; isStateful: boolean } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; isStateful: boolean } {
   const nodeMap    = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
   const functions  = new Set<string>();
   const mainCode: string[] = [];
   const paramUniforms: Record<string, number> = {};
   const textureUniforms: Record<string, string> = {};  // uniformName → nodeId
+  const audioUniforms: Record<string, string> = {};    // uniformName → nodeId
   const nodeOutputs = new Map<string, Record<string, string>>();
 
-  // Pre-scan for textureInput and prevFrame nodes — their uniforms go in the preamble
+  // Pre-scan for textureInput, audioInput, and prevFrame nodes — their uniforms go in the preamble
   let isStateful = false;
   for (const node of sortedNodes) {
     if (node.type === 'textureInput') {
       textureUniforms[`u_tex_${node.id}`] = node.id;
+    }
+    if (node.type === 'audioInput') {
+      audioUniforms[`u_audio_${node.id}`] = node.id;
     }
     if (node.type === 'prevFrame') {
       isStateful = true;
@@ -831,6 +835,9 @@ export function generateFragmentShader(
     ...Object.keys(textureUniforms).map(name => `uniform sampler2D ${name};`),
     ...(isStateful ? ['uniform sampler2D u_prevFrame;'] : []),
   ].join('\n');
+  const audioUniformDecls = Object.keys(audioUniforms)
+    .map(name => `uniform float ${name};`)
+    .join('\n');
 
   const fragmentShader = `precision mediump float;
 #define PI 3.1415926538
@@ -839,7 +846,7 @@ export function generateFragmentShader(
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
-${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}
+${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}${audioUniformDecls ? audioUniformDecls + '\n' : ''}
 varying vec2 vUv;
 
 // ── Built-in helpers (always available to all nodes / custom functions) ──────
@@ -918,5 +925,5 @@ void main() {
     g_uv.x *= u_resolution.x / u_resolution.y;
 ${mainCode.join('')}}`.trim();
 
-  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, isStateful };
+  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, audioUniforms, isStateful };
 }
