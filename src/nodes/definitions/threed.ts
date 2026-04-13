@@ -52,7 +52,56 @@ float sminSDF(float a, float b, float k) {
     return mix(b, a, h) - k*h*(1.0-h);
 }
 // Repetition
-vec3 opRep(vec3 p, vec3 c) { return mod(p + 0.5*c, c) - 0.5*c; }`;
+vec3 opRep(vec3 p, vec3 c) { return mod(p + 0.5*c, c) - 0.5*c; }
+float sdCone(vec3 p, float angle, float height) {
+    p.y -= height;
+    vec2 q = vec2(length(p.xz), -p.y);
+    vec2 w = vec2(height * tan(angle), height);
+    vec2 a = q - w * clamp(dot(q, w) / dot(w, w), 0.0, 1.0);
+    vec2 b = q - w * vec2(clamp(q.x / w.x, 0.0, 1.0), 1.0);
+    float k = sign(w.y);
+    float d = min(dot(a, a), dot(b, b));
+    float s = max(k * (q.x * w.y - q.y * w.x), k * (q.y - w.y));
+    return sqrt(d) * sign(s);
+}
+float sdCylinder(vec3 p, float r, float h) {
+    vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, h);
+    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+float sdOctahedron(vec3 p, float s) {
+    p = abs(p);
+    float m = p.x + p.y + p.z - s;
+    vec3 q;
+    if (3.0 * p.x < m) { q = p; }
+    else if (3.0 * p.y < m) { q = vec3(p.y, p.x, p.z); }
+    else if (3.0 * p.z < m) { q = vec3(p.z, p.x, p.y); }
+    else { return m * 0.57735027; }
+    float k = clamp(0.5 * (q.z - q.y + s), 0.0, s);
+    return length(vec3(q.x, q.y - s + k, q.z - k));
+}
+float sdRoundBox3(vec3 p, vec3 b, float r) {
+    vec3 q = abs(p) - b + r;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+vec3 opTwist(vec3 p, float k) {
+    float c = cos(k * p.y);
+    float s = sin(k * p.y);
+    return vec3(c*p.x - s*p.z, p.y, s*p.x + c*p.z);
+}
+float sdMenger(vec3 p, float scale) {
+    float d = sdBox3(p, vec3(scale));
+    float s = scale;
+    for (float mi = 0.0; mi < 4.0; mi++) {
+        s /= 3.0;
+        vec3 a = mod(p / s + 0.5, 1.0) - 0.5;
+        float da = max(abs(a.x), abs(a.y));
+        float db = max(abs(a.y), abs(a.z));
+        float dc = max(abs(a.z), abs(a.x));
+        float c = (min(da, min(db, dc)) - 0.33) * s;
+        d = max(d, -c);
+    }
+    return d;
+}`;
 
 // Camera setup utilities
 const CAMERA3D_GLSL = `
@@ -164,6 +213,9 @@ export const RaymarchNode: NodeDefinition = {
     ao_steps:    5,
     noise_scale: 1.5,
     noise_strength: 0.3,
+    cone_angle: 0.4,
+    twist_k: 1.5,
+    round_r: 0.15,
   },
   paramDefs: {
     scene: { label: 'Scene', type: 'select', options: [
@@ -173,6 +225,12 @@ export const RaymarchNode: NodeDefinition = {
       { value: 'blend',       label: 'Sphere+Box Blend'},
       { value: 'repeat',      label: 'Repeat Grid'     },
       { value: 'noisy_sphere',label: 'Noisy Sphere'    },
+      { value: 'cone',         label: 'Cone'         },
+      { value: 'cylinder',     label: 'Cylinder'     },
+      { value: 'octahedron',   label: 'Octahedron'   },
+      { value: 'round_box',    label: 'Rounded Box'  },
+      { value: 'twisted_box',  label: 'Twisted Box'  },
+      { value: 'menger',       label: 'Menger Sponge'},
     ]},
     max_steps:      { label: 'Max Steps',     type: 'float', min: 20,    max: 200,  step: 5      },
     max_dist:       { label: 'Max Distance',  type: 'float', min: 5,     max: 100,  step: 1      },
@@ -197,6 +255,9 @@ export const RaymarchNode: NodeDefinition = {
     ao_steps:       { label: 'AO Steps',      type: 'float', min: 0,     max: 10,   step: 1      },
     noise_scale:    { label: 'Noise Scale',   type: 'float', min: 0.1,   max: 5,    step: 0.1    },
     noise_strength: { label: 'Noise Warp',    type: 'float', min: 0,     max: 1,    step: 0.01   },
+    cone_angle:     { label: 'Cone Angle',    type: 'float', min: 0.05,  max: 1.2,  step: 0.01   },
+    twist_k:        { label: 'Twist Amount',  type: 'float', min: -5,    max: 5,    step: 0.1    },
+    round_r:        { label: 'Round Radius',  type: 'float', min: 0.0,   max: 0.5,  step: 0.01   },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -228,6 +289,9 @@ export const RaymarchNode: NodeDefinition = {
     const specPow      = p(node.params.specular, 32.0);
     const noiseStrength= p(node.params.noise_strength, 0.3);
     const aoSteps      = Math.round(typeof node.params.ao_steps       === 'number' ? node.params.ao_steps       : 5);
+    const coneAngle    = p(node.params.cone_angle, 0.4);
+    const twistK       = p(node.params.twist_k, 1.5);
+    const roundR       = p(node.params.round_r, 0.15);
 
     const fogColorArr  = Array.isArray(node.params.fog_color) ? node.params.fog_color as number[] : [0.7, 0.75, 0.85];
 
@@ -257,6 +321,24 @@ export const RaymarchNode: NodeDefinition = {
         break;
       case 'noisy_sphere':
         sdfExpr = `sdSphere(${id}_p, ${shapeR} + noise3(${id}_p * ${noiseScale}) * ${noiseStrength})`;
+        break;
+      case 'cone':
+        sdfExpr = `sdCone(${id}_p, ${coneAngle}, ${shapeR})`;
+        break;
+      case 'cylinder':
+        sdfExpr = `sdCylinder(${id}_p, ${shapeR} * 0.6, ${shapeR})`;
+        break;
+      case 'octahedron':
+        sdfExpr = `sdOctahedron(${id}_p, ${shapeR})`;
+        break;
+      case 'round_box':
+        sdfExpr = `sdRoundBox3(${id}_p, vec3(${shapeR} * 0.7), ${roundR})`;
+        break;
+      case 'twisted_box':
+        sdfExpr = `sdBox3(opTwist(${id}_p, ${twistK}), vec3(${shapeR} * 0.6, ${shapeR}, ${shapeR} * 0.6))`;
+        break;
+      case 'menger':
+        sdfExpr = `sdMenger(${id}_p, ${shapeR})`;
         break;
       default: // spheres
         sdfExpr = `sdSphere(${id}_p, ${shapeR})`;
@@ -355,6 +437,191 @@ export const RaymarchNode: NodeDefinition = {
         normal: `${id}_nm`,
         occ:    `${id}_ao`,
         fog:    `${id}_fog`,
+      },
+    };
+  },
+};
+
+// ─── Mandelbulb Node ─────────────────────────────────────────────────────────
+
+const MANDELBULB_DE_GLSL = `
+float mandelbulbDE(vec3 pos, float power, float maxIter) {
+    vec3 z = pos;
+    float dr = 1.0;
+    float r = 0.0;
+    float trap = 1e10;
+    for (float mbi = 0.0; mbi < 24.0; mbi++) {
+        if (mbi >= maxIter) break;
+        r = length(z);
+        if (r > 2.0) break;
+        float theta = acos(clamp(z.z / r, -1.0, 1.0));
+        float phi = atan(z.y, z.x);
+        dr = pow(r, power - 1.0) * power * dr + 1.0;
+        float zr = pow(r, power);
+        theta *= power;
+        phi *= power;
+        z = zr * vec3(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)) + pos;
+        trap = min(trap, length(z));
+    }
+    return 0.5 * log(r) * r / dr;
+}`;
+
+const MANDELBULB_GLSL = SDF3D_GLSL + CAMERA3D_GLSL + NOISE3D_GLSL + MANDELBULB_DE_GLSL;
+
+export const MandelbulbNode: NodeDefinition = {
+  type: 'mandelbulb',
+  label: 'Mandelbulb 3D',
+  category: 'Presets',
+  description: [
+    '3D Mandelbulb fractal via distance estimation and raymarching. ',
+    'Adjustable power (2–16). Orbit trap output for coloring. ',
+    'Camera orbits automatically when Time is wired in.',
+  ].join(''),
+  inputs: {
+    uv:         { type: 'vec2',  label: 'UV'           },
+    time:       { type: 'float', label: 'Time'         },
+    cam_dist:   { type: 'float', label: 'Camera Dist'  },
+    cam_height: { type: 'float', label: 'Cam Height'   },
+    cam_speed:  { type: 'float', label: 'Orbit Speed'  },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color'      },
+    depth: { type: 'float', label: 'Depth'      },
+    orbit: { type: 'float', label: 'Orbit Trap' },
+  },
+  glslFunction: MANDELBULB_GLSL + '\n' + PALETTE_GLSL_FN,
+  defaultParams: {
+    power:          8,
+    max_iter:       12,
+    max_steps:      80,
+    max_dist:       5.0,
+    cam_dist:       2.5,
+    cam_height:     0.5,
+    cam_speed:      0.2,
+    cam_fov:        1.5,
+    ambient:        0.05,
+    light_x:        2.0,
+    light_y:        4.0,
+    light_z:        2.0,
+    palette_preset: '1',
+    bg_color:       [0.05, 0.05, 0.1],
+  },
+  paramDefs: {
+    power:          { label: 'Power',         type: 'float', min: 2,    max: 16,   step: 0.5  },
+    max_iter:       { label: 'DE Iterations', type: 'float', min: 4,    max: 24,   step: 1    },
+    max_steps:      { label: 'Max Steps',     type: 'float', min: 20,   max: 200,  step: 5    },
+    max_dist:       { label: 'Max Distance',  type: 'float', min: 2,    max: 20,   step: 0.1  },
+    cam_dist:       { label: 'Camera Dist',   type: 'float', min: 1,    max: 10,   step: 0.1  },
+    cam_height:     { label: 'Camera Height', type: 'float', min: -3,   max: 5,    step: 0.1  },
+    cam_speed:      { label: 'Orbit Speed',   type: 'float', min: 0,    max: 2,    step: 0.01 },
+    cam_fov:        { label: 'FOV',           type: 'float', min: 0.5,  max: 3,    step: 0.05 },
+    ambient:        { label: 'Ambient',       type: 'float', min: 0,    max: 0.5,  step: 0.01 },
+    light_x:        { label: 'Light X',       type: 'float', min: -10,  max: 10,   step: 0.1  },
+    light_y:        { label: 'Light Y',       type: 'float', min: 0,    max: 20,   step: 0.1  },
+    light_z:        { label: 'Light Z',       type: 'float', min: -10,  max: 10,   step: 0.1  },
+    palette_preset: { label: 'Palette',       type: 'select', options: PALETTE_PRESET_OPTIONS },
+    bg_color:       { label: 'BG Color',      type: 'vec3',  min: 0,    max: 1,    step: 0.01 },
+  },
+
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+
+    const uvVar     = inputVars.uv         ?? 'vec2(0.0)';
+    const timeVar   = inputVars.time       ?? '0.0';
+    const camDist   = inputVars.cam_dist   ?? p(node.params.cam_dist, 2.5);
+    const camHeight = inputVars.cam_height ?? p(node.params.cam_height, 0.5);
+    const camSpeed  = inputVars.cam_speed  ?? p(node.params.cam_speed, 0.2);
+
+    const power     = p(node.params.power, 8);
+    const maxIter   = p(node.params.max_iter, 12);
+    const maxSteps  = Math.max(20, Math.round(typeof node.params.max_steps === 'number' ? node.params.max_steps : 80));
+    const maxDist   = p(node.params.max_dist, 5.0);
+    const camFov    = p(node.params.cam_fov, 1.5);
+    const ambient   = p(node.params.ambient, 0.05);
+    const lightX    = p(node.params.light_x, 2.0);
+    const lightY    = p(node.params.light_y, 4.0);
+    const lightZ    = p(node.params.light_z, 2.0);
+    const bgColorArr = Array.isArray(node.params.bg_color) ? node.params.bg_color as number[] : [0.05, 0.05, 0.1];
+
+    const presIdx   = parseInt((node.params.palette_preset as string) ?? '1', 10);
+    const pres      = RM_PALETTE_PRESETS[Math.min(presIdx, RM_PALETTE_PRESETS.length - 1)];
+    const [pA, pB, pC, pD] = [rmPalVec(pres.a), rmPalVec(pres.b), rmPalVec(pres.c), rmPalVec(pres.d)];
+
+    const surfEps = '0.0005';
+    const stepMul = '0.5';
+
+    const code = [
+      `    // ── Mandelbulb 3D ──\n`,
+      // Camera orbit
+      `    float ${id}_angle = ${timeVar} * ${camSpeed};\n`,
+      `    vec3  ${id}_ro    = vec3(cos(${id}_angle) * ${camDist}, ${camHeight}, sin(${id}_angle) * ${camDist});\n`,
+      `    vec3  ${id}_ta    = vec3(0.0, 0.0, 0.0);\n`,
+      `    mat3  ${id}_cam   = setCamera(${id}_ro, ${id}_ta, 0.0);\n`,
+      `    vec3  ${id}_rd    = normalize(${id}_cam * vec3(${uvVar}.x, ${uvVar}.y, ${camFov}));\n`,
+      // Raymarch loop with smaller step multiplier for stability
+      `    float ${id}_t  = 0.001;\n`,
+      `    bool  ${id}_hit = false;\n`,
+      `    for (int ${id}_si = 0; ${id}_si < ${maxSteps}; ${id}_si++) {\n`,
+      `        vec3  ${id}_p  = ${id}_ro + ${id}_rd * ${id}_t;\n`,
+      `        float ${id}_de = mandelbulbDE(${id}_p, ${power}, ${maxIter});\n`,
+      `        if (${id}_de < ${surfEps}) { ${id}_hit = true; break; }\n`,
+      `        if (${id}_t > ${maxDist}) break;\n`,
+      `        ${id}_t += ${id}_de * ${stepMul};\n`,
+      `    }\n`,
+      // Hit point and normal via tetrahedron method
+      `    vec3 ${id}_hp = ${id}_ro + ${id}_rd * ${id}_t;\n`,
+      `    vec3 ${id}_nm = vec3(0.0);\n`,
+      `    if (${id}_hit) {\n`,
+      `        vec2 ${id}_e = vec2(0.001, -0.001);\n`,
+      `        float ${id}_h0 = mandelbulbDE(${id}_hp + vec3(${id}_e.x, ${id}_e.y, ${id}_e.y), ${power}, ${maxIter});\n`,
+      `        float ${id}_h1 = mandelbulbDE(${id}_hp + vec3(${id}_e.y, ${id}_e.y, ${id}_e.x), ${power}, ${maxIter});\n`,
+      `        float ${id}_h2 = mandelbulbDE(${id}_hp + vec3(${id}_e.y, ${id}_e.x, ${id}_e.y), ${power}, ${maxIter});\n`,
+      `        float ${id}_h3 = mandelbulbDE(${id}_hp + vec3(${id}_e.x, ${id}_e.x, ${id}_e.x), ${power}, ${maxIter});\n`,
+      `        ${id}_nm = normalize(vec3(${id}_e.x,${id}_e.y,${id}_e.y)*${id}_h0 + vec3(${id}_e.y,${id}_e.y,${id}_e.x)*${id}_h1 + vec3(${id}_e.y,${id}_e.x,${id}_e.y)*${id}_h2 + vec3(${id}_e.x,${id}_e.x,${id}_e.x)*${id}_h3);\n`,
+      `    }\n`,
+      // Lighting
+      `    vec3  ${id}_lp   = vec3(${lightX}, ${lightY}, ${lightZ});\n`,
+      `    vec3  ${id}_ldir = normalize(${id}_lp - ${id}_hp);\n`,
+      `    float ${id}_diff = max(dot(${id}_nm, ${id}_ldir), 0.0);\n`,
+      `    vec3  ${id}_hv   = normalize(${id}_ldir - ${id}_rd);\n`,
+      `    float ${id}_spec = pow(max(dot(${id}_nm, ${id}_hv), 0.0), 32.0);\n`,
+      // Orbit trap for coloring (compute after hit)
+      `    float ${id}_orbitVal = 0.0;\n`,
+      `    if (${id}_hit) {\n`,
+      `        float ${id}_orDr = 1.0;\n`,
+      `        vec3  ${id}_oz   = ${id}_hp;\n`,
+      `        float ${id}_oTrap = 1e10;\n`,
+      `        for (float ${id}_oi = 0.0; ${id}_oi < ${maxIter}; ${id}_oi++) {\n`,
+      `            float ${id}_or2 = dot(${id}_oz, ${id}_oz);\n`,
+      `            if (${id}_or2 > 4.0) break;\n`,
+      `            float ${id}_oR = sqrt(${id}_or2);\n`,
+      `            float ${id}_oTheta = acos(clamp(${id}_oz.z / ${id}_oR, -1.0, 1.0));\n`,
+      `            float ${id}_oPhi = atan(${id}_oz.y, ${id}_oz.x);\n`,
+      `            ${id}_orDr = pow(${id}_oR, ${power} - 1.0) * ${power} * ${id}_orDr + 1.0;\n`,
+      `            float ${id}_oZr = pow(${id}_oR, ${power});\n`,
+      `            ${id}_oTheta *= ${power};\n`,
+      `            ${id}_oPhi *= ${power};\n`,
+      `            ${id}_oz = ${id}_oZr * vec3(sin(${id}_oTheta)*cos(${id}_oPhi), sin(${id}_oTheta)*sin(${id}_oPhi), cos(${id}_oTheta)) + ${id}_hp;\n`,
+      `            ${id}_oTrap = min(${id}_oTrap, length(${id}_oz));\n`,
+      `        }\n`,
+      `        ${id}_orbitVal = clamp(${id}_oTrap * 0.5, 0.0, 1.0);\n`,
+      `    }\n`,
+      // Color from palette based on orbit trap
+      `    float ${id}_colt  = ${id}_orbitVal;\n`,
+      `    vec3  ${id}_objcol = palette(${id}_colt, ${pA}, ${pB}, ${pC}, ${pD});\n`,
+      `    vec3  ${id}_litcol = ${id}_objcol * (${ambient} + (1.0 - ${ambient}) * ${id}_diff) + vec3(${id}_spec * 0.2);\n`,
+      `    vec3  ${id}_bgcol  = ${vec3Str(bgColorArr)};\n`,
+      `    vec3  ${id}_color  = ${id}_hit ? ${id}_litcol : ${id}_bgcol;\n`,
+      `    float ${id}_depth  = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
+      `    float ${id}_orbit  = ${id}_orbitVal;\n`,
+    ];
+
+    return {
+      code: code.join(''),
+      outputVars: {
+        color: `${id}_color`,
+        depth: `${id}_depth`,
+        orbit: `${id}_orbit`,
       },
     };
   },
