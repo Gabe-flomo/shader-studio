@@ -560,6 +560,76 @@ function deepCloneGroupNode(groupNode: GraphNode): GraphNode {
   };
 }
 
+// ─── Smart param surfacing heuristics ─────────────────────────────────────────
+/** Param keys that are HIGH priority to surface (size/intensity knobs). */
+const SURFACE_HIGH = new Set([
+  'radius', 'scale', 'size', 'amount', 'strength', 'boost',
+  'outmin', 'outmax', 'value', 'freq', 'amp', 'frequency', 'amplitude',
+  'mix', 'blur', 'weight', 'intensity', 'density', 'speed',
+]);
+/** Param keys that should NOT be auto-surfaced (positional / rarely tweaked). */
+const SURFACE_EXCLUDE = new Set([
+  'posx', 'posy', 'positionx', 'positiony', 'inmin', 'inmax', 'seed',
+]);
+
+/**
+ * Given a freshly-created group node whose subgraph may contain inner group nodes,
+ * auto-select up to 2 params per inner group (max 8 total) as surfaced params.
+ */
+function pickSurfacedParams(
+  subgraphNodes: GraphNode[],
+): import('../types/nodeGraph').SurfacedParam[] {
+  const result: import('../types/nodeGraph').SurfacedParam[] = [];
+  let total = 0;
+
+  for (const innerGroupNode of subgraphNodes) {
+    if (innerGroupNode.type !== 'group') continue;
+    if (total >= 8) break;
+    const innerSub = innerGroupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+    if (!innerSub) continue;
+
+    let perGroup = 0;
+
+    // Collect all candidate (nodeId, paramKey, paramDef) triples from inner nodes
+    type Candidate = { nodeId: string; paramKey: string; label: string; priority: number };
+    const candidates: Candidate[] = [];
+
+    for (const inn of innerSub.nodes) {
+      if (inn.type === 'loopIndex' || inn.type === 'loopCarry') continue;
+      const innDef = getNodeDefinition(inn.type);
+      if (!innDef?.paramDefs) continue;
+      const floatParams = Object.entries(innDef.paramDefs).filter(
+        ([, pd]) => pd.type === 'float' && pd.step !== 1,
+      );
+      for (const [paramKey, paramDef] of floatParams) {
+        const low = paramKey.toLowerCase();
+        if (SURFACE_EXCLUDE.has(low)) continue;
+        const priority = SURFACE_HIGH.has(low) ? 0 : 1;
+        candidates.push({ nodeId: inn.id, paramKey, label: paramDef.label, priority });
+      }
+    }
+
+    // Sort by priority (HIGH first), then alphabetically
+    candidates.sort((a, b) =>
+      a.priority !== b.priority ? a.priority - b.priority : a.paramKey.localeCompare(b.paramKey),
+    );
+
+    // Surface up to 2 (or 1 if only 1 candidate total in the inner group)
+    const limit = Math.min(candidates.length === 1 ? 1 : 2, candidates.length);
+    for (let i = 0; i < limit && perGroup < 2 && total < 8; i++) {
+      result.push({
+        innerGroupId: innerGroupNode.id,
+        nodeId: candidates[i].nodeId,
+        paramKey: candidates[i].paramKey,
+        label: candidates[i].label,
+      });
+      perGroup++;
+      total++;
+    }
+  }
+  return result;
+}
+
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodes: [],
   vertexShader: '',
@@ -916,6 +986,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       inputPorts,
       outputPorts,
     };
+    // Auto-surface params from any inner group nodes
+    const surfacedParams = pickSurfacedParams([...originalNodes, loopIndexNode]);
+
     const groupNode: import('../types/nodeGraph').GraphNode = {
       id: groupId,
       type: 'group',
@@ -925,6 +998,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       params: {
         label: label ?? 'Group',
         subgraph,
+        ...(surfacedParams.length > 0 ? { surfacedParams } : {}),
       },
     };
 
