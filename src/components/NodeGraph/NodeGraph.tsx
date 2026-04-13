@@ -72,6 +72,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const activeGroupId       = useNodeGraphStore(s => s.activeGroupId);
   const setActiveGroupId    = useNodeGraphStore(s => s.setActiveGroupId);
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
+  const removeNode          = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
 
   // When drilling into a group, show its subgraph nodes instead
@@ -889,6 +890,14 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                       setContextMenu(null);
                     }}>
                       Ungroup
+                    </button>
+                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                      if (window.confirm(`Delete group "${typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group'}" and all its nodes?`)) {
+                        removeNode(clickedNode.id);
+                        setContextMenu(null);
+                      }
+                    }}>
+                      Delete Group
                     </button>
                   </>
                 )}
