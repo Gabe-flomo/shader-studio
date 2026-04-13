@@ -492,6 +492,7 @@ function DataTable({ rows }: { rows: [string, string, string][] }) {
 export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const { loadExampleGraph } = useNodeGraphStore();
 
+  const sec0Ref = useRef<HTMLDivElement>(null);
   const sec1Ref = useRef<HTMLDivElement>(null);
   const sec2Ref = useRef<HTMLDivElement>(null);
   const sec3Ref = useRef<HTMLDivElement>(null);
@@ -499,6 +500,17 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const sec5Ref = useRef<HTMLDivElement>(null);
   const sec6Ref = useRef<HTMLDivElement>(null);
   const sec7Ref = useRef<HTMLDivElement>(null);
+  const sec8Ref = useRef<HTMLDivElement>(null);
+  const sec9Ref = useRef<HTMLDivElement>(null);
+  const sec10Ref = useRef<HTMLDivElement>(null);
+  const sec11Ref = useRef<HTMLDivElement>(null);
+  const sec12Ref = useRef<HTMLDivElement>(null);
+  const sec13Ref = useRef<HTMLDivElement>(null);
+  const sec14Ref = useRef<HTMLDivElement>(null);
+  const sec15Ref = useRef<HTMLDivElement>(null);
+  const sec16Ref = useRef<HTMLDivElement>(null);
+  const sec17Ref = useRef<HTMLDivElement>(null);
+  const secAppRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   function tryExample(key: string) {
@@ -548,47 +560,33 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
         {/* TOC content — hidden when collapsed */}
         {sidebarOpen && <>
         <span style={{ ...S.tocSection, paddingTop: '2px' }}>Shader Studio</span>
-        <span style={{ ...S.tocSection }}>1. Node Basics</span>
-        <TocLink label="How Nodes Work" targetRef={sec1Ref} />
-        <TocLink label="Data Types" targetRef={sec1Ref} />
-        <TocLink label="UV Coordinates" targetRef={sec1Ref} />
 
-        <span style={S.tocSection}>2. Color & Math</span>
-        <TocLink label="Colors are vec3" targetRef={sec2Ref} />
-        <TocLink label="Math Nodes" targetRef={sec2Ref} />
-        <TocLink label="Animation with Time" targetRef={sec2Ref} />
+        <span style={S.tocSection}>Getting Started</span>
+        <TocLink label="Introduction" targetRef={sec0Ref} />
+        <TocLink label="Interface" targetRef={sec1Ref} />
+        <TocLink label="First Shader" targetRef={sec2Ref} />
 
-        <span style={S.tocSection}>3. Effects</span>
-        <TocLink label="SDF Shapes" targetRef={sec3Ref} />
-        <TocLink label="Glow & Light" targetRef={sec3Ref} />
-        <TocLink label="Chromatic Aberration" targetRef={sec3Ref} />
-        <TocLink label="Gravity Lens" targetRef={sec3Ref} />
+        <span style={S.tocSection}>Core Concepts</span>
+        <TocLink label="Data & Types" targetRef={sec3Ref} />
+        <TocLink label="SDFs" targetRef={sec4Ref} />
+        <TocLink label="Sources" targetRef={sec5Ref} />
+        <TocLink label="Transforms" targetRef={sec6Ref} />
+        <TocLink label="Groups" targetRef={sec7Ref} />
+        <TocLink label="Loops" targetRef={sec8Ref} />
+        <TocLink label="Noise" targetRef={sec9Ref} />
+        <TocLink label="Color" targetRef={sec10Ref} />
+        <TocLink label="Math" targetRef={sec11Ref} />
 
-        <span style={S.tocSection}>4. Noise & Fractals</span>
-        <TocLink label="FBM Noise" targetRef={sec4Ref} />
-        <TocLink label="Domain Warping" targetRef={sec4Ref} />
-        <TocLink label="Flow Fields" targetRef={sec4Ref} />
-        <TocLink label="Mandelbrot / Julia" targetRef={sec4Ref} />
-        <TocLink label="IFS Fractals" targetRef={sec4Ref} />
+        <span style={S.tocSection}>Advanced</span>
+        <TocLink label="Animation" targetRef={sec12Ref} />
+        <TocLink label="Effects" targetRef={sec13Ref} />
+        <TocLink label="Fractals" targetRef={sec14Ref} />
+        <TocLink label="3D / Raymarch" targetRef={sec15Ref} />
+        <TocLink label="Import / Export" targetRef={sec16Ref} />
 
-        <span style={S.tocSection}>5. Physics Sims</span>
-        <TocLink label="Chladni Plates" targetRef={sec5Ref} />
-        <TocLink label="Electron Orbitals 2D" targetRef={sec5Ref} />
-        <TocLink label="Orbital 3D Volume" targetRef={sec5Ref} />
-        <TocLink label="Combining Both" targetRef={sec5Ref} />
-
-        <span style={S.tocSection}>6. Generative Systems</span>
-        <TocLink label="Flow Fields (Hobbs)" targetRef={sec6Ref} />
-        <TocLink label="Field Modes" targetRef={sec6Ref} />
-        <TocLink label="Circle Packing" targetRef={sec6Ref} />
-        <TocLink label="Combining Both" targetRef={sec6Ref} />
-
-        <span style={S.tocSection}>7. Wired Loops</span>
-        <TocLink label="The Carry" targetRef={sec7Ref} />
-        <TocLink label="UV Transformation" targetRef={sec7Ref} />
-        <TocLink label="Color Accumulation" targetRef={sec7Ref} />
-        <TocLink label="iter_index" targetRef={sec7Ref} />
-        <TocLink label="Animating Params" targetRef={sec7Ref} />
+        <span style={S.tocSection}>Reference</span>
+        <TocLink label="Examples" targetRef={sec17Ref} />
+        <TocLink label="Node Reference" targetRef={secAppRef} />
         </>}
       </nav>
 
@@ -600,1265 +598,519 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
             Shader Studio Guide
           </h1>
           <p style={{ ...S.p, color: T.dim, marginBottom: 0 }}>
-            A hands-on guide to building GLSL shaders with the node graph — from first UV to animated fractals.
-            Each section builds on the previous one.
+            A comprehensive guide to building GLSL shaders with the node graph — from first UV to animated fractals and volumetric rendering.
           </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 1 — NODE GRAPH BASICS & UV
+            SECTION 0 — INTRODUCTION
         ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec1Ref as React.RefObject<HTMLDivElement>}>
-          <h2 style={S.sectionTitle}>1 · Node Graph Basics & UV</h2>
+        <div ref={sec0Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Introduction</h2>
           <div style={S.divider} />
 
-          <h3 style={S.subTitle}>How the Node Graph Works</h3>
           <p style={S.p}>
-            The node graph is a visual programming environment. Each <strong style={{ color: T.textBold }}>node</strong> does one
-            thing — compute a distance, generate a color, distort a position — and <strong style={{ color: T.textBold }}>wires</strong> carry
-            data between them. When you press play, the entire graph is compiled into a single GLSL fragment shader
-            that runs on the GPU — one parallel execution per pixel.
+            Shader Studio is a node-based GLSL shader editor. Every pixel is computed independently and in parallel on the GPU. You define "what color should this coordinate be" as a composition of math functions.
           </p>
 
-          <NodeDiagram
-            nodes={[
-              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-              { label: 'Some Node', type: 'transform', inputs: ['uv: vec2'], outputs: ['value: float'] },
-              { label: 'Palette', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
-              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-            ]}
-            caption="A basic pipeline — data flows left to right through connected nodes."
-          />
-
-          <p style={S.p}><strong style={{ color: T.textBold }}>Controls:</strong></p>
+          <p style={S.p}>
+            This is the same paradigm used across the visual-computing world:
+          </p>
           <ul style={S.ul}>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Add a node:</strong> click any item in the left palette panel</li>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Move:</strong> drag the node's title bar</li>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Connect:</strong> drag from an output socket (right side) to an input socket (left side)</li>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Disconnect:</strong> click a connection line</li>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Auto Layout:</strong> click ⊞ in the toolbar to automatically arrange nodes left-to-right</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Shadertoy</strong> — write GLSL fragment shaders in a browser</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>TouchDesigner</strong> — node-based visual programming for real-time graphics</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Blender Shader Editor</strong> — material graph for 3D rendering</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Unreal / Unity Shader Graphs</strong> — game-engine material editors</li>
+          </ul>
+          <p style={S.p}>
+            The key difference: Shader Studio compiles your graph directly into GLSL you can inspect, copy, and run anywhere.
+          </p>
+
+          <Tip>You don't need to write any code. But understanding what's happening mathematically will help you build more interesting things. This guide explains both layers — what you click and why it works.</Tip>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 1 — THE INTERFACE
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec1Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>The Interface</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>The Layout</h3>
+          <pre style={S.code}>{`┌─────────────────────────────────────────────────────┐
+│                    Top Nav Bar                      │
+├──────────┬────────────────────────┬─────────────────┤
+│          │                        │                 │
+│  Node    │    Node Graph Canvas   │   Shader        │
+│  Palette │                        │   Preview       │
+│          │   (drag, connect,      │                 │
+│  (click  │    build your graph)   │   (live GPU     │
+│   to add │                        │    output)      │
+│   nodes) │                        │                 │
+│          ├────────────────────────┤                 │
+│          │     Code Panel         │                 │
+│          │   (generated GLSL)     │                 │
+└──────────┴────────────────────────┴─────────────────┘`}</pre>
+          <ul style={S.ul}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Top Nav</strong> — file operations, view toggles, recording controls</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Node Palette</strong> — categorized list of all available nodes; click to add</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Node Graph Canvas</strong> — drag nodes, draw wires between sockets, build your shader</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Shader Preview</strong> — live GPU-rendered output of your graph</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Code Panel</strong> — the generated GLSL source; toggle with <C>Cmd+\</C></li>
           </ul>
 
-          <Tip>
-            Every graph needs exactly one <strong>Output</strong> node. It accepts a <C>vec3</C> color and writes
-            it to the canvas. If you see a black screen, check that your Output node is connected.
-          </Tip>
+          <h3 style={S.subTitle}>Node Anatomy</h3>
+          <pre style={S.code}>{`        ┌──────────────────────┐
+        │   Node Title         │
+        ├──────────────────────┤
+  ● ──▶ │  input_a    output ──▶ ○
+  ● ──▶ │  input_b             │
+        ├──────────────────────┤
+        │  [param: 0.50]       │
+        │  [dropdown: mode]    │
+        ├──────────────────────┤
+        │  ┌────────────────┐  │
+        │  │  inline preview│  │
+        │  └────────────────┘  │
+        └──────────────────────┘
 
-          <h3 style={S.subTitle}>Data Types</h3>
+  ● = input socket (left, filled)
+  ○ = output socket (right, open)`}</pre>
           <p style={S.p}>
-            Sockets are typed — you can only connect matching types. There are three types you'll use constantly:
+            Socket colors indicate data type: <span style={{ color: '#bac2de' }}>float = gray/white</span>, <span style={{ color: T.blue }}>vec2 = blue</span>, <span style={{ color: T.green }}>vec3 = green</span>, <span style={{ color: T.mauve }}>vec4 = purple</span>. You can only connect matching types.
           </p>
 
-          <DataTable rows={[
-            ['float', 'A single decimal number — brightness, time, distance, angle', '0.75, -1.0, 3.14'],
-            ['vec2',  '2D coordinate — UV position, mouse position, direction', 'vec2(0.3, -0.5)'],
-            ['vec3',  '3D value — always a color (R, G, B), each 0.0–1.0', 'vec3(1.0, 0.5, 0.0)'],
-          ]} />
-
-          <Tip>
-            A <TypeBadge type="float" /> can plug into a <TypeBadge type="vec3" /> input — it broadcasts to all 3
-            channels, so <C>0.5</C> becomes <C>vec3(0.5, 0.5, 0.5)</C> grey.
-          </Tip>
-
-          <h3 style={S.subTitle}>UV Coordinates</h3>
-          <p style={S.p}>
-            UV is the 2D pixel position passed to every node. The <strong style={{ color: T.textBold }}>UV</strong> node
-            outputs centered, aspect-corrected coordinates — <C>(0,0)</C> is the center, edges reach about <C>±0.5</C>.
-            Every interesting shader starts here.
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-            <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '14px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: T.blue, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>UV Space</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gridTemplateRows: '1fr 1fr 1fr', width: '150px', height: '100px', fontFamily: 'monospace', fontSize: '9px', color: T.green }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start' }}>(-0.5, 0.5)</div>
-                <div />
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' }}>(0.5, 0.5)</div>
-                <div />
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.blue, fontWeight: 700, fontSize: '10px' }}>(0, 0)</div>
-                <div />
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>(-0.5,-0.5)</div>
-                <div />
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end' }}>(0.5,-0.5)</div>
-              </div>
-            </div>
-            <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '14px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: T.blue, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Common UV Ops</div>
-              {[
-                ['length(uv)', 'Radial distance — 0 at center'],
-                ['abs(uv)', 'Fold — 4-fold symmetry'],
-                ['fract(uv*4)', 'Tile — repeat 4× across screen'],
-                ['uv.x, uv.y', 'Horizontal / vertical gradient'],
-              ].map(([op, desc]) => (
-                <div key={op} style={{ marginBottom: '4px' }}>
-                  <code style={{ fontSize: '10px', color: T.green, fontFamily: 'monospace' }}>{op}</code>
-                  <span style={{ fontSize: '10px', color: T.dim, marginLeft: '6px' }}>{desc}</span>
-                </div>
+          <h3 style={S.subTitle}>Keyboard Shortcuts Quick Reference</h3>
+          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Action</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Shortcut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['Open palette', 'A'],
+                ['Add UV', 'U'],
+                ['Add Time', 'T'],
+                ['Add Output', 'O'],
+                ['Add Mix', 'M'],
+                ['Add Float constant', 'Shift+F'],
+                ['Add Color', 'C'],
+                ['Fit view', 'F'],
+                ['Toggle GLSL', 'Cmd+\\'],
+                ['Undo', 'Cmd+Z'],
+                ['Export graph', 'Cmd+S'],
+                ['Import graph', 'Cmd+O'],
+                ['Group selected', 'Cmd+G'],
+                ['Wrap in loop', 'Cmd+L'],
+                ['Record video', 'Cmd+R'],
+                ['Show shortcuts', '?'],
+              ] as [string, string][]).map(([action, shortcut], i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{action}</td>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{shortcut}</td>
+                </tr>
               ))}
-            </div>
-          </div>
+            </tbody>
+          </table>
+          <Tip>Hold <C>1</C>, <C>2</C>, or <C>3</C> to highlight nodes by type — useful for finding specific nodes in a complex graph.</Tip>
+        </div>
 
-          <h3 style={S.subTitle}>Build it step by step — UV to tiled colors</h3>
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 2 — YOUR FIRST SHADER
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec2Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Your First Shader</h2>
+          <div style={S.divider} />
+
           <StepBuilder steps={[
             {
-              title: 'Start with UV',
-              description: 'The UV node is where every shader begins. Add it from the Sources section.',
+              title: 'Step 1: The Coordinate System',
+              description: <>Press <C>U</C> to add a <strong style={{ color: T.textBold }}>UV</strong> node. This is the starting point for every shader. It outputs centered, aspect-corrected coordinates — <C>(0,0)</C> is the center, y spans roughly <C>±0.5</C>, and x is scaled by the aspect ratio.</>,
               nodes: [{ label: 'UV', type: 'source', outputs: ['uv: vec2'] }],
             },
             {
-              title: 'Add an Output node',
-              description: <>Connect the UV to an Output node. UV is <TypeBadge type="vec2" /> but Output needs <TypeBadge type="vec3" /> — use a <strong style={{ color: T.textBold }}>Vec2ToVec3</strong> in between, or just observe the type error.</>,
+              title: 'Step 2: A Shape',
+              description: <>Add a <strong style={{ color: T.textBold }}>Circle SDF</strong> node and connect <C>UV → CircleSDF.position</C>. An SDF (Signed Distance Field) returns a float: negative inside, zero on the boundary, positive outside. The circle formula is simply <C>distance_from_center - radius</C>.</>,
               nodes: [
                 { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+                { label: 'CircleSDF', type: 'effect', inputs: ['position: vec2'], outputs: ['distance: float'] },
               ],
             },
             {
-              title: 'Tile with FractRaw',
-              description: <>Add a <strong style={{ color: T.textBold }}>FractRaw</strong> node (Transforms). Set scale to 4. <C>fract(uv * 4)</C> repeats the 0→1 space 4 times, creating a tiled pattern.</>,
+              title: 'Step 3: Lighting',
+              description: <>Add a <strong style={{ color: T.textBold }}>MakeLight</strong> node and connect <C>CircleSDF.distance → MakeLight.sdf</C>. MakeLight computes a glow formula: bright at the boundary (distance near 0) and falling off quickly elsewhere.</>,
               nodes: [
-                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'FractRaw', type: 'transform', inputs: ['uv: vec2'], outputs: ['uv: vec2'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+                { label: 'CircleSDF', type: 'effect', outputs: ['distance: float'] },
+                { label: 'MakeLight', type: 'effect', inputs: ['sdf: float'], outputs: ['glow: float'] },
               ],
             },
             {
-              title: 'Color with Palette',
-              description: <>Insert a <strong style={{ color: T.textBold }}>Palette Preset</strong> node. Wire the FractRaw UV to its <C>t</C> input (vec2 → float broadcasts the x channel). Try different preset numbers 1–8.</>,
+              title: 'Step 4: Color',
+              description: <>Add a <strong style={{ color: T.textBold }}>Palette</strong> node and connect <C>MakeLight → Palette.t</C>. The palette uses the IQ cosine formula: <C>{'a + b * cos(2\u03C0 * (c * t + d))'}</C>. This maps any float to a smooth rainbow gradient.</>,
               nodes: [
-                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'FractRaw', type: 'transform', inputs: ['uv: vec2'], outputs: ['uv: vec2'] },
-                { label: 'Palette Preset', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
+                { label: 'MakeLight', type: 'effect', outputs: ['glow: float'] },
+                { label: 'Palette', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
+              ],
+            },
+            {
+              title: 'Step 5: Output',
+              description: <>Press <C>O</C> to add an <strong style={{ color: T.textBold }}>Output</strong> node. Connect <C>Palette.color → Output.color</C>. You should see a glowing colored circle in the preview.</>,
+              nodes: [
+                { label: 'Palette', type: 'color', outputs: ['color: vec3'] },
                 { label: 'Output', type: 'output', inputs: ['color: vec3'] },
               ],
             },
           ]} />
 
-          <TryIt exampleKey="fractalRings" label="Fractal Rings" onTry={tryExample} />
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+              { label: 'CircleSDF', type: 'effect', inputs: ['position'], outputs: ['distance'] },
+              { label: 'MakeLight', type: 'effect', inputs: ['sdf'], outputs: ['glow'] },
+              { label: 'Palette', type: 'color', inputs: ['t'], outputs: ['color'] },
+              { label: 'Output', type: 'output', inputs: ['color'] },
+            ]}
+            caption="Complete first shader: UV → CircleSDF → MakeLight → Palette → Output"
+          />
+
+          <Tip>Try adding Time: Press <C>T</C>, add a Time node. Connect Time → Sin → Multiply(0.3) → MakeLight.brightness. Now the glow pulses.</Tip>
+
+          <TryIt exampleKey="glowing-circle" label="Glowing Circle" onTry={tryExample} />
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 2 — COLORS, MATH & ANIMATION
+            SECTION 3 — DATA FLOW & TYPES
         ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec2Ref as React.RefObject<HTMLDivElement>}>
-          <h2 style={S.sectionTitle}>2 · Colors, Math & Animation</h2>
+        <div ref={sec3Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Data Flow & Types</h2>
           <div style={S.divider} />
 
-          <h3 style={S.subTitle}>Colors are vec3</h3>
-          <p style={S.p}>
-            A color in GLSL is just three floats — R, G, B — each clamped to <C>0.0–1.0</C>.
-            Values outside this range won't display correctly unless you use a tone map node.
-          </p>
+          <h3 style={S.subTitle}>Types in Shader Studio</h3>
           <DataTable rows={[
-            ['vec3', 'vec3(1, 0, 0)', 'Pure red'],
-            ['vec3', 'vec3(0, 1, 0)', 'Pure green'],
-            ['vec3', 'vec3(0, 0, 1)', 'Pure blue'],
-            ['vec3', 'vec3(1, 1, 1)', 'White'],
-            ['vec3', 'vec3(0, 0, 0)', 'Black (default background)'],
-            ['vec3', 'vec3(0.5)', 'Mid grey (broadcasts from float)'],
+            ['float', 'Single number', 'Time / Constant / Sin'],
+            ['vec2', 'Two numbers (x, y)', 'UV / Mouse / MakeVec2'],
+            ['vec3', 'Three numbers (r, g, b)', 'Palette / MakeVec3 / FloatToVec3'],
+            ['vec4', 'Four numbers (r, g, b, a)', 'Vec4Output'],
           ]} />
 
+          <h3 style={S.subTitle}>The Compilation Model</h3>
           <p style={S.p}>
-            The <strong style={{ color: T.textBold }}>Constant</strong> node sets a fixed color or value.
-            The <strong style={{ color: T.textBold }}>Palette Preset</strong> node maps a float 0→1 to a smooth gradient
-            using 8 built-in presets. For full control, use the <strong style={{ color: T.textBold }}>Palette</strong> node
-            with the IQ cosine formula parameters.
+            When you connect nodes and hit play, the compiler runs four steps:
+          </p>
+          <ol style={{ ...S.ul, listStyleType: 'decimal' }}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Topological sort</strong> — orders nodes so every input is computed before it is used</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Generate GLSL</strong> — each node emits its GLSL snippet with unique variable names</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Assemble main()</strong> — all snippets are concatenated into a single <C>void main()</C></li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Compile on GPU</strong> — the shader is compiled and linked by WebGL</li>
+          </ol>
+
+          <CodeBlock>{`// Example generated GLSL for UV → CircleSDF → MakeLight
+void main() {
+    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution)
+              / u_resolution.y;
+
+    float n1_dist = length(uv) - 0.25;  // CircleSDF
+    float n2_glow = 0.02 / max(abs(n1_dist), 0.001);  // MakeLight
+
+    gl_FragColor = vec4(vec3(n2_glow), 1.0);
+}`}</CodeBlock>
+
+          <h3 style={S.subTitle}>Wired vs. Parameter Values</h3>
+          <p style={S.p}>
+            Every node parameter has two modes. As a <strong style={{ color: T.textBold }}>static parameter</strong>, the value is set by the slider and baked into the GLSL as a literal constant. As a <strong style={{ color: T.textBold }}>wired parameter</strong>, the value comes from another node at runtime — the slider shows "wired" and becomes inactive.
+          </p>
+          <p style={S.p}>
+            Example: CircleSDF radius as static <C>0.3</C> versus wired from <C>Sin(Time*2)*0.2+0.3</C> for an animated pulsing radius.
           </p>
 
-          <h3 style={S.subTitle}>Math Nodes</h3>
-          <p style={S.p}>
-            Math nodes mirror GLSL built-ins and work componentwise on any type — <TypeBadge type="float" />,
-            <TypeBadge type="vec2" />, or <TypeBadge type="vec3" />.
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
-            {([
-              ['Mix', 'mix(a, b, t)', 'Blend: t=0→a, t=1→b. Great for crossfades and lerping colors.'],
-              ['Smoothstep', 'smoothstep(e0, e1, x)', 'Smooth 0→1 ramp. Better than step for anti-aliased edges.'],
-              ['Clamp', 'clamp(x, 0, 1)', 'Clamp to valid range. Essential to keep colors from going HDR.'],
-              ['Sin / Cos', 'sin(x) / cos(x)', 'Oscillates −1 to 1. Excellent for continuous animation.'],
-              ['Multiply', 'a * b', 'Scale values. Use to dim/brighten colors or stretch UV.'],
-              ['Add', 'a + b', 'Offset values. Shift UV to translate shapes; tint colors.'],
-              ['Abs', 'abs(x)', 'Absolute value. Folds negative values up, creates symmetry.'],
-              ['Mod', 'mod(x, n)', 'Modulo. Repeat a pattern every n units.'],
-            ] as [string, string, string][]).map(([name, sig, desc]) => (
-              <div key={name} style={{ background: T.surface2, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${T.border}` }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: T.blue, marginBottom: '3px' }}>{name}</div>
-                <code style={{ fontSize: '11px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '4px' }}>{sig}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{desc}</div>
-              </div>
-            ))}
-          </div>
-
-          <h3 style={S.subTitle}>Animation with Time</h3>
-          <p style={S.p}>
-            The <strong style={{ color: T.textBold }}>Time</strong> node outputs the current elapsed time in seconds,
-            incrementing every frame. Feed it into <C>sin()</C> or <C>cos()</C> to get smooth oscillation between
-            −1 and 1.
-          </p>
-
-          <CodeBlock>{`sin(time)              // −1 to 1, period ~6.28s
-sin(time * 2.0)        // twice as fast
-sin(time) * 0.5 + 0.5  // remap to 0→1 (always positive)
-time * 0.3             // slowly increasing ramp
-mod(time, 3.0)         // sawtooth: 0→3 repeating`}</CodeBlock>
-
-          <h3 style={S.subTitle}>Build it step by step — animated wavy colors</h3>
-          <p style={S.p}>
-            This builds a pulsing color wave: radial distance from center + animated sin wave → colored palette → brightness pulse.
-          </p>
-          <StepBuilder steps={[
-            {
-              title: 'Radial distance from center',
-              description: <>Wire <strong>UV → Length</strong>. The <C>length(uv)</C> node returns a float — 0 at the center, growing outward. This creates a radial gradient.</>,
-              nodes: [
-                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'Length', type: 'transform', inputs: ['v: vec2'], outputs: ['result: float'] },
-              ],
-            },
-            {
-              title: 'Animated oscillation',
-              description: <>Add <strong>Time → Sin</strong>. Set scale to 1.5 on the Sin node. This creates a smooth oscillation we'll combine with the distance.</>,
-              nodes: [
-                { label: 'Time', type: 'source', outputs: ['time: float'] },
-                { label: 'Sin', type: 'transform', inputs: ['x: float'], outputs: ['result: float'] },
-              ],
-            },
-            {
-              title: 'Combine distance + sin wave',
-              description: <>Add an <strong>Add</strong> node. Connect Length → A and Sin → B. This offsets the radial gradient by the oscillating wave, creating a wave that expands and contracts.</>,
-              nodes: [
-                { label: 'Length', type: 'transform', outputs: ['result: float'] },
-                { label: 'Sin', type: 'transform', outputs: ['result: float'] },
-                { label: 'Add', type: 'transform', inputs: ['a: float', 'b: float'], outputs: ['result: float'] },
-              ],
-            },
-            {
-              title: 'Color with Palette',
-              description: <>Connect Add → Palette Preset <C>t</C> input. The palette maps 0→1 float to a gradient color. The result animates as the sin wave shifts the input value.</>,
-              nodes: [
-                { label: 'Add', type: 'transform', outputs: ['result: float'] },
-                { label: 'Palette Preset', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-              ],
-            },
-            {
-              title: 'Brightness pulse (optional)',
-              description: <>Multiply the Sin output by 0.4, then Add 0.6 to keep it positive (0.2→1.0 range). Use <strong>MultiplyVec3</strong> to scale the palette color by this value — the whole image pulses in brightness.</>,
-              nodes: [
-                { label: 'Sin', type: 'source', outputs: ['result: float'] },
-                { label: 'Multiply\n×0.4', type: 'transform', outputs: ['result: float'] },
-                { label: 'Add\n+0.6', type: 'transform', outputs: ['result: float'] },
-                { label: 'MultiplyVec3', type: 'color', inputs: ['color: vec3', 'scale: float'], outputs: ['result: vec3'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-              ],
-            },
-          ]} />
-
-          <TryIt exampleKey="wavyColors" label="Wavy Colors" onTry={tryExample} />
+          <h3 style={S.subTitle}>Type Conversion Nodes</h3>
+          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>From</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>To</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Node</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['float', 'vec3', 'FloatToVec3'],
+                ['float + float', 'vec2', 'MakeVec2'],
+                ['float x 3', 'vec3', 'MakeVec3'],
+                ['vec2', 'float (x)', 'ExtractX'],
+                ['vec2', 'float (y)', 'ExtractY'],
+                ['float', 'remapped float', 'Remap'],
+              ] as [string, string, string][]).map(([from, to, node], i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{from}</td>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{to}</td>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{node}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 3 — EFFECTS
+            SECTION 4 — SIGNED DISTANCE FIELDS
         ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec3Ref as React.RefObject<HTMLDivElement>}>
-          <h2 style={S.sectionTitle}>3 · Effects: SDF Shapes, Glow & Lensing</h2>
+        <div ref={sec4Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Signed Distance Fields</h2>
           <div style={S.divider} />
 
-          <h3 style={S.subTitle}>Signed Distance Fields (SDF)</h3>
+          <h3 style={S.subTitle}>What is an SDF?</h3>
           <p style={S.p}>
-            A Signed Distance Field function returns the <strong style={{ color: T.textBold }}>signed distance</strong> from
-            any pixel to a shape's edge:
+            A Signed Distance Field is a function <C>f(point) → float</C> that returns the signed distance from any point to the nearest surface. Negative means inside, zero means on the boundary, positive means outside.
           </p>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
-            {[
-              { label: 'Inside', color: T.red,   desc: 'dist < 0' },
-              { label: 'On edge', color: T.yellow, desc: 'dist = 0' },
-              { label: 'Outside', color: T.blue,   desc: 'dist > 0' },
-            ].map(({ label, color, desc }) => (
-              <div key={label} style={{ background: color + '22', border: `1px solid ${color}44`, borderRadius: '6px', padding: '8px 14px', fontSize: '12px' }}>
-                <div style={{ color, fontWeight: 600, marginBottom: '2px' }}>{label}</div>
-                <code style={{ fontSize: '11px', fontFamily: 'monospace', color: T.text }}>{desc}</code>
-              </div>
-            ))}
-          </div>
+          <p style={S.p}>Four reasons SDFs are powerful:</p>
+          <ol style={{ ...S.ul, listStyleType: 'decimal' }}>
+            <li style={S.li}>Shapes combine with <C>min</C>/<C>max</C> — union, intersection, subtraction</li>
+            <li style={S.li}>Smooth blending between shapes with SmoothMin</li>
+            <li style={S.li}>The same definition works for rendering, coloring, and compositing</li>
+            <li style={S.li}>Transforming the input coordinates = transforming the shape</li>
+          </ol>
 
-          <CodeBlock>{`// Circle SDF: distance to ring of given radius
-float dist = length(uv) - radius;    // negative inside, positive outside
+          <h3 style={S.subTitle}>2D Primitive Nodes</h3>
+          <p style={S.p}><strong style={{ color: T.textBold }}>Circle SDF</strong> — the simplest distance function:</p>
+          <CodeBlock>{`float dist = length(point) - radius;`}</CodeBlock>
 
-// Ring SDF: hollow circle
-float dist = abs(length(uv) - r) - thickness;
-
-// Box SDF (IQ's formula):
-vec2 d = abs(uv) - vec2(w, h);
+          <p style={S.p}><strong style={{ color: T.textBold }}>Box SDF</strong> — uses the elegant abs+max formula:</p>
+          <CodeBlock>{`vec2 d = abs(point) - vec2(width, height);
 float dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);`}</CodeBlock>
 
-          <h3 style={S.subTitle}>Build it step by step — pulsing glowing circle</h3>
-          <StepBuilder steps={[
-            {
-              title: 'Place a Circle SDF',
-              description: <>Add <strong>UV → CircleSDF</strong>. Set radius to 0.25. The output is a <TypeBadge type="float" /> distance — negative inside the circle, positive outside.</>,
-              nodes: [
-                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'Circle SDF', type: 'effect', inputs: ['uv: vec2', 'radius: float'], outputs: ['dist: float'] },
-              ],
-            },
-            {
-              title: 'Animate the radius',
-              description: <>Add <strong>Time → Sin → Multiply (×0.08)</strong>. Connect the multiply output to CircleSDF's <C>radius</C> input. The circle now pulses in and out over time.</>,
-              nodes: [
-                { label: 'Time', type: 'source', outputs: ['time: float'] },
-                { label: 'Sin\n×0.8', type: 'transform', outputs: ['result: float'] },
-                { label: 'Multiply\n×0.08', type: 'transform', outputs: ['result: float'] },
-                { label: 'Circle SDF', type: 'effect', inputs: ['radius: float'], outputs: ['dist: float'] },
-              ],
-            },
-            {
-              title: 'Convert distance to glow',
-              description: <>Add <strong>MakeLight</strong>. Connect CircleSDF → distance input. MakeLight computes <C>strength / max(|dist|, ε)</C> — bright at the edge, falling off quickly on both sides.</>,
-              nodes: [
-                { label: 'Circle SDF', type: 'effect', outputs: ['dist: float'] },
-                { label: 'MakeLight', type: 'effect', inputs: ['distance: float'], outputs: ['glow: float'] },
-              ],
-            },
-            {
-              title: 'Add color',
-              description: <>Add a <strong>Palette Preset</strong> node. Wire <strong>Time</strong> → palette <C>t</C> so the color slowly cycles. The palette outputs a <TypeBadge type="vec3" /> color that shifts over time.</>,
-              nodes: [
-                { label: 'Time', type: 'source', outputs: ['time: float'] },
-                { label: 'Palette Preset', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
-              ],
-            },
-            {
-              title: 'Multiply color by glow intensity',
-              description: <>Add <strong>MultiplyVec3</strong>. Connect Palette → color and MakeLight → scale. The glow intensity modulates the color — fully dark where there's no glow, bright at the ring edge.</>,
-              nodes: [
-                { label: 'Palette Preset', type: 'color', outputs: ['color: vec3'] },
-                { label: 'MakeLight', type: 'effect', outputs: ['glow: float'] },
-                { label: 'MultiplyVec3', type: 'color', inputs: ['color: vec3', 'scale: float'], outputs: ['result: vec3'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-              ],
-            },
-          ]} />
+          <p style={S.p}><strong style={{ color: T.textBold }}>Ring SDF</strong> — hollow circle variant:</p>
+          <CodeBlock>{`float dist = abs(length(point) - radius) - thickness;`}</CodeBlock>
 
-          <TryIt exampleKey="glowShape" label="Glow Shape" onTry={tryExample} />
+          <p style={S.p}><strong style={{ color: T.textBold }}>Shape SDF</strong> — dropdown with 30+ shapes including star, heart, hexagon, cross, and more.</p>
 
-          {/* Chromatic Aberration */}
-          <h3 style={S.subTitle}>Chromatic Aberration</h3>
+          <h3 style={S.subTitle}>SDF Repeat Nodes</h3>
           <p style={S.p}>
-            Chromatic aberration splits UV into three slightly offset copies — one for each color channel.
-            When you feed each offset UV into the same shape shader and recombine, the edges "fringe"
-            with rainbow color like light through a cheap glass lens.
-          </p>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-              { label: 'Chromatic\nAberration', type: 'effect', inputs: ['uv: vec2'], outputs: ['uv_r: vec2', 'uv_g: vec2', 'uv_b: vec2'] },
-              { label: 'Ring SDF\n(×3)', type: 'effect', inputs: ['uv per channel'] },
-              { label: 'MakeLight\n(×3)', type: 'effect', outputs: ['glow R/G/B'] },
-              { label: 'CombineRGB', type: 'color', inputs: ['r/g/b: float'], outputs: ['color: vec3'] },
-              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-            ]}
-            caption="Each UV offset feeds its own SDF+glow chain. CombineRGB merges the three channel results."
-          />
-
-          <Tip>
-            The key insight: you run the <em>same shape</em> three times, each on a slightly different UV.
-            The red channel samples from a slightly shifted position — that's what creates the color split.
-          </Tip>
-
-          <TryIt exampleKey="chromaticRings" label="Chromatic Rings" onTry={tryExample} />
-
-          {/* Gravity Lens */}
-          <h3 style={S.subTitle}>Gravity Lens</h3>
-          <p style={S.p}>
-            The <strong style={{ color: T.textBold }}>Gravitational Lens</strong> node warps UV space using an
-            inverse-square-law displacement — pixels are bent toward the lens center, just like light curving around
-            a massive object.
+            <strong style={{ color: T.textBold }}>OpRepeat</strong> — tiles space via <C>mod</C>. Feed your UV through OpRepeat before the SDF to create an infinite grid of the shape.
           </p>
           <p style={S.p}>
-            It outputs a <strong style={{ color: T.textBold }}>distorted UV</strong> (<C>uv_lensed</C>) — wire this
-            into any shader's UV input to bend its output through the lens:
+            <strong style={{ color: T.textBold }}>OpRepeatPolar</strong> — N-fold angular repeat. Creates mandala-like radial symmetry by repeating the SDF around a circle.
           </p>
 
-          <NodeDiagram
-            nodes={[
-              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-              { label: 'Mouse', type: 'source', outputs: ['uv: vec2'] },
-              { label: 'Gravity\nLens', type: 'effect', inputs: ['uv', 'lens_center'], outputs: ['uv_lensed: vec2', 'horizon_mask: float'] },
-              { label: 'Mandelbrot', type: 'effect', inputs: ['uv: vec2'], outputs: ['color: vec3'] },
-              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-            ]}
-            caption="Mouse → lens_center makes the lens follow your cursor. Wire uv_lensed upstream into any shader."
-          />
-
-          <p style={S.p}><strong style={{ color: T.textBold }}>Three lens modes:</strong></p>
+          <h3 style={S.subTitle}>Combining SDFs</h3>
+          <p style={S.p}>SDFs combine with simple math operations:</p>
           <ul style={S.ul}>
-            <li style={S.li}><C>gravity</C> — 1/r² displacement (classic black hole)</li>
-            <li style={S.li}><C>fisheye</C> — smooth barrel distortion (wide-angle lens effect)</li>
-            <li style={S.li}><C>ripple</C> — animated wave warp (wire Time → time input)</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Union</strong> — <C>min(sdf_a, sdf_b)</C> — merges two shapes</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Intersection</strong> — <C>max(sdf_a, sdf_b)</C> — keeps only overlap</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Subtraction</strong> — <C>max(sdf_a, -sdf_b)</C> — cuts shape B from shape A</li>
           </ul>
+          <pre style={S.code}>{`Union (min):       ██████████
+                   ████  ████
+Shape A ████       ██████████    Shape B    ████
+        ████  +    ██████████  =            ████
+        ████       ████  ████               ████
+                   ██████████`}</pre>
 
-          <Warn>
-            <C>uv_lensed</C> is a <em>displaced UV</em>, not a color. Always wire it into another node's UV
-            input rather than directly to Output.
-          </Warn>
-
-          <TryIt exampleKey="gravitationalLens" label="Gravitational Lens" onTry={tryExample} />
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 4 — NOISE, FRACTALS & ADVANCED
-        ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec4Ref as React.RefObject<HTMLDivElement>}>
-          <h2 style={S.sectionTitle}>4 · Noise, Fractals & Advanced</h2>
-          <div style={S.divider} />
-
-          <h3 style={S.subTitle}>FBM Noise</h3>
+          <h3 style={S.subTitle}>Smooth Blending</h3>
           <p style={S.p}>
-            FBM (Fractal Brownian Motion) stacks multiple octaves of smooth Perlin-like noise at increasing
-            frequencies — each octave adds smaller-scale detail. The result is organic, cloud-like texture.
+            SmoothMin blends two SDFs together with a smooth transition controlled by parameter <C>k</C>:
           </p>
+          <CodeBlock>{`float smoothMin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}`}</CodeBlock>
+          <pre style={S.code}>{`k = 0.0    k = 0.2    k = 0.5
+██    ██   ██    ██   ██████████
+██    ██   ████████   ██████████
+██    ██   ██████████ ██████████
+(sharp)    (smooth)   (heavy blend)`}</pre>
+          <Tip>Wire <C>Time → Sin → k</C> to animate the blend amount and morph between sharp and blobby.</Tip>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-            {[
-              ['octaves', 'Number of noise layers. More = finer detail. 4–6 is typical.'],
-              ['scale', 'Base zoom level. Higher = smaller features.'],
-              ['lacunarity', 'Frequency multiplier per octave. 2.0 = each octave is 2× finer.'],
-              ['gain', 'Amplitude falloff per octave. 0.5 = each octave is half as loud.'],
-            ].map(([param, desc]) => (
-              <div key={param} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '8px 12px' }}>
-                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{param}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{desc}</div>
-              </div>
-            ))}
-          </div>
-
-          <h3 style={S.subTitle}>Domain Warping</h3>
-          <p style={S.p}>
-            Domain warping is a technique where you use the <em>output</em> of one FBM node as the UV
-            <em> input</em> to another. This creates turbulent, swirling patterns that look completely different
-            from plain FBM:
-          </p>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-              { label: 'FBM\n(pass 1)', type: 'effect', inputs: ['uv: vec2'], outputs: ['value: float', 'uv: vec2'] },
-              { label: 'Domain\nWarp', type: 'effect', inputs: ['uv: vec2', 'warp_uv: vec2'], outputs: ['warped_uv: vec2'] },
-              { label: 'FBM\n(pass 2)', type: 'effect', inputs: ['uv: vec2'], outputs: ['value: float'] },
-              { label: 'Palette', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
-              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-            ]}
-            caption="The DomainWarp node offsets UV by a noise-derived displacement before feeding into the second FBM."
-          />
-
-          <CodeBlock>{`// What domain warp does internally:
-vec2 offset = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
-vec2 warped_uv = uv + offset * warp_strength;
-float final = fbm(warped_uv);  // much more complex patterns`}</CodeBlock>
-
-          <TryIt exampleKey="domainWarpFractal" label="Domain Warp Fractal" onTry={tryExample} />
-
-          {/* Flow Fields */}
-          <h3 style={S.subTitle}>Flow Fields</h3>
-          <p style={S.p}>
-            As generative artist Tyler Hobbs describes: a flow field is a <strong style={{ color: T.textBold }}>grid of angles</strong>. Every point
-            in the field stores a direction derived from noise. Curves are drawn by starting at a seed position
-            and repeatedly taking small steps in the direction the field points — like a leaf floating in a river.
-          </p>
-          <p style={S.p}>
-            The key insight is that short curves feel like <em>fur or grass</em>, while long curves feel like
-            smooth, flowing <em>rivers</em>. The same field produces completely different aesthetics depending
-            on how many steps you take per curve.
-          </p>
-
-          <CodeBlock>{`// Core algorithm (per curve, per step):
-angle = fbmNoise(position * scale + time * speed) * 2π
-position += vec2(cos(angle), sin(angle)) * step_size
-
-// Per pixel: accumulate soft glow from ALL steps of ALL curves
-dist  = length(pixel - step_position)
-light = smoothstep(line_width * softness, line_width, dist)
-color += curve_palette_color * light`}</CodeBlock>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-              { label: 'Time', type: 'source', outputs: ['time: float'] },
-              { label: 'Flow Field', type: 'effect', inputs: ['uv: vec2', 'time: float'], outputs: ['color: vec3', 'density: float'] },
-              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-            ]}
-            caption="The Flow Field node is self-contained — curves, steps, colors all happen inside. density is a coverage mask you can use downstream."
-          />
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            {([
-              ['curves', 'Number of independent curves. More = denser. 60 is a good start.'],
-              ['steps', 'Steps per curve. Low (6–8) = short fur-like strokes. High (40–64) = long fluid rivers.'],
-              ['step_size', 'Distance each step travels. Smaller = smoother but slower.'],
-              ['field_mode', 'perlin: classic smooth flow. curl: swirling loops (noise gradient rotated 90°). quantized: angular rocky forms.'],
-              ['line_width', 'Stroke thickness. Try 0.003–0.015.'],
-              ['noise_scale', 'Scale of the angle field. Large = big sweeping curves. Small = tight chaotic swirls.'],
-            ] as [string, string][]).map(([p, d]) => (
-              <div key={p} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '8px 12px' }}>
-                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{p}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{d}</div>
-              </div>
-            ))}
-          </div>
-
-          <Tip>
-            The <strong>density</strong> output is a 0→1 float representing how many curves passed near this pixel.
-            Wire it into a <strong>Palette Preset</strong> for custom coloring, or multiply by an SDF mask to
-            confine the flow to a shape.
-          </Tip>
-
-          <TryIt exampleKey="flowFieldDemo" label="Flow Field" onTry={tryExample} />
-
-          {/* Mandelbrot / Julia */}
-          <h3 style={S.subTitle}>Mandelbrot & Julia Sets</h3>
-          <p style={S.p}>
-            The Mandelbrot set visualizes which points in the complex plane remain bounded under repeated
-            iteration of a simple formula. The <strong style={{ color: T.textBold }}>Mandelbrot</strong> node
-            handles all the iteration and smooth coloring internally.
-          </p>
-
-          <CodeBlock>{`// The iteration (runs max_iter times per pixel):
-z = z² + c       // Mandelbrot: c = UV position, z starts at 0
-z = z² + c       // Julia:      c = fixed param, z = UV position
-
-// Escape condition: |z| > bailout (usually 256)
-// Smooth iteration count (continuous coloring):
-iter_smooth = iter - log2(log2(|z|))`}</CodeBlock>
-
-          <StepBuilder steps={[
-            {
-              title: 'Basic Mandelbrot',
-              description: 'Add UV → Mandelbrot → Output. The node handles everything. Try adjusting zoom and offset_x/offset_y to explore the set.',
-              nodes: [
-                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'Mandelbrot', type: 'effect', inputs: ['uv: vec2'], outputs: ['color: vec3', 'iter: float'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-              ],
-            },
-            {
-              title: 'Switch to Julia mode',
-              description: <>Change the mode param to <C>julia</C>. Now <C>c_pos</C> controls the shape of the entire Julia set — each value produces a completely different fractal structure.</>,
-              nodes: [
-                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'Mandelbrot\n(mode: julia)', type: 'effect', inputs: ['uv: vec2', 'c_pos: vec2'], outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-              ],
-            },
-            {
-              title: 'Wire Mouse → c_pos for interactive Julia',
-              description: 'Add a Mouse node and connect its uv output to the Mandelbrot c_pos input. Move your mouse over the canvas to explore different Julia shapes in real time.',
-              nodes: [
-                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'Mouse', type: 'source', outputs: ['uv: vec2'] },
-                { label: 'Mandelbrot\n(julia)', type: 'effect', inputs: ['uv', 'c_pos: vec2'], outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-              ],
-            },
-            {
-              title: 'Animated Julia with orbit traps',
-              description: <>Use an <strong>Expr</strong> node to drive <C>c_pos</C> with time: <C>vec2(cos(t*0.3)*0.7, sin(t*0.4)*0.4)</C>. Enable orbit_trap to change coloring style.</>,
-              nodes: [
-                { label: 'Time', type: 'source', outputs: ['time: float'] },
-                { label: 'Expr\nvec2(cos, sin)', type: 'transform', inputs: ['t: float'], outputs: ['result: vec2'] },
-                { label: 'Mandelbrot\n(julia+trap)', type: 'effect', inputs: ['uv', 'c_pos'], outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output' },
-              ],
-            },
-          ]} />
-
-          <TryIt exampleKey="mandelbrotExplorer" label="Mandelbrot Explorer" onTry={tryExample} />
-          <TryIt exampleKey="juliaExplorer" label="Animated Julia" onTry={tryExample} />
-
-          {/* IFS */}
-          <h3 style={S.subTitle}>IFS Fractals (Iterated Function Systems)</h3>
-          <p style={S.p}>
-            An IFS fractal is defined by a small set of affine transforms. The{' '}
-            <strong style={{ color: T.textBold }}>chaos game</strong> algorithm reveals the attractor:
-          </p>
-
-          <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '14px 16px', marginBottom: '14px' }}>
-            <ol style={{ paddingLeft: '18px', margin: 0 }}>
-              {[
-                'Start a single point at the origin (0, 0)',
-                'Randomly pick one of the N transforms — each has a probability weight',
-                'Apply that transform to move the point to a new position',
-                'Pixels near where the point lands accumulate glow intensity',
-                'Repeat 60–150 times per pixel — the point traces the attractor',
-              ].map((step, i) => (
-                <li key={i} style={{ fontSize: '12px', color: T.text, lineHeight: 1.7, marginBottom: '2px' }}>
-                  {step}
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
-              { label: 'Time\n(optional)', type: 'source', outputs: ['time: float'] },
-              { label: 'IFS\n(preset: sierpinski)', type: 'effect', inputs: ['uv: vec2', 'time: float'], outputs: ['color: vec3', 'glow: float'] },
-              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
-            ]}
-            caption="The IFS node contains 4 preset transform sets. Use the glow output for custom coloring."
-          />
-
-          <p style={S.p}><strong style={{ color: T.textBold }}>Available presets:</strong></p>
+          <h3 style={S.subTitle}>Rendering SDFs</h3>
           <ul style={S.ul}>
-            <li style={S.li}><C>sierpinski</C> — 3 contractions toward triangle corners</li>
-            <li style={S.li}><C>fern</C> — Barnsley fern, 4 transforms simulating leaf structure</li>
-            <li style={S.li}><C>dragon</C> — Dragon curve, 2 transforms creating a space-filling path</li>
-            <li style={S.li}><C>koch</C> — Koch snowflake variant</li>
-          </ul>
-
-          <Tip>
-            Increase <C>iterations</C> (60–150) for a denser, more defined attractor.
-            The <C>glow</C> param controls how bright each hit is — lower values show fine structure better,
-            higher values give a bright flame-like look.
-          </Tip>
-
-          <TryIt exampleKey="ifsFractal" label="IFS Fractal (Sierpinski)" onTry={tryExample} />
-          <TryIt exampleKey="barnsleyFern" label="Barnsley Fern" onTry={tryExample} />
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 5 — PHYSICS SIMULATIONS
-        ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec5Ref as React.RefObject<HTMLDivElement>}>
-          <h2 style={S.sectionTitle}>5 · Physics Simulations</h2>
-          <div style={S.divider} />
-
-          <p style={S.p}>
-            These nodes visualize physical phenomena directly as <strong style={{ color: T.textBold }}>density fields</strong>.
-            The Chladni node renders nodal lines analytically per-pixel. The 2D orbital cross-section gives you
-            the textbook probability density map. The 3D orbital volumetrically raymarches through
-            the full <C>|ψ_nlm(r,θ,φ)|²</C> wavefunction using real spherical harmonics — a self-contained
-            camera orbiting the atom in real time.
-          </p>
-
-          {/* ── Chladni ── */}
-          <h3 style={S.subTitle}>Chladni Plates</h3>
-          <p style={S.p}>
-            When a metal plate is vibrated at a resonant frequency, sand grains are bounced away from the
-            moving areas and settle along the <strong style={{ color: T.textBold }}>nodal lines</strong> —
-            the stationary points of the standing wave. The pattern is determined by the eigenfunction:
-          </p>
-
-          <CodeBlock>{`// Chladni formula (integers m ≠ n pick the mode):
-cos(n·π·x) · cos(m·π·y) − cos(m·π·x) · cos(n·π·y) = 0
-
-// Points near zero → nodal lines → where sand clusters
-density = exp(−|chladni(x,y)| · sharpness)`}</CodeBlock>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            {[
-              ['m / n', 'Integer mode numbers. Different combos give completely different patterns. m=n gives nothing (no pattern). Try (3,4), (2,5), (1,6).'],
-              ['sharpness', 'How tight the nodal lines are. Low (4) = fat diffuse bands. High (20) = razor-thin lines.'],
-              ['turbulence', 'How much each particle jitters. 0 = frozen. ~0.04 = sand that\'s still vibrating.'],
-              ['particles', 'More particles = denser, richer glow on the lines. 50 is fast; 200 is lush.'],
-            ].map(([p, d]) => (
-              <div key={p as string} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '8px 12px' }}>
-                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{p}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{d}</div>
-              </div>
-            ))}
-          </div>
-
-          <StepBuilder steps={[
-            {
-              title: 'Basic Chladni pattern',
-              description: 'Add UV + Time → Chladni Plate → Output (Color output). You should immediately see glowing nodal lines on a dark background.',
-              nodes: [
-                { label: 'UV',    type: 'source',    outputs: ['uv: vec2']    },
-                { label: 'Time',  type: 'source',    outputs: ['time: float'] },
-                { label: 'Chladni\nPlate', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3', 'density: float', 'field: float'] },
-                { label: 'Output', type: 'output',   inputs: ['color: vec3']  },
-              ],
-            },
-            {
-              title: 'Explore modes — try different m and n',
-              description: <>Change the <C>m</C> and <C>n</C> params to different integers. They must differ for a pattern to appear. Even numbers tend to be more symmetric; odd combos are more irregular.</>,
-              nodes: [
-                { label: 'Chladni\nm=5, n=4', type: 'effect', outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output' },
-              ],
-            },
-            {
-              title: 'Use the Density output for custom coloring',
-              description: <>Wire <C>density</C> (a float 0→1) into a <strong>Palette Preset</strong> node. Now you can color the nodal lines with any palette instead of the default white glow.</>,
-              nodes: [
-                { label: 'Chladni\nPlate', type: 'effect', outputs: ['density: float'] },
-                { label: 'Palette\nPreset', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output' },
-              ],
-            },
-            {
-              title: 'Animate between modes with Time',
-              description: <>Use an <strong>Expr</strong> node to slowly pulse <C>m</C> or <C>n</C> over time. Wire Time → Expr → Floor → Chladni m to step between integer modes with a crossfade.</>,
-              nodes: [
-                { label: 'Time',   type: 'source',    outputs: ['time: float'] },
-                { label: 'Expr\nfloor(t*0.3)', type: 'transform', outputs: ['result: float'] },
-                { label: 'Chladni\nPlate', type: 'effect', inputs: ['m: float'], outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output' },
-              ],
-            },
-          ]} />
-
-          <TryIt exampleKey="chladniDemo" label="Chladni Plate" onTry={tryExample} />
-
-          <Tip>
-            The <C>field</C> output is the raw signed value — positive on one side of the nodal line,
-            negative on the other. Pipe it into <strong>Abs → Smoothstep</strong> to get a custom edge mask,
-            or use it directly in an <strong>Expr</strong> node for interference patterns.
-          </Tip>
-
-          {/* ── Electron Orbitals ── */}
-          <h3 style={S.subTitle}>Electron Orbitals</h3>
-          <p style={S.p}>
-            Solving the Schrödinger equation for hydrogen gives exact wavefunctions described by three
-            quantum numbers. The node implements the 2D cross-section at z=0 using real spherical harmonics:
-          </p>
-
-          <CodeBlock>{`// Quantum numbers:
-//   n = principal (shell) — 1,2,3,4
-//   l = azimuthal (subshell) — 0..n-1   (0=s, 1=p, 2=d, 3=f)
-
-// Wavefunction ψ_nl(r,θ) in 2D:
-R(r) = rˡ · exp(−r / n·a₀) · L_{n−l−1}^{2l+1}(2r / n·a₀)
-Y(θ) = cos(l·θ)   // real part of spherical harmonic
-
-// Probability density:
-|ψ|² = (R · Y)²   // this is what you see`}</CodeBlock>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            {[
-              ['n (shell)',     '1=K, 2=L, 3=M, 4=N shell. Higher n → bigger, more diffuse orbital with more nodes.'],
-              ['l (subshell)',  '0=s (spherical), 1=p (dumbbell), 2=d (clover), 3=f (complex). Must be < n.'],
-              ['a₀ (Bohr r.)', 'Sets the physical scale of the orbital. Increase to zoom out; decrease to zoom in.'],
-              ['turbulence',   'Quantum jitter — how restless the particle swarm is. Matches the inherent uncertainty of |ψ|².'],
-            ].map(([p, d]) => (
-              <div key={p as string} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '8px 12px' }}>
-                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{p}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{d}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '14px 18px', marginBottom: '16px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: T.blue, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notable orbital shapes</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-              {[
-                ['n=1, l=0', '1s — single sphere, maximum density at nucleus'],
-                ['n=2, l=0', '2s — sphere with inner ring node'],
-                ['n=2, l=1', '2p — dumbbell lobes, zero at center'],
-                ['n=3, l=0', '3s — two ring nodes around core'],
-                ['n=3, l=2', '3d — four-leaf clover pattern'],
-                ['n=4, l=3', '4f — 8-lobed pattern'],
-              ].map(([label, desc]) => (
-                <div key={label as string} style={{ background: T.surface, borderRadius: '5px', padding: '7px 10px' }}>
-                  <code style={{ fontSize: '11px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{label}</code>
-                  <div style={{ fontSize: '10px', color: T.dim, lineHeight: 1.4 }}>{desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <StepBuilder steps={[
-            {
-              title: 'Basic 2p orbital',
-              description: 'Add UV + Time → Electron Orbital → Output. Default is n=2, l=1 — the classic dumbbell (2p orbital). You should see two glowing lobes with quantum jitter.',
-              nodes: [
-                { label: 'UV',    type: 'source',  outputs: ['uv: vec2']    },
-                { label: 'Time',  type: 'source',  outputs: ['time: float'] },
-                { label: 'Electron\nOrbital', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3', 'density: float', 'ψ: float'] },
-                { label: 'Output', type: 'output', inputs: ['color: vec3']  },
-              ],
-            },
-            {
-              title: 'Explore orbitals — change n and l',
-              description: <>Try <C>n=3, l=2</C> for a d-orbital with its 4-lobed pattern. Try <C>n=1, l=0</C> for the ground state 1s orbital — a simple sphere. Rule: l must always be less than n.</>,
-              nodes: [
-                { label: 'Electron\nn=3, l=2', type: 'effect', outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output' },
-              ],
-            },
-            {
-              title: 'Use density for interference',
-              description: <>Wire the <C>density</C> (<TypeBadge type="float" />) into a <strong>Multiply</strong> with an FBM noise value. This modulates the orbital with turbulent noise — looks like orbital deformation in a molecule.</>,
-              nodes: [
-                { label: 'Electron\nOrbital', type: 'effect', outputs: ['density: float'] },
-                { label: 'FBM',    type: 'effect',    outputs: ['value: float']  },
-                { label: 'Multiply', type: 'transform', inputs: ['a', 'b: float'], outputs: ['result: float'] },
-                { label: 'Palette', type: 'color',     outputs: ['color: vec3']  },
-                { label: 'Output',  type: 'output'                                },
-              ],
-            },
-          ]} />
-
-          <TryIt exampleKey="electronOrbitalDemo" label="Electron Orbital (2p)" onTry={tryExample} />
-
-          <Warn>
-            The l constraint <C>l {'<'} n</C> is not enforced by the node — setting l ≥ n will give a
-            degenerate Laguerre polynomial (p &lt; 0 clamps to 0) and the orbital will just be a uniform blob.
-            It won't crash, but it won't be physically meaningful.
-          </Warn>
-
-          {/* ── 3D Orbital ── */}
-          <h3 style={S.subTitle}>Orbital 3D — Volumetric Raymarch</h3>
-          <p style={S.p}>
-            The <strong style={{ color: T.textBold }}>Orbital 3D</strong> node renders the full
-            3D wavefunction by marching a ray through the density cloud <C>|ψ_nlm|²</C>.
-            It uses the complete hydrogen atom solution — real spherical harmonics <C>Y_l^m(θ,φ)</C>
-            for the angular part, and associated Laguerre polynomials for the radial part:
-          </p>
-
-          <CodeBlock>{`// Full 3D wavefunction:
-ψ_nlm(r,θ,φ) = R_nl(r) · Y_l^m(θ,φ)
-
-// Radial (same as 2D):
-R_nl(r) = ρˡ · exp(−ρ/2) · L_{n−l−1}^{2l+1}(ρ)   where ρ = 2r/(n·a₀)
-
-// Real spherical harmonics (3D angular structure):
-Y_l^0   → rotationally symmetric (s, p_z, d_z², ...)
-Y_l^|m| → cos(m·φ) lobes   (p_x, d_xz, ...)
-Y_l^-|m|→ sin(m·φ) lobes   (p_y, d_yz, ...)
-
-// Volume integration (front-to-back alpha compositing):
-color += (1 − alpha) · sampleAlpha · sampleColor
-alpha += (1 − alpha) · sampleAlpha`}</CodeBlock>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            {([
-              ['n, l, m', 'Quantum numbers. n=shell, l=subshell shape, m=magnetic orientation. m goes from −l to +l.'],
-              ['steps / step size', 'Quality vs speed. 64 steps at 0.06 is a good balance. More steps = cleaner at cost of framerate.'],
-              ['density scale', 'How bright/opaque the cloud is. Increase if it looks faint; decrease if it\'s solid white.'],
-              ['gamma', '< 1 reveals faint outer shells. > 1 deepens the core. Try 0.3 to see all radial nodes.'],
-              ['cam dist / speed', 'Camera orbit radius and speed. Set speed=0 and adjust cam_dist for a still shot.'],
-              ['Color A / Color B', 'Two-tone coloring mapped to lobe orientation (positive vs negative ψ axis projection).'],
-            ] as [string, string][]).map(([p, d]) => (
-              <div key={p} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '8px 12px' }}>
-                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{p}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{d}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '14px 18px', marginBottom: '16px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: T.blue, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Good 3D orbital combos to try</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-              {([
-                ['n=2, l=0, m=0', '2s — solid sphere with a hollow core'],
-                ['n=2, l=1, m=0', '2p_z — two vertical lobes (default)'],
-                ['n=2, l=1, m=1', '2p_x — two horizontal lobes'],
-                ['n=3, l=2, m=0', '3d_z² — donut + two caps'],
-                ['n=3, l=2, m=2', '3d_x²−y² — four-leaf clover in 3D'],
-                ['n=4, l=3, m=0', '4f_z³ — layered lobes along z-axis'],
-              ] as [string, string][]).map(([label, desc]) => (
-                <div key={label} style={{ background: T.surface, borderRadius: '5px', padding: '7px 10px' }}>
-                  <code style={{ fontSize: '11px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{label}</code>
-                  <div style={{ fontSize: '10px', color: T.dim, lineHeight: 1.4 }}>{desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV',       type: 'source',  outputs: ['uv: vec2']    },
-              { label: 'Time',     type: 'source',  outputs: ['time: float'] },
-              { label: 'Orbital\n3D', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3', 'alpha: float', 'depth: float'] },
-              { label: 'Output',   type: 'output',  inputs: ['color: vec3']  },
-            ]}
-            caption="The simplest setup — just UV + Time → Orbital 3D → Output. Camera auto-orbits. Try wiring depth into a Palette for a depth-shaded version."
-          />
-
-          <Tip>
-            Wire the <C>depth</C> output into a <strong>Palette Preset</strong> node then <strong>Mix</strong>
-            it with the <C>color</C> output for a depth-tinted version. Or multiply <C>alpha</C> by
-            a Chladni <C>density</C> to mask the orbital volume to only appear inside the nodal lines.
-          </Tip>
-
-          <TryIt exampleKey="orbitalVolume3dDemo" label="3D Orbital (2p)" onTry={tryExample} />
-
-          {/* ── Combining both ── */}
-          <h3 style={S.subTitle}>Combining Both — Interference & Layering</h3>
-          <p style={S.p}>
-            Both nodes output a <C>density</C> float and a <C>color</C> vec3, making them easy to
-            compose with each other or with other nodes:
-          </p>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV',    type: 'source',    outputs: ['uv: vec2']        },
-              { label: 'Time',  type: 'source',    outputs: ['time: float']     },
-              { label: 'Chladni\nPlate',  type: 'effect',    outputs: ['density: float'] },
-              { label: 'Electron\nOrbital', type: 'effect',  outputs: ['density: float'] },
-              { label: 'Multiply\n(interference)', type: 'transform', outputs: ['result: float'] },
-              { label: 'Palette', type: 'color',   outputs: ['color: vec3']     },
-              { label: 'Output',  type: 'output'                                 },
-            ]}
-            caption="Multiplying both density outputs creates a moiré-like interference pattern — bright only where both fields are simultaneously dense."
-          />
-
-          <p style={S.p}>
-            Other ideas to try:
-          </p>
-          <ul style={S.ul}>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Add densities</strong> — overlay both patterns at once, brighter where they coincide</li>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Mix colors</strong> — blend the two <C>color</C> outputs with a <strong>Mix</strong> node driven by Time → Sin</li>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Domain warp the UV first</strong> — feed the Chladni UV through a DomainWarp to bend the plate</li>
-            <li style={S.li}><strong style={{ color: T.textBold }}>Gravity lens over an orbital</strong> — wire <C>uv_lensed</C> into the Orbital's UV input to simulate curvature</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>MakeLight</strong> — converts SDF distance to a glow intensity (<C>strength / max(|dist|, epsilon)</C>)</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>SDF Colorize</strong> — maps distance to a color gradient</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>SDF Outline</strong> — renders only the boundary edge of the SDF</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Glow Layer</strong> — additive glow with controllable falloff</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Blend Node</strong> — blend two colors using an SDF as a mask</li>
           </ul>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 6 — GENERATIVE SYSTEMS (Hobbs Flow Fields + Circle Packing)
+            SECTION 5 — SOURCES & INPUTS
         ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec6Ref as React.RefObject<HTMLDivElement>}>
-          <h2 style={S.sectionTitle}>6 · Generative Systems</h2>
+        <div ref={sec5Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Sources & Inputs</h2>
           <div style={S.divider} />
 
+          <h3 style={S.subTitle}>UV</h3>
           <p style={S.p}>
-            Two essays by generative artist <strong style={{ color: T.textBold }}>Tyler Hobbs</strong> form the
-            conceptual backbone of this section: his 2020 essay on flow fields and his 2016 essay on circle
-            packing. Both are about the same idea — using simple, well-defined rules to produce organic
-            complexity that looks alive, physical, and impossible to predict from the rule alone.
+            The primary coordinate source. Outputs centered, aspect-corrected <TypeBadge type="vec2" />. Origin <C>(0,0)</C> at center, y spans <C>±0.5</C>, x is scaled by aspect ratio. Every shader starts here.
           </p>
 
-          {/* ── Flow Fields: Hobbs Deep Dive ── */}
-          <h3 style={S.subTitle}>Flow Fields — The Hobbs Model</h3>
+          <h3 style={S.subTitle}>PixelUV</h3>
           <p style={S.p}>
-            A flow field is a <strong style={{ color: T.textBold }}>2D array of angles</strong>. Every cell in
-            the grid holds one number: a direction. To draw a curve, you pick a starting point, look up the
-            angle in the nearest cell, take a small step in that direction, and repeat. The curve follows the
-            field like a leaf on water. The shape of the field determines everything.
+            Raw pixel coordinates — <C>(0,0)</C> at bottom-left, <C>(width, height)</C> at top-right. Useful when you need integer pixel positions or exact resolution-dependent effects.
           </p>
 
-          <CodeBlock>{`// The grid (conceptually — in GLSL we sample it directly):
-for each column, row:
-    angle = fbmNoise(col * 0.005, row * 0.005) * 2π
-    grid[col][row] = angle
-
-// Drawing one curve:
-pos = seed_position
-for step in 0..num_steps:
-    angle = grid[nearest_cell(pos)]
-    pos  += vec2(cos(angle), sin(angle)) * step_length
-    draw_dot(pos)               // or accumulate glow at dist to pixel`}</CodeBlock>
-
+          <h3 style={S.subTitle}>Time</h3>
           <p style={S.p}>
-            Hobbs identifies three choices that control the entire aesthetic:
+            Outputs elapsed seconds as a <TypeBadge type="float" />. Increments every frame. The foundation of all animation.
+          </p>
+          <CodeBlock>{`sin(time)              // smooth oscillation, period ~6.28s
+cos(time * 0.5)        // slow oscillation
+fract(time * 0.2)      // sawtooth ramp 0→1 repeating
+mod(time, 4.0)         // 0→4 repeating ramp
+time * 0.1             // slowly increasing value`}</CodeBlock>
+
+          <h3 style={S.subTitle}>Mouse</h3>
+          <p style={S.p}>
+            Outputs the cursor position as <TypeBadge type="vec2" /> in the same coordinate space as UV. Great for interactive effects.
+          </p>
+          <p style={S.p}>Example: subtract Mouse from UV and feed into CircleSDF — the circle follows your cursor.</p>
+
+          <h3 style={S.subTitle}>Constant</h3>
+          <p style={S.p}>
+            Outputs a fixed value — <TypeBadge type="float" />, <TypeBadge type="vec2" />, or <TypeBadge type="vec3" /> depending on configuration. Use for colors, offsets, or any static parameter.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            {([
-              ['Starting positions', 'Grid (rigid), random (loose, clumpy), or circle packing (evenly spaced but relaxed). Each creates a different texture.'],
-              ['steps per curve', 'Short = fur, bristles, grass. Long = rivers, smoke, calligraphy. This single number changes the entire mood.'],
-              ['Angle distortion', 'How you fill the angle grid. Perlin = organic smooth. Curl = loops. Quantized/snapped = rocky crystalline.'],
-            ] as [string, string][]).map(([p, d]) => (
-              <div key={p} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '10px 12px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: T.blue, marginBottom: '5px' }}>{p}</div>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{d}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Field Modes ── */}
-          <h3 style={S.subTitle}>Field Modes — Three Distortion Approaches</h3>
+          <h3 style={S.subTitle}>Texture Input</h3>
           <p style={S.p}>
-            The <C>field_mode</C> param determines the mathematical distortion of the angle grid.
-            These map to three distinct visual personalities:
+            Loads an image as a <TypeBadge type="vec3" /> color field. Sample it with UV coordinates to use photographs, patterns, or any bitmap in your shader.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            {([
-              ['perlin (smooth)', 'FBM noise maps directly to angle. Classic Hobbs look — organic, continuous, never loops on itself. Curves flow gracefully in one direction then turn.'],
-              ['curl (loops)', 'Takes the gradient of the noise field and rotates it 90°. This creates a divergence-free (curl) field — curves loop and spiral. Great for vortex / fluid dynamics look.'],
-              ['quantized (rocky)', 'Angles are snapped to multiples of π/N. With N=2 you get a crosshatch; N=4 is diamond facets; N=10 is a sculpted stone surface. Hobbs calls these "non-continuous distortions."'],
-            ] as [string, string][]).map(([p, d]) => (
-              <div key={p} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '10px 12px' }}>
-                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '5px' }}>{p}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{d}</div>
-              </div>
-            ))}
-          </div>
-
-          <CodeBlock>{`// Smooth (perlin) — angle = fbm(pos) * 2π
-
-// Curl — rotate noise gradient 90°:
-float nx = fbm(pos + vec2(eps, 0.0));
-float ny = fbm(pos + vec2(0.0, eps));
-angle = atan((ny - n) / eps, -(nx - n) / eps);
-
-// Quantized — snap to multiples of quant:
-float quant = PI / quant_steps;   // e.g. π/10 = 18°
-angle = round(angle / quant) * quant;`}</CodeBlock>
-
-          <StepBuilder steps={[
-            {
-              title: 'Fur / grass texture (short curves)',
-              description: <>Set <C>steps=6</C>, <C>step_size=0.025</C>, <C>curves=100</C>. The result looks like
-                a dense fur or grass field. Tune <C>noise_scale</C> to change the swirl size. Add Time to animate it gently.</>,
-              nodes: [
-                { label: 'UV',        type: 'source',  outputs: ['uv: vec2']    },
-                { label: 'Time',      type: 'source',  outputs: ['time: float'] },
-                { label: 'Flow Field\nsteps=6', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3'] },
-                { label: 'Output',    type: 'output',  inputs: ['color: vec3']  },
-              ],
-            },
-            {
-              title: 'Long fluid strokes',
-              description: <>Increase to <C>steps=48</C>, <C>curves=40</C>. Now you see long curving brushstrokes.
-                These feel calligraphic or like ink in water. Lower <C>noise_scale</C> (0.5–1.0) for bigger sweeping arcs.</>,
-              nodes: [
-                { label: 'UV',        type: 'source',  outputs: ['uv: vec2']    },
-                { label: 'Time',      type: 'source',  outputs: ['time: float'] },
-                { label: 'Flow Field\nsteps=48', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3'] },
-                { label: 'Output',    type: 'output',  inputs: ['color: vec3']  },
-              ],
-            },
-            {
-              title: 'Curl mode: vortex spirals',
-              description: <>Switch <C>field_mode</C> to <C>curl</C>. Curves now loop and spiral back on
-                themselves because the field is divergence-free — no sources or sinks, only rotation.</>,
-              nodes: [
-                { label: 'UV',        type: 'source',  outputs: ['uv: vec2']    },
-                { label: 'Flow Field\ncurl mode', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3'] },
-                { label: 'Output',    type: 'output',  inputs: ['color: vec3']  },
-              ],
-            },
-            {
-              title: 'Quantized rocky forms',
-              description: <>Switch to <C>quantized</C>, set <C>quant_steps=4</C> for dramatic crystalline
-                angles. Increase <C>quant_steps</C> to 12–16 to soften back toward smooth but keep the
-                faceted, architectural quality.</>,
-              nodes: [
-                { label: 'UV',        type: 'source',  outputs: ['uv: vec2']    },
-                { label: 'Flow Field\nquantized', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3'] },
-                { label: 'Output',    type: 'output',  inputs: ['color: vec3']  },
-              ],
-            },
-            {
-              title: 'Use density output for custom coloring',
-              description: <>Wire <C>density</C> into a <strong>Palette Preset</strong> node instead of using
-                the built-in <C>color</C>. Now your palette controls the hue. Or multiply <C>density</C> by
-                a Voronoi pattern to get cellular texture on the curves.</>,
-              nodes: [
-                { label: 'Flow Field', type: 'effect', outputs: ['density: float'] },
-                { label: 'Palette\nPreset', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
-                { label: 'Output',     type: 'output', inputs: ['color: vec3']   },
-              ],
-            },
-          ]} />
-
-          <TryIt exampleKey="flowFieldDemo" label="Flow Field" onTry={tryExample} />
-
-          <Tip>
-            Hobbs' key insight: <strong>don't just use Perlin noise and call it a day.</strong> The most
-            interesting work comes from non-standard distortions — quantizing angles, using curl fields,
-            mixing multiple noise layers, or combining flow fields with other geometric constraints.
-          </Tip>
-
-          {/* ── Circle Packing ── */}
-          <h3 style={S.subTitle}>Circle Packing</h3>
+          <h3 style={S.subTitle}>Previous Frame</h3>
           <p style={S.p}>
-            Circle packing places circles as tightly as possible without overlapping. Hobbs' 2016 approach
-            is elegantly simple: for each circle, try a random location, check for collisions with all
-            previous circles, and only place it if there's room. Repeat with 2000 failures allowed before
-            giving up on a given size.
+            Samples the previous frame's output — enables feedback loops where the output feeds back into itself. Creates trails, blur, echo, and accumulation effects.
+          </p>
+          <Warn>Previous Frame requires enabling the Feedback toggle on the Output node. Without it, the node outputs black.</Warn>
+
+          <h3 style={S.subTitle}>Loop Index</h3>
+          <p style={S.p}>
+            Inside a loop body, outputs the current iteration number as a <TypeBadge type="float" /> (<C>0.0, 1.0, 2.0...</C>). Used to vary behavior per iteration.
           </p>
 
-          <CodeBlock>{`// Core collision check (two circles):
-distance(center_a, center_b) > radius_a + radius_b + padding
-//  → no collision, safe to place
-
-// Algorithm (per circle size, largest first):
-failures = 0
-while placed < target AND failures < 2000:
-    candidate = random_position()
-    if no_collision(candidate, radius, all_placed):
-        place(candidate, radius)
-        failures = 0
-    else:
-        failures++`}</CodeBlock>
-
+          <h3 style={S.subTitle}>Audio Input</h3>
           <p style={S.p}>
-            In shader GLSL we do this differently — we use deterministic hash-based placement so the same
-            circle always appears at the same position regardless of frame. Each circle's center and radius
-            come from a hash of its index number. The collision check loops over all earlier circles.
+            Analyzes microphone or audio input via FFT. Outputs multiple frequency bands as <TypeBadge type="float" /> values: <C>bass</C>, <C>mid</C>, <C>high</C>, <C>sub</C>, <C>presence</C>, <C>brilliance</C>, plus <C>volume</C> (overall level). Use these to drive any parameter for audio-reactive visuals.
           </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            {([
-              ['circle_mode: flat', 'Hard solid disc with 1px AA. Clean, geometric.'],
-              ['circle_mode: gradient', 'Radial falloff — dense at centre, irregular fringe at edge. Looks like probability clouds or ink drops.'],
-              ['circle_mode: ring', 'Hollow stroke — only the circumference is lit. Good for diagrams or bubble soap textures.'],
-              ['circle_mode: noise', 'FBM texture masked to the disc. Each circle has a turbulent interior.'],
-              ['padding', 'Gap between circle edges. 0 = touching, 0.02 = visible breathing room.'],
-              ['animate', 'Pulses each circle radius with time at a unique phase. Makes the packing breathe.'],
-            ] as [string, string][]).map(([p, d]) => (
-              <div key={p} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', padding: '8px 12px' }}>
-                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{p}</code>
-                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{d}</div>
-              </div>
-            ))}
-          </div>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV',          type: 'source',    outputs: ['uv: vec2']    },
-              { label: 'Time',        type: 'source',    outputs: ['time: float'] },
-              { label: 'Circle Pack', type: 'effect',    inputs: ['uv', 'time'],  outputs: ['color: vec3', 'mask: float', 'centers: vec2'] },
-              { label: 'Output',      type: 'output',    inputs: ['color: vec3']  },
-            ]}
-            caption="CirclePack outputs color (filled circles), mask (coverage float), and centers (nearest circle center as vec2 — useful for compositing)."
-          />
-
-          <StepBuilder steps={[
-            {
-              title: 'Basic circle packing',
-              description: 'Add UV + Time → Circle Pack → Output. Default is gradient mode with 80 circles. Adjust min_radius and max_radius to control the size distribution.',
-              nodes: [
-                { label: 'UV',          type: 'source',  outputs: ['uv: vec2']    },
-                { label: 'Time',        type: 'source',  outputs: ['time: float'] },
-                { label: 'Circle Pack', type: 'effect',  inputs: ['uv', 'time'],  outputs: ['color: vec3'] },
-                { label: 'Output',      type: 'output',  inputs: ['color: vec3']  },
-              ],
-            },
-            {
-              title: 'Ring mode for a bubble/cell look',
-              description: <>Switch <C>circle_mode</C> to <C>ring</C>. Lower <C>circles</C> to 40 and increase <C>max_radius</C> to 0.25
-                for large soap bubbles. The padding controls how tightly they pack.</>,
-              nodes: [
-                { label: 'Circle Pack\nring mode', type: 'effect', outputs: ['color: vec3'] },
-                { label: 'Output', type: 'output' },
-              ],
-            },
-            {
-              title: 'Animate the packing',
-              description: <>Set <C>animate</C> to 0.5 — each circle pulses at a slightly different phase,
-                making the whole field breathe. Pairs well with gradient mode for a living cell look.</>,
-              nodes: [
-                { label: 'Time',        type: 'source',  outputs: ['time: float'] },
-                { label: 'Circle Pack\nanimate=0.5', type: 'effect', inputs: ['uv', 'time'], outputs: ['color: vec3'] },
-                { label: 'Output',      type: 'output'  },
-              ],
-            },
-            {
-              title: 'Use mask to cut other effects into circles',
-              description: <>Wire <C>mask</C> into a <strong>Mix</strong> node to blend between two effects —
-                one inside circles, one outside. For example: FBM pattern inside circles, black outside.</>,
-              nodes: [
-                { label: 'Circle Pack', type: 'effect',    outputs: ['mask: float']   },
-                { label: 'FBM',         type: 'effect',    outputs: ['value: float']  },
-                { label: 'Mix',         type: 'transform', inputs: ['a', 'b', 't'],   outputs: ['result: float'] },
-                { label: 'Palette',     type: 'color',     outputs: ['color: vec3']   },
-                { label: 'Output',      type: 'output'                                },
-              ],
-            },
-          ]} />
-
-          <TryIt exampleKey="circlePackDemo" label="Circle Pack" onTry={tryExample} />
-
-          {/* ── Combining Flow Fields + Circle Pack ── */}
-          <h3 style={S.subTitle}>Combining Flow Fields & Circle Packing</h3>
-          <p style={S.p}>
-            Hobbs uses circle packing to choose <em>starting positions</em> for his flow field curves.
-            In Shader Studio the two nodes compose naturally — wire <C>density</C> from one into a
-            <strong> Mix</strong> with the other, or use Circle Pack's <C>mask</C> to confine the flow:
-          </p>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'UV',          type: 'source',    outputs: ['uv: vec2']        },
-              { label: 'Time',        type: 'source',    outputs: ['time: float']     },
-              { label: 'Circle Pack', type: 'effect',    outputs: ['mask: float']     },
-              { label: 'Flow Field',  type: 'effect',    outputs: ['color: vec3', 'density: float'] },
-              { label: 'Multiply\n(mask × density)', type: 'transform', outputs: ['result: float'] },
-              { label: 'Palette',     type: 'color',     outputs: ['color: vec3']     },
-              { label: 'Output',      type: 'output'                                   },
-            ]}
-            caption="Multiplying Flow Field density by Circle Pack mask confines the curves to live inside the circles — each circle becomes a swirling micro-field."
-          />
-
-          <p style={S.p}>Other composition ideas from the Hobbs essays:</p>
-          <ul style={S.ul}>
-            <li style={S.li}>
-              <strong style={{ color: T.textBold }}>Domain warp before flow field</strong> — feed UV through
-              a <strong>Domain Warp</strong> node first. The warp pre-distorts the coordinate space so the
-              flow field curves through an already-turbulent landscape.
-            </li>
-            <li style={S.li}>
-              <strong style={{ color: T.textBold }}>Voronoi as angle field</strong> — wire a <strong>Voronoi</strong>{' '}
-              node's distance output through an <strong>Expr</strong> (<C>v * 6.28318</C>) and into a
-              custom <strong>Flow Field</strong>. Cells create their own local current directions.
-            </li>
-            <li style={S.li}>
-              <strong style={{ color: T.textBold }}>Orbital density as flow mask</strong> — multiply the
-              Flow Field <C>density</C> by an Electron Orbital <C>density</C>. Curves only appear where the
-              quantum probability is high — the atom itself becomes the flow field boundary.
-            </li>
-            <li style={S.li}>
-              <strong style={{ color: T.textBold }}>Chladni as collision boundary</strong> — use the
-              Chladni <C>field</C> output (positive inside, negative outside nodal lines) to mask flow
-              curves. Curves travel along the resonance pattern but never cross the nodal boundaries.
-            </li>
-            <li style={S.li}>
-              <strong style={{ color: T.textBold }}>Circle Pack noise fill + flow overlay</strong> — use
-              circle mode <C>noise</C> for the background, then blend Flow Field <C>color</C> on top with
-              low opacity. The circles form islands; the flow field connects them.
-            </li>
-          </ul>
-
-          <Tip>
-            The <strong>density</strong> output from Flow Field and the <strong>mask</strong> output from
-            Circle Pack are both plain <TypeBadge type="float" /> values — they compose with any math node.
-            Think of them as painterly alpha channels: multiply, mix, add, threshold however you want.
-          </Tip>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 7 — WIRED LOOP SYSTEM
+            SECTION 6 — TRANSFORMS & SPACES
         ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec7Ref as React.RefObject<HTMLDivElement>}>
-          <h2 style={S.sectionTitle}>7 · Wired Loops</h2>
+        <div ref={sec6Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Transforms & Spaces</h2>
           <div style={S.divider} />
 
+          <h3 style={S.subTitle}>Why Domain Transformation?</h3>
           <p style={S.p}>
-            The <strong style={{ color: T.textBold }}>Loop Start / Loop End</strong> pair lets you run any chain of nodes
-            multiple times. Unlike the compound loop nodes, you can see and control every step — each body node is a real
-            node in the graph, with editable params and animatable inputs.
+            There are two ways to move a shape. Option A: change the shape's position parameter. Option B: subtract an offset from the UV before passing it to the shape. In shaders, Option B — <strong style={{ color: T.textBold }}>domain transformation</strong> — is the native approach. Instead of moving shapes through space, you warp space itself.
           </p>
 
-          {/* ── The Carry ── */}
-          <h3 style={S.subTitle}>The Carry: a Value That Travels Through Time</h3>
+          <h3 style={S.subTitle}>Transform Nodes</h3>
+          <p style={S.p}><strong style={{ color: T.textBold }}>Fract</strong> — tiles space by repeating the 0→1 range:</p>
+          <pre style={S.code}>{`Input:   0.0  0.5  1.0  1.5  2.0  2.5  3.0
+Output:  0.0  0.5  0.0  0.5  0.0  0.5  0.0
+         └──tile──┘└──tile──┘└──tile──┘`}</pre>
+
+          <p style={S.p}><strong style={{ color: T.textBold }}>Rotate2D</strong> — rotates UV around the origin:</p>
+          <CodeBlock>{`vec2 rotated = mat2(cos(a), -sin(a), sin(a), cos(a)) * uv;`}</CodeBlock>
+
+          <p style={S.p}><strong style={{ color: T.textBold }}>UVWarp</strong> — displaces UV by a noise-derived offset. Connect a noise source to the warp input:</p>
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+              { label: 'FBM', type: 'effect', inputs: ['uv'], outputs: ['value: float'] },
+              { label: 'UVWarp', type: 'transform', inputs: ['uv', 'warp'], outputs: ['warped: vec2'] },
+              { label: 'CircleSDF', type: 'effect', inputs: ['uv'], outputs: ['dist'] },
+            ]}
+            caption="FBM noise warps the UV before the SDF sees it — the circle becomes organic."
+          />
+
+          <p style={S.p}><strong style={{ color: T.textBold }}>CurlWarp</strong> — divergence-free warp that creates smoke and liquid-like distortion. Unlike UVWarp, curl warps never compress or expand space — they only rotate it.</p>
+
+          <p style={S.p}><strong style={{ color: T.textBold }}>SwirlWarp</strong> — twists UV around the origin with distance-dependent rotation.</p>
+          <p style={S.p}><strong style={{ color: T.textBold }}>Displace</strong> — shifts UV along a direction by a float amount.</p>
+
+          <h3 style={S.subTitle}>Space Nodes</h3>
+          <p style={S.p}>Space nodes remap the entire coordinate system into a different geometry:</p>
+          <ul style={S.ul}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Polar Space</strong> — Cartesian to polar (<C>r, theta</C>). The twist parameter rotates the angle offset. Useful for radial patterns and spirals.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>LogPolar</strong> — logarithmic polar coordinates. Creates Escher-like infinite zoom effects where the center repeats infinitely.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Hyperbolic Space</strong> — Poincare disc model. Points near the edge get compressed, simulating hyperbolic geometry.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Inversion Space</strong> — circle inversion (<C>p/|p|^2</C>). Inside maps to outside and vice versa.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Mobius Space</strong> — Mobius transformation. Conformal mapping that preserves angles but warps distances.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Swirl Space</strong> — distance-dependent rotation of the entire coordinate plane.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Kaleido Space</strong> — N-sided kaleidoscope. Folds the plane into N symmetric wedges. Set sides to 6 for a mandala.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Spherical Space</strong> — projects UV onto a sphere surface.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Ripple Space</strong> — concentric wave distortion radiating from center.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Infinite Repeat Space</strong> — tiles the plane infinitely with configurable cell size.</li>
+          </ul>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 7 — GROUPS
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec7Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Groups</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>Creating a Group</h3>
           <p style={S.p}>
-            Every loop needs a running value — something each iteration reads, transforms, and passes to the next. This is
-            called the <strong style={{ color: T.textBold }}>carry</strong>. It starts at your initial value, flows through
-            all body nodes once per iteration, and whatever comes out the end becomes the input for the next pass.
+            Select one or more nodes and press <C>Cmd+G</C>. The system auto-detects inputs and outputs from wires that cross the group boundary. Everything inside collapses into a single group node.
           </p>
 
-          {/* Carry type table */}
-          <DataTable rows={[
-            ['vec2', 'A 2D coordinate — transform UV space each iteration', 'ripple, fold, rotate'],
-            ['vec3', 'Accumulated color — add color each iteration', 'fractal rings, glow layers'],
-            ['float', 'Accumulated scalar — oscillate a number each iteration', 'float accumulate'],
-            ['vec4', 'Color + alpha, or any 4D state', 'advanced custom loops'],
-          ]} />
-
+          <h3 style={S.subTitle}>How Groups Work</h3>
           <p style={S.p}>
-            Set the carry type on <strong style={{ color: T.textBold }}>Loop Start</strong> using the{' '}
-            <em>Carry Type</em> dropdown. The type flows through all body nodes for that iteration count.
+            Groups are compiled inline — no function call overhead, just inlined GLSL. Double-click a group to enter it and edit the internal nodes. Groups let you clean up, reuse, and iterate on sub-graphs.
           </p>
 
-          {/* Visual diagram of the loop structure */}
+          <h3 style={S.subTitle}>Group Inputs and Outputs</h3>
+          <pre style={S.code}>{`Before grouping:
+  UV → [Rotate2D] → [FBM] → Palette
+
+After Cmd+G on Rotate2D + FBM:
+  UV → ┌─────────────────┐ → Palette
+       │  Group           │
+       │  ↳ Rotate2D      │
+       │  ↳ FBM           │
+       └─────────────────┘
+       in: vec2    out: float`}</pre>
+
+          <h3 style={S.subTitle}>The Iterations Parameter</h3>
+          <p style={S.p}>
+            Every group has an Iterations parameter (default 1). Set it to N and the group body runs N times, with each pass feeding into the next. This turns any sub-graph into a loop.
+          </p>
+          <p style={S.p}>
+            Example: a UV Fold Loop. Inside the group: <C>Multiply(1.5) → Fract → Subtract(0.5)</C>. With 6 iterations, each pass scales, tiles, and re-centers — creating a fractal pattern.
+          </p>
+          <CodeBlock>{`// What each iteration does:
+uv = fract(uv * 1.5) - 0.5;
+// Iteration 1: tiles 1.5x, re-centers
+// Iteration 2: tiles again on the tiled result
+// ...
+// Iteration 6: deep fractal structure`}</CodeBlock>
+
+          <h3 style={S.subTitle}>Nesting Groups</h3>
+          <p style={S.p}>
+            Groups can contain other groups. This lets you build hierarchical compositions — a fractal group inside a color-processing group, for example.
+          </p>
+
+          <h3 style={S.subTitle}>Loop Carry (Stateful Groups)</h3>
+          <p style={S.p}>
+            For stateful iteration, groups support the Init/Next/Value pattern. The <strong style={{ color: T.textBold }}>Init</strong> value feeds the first iteration, each iteration transforms it via <strong style={{ color: T.textBold }}>Next</strong>, and the final <strong style={{ color: T.textBold }}>Value</strong> is the group output. Example: accumulating brightness across iterations by adding a glow contribution each pass.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 8 — THE WIRED LOOP SYSTEM
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec8Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>The Wired Loop System</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>LoopStart / LoopEnd</h3>
+          <p style={S.p}>
+            The <strong style={{ color: T.textBold }}>Loop Start / Loop End</strong> pair lets you run any chain of nodes multiple times. Wire body nodes between them, set the iteration count on Loop Start, and choose a carry type (<C>vec2</C>, <C>vec3</C>, <C>float</C>, or <C>vec4</C>). The carry value flows through the body once per iteration.
+          </p>
+
           <div style={{
             background: T.surface2,
             border: `1px solid ${T.border}`,
@@ -1889,146 +1141,574 @@ while placed < target AND failures < 2000:
             </div>
           </div>
 
-          {/* ── Pattern 1: UV Transformation ── */}
-          <h3 style={S.subTitle}>Pattern 1 · UV Transformation (vec2 carry)</h3>
+          <h3 style={S.subTitle}>Wrap in Loop</h3>
           <p style={S.p}>
-            Use a <TypeBadge type="vec2" /> carry when you want to <strong style={{ color: T.textBold }}>warp or fold UV
-            coordinates</strong> across multiple passes. Each iteration transforms the position further. After the loop,
-            the result is a heavily distorted coordinate — feed it into a palette or SDF for the final color.
+            Select any chain of nodes and press <C>Cmd+L</C>. This auto-inserts LoopStart before and LoopEnd after the selection, wiring everything up. The carry type is inferred from the first node's input.
           </p>
 
-          <NodeDiagram
-            nodes={[
-              { label: 'UV', type: 'source', outputs: ['vec2'] },
-              { label: 'Loop Start', type: 'transform', inputs: ['carry: vec2'], outputs: ['carry →', 'iter index'] },
-              { label: 'Ripple Step', type: 'effect', inputs: ['uv (carry)'], outputs: ['uv out'] },
-              { label: 'Loop End', type: 'transform', inputs: ['carry in'], outputs: ['result: vec2'] },
-              { label: 'Length', type: 'effect', outputs: ['float'] },
-              { label: 'Palette', type: 'color', outputs: ['vec3'] },
-              { label: 'Output', type: 'output' },
-            ]}
-            caption="vec2 carry: UV is warped 6× — the folded coordinate drives the final color"
-          />
-
-          <TryIt exampleKey="loopRippleWarp" label="Loop: Ripple Warp" onTry={tryExample} />
-          <TryIt exampleKey="loopRotateSpiral" label="Loop: Rotate Spiral" onTry={tryExample} />
-          <TryIt exampleKey="loopChainedBody" label="Loop: Chained Body (fold + ripple per pass)" onTry={tryExample} />
-
-          <Tip>
-            You can chain multiple body nodes inside one loop. Connect{' '}
-            <C>Loop Start → Domain Fold → Ripple Step → Loop End</C> and both transformations run every iteration.
-            The output of each body feeds directly into the next.
-          </Tip>
-
-          {/* ── Pattern 2: Color Accumulation ── */}
-          <h3 style={S.subTitle}>Pattern 2 · Color Accumulation (vec3 carry)</h3>
-          <p style={S.p}>
-            Use a <TypeBadge type="vec3" /> carry when you want to <strong style={{ color: T.textBold }}>build up color
-            across iterations</strong>. Each pass adds something to the running color total. Leave{' '}
-            <em>Initial value</em> on Loop Start unwired — it starts at black (<C>vec3(0.0)</C>) and fills up
-            iteration by iteration.
-          </p>
-          <p style={S.p}>
-            This is how <strong style={{ color: T.textBold }}>Color Ring Step</strong> works: each iteration folds UV
-            at a different scale (using <C>iter_index</C>), computes a ring glow, and adds a palette color to the
-            carry. After 8 passes you have 8 layered ring contributions — that's the fractal rings effect.
-          </p>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'Loop Start', type: 'transform', inputs: ['no input → vec3(0)'], outputs: ['carry: vec3', 'iter index'] },
-              { label: 'Color Ring Step', type: 'effect', inputs: ['color (carry)', 'UV Scale', 'Glow…'], outputs: ['color out'] },
-              { label: 'Loop End', type: 'transform', inputs: ['carry in'], outputs: ['result: vec3'] },
-              { label: 'Output', type: 'output' },
-            ]}
-            caption="vec3 carry: starts at black, each of 8 iterations adds one ring layer of color"
-          />
-
-          <TryIt exampleKey="fractalRingsNewWired" label="Fractal Rings (New Loop)" onTry={tryExample} />
-
-          <Tip>
-            The key difference from UV loops: the carry is <em>color</em>, not position. The loop doesn't move through
-            space — it paints into an accumulator. Think of it as stamping 8 ring patterns on top of each other, each
-            one a slightly different color and fold scale.
-          </Tip>
-
-          {/* ── iter_index ── */}
-          <h3 style={S.subTitle}>iter_index: The Iteration Counter</h3>
-          <p style={S.p}>
-            <strong style={{ color: T.textBold }}>Loop Start</strong> has an <C>Iter Index</C> output — a{' '}
-            <TypeBadge type="float" /> that counts <C>0.0, 1.0, 2.0…</C> as the loop runs. Body nodes receive
-            this automatically as <C>iter_index</C> in their internal GLSL — no wiring needed inside the loop.
-          </p>
-          <p style={S.p}>
-            <strong style={{ color: T.textBold }}>Color Ring Step</strong> uses it to:
-          </p>
-          <ul style={{ ...S.p, paddingLeft: '20px', marginTop: '-8px' }}>
-            <li style={{ marginBottom: '4px' }}>
-              Scale UV differently each pass: <C>fract(uv × (iter + 1) × scale)</C> — iteration 0 folds once, iteration 7 folds 8×
-            </li>
-            <li style={{ marginBottom: '4px' }}>
-              Shift palette hue each pass: <C>palette(d + iter × phaseStep + time × timeScale)</C> — each ring layer is a different color
-            </li>
-          </ul>
-          <p style={S.p}>
-            You can also wire <C>Iter Index</C> to any <TypeBadge type="float" /> param socket on a body node to
-            create explicit per-iteration variation — for example, ramping up <em>Strength</em> on a Ripple Step
-            as the loop progresses.
-          </p>
-
-          {/* ── Animating params ── */}
-          <h3 style={S.subTitle}>Animating Parameters</h3>
-          <p style={S.p}>
-            Every numeric param on loop body nodes (scale, frequency, glow, strength, etc.) has a matching{' '}
-            <TypeBadge type="float" /> input socket. When connected, the socket <strong style={{ color: T.textBold }}>overrides
-            the slider</strong> for that value — the slider shows a "wired ↑" indicator and becomes inactive.
-            Disconnect the wire and the slider takes over again.
-          </p>
-
-          <NodeDiagram
-            nodes={[
-              { label: 'Sine LFO', type: 'source', outputs: ['float'] },
-              { label: 'Ripple Step', type: 'effect', inputs: ['uv (carry)', 'scale ← LFO'], outputs: ['uv out'] },
-            ]}
-            caption="Sine LFO → scale socket: scale oscillates smoothly, slider is inactive"
-          />
-
-          <Tip>
-            Good params to animate: <C>scale</C> for morphing geometry, <C>phaseStep</C> for color cycling, <C>timeScale</C>
-            for speed control. The <C>glow</C> param on Color Ring Step is very sensitive — values between{' '}
-            <C>0.001</C> and <C>0.005</C> look best.
-          </Tip>
-
-          {/* ── Quick reference ── */}
-          <h3 style={S.subTitle}>Quick Reference</h3>
+          <h3 style={S.subTitle}>Loop Step Nodes</h3>
           <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
             <thead>
               <tr>
-                {['You want to…', 'Use', 'Carry type'].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>{h}</th>
-                ))}
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Node</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Shape</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Use</th>
               </tr>
             </thead>
             <tbody>
-              {[
-                ['Warp UV with ripples', 'Ripple Step', 'vec2'],
-                ['Rotate / spiral UV', 'Rotate Step', 'vec2'],
-                ['Fold fractal space', 'Domain Fold', 'vec2'],
-                ['Stack two transforms per pass', 'Domain Fold → Ripple Step', 'vec2'],
-                ['Build layered ring colors', 'Color Ring Step', 'vec3'],
-                ['Oscillate a scalar', 'Float Accumulate', 'float'],
-              ].map(([want, use, type], i) => (
+              {([
+                ['LoopRippleStep', 'Radial displacement', 'Concentric waves'],
+                ['LoopRotateStep', 'Rotates UV', 'Rotating ring patterns'],
+                ['LoopDomainFold', 'abs fold', 'Kleinian fractals'],
+                ['LoopFloatAccumulate', 'Sums float', 'Layered contributions'],
+                ['LoopRingStep', 'Ring formation', 'N copies of SDF'],
+                ['LoopColorRingStep', 'Ring of colored glows', 'Fractal ring colors'],
+              ] as [string, string, string][]).map(([node, shape, use], i) => (
                 <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
-                  <td style={{ padding: '6px 10px', color: T.text }}>{want}</td>
-                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{use}</td>
-                  <td style={{ padding: '6px 10px' }}><TypeBadge type={type} /></td>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{node}</td>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{shape}</td>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{use}</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <TryIt exampleKey="loopFloatDemo" label="Loop: Float Accumulate" onTry={tryExample} />
+          <h3 style={S.subTitle}>Example: Building a Spiral</h3>
+          <CodeBlock>{`UV → LoopStart(vec2, iter=8)
+  → LoopRotateStep(angle: 0.4)
+  → LoopRippleStep(strength: 0.1)
+→ LoopEnd
+→ CircleSDF → MakeLight → Output
 
+// Each iteration rotates UV slightly and adds a radial ripple.
+// After 8 passes, the UV is heavily spiraled — the CircleSDF
+// renders as a mandala of concentric, rotated rings.`}</CodeBlock>
+
+          <TryIt exampleKey="loopRippleWarp" label="Loop Spiral" onTry={tryExample} />
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 9 — NOISE
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec9Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Noise</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>FBM — Fractal Brownian Motion</h3>
+          <p style={S.p}>
+            FBM stacks multiple octaves of smooth noise at increasing frequencies. Each octave adds finer detail. The result is organic, cloud-like texture.
+          </p>
+          <CodeBlock>{`// FBM pseudocode:
+float fbm(vec2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+    for (int i = 0; i < octaves; i++) {
+        value += amplitude * noise(p * frequency);
+        frequency *= lacunarity;  // typically 2.0
+        amplitude *= gain;        // typically 0.5
+    }
+    return value;
+}`}</CodeBlock>
+          <p style={S.p}>Parameters: <C>octaves</C> (detail layers, 4-6 typical), <C>scale</C> (base zoom), <C>lacunarity</C> (frequency multiplier per octave, 2.0 = each is 2x finer), <C>gain</C> (amplitude falloff, 0.5 = each is half as loud), <C>anim speed</C> (time-based animation rate).</p>
+
+          <h3 style={S.subTitle}>Voronoi (Worley / Cell Noise)</h3>
+          <pre style={S.code}>{`  ┌─────┬─────┬─────┐
+  │  *  │     │ *   │
+  │     │  *  │     │
+  ├─────┼─────┼─────┤
+  │     │     │     │
+  │ *   │     │  *  │
+  ├─────┼─────┼─────┤
+  │     │  *  │     │
+  │  *  │     │ *   │
+  └─────┴─────┴─────┘
+  * = cell center (seed point)
+  Pixel color = distance to nearest *`}</pre>
+          <p style={S.p}>
+            Voronoi divides space into cells, each centered on a random point. The <C>jitter</C> parameter controls randomness: 0 = regular grid, 1 = fully random placement. Use cases: organic cells, cracked earth, stained glass, biological tissue.
+          </p>
+
+          <h3 style={S.subTitle}>Domain Warp</h3>
+          <p style={S.p}>
+            Feed noise output back as input to create turbulent patterns. The standard recipe is three passes:
+          </p>
+          <CodeBlock>{`p1 = p + FBM(p)           // first warp
+p2 = p1 + FBM(p1)        // second warp
+result = FBM(p2)          // final sample`}</CodeBlock>
+          <p style={S.p}>Use cases: clouds, smoke, marble, organic textures that look nothing like raw noise.</p>
+
+          <h3 style={S.subTitle}>Flow Field</h3>
+          <p style={S.p}>
+            Advects curves along a vector field derived from noise. Each curve follows the field direction, producing long streaming streaks. Parameters control curve count, step count (short = fur, long = rivers), and field mode.
+          </p>
+
+          <h3 style={S.subTitle}>Circle Pack</h3>
+          <p style={S.p}>
+            Pseudo-random circle packing — places non-overlapping circles with controllable size distribution. Use cases: bubbles, stippling, cellular patterns, polka dots.
+          </p>
+
+          <h3 style={S.subTitle}>Noise Float</h3>
+          <p style={S.p}>
+            Single-octave cheap noise. Faster than FBM when you just need simple randomness without multi-octave detail.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 10 — COLOR
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec10Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Color</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>Palette</h3>
+          <p style={S.p}>
+            The IQ cosine palette maps any float to a smooth color using four vec3 parameters:
+          </p>
+          <CodeBlock>{`vec3 palette(float t) {
+    return a + b * cos(6.28318 * (c * t + d));
+}
+// a = offset, b = amplitude, c = frequency, d = phase`}</CodeBlock>
+          <Tip>Start with <C>a = b = vec3(0.5)</C> — this gives a full-range color cycle. Then adjust <C>c</C> and <C>d</C> to control which colors appear and where.</Tip>
+
+          <h3 style={S.subTitle}>Palette Preset</h3>
+          <p style={S.p}>
+            Dropdown with 8 pre-configured palettes. Quick way to get good colors without tuning the four cosine parameters manually.
+          </p>
+
+          <h3 style={S.subTitle}>Gradient</h3>
+          <p style={S.p}>
+            Linear interpolation between two colors. Input <C>t</C> controls the blend: 0 = color A, 1 = color B.
+          </p>
+
+          <h3 style={S.subTitle}>HSV</h3>
+          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Component</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Range</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['Hue', '0 → 1', 'Position on color wheel (0=red, 0.33=green, 0.66=blue)'],
+                ['Saturation', '0 → 1', 'Gray → full color'],
+                ['Value', '0 → 1', 'Black → full brightness'],
+              ] as [string, string, string][]).map(([comp, range, meaning], i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{comp}</td>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{range}</td>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{meaning}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={S.p}>Wire <C>Time → Hue</C> for a continuously cycling color wheel effect.</p>
+
+          <h3 style={S.subTitle}>Posterize</h3>
+          <p style={S.p}>
+            Quantizes color to N discrete steps, creating a cel-shaded / flat-color aesthetic. Lower N = more cartoon-like.
+          </p>
+
+          <h3 style={S.subTitle}>Invert</h3>
+          <p style={S.p}>
+            Computes <C>1.0 - color</C> for each channel. Swaps darks and lights.
+          </p>
+
+          <h3 style={S.subTitle}>Desaturate</h3>
+          <p style={S.p}>
+            Converts to grayscale using the luminance formula: <C>0.299*r + 0.587*g + 0.114*b</C>. The mix parameter blends between full color and grayscale.
+          </p>
+
+          <h3 style={S.subTitle}>Hue Range</h3>
+          <p style={S.p}>
+            Selective recoloring — shifts hues within a specified range while leaving other colors untouched. Useful for targeted color grading.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 11 — MATH NODES
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec11Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Math Nodes</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>Arithmetic</h3>
+          <p style={S.p}>
+            <C>Add</C>, <C>Subtract</C>, <C>Multiply</C>, <C>Divide</C>, <C>Negate</C>, <C>Abs</C> — all work componentwise on any type. Multiply a color by a float to dim/brighten it. Add to a UV to translate a shape.
+          </p>
+
+          <h3 style={S.subTitle}>Trigonometry</h3>
+          <p style={S.p}>
+            <C>Sin</C> / <C>Cos</C> — period is 2pi. Connect Time to get smooth oscillation between -1 and 1. <C>Atan2</C> — returns the angle of a vec2, useful for polar conversions.
+          </p>
+
+          <h3 style={S.subTitle}>Exponents & Powers</h3>
+          <p style={S.p}>
+            <C>Pow</C> — raises to a power (use for gamma correction or shaping falloff curves). <C>Sqrt</C> — square root. <C>Exp</C> — natural exponential.
+          </p>
+
+          <h3 style={S.subTitle}>Range / Interpolation</h3>
+          <ul style={S.ul}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Mix</strong> — linear interpolation: <C>mix(a, b, t)</C>. t=0 returns a, t=1 returns b. The workhorse of blending.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Smoothstep</strong> — S-curve ramp: <C>smoothstep(edge0, edge1, x)</C>. Returns a smooth 0→1 transition. Essential for anti-aliased SDF edges.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Remap</strong> — remaps a value from one range to another.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Clamp</strong> — restricts a value to a min/max range.</li>
+          </ul>
+
+          <h3 style={S.subTitle}>Min / Max</h3>
+          <p style={S.p}>
+            <C>Min</C> / <C>Max</C> — component-wise minimum/maximum (note: different from SDF union/intersection which use these on distance values). Also: <C>Floor</C>, <C>Ceil</C>, <C>Round</C>, <C>Fract Raw</C> (fractional part), <C>Mod</C> (modulo).
+          </p>
+
+          <h3 style={S.subTitle}>Vectors</h3>
+          <p style={S.p}>
+            <C>Length</C> — magnitude of a vector. <C>Dot</C> — dot product. <C>Normalize</C> — unit vector. <C>MakeVec2</C> — combine two floats. <C>ExtractX</C> / <C>ExtractY</C> — split a vec2. <C>MakeVec3</C> / <C>FloatToVec3</C> — build vec3. <C>AddVec2</C> / <C>MultiplyVec2</C>, <C>AddVec3</C> / <C>MultiplyVec3</C> — typed vector arithmetic. <C>Tanh</C> — hyperbolic tangent (smooth clamping).
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 12 — ANIMATION
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec12Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Animation</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>LFO Nodes</h3>
+          <p style={S.p}>
+            Low-Frequency Oscillators generate repeating waveforms. All share the same parameters: Frequency, Amplitude, and Offset.
+          </p>
+          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Node</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Shape</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Range</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['SineLFO', 'Smooth sine wave', '-1 to 1', 'Organic motion, breathing'],
+                ['SquareLFO', 'On/off toggle', '-1 or 1', 'Blinking, strobing'],
+                ['SawtoothLFO', 'Linear ramp up', '-1 to 1', 'Scrolling, phase drives'],
+                ['TriangleLFO', 'Linear up-down', '-1 to 1', 'Ping-pong motion'],
+              ] as [string, string, string, string][]).map(([node, shape, range, use], i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{node}</td>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{shape}</td>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.text, fontSize: '11px' }}>{range}</td>
+                  <td style={{ padding: '6px 10px', color: T.text }}>{use}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={S.p}>
+            Example: breathing circle — <C>SineLFO → Remap(-1, 1 to 0.1, 0.4) → CircleSDF.radius</C>. The radius oscillates smoothly between 0.1 and 0.4.
+          </p>
+
+          <h3 style={S.subTitle}>BPM Sync</h3>
+          <p style={S.p}>
+            Locks animation to a musical tempo. Outputs a beat phase from 0→1 that resets each beat. Use beat divisions to sync to different note values: multiply by 1 for quarter notes, 0.5 for half notes, 4 for sixteenth notes.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 13 — EFFECTS
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec13Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Effects</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>Grain</h3>
+          <p style={S.p}>
+            Three variants: <C>Grain</C> (static noise overlay), <C>LumaGrain</C> (noise scaled by luminance — more grain in darks), <C>TemporalGrain</C> (animated noise that changes every frame). All have an intensity parameter.
+          </p>
+
+          <h3 style={S.subTitle}>Tone Map</h3>
+          <p style={S.p}>
+            HDR compression using a Reinhard-style curve. Maps bright values into displayable range without clipping. Essential when combining multiple glow sources.
+          </p>
+
+          <h3 style={S.subTitle}>Chromatic Aberration</h3>
+          <p style={S.p}>
+            Splits UV into three offset copies — one per RGB channel. Creates rainbow fringing at edges, like light through a cheap lens. Parameters: strength (offset amount) and direction.
+          </p>
+
+          <h3 style={S.subTitle}>Gravitational Lens</h3>
+          <p style={S.p}>
+            Bends UV using an inverse-square-law displacement field. Pixels are attracted toward the lens center. Outputs <C>uv_lensed</C> (displaced coordinates) — wire this into any node's UV input to bend its output.
+          </p>
+
+          <h3 style={S.subTitle}>Float Warp</h3>
+          <p style={S.p}>
+            Directional UV displacement by a float value. Shifts pixels along a specified direction, controlled by a float input. Simpler than UVWarp when you only need one-axis displacement.
+          </p>
+
+          <h3 style={S.subTitle}>Expr Node</h3>
+          <p style={S.p}>
+            Inline GLSL expression with inputs <C>a</C>, <C>b</C>, <C>c</C>. Write any single-line GLSL expression using these inputs.
+          </p>
+          <CodeBlock>{`sin(a * 3.14159) * b + cos(c)`}</CodeBlock>
+
+          <h3 style={S.subTitle}>Custom Function Node</h3>
+          <p style={S.p}>
+            Full GLSL function — declare inputs by name, specify the output type, and write a complete function body. For when Expr is too limited and you need multiple statements, local variables, or loops.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 14 — FRACTALS & PHYSICS
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec14Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Fractals & Physics</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>Mandelbrot / Julia</h3>
+          <p style={S.p}>
+            The Mandelbrot node visualizes the iteration formula <C>{'z → z^k + c'}</C>, computing an escape count per pixel. Four modes: <strong style={{ color: T.textBold }}>Mandelbrot</strong> (c = UV, z starts at 0), <strong style={{ color: T.textBold }}>Julia</strong> (c = fixed param, z = UV), <strong style={{ color: T.textBold }}>Burning Ship</strong> (abs applied to real/imag), <strong style={{ color: T.textBold }}>Tricorn</strong> (conjugate of z).
+          </p>
+          <p style={S.p}>Outputs:</p>
+          <ul style={S.ul}>
+            <li style={S.li}><C>Color</C> — pre-colored fractal using smooth iteration count</li>
+            <li style={S.li}><C>Smooth Iter</C> — continuous iteration count for custom coloring</li>
+            <li style={S.li}><C>Distance SDF</C> — estimated distance to the fractal boundary</li>
+            <li style={S.li}><C>Orbit Trap</C> — minimum distance to a trap shape during iteration</li>
+          </ul>
+          <p style={S.p}>
+            Key params: <C>Power k</C> (exponent, 2 = classic, try 3-8 for multibrot), <C>Max Iterations</C> (detail level), <C>Zoom</C> (magnification).
+          </p>
+          <Tip>Wire <C>Mouse → c(Julia)</C> for interactive morphing — move your cursor to explore different Julia set shapes in real time.</Tip>
+
+          <TryIt exampleKey="mandelbrotExplorer" label="Mandelbrot Explorer" onTry={tryExample} />
+
+          <h3 style={S.subTitle}>IFS (Iterated Function Systems)</h3>
+          <p style={S.p}>
+            An IFS fractal is defined by a small set of affine transforms. The chaos game algorithm reveals the attractor: start a point at the origin, randomly pick a transform, apply it, and repeat. Where the point visits most frequently defines the fractal shape.
+          </p>
+          <p style={S.p}>
+            Classic examples: Sierpinski triangle (3 contractions), Barnsley fern (4 transforms simulating leaf structure).
+          </p>
+
+          <h3 style={S.subTitle}>Chladni Patterns</h3>
+          <p style={S.p}>
+            Vibrational modes of a 2D plate. The formula uses integer mode numbers <C>m</C> and <C>n</C>:
+          </p>
+          <CodeBlock>{`// Chladni formula (m and n pick the mode):
+cos(n*PI*x) * cos(m*PI*y) - cos(m*PI*x) * cos(n*PI*y) = 0
+
+// Points near zero = nodal lines = where sand clusters
+density = exp(-abs(chladni(x,y)) * sharpness)`}</CodeBlock>
+
+          <h3 style={S.subTitle}>Chladni 3D / Particles</h3>
+          <p style={S.p}>
+            3D volumetric extension of Chladni patterns. Renders particle-based 3D vibrational modes with depth.
+          </p>
+
+          <h3 style={S.subTitle}>Electron Orbital</h3>
+          <p style={S.p}>
+            Visualizes hydrogen wavefunction probability density <C>|psi|^2</C> using quantum numbers: <C>n</C> (principal/shell), <C>l</C> (azimuthal/subshell), <C>m</C> (magnetic). Uses real spherical harmonics and associated Laguerre polynomials for the radial part.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 15 — 3D / VOLUMETRIC
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec15Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>3D / Volumetric</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>How Raymarching Works</h3>
+          <p style={S.p}>
+            Raymarching is the primary 3D rendering technique in shader art. The algorithm: cast a ray from the camera, evaluate the SDF at the current position, step forward by the SDF distance (the minimum safe distance), and repeat until the ray hits a surface or exceeds the maximum distance.
+          </p>
+          <pre style={S.code}>{`       Camera
+         \\
+          \\   step 1 (large — far from surface)
+           \\
+            * ─ ─ step 2 (medium)
+                   \\
+                    * ─ step 3 (small — close!)
+                       \\
+                        * HIT ● Sphere surface
+
+Key insight: the SDF value tells you exactly how far
+you can safely step without missing any geometry.`}</pre>
+
+          <h3 style={S.subTitle}>Raymarch 3D Node</h3>
+          <p style={S.p}>
+            A self-contained 3D scene renderer. Inputs: UV, Time, plus wirable params for scene configuration. Choose from multiple scene types, configure camera position and lighting (Phong shading + ambient occlusion).
+          </p>
+          <p style={S.p}>Outputs:</p>
+          <ul style={S.ul}>
+            <li style={S.li}><C>Color</C> — fully lit and shaded scene</li>
+            <li style={S.li}><C>Depth</C> — distance from camera (use for fog or DOF effects)</li>
+            <li style={S.li}><C>Normal</C> — surface normal as vec3 (wire into Palette for colored-by-normal)</li>
+            <li style={S.li}><C>Occlusion</C> — ambient occlusion factor (wire into Multiply for AO shading)</li>
+            <li style={S.li}><C>Fog Mask</C> — distance-based fog amount</li>
+          </ul>
+          <Tip>Wire <C>Normal → Palette</C> for a colored-by-normal effect. Wire <C>Occlusion → Multiply</C> with the color output for ambient occlusion shading.</Tip>
+
+          <h3 style={S.subTitle}>Volume Clouds</h3>
+          <p style={S.p}>
+            Volumetric raymarching that accumulates opacity through a density field. Instead of finding a surface hit, it samples density at each step and composites front-to-back. Parameters: Coverage, Puffiness, Scale, Light Direction.
+          </p>
+
+          <h3 style={S.subTitle}>Orbital Volume 3D</h3>
+          <p style={S.p}>
+            Combines the electron orbital wavefunction formula with volumetric raymarching. Renders the full 3D <C>|psi_nlm|^2</C> probability density as a rotating, semi-transparent cloud. Camera auto-orbits around the atom.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 16 — IMPORT / EXPORT
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec16Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Import / Export</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>Graph Files (.json)</h3>
+          <p style={S.p}>
+            Save your graph with <C>Cmd+S</C> and load with <C>Cmd+O</C>. Graphs are stored as JSON files containing all node positions, connections, and parameter values. Share .json files to exchange graphs.
+          </p>
+
+          <h3 style={S.subTitle}>GLSL Export</h3>
+          <p style={S.p}>
+            The generated GLSL is always visible in the Code Panel (toggle with <C>Cmd+\</C>). The shader is compatible with Shadertoy and requires these uniforms:
+          </p>
+          <CodeBlock>{`uniform vec2 u_resolution;  // viewport size in pixels
+uniform float u_time;       // elapsed time in seconds
+uniform vec2 u_mouse;       // mouse position (normalized)`}</CodeBlock>
+
+          <h3 style={S.subTitle}>Video Recording</h3>
+          <p style={S.p}>
+            Press <C>Cmd+R</C> to start recording the shader preview. Available formats: H.264 (smallest, web-friendly), ProRes 422 HQ (lossless quality, large files), FFV1 (open-source lossless). Configure resolution, duration, and the FFmpeg encoder is used under the hood.
+          </p>
+
+          <h3 style={S.subTitle}>Popping Out the Preview</h3>
+          <p style={S.p}>
+            Detach the shader preview to a floating window. Useful for putting the preview on a second monitor, comparing two graphs side by side, or presenting full-screen.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 17 — COMPLETE EXAMPLES
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec17Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Complete Examples</h2>
+          <div style={S.divider} />
+
+          <h3 style={S.subTitle}>Example 1: Animated Mandala</h3>
+          <p style={S.p}>
+            Kaleidoscopic symmetry with fractal noise, colored by a palette and animated by Time.
+          </p>
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv'] },
+              { label: 'KaleidoSpace', type: 'transform', inputs: ['uv', 'sides: 6'], outputs: ['uv'] },
+              { label: 'PolarSpace', type: 'transform', inputs: ['uv'], outputs: ['uv'] },
+              { label: 'FBM', type: 'effect', inputs: ['uv'], outputs: ['value'] },
+              { label: 'Palette', type: 'color', inputs: ['t'], outputs: ['color'] },
+              { label: 'Output', type: 'output', inputs: ['color'] },
+            ]}
+            caption="Time drives the FBM animation speed and the KaleidoSpace angle offset."
+          />
+          <TryIt exampleKey="mandala" label="Animated Mandala" onTry={tryExample} />
+
+          <h3 style={S.subTitle}>Example 2: Floating Orbs</h3>
+          <p style={S.p}>
+            Three CircleSDFs with time-animated positions, merged with SmoothMin(k=0.15), then rendered with MakeLight and colored by a Palette.
+          </p>
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv'] },
+              { label: 'CircleSDF\nx3', type: 'effect', inputs: ['animated positions'], outputs: ['dist x3'] },
+              { label: 'SmoothMin\nk=0.15', type: 'effect', inputs: ['dist a', 'dist b'], outputs: ['merged'] },
+              { label: 'MakeLight', type: 'effect', inputs: ['dist'], outputs: ['glow'] },
+              { label: 'Palette', type: 'color', inputs: ['t'], outputs: ['color'] },
+              { label: 'Output', type: 'output', inputs: ['color'] },
+            ]}
+            caption="Three orbs smoothly blend together as they drift past each other."
+          />
+          <TryIt exampleKey="orbs" label="Floating Orbs" onTry={tryExample} />
+
+          <h3 style={S.subTitle}>Example 3: Fractal UV Fold</h3>
+          <p style={S.p}>
+            A Group with 6 iterations containing <C>Multiply(1.5) → Fract → Subtract(0.5)</C>. The folded UV is fed into a CircleSDF for a deep fractal pattern.
+          </p>
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv'] },
+              { label: 'Group\n6 iters', type: 'transform', inputs: ['uv'], outputs: ['folded uv'] },
+              { label: 'CircleSDF', type: 'effect', inputs: ['uv'], outputs: ['dist'] },
+              { label: 'MakeLight', type: 'effect', inputs: ['dist'], outputs: ['glow'] },
+              { label: 'Palette', type: 'color', inputs: ['t'], outputs: ['color'] },
+              { label: 'Output', type: 'output', inputs: ['color'] },
+            ]}
+            caption="Each iteration scales, tiles, and re-centers — 6 passes creates deep fractal structure."
+          />
+          <TryIt exampleKey="fractal-fold" label="Fractal UV Fold" onTry={tryExample} />
+
+          <h3 style={S.subTitle}>Example 4: Audio-Reactive Visualizer</h3>
+          <p style={S.p}>
+            AudioInput drives multiple parameters: bass controls CircleSDF radius, mid drives MakeLight brightness, Time feeds PolarSpace and FBM for background texture, and high modulates the Palette phase offset.
+          </p>
+          <NodeDiagram
+            nodes={[
+              { label: 'AudioInput', type: 'source', outputs: ['bass', 'mid', 'high'] },
+              { label: 'CircleSDF', type: 'effect', inputs: ['radius ← bass'], outputs: ['dist'] },
+              { label: 'MakeLight', type: 'effect', inputs: ['dist', 'brightness ← mid'], outputs: ['glow'] },
+              { label: 'Palette', type: 'color', inputs: ['t', 'phase ← high'], outputs: ['color'] },
+              { label: 'Output', type: 'output', inputs: ['color'] },
+            ]}
+            caption="The shader pulses and shifts color in response to music."
+          />
+          <TryIt exampleKey="audio-reactive" label="Audio-Reactive Visualizer" onTry={tryExample} />
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            APPENDIX — NODE REFERENCE
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={secAppRef as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Node Reference</h2>
+          <div style={S.divider} />
+
+          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600, width: '140px' }}>Category</th>
+                <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Nodes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['Sources', 'UV, PixelUV, Time, Mouse, Constant, TextureInput, PrevFrame, LoopIndex, AudioInput'],
+                ['Transforms', 'Fract, Rotate2D, UVWarp, SmoothWarp, CurlWarp, SwirlWarp, Displace'],
+                ['Spaces', 'Polar, LogPolar, Hyperbolic, Inversion, Mobius, Swirl, Kaleido, Spherical, Ripple, InfiniteRepeat'],
+                ['2D Primitives', 'CircleSDF, BoxSDF, RingSDF, ShapeSDF (30+ shapes)'],
+                ['SDF Repeat', 'OpRepeat, OpRepeatPolar'],
+                ['Combiners', 'SmoothMin, Min, Max, Subtract, SmoothMax, SmoothSubtract, Blend, Mask, AddColor, ScreenBlend, GlowLayer, SDFOutline, SDFColorize'],
+                ['Effects', 'MakeLight, ToneMap, Grain, LumaGrain, TemporalGrain, ChromaticAberration, GravitationalLens, FloatWarp, Expr, CustomFn'],
+                ['Loops (high-level)', 'FractalLoop, RotatingLinesLoop, AccumulateLoop, ForLoop'],
+                ['Loops (wired pair)', 'LoopStart, LoopEnd, LoopCarry, LoopRippleStep, LoopRotateStep, LoopDomainFold, LoopFloatAccumulate, LoopRingStep, LoopColorRingStep'],
+                ['Noise', 'FBM, Voronoi, DomainWarp, FlowField, CirclePack, NoiseFloat'],
+                ['Fractals', 'Mandelbrot/Julia, IFS'],
+                ['Physics', 'Chladni, Chladni3D, Chladni3DParticles, ElectronOrbital'],
+                ['3D', 'Raymarch3D, VolumeClouds, OrbitalVolume3D'],
+                ['Color', 'Palette, PalettePreset, Gradient, HSV, Posterize, Invert, Desaturate, HueRange'],
+                ['Output', 'Output, Vec4Output'],
+                ['Utility', 'Group, Scope'],
+                ['Math', 'Add, Sub, Mul, Div, Sin, Cos, Exp, Pow, Negate, Length, Tanh, Min, Max, Clamp, Mix, Mod, Atan2, Ceil, Floor, Sqrt, Round, Dot, MakeVec2, ExtractX, ExtractY, MakeVec3, FloatToVec3, Fract, Smoothstep, AddVec2, MultiplyVec2, Remap'],
+                ['Animation', 'SineLFO, SquareLFO, SawtoothLFO, TriangleLFO, BPMSync'],
+              ] as [string, string][]).map(([cat, nodes], i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+                  <td style={{ padding: '6px 10px', color: T.blue, fontWeight: 600, fontSize: '11px', verticalAlign: 'top' }}>{cat}</td>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px', lineHeight: 1.7 }}>{nodes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {/* Bottom padding */}
