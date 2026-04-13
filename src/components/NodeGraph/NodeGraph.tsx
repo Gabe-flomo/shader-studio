@@ -62,6 +62,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const setGroupOutput          = useNodeGraphStore(s => s.setGroupOutput);
   const addGroupOutput          = useNodeGraphStore(s => s.addGroupOutput);
   const removeGroupOutput       = useNodeGraphStore(s => s.removeGroupOutput);
+  const renameGroupPort         = useNodeGraphStore(s => s.renameGroupPort);
   const addGroupInput           = useNodeGraphStore(s => s.addGroupInput);
   const rerouteGroupInput       = useNodeGraphStore(s => s.rerouteGroupInput);
   const disconnectedNotice      = useNodeGraphStore(s => s.disconnectedNotice);
