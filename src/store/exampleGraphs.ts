@@ -4233,6 +4233,340 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ─── V2 Phase 1 Examples ─────────────────────────────────────────────────────
+
+  colorRampDemo: {
+    label: 'Color Ramp',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 350 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ramp_2', type: 'colorRamp', position: { x: 360, y: 180 },
+        inputs: { t: { type: 'float', label: 't (0-1)', connection: { nodeId: 'len_x', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { stops: 4, color0: [0.02, 0.02, 0.15], color1: [0.0, 0.4, 0.8], color2: [0.2, 0.9, 0.4], color3: [1.0, 1.0, 0.0] },
+      },
+      {
+        id: 'len_x', type: 'add', position: { x: 210, y: 230 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'uv_0', outputKey: 'uv' } as never },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.0 },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 640, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ramp_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  blackbodyDemo: {
+    label: 'Blackbody Temperature',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'remap_2', type: 'remap', position: { x: 250, y: 200 },
+        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'uv_0', outputKey: 'uv' } as never } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { inMin: -1.0, inMax: 1.0, outMin: 1000.0, outMax: 12000.0, smooth: 'linear' },
+      },
+      {
+        id: 'add_x', type: 'add', position: { x: 250, y: 310 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'remap_2', outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.0 },
+      },
+      {
+        id: 'bb_3', type: 'blackbody', position: { x: 460, y: 240 },
+        inputs: { kelvin: { type: 'float', label: 'Kelvin', connection: { nodeId: 'add_x', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { kelvin: 6500.0 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 660, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bb_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  waveTextureDemo: {
+    label: 'Wave Texture',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'wave_2', type: 'waveTexture', position: { x: 300, y: 200 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { mode: 'rings', scale: 8.0, speed: 1.5, distortion: 0.3 },
+      },
+      {
+        id: 'pal_3', type: 'palettePreset', position: { x: 500, y: 200 },
+        inputs: { t: { type: 'float', label: 't', connection: { nodeId: 'wave_2', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '1', scale: 1.0, offset: 0.0 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 700, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  magicTextureDemo: {
+    label: 'Magic Texture',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'magic_2', type: 'magicTexture', position: { x: 300, y: 200 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { scale: 4.0, depth: 4, distortion: 1.0 },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 560, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'magic_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  gridDemo: {
+    label: 'Grid / Checker',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'grid_2', type: 'grid', position: { x: 300, y: 180 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          scale: { type: 'float', label: 'Scale'  },
+        },
+        outputs: { grid: { type: 'float', label: 'Grid Lines' }, checker: { type: 'float', label: 'Checker' }, cellUV: { type: 'vec2', label: 'Cell UV' }, cellID: { type: 'vec2', label: 'Cell ID' } },
+        params: { scale: 6.0, lineWidth: 0.04 },
+      },
+      {
+        id: 'mix_3', type: 'mix', position: { x: 500, y: 200 },
+        inputs: {
+          a:   { type: 'float', label: 'A' },
+          b:   { type: 'float', label: 'B' },
+          t:   { type: 'float', label: 't', connection: { nodeId: 'grid_2', outputKey: 'checker' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { a: 0.1, b: 0.9, t: 0.5 },
+      },
+      {
+        id: 'add_g', type: 'add', position: { x: 500, y: 310 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'mix_3', outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'grid_2', outputKey: 'grid' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.0 },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 700, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_g', outputKey: 'result' } as never } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  vignetteDemo: {
+    label: 'Vignette',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fbm_2', type: 'fbm', position: { x: 260, y: 180 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 5, lacunarity: 2.0, gain: 0.5, scale: 3.0, time_scale: 0.2, offset_x: 0.0, offset_y: 0.0 },
+      },
+      {
+        id: 'pal_3', type: 'palettePreset', position: { x: 460, y: 180 },
+        inputs: { t: { type: 'float', label: 't', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '5', scale: 1.0, offset: 0.0 },
+      },
+      {
+        id: 'pixuv_x', type: 'pixelUV', position: { x: 260, y: 340 },
+        inputs: {},
+        outputs: { uv: { type: 'vec2', label: 'UV (0-1)' } },
+        params: {},
+      },
+      {
+        id: 'vig_4', type: 'vignette', position: { x: 660, y: 200 },
+        inputs: {
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_3', outputKey: 'color' } },
+          uv:    { type: 'vec2', label: 'UV (0-1)', connection: { nodeId: 'pixuv_x', outputKey: 'uv' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { radius: 0.65, softness: 0.45, strength: 1.0 },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 880, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'vig_4', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  scanlinesDemo: {
+    label: 'Scanlines (CRT)',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fbm_2', type: 'fbm', position: { x: 260, y: 180 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 2.5, time_scale: 0.15 },
+      },
+      {
+        id: 'pal_3', type: 'palettePreset', position: { x: 460, y: 180 },
+        inputs: { t: { type: 'float', label: 't', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '6', scale: 1.0, offset: 0.0 },
+      },
+      {
+        id: 'pixuv_x', type: 'pixelUV', position: { x: 260, y: 340 },
+        inputs: {},
+        outputs: { uv: { type: 'vec2', label: 'UV (0-1)' } },
+        params: {},
+      },
+      {
+        id: 'scan_4', type: 'scanlines', position: { x: 660, y: 200 },
+        inputs: {
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_3',  outputKey: 'color' } },
+          uv:    { type: 'vec2', label: 'UV (0-1)', connection: { nodeId: 'pixuv_x', outputKey: 'uv' } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { count: 320.0, intensity: 0.4, scroll: 0.2 },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 880, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'scan_4', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  sobelDemo: {
+    label: 'Sobel Edge Detection',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fbm_2', type: 'fbm', position: { x: 260, y: 180 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 3.0, time_scale: 0.1 },
+      },
+      {
+        id: 'sobel_3', type: 'sobel', position: { x: 460, y: 180 },
+        inputs: {
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'fbm_2', outputKey: 'value' } },
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',  outputKey: 'uv'   } },
+        },
+        outputs: { edges: { type: 'float', label: 'Edge Strength' }, result: { type: 'vec3', label: 'Edge Color' } },
+        params: { strength: 3.0, colorR: 0.4, colorG: 0.9, colorB: 1.0 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 680, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sobel_3', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  blendModesDemo: {
+    label: 'Blend Modes',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 370 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fbm_2', type: 'fbm', position: { x: 260, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 5, lacunarity: 2.0, gain: 0.5, scale: 3.0, time_scale: 0.2 },
+      },
+      {
+        id: 'fbm_b', type: 'fbm', position: { x: 260, y: 350 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 3, lacunarity: 2.0, gain: 0.5, scale: 5.0, time_scale: 0.3, offset_x: 1.5, offset_y: 0.7 },
+      },
+      {
+        id: 'pal_3', type: 'palettePreset', position: { x: 480, y: 160 },
+        inputs: { t: { type: 'float', label: 't', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '2', scale: 1.0, offset: 0.0 },
+      },
+      {
+        id: 'pal_b', type: 'palettePreset', position: { x: 480, y: 350 },
+        inputs: { t: { type: 'float', label: 't', connection: { nodeId: 'fbm_b', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '5', scale: 1.0, offset: 0.0 },
+      },
+      {
+        id: 'blend_4', type: 'blendModes', position: { x: 700, y: 220 },
+        inputs: {
+          base:  { type: 'vec3', label: 'Base',  connection: { nodeId: 'pal_3', outputKey: 'color' } },
+          blend: { type: 'vec3', label: 'Blend', connection: { nodeId: 'pal_b', outputKey: 'color' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { mode: 'screen', opacity: 1.0 },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 920, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'blend_4', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

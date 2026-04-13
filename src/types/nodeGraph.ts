@@ -1,5 +1,5 @@
 // Data types that flow between nodes
-export type DataType = "float" | "vec2" | "vec3" | "vec4";
+export type DataType = "float" | "vec2" | "vec3" | "vec4" | "scene3d";
 
 // Socket (connection point on a node)
 export interface Socket {
@@ -65,7 +65,7 @@ export interface GraphNode {
 // Editable parameter definition (used to render inline controls on the node card)
 export interface ParamDef {
   label: string;
-  type: 'float' | 'vec3' | 'select' | 'string';
+  type: 'float' | 'vec3' | 'vec3color' | 'select' | 'string' | 'bool';
   min?: number;
   max?: number;
   step?: number;

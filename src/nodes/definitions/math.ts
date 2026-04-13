@@ -428,3 +428,163 @@ export const RemapNode: NodeDefinition = {
     };
   },
 };
+
+// ─── New Math Nodes (V2) ───────────────────────────────────────────────────────
+
+export const CrossProductNode: NodeDefinition = {
+  type: 'crossProduct', label: 'Cross Product', category: 'Math', description: 'Cross product of two vec3 vectors',
+  inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' } },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const a  = inputVars.a || 'vec3(1.0, 0.0, 0.0)';
+    const b  = inputVars.b || 'vec3(0.0, 1.0, 0.0)';
+    return {
+      code: `    vec3 ${id}_result = cross(${a}, ${b});\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const ReflectNode: NodeDefinition = {
+  type: 'reflect', label: 'Reflect', category: 'Math', description: 'Reflect incident vector I around normal N',
+  inputs: { incident: { type: 'vec3', label: 'Incident' }, normal: { type: 'vec3', label: 'Normal' } },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const i  = inputVars.incident || 'vec3(0.0, -1.0, 0.0)';
+    const n  = inputVars.normal   || 'vec3(0.0, 1.0, 0.0)';
+    return {
+      code: `    vec3 ${id}_result = reflect(${i}, normalize(${n}));\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const ComplexMulNode: NodeDefinition = {
+  type: 'complexMul', label: 'Complex Mul', category: 'Math', description: 'Multiply two complex numbers (vec2)',
+  inputs: { a: { type: 'vec2', label: 'A (re,im)' }, b: { type: 'vec2', label: 'B (re,im)' } },
+  outputs: { result: { type: 'vec2', label: 'Result' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const a  = inputVars.a || 'vec2(1.0, 0.0)';
+    const b  = inputVars.b || 'vec2(1.0, 0.0)';
+    return {
+      code: [
+        `    vec2 ${id}_av = ${a};\n`,
+        `    vec2 ${id}_bv = ${b};\n`,
+        `    vec2 ${id}_result = vec2(${id}_av.x*${id}_bv.x - ${id}_av.y*${id}_bv.y, ${id}_av.x*${id}_bv.y + ${id}_av.y*${id}_bv.x);\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const ComplexPowNode: NodeDefinition = {
+  type: 'complexPow', label: 'Complex Pow', category: 'Math', description: 'Raise complex number (vec2) to a real power via polar form',
+  inputs: { z: { type: 'vec2', label: 'Z (re,im)' }, exponent: { type: 'float', label: 'Exponent' } },
+  outputs: { result: { type: 'vec2', label: 'Result' } },
+  defaultParams: { exponent: 2.0 },
+  paramDefs: { exponent: { label: 'Exponent', type: 'float', min: -8.0, max: 8.0, step: 0.1 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const z  = inputVars.z        || 'vec2(1.0, 0.0)';
+    const k  = inputVars.exponent || p(node.params.exponent, 2.0);
+    return {
+      code: [
+        `    vec2  ${id}_zv = ${z};\n`,
+        `    float ${id}_r  = length(${id}_zv);\n`,
+        `    float ${id}_a  = atan(${id}_zv.y, ${id}_zv.x);\n`,
+        `    vec2  ${id}_result = pow(max(${id}_r, 0.00001), ${k}) * vec2(cos(${k}*${id}_a), sin(${k}*${id}_a));\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const AngleToVec2Node: NodeDefinition = {
+  type: 'angleToVec2', label: 'Angle → Vec2', category: 'Math', description: 'Convert angle (radians) to unit direction vec2',
+  inputs: { angle: { type: 'float', label: 'Angle (rad)' } },
+  outputs: { result: { type: 'vec2', label: 'Direction' } },
+  defaultParams: { angle: 0.0 },
+  paramDefs: { angle: { label: 'Angle', type: 'float', min: -6.2832, max: 6.2832, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const a  = inputVars.angle || p(node.params.angle, 0.0);
+    return {
+      code: `    vec2 ${id}_result = vec2(cos(${a}), sin(${a}));\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const Vec2AngleNode: NodeDefinition = {
+  type: 'vec2Angle', label: 'Vec2 → Angle', category: 'Math', description: 'Get angle of a vec2 direction (atan2)',
+  inputs: { v: { type: 'vec2', label: 'Vector' } },
+  outputs: { result: { type: 'float', label: 'Angle (rad)' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.v || 'vec2(1.0, 0.0)';
+    return {
+      code: `    float ${id}_result = atan((${v}).y, (${v}).x);\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const LuminanceNode: NodeDefinition = {
+  type: 'luminance', label: 'Luminance', category: 'Math', description: 'Perceptual luminance of a vec3 RGB color (BT.709)',
+  inputs: { color: { type: 'vec3', label: 'RGB' } },
+  outputs: { result: { type: 'float', label: 'Luminance' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const c  = inputVars.color || 'vec3(0.5)';
+    return {
+      code: `    float ${id}_result = dot(${c}, vec3(0.2126, 0.7152, 0.0722));\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const SignNode: NodeDefinition = {
+  type: 'sign', label: 'Sign', category: 'Math', description: 'Sign of a float value (-1, 0, +1)',
+  inputs: { value: { type: 'float', label: 'Value' } },
+  outputs: { result: { type: 'float', label: 'Sign' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.value || '0.0';
+    return {
+      code: `    float ${id}_result = sign(${v});\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+export const StepNode: NodeDefinition = {
+  type: 'step', label: 'Step', category: 'Math', description: 'step(edge, x) — 0 if x < edge, else 1',
+  inputs: { edge: { type: 'float', label: 'Edge' }, x: { type: 'float', label: 'X' } },
+  outputs: { result: { type: 'float', label: 'Result' } },
+  defaultParams: { edge: 0.5 },
+  paramDefs: { edge: { label: 'Edge', type: 'float', min: -2.0, max: 2.0, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const edge = inputVars.edge || p(node.params.edge, 0.5);
+    const x    = inputVars.x   || '0.0';
+    return {
+      code: `    float ${id}_result = step(${edge}, ${x});\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};

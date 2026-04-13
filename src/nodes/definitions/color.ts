@@ -357,3 +357,197 @@ export const HueRangeNode: NodeDefinition = {
     };
   },
 };
+
+// ─── New Color Nodes (V2) ─────────────────────────────────────────────────────
+
+// ColorRamp: multi-stop gradient (up to 8 stops), generates a chain of mix() calls
+export const ColorRampNode: NodeDefinition = {
+  type: 'colorRamp', label: 'Color Ramp', category: 'Color',
+  description: 'Multi-stop gradient — up to 8 color stops, evenly spaced.',
+  inputs: { t: { type: 'float', label: 't (0-1)' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: {
+    stops: 3,
+    color0: [0.0, 0.0, 0.0],
+    color1: [0.5, 0.0, 1.0],
+    color2: [1.0, 1.0, 1.0],
+    color3: [1.0, 0.5, 0.0],
+    color4: [1.0, 0.0, 0.0],
+    color5: [0.0, 1.0, 0.5],
+    color6: [0.0, 0.5, 1.0],
+    color7: [1.0, 1.0, 0.0],
+  },
+  paramDefs: {
+    stops:  { label: 'Stops',   type: 'select', options: [2,3,4,5,6,7,8].map(n => ({ value: String(n), label: String(n) })) },
+    color0: { label: 'Stop 0',  type: 'vec3color' },
+    color1: { label: 'Stop 1',  type: 'vec3color' },
+    color2: { label: 'Stop 2',  type: 'vec3color' },
+    color3: { label: 'Stop 3',  type: 'vec3color' },
+    color4: { label: 'Stop 4',  type: 'vec3color' },
+    color5: { label: 'Stop 5',  type: 'vec3color' },
+    color6: { label: 'Stop 6',  type: 'vec3color' },
+    color7: { label: 'Stop 7',  type: 'vec3color' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id     = node.id;
+    const t      = inputVars.t || '0.0';
+    const stops  = Math.max(2, Math.min(8, Number(node.params.stops) || 3));
+    const colors = Array.from({ length: stops }, (_, i) => {
+      const raw = node.params[`color${i}`];
+      const arr = Array.isArray(raw) ? raw as number[] : [0.0, 0.0, 0.0];
+      return vec3Str(arr);
+    });
+    // Build chain: for N stops there are N-1 segments evenly in [0,1]
+    const lines: string[] = [];
+    // Declare all stop colors
+    colors.forEach((c, i) => lines.push(`    vec3 ${id}_c${i} = ${c};\n`));
+    // Build nested mix chain
+    let expr = `${id}_c0`;
+    for (let i = 0; i < stops - 1; i++) {
+      const lo = f(i / (stops - 1));
+      const hi = f((i + 1) / (stops - 1));
+      const seg = `clamp((${t} - ${lo}) / (${hi} - ${lo}), 0.0, 1.0)`;
+      expr = `mix(${expr}, ${id}_c${i + 1}, ${seg})`;
+    }
+    lines.push(`    vec3 ${id}_color = ${expr};\n`);
+    return { code: lines.join(''), outputVars: { color: `${id}_color` } };
+  },
+};
+
+// BlendModes: full Photoshop-style blend operations
+export const BlendModesNode: NodeDefinition = {
+  type: 'blendModes', label: 'Blend Modes', category: 'Color',
+  description: 'Photoshop-style blend operations: Multiply, Screen, Overlay, Soft Light, Hard Light, Difference, Exclusion, Dodge, Burn, Lighten, Darken.',
+  inputs: {
+    base:    { type: 'vec3', label: 'Base' },
+    blend:   { type: 'vec3', label: 'Blend' },
+    opacity: { type: 'float', label: 'Opacity' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { mode: 'multiply', opacity: 1.0 },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: 'multiply',    label: 'Multiply' },
+      { value: 'screen',      label: 'Screen' },
+      { value: 'overlay',     label: 'Overlay' },
+      { value: 'soft_light',  label: 'Soft Light' },
+      { value: 'hard_light',  label: 'Hard Light' },
+      { value: 'difference',  label: 'Difference' },
+      { value: 'exclusion',   label: 'Exclusion' },
+      { value: 'dodge',       label: 'Color Dodge' },
+      { value: 'burn',        label: 'Color Burn' },
+      { value: 'lighten',     label: 'Lighten' },
+      { value: 'darken',      label: 'Darken' },
+    ]},
+    opacity: { label: 'Opacity', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+  },
+  glslFunction: `
+vec3 blendMultiply(vec3 b, vec3 s) { return b * s; }
+vec3 blendScreen(vec3 b, vec3 s) { return 1.0 - (1.0 - b) * (1.0 - s); }
+vec3 blendOverlay(vec3 b, vec3 s) {
+    return mix(2.0*b*s, 1.0 - 2.0*(1.0-b)*(1.0-s), step(0.5, b));
+}
+vec3 blendSoftLight(vec3 b, vec3 s) {
+    return mix(2.0*b*s + b*b*(1.0-2.0*s), sqrt(b)*(2.0*s-1.0)+2.0*b*(1.0-s), step(0.5, s));
+}
+vec3 blendHardLight(vec3 b, vec3 s) {
+    return mix(2.0*b*s, 1.0 - 2.0*(1.0-b)*(1.0-s), step(0.5, s));
+}
+vec3 blendDifference(vec3 b, vec3 s) { return abs(b - s); }
+vec3 blendExclusion(vec3 b, vec3 s) { return b + s - 2.0*b*s; }
+vec3 blendDodge(vec3 b, vec3 s) { return clamp(b / max(1.0 - s, 0.001), 0.0, 1.0); }
+vec3 blendBurn(vec3 b, vec3 s) { return 1.0 - clamp((1.0 - b) / max(s, 0.001), 0.0, 1.0); }
+vec3 blendLighten(vec3 b, vec3 s) { return max(b, s); }
+vec3 blendDarken(vec3 b, vec3 s) { return min(b, s); }`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const base    = inputVars.base    || 'vec3(0.5)';
+    const blend   = inputVars.blend   || 'vec3(0.5)';
+    const opacity = inputVars.opacity || p(node.params.opacity, 1.0);
+    const mode    = String(node.params.mode || 'multiply');
+    const fnMap: Record<string, string> = {
+      multiply:   'blendMultiply',
+      screen:     'blendScreen',
+      overlay:    'blendOverlay',
+      soft_light: 'blendSoftLight',
+      hard_light: 'blendHardLight',
+      difference: 'blendDifference',
+      exclusion:  'blendExclusion',
+      dodge:      'blendDodge',
+      burn:       'blendBurn',
+      lighten:    'blendLighten',
+      darken:     'blendDarken',
+    };
+    const fn = fnMap[mode] || 'blendMultiply';
+    return {
+      code: `    vec3 ${id}_result = mix(${base}, ${fn}(${base}, ${blend}), clamp(${opacity}, 0.0, 1.0));\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+// BrightnessContrast
+export const BrightnessContrastNode: NodeDefinition = {
+  type: 'brightnessContrast', label: 'Brightness / Contrast', category: 'Color',
+  description: 'Adjust brightness and contrast of a vec3 color.',
+  inputs: {
+    color:      { type: 'vec3',  label: 'Color' },
+    brightness: { type: 'float', label: 'Brightness' },
+    contrast:   { type: 'float', label: 'Contrast' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { brightness: 0.0, contrast: 1.0 },
+  paramDefs: {
+    brightness: { label: 'Brightness', type: 'float', min: -1.0, max: 1.0, step: 0.01 },
+    contrast:   { label: 'Contrast',   type: 'float', min:  0.0, max: 4.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const c   = inputVars.color      || 'vec3(0.5)';
+    const br  = inputVars.brightness || p(node.params.brightness, 0.0);
+    const con = inputVars.contrast   || p(node.params.contrast,   1.0);
+    return {
+      code: `    vec3 ${id}_result = clamp((${c} - 0.5) * ${con} + 0.5 + ${br}, 0.0, 1.0);\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+// Blackbody: converts color temperature (Kelvin) to approximate RGB
+// Uses IQ's polynomial fit for [1000K .. 12000K]
+export const BlackbodyNode: NodeDefinition = {
+  type: 'blackbody', label: 'Blackbody', category: 'Color',
+  description: 'Convert color temperature in Kelvin to an approximate RGB color (1000K – 12000K).',
+  inputs: { kelvin: { type: 'float', label: 'Kelvin' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { kelvin: 6500.0 },
+  paramDefs: { kelvin: { label: 'Kelvin', type: 'float', min: 1000.0, max: 12000.0, step: 100.0 } },
+  glslFunction: `
+vec3 blackbodyColor(float kelvin) {
+    float t = clamp(kelvin, 1000.0, 12000.0) / 100.0;
+    float r, g, b;
+    if (t <= 66.0) {
+        r = 1.0;
+        g = clamp((99.4708025861 * log(t) - 161.1195681661) / 255.0, 0.0, 1.0);
+    } else {
+        r = clamp((329.698727446 * pow(t - 60.0, -0.1332047592)) / 255.0, 0.0, 1.0);
+        g = clamp((288.1221695283 * pow(t - 60.0, -0.0755148492)) / 255.0, 0.0, 1.0);
+    }
+    if (t >= 66.0) {
+        b = 1.0;
+    } else if (t <= 19.0) {
+        b = 0.0;
+    } else {
+        b = clamp((138.5177312231 * log(t - 10.0) - 305.0447927307) / 255.0, 0.0, 1.0);
+    }
+    return vec3(r, g, b);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const k   = inputVars.kelvin || p(node.params.kelvin, 6500.0);
+    return {
+      code: `    vec3 ${id}_color = blackbodyColor(${k});\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};

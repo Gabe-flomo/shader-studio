@@ -27,10 +27,12 @@ const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
   { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
   { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
   { label: 'Interp',     types: ['clamp', 'mix', 'smoothstep', 'mod'] },
-  { label: 'Compare',    types: ['minMath', 'max'] },
-  { label: 'Geometry',   types: ['length', 'dot'] },
-  { label: 'Vec2',       types: ['makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2'] },
+  { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
+  { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'luminance'] },
+  { label: 'Vec2',       types: ['makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
   { label: 'Vec3',       types: ['makeVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
+  { label: 'Complex',    types: ['complexMul', 'complexPow'] },
+  { label: 'Remap',      types: ['remap'] },
 ];
 
 const MATH_ORDER: string[] = MATH_GROUPS.flatMap(g => g.types);
@@ -59,12 +61,16 @@ const CATEGORY_COLORS: Record<string, string> = {
   Science:         '#94e2d5',  // teal
   Presets:         '#f9e2af',  // warm gold — these are the complex self-contained nodes
   Output:          '#94e2d5',  // teal
+  '3D Primitives': '#f5c2e7',  // pink
+  '3D Transforms': '#f5c2e7',  // pink
+  '3D Scene':      '#cc88aa',  // purple-pink
 };
 
 // Preferred display order for categories — alphabetical, with Output pinned last
 const CATEGORY_ORDER = [
   'Color', 'Combiners', 'Effects', 'Loops', 'Math', 'Noise',
   'Presets', 'Science', 'Spaces', 'Sources', 'Transforms', '2D Primitives',
+  '3D Primitives', '3D Transforms', '3D Scene',
   'Output',
 ];
 
@@ -74,14 +80,15 @@ type ExKey = keyof typeof EXAMPLE_GRAPHS;
 const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
   { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'] as ExKey[] },
   { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupAdditiveRings','groupProductRings','groupCarryRotate','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
-  { label: 'Loops',           color: '#89dceb', keys: ['loopRippleWarp','loopRotateSpiral','loopFloatDemo','loopChainedBody','loopZoomTunnel','loopAnimatedSpin','loopTwoStage','loopSpatialFloat','loopDenseRings','loopIterScale'] as ExKey[] },
-  { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal','newtonFractalClassic','newtonFractalZ5','lyapunovMarkus','lyapunovAABB','apollonianGasket'] as ExKey[] },
-  { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','chladni3dDemo','chladni3dParticlesDemo','electronOrbitalDemo','orbitalVolume3dDemo','gravitationalLens'] as ExKey[] },
+  { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','domainWarpFractal','newtonFractalClassic','lyapunovMarkus','apollonianGasket'] as ExKey[] },
+  { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','electronOrbitalDemo','orbitalVolume3dDemo'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'] as ExKey[] },
-  { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','agxToneDemo','lumaGrainDemo','temporalGrainDemo','hueRangeDemo','angularGradient','shapeShowcase'] as ExKey[] },
+  { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','agxToneDemo','lumaGrainDemo','temporalGrainDemo','hueRangeDemo','angularGradient','shapeShowcase','colorRampDemo','blackbodyDemo','blendModesDemo'] as ExKey[] },
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
-  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['raymarchSpheres','noiseFloatDemo','remapDemo','mandelbulbClassic','mengerSponge','twistedBox'] as ExKey[] },
+  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['noiseFloatDemo','remapDemo','mandelbulbClassic','mengerSponge','twistedBox'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo'] as ExKey[] },
+  { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','magicTextureDemo','gridDemo'] as ExKey[] },
+  { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo'] as ExKey[] },
 ];
 
 
