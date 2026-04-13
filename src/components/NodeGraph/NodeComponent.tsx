@@ -66,6 +66,17 @@ interface Props {
   externalParamKeys?: Set<string>;
 }
 
+// Maps slider position (0–1000) to Hz using a dampened log scale (power=0.6)
+// Feels smoother than pure log but still covers 20Hz–20kHz
+function sliderToHz(v: number): number {
+  const t = v / 1000;
+  return Math.round(20 * Math.pow(1000, Math.pow(t, 0.6)));
+}
+function hzToSlider(hz: number): number {
+  const ratio = Math.log(Math.max(20, Math.min(20000, hz)) / 20) / Math.log(1000);
+  return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
+}
+
 const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
@@ -268,6 +279,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams   = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
+  const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
@@ -577,14 +589,22 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
     const freqRange    = typeof node.params.freq_range  === 'number' ? node.params.freq_range  : 200;
     const mode         = (node.params.mode as string) ?? 'band';
+    const soloedBand   = typeof node.params._soloedBand === 'number' ? node.params._soloedBand : -1;
 
     const buildOutputs = (bs: number[]) =>
       Object.fromEntries(bs.map((_, i) => [`amplitude_${i}`, { type: 'float' as const, label: `Band ${i}` }]));
+
+    const buildInputs = (bs: number[]) =>
+      Object.fromEntries(bs.map((_, i) => [
+        `band_${i}_center`,
+        { type: 'float' as const, label: `Band ${i} Hz` },
+      ]));
 
     const handleAddBand = () => {
       const newBands = [...bands, 1000];
       updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
       updateNodeOutputs(node.id, buildOutputs(newBands));
+      updateNodeInputs(node.id, buildInputs(newBands));
     };
 
     const handleRemoveBand = (i: number) => {
@@ -592,6 +612,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       const newBands = bands.filter((_, idx) => idx !== i);
       updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
       updateNodeOutputs(node.id, buildOutputs(newBands));
+      updateNodeInputs(node.id, buildInputs(newBands));
+    };
+
+    const handleSolo = (i: number) => {
+      updateNodeParams(node.id, { _soloedBand: soloedBand === i ? -1 : i }, { immediate: true });
     };
 
     const handleAudioDrop = (e: React.DragEvent) => {
@@ -663,7 +688,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 disabled={!hasFile}
                 style={{ background: 'none', border: 'none', color: !hasFile ? '#45475a' : isNodePlaying ? '#a6e3a1' : '#89dceb', cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
               >{isNodePlaying ? '⏸' : '▶'}</button>
-              <span style={{ fontWeight: 600, fontSize: '11px', color: '#89dceb' }}>Audio Input</span>
+              <span style={{ fontWeight: 600, fontSize: '11px', color: '#89dceb' }}>
+                Audio Input{soloedBand >= 0 ? <span style={{ color: '#f9e2af', fontSize: '9px', marginLeft: '4px' }}>SOLO</span> : null}
+              </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {/* Open analyzer modal */}
@@ -737,11 +764,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   title="Remove band"
                   style={{ background: 'none', border: 'none', color: bands.length <= 1 ? '#45475a' : '#585b70', cursor: bands.length <= 1 ? 'default' : 'pointer', fontSize: '11px', padding: '0', lineHeight: 1, flexShrink: 0 }}
                 >×</button>
+                <button
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => handleSolo(i)}
+                  title={soloedBand === i ? 'Un-solo' : 'Solo this band'}
+                  style={{ background: 'none', border: 'none', color: soloedBand === i ? '#f9e2af' : '#45475a', cursor: 'pointer', fontSize: '9px', padding: '0', lineHeight: 1, flexShrink: 0, fontWeight: 700 }}
+                >S</button>
                 <input
-                  type="range" min={20} max={20000} step={1}
-                  value={center}
+                  type="range" min={0} max={1000} step={1}
+                  value={hzToSlider(center)}
                   onChange={e => {
-                    const newBands = bands.map((c, idx) => idx === i ? parseFloat(e.target.value) : c);
+                    const newHz = sliderToHz(parseInt(e.target.value));
+                    const newBands = bands.map((c, idx) => idx === i ? newHz : c);
                     updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
                   }}
                   style={{ flex: 1, accentColor: '#89dceb', cursor: 'pointer' }}
