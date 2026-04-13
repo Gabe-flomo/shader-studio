@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface Props {
   code: string;
   onClose: () => void;
+  highlightNodeId?: string | null;
 }
 
-export function CodePanel({ code, onClose }: Props) {
+export function CodePanel({ code, onClose, highlightNodeId }: Props) {
   const [copied, setCopied] = useState(false);
+  const firstMatchRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const handleCopy = async () => {
     try {
@@ -17,6 +20,25 @@ export function CodePanel({ code, onClose }: Props) {
       // Clipboard write failed silently
     }
   };
+
+  // Scroll to first highlighted line when selection changes
+  useEffect(() => {
+    if (!highlightNodeId) return;
+    // Small delay so the DOM has rendered the highlighted lines
+    const t = setTimeout(() => {
+      firstMatchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 40);
+    return () => clearTimeout(t);
+  }, [highlightNodeId]);
+
+  const setFirstMatch = useCallback((el: HTMLDivElement | null) => {
+    firstMatchRef.current = el;
+  }, []);
+
+  // Split code into annotated lines
+  const prefix = highlightNodeId ? `${highlightNodeId}_` : null;
+  const lines = code ? code.split('\n') : ['// No shader compiled yet'];
+  let isFirstMatch = true;
 
   return (
     <div
@@ -46,9 +68,16 @@ export function CodePanel({ code, onClose }: Props) {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: '11px', fontWeight: 600, color: '#89b4fa', letterSpacing: '0.04em' }}>
-          Fragment Shader
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: '#89b4fa', letterSpacing: '0.04em' }}>
+            Fragment Shader
+          </span>
+          {highlightNodeId && (
+            <span style={{ fontSize: '10px', color: '#f9e2af', fontFamily: 'monospace', opacity: 0.8 }}>
+              ↳ {highlightNodeId}
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button
             onClick={handleCopy}
@@ -84,22 +113,43 @@ export function CodePanel({ code, onClose }: Props) {
       </div>
 
       {/* Code content */}
-      <pre
+      <div
+        ref={scrollRef}
         style={{
           flex: 1,
-          margin: 0,
-          padding: '8px 14px',
           overflowY: 'auto',
           overflowX: 'auto',
-          color: '#cdd6f4',
-          fontSize: '11px',
+          padding: '6px 0',
           fontFamily: 'monospace',
-          whiteSpace: 'pre',
-          lineHeight: 1.5,
+          fontSize: '11px',
+          lineHeight: 1.55,
         }}
       >
-        {code || '// No shader compiled yet'}
-      </pre>
+        {lines.map((line, i) => {
+          const isMatch = !!(prefix && line.includes(prefix));
+          let refProp: ((el: HTMLDivElement | null) => void) | undefined;
+          if (isMatch && isFirstMatch) {
+            refProp = setFirstMatch;
+            isFirstMatch = false;
+          }
+          return (
+            <div
+              key={i}
+              ref={refProp}
+              style={{
+                padding: '0 14px',
+                background: isMatch ? '#89b4fa18' : 'transparent',
+                borderLeft: isMatch ? '2px solid #89b4fa88' : '2px solid transparent',
+                color: isMatch ? '#cdd6f4' : '#585b70',
+                whiteSpace: 'pre',
+                transition: 'background 0.15s',
+              }}
+            >
+              {line || ' '}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -616,7 +616,7 @@ function App() {
             </button>
 
             <NodeGraph />
-            {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} />}
+            {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} />}
           </div>
 
           {/* Divider — wider touch target for tablet */}
@@ -699,7 +699,7 @@ function App() {
               </button>
 
               <NodeGraph />
-              {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} />}
+              {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} />}
             </>
           )}
           {page === 'glsl' && <GLSLPage />}
