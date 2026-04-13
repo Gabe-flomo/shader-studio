@@ -1713,8 +1713,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       return;
     }
 
-    // Ctrl+click (or Cmd+click) → navigate palette to this node type
-    if (e.ctrlKey || e.metaKey) {
+    // Ctrl+click → navigate palette to this node type
+    // (Cmd/Meta is reserved for multi-select grouping)
+    if (e.ctrlKey && !e.metaKey) {
       window.dispatchEvent(new CustomEvent('palette-navigate', { detail: { nodeType: node.type } }));
       return;
     }
