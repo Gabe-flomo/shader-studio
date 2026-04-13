@@ -127,6 +127,10 @@ function App() {
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
   const [page, setPage]                 = useState<'studio' | 'learn' | 'shortcuts' | 'glsl'>('studio');
+  const [previewFloated, setPreviewFloated] = useState(false);
+  const [floatPos, setFloatPos]   = useState({ x: 40, y: 60 });
+  const [floatSize, setFloatSize] = useState({ w: 480, h: 360 });
+  const floatDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
   // Mobile/tablet drawer state
   const [drawerOpen, setDrawerOpen]         = useState(false);
@@ -246,6 +250,26 @@ function App() {
     window.addEventListener('touchend', onEnd);
   }, []);
 
+
+  // ── Float preview drag ────────────────────────────────────────────────────
+  const handleFloatHeaderMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    floatDragRef.current = { startX: e.clientX, startY: e.clientY, origX: floatPos.x, origY: floatPos.y };
+    const onMove = (ev: MouseEvent) => {
+      if (!floatDragRef.current) return;
+      const dx = ev.clientX - floatDragRef.current.startX;
+      const dy = ev.clientY - floatDragRef.current.startY;
+      setFloatPos({ x: floatDragRef.current.origX + dx, y: floatDragRef.current.origY + dy });
+    };
+    const onUp = () => {
+      floatDragRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floatPos.x, floatPos.y]);
 
   // ── Error badge ───────────────────────────────────────────────────────────
   const errorCount = compilationErrors.length + glslErrors.length;
@@ -681,30 +705,127 @@ function App() {
           {page === 'glsl' && <GLSLPage />}
         </div>
 
-        {/* Resize Divider */}
-        <div
-          onMouseDown={handleDividerMouseDown}
-          onTouchStart={handleDividerTouchStart}
-          style={{ width: '5px', flexShrink: 0, background: isDragging ? '#45475a' : '#313244', cursor: 'col-resize', transition: 'background 0.15s' }}
-          onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#45475a'; }}
-          onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#313244'; }}
-        />
+        {/* Resize Divider — hidden when preview is floated */}
+        {!previewFloated && (
+          <div
+            onMouseDown={handleDividerMouseDown}
+            onTouchStart={handleDividerTouchStart}
+            style={{ width: '5px', flexShrink: 0, background: isDragging ? '#45475a' : '#313244', cursor: 'col-resize', transition: 'background 0.15s' }}
+            onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#45475a'; }}
+            onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#313244'; }}
+          />
+        )}
 
-        {/* Right: Shader Preview */}
-        <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /></div>
+        {/* Right: Shader Preview — hidden when floated */}
+        {!previewFloated && (
+          <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+              {/* Float toggle button */}
+              <button
+                onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }}
+                title="Float preview"
+                style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, background: '#1e1e2e99', border: '1px solid #45475a', color: '#585b70', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+              >⊞</button>
+            </div>
+            {/* Status bar */}
+            <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
+              {pixelSample ? (
+                <div title="Pixel color under cursor (0.0–1.0)" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
+                  <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(3)}</span>
+                  <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
+                  <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
+                </div>
+              ) : probeDisplay ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                  {probeDisplay.map(({ label, col, formatted }) => (
+                    <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                      <span style={{ color: col, fontWeight: 700 }}>{label}</span>
+                      <span style={{ color: '#cdd6f4' }}>{formatted}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover for color · click node to probe'}</span>}
+              <div style={{ flex: 1 }} />
+              {errorBadge}
+            </div>
+            {errorPopup}
+          </div>
+        )}
+      </div>
+
+      {/* Floating preview window */}
+      {previewFloated && (
+        <div
+          style={{
+            position: 'fixed',
+            left: floatPos.x,
+            top: floatPos.y,
+            width: floatSize.w,
+            height: floatSize.h,
+            zIndex: 500,
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#181825',
+            border: '1px solid #45475a',
+            borderRadius: '8px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+            overflow: 'hidden',
+            resize: 'both',
+            minWidth: 240,
+            minHeight: 180,
+          }}
+          onMouseUp={e => {
+            // Capture resize changes via onMouseUp on the container
+            const el = e.currentTarget as HTMLDivElement;
+            setFloatSize({ w: el.offsetWidth, h: el.offsetHeight });
+          }}
+        >
+          {/* Drag handle / title bar */}
+          <div
+            onMouseDown={handleFloatHeaderMouseDown}
+            style={{
+              background: '#1e1e2e',
+              borderBottom: '1px solid #313244',
+              padding: '4px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'grab',
+              flexShrink: 0,
+              userSelect: 'none',
+            }}
+          >
+            <span style={{ fontSize: '10px', color: '#585b70', letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setPreviewFloated(false)}
+              title="Dock preview"
+              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+            >⊟</button>
+          </div>
+
+          {/* Canvas */}
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+            <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+          </div>
 
           {/* Status bar */}
-          <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
+          <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '24px', flexShrink: 0 }}>
             {pixelSample ? (
-              <div title="Pixel color under cursor (0.0–1.0)" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
                 <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(3)}</span>
                 <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
                 <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
               </div>
             ) : probeDisplay ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                 {probeDisplay.map(({ label, col, formatted }) => (
                   <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
                     <span style={{ color: col, fontWeight: 700 }}>{label}</span>
@@ -712,13 +833,14 @@ function App() {
                   </span>
                 ))}
               </div>
-            ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover for color · click node to probe'}</span>}
+            ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover to probe'}</span>}
             <div style={{ flex: 1 }} />
             {errorBadge}
           </div>
           {errorPopup}
         </div>
-      </div>
+      )}
+
       {showExport && (
         <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
       )}
