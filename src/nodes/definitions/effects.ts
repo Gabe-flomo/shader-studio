@@ -59,7 +59,7 @@ export const ToneMapNode: NodeDefinition = {
   type: 'toneMap',
   label: 'Tone Map',
   category: 'Effects',
-  description: 'Apply tone mapping to a vec3 color. Choose from ACES, Hable, Unreal, or Tanh operators.',
+  description: 'Apply tone mapping to a vec3 color. ACES, Hable, Unreal, Tanh, Reinhard2, Lottes, Uchimura, AgX.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
   },
@@ -71,10 +71,14 @@ export const ToneMapNode: NodeDefinition = {
     mode: {
       label: 'Mode', type: 'select',
       options: [
-        { value: 'aces',   label: 'ACES'   },
-        { value: 'hable',  label: 'Hable'  },
-        { value: 'unreal', label: 'Unreal' },
-        { value: 'tanh',   label: 'Tanh'   },
+        { value: 'aces',       label: 'ACES'       },
+        { value: 'hable',      label: 'Hable'      },
+        { value: 'unreal',     label: 'Unreal'     },
+        { value: 'tanh',       label: 'Tanh'       },
+        { value: 'reinhard2',  label: 'Reinhard2'  },
+        { value: 'lottes',     label: 'Lottes'     },
+        { value: 'uchimura',   label: 'Uchimura'   },
+        { value: 'agx',        label: 'AgX'        },
       ],
     },
   },
@@ -83,7 +87,7 @@ export const ToneMapNode: NodeDefinition = {
 }
 vec3 toneHable(vec3 x) {
   x *= 16.0;
-  const float A=0.15,B=0.5,C=0.1,D=0.2,E=0.02,F=0.3;
+  float A=0.15,B=0.5,C=0.1,D=0.2,E=0.02,F=0.3;
   return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
 }
 vec3 toneUnreal(vec3 c) { return c/(c+0.155)*1.019; }
@@ -91,11 +95,50 @@ vec3 toneTanh(vec3 c) {
   c = clamp(c, -40.0, 40.0);
   vec3 e = exp(c); vec3 em = exp(-c);
   return (e-em)/(e+em);
+}
+vec3 toneReinhard2(vec3 c) {
+  float Lw = 4.0;
+  return (c * (1.0 + c / (Lw * Lw))) / (1.0 + c);
+}
+float _lottesF(float x) {
+  float a=1.6, d=0.977, hdrMax=8.0, midIn=0.18, midOut=0.267;
+  float b = (-pow(midIn,a) + pow(hdrMax,a)*midOut) / ((pow(hdrMax,a)-pow(midIn,a))*midOut);
+  float c2 = (pow(hdrMax,a*d)*(-pow(midIn,a)) + pow(hdrMax,a)*pow(midIn,a*d)*midOut) /
+             ((pow(hdrMax,a*d)-pow(midIn,a*d))*midOut);
+  return pow(x,a) / (pow(x,a*d)*b + c2);
+}
+vec3 toneLottes(vec3 c) {
+  return clamp(vec3(_lottesF(c.r),_lottesF(c.g),_lottesF(c.b)), 0.0, 1.0);
+}
+float _uchi(float x) {
+  float P=1.0,a=1.0,m=0.22,l=0.4,c2=1.33,b=0.0;
+  float l0=(P-m)*l/a, S0=m+l0, S1=m+a*l0;
+  float C2=a*P/(P-S1), CP=-C2/P;
+  float w0=1.0-smoothstep(0.0,m,x);
+  float w2=step(S0,x);
+  float w1=1.0-w0-w2;
+  float T=m*pow(max(x/m,0.0001),c2)+b;
+  float S=P-(P-S1)*exp(CP*(x-S0));
+  float L=m+a*(x-m);
+  return T*w0+L*w1+S*w2;
+}
+vec3 toneUchimura(vec3 c) {
+  return clamp(vec3(_uchi(c.r),_uchi(c.g),_uchi(c.b)), 0.0, 1.0);
+}
+vec3 toneAgX(vec3 c) {
+  c = mat3(0.84248,0.04233,0.04238, 0.07843,0.87847,0.07843, 0.07922,0.07917,0.87914) * c;
+  c = clamp(c, 0.000061, 256.0);
+  c = (log2(c) - log2(0.000061)) / (log2(256.0) - log2(0.000061));
+  c = clamp(c, 0.0, 1.0);
+  return clamp(c*(c*(c*(1.67*c - 4.0)+4.33)), 0.0, 1.0);
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const colorVar = inputVars.color ?? 'vec3(0.0)';
     const mode = (node.params.mode as string) ?? 'aces';
-    const fnMap: Record<string, string> = { aces: 'toneACES', hable: 'toneHable', unreal: 'toneUnreal', tanh: 'toneTanh' };
+    const fnMap: Record<string, string> = {
+      aces: 'toneACES', hable: 'toneHable', unreal: 'toneUnreal', tanh: 'toneTanh',
+      reinhard2: 'toneReinhard2', lottes: 'toneLottes', uchimura: 'toneUchimura', agx: 'toneAgX',
+    };
     const fn = fnMap[mode] ?? 'toneACES';
     const outVar = `${node.id}_color`;
     return {
@@ -143,6 +186,82 @@ vec3 applyGrain(vec3 color, vec2 uv, float amount, float seed) {
     return {
       code: `    vec3 ${outVar} = applyGrain(${colorVar}, ${uvVar}, ${amount}, ${seed});\n`,
       outputVars: { color: outVar, uv: uvVar },
+    };
+  },
+};
+
+// ─── Luma Grain ───────────────────────────────────────────────────────────────
+
+export const LumaGrainNode: NodeDefinition = {
+  type: 'lumaGrain',
+  label: 'Luma Grain',
+  category: 'Effects',
+  description: 'Shadow-weighted film grain — more noise in dark regions, less in highlights. Wire UV and a time seed for animation.',
+  inputs: {
+    color:  { type: 'vec3',  label: 'Color'  },
+    uv:     { type: 'vec2',  label: 'UV'     },
+    seed:   { type: 'float', label: 'Seed'   },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+  },
+  defaultParams: { amount: 0.06, seed: 0.0 },
+  paramDefs: {
+    amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
+    seed:   { label: 'Seed',   type: 'float', min: 0.0, max: 1.0, step: 0.01  },
+  },
+  glslFunction: `vec3 applyLumaGrain(vec3 color, vec2 uv, float amount, float seed) {
+  float luma = dot(color, vec3(0.299, 0.587, 0.114));
+  float w = 1.0 - luma;
+  float n = fract(sin(dot(uv * 1234.5678 + seed, vec2(12.9898, 78.233))) * 43758.5453);
+  return clamp(color + vec3(mix(-amount, amount, n) * w), 0.0, 1.0);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const colorVar = inputVars.color ?? 'vec3(0.0)';
+    const uvVar    = inputVars.uv    ?? 'vec2(0.0)';
+    const amount   = p(node.params.amount, 0.06);
+    const seed     = inputVars.seed  ?? p(node.params.seed, 0.0);
+    return {
+      code: `    vec3 ${id}_color = applyLumaGrain(${colorVar}, ${uvVar}, ${amount}, ${seed});\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ─── Temporal Grain ───────────────────────────────────────────────────────────
+
+export const TemporalGrainNode: NodeDefinition = {
+  type: 'temporalGrain',
+  label: 'Temporal Grain',
+  category: 'Effects',
+  description: 'Time-animated film grain — pattern changes each frame. Wire a Time node to the Time input.',
+  inputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    time:  { type: 'float', label: 'Time'  },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+  },
+  defaultParams: { amount: 0.05 },
+  paramDefs: {
+    amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
+  },
+  glslFunction: `vec3 applyTemporalGrain(vec3 color, vec2 uv, float amount, float time) {
+  vec2 uvt = uv + fract(time * 0.123456);
+  float n = fract(sin(dot(uvt, vec2(127.1, 311.7))) * 43758.5453);
+  return clamp(color + vec3(mix(-amount, amount, n)), 0.0, 1.0);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const colorVar = inputVars.color ?? 'vec3(0.0)';
+    const uvVar    = inputVars.uv    ?? 'vec2(0.0)';
+    const amount   = p(node.params.amount, 0.05);
+    const timeVar  = inputVars.time  ?? 'iTime';
+    return {
+      code: `    vec3 ${id}_color = applyTemporalGrain(${colorVar}, ${uvVar}, ${amount}, ${timeVar});\n`,
+      outputVars: { color: `${id}_color` },
     };
   },
 };

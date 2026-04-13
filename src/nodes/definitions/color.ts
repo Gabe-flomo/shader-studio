@@ -193,7 +193,7 @@ export const PalettePresetNode: NodeDefinition = {
 
 // ─── HSV ↔ RGB ────────────────────────────────────────────────────────────────
 
-const HSV_GLSL = `
+export const HSV_GLSL = `
 vec3 rgb2hsv(vec3 c) {
     vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
     vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
@@ -299,6 +299,49 @@ export const DesaturateNode: NodeDefinition = {
         `    vec3  ${id}_color = mix(${c}, vec3(${id}_lum), ${amt});\n`,
       ].join(''),
       outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ─── Hue Range ────────────────────────────────────────────────────────────────
+
+export const HueRangeNode: NodeDefinition = {
+  type: 'hueRange',
+  label: 'Hue Range',
+  category: 'Color',
+  description: 'Boost or isolate a hue band. Hue Center & Width are 0–1. Boost > 1 amplifies saturation in-range, < 1 suppresses it. Mask output is the soft hue weight.',
+  inputs: {
+    color:      { type: 'vec3',  label: 'Color'      },
+    hue_center: { type: 'float', label: 'Hue Center' },
+    hue_width:  { type: 'float', label: 'Hue Width'  },
+    boost:      { type: 'float', label: 'Boost'      },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    mask:  { type: 'float', label: 'Mask'  },
+  },
+  defaultParams: { hue_center: 0.0, hue_width: 0.1, boost: 2.0 },
+  paramDefs: {
+    hue_center: { label: 'Hue Center', type: 'float', min: 0.0, max: 1.0, step: 0.005 },
+    hue_width:  { label: 'Hue Width',  type: 'float', min: 0.0, max: 0.5, step: 0.005 },
+    boost:      { label: 'Boost',      type: 'float', min: 0.0, max: 8.0, step: 0.05  },
+  },
+  glslFunction: HSV_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const c  = inputVars.color      ?? 'vec3(0.5)';
+    const hc = inputVars.hue_center ?? p(node.params.hue_center, 0.0);
+    const hw = inputVars.hue_width  ?? p(node.params.hue_width,  0.1);
+    const bv = inputVars.boost      ?? p(node.params.boost,      2.0);
+    return {
+      code: [
+        `    vec3  ${id}_hsv    = rgb2hsv(${c});\n`,
+        `    float ${id}_hdiff  = abs(fract(${id}_hsv.x - ${hc} + 0.5) - 0.5);\n`,
+        `    float ${id}_mask   = clamp(1.0 - ${id}_hdiff / max(${hw}, 0.001), 0.0, 1.0);\n`,
+        `    float ${id}_newV   = ${id}_hsv.z * (1.0 + (${bv} - 1.0) * ${id}_mask);\n`,
+        `    vec3  ${id}_color  = hsv2rgb(vec3(${id}_hsv.x, ${id}_hsv.y, clamp(${id}_newV, 0.0, 1.0)));\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color`, mask: `${id}_mask` },
     };
   },
 };

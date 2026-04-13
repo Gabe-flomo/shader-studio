@@ -33,7 +33,7 @@ export {
 
 // Effects / Loops
 export {
-  MakeLightNode, AbsNode, ToneMapNode, GrainNode, LightNode,
+  MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
@@ -53,7 +53,7 @@ export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
 
 // Color
-export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode } from './color';
+export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode } from './color';
 
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
@@ -95,7 +95,7 @@ import {
   GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
 } from './combiners';
 import {
-  MakeLightNode, AbsNode, ToneMapNode, GrainNode, LightNode,
+  MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
 } from './effects';
@@ -105,7 +105,7 @@ import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, No
 import { MandelbrotNode, IFSNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
-import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode } from './color';
+import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
@@ -182,6 +182,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   abs: AbsNode,
   toneMap: ToneMapNode,
   grain: GrainNode,
+  lumaGrain: LumaGrainNode,
+  temporalGrain: TemporalGrainNode,
   light: LightNode,
   fractalLoop: FractalLoopNode,
   rotatingLinesLoop: RotatingLinesLoopNode,
@@ -230,6 +232,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   posterize: PosterizeNode,
   invert: InvertNode,
   desaturate: DesaturateNode,
+  hueRange: HueRangeNode,
   // Output
   output: OutputNode,
   vec4Output: Vec4OutputNode,
