@@ -201,7 +201,7 @@ float simpleLight(float d, float brightness) {
 export const FractalLoopNode: NodeDefinition = {
   type: 'fractalLoop',
   label: 'Fractal Loop',
-  category: 'Effects',
+  category: 'Presets',
   description: 'IQ-style iterated fractal with built-in palette. Each iteration tiles UV and accumulates glowing rings.',
   inputs: {
     uv:          { type: 'vec2',  label: 'UV'           },
@@ -290,7 +290,7 @@ export const FractalLoopNode: NodeDefinition = {
 export const RotatingLinesLoopNode: NodeDefinition = {
   type: 'rotatingLinesLoop',
   label: 'Rotating Lines',
-  category: 'Effects',
+  category: 'Presets',
   description: 'Iterated rotating box/line glow. Each layer builds a pseudo-random mat2 from cosines, tiles rotated space, and accumulates glowing horizontal stripes with an RGBA cosine palette.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV (Pixel)'  },
@@ -356,7 +356,7 @@ export const RotatingLinesLoopNode: NodeDefinition = {
 export const AccumulateLoopNode: NodeDefinition = {
   type: 'accumulateLoop',
   label: 'Accumulate Loop',
-  category: 'Effects',
+  category: 'Presets',
   description: 'General iterated accumulation loop. Configure position, distance, attenuation, color and tonemap modes to create stars, orbs, arc rings, plasma, and more.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
@@ -534,7 +534,7 @@ export const ForLoopNode: NodeDefinition = {
 export const ExprNode: NodeDefinition = {
   type: 'expr',
   label: 'Expr',
-  category: 'Effects',
+  category: 'Sources',
   description: 'Write a single-line GLSL expression. Name each input slot, wire nodes into them, then use the names in your formula. Output type sets the declared GLSL type.',
   inputs: {
     in0: { type: 'float', label: 'in0' },
@@ -577,7 +577,7 @@ export const ExprNode: NodeDefinition = {
 export const CustomFnNode: NodeDefinition = {
   type: 'customFn',
   label: 'Custom Fn',
-  category: 'Effects',
+  category: 'Sources',
   description: 'User-defined GLSL function. Define input sockets, output type, and write the GLSL body.',
   inputs: {},
   outputs: { result: { type: 'float', label: 'Result' } },

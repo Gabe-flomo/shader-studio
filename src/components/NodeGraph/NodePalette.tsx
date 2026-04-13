@@ -7,31 +7,31 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { GroupPreset } from '../../types/groupPreset';
 
-// ── Math node ordering: simple → complex ──────────────────────────────────────
-const MATH_ORDER: string[] = [
-  // Arithmetic
-  'add', 'subtract', 'multiply', 'divide',
-  // Trig
-  'sin', 'cos',
-  // Rounding / stepping
-  'abs', 'negate', 'ceil', 'floor', 'round', 'fract',
-  // Algebra
-  'pow', 'sqrt', 'exp',
-  // Interpolation / clamping
-  'clamp', 'mix', 'smoothstep', 'mod',
-  // Comparison
-  'min', 'max',
-  // Hyperbolic
-  'tanh',
-  // Angle
-  'atan2',
-  // Length / dot
-  'length', 'dot',
-  // Vec2 ops
-  'makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2',
-  // Vec3 ops
-  'makeVec3', 'floatToVec3', 'multiplyVec3', 'addVec3',
+// ── Nodes hidden from the palette (still functional in existing graphs) ───────
+const HIDDEN_NODES = new Set([
+  'forLoop',           // legacy — use iterated groups instead
+  'loopRippleStep',
+  'loopRotateStep',
+  'loopDomainFold',
+  'loopFloatAccumulate',
+  'loopColorRingStep',
+  'loopRingStep',
+]);
+
+// ── Math node ordering & sub-groups ──────────────────────────────────────────
+const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
+  { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
+  { label: 'Trig',       types: ['sin', 'cos', 'atan2'] },
+  { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
+  { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
+  { label: 'Interp',     types: ['clamp', 'mix', 'smoothstep', 'mod'] },
+  { label: 'Compare',    types: ['min', 'max'] },
+  { label: 'Geometry',   types: ['length', 'dot'] },
+  { label: 'Vec2',       types: ['makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2'] },
+  { label: 'Vec3',       types: ['makeVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
 ];
+
+const MATH_ORDER: string[] = MATH_GROUPS.flatMap(g => g.types);
 
 function sortMathNodes(nodes: NodeDefinition[]): NodeDefinition[] {
   const indexMap = new Map(MATH_ORDER.map((id, i) => [id, i]));
@@ -123,6 +123,19 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   // Search query
   const [query, setQuery] = useState('');
 
+  // Favorites — persisted to localStorage
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('nodepalette_favorites') ?? '[]'); } catch { return []; }
+  });
+  const [favoritesExpanded, setFavoritesExpanded] = useState(true);
+  const toggleFavorite = (type: string) => {
+    setFavorites(prev => {
+      const next = prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type];
+      localStorage.setItem('nodepalette_favorites', JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Which categories are expanded (accordion). Default: all collapsed.
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -201,43 +214,68 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
 
   const searchResults = isSearching
     ? Object.values(NODE_REGISTRY).filter(def =>
-        def.label.toLowerCase().includes(trimmed) ||
-        def.type.toLowerCase().includes(trimmed) ||
-        (def.description ?? '').toLowerCase().includes(trimmed)
+        !HIDDEN_NODES.has(def.type) && (
+          def.label.toLowerCase().includes(trimmed) ||
+          def.type.toLowerCase().includes(trimmed) ||
+          (def.description ?? '').toLowerCase().includes(trimmed)
+        )
       )
     : [];
 
-  const nodeBtn = (type: string, label: string, description?: string) => (
-    <button
-      key={type}
-      onClick={() => handleAdd(type)}
-      title={description ?? `Drag to canvas or click to ${swapTargetNodeId ? 'replace' : 'add'}`}
-      draggable={!swapTargetNodeId}
-      onDragStart={e => {
-        e.dataTransfer.setData('application/shader-studio-node', type);
-        e.dataTransfer.effectAllowed = 'copy';
-      }}
-      style={{
-        display: 'block',
-        width: '100%',
-        padding: isDrawer ? '9px 12px' : '5px 10px',
-        marginBottom: '3px',
-        background: '#313244',
-        border: '1px solid #45475a',
-        color: '#cdd6f4',
-        cursor: swapTargetNodeId ? 'pointer' : 'grab',
-        textAlign: 'left',
-        borderRadius: '6px',
-        fontSize: isDrawer ? '13px' : '12px',
-        transition: 'background 0.1s',
-        touchAction: 'manipulation',
-      }}
-      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
-    >
-      {label}
-    </button>
-  );
+  const nodeBtn = (type: string, label: string, description?: string) => {
+    const isFav = favorites.includes(type);
+    return (
+      <div key={type} style={{ position: 'relative', marginBottom: '3px' }}>
+        <button
+          onClick={() => handleAdd(type)}
+          title={description ?? `Drag to canvas or click to ${swapTargetNodeId ? 'replace' : 'add'}`}
+          draggable={!swapTargetNodeId}
+          onDragStart={e => {
+            e.dataTransfer.setData('application/shader-studio-node', type);
+            e.dataTransfer.effectAllowed = 'copy';
+          }}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: isDrawer ? '9px 28px 9px 12px' : '5px 24px 5px 10px',
+            background: '#313244',
+            border: '1px solid #45475a',
+            color: '#cdd6f4',
+            cursor: swapTargetNodeId ? 'pointer' : 'grab',
+            textAlign: 'left',
+            borderRadius: '6px',
+            fontSize: isDrawer ? '13px' : '12px',
+            transition: 'background 0.1s',
+            touchAction: 'manipulation',
+          }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+        >
+          {label}
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); toggleFavorite(type); }}
+          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+          style={{
+            position: 'absolute',
+            right: '5px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '2px 3px',
+            lineHeight: 1,
+            fontSize: '11px',
+            color: isFav ? '#f9e2af' : '#45475a',
+            transition: 'color 0.1s',
+          }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#fab387' : '#a6adc8')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#f9e2af' : '#45475a')}
+        >★</button>
+      </div>
+    );
+  };
 
   const isDrawer = mode === 'drawer';
 
@@ -317,6 +355,43 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
           boxSizing: 'border-box',
         }}
       />
+
+      {/* ── Favorites ── */}
+      {favorites.length > 0 && (
+        <div style={{ marginBottom: '6px' }}>
+          <button
+            onClick={() => setFavoritesExpanded(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              width: '100%', background: 'none', border: 'none',
+              cursor: 'pointer', padding: '2px 4px', marginBottom: '3px',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: '7px', opacity: 0.5, color: '#f9e2af', width: '7px', flexShrink: 0 }}>
+              {favoritesExpanded ? '▼' : '▶'}
+            </span>
+            <span style={{ fontSize: '11px' }}>★</span>
+            <span style={{
+              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: '#f9e2af',
+            }}>
+              Favorites
+            </span>
+            <span style={{ marginLeft: 'auto', opacity: 0.4, fontSize: '9px', color: '#f9e2af' }}>
+              {favorites.length}
+            </span>
+          </button>
+          {favoritesExpanded && (
+            <div style={{ paddingLeft: '4px' }}>
+              {favorites
+                .map(t => NODE_REGISTRY[t])
+                .filter(Boolean)
+                .map(def => nodeBtn(def.type, def.label, def.description))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Examples browser ── */}
       {!isSearching && (
@@ -423,10 +498,11 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
       ) : (
         /* Accordion categories */
         categories.map(category => {
-          const isOpen  = open.has(category);
-          const color   = CATEGORY_COLORS[category] ?? '#888';
-          const rawNodes = getNodesByCategory(category);
-          const nodes   = category === 'Math' ? sortMathNodes(rawNodes) : rawNodes;
+          const isOpen   = open.has(category);
+          const color    = CATEGORY_COLORS[category] ?? '#888';
+          const rawNodes = getNodesByCategory(category).filter(d => !HIDDEN_NODES.has(d.type));
+          const nodes    = category === 'Math' ? sortMathNodes(rawNodes) : rawNodes;
+          if (nodes.length === 0) return null;
           return (
             <div key={category} style={{ marginBottom: '2px' }}>
               {/* Category header toggle */}
@@ -461,7 +537,26 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               {/* Node buttons — only shown when open */}
               {isOpen && (
                 <div style={{ marginTop: '2px', paddingLeft: '4px' }}>
-                  {nodes.map(def => nodeBtn(def.type, def.label, def.description))}
+                  {category === 'Math' ? (
+                    MATH_GROUPS.map(group => {
+                      const groupNodes = nodes.filter(d => group.types.includes(d.type));
+                      if (groupNodes.length === 0) return null;
+                      return (
+                        <div key={group.label}>
+                          <div style={{
+                            fontSize: '8px', color: '#45475a', letterSpacing: '0.08em',
+                            textTransform: 'uppercase', padding: '4px 2px 2px',
+                            fontWeight: 600,
+                          }}>
+                            {group.label}
+                          </div>
+                          {groupNodes.map(def => nodeBtn(def.type, def.label, def.description))}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    nodes.map(def => nodeBtn(def.type, def.label, def.description))
+                  )}
                 </div>
               )}
             </div>

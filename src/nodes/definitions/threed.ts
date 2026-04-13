@@ -614,7 +614,7 @@ export const ChromaticAberrationNode: NodeDefinition = {
 export const CombineRGBNode: NodeDefinition = {
   type: 'combineRGB',
   label: 'Combine RGB',
-  category: 'Effects',
+  category: 'Combiners',
   description: [
     'Combines three inputs (float or vec3) into a single vec3 color. ',
     'Channel mode: takes .r from R input, .g from G input, .b from B input. ',
