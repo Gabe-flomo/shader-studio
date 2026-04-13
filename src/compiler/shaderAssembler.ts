@@ -368,7 +368,7 @@ export function generateFragmentShader(
             }
             // Build inner port overrides from the nested group's resolved input vars
             const innerPortOverrides = new Map<string, string>();
-            for (const port of innerSubgraph.inputPorts) {
+            for (const port of (innerSubgraph.inputPorts ?? [])) {
               const outerVar = nestedInputVars[port.key];
               if (outerVar) innerPortOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
             }
@@ -540,13 +540,13 @@ export function generateFragmentShader(
         // ── Single pass (original behavior) ──────────────────────────────────
         const prefix = `${node.id}_g_`;
         const portInputOverrides = new Map<string, string>();
-        for (const port of subgraph.inputPorts) {
+        for (const port of (subgraph.inputPorts ?? [])) {
           const outerVar = inputVars[port.key];
           if (outerVar) portInputOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
         }
         compileSubgraphPass(prefix, portInputOverrides);
         const groupOutputVars: Record<string, string> = {};
-        for (const port of subgraph.outputPorts) {
+        for (const port of (subgraph.outputPorts ?? [])) {
           const fromOutputs = nodeOutputs.get(prefix + port.fromNodeId);
           if (fromOutputs?.[port.fromOutputKey]) groupOutputVars[port.key] = fromOutputs[port.fromOutputKey];
         }
@@ -558,11 +558,13 @@ export function generateFragmentShader(
         // Carry pairs: outputPorts[i] ↔ inputPorts[i] where types match.
         // Carry vars are declared outside the loop and persist across iterations.
         // Non-matched inputs are "fixed" — use the outer var every iteration.
+        const inPorts  = subgraph.inputPorts  ?? [];
+        const outPorts = subgraph.outputPorts ?? [];
         const carryPairs: Array<{ inPort: SubgraphData['inputPorts'][0]; outPort: SubgraphData['outputPorts'][0] }> = [];
-        const minLen = Math.min(subgraph.inputPorts.length, subgraph.outputPorts.length);
+        const minLen = Math.min(inPorts.length, outPorts.length);
         for (let i = 0; i < minLen; i++) {
-          if (subgraph.inputPorts[i].type === subgraph.outputPorts[i].type) {
-            carryPairs.push({ inPort: subgraph.inputPorts[i], outPort: subgraph.outputPorts[i] });
+          if (inPorts[i].type === outPorts[i].type) {
+            carryPairs.push({ inPort: inPorts[i], outPort: outPorts[i] });
           }
         }
         const carryInKeys = new Set(carryPairs.map(cp => cp.inPort.key));
@@ -581,7 +583,7 @@ export function generateFragmentShader(
         //     We don't know the inner var names yet — fill them in after compileSubgraphPass.
         //     Store placeholder names keyed by output port key.
         const nonCarryOutVarNames: Record<string, string> = {};
-        for (const port of subgraph.outputPorts) {
+        for (const port of outPorts) {
           if (!carryOutKeys.has(port.key)) {
             const varName = `${node.id}_out_${port.key}`;
             nonCarryOutVarNames[port.key] = varName;
@@ -592,7 +594,7 @@ export function generateFragmentShader(
 
         // Build portInputOverrides early — needed for carry-mode node init resolution below.
         const portInputOverrides = new Map<string, string>();
-        for (const port of subgraph.inputPorts) {
+        for (const port of inPorts) {
           const outerVar = carryInKeys.has(port.key)
             ? carryVarNames[port.key]   // carry: use the persistent carry var
             : inputVars[port.key];      // fixed: same outer var every iteration
@@ -771,7 +773,7 @@ export function generateFragmentShader(
         }
 
         // 4b. Copy non-carry output vars to their outer counterparts (before closing brace)
-        for (const port of subgraph.outputPorts) {
+        for (const port of outPorts) {
           if (!carryOutKeys.has(port.key)) {
             const fromOutputs = nodeOutputs.get(prefix + port.fromNodeId);
             const innerVar = fromOutputs?.[port.fromOutputKey];
@@ -786,7 +788,7 @@ export function generateFragmentShader(
 
         // 6. Map group outputs: carry pairs use their persistent vars; non-carry use outer result vars
         const groupOutputVars: Record<string, string> = {};
-        for (const port of subgraph.outputPorts) {
+        for (const port of outPorts) {
           if (carryOutKeys.has(port.key)) {
             const matchPair = carryPairs.find(cp => cp.outPort.key === port.key);
             if (matchPair) groupOutputVars[port.key] = carryVarNames[matchPair.inPort.key];
@@ -820,7 +822,7 @@ export function generateFragmentShader(
 
       // Apply port input overrides from the sceneGroup's own outer inputs
       const sgPortOverrides = new Map<string, string>();
-      for (const port of subgraph.inputPorts) {
+      for (const port of (subgraph.inputPorts ?? [])) {
         const outerVar = inputVars[port.key];
         if (outerVar) sgPortOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
       }
@@ -883,7 +885,7 @@ export function generateFragmentShader(
       }
 
       // Find return value from the subgraph's output port (if defined)
-      for (const port of subgraph.outputPorts) {
+      for (const port of (subgraph.outputPorts ?? [])) {
         if (port.type === 'float') {
           const srcOut = nodeOutputs.get(sgPrefix + port.fromNodeId);
           if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
