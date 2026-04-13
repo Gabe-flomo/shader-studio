@@ -3017,8 +3017,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               }}
             >
               {liveValueBadge && (
-                <span style={{ color: '#f9e2af', fontSize: '9px', fontFamily: 'monospace', marginRight: '6px', opacity: 0.8 }}>
-                  {liveValueBadge}
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px', marginRight: '6px' }}>
+                  <span style={{ color: '#f9e2af', fontSize: '9px', fontFamily: 'monospace', opacity: 0.8 }}>
+                    {liveValueBadge}
+                  </span>
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={e => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('reset-time')); }}
+                    title="Reset time to 0"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: '#585b70', fontSize: '9px', padding: '0', lineHeight: 1,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#f9e2af')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#585b70')}
+                  >↺</button>
                 </span>
               )}
               <span style={{ color: '#a6adc8', fontSize: '11px' }}>{output.label}</span>

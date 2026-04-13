@@ -561,11 +561,19 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     renderer.domElement.addEventListener('mousemove', handleMouseMove);
     renderer.domElement.addEventListener('mouseleave', handleMouseLeave);
 
+    // Reset time to 0 when 'reset-time' is fired (e.g. from Time node button)
+    const handleResetTime = () => {
+      clock.start();
+      material.uniforms.u_time.value = 0;
+    };
+    window.addEventListener('reset-time', handleResetTime);
+
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       ro.disconnect();
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('reset-time', handleResetTime);
       rt.dispose();
       probeRT.dispose();
       probeGeo.dispose();
