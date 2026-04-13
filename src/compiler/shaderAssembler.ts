@@ -738,7 +738,7 @@ uniform vec2 u_mouse;
 ${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}
 varying vec2 vUv;
 
-// ── Built-in noise helpers (always available to all nodes) ────────────────
+// ── Built-in helpers (always available to all nodes / custom functions) ──────
 vec2 noiseHash2(vec2 p) {
     p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
     return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
@@ -751,6 +751,59 @@ float valueNoise(vec2 p) {
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
                mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+// Rotate a 2D vector by angle (radians)
+vec2 rotate(vec2 v, float angle) {
+    return vec2(v.x * cos(angle) - v.y * sin(angle),
+                v.x * sin(angle) + v.y * cos(angle));
+}
+// Signed distance — axis-aligned box
+float sdBox(vec2 p, vec2 b) {
+    vec2 d = abs(p) - b;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+// Signed distance — line segment
+float sdSegment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+// Signed distance — ellipse
+float sdEllipse(vec2 p, vec2 ab) {
+    p = abs(p);
+    if (p.x > p.y) { p = p.yx; ab = ab.yx; }
+    float l = ab.y*ab.y - ab.x*ab.x;
+    float m = ab.x*p.x/l; float m2 = m*m;
+    float n = ab.y*p.y/l; float n2 = n*n;
+    float c = (m2+n2-1.0)/3.0; float c3 = c*c*c;
+    float q = c3 + m2*n2*2.0; float d2 = c3 + m2*n2; float g = m + m*n2;
+    float co;
+    if (d2 < 0.0) {
+        float h2 = acos(q/c3)/3.0;
+        float s2 = cos(h2); float t2 = sin(h2)*sqrt(3.0);
+        float rx2 = sqrt(-c*(s2+t2+2.0)+m2); float ry2 = sqrt(-c*(s2-t2+2.0)+m2);
+        co = (ry2+sign(l)*rx2+abs(g)/(rx2*ry2)-m)/2.0;
+    } else {
+        float h2 = 2.0*m*n*sqrt(d2);
+        float s2 = sign(q+h2)*pow(abs(q+h2), 1.0/3.0);
+        float t2 = sign(q-h2)*pow(abs(q-h2), 1.0/3.0);
+        float rx2 = -(s2+t2)-c*4.0+2.0*m2; float ry2 = (s2-t2)*sqrt(3.0);
+        float rm2 = sqrt(rx2*rx2+ry2*ry2);
+        co = (ry2/sqrt(rm2-rx2)+2.0*g/rm2-m)/2.0;
+    }
+    vec2 r2 = ab*vec2(co, sqrt(1.0-co*co));
+    return length(r2-p)*sign(p.y-r2.y);
+}
+// Domain repetition — tile space with period s
+vec2 opRepeat(vec2 p, float s) {
+    return mod(p + s*0.5, s) - s*0.5;
+}
+// Polar domain repetition — n-fold symmetry
+vec2 opRepeatPolar(vec2 p, float n) {
+    float angle = TAU / n;
+    float a = atan(p.y, p.x) + angle * 0.5;
+    a = mod(a, angle) - angle * 0.5;
+    return vec2(cos(a), sin(a)) * length(p);
 }
 // ─────────────────────────────────────────────────────────────────────────
 

@@ -274,13 +274,7 @@ export const Rotate2DNode: NodeDefinition = {
   paramDefs: {
     angle: { label: 'Angle', type: 'float', min: -6.28, max: 6.28, step: 0.01 },
   },
-  glslFunction: `
-vec2 rotate(vec2 v, float angle) {
-    return vec2(
-        v.x * cos(angle) - v.y * sin(angle),
-        v.x * sin(angle) + v.y * cos(angle)
-    );
-}`,
+  // rotate() is now a built-in always emitted by shaderAssembler — no glslFunction needed
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_output`;
     const inVar = inputVars.input || 'vec2(0.0)';

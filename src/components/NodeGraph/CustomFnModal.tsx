@@ -80,6 +80,67 @@ export function CustomFnModal({ node, onClose }: Props) {
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fnRef   = useRef<HTMLTextAreaElement | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [autoWrap, setAutoWrap] = useState(false);
+
+  // Read current params
+  const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
+  const outputType   = (node.params.outputType as DataType) || 'float';
+  const body         = typeof node.params.body === 'string' ? node.params.body : '0.0';
+  const glslFns      = typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '';
+  const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Fn';
+
+  // ── Undo / Redo for body ────────────────────────────────────────────────────
+  const bodyHistory      = useRef<string[]>([body]);
+  const bodyHistoryIndex = useRef<number>(0);
+  const [bodyHistoryPos, setBodyHistoryPos] = useState(0);
+
+  const pushBodyHistory = (newBody: string) => {
+    const trimmed = bodyHistory.current.slice(0, bodyHistoryIndex.current + 1);
+    trimmed.push(newBody);
+    bodyHistory.current      = trimmed;
+    bodyHistoryIndex.current = trimmed.length - 1;
+    setBodyHistoryPos(bodyHistoryIndex.current);
+  };
+
+  const commitBody = (newBody: string) => {
+    updateNodeParams(node.id, { body: newBody });
+    pushBodyHistory(newBody);
+  };
+
+  const undoBody = () => {
+    if (bodyHistoryIndex.current <= 0) return;
+    bodyHistoryIndex.current -= 1;
+    setBodyHistoryPos(bodyHistoryIndex.current);
+    updateNodeParams(node.id, { body: bodyHistory.current[bodyHistoryIndex.current] });
+    requestAnimationFrame(() => bodyRef.current?.focus());
+  };
+
+  const redoBody = () => {
+    if (bodyHistoryIndex.current >= bodyHistory.current.length - 1) return;
+    bodyHistoryIndex.current += 1;
+    setBodyHistoryPos(bodyHistoryIndex.current);
+    updateNodeParams(node.id, { body: bodyHistory.current[bodyHistoryIndex.current] });
+    requestAnimationFrame(() => bodyRef.current?.focus());
+  };
+
+  const canUndoBody = bodyHistoryPos > 0;
+  const canRedoBody = bodyHistoryPos < bodyHistory.current.length - 1;
+
+  const handleBodyKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) redoBody(); else undoBody();
+    } else if (mod && e.key === 'y') {
+      e.preventDefault();
+      redoBody();
+    }
+  };
+
+  const handleBodyBlur = () => {
+    const current = bodyHistory.current[bodyHistoryIndex.current];
+    if (body !== current) pushBodyHistory(body);
+  };
 
   const handleSavePreset = () => {
     // Read params directly from the node prop (always up-to-date via controlled inputs)
@@ -95,45 +156,59 @@ export function CustomFnModal({ node, onClose }: Props) {
     setTimeout(() => setSavedFlash(false), 1500);
   };
 
-  // Read current params
-  const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
-  const outputType   = (node.params.outputType as DataType) || 'float';
-  const body         = typeof node.params.body === 'string' ? node.params.body : '0.0';
-  const glslFns      = typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '';
-  const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Fn';
-
-  // Insert text at textarea cursor — if text contains "()" and there is a
-  // non-empty selection, auto-wraps the selection inside the first "()" pair.
-  // e.g. selected "myVar" + click sin() → sin(myVar)
+  // Insert text at cursor for the body textarea — supports auto-wrap and selection-wrap.
+  // For non-body textareas (glslFunctions), falls back to plain cursor insert.
   const insertAtCursor = (ref: React.RefObject<HTMLTextAreaElement | null>, current: string, paramKey: string, text: string) => {
     const ta = ref.current;
+    const isBody = paramKey === 'body';
+
     if (!ta) {
-      updateNodeParams(node.id, { [paramKey]: current + text });
+      if (isBody) commitBody(current + text);
+      else updateNodeParams(node.id, { [paramKey]: current + text });
       return;
     }
-    const start = ta.selectionStart ?? current.length;
-    const end   = ta.selectionEnd   ?? current.length;
+
+    const start    = ta.selectionStart ?? current.length;
+    const end      = ta.selectionEnd   ?? current.length;
     const selected = current.slice(start, end);
+    const hasParen = text.includes('(');
 
-    let inserted = text;
-    let cursorOffset = text.length;
+    // Helper: insert `inner` as first argument of a function template like "sin()" or "pow(, )"
+    const wrapFirst = (fnInsert: string, inner: string): string => {
+      const parenIdx = fnInsert.indexOf('(');
+      return fnInsert.slice(0, parenIdx + 1) + inner + fnInsert.slice(parenIdx + 1);
+    };
 
-    if (selected && text.includes('()')) {
-      // Wrap selection inside the first empty "()" in the template
-      inserted = text.replace('()', `(${selected})`);
-      // Place cursor after the closing paren of the wrap
-      cursorOffset = inserted.length;
-    } else if (!selected && text.includes('()')) {
-      // No selection — place cursor inside the parens
+    let next: string;
+    let cursorOffset: number;
+
+    if (isBody && autoWrap && hasParen) {
+      // Auto-wrap ON: wrap the entire current body as the first argument
+      const wrapped = wrapFirst(text, current);
+      next         = wrapped;
+      cursorOffset = wrapped.length;
+    } else if (selected && hasParen) {
+      // Selection present: wrap selected text as first argument, replace selection
+      const wrapped = wrapFirst(text, selected);
+      next         = current.slice(0, start) + wrapped + current.slice(end);
+      cursorOffset = start + wrapped.length;
+    } else if (!selected && hasParen) {
+      // No selection: insert and place cursor inside the first "()"
       const parenIdx = text.indexOf('()');
-      cursorOffset = parenIdx + 1; // inside the ()
+      next         = current.slice(0, start) + text + current.slice(end);
+      cursorOffset = start + (parenIdx >= 0 ? parenIdx + 1 : text.length);
+    } else {
+      // Plain insert / replace selection
+      next         = current.slice(0, start) + text + current.slice(end);
+      cursorOffset = start + text.length;
     }
 
-    const next = current.slice(0, start) + inserted + current.slice(end);
-    updateNodeParams(node.id, { [paramKey]: next });
+    if (isBody) commitBody(next);
+    else updateNodeParams(node.id, { [paramKey]: next });
+
     requestAnimationFrame(() => {
       ta.focus();
-      ta.setSelectionRange(start + cursorOffset, start + cursorOffset);
+      ta.setSelectionRange(cursorOffset, cursorOffset);
     });
   };
 
@@ -419,7 +494,40 @@ export function CustomFnModal({ node, onClose }: Props) {
         </div>
 
         {/* Body textarea */}
-        <div style={SECTION_LABEL as React.CSSProperties}>GLSL Body</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+          <span style={{ ...(SECTION_LABEL as React.CSSProperties), margin: 0 }}>GLSL Body</span>
+
+          {/* Undo */}
+          <button
+            onClick={undoBody}
+            disabled={!canUndoBody}
+            title="Undo (Cmd/Ctrl+Z)"
+            style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canUndoBody ? 1 : 0.35, cursor: canUndoBody ? 'pointer' : 'default' }}
+          >↩</button>
+
+          {/* Redo */}
+          <button
+            onClick={redoBody}
+            disabled={!canRedoBody}
+            title="Redo (Cmd/Ctrl+Shift+Z)"
+            style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canRedoBody ? 1 : 0.35, cursor: canRedoBody ? 'pointer' : 'default' }}
+          >↪</button>
+
+          {/* Auto-wrap toggle */}
+          <button
+            onClick={() => setAutoWrap(v => !v)}
+            title={autoWrap
+              ? 'Auto-wrap ON — clicking a function wraps the entire body as its first argument. Click to toggle off.'
+              : 'Auto-wrap OFF — clicking a function while text is selected wraps just the selection. Click to toggle on.'}
+            style={{
+              ...BTN, padding: '2px 8px', fontSize: '10px',
+              background: autoWrap ? '#45475a' : '#313244',
+              color: autoWrap ? '#cba6f7' : '#585b70',
+              border: `1px solid ${autoWrap ? '#cba6f7' : '#45475a'}`,
+              transition: 'all 0.15s',
+            }}
+          >⊂ auto-wrap {autoWrap ? 'ON' : 'OFF'}</button>
+        </div>
         <div style={{ fontSize: '10px', color: '#585b70', marginBottom: '4px' }}>
           Use your input names directly. Single expression or multi-line block. The result is assigned to the output.
         </div>
@@ -427,6 +535,8 @@ export function CustomFnModal({ node, onClose }: Props) {
           ref={bodyRef}
           value={body}
           onChange={e => updateNodeParams(node.id, { body: e.target.value })}
+          onBlur={handleBodyBlur}
+          onKeyDown={handleBodyKeyDown}
           spellCheck={false}
           rows={6}
           style={{
