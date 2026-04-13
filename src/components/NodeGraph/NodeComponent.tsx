@@ -11,6 +11,9 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
       100% { background: none; border-color: #585b70; color: #a6adc8; box-shadow: none; }
     }
     .group-save-flash { animation: groupSaveFlash 0.7s ease-out forwards; }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
   `;
   document.head.appendChild(s);
 }
@@ -72,15 +75,18 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
-  background: '#11111b',
-  border: '1px solid #45475a',
+  background: 'transparent',
+  border: '1px solid #31324488',
   color: '#cdd6f4',
-  padding: '2px 4px',
+  padding: '1px 4px',
   borderRadius: '3px',
   fontSize: '11px',
   width: '52px',
   outline: 'none',
-};
+  textAlign: 'center',
+  // hide browser spinner arrows
+  MozAppearance: 'textfield' as React.CSSProperties['MozAppearance'],
+} as React.CSSProperties;
 
 const RANGE_STYLE: React.CSSProperties = {
   width: '72px',
@@ -705,6 +711,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [saveHovered, setSaveHovered] = useState(false);
   const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
   const [hoveredSliderKey, setHoveredSliderKey] = useState<string | null>(null);
+  const [editingSliderKey, setEditingSliderKey] = useState<string | null>(null);
+  const [editingSliderValue, setEditingSliderValue] = useState('');
 
   if (node.type === 'group') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
@@ -1173,9 +1181,32 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                           onDoubleClick={() => updateNodeParams(node.id, { [overrideKey]: (effMin + effMax) / 2 })}
                           style={{ flex: 1, accentColor: '#89b4fa', cursor: 'pointer' }}
                         />
-                        <span style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
-                        </span>
+                        {editingSliderKey === `gp_${overrideKey}` ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: '1px solid #585b70' }}
+                            value={editingSliderValue}
+                            onChange={e => setEditingSliderValue(e.target.value)}
+                            onBlur={() => {
+                              const n = parseFloat(editingSliderValue);
+                              if (!isNaN(n)) updateNodeParams(node.id, { [overrideKey]: n });
+                              setEditingSliderKey(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { const n = parseFloat(editingSliderValue); if (!isNaN(n)) updateNodeParams(node.id, { [overrideKey]: n }); setEditingSliderKey(null); }
+                              if (e.key === 'Escape') setEditingSliderKey(null);
+                            }}
+                          />
+                        ) : (
+                          <span
+                            title="Double-click to edit"
+                            style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
+                            onDoubleClick={() => { setEditingSliderKey(`gp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
+                          >
+                            {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                          </span>
+                        )}
                       </>
                     )}
                   </div>
@@ -2139,16 +2170,38 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     onChange={e => setFloat(key, e.target.value)}
                     onDoubleClick={() => setFloat(key, String((effMin + effMax) / 2))}
                   />
-                  <input
-                    type="number"
-                    style={INPUT_STYLE}
-                    step={step}
-                    value={val}
-                    onChange={e => setFloat(key, e.target.value)}
-                    onBlur={e => handleNumberCommit(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleNumberCommit((e.target as HTMLInputElement).value); }}
-                    onDoubleClick={() => setFloat(key, String((effMin + effMax) / 2))}
-                  />
+                  {editingSliderKey === key ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      style={{ ...INPUT_STYLE, border: '1px solid #585b70' }}
+                      value={editingSliderValue}
+                      onChange={e => setEditingSliderValue(e.target.value)}
+                      onBlur={() => {
+                        handleNumberCommit(editingSliderValue);
+                        setEditingSliderKey(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { handleNumberCommit(editingSliderValue); setEditingSliderKey(null); }
+                        if (e.key === 'Escape') setEditingSliderKey(null);
+                      }}
+                    />
+                  ) : (
+                    <span
+                      title="Double-click to edit"
+                      style={{
+                        ...INPUT_STYLE,
+                        display: 'inline-block',
+                        lineHeight: '1.6',
+                        cursor: 'text',
+                        userSelect: 'none',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                      onDoubleClick={() => { setEditingSliderKey(key); setEditingSliderValue(String(val)); }}
+                    >
+                      {val.toFixed(step < 0.01 ? 4 : step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                    </span>
+                  )}
                   {/* Gear button */}
                   <button
                     onClick={() => setOpenSliderConfig(prev => prev === key ? null : key)}
