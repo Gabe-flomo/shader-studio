@@ -329,6 +329,110 @@ export function generateFragmentShader(
           // Skip nodes already pre-computed before this pass (e.g. loopIndex nodes
           // whose output was pre-injected with the real loop variable before the pass ran).
           if (nodeOutputs.has(subNode.id)) continue;
+
+          // ── Nested group: recursively inline its subgraph (max 2 levels) ─────────
+          if (subNode.type === 'group') {
+            const innerSubgraph = subNode.params.subgraph as SubgraphData | undefined;
+            if (!innerSubgraph || innerSubgraph.nodes.length === 0) {
+              nodeOutputs.set(subNode.id, {});
+              continue;
+            }
+            const innerPrefix = `${subNode.id}_g_`;
+            // Resolve the nested group's own input vars from portInputOverrides + nodeOutputs
+            const nestedOrigId = subNode.id.slice(iterPrefix.length);
+            const nestedInputVars: Record<string, string> = {};
+            for (const [k, inp] of Object.entries(subNode.inputs)) {
+              const portKey = `${nestedOrigId}:${k}`;
+              if (portInputOverrides.has(portKey)) {
+                nestedInputVars[k] = portInputOverrides.get(portKey)!;
+              } else if (inp.connection) {
+                const srcOutputs = nodeOutputs.get(inp.connection.nodeId);
+                if (srcOutputs?.[inp.connection.outputKey]) nestedInputVars[k] = srcOutputs[inp.connection.outputKey];
+              }
+              if (!nestedInputVars[k]) {
+                if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) nestedInputVars[k] = 'g_uv';
+                else if (inp.type === 'float' && (k === 'time' || k === 't')) nestedInputVars[k] = 'u_time';
+                else if (inp.defaultValue !== undefined) {
+                  if (typeof inp.defaultValue === 'number') nestedInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                  else if (Array.isArray(inp.defaultValue)) nestedInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                }
+              }
+            }
+            // Build inner port overrides from the nested group's resolved input vars
+            const innerPortOverrides = new Map<string, string>();
+            for (const port of innerSubgraph.inputPorts) {
+              const outerVar = nestedInputVars[port.key];
+              if (outerVar) innerPortOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
+            }
+            // Collect GLSL helpers from inner subgraph nodes
+            for (const inn of innerSubgraph.nodes) {
+              const innDef = getNodeDefinition(inn.type);
+              if (innDef?.glslFunction) functions.add(innDef.glslFunction);
+              innDef?.glslFunctions?.forEach(f => functions.add(f));
+              if (inn.type === 'customFn' && typeof inn.params.glslFunctions === 'string') {
+                const h = (inn.params.glslFunctions as string).trim();
+                if (h) functions.add(h);
+              }
+            }
+            // Pre-inject loopIndex nodes (single-pass: i = 0.0)
+            for (const inn of innerSubgraph.nodes) {
+              if (inn.type === 'loopIndex') {
+                nodeOutputs.set(innerPrefix + inn.id, { i: '0.0' });
+              }
+            }
+            // Build prefixed inner nodes
+            const innerPrefixedNodes: GraphNode[] = innerSubgraph.nodes.map(inn => ({
+              ...inn,
+              id: innerPrefix + inn.id,
+              inputs: Object.fromEntries(
+                Object.entries(inn.inputs).map(([k, inp]) => [
+                  k,
+                  inp.connection
+                    ? { ...inp, connection: { nodeId: innerPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
+                    : inp,
+                ]),
+              ),
+            }));
+            const sortedInner = topologicalSort(innerPrefixedNodes.filter(inn => inn.type !== 'loopCarry'));
+            for (const inn of sortedInner) {
+              if (nodeOutputs.has(inn.id)) continue;
+              const innDef = getNodeDefinition(inn.type);
+              if (!innDef) continue;
+              const innOrigId = inn.id.slice(innerPrefix.length);
+              const innInputVars: Record<string, string> = {};
+              for (const [k, inp] of Object.entries(inn.inputs)) {
+                const portKey = `${innOrigId}:${k}`;
+                if (innerPortOverrides.has(portKey)) {
+                  innInputVars[k] = innerPortOverrides.get(portKey)!;
+                } else if (inp.connection) {
+                  const srcOut = nodeOutputs.get(inp.connection.nodeId);
+                  if (srcOut?.[inp.connection.outputKey]) innInputVars[k] = srcOut[inp.connection.outputKey];
+                }
+                if (!innInputVars[k]) {
+                  if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) innInputVars[k] = 'g_uv';
+                  else if (inp.type === 'float' && (k === 'time' || k === 't')) innInputVars[k] = 'u_time';
+                  else if (inp.defaultValue !== undefined) {
+                    if (typeof inp.defaultValue === 'number') innInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                    else if (Array.isArray(inp.defaultValue)) innInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                  }
+                }
+              }
+              const { patchedNode: patchedInn, uniforms: innUniforms } = patchNodeParamsForUniforms(inn, innDef);
+              Object.assign(paramUniforms, innUniforms);
+              const innResult = innDef.generateGLSL(patchedInn, innInputVars);
+              mainCode.push(innResult.code);
+              nodeOutputs.set(inn.id, innResult.outputVars);
+            }
+            // Map inner group output ports → compiled vars
+            const innerGroupOutVars: Record<string, string> = {};
+            for (const port of innerSubgraph.outputPorts) {
+              const fromOut = nodeOutputs.get(innerPrefix + port.fromNodeId);
+              if (fromOut?.[port.fromOutputKey]) innerGroupOutVars[port.key] = fromOut[port.fromOutputKey];
+            }
+            nodeOutputs.set(subNode.id, innerGroupOutVars);
+            continue;
+          }
+
           if (subDef.glslFunction) functions.add(subDef.glslFunction);
           subDef.glslFunctions?.forEach(f => functions.add(f));
           const originalId = subNode.id.slice(iterPrefix.length);

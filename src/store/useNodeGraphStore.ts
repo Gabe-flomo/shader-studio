@@ -172,6 +172,12 @@ interface NodeGraphState {
   // Group drill-down — when set, NodeGraph renders this group's subgraph instead
   activeGroupId: string | null;
   setActiveGroupId: (id: string | null) => void;
+  activeGroupPath: string[];
+  enterGroup: (id: string) => void;
+  exitGroup: () => void;
+  exitToRoot: () => void;
+  exitToDepth: (depth: number) => void;
+  duplicateGroup: (groupId: string) => string | null;
 
   // Texture inputs — maps nodeId → loaded THREE.Texture (or null if not yet loaded)
   // Populated by NodeComponent file picker; consumed by ShaderCanvas to bind sampler2D uniforms.
@@ -469,6 +475,91 @@ function estimateNodeHeight(node: GraphNode): number {
   return 36 + (inputCount + outputCount) * 22 + paramCount * 34 + 16;
 }
 
+// ── Nested-group path helpers ──────────────────────────────────────────────
+/**
+ * Return the node list at the active depth specified by `path`.
+ * path=[] → top-level nodes; path=['a'] → inside group a; path=['a','b'] → inside b inside a.
+ */
+export function getActiveNodes(nodes: GraphNode[], path: string[]): GraphNode[] | null {
+  if (path.length === 0) return nodes;
+  const g0 = nodes.find(n => n.id === path[0]);
+  const sg0 = g0?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  if (!sg0) return null;
+  if (path.length === 1) return sg0.nodes;
+  const g1 = sg0.nodes.find(n => n.id === path[1]);
+  const sg1 = g1?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  return sg1?.nodes ?? null;
+}
+
+/**
+ * Return a new top-level nodes array with the subgraph at `path` replaced by `newSub`.
+ */
+function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[]): GraphNode[] | null {
+  if (path.length === 0) return newSub;
+  if (path.length === 1) {
+    return nodes.map(n => {
+      if (n.id !== path[0]) return n;
+      const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return n;
+      return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: newSub } } };
+    });
+  }
+  return nodes.map(outer => {
+    if (outer.id !== path[0]) return outer;
+    const outerSg = outer.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+    if (!outerSg) return outer;
+    const newOuterSub = outerSg.nodes.map(inner => {
+      if (inner.id !== path[1]) return inner;
+      const innerSg = inner.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!innerSg) return inner;
+      return { ...inner, params: { ...inner.params, subgraph: { ...innerSg, nodes: newSub } } };
+    });
+    return { ...outer, params: { ...outer.params, subgraph: { ...outerSg, nodes: newOuterSub } } };
+  });
+}
+
+/**
+ * Deep-clone a group node, assigning new IDs to the group itself and all its
+ * subgraph nodes (recursively for nested groups).
+ */
+function deepCloneGroupNode(groupNode: GraphNode): GraphNode {
+  const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  const newGroupId = `group_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  if (!subgraph) return { ...groupNode, id: newGroupId };
+
+  const idMap = new Map<string, string>();
+  for (const sn of subgraph.nodes) {
+    idMap.set(sn.id, `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+  }
+  const newSubNodes = subgraph.nodes.map(sn => {
+    const newId = idMap.get(sn.id)!;
+    const remappedInputs = Object.fromEntries(
+      Object.entries(sn.inputs).map(([k, inp]) => [
+        k,
+        inp.connection && idMap.has(inp.connection.nodeId)
+          ? { ...inp, connection: { ...inp.connection, nodeId: idMap.get(inp.connection.nodeId)! } }
+          : inp,
+      ])
+    );
+    const base: GraphNode = { ...sn, id: newId, inputs: remappedInputs };
+    return sn.type === 'group' ? deepCloneGroupNode(base) : base;
+  });
+  const newInputPorts = subgraph.inputPorts.map(p => ({
+    ...p, toNodeId: idMap.get(p.toNodeId) ?? p.toNodeId,
+  }));
+  const newOutputPorts = subgraph.outputPorts.map(p => ({
+    ...p, fromNodeId: idMap.get(p.fromNodeId) ?? p.fromNodeId,
+  }));
+  return {
+    ...groupNode,
+    id: newGroupId,
+    params: {
+      ...groupNode.params,
+      subgraph: { nodes: newSubNodes, inputPorts: newInputPorts, outputPorts: newOutputPorts },
+    },
+  };
+}
+
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodes: [],
   vertexShader: '',
@@ -489,6 +580,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   swapTargetNodeId: null,
   searchPaletteOpen: false,
   activeGroupId: null,
+  activeGroupPath: [],
   nodeTextures: {},
   textureUniforms: {},
   nodePreviews: {},
@@ -509,11 +601,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         set(state => {
           const gn = state.nodes.find(n => n.id === exitingGroupId);
           const sg = gn?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-          if (!sg) return { activeGroupId: null };
+          if (!sg) return { activeGroupId: null, activeGroupPath: [] };
           const alreadyAllStamped = sg.nodes.every(n => n.params?._groupOriginal);
-          if (alreadyAllStamped) return { activeGroupId: null };
+          if (alreadyAllStamped) return { activeGroupId: null, activeGroupPath: [] };
           return {
             activeGroupId: null,
+            activeGroupPath: [],
             nodes: state.nodes.map(n => {
               if (n.id !== exitingGroupId) return n;
               return {
@@ -532,7 +625,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           };
         });
       } else {
-        set({ activeGroupId: null });
+        set({ activeGroupId: null, activeGroupPath: [] });
       }
       return;
     }
@@ -562,6 +655,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         };
         return {
           activeGroupId: id,
+          activeGroupPath: [id],
           nodes: state.nodes.map(n =>
             n.id === id ? { ...n, params: { ...n.params, subgraph: emptySubgraph } } : n
           ),
@@ -571,7 +665,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const alreadyMigrated = sg.nodes.some(n => n.params?._groupOriginal);
       const hasLoopIndex    = sg.nodes.some(n => n.type === 'loopIndex');
 
-      if (alreadyMigrated && hasLoopIndex) return { activeGroupId: id };
+      if (alreadyMigrated && hasLoopIndex) return { activeGroupId: id, activeGroupPath: [id] };
 
       // Stamp all existing nodes as original
       const stampedNodes = alreadyMigrated
@@ -628,9 +722,54 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           params: { ...n.params, subgraph: { ...sg, nodes: finalNodes } },
         };
       });
-      return { activeGroupId: id, nodes: updatedNodes };
+      return { activeGroupId: id, activeGroupPath: [id], nodes: updatedNodes };
     });
   },
+
+  enterGroup: (id) => {
+    const { activeGroupPath } = get();
+    if (activeGroupPath.length >= 2) return; // max depth
+    set(state => ({ activeGroupPath: [...state.activeGroupPath, id] }));
+    // Also update activeGroupId for backward compat
+    set(() => ({ activeGroupId: id }));
+  },
+
+  exitGroup: () => {
+    const path = get().activeGroupPath;
+    if (path.length === 0) return;
+    const newPath = path.slice(0, -1);
+    set({ activeGroupPath: newPath, activeGroupId: newPath[newPath.length - 1] ?? null });
+  },
+
+  exitToRoot: () => {
+    set({ activeGroupPath: [], activeGroupId: null });
+  },
+
+  exitToDepth: (depth) => {
+    const path = get().activeGroupPath;
+    const newPath = path.slice(0, depth);
+    set({ activeGroupPath: newPath, activeGroupId: newPath[newPath.length - 1] ?? null });
+  },
+
+  duplicateGroup: (groupId) => {
+    const { nodes, activeGroupPath } = get();
+    pushHistory(nodes);
+    const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const groupNode = activeNodes.find(n => n.id === groupId);
+    if (!groupNode || groupNode.type !== 'group') return null;
+    const cloned = deepCloneGroupNode(groupNode);
+    const newNode = { ...cloned, position: { x: groupNode.position.x + 60, y: groupNode.position.y + 60 } };
+    if (activeGroupPath.length > 0) {
+      const newActiveNodes = [...activeNodes, newNode];
+      const newNodes = setActiveNodes(nodes, activeGroupPath, newActiveNodes);
+      if (newNodes) set({ nodes: newNodes });
+    } else {
+      set(state => ({ nodes: [...state.nodes, newNode] }));
+    }
+    get().compile();
+    return newNode.id;
+  },
+
   setNodeTexture: (nodeId, texture) => set(state => ({
     nodeTextures: { ...state.nodeTextures, [nodeId]: texture },
   })),
@@ -642,11 +781,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setSearchPaletteOpen: (open) => set({ searchPaletteOpen: open }),
 
   groupNodes: (nodeIds, label?) => {
-    const { nodes } = get();
+    const { nodes, activeGroupPath } = get();
     if (nodeIds.length < 1) return null;
 
+    // Depth guard: can't group when already at max depth
+    if (activeGroupPath.length >= 2) return null;
+
+    // When inside a group, operate on the active subgraph nodes
+    const workingNodes = activeGroupPath.length > 0
+      ? (getActiveNodes(nodes, activeGroupPath) ?? nodes)
+      : nodes;
+
     const selectedSet = new Set(nodeIds);
-    const selectedNodes = nodes.filter(n => selectedSet.has(n.id));
+    const selectedNodes = workingNodes.filter(n => selectedSet.has(n.id));
     if (selectedNodes.length === 0) return null;
 
     // Reject if any output nodes are in the selection
@@ -703,7 +850,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // OUTPUT PORTS: non-selected nodes wired to selected node outputs
     const seenOutputs = new Set<string>(); // "fromNodeId:fromOutputKey"
-    for (const n of nodes) {
+    for (const n of workingNodes) {
       if (selectedSet.has(n.id)) continue;
       for (const [key, inp] of Object.entries(n.inputs)) {
         if (!inp.connection) continue;
@@ -782,7 +929,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
 
     // Replace outer connections that pointed into the group
-    const updatedNodes = nodes
+    const updatedNodes = workingNodes
       .filter(n => !selectedSet.has(n.id))
       .map(n => {
         const replacements = outerReplacements.filter(r => r.nodeId === n.id);
@@ -797,7 +944,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return { ...n, inputs: newInputs };
       });
 
-    set({ nodes: [...updatedNodes, groupNode] });
+    const finalNodes = [...updatedNodes, groupNode];
+    if (activeGroupPath.length > 0) {
+      const newNodes = setActiveNodes(nodes, activeGroupPath, finalNodes);
+      if (newNodes) set({ nodes: newNodes });
+    } else {
+      set({ nodes: finalNodes });
+    }
     get().compile();
     return groupId;
   },

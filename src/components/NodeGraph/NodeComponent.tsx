@@ -279,6 +279,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
   const renameGroupPort    = useNodeGraphStore(s => s.renameGroupPort);
   const saveGroupPreset    = useNodeGraphStore(s => s.saveGroupPreset);
+  const duplicateGroup     = useNodeGraphStore(s => s.duplicateGroup);
 
   // Swap mode
   const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
@@ -812,31 +813,45 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <span style={{ fontSize: '10px', color: '#585b70' }}>({nodeCount} node{nodeCount !== 1 ? 's' : ''})</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '10px', color: '#585b70' }}>×</span>
-            <input
-              type="number"
-              min={1}
-              max={16}
-              step={1}
-              value={groupIters}
+            {/* Iterations slider — stopPropagation prevents double-click from entering group */}
+            <div
               onMouseDown={e => e.stopPropagation()}
-              onChange={e => {
-                const v = Math.max(1, Math.min(16, Math.round(Number(e.target.value))));
-                if (!isNaN(v)) updateNodeParams(node.id, { iterations: v }, { immediate: true });
-              }}
-              title="Iterations"
+              onDoubleClick={e => e.stopPropagation()}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              title={`Iterations: ${groupIters}`}
+            >
+              <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '18px' }}>×{groupIters}</span>
+              <input
+                type="range"
+                min={1}
+                max={16}
+                step={1}
+                value={groupIters}
+                onChange={e => {
+                  const v = Math.max(1, Math.min(16, Math.round(Number(e.target.value))));
+                  if (!isNaN(v)) updateNodeParams(node.id, { iterations: v }, { immediate: true });
+                }}
+                style={{ width: '52px', accentColor: '#cba6f7', cursor: 'pointer', margin: 0 }}
+              />
+            </div>
+            {/* Duplicate group button */}
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onDoubleClick={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); duplicateGroup(node.id); }}
+              title="Duplicate group (independent copy)"
               style={{
-                width: '32px',
-                background: '#11111b',
-                border: '1px solid #45475a',
-                color: '#cdd6f4',
-                borderRadius: '3px',
-                padding: '1px 3px',
-                fontSize: '11px',
-                textAlign: 'center',
-                outline: 'none',
+                background: 'none',
+                border: 'none',
+                color: '#585b70',
+                cursor: 'pointer',
+                fontSize: '13px',
+                padding: '0 3px',
+                lineHeight: 1,
               }}
-            />
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cba6f7')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+            >⧉</button>
           </div>
           {savingMode ? (
             // ── Save-as-preset inline form ───────────────────────────────────

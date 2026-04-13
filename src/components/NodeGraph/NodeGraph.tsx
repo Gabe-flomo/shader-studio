@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
@@ -70,18 +70,19 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   const groupNodes          = useNodeGraphStore(s => s.groupNodes);
   const activeGroupId       = useNodeGraphStore(s => s.activeGroupId);
-  const setActiveGroupId    = useNodeGraphStore(s => s.setActiveGroupId);
+  const activeGroupPath     = useNodeGraphStore(s => s.activeGroupPath);
+  const enterGroup          = useNodeGraphStore(s => s.enterGroup);
+  const exitToRoot          = useNodeGraphStore(s => s.exitToRoot);
+  const exitToDepth         = useNodeGraphStore(s => s.exitToDepth);
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
   const removeNode          = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
 
   // When drilling into a group, show its subgraph nodes instead
   const displayNodes = React.useMemo(() => {
-    if (!activeGroupId) return nodes;
-    const groupNode = nodes.find(n => n.id === activeGroupId);
-    const subgraph = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-    return subgraph?.nodes ?? [];
-  }, [nodes, activeGroupId]);
+    if (activeGroupPath.length === 0) return nodes;
+    return getActiveNodes(nodes, activeGroupPath) ?? [];
+  }, [nodes, activeGroupPath]);
 
   // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
   const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
@@ -183,12 +184,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     }
     return ids;
   }, [compilationErrors]);
-
-  const activeGroupLabel = React.useMemo(() => {
-    if (!activeGroupId) return null;
-    const g = nodes.find(n => n.id === activeGroupId);
-    return typeof g?.params?.label === 'string' ? g.params.label : 'Group';
-  }, [nodes, activeGroupId]);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
@@ -800,25 +795,48 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       </div>
 
       {/* Breadcrumb when inside a group */}
-      {activeGroupId && activeGroupLabel && (
+      {activeGroupPath.length > 0 && (
         <div style={{
           position: 'absolute',
           top: compactToolbar ? 46 : 10,
           left: '50%', transform: 'translateX(-50%)',
           background: '#1e1e2e', border: '1px solid #cba6f755',
           color: '#cba6f7', padding: '5px 14px', borderRadius: '8px',
-          fontSize: '11px', zIndex: 20, display: 'flex', alignItems: 'center',
-          gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          fontSize: '11px', zIndex: 20,
+          display: 'flex', alignItems: 'center', gap: '6px',
+          userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
           whiteSpace: 'nowrap',
         }}>
           <button
-            onClick={() => setActiveGroupId(null)}
-            style={{ background: 'none', border: 'none', color: '#89b4fa', cursor: 'pointer', fontSize: '11px', padding: 0 }}
-          >
-            Root
-          </button>
-          <span style={{ color: '#585b70' }}>›</span>
-          <strong>{activeGroupLabel}</strong>
+            onClick={() => exitToRoot()}
+            style={{ background: 'none', border: 'none', color: '#7f849c', cursor: 'pointer', padding: 0, fontSize: '11px' }}
+          >Root</button>
+          {activeGroupPath.map((gid, depth) => {
+            // Find the group node label
+            let gn: import('../../types/nodeGraph').GraphNode | undefined;
+            if (depth === 0) {
+              gn = nodes.find(n => n.id === gid);
+            } else {
+              const outer = nodes.find(n => n.id === activeGroupPath[0]);
+              const outerSg = outer?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+              gn = outerSg?.nodes.find(n => n.id === gid);
+            }
+            const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : 'Group';
+            const isLast = depth === activeGroupPath.length - 1;
+            return (
+              <React.Fragment key={gid}>
+                <span style={{ color: '#45475a' }}>›</span>
+                {isLast ? (
+                  <strong>{lbl}</strong>
+                ) : (
+                  <button
+                    onClick={() => exitToDepth(depth + 1)}
+                    style={{ background: 'none', border: 'none', color: '#7f849c', cursor: 'pointer', padding: 0, fontSize: '11px' }}
+                  >{lbl}</button>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
 
@@ -872,7 +890,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                 {isGroup && clickedNode && (
                   <>
                     <button style={ctxBtnStyle} onClick={() => {
-                      setActiveGroupId(clickedNode.id);
+                      enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
                       Enter Group
@@ -1090,7 +1108,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             isTouchDevice={isTouchDevice.current}
             zoom={zoom}
             dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
-            onEnterGroup={setActiveGroupId}
+            onEnterGroup={enterGroup}
             hasError={errorNodeIds.has(node.id)}
             externalInputKeys={externalPortMap?.get(node.id)}
             externalParamKeys={externalParamMap?.get(node.id)}
