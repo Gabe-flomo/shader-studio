@@ -1711,6 +1711,698 @@ uniform vec2 u_mouse;       // mouse position (normalized)`}</CodeBlock>
           </table>
         </div>
 
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 8 — NEW MATH NODES
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec8Ref as React.RefObject<HTMLDivElement>}>
+          <h2 style={S.sectionTitle}>8 · New Math Nodes</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            These math nodes were added in V2 to cover common GLSL patterns that previously required an
+            <C>Expr</C> node. Each one maps directly to a GLSL built-in or a small inline formula.
+          </p>
+
+          {/* CrossProduct & Reflect */}
+          <h3 style={S.subTitle}>CrossProduct & Reflect</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>CrossProduct</strong> takes two <TypeBadge type="vec3" /> inputs
+            and outputs their cross product — a <TypeBadge type="vec3" /> perpendicular to both. Use it to compute
+            surface normals from two tangent vectors, or to generate a rotation axis.
+          </p>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Reflect</strong> reflects a direction vector{' '}
+            <C>I</C> around a surface normal <C>N</C>, computing <C>I − 2·dot(N,I)·N</C>. Both inputs and the
+            output are <TypeBadge type="vec3" />. Classic use: reflect a ray direction off a plane normal for
+            mirror-like effects.
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'ScenePos', type: 'source', outputs: ['p: vec3'] },
+              { label: 'CrossProduct', type: 'transform', inputs: ['a: vec3', 'b: vec3'], outputs: ['out: vec3'] },
+              { label: 'Normalize', type: 'transform', inputs: ['v: vec3'], outputs: ['n: vec3'] },
+            ]}
+            caption="Compute a normal from two edge vectors, then normalize — ready to feed into lighting."
+          />
+
+          {/* Complex Math */}
+          <h3 style={S.subTitle}>Complex Math — ComplexMul & ComplexPow</h3>
+          <p style={S.p}>
+            Shader Studio represents complex numbers as <TypeBadge type="vec2" /> values where <C>.x</C> is the real
+            part and <C>.y</C> is the imaginary part. These two nodes implement complex arithmetic directly:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>ComplexMul</strong> — multiply two complex numbers:
+              <C>(a.x·b.x − a.y·b.y, a.x·b.y + a.y·b.x)</C>. Output is <TypeBadge type="vec2" />.
+            </li>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>ComplexPow</strong> — raise a complex number to a real power
+              using polar form: convert to <C>(r, θ)</C>, compute <C>(rⁿ, n·θ)</C>, convert back. Power is a{' '}
+              <TypeBadge type="float" /> param. Great for Julia-set-style iteration without writing an Expr node.
+            </li>
+          </ul>
+
+          <CodeBlock>{`// ComplexMul: z = a * b
+vec2 complexMul(vec2 a, vec2 b) {
+    return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x);
+}
+
+// ComplexPow: z = c ^ n  (via polar form)
+float r     = length(c);
+float theta = atan(c.y, c.x);
+vec2  result = pow(r, n) * vec2(cos(n*theta), sin(n*theta));`}</CodeBlock>
+
+          <Tip>
+            Chain ComplexPow into ComplexMul (or vice-versa) to build custom fractal iteration.
+            Wire UV directly into the input — <TypeBadge type="vec2" /> UV maps cleanly to the complex plane.
+          </Tip>
+
+          {/* Angle / Luminance / Sign / Step */}
+          <h3 style={S.subTitle}>AngleToVec2, Vec2Angle, Luminance, Sign, Step</h3>
+          <p style={S.p}>
+            These are convenience nodes for patterns that come up constantly:
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+            {([
+              ['AngleToVec2', 'float radians → vec2', 'Converts a radian angle to a unit direction vector: vec2(cos(θ), sin(θ)). Feed Time → Sin into it to get a direction that spins with time.'],
+              ['Vec2Angle', 'vec2 → float radians', 'Returns atan2(v.y, v.x) — the angle of a 2D vector. Use on UV to get radial angle for spiral patterns.'],
+              ['Luminance', 'vec3 → float', 'Computes perceptual brightness using BT.709 weights: 0.2126·R + 0.7152·G + 0.0722·B. Use to convert a color output to a grayscale mask.'],
+              ['Sign', 'float → float', 'Returns −1.0 for negative, 0.0 for zero, +1.0 for positive. Useful for creating sharp sign-based patterns from SDF fields.'],
+              ['Step', 'edge, x → float', 'step(edge, x) — returns 0 if x < edge, 1 otherwise. Sharp threshold. Chain with Smoothstep for a soft version, or use raw for hard outlines.'],
+            ] as [string, string, string][]).map(([name, sig, desc]) => (
+              <div key={name} style={{ background: T.surface2, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: T.blue, marginBottom: '3px' }}>{name}</div>
+                <code style={{ fontSize: '11px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '4px' }}>{sig}</code>
+                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <Tip>
+            <strong>Vec2Angle → AngleToVec2</strong> is a round-trip: you can extract the angle of a
+            UV position, add a Time-driven offset, then convert back to a direction to rotate flow or
+            spiral sampling positions smoothly.
+          </Tip>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 9 — NEW COLOR NODES
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec9Ref as React.RefObject<HTMLDivElement>}>
+          <h2 style={S.sectionTitle}>9 · New Color Nodes</h2>
+          <div style={S.divider} />
+
+          {/* ColorRamp */}
+          <h3 style={S.subTitle}>ColorRamp — Multi-Stop Gradient</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>ColorRamp</strong> maps a <TypeBadge type="float" /> <C>t</C> value
+            (0→1) through a multi-stop gradient with up to 8 color stops, evenly spaced along the ramp.
+            You define each stop color directly in the node. The output is a <TypeBadge type="vec3" /> interpolated
+            between the two nearest stops.
+          </p>
+          <p style={S.p}>
+            The most natural drivers for <C>t</C> are <C>length(uv)</C> for radial gradients, or an FBM noise
+            value for organic coloring. Connect the output of any node that produces a 0→1 float.
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+              { label: 'FBM', type: 'effect', inputs: ['uv: vec2'], outputs: ['value: float'] },
+              { label: 'ColorRamp', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
+              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+            ]}
+            caption="FBM noise drives the ramp position — organic variation across the gradient stops."
+          />
+
+          <Tip>
+            ColorRamp gives you more expressive gradients than Palette Preset when you need specific colors
+            at specific positions. For smooth fire or aurora effects, set stops to deep red → orange → yellow → white.
+          </Tip>
+
+          {/* BlendModes */}
+          <h3 style={S.subTitle}>BlendModes — Photoshop-Style Layer Compositing</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>BlendModes</strong> takes a base color, a blend color, and a
+            mode selector. Both colors are <TypeBadge type="vec3" />. It implements the standard Photoshop blend
+            formulas exactly:
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+            {([
+              ['multiply', 'base * blend — darkens, like overlapping transparencies'],
+              ['screen', '1 − (1−base)(1−blend) — brightens, like two projectors'],
+              ['overlay', 'Multiply for darks, Screen for lights — high contrast'],
+              ['soft light', 'Gentle version of overlay — subtle contrast boost'],
+              ['hard light', 'Overlay with base/blend swapped — more aggressive'],
+              ['difference', 'abs(base − blend) — inverts where they differ, black where equal'],
+              ['exclusion', 'Softer version of difference — lower contrast subtraction'],
+              ['dodge', 'base / (1 − blend) — extreme brightening in highlights'],
+              ['burn', '1 − (1 − base) / blend — extreme darkening in shadows'],
+              ['lighten', 'max(base, blend) — keeps the lighter pixel'],
+              ['darken', 'min(base, blend) — keeps the darker pixel'],
+            ] as [string, string][]).map(([mode, desc]) => (
+              <div key={mode} style={{ background: T.surface2, borderRadius: '5px', padding: '7px 10px', border: `1px solid ${T.border}` }}>
+                <code style={{ fontSize: '11px', color: T.mauve, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{mode}</code>
+                <div style={{ fontSize: '10px', color: T.dim, lineHeight: 1.4 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <Tip>
+            <strong>Overlay</strong> is the most versatile — it simultaneously adds contrast to both darks and
+            lights. Try blending an FBM noise layer over your main color output in overlay mode to add
+            instant texture and depth.
+          </Tip>
+
+          {/* BrightnessContrast */}
+          <h3 style={S.subTitle}>BrightnessContrast</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>BrightnessContrast</strong> takes a <TypeBadge type="vec3" /> color
+            and applies a brightness offset and contrast multiplier. Brightness shifts all channels up or down.
+            Contrast is applied around the midpoint (0.5) — values above 1.0 increase contrast, below 1.0 flatten it.
+            Use it as a final grade node before Output to polish any result.
+          </p>
+
+          {/* Blackbody */}
+          <h3 style={S.subTitle}>Blackbody — Temperature to RGB</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Blackbody</strong> converts a color temperature in Kelvin
+            (1000–12000K) to a physically-based RGB color using a polynomial fit to the Planckian locus.
+            Feed a <TypeBadge type="float" /> temperature value to get a <TypeBadge type="vec3" /> color output.
+          </p>
+
+          <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '14px 18px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: T.blue, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Temperature reference</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {([
+                ['1000 K', 'Deep red — glowing embers, very hot metal'],
+                ['2000 K', 'Orange-red — candle flame, incandescent bulb'],
+                ['3000 K', 'Warm white — tungsten lamp, firelight'],
+                ['5500 K', 'Neutral white — sunlight at noon'],
+                ['6500 K', 'Daylight white — overcast sky, monitor calibration'],
+                ['12000 K', 'Blue-white — clear sky, arc lamp, blue giant star'],
+              ] as [string, string][]).map(([temp, desc]) => (
+                <div key={temp} style={{ background: T.surface, borderRadius: '5px', padding: '7px 10px' }}>
+                  <code style={{ fontSize: '11px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '3px' }}>{temp}</code>
+                  <div style={{ fontSize: '10px', color: T.dim, lineHeight: 1.4 }}>{desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p style={S.p}>
+            Blackbody is especially useful for fire, sun, and star effects. Drive the temperature with an FBM
+            noise value scaled into the 1000–6500K range — hotter at the core, cooler at the edges — for
+            realistic flames or plasma:
+          </p>
+
+          <CodeBlock>{`// Wire FBM (0→1) into temperature:
+temperature = 1000.0 + fbm_value * 5500.0
+// Core of fire = high fbm → 6500K = warm white
+// Edges of fire = low fbm  → 1000K = deep red`}</CodeBlock>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+              { label: 'FBM', type: 'effect', inputs: ['uv: vec2'], outputs: ['value: float'] },
+              { label: 'Multiply\n×5500', type: 'transform', outputs: ['scaled: float'] },
+              { label: 'Add\n+1000', type: 'transform', outputs: ['temp K: float'] },
+              { label: 'Blackbody', type: 'color', inputs: ['kelvin: float'], outputs: ['color: vec3'] },
+              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+            ]}
+            caption="FBM noise scaled to 1000–6500K drives the blackbody temperature — organic fire coloring."
+          />
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 10 — NEW SPACE / TEXTURE NODES
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec10Ref as React.RefObject<HTMLDivElement>}>
+          <h2 style={S.sectionTitle}>10 · New Space & Texture Nodes</h2>
+          <div style={S.divider} />
+
+          {/* WaveTexture */}
+          <h3 style={S.subTitle}>WaveTexture</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>WaveTexture</strong> generates a procedural wave or band pattern
+            from UV coordinates. It outputs a <TypeBadge type="float" /> value you can drive into a palette
+            or use as a mask. Five band types:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><C>bands</C> — concentric rings driven by <C>length(uv)</C></li>
+            <li style={S.li}><C>rings</C> — same as bands but with a sharpness parameter for harder edges</li>
+            <li style={S.li}><C>x</C> — horizontal stripes along the x-axis</li>
+            <li style={S.li}><C>y</C> — vertical stripes along the y-axis</li>
+            <li style={S.li}><C>diagonal</C> — stripes at 45°</li>
+          </ul>
+          <p style={S.p}>
+            The <strong style={{ color: T.textBold }}>distortion</strong> parameter adds FBM turbulence to the
+            wave pattern before sampling — great for wavy, hand-drawn stripes or disturbed rings.
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+              { label: 'Time', type: 'source', outputs: ['time: float'] },
+              { label: 'WaveTexture\nbands mode', type: 'transform', inputs: ['uv: vec2', 'time: float'], outputs: ['value: float'] },
+              { label: 'ColorRamp', type: 'color', inputs: ['t: float'], outputs: ['color: vec3'] },
+              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+            ]}
+            caption="Animated concentric rings with custom coloring via ColorRamp."
+          />
+
+          {/* MagicTexture */}
+          <h3 style={S.subTitle}>MagicTexture</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>MagicTexture</strong> generates a psychedelic multicolored
+            interference pattern from UV — inspired by Blender's Magic Texture node. It internally applies
+            multiple sine waves at different scales and rotations to each UV axis, then maps to RGB.
+            The <strong style={{ color: T.textBold }}>depth</strong> parameter controls how many nested sine
+            iterations are applied — higher depth gives more complex, fractal-like interference. Outputs a
+            <TypeBadge type="vec3" /> color directly; no palette needed.
+          </p>
+
+          <Tip>
+            MagicTexture responds well to UV distortion upstream — feed the UV through a Shear or Domain Warp
+            node first to break the pattern's symmetry and make it feel more organic.
+          </Tip>
+
+          {/* Grid */}
+          <h3 style={S.subTitle}>Grid — Four Outputs for Tiling Effects</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Grid</strong> takes a UV input and a scale parameter, and
+            divides the space into a regular grid of cells. It produces four distinct outputs, each useful
+            for different tiling techniques:
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+            {([
+              ['grid (float)', 'Bright at cell edges, 0 in the interior — the grid lines themselves. Use to render a visible grid or as a mask to highlight boundaries.'],
+              ['checker (float)', 'Alternating 0/1 per cell in a checkerboard pattern. Multiply by any color to get a checker-tinted result, or use as a hard mask.'],
+              ['cell UV (vec2)', 'Local position within the current cell, re-centered at (0,0). Useful for running SDFs or patterns relative to each cell center independently.'],
+              ['cell ID (vec2)', 'Integer cell coordinates (e.g. (3.0, 7.0)) identifying which cell the pixel is in. Feed into a hash function for per-cell random colors or offsets.'],
+            ] as [string, string][]).map(([out, desc]) => (
+              <div key={out} style={{ background: T.surface2, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${T.border}` }}>
+                <code style={{ fontSize: '11px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '4px' }}>{out}</code>
+                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <p style={S.p}>
+            A typical tiling workflow: use <C>cell UV</C> to run a CircleSDF relative to each cell center
+            (one circle per cell), then use <C>cell ID</C> fed through a hash to vary the circle radius or
+            color per cell:
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+              { label: 'Grid', type: 'transform', inputs: ['uv: vec2'], outputs: ['cell UV: vec2', 'cell ID: vec2', 'checker: float', 'grid: float'] },
+              { label: 'CircleSDF', type: 'effect', inputs: ['uv: vec2 (cell UV)'], outputs: ['dist: float'] },
+              { label: 'MakeLight', type: 'effect', inputs: ['dist: float'], outputs: ['glow: float'] },
+              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+            ]}
+            caption="Cell UV centers each SDF within its own tile — Grid divides, SDF draws per-cell."
+          />
+
+          {/* Shear */}
+          <h3 style={S.subTitle}>Shear</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Shear</strong> skews UV space along one axis proportionally
+            to the other axis: <C>uv.x += shear_x * uv.y</C> and <C>uv.y += shear_y * uv.x</C>.
+            The output is a distorted <TypeBadge type="vec2" /> to wire into any downstream UV input.
+            Use it to lean stripes at an angle, slant shapes, or create a parallelogram tiling from a
+            Grid node. At small values it acts like a subtle skew; at large values it creates dramatic
+            diagonal distortion.
+          </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 11 — NEW EFFECT NODES
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec11Ref as React.RefObject<HTMLDivElement>}>
+          <h2 style={S.sectionTitle}>11 · New Effect Nodes</h2>
+          <div style={S.divider} />
+
+          {/* Vignette */}
+          <h3 style={S.subTitle}>Vignette</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Vignette</strong> applies a smooth edge darkening — the
+            classic photographic vignette. It takes a UV input and outputs a <TypeBadge type="float" /> mask
+            (1.0 at center, 0.0 at edges) computed via <C>smoothstep</C>.
+          </p>
+          <Warn>
+            Vignette's UV input expects <strong>0–1 range coordinates</strong>. Use a{' '}
+            <strong>PixelUV</strong> node (not the standard <strong>UV</strong> node) to get the correct
+            range. The standard UV outputs −1 to 1 centered; PixelUV outputs 0 to 1 from bottom-left.
+          </Warn>
+          <p style={S.p}>
+            Wire the float output into a <strong>MultiplyVec3</strong> to dim your final color toward the
+            edges, or use it as a <strong>Mix</strong> weight to blend in a dark color at the border:
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'PixelUV', type: 'source', outputs: ['uv: vec2 (0–1)'] },
+              { label: 'Vignette', type: 'effect', inputs: ['uv: vec2'], outputs: ['mask: float'] },
+              { label: 'MultiplyVec3', type: 'color', inputs: ['color: vec3', 'scale: float'], outputs: ['result: vec3'] },
+              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+            ]}
+            caption="PixelUV is essential here — the vignette mask is computed in 0–1 space."
+          />
+
+          {/* Scanlines */}
+          <h3 style={S.subTitle}>Scanlines</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Scanlines</strong> overlays horizontal CRT scan lines on
+            your image. It darkens every other row of pixels slightly, replicating the look of old TV displays
+            or retro monitors. The <strong style={{ color: T.textBold }}>scroll speed</strong> parameter
+            animates the lines slowly downward over time (wire <strong>Time</strong> into the time input).
+            Set scroll speed to 0 for a static pattern.
+          </p>
+          <Warn>
+            Like Vignette, Scanlines expects a <strong>PixelUV</strong> (0–1) UV input, not the standard
+            centered UV. The line spacing is calculated in pixel-space rows.
+          </Warn>
+          <p style={S.p}>
+            Scanlines outputs a <TypeBadge type="float" /> multiplier (near 1.0 for bright rows, near 0.85
+            for dark rows). Multiply it by your color to apply the effect:
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'PixelUV', type: 'source', outputs: ['uv: vec2 (0–1)'] },
+              { label: 'Time', type: 'source', outputs: ['time: float'] },
+              { label: 'Scanlines', type: 'effect', inputs: ['uv: vec2', 'time: float'], outputs: ['mask: float'] },
+              { label: 'MultiplyVec3', type: 'color', inputs: ['color: vec3', 'scale: float'], outputs: ['result: vec3'] },
+              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+            ]}
+            caption="Animated CRT scanlines — combine with Vignette for a full retro CRT post-process."
+          />
+
+          <Tip>
+            Stack Vignette and Scanlines together as a finishing chain on top of any other effect:
+            main color → MultiplyVec3 (×scanlines mask) → MultiplyVec3 (×vignette mask) → Output.
+            Both use PixelUV, so they share a single PixelUV node.
+          </Tip>
+
+          {/* Sobel */}
+          <h3 style={S.subTitle}>Sobel Edge Detection</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>Sobel</strong> detects edges in your image by computing the
+            image gradient at each pixel using <C>dFdx</C> and <C>dFdy</C> — the screen-space partial
+            derivatives available in fragment shaders. It produces two outputs:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>edge strength</strong> (<TypeBadge type="float" />) — 0 in
+              flat regions, bright at edges. Use to threshold or glow-detect boundaries.
+            </li>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>edge color</strong> (<TypeBadge type="vec3" />) — the
+              gradient direction mapped to color space — useful for normal-map-like visualizations or artistic
+              colored-edge effects.
+            </li>
+          </ul>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+              { label: 'FBM', type: 'effect', inputs: ['uv: vec2'], outputs: ['value: float'] },
+              { label: 'Sobel', type: 'effect', inputs: ['value: float'], outputs: ['strength: float', 'edge color: vec3'] },
+              { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+            ]}
+            caption="Sobel on FBM noise isolates ridges and valleys as bright edges — a sketch or toon-shading effect."
+          />
+
+          <Tip>
+            Wire Sobel's <C>edge strength</C> into a <strong>MakeLight</strong> to glow the detected edges,
+            or multiply it by a palette color to tint only the outlines. This is a quick way to get a
+            cel-shaded look from any procedural pattern.
+          </Tip>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 12 — 3D PRIMITIVES & TRANSFORMS
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec12Ref as React.RefObject<HTMLDivElement>}>
+          <h2 style={S.sectionTitle}>12 · 3D SDF Primitives & Transforms</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            The 3D Primitives and 3D Transforms categories give you the building blocks for constructing
+            3D scenes that feed into the <strong style={{ color: T.textBold }}>Scene System</strong>
+            (see Section 13). Each primitive takes a <TypeBadge type="vec3" /> position and outputs a
+            <TypeBadge type="float" /> signed distance. Transforms reshape the position space before
+            it reaches the primitive — chain them in sequence.
+          </p>
+
+          {/* SDF Primitives */}
+          <h3 style={S.subTitle}>3D SDF Primitives</h3>
+          <p style={S.p}>
+            All primitives live under <strong style={{ color: T.textBold }}>3D Primitives</strong> in the node
+            palette. Each one takes a <C>Position: vec3</C> input and outputs a <C>Distance: float</C>.
+            Inside a Scene Group, wire <strong>ScenePos</strong> (optionally through transforms) into the
+            Position input.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+            {([
+              ['SphereSDF3D', 'pos, radius', 'length(pos) − radius. The simplest SDF.'],
+              ['BoxSDF3D', 'pos, size (vec3)', 'IQ box formula — axis-aligned rounded box. Size controls x/y/z half-extents.'],
+              ['TorusSDF3D', 'pos, major_r, minor_r', 'A donut. Major_r = ring radius from center, minor_r = tube thickness.'],
+              ['CapsuleSDF3D', 'pos, height, radius', 'Pill shape — a capped cylinder. Height sets the length of the straight section.'],
+              ['CylinderSDF3D', 'pos, height, radius', 'Infinite cylinder capped at ±height. Exact IQ formula.'],
+              ['ConeSDF3D', 'pos, angle, height', 'Cone with apex at origin. Angle in radians, height caps the tip.'],
+              ['OctahedronSDF3D', 'pos, size', 'Eight-faced diamond. size controls the vertex distance from origin.'],
+            ] as [string, string, string][]).map(([name, params, desc]) => (
+              <div key={name} style={{ background: T.surface2, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: T.peach, marginBottom: '3px' }}>{name}</div>
+                <code style={{ fontSize: '10px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '4px' }}>{params}</code>
+                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 3D Transforms */}
+          <h3 style={S.subTitle}>3D Transforms</h3>
+          <p style={S.p}>
+            Transform nodes take <TypeBadge type="vec3" /> in and output <TypeBadge type="vec3" />. Place
+            them between <strong>ScenePos</strong> and a primitive to shape the space the SDF sees. Chain
+            multiple transforms for compound effects — the order matters.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+            {([
+              ['Translate3D', 'offset: vec3', 'Shift the position — moves the primitive in world space.'],
+              ['Rotate3D', 'axis: X/Y/Z, angle: float', 'Rotate around the chosen axis by angle radians. Chain two for arbitrary 3D rotation.'],
+              ['Repeat3D', 'period: vec3', 'Infinite domain repetition: mod(pos, period) − period*0.5. Tiles the SDF infinitely in all three axes.'],
+              ['Twist3D', 'k: float', 'Twists position around the Y-axis: angle = k*pos.y, then rotate x/z. Higher k = tighter twist.'],
+              ['Fold3D', 'axes: bvec3', 'Applies abs() per chosen axis — mirror-folds the space. Good for symmetrical shapes without duplicating primitives.'],
+            ] as [string, string, string][]).map(([name, params, desc]) => (
+              <div key={name} style={{ background: T.surface2, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: T.blue, marginBottom: '3px' }}>{name}</div>
+                <code style={{ fontSize: '10px', color: T.green, fontFamily: 'monospace', display: 'block', marginBottom: '4px' }}>{params}</code>
+                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <p style={S.p}>
+            A few powerful combinations to try:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>Repeat3D → BoxSDF3D</strong> — infinite grid of boxes
+              with a single node pair. Adjust period to control spacing.
+            </li>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>Fold3D → SphereSDF3D</strong> — fold space on all three
+              axes before the sphere SDF to get an 8-way symmetric cluster of spheres from one primitive.
+            </li>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>Twist3D → CylinderSDF3D</strong> — twisted column.
+              Animate the twist angle with Time for a continuously rotating helix effect.
+            </li>
+            <li style={S.li}>
+              <strong style={{ color: T.textBold }}>Rotate3D (Y) → Rotate3D (X) → TorusSDF3D</strong> — rotate
+              the torus into any orientation. Two rotate nodes cover arbitrary rotation since each handles one axis.
+            </li>
+          </ul>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'ScenePos', type: 'source', outputs: ['p: vec3'] },
+              { label: 'Repeat3D\nperiod=2', type: 'transform', inputs: ['p: vec3'], outputs: ['p: vec3'] },
+              { label: 'Twist3D\nk=0.4', type: 'transform', inputs: ['p: vec3'], outputs: ['p: vec3'] },
+              { label: 'BoxSDF3D\nsize=0.4', type: 'effect', inputs: ['pos: vec3'], outputs: ['dist: float'] },
+            ]}
+            caption="Infinite twisted boxes — Repeat tiles the field, Twist bends each copy, Box evaluates the SDF."
+          />
+
+          <Tip>
+            Transforms in 3D SDF work on the <em>position space</em>, not the shape itself. Think of each
+            transform as "what does the SDF see" rather than "how does the shape move." Translate moves
+            the SDF origin; Rotate spins the coordinate system that the SDF samples from.
+          </Tip>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION 13 — 3D SCENE SYSTEM
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={sec13Ref as React.RefObject<HTMLDivElement>}>
+          <h2 style={S.sectionTitle}>13 · 3D Scene System</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            The 3D Scene system in V2 is the full ray marching pipeline. It compiles your node subgraph
+            into a GLSL <C>mapScene</C> function, then uses a sphere tracer to render it with camera,
+            lighting, and fog — all from within the node graph.
+          </p>
+
+          {/* ScenePos & SceneGroup */}
+          <h3 style={S.subTitle}>ScenePos & SceneGroup</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>SceneGroup</strong> is the container for your 3D scene
+            subgraph. Think of it as the 3D equivalent of the Loop Start/End pair — it defines a scope that
+            the compiler treats specially. Inside it, you build the distance function for your scene.
+          </p>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>ScenePos</strong> is only valid inside a SceneGroup. It
+            outputs the current ray march sample position <C>p</C> as a <TypeBadge type="vec3" /> — this is
+            the point in 3D space that the tracer is currently testing. Wire it through any chain of 3D
+            Transforms, then into an SDF Primitive. The final distance float becomes the SceneGroup's output.
+          </p>
+
+          <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '14px 18px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: T.blue, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>How SceneGroup compiles</div>
+            <p style={{ ...S.p, marginBottom: '6px' }}>
+              When you press play, the compiler walks the nodes connected inside SceneGroup and emits:
+            </p>
+            <CodeBlock>{`float mapScene_<id>(vec3 p) {
+    // your transform nodes become inline GLSL here
+    vec3 p1 = p - translate_offset;      // Translate3D
+    vec3 p2 = repeatDomain(p1, period);  // Repeat3D
+    return sdBox(p2, half_extents);       // BoxSDF3D
+}`}</CodeBlock>
+            <p style={{ ...S.p, fontSize: '11px', color: T.dim, marginBottom: 0 }}>
+              This function is then called by the ray marcher on every step of every ray.
+            </p>
+          </div>
+
+          <Tip>
+            Set the <strong>output port</strong> on SceneGroup to the final distance float. If multiple SDF
+            primitives are in the subgraph, combine them with a <strong>Min</strong> node (union) or
+            a <strong>Max</strong> node (intersection) before connecting to the output.
+          </Tip>
+
+          {/* RayRender */}
+          <h3 style={S.subTitle}>RayRender</h3>
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>RayRender</strong> is the full sphere tracer. It takes three
+            inputs and produces three outputs:
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+            {([
+              ['scene3d (input)', 'scene3d wire', 'Connect the output port of a SceneGroup here.'],
+              ['UV (input)', 'vec2', 'Standard UV node — defines the ray direction per pixel.'],
+              ['Time (input)', 'float', 'Drives camera orbit and any animated transforms inside the scene.'],
+              ['color (output)', 'vec3', 'Fully shaded RGB result — wire to Output.'],
+              ['depth (output)', 'float', 'Normalized ray hit distance. Use for depth-based effects or fog overrides.'],
+              ['normal (output)', 'vec3', 'Surface normal at the hit point, in world space. Use for custom shading or normal maps.'],
+            ] as [string, string, string][]).map(([port, type, desc]) => (
+              <div key={port} style={{ background: T.surface2, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: T.mauve, marginBottom: '3px' }}>{port}</div>
+                <code style={{ fontSize: '10px', color: T.yellow, fontFamily: 'monospace', display: 'block', marginBottom: '4px' }}>{type}</code>
+                <div style={{ fontSize: '11px', color: T.dim, lineHeight: 1.5 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <p style={S.p}>
+            RayRender has configurable parameters for the built-in camera and lighting:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Camera orbit</strong> — radius, elevation, and azimuth speed. The camera circles the origin over time.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Key light</strong> — direction and color of the primary directional light.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Ambient</strong> — fill light intensity, prevents pure black in unlit regions.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Fog</strong> — exponential distance fog, color and density params.</li>
+          </ul>
+
+          {/* Full Pipeline */}
+          <h3 style={S.subTitle}>Full 3D Pipeline — Step by Step</h3>
+          <p style={S.p}>
+            Here is the complete wiring for a minimal 3D scene with a sphere and a torus:
+          </p>
+
+          <StepBuilder steps={[
+            {
+              title: 'Add a SceneGroup',
+              description: 'Add a SceneGroup from the 3D Scene category. It appears as a container node. This is where your SDF subgraph lives.',
+              nodes: [
+                { label: 'SceneGroup', type: 'effect', outputs: ['scene3d'] },
+              ],
+            },
+            {
+              title: 'Inside SceneGroup: ScenePos → SDF',
+              description: <>Add <strong>ScenePos</strong> inside the SceneGroup. Connect it to a <strong>SphereSDF3D</strong> (radius = 0.5). Connect the distance float to the SceneGroup output port.</>,
+              nodes: [
+                { label: 'ScenePos', type: 'source', outputs: ['p: vec3'] },
+                { label: 'SphereSDF3D\nradius=0.5', type: 'effect', inputs: ['pos: vec3'], outputs: ['dist: float'] },
+              ],
+            },
+            {
+              title: 'Add transforms between ScenePos and SDF',
+              description: <>Insert a <strong>Translate3D</strong> to move the sphere. Or add <strong>Repeat3D</strong> for an infinite field of spheres. The distance float at the end of the chain goes to the output port.</>,
+              nodes: [
+                { label: 'ScenePos', type: 'source', outputs: ['p: vec3'] },
+                { label: 'Translate3D\noffset=(0,0,0)', type: 'transform', inputs: ['p: vec3'], outputs: ['p: vec3'] },
+                { label: 'SphereSDF3D', type: 'effect', inputs: ['pos: vec3'], outputs: ['dist: float'] },
+              ],
+            },
+            {
+              title: 'Add RayRender',
+              description: <>Outside the SceneGroup, add a <strong>RayRender</strong> node. Connect <strong>SceneGroup → scene3d</strong>, <strong>UV → uv</strong>, and <strong>Time → time</strong>.</>,
+              nodes: [
+                { label: 'UV', type: 'source', outputs: ['uv: vec2'] },
+                { label: 'Time', type: 'source', outputs: ['time: float'] },
+                { label: 'SceneGroup', type: 'effect', outputs: ['scene3d'] },
+                { label: 'RayRender', type: 'effect', inputs: ['scene3d', 'uv', 'time'], outputs: ['color: vec3', 'depth: float', 'normal: vec3'] },
+                { label: 'Output', type: 'output', inputs: ['color: vec3'] },
+              ],
+            },
+            {
+              title: 'Extend: combine two SDFs with Min',
+              description: <>Inside the SceneGroup, add a second SDF (e.g. <strong>TorusSDF3D</strong>). Feed both distances into a <strong>Min</strong> node — the minimum distance is the SDF union, showing whichever surface is closer.</>,
+              nodes: [
+                { label: 'SphereSDF3D', type: 'effect', outputs: ['dist_a: float'] },
+                { label: 'TorusSDF3D', type: 'effect', outputs: ['dist_b: float'] },
+                { label: 'Min\n(union)', type: 'transform', inputs: ['a: float', 'b: float'], outputs: ['dist: float'] },
+              ],
+            },
+          ]} />
+
+          <Tip>
+            The <C>normal</C> output from RayRender is in world space as a <TypeBadge type="vec3" /> with
+            values in the −1 to 1 range. Remap it with <C>normal * 0.5 + 0.5</C> (using a <strong>Multiply</strong>{' '}
+            and <strong>Add</strong> node) to get a visible normal-map color. Or wire it directly into a{' '}
+            <strong>Dot</strong> with a light direction for custom per-pixel shading on top of the
+            built-in lighting.
+          </Tip>
+
+          <Warn>
+            The <C>scene3d</C> wire type is special — it can only connect from a SceneGroup output to a
+            RayRender input. It cannot be wired into math or color nodes. Think of it as carrying compiled
+            scene code, not a data value.
+          </Warn>
+        </div>
+
         {/* Bottom padding */}
         <div style={{ height: '80px' }} />
       </main>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
@@ -83,12 +83,13 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','domainWarpFractal','newtonFractalClassic','lyapunovMarkus','apollonianGasket'] as ExKey[] },
   { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','electronOrbitalDemo','orbitalVolume3dDemo'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'] as ExKey[] },
-  { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','agxToneDemo','lumaGrainDemo','temporalGrainDemo','hueRangeDemo','angularGradient','shapeShowcase','colorRampDemo','blackbodyDemo','blendModesDemo'] as ExKey[] },
+  { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','agxToneDemo','lumaGrainDemo','temporalGrainDemo','hueRangeDemo','angularGradient','shapeShowcase','colorRampDemo','colorRampFBM','colorRampWave','blackbodyDemo','blackbodyFire','blackbodyStar','blendModesDemo','blendOverlayDemo','blendSoftLight'] as ExKey[] },
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
-  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['noiseFloatDemo','remapDemo','mandelbulbClassic','mengerSponge','twistedBox'] as ExKey[] },
+  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['noiseFloatDemo','remapDemo','mandelbulbClassic','mengerSponge','twistedBox','sphereScene3D','torusScene3D','twoShapes3D','infiniteBoxes3D'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo'] as ExKey[] },
-  { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','magicTextureDemo','gridDemo'] as ExKey[] },
-  { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo'] as ExKey[] },
+  { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic'] as ExKey[] },
+  { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },
+  { label: 'Math & Complex',  color: '#b4befe', keys: ['complexPowFlower','luminanceTint'] as ExKey[] },
 ];
 
 
@@ -147,6 +148,34 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
 
   // Which categories are expanded (accordion). Default: all collapsed.
   const [open, setOpen] = useState<Set<string>>(new Set());
+
+  // Palette navigation: highlight a node type when ctrl+clicked in the graph
+  const [highlightType, setHighlightType] = useState<string | null>(null);
+  const nodeButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const paletteScrollRef = useRef<HTMLDivElement>(null);
+
+  const handlePaletteNavigate = useCallback((e: Event) => {
+    const { nodeType } = (e as CustomEvent<{ nodeType: string }>).detail;
+    const def = NODE_REGISTRY[nodeType];
+    if (!def) return;
+    // Expand the category containing this node
+    setOpen(prev => { const next = new Set(prev); next.add(def.category); return next; });
+    setHighlightType(nodeType);
+    // Scroll to the node button after a brief delay (category needs to expand first)
+    setTimeout(() => {
+      const btn = nodeButtonRefs.current.get(nodeType);
+      if (btn) {
+        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      // Clear highlight after 2 seconds
+      setTimeout(() => setHighlightType(null), 2000);
+    }, 80);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('palette-navigate', handlePaletteNavigate);
+    return () => window.removeEventListener('palette-navigate', handlePaletteNavigate);
+  }, [handlePaletteNavigate]);
 
   // Import GLSL modal
   const [showImport, setShowImport] = useState(false);
@@ -237,9 +266,14 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
 
   const nodeBtn = (type: string, label: string, description?: string) => {
     const isFav = favorites.includes(type);
+    const isHighlighted = highlightType === type;
     return (
       <div key={type} style={{ position: 'relative', marginBottom: '3px' }}>
         <button
+          ref={el => {
+            if (el) nodeButtonRefs.current.set(type, el);
+            else nodeButtonRefs.current.delete(type);
+          }}
           onClick={() => handleAdd(type)}
           title={description ?? `Drag to canvas or click to ${swapTargetNodeId ? 'replace' : 'add'}`}
           draggable={!swapTargetNodeId}
@@ -251,18 +285,19 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
             display: 'block',
             width: '100%',
             padding: isDrawer ? '9px 28px 9px 12px' : '5px 24px 5px 10px',
-            background: '#313244',
-            border: '1px solid #45475a',
-            color: '#cdd6f4',
+            background: isHighlighted ? '#2a2a3e' : '#313244',
+            border: isHighlighted ? '1px solid #89b4fa' : '1px solid #45475a',
+            color: isHighlighted ? '#89b4fa' : '#cdd6f4',
             cursor: swapTargetNodeId ? 'pointer' : 'grab',
             textAlign: 'left',
             borderRadius: '6px',
             fontSize: isDrawer ? '13px' : '12px',
-            transition: 'background 0.1s',
+            transition: 'background 0.1s, border-color 0.15s, color 0.15s, box-shadow 0.15s',
             touchAction: 'manipulation',
+            boxShadow: isHighlighted ? '0 0 0 2px #89b4fa44' : 'none',
           }}
           onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = isHighlighted ? '#2a2a3e' : '#313244')}
         >
           {label}
         </button>
@@ -294,6 +329,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
 
   return (
     <div
+      ref={paletteScrollRef}
       style={{
         // In full mode: fixed sidebar. In drawer mode: fill the parent container.
         width:    isDrawer ? '100%'    : '210px',

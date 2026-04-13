@@ -151,8 +151,8 @@ export const MandelbrotNode: NodeDefinition = {
     bailout:        { label: 'Bailout Radius',  type: 'float', min: 2,     max: 1000, step: 10   },
     zoom:           { label: 'Zoom',            type: 'float', min: 0.01,  max: 50000, step: 0.05 },
     zoom_exp:       { label: 'Zoom (log₂)',     type: 'float', min: 0,     max: 60,   step: 0.1  },
-    center_x:       { label: 'Center X',        type: 'string' },
-    center_y:       { label: 'Center Y',        type: 'string' },
+    center_x:       { label: 'Center X',        type: 'float', min: -3,    max: 3,    step: 0.0001 },
+    center_y:       { label: 'Center Y',        type: 'float', min: -3,    max: 3,    step: 0.0001 },
     cx:             { label: 'Julia c.x',       type: 'float', min: -2,    max: 2,    step: 0.001 },
     cy:             { label: 'Julia c.y',       type: 'float', min: -2,    max: 2,    step: 0.001 },
     orbit_trap:     { label: 'Orbit Trap',  type: 'select', options: [
@@ -190,14 +190,10 @@ export const MandelbrotNode: NodeDefinition = {
     const zoomExp   = (node.params.zoom_exp as number) || 0.0;
     const zoom      = zoomExp > 0 ? `pow(2.0, ${f(zoomExp)})` : f(zoomRaw);
 
-    // Center coordinates — stored as full JS float64 (or string for high-precision text input).
+    // Center coordinates — full JS float64, split into DS pairs for high precision mode.
     // Math.fround() rounds to nearest float32; the difference is the lo (error) term.
-    const centerXRaw = node.params.center_x;
-    const centerYRaw = node.params.center_y;
-    const centerXf64 = typeof centerXRaw === 'number' ? centerXRaw
-      : typeof centerXRaw === 'string' ? (parseFloat(centerXRaw) || -0.5) : -0.5;
-    const centerYf64 = typeof centerYRaw === 'number' ? centerYRaw
-      : typeof centerYRaw === 'string' ? (parseFloat(centerYRaw) || 0.0) : 0.0;
+    const centerXf64 = typeof node.params.center_x === 'number' ? node.params.center_x : -0.5;
+    const centerYf64 = typeof node.params.center_y === 'number' ? node.params.center_y :  0.0;
     const cxHi = Math.fround(centerXf64);
     const cxLo = centerXf64 - cxHi;
     const cyHi = Math.fround(centerYf64);
