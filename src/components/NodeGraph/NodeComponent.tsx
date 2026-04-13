@@ -381,6 +381,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   // ── Loop Index node special card ─────────────────────────────────────────────
   if (node.type === 'loopIndex') {
+    // Deletable if: in the main graph (no active group), OR inside a group with 2+ loop index nodes
+    const loopIndexSiblingCount = (() => {
+      if (!activeGroupId) return 0; // main graph — count doesn't matter, always deletable
+      const group = nodes.find(n => n.id === activeGroupId);
+      const sg = group?.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+      return sg ? sg.nodes.filter(n => n.type === 'loopIndex').length : 0;
+    })();
+    const canDeleteLoopIndex = !activeGroupId || loopIndexSiblingCount > 1;
+
     const nodeStyle: React.CSSProperties = {
       position: 'absolute',
       left: node.position.x,
@@ -415,7 +424,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           <span style={{ fontWeight: 700, fontSize: '11px', color: '#cba6f7', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ fontSize: '10px', opacity: 0.7 }}>⟳</span> Loop Index
           </span>
-          <span style={{ fontSize: '9px', color: '#585b70', fontFamily: 'monospace' }}>🔒</span>
+          {canDeleteLoopIndex ? (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => removeNode(node.id)}
+              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+              title="Remove loop index"
+            >✕</button>
+          ) : (
+            <span style={{ fontSize: '9px', color: '#585b70', fontFamily: 'monospace' }} title="Last loop index in group — cannot delete">🔒</span>
+          )}
         </div>
         {/* Body */}
         <div style={{ padding: '6px 0 4px' }}>
