@@ -1024,7 +1024,10 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               if (!fromPos || !toPos) return null;
 
               const srcDef   = getNodeDefinition(sourceNode.type);
-              const lineType = srcDef?.outputs[input.connection.outputKey]?.type;
+              // For group nodes the static def has empty outputs (they're dynamic);
+              // fall back to the live node's outputs so wires get the right colour.
+              const lineType = srcDef?.outputs[input.connection.outputKey]?.type
+                ?? sourceNode.outputs[input.connection.outputKey]?.type;
 
               return (
                 <ConnectionLine
