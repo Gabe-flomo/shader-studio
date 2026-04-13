@@ -13,8 +13,9 @@ interface AudioNodeState {
   freqData: Float32Array;
   isPlaying: boolean;
   fileName: string;
-  freqCenter: number;
-  freqRange: number;  // 0 = full spectrum
+  bands: number[];    // array of center Hz values
+  freqRange: number;  // shared half-width (0 = full spectrum in 'full' mode)
+  mode: string;       // 'band' | 'full'
 }
 
 let ctx: AudioContext | null = null;
@@ -58,8 +59,9 @@ async function loadAudio(nodeId: string, arrayBuffer: ArrayBuffer, fileName: str
     freqData,
     isPlaying: false,
     fileName,
-    freqCenter: 200,
+    bands: [200],
     freqRange: 200,
+    mode: 'band',
   });
 }
 
@@ -112,46 +114,35 @@ function removeAudio(nodeId: string): void {
   nodes.delete(nodeId);
 }
 
-function updateFreqParams(nodeId: string, freqCenter: number, freqRange: number): void {
+function updateFreqParams(nodeId: string, bands: number[], range: number, mode: string): void {
   const state = nodes.get(nodeId);
   if (!state) return;
-  state.freqCenter = freqCenter;
-  state.freqRange = freqRange;
+  state.bands = bands;
+  state.freqRange = range;
+  state.mode = mode;
 }
 
-function getAmplitude(nodeId: string, freqCenter: number, freqRange: number): number {
-  const state = nodes.get(nodeId);
-  if (!state?.isPlaying) return 0;
+function computeBandAmplitude(
+  freqData: Float32Array,
+  analyser: AnalyserNode,
+  center: number,
+  range: number,
+): number {
   if (!ctx) return 0;
-
-  state.analyser.getFloatFrequencyData(state.freqData as Float32Array<ArrayBuffer>);
-
-  const binCount = state.analyser.frequencyBinCount; // fftSize / 2 = 1024
-  const hzPerBin = ctx.sampleRate / state.analyser.fftSize; // ~21.5 Hz/bin at 44100
-
+  const binCount = analyser.frequencyBinCount;
+  const hzPerBin = ctx.sampleRate / analyser.fftSize;
   let binLow: number;
   let binHigh: number;
-
-  if (freqRange <= 0) {
-    // Full spectrum mode: average all bins
-    binLow = 0;
-    binHigh = binCount - 1;
+  if (range <= 0) {
+    binLow = 0; binHigh = binCount - 1;
   } else {
-    binLow  = Math.max(0,          Math.round((freqCenter - freqRange) / hzPerBin));
-    binHigh = Math.min(binCount - 1, Math.round((freqCenter + freqRange) / hzPerBin));
+    binLow  = Math.max(0,          Math.round((center - range) / hzPerBin));
+    binHigh = Math.min(binCount - 1, Math.round((center + range) / hzPerBin));
   }
-
   if (binLow > binHigh) binLow = binHigh;
-
-  // Average dB values across the band.
-  // getFloatFrequencyData returns values in dB, typically -160 to 0.
   let sum = 0;
-  for (let i = binLow; i <= binHigh; i++) {
-    sum += state.freqData[i];
-  }
+  for (let i = binLow; i <= binHigh; i++) sum += freqData[i];
   const avgDb = sum / (binHigh - binLow + 1);
-
-  // Normalize: -100 dB → 0.0, 0 dB → 1.0. Clamp to [0, 1].
   return Math.max(0, Math.min(1, (avgDb + 100) / 100));
 }
 
@@ -163,8 +154,17 @@ function tick(): Map<string, number> {
   const result = new Map<string, number>();
   for (const [nodeId, state] of nodes) {
     if (!state.isPlaying) continue;
-    const amp = getAmplitude(nodeId, state.freqCenter, state.freqRange);
-    result.set(`u_audio_${nodeId}`, amp);
+    state.analyser.getFloatFrequencyData(state.freqData as Float32Array<ArrayBuffer>);
+    if (state.mode === 'full') {
+      // Full spectrum — emit band_0 with range=0
+      const amp = computeBandAmplitude(state.freqData, state.analyser, 0, 0);
+      result.set(`u_audio_${nodeId}_0`, amp);
+    } else {
+      for (let i = 0; i < state.bands.length; i++) {
+        const amp = computeBandAmplitude(state.freqData, state.analyser, state.bands[i], state.freqRange);
+        result.set(`u_audio_${nodeId}_${i}`, amp);
+      }
+    }
   }
   return result;
 }

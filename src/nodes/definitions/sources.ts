@@ -170,21 +170,20 @@ export const AudioInputNode: NodeDefinition = {
   type: 'audioInput',
   label: 'Audio Input',
   category: 'Sources',
-  description: 'Load an audio file and output the amplitude of a frequency band as a float (0–1). Set freq_center + freq_range in Hz, or set mode=Full Spectrum for overall volume.',
+  description: 'Load an audio file and output per-band frequency amplitudes as floats (0–1). Add multiple bands or use Full Spectrum mode for overall volume.',
   inputs: {},
   outputs: {
-    amplitude: { type: 'float', label: 'Amplitude' },
+    amplitude_0: { type: 'float', label: 'Band 0' },
   },
   defaultParams: {
-    freq_center: 200.0,
     freq_range:  200.0,
     mode: 'band',
+    _bands: [200],
     _fileName: '',
     _hasFile: false,
   },
   paramDefs: {
-    freq_center: { label: 'Freq Center (Hz)', type: 'float', min: 20,  max: 20000, step: 1 },
-    freq_range:  { label: 'Freq Range (Hz)',  type: 'float', min: 0,   max: 10000, step: 1 },
+    freq_range: { label: 'Freq Range (Hz)', type: 'float', min: 0, max: 10000, step: 1 },
     mode: { label: 'Mode', type: 'select', options: [
       { value: 'band', label: 'Frequency Band' },
       { value: 'full', label: 'Full Spectrum'  },
@@ -192,11 +191,16 @@ export const AudioInputNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode) => {
     const id = node.id;
-    const outVar = `${id}_amplitude`;
-    return {
-      code: `    float ${outVar} = u_audio_${id};\n`,
-      outputVars: { amplitude: outVar },
-    };
+    const rawBands = node.params._bands;
+    const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
+    const lines: string[] = [];
+    const outputVars: Record<string, string> = {};
+    for (let i = 0; i < bands.length; i++) {
+      const outVar = `${id}_amplitude_${i}`;
+      lines.push(`    float ${outVar} = u_audio_${id}_${i};\n`);
+      outputVars[`amplitude_${i}`] = outVar;
+    }
+    return { code: lines.join(''), outputVars };
   },
 };
 
