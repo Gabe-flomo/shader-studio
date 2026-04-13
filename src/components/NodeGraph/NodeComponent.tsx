@@ -2126,7 +2126,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               const n = parseFloat(raw);
               if (isNaN(n)) return;
               const absN = Math.abs(n);
-              if (absN > effMax || (bidir && n < effMin)) {
+              // Whatever the user types becomes the new max (abs value).
+              // Only skip if zero (a range of 0 is meaningless).
+              if (absN > 0) {
                 updateNodeParams(node.id, { [`__scMax_${key}`]: absN });
               }
               setFloat(key, String(n));
