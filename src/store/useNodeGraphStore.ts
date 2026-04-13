@@ -1608,20 +1608,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeNode: (nodeId) => {
-    const { nodes, activeGroupId } = get();
+    const { nodes, activeGroupPath } = get();
 
-    // When inside a group, handle subgraph node removal
-    if (activeGroupId) {
-      const groupNode = nodes.find(n => n.id === activeGroupId);
-      const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-      if (sg) {
-        const sgNode = sg.nodes.find(n => n.id === nodeId);
+    // When inside a group, handle subgraph node removal (handles depth 1 and 2)
+    if (activeGroupPath.length > 0) {
+      const activeNodes = getActiveNodes(nodes, activeGroupPath);
+      if (activeNodes) {
+        const sgNode = activeNodes.find(n => n.id === nodeId);
         // Block deletion of original (creation-time) nodes
         if (sgNode?.params?._groupOriginal) return;
         if (sgNode) {
           pushHistory(nodes);
           // Remove from subgraph and clear connections pointing to it
-          const newSgNodes = sg.nodes
+          const newSgNodes = activeNodes
             .filter(n => n.id !== nodeId)
             .map(n => ({
               ...n,
@@ -1632,12 +1631,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
                 ]),
               ),
             }));
-          set(state => ({
-            nodes: state.nodes.map(n => {
-              if (n.id !== activeGroupId) return n;
-              return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes } } };
-            }),
-          }));
+          set(state => {
+            const newTop = setActiveNodes(state.nodes, activeGroupPath, newSgNodes);
+            return { nodes: newTop ?? state.nodes };
+          });
           get().compile();
           return;
         }
@@ -1731,20 +1728,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (state.nodes.some(n => n.id === nodeId)) {
         return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, position } : n) };
       }
-      // Drill into active group's subgraph (handles drag inside "enter group" view)
-      const groupId = state.activeGroupId;
-      if (!groupId) return {};
-      return {
-        nodes: state.nodes.map(n => {
-          if (n.id !== groupId) return n;
-          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-          if (!sg) return n;
-          return {
-            ...n,
-            params: { ...n.params, subgraph: { ...sg, nodes: sg.nodes.map(sn => sn.id === nodeId ? { ...sn, position } : sn) } },
-          };
-        }),
-      };
+      // Drill into active group's subgraph (handles depth 1 and 2)
+      const path = state.activeGroupPath;
+      if (path.length === 0) return {};
+      const activeNodes = getActiveNodes(state.nodes, path);
+      if (!activeNodes) return {};
+      const newActiveNodes = activeNodes.map(sn => sn.id === nodeId ? { ...sn, position } : sn);
+      const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+      return { nodes: newTop ?? state.nodes };
     });
   },
 
@@ -1793,9 +1784,31 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }
         return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n) };
       }
-      // Subgraph node — also sync to group node's override keys
-      const groupId = state.activeGroupId;
-      if (!groupId) return {};
+      // Subgraph node — also sync to group node's override keys (depth 1 only)
+      const path = state.activeGroupPath;
+      if (path.length === 0) return {};
+      // Depth > 1: update node directly without override key sync
+      if (path.length > 1) {
+        const activeNodes = getActiveNodes(state.nodes, path);
+        if (!activeNodes) return {};
+        const newActiveNodes = activeNodes.map(sn => {
+          if (sn.id !== nodeId) return sn;
+          const updated = { ...sn, params: { ...sn.params, ...params } };
+          if (sn.type === 'loopCarry' && 'dataType' in params) {
+            const t = params.dataType as import('../types/nodeGraph').DataType;
+            return {
+              ...updated,
+              inputs: { init: { ...updated.inputs.init, type: t }, next: { ...updated.inputs.next, type: t } },
+              outputs: { value: { ...updated.outputs.value, type: t } },
+            };
+          }
+          return updated;
+        });
+        const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+        return { nodes: newTop ?? state.nodes };
+      }
+      // Depth 1: sync params back to parent group's override keys
+      const groupId = path[0];
       return {
         nodes: state.nodes.map(n => {
           if (n.id !== groupId) return n;
@@ -1912,50 +1925,38 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           }),
         };
       }
-      // Subgraph connection (inside active group)
-      const groupId = state.activeGroupId;
-      if (!groupId) return {};
-      return {
-        nodes: state.nodes.map(n => {
-          if (n.id !== groupId) return n;
-          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-          if (!sg) return n;
-          const targetSgNode = sg.nodes.find(sn => sn.id === targetNodeId);
-          if (!targetSgNode) return n;
-          // Determine type/label for __param_ virtual inputs
-          let socketType: import('../types/nodeGraph').DataType = targetSgNode.inputs[targetInputKey]?.type ?? 'float';
-          let socketLabel = targetSgNode.inputs[targetInputKey]?.label ?? targetInputKey;
-          if (targetInputKey.startsWith('__param_')) {
-            const paramKey = targetInputKey.slice('__param_'.length);
-            const def = getNodeDefinition(targetSgNode.type);
-            const pd = def?.paramDefs?.[paramKey];
-            if (pd) { socketType = (pd.type as import('../types/nodeGraph').DataType) ?? 'float'; socketLabel = pd.label; }
-          }
-          return {
-            ...n,
-            params: {
-              ...n.params,
-              subgraph: {
-                ...sg,
-                nodes: sg.nodes.map(sn => {
-                  if (sn.id !== targetNodeId) return sn;
-                  return {
-                    ...sn,
-                    inputs: {
-                      ...sn.inputs,
-                      [targetInputKey]: {
-                        type: socketType,
-                        label: socketLabel,
-                        connection: { nodeId: sourceNodeId, outputKey: sourceOutputKey },
-                      },
-                    },
-                  };
-                }),
-              },
+      // Subgraph connection (inside active group, handles depth 1 and 2)
+      const path = state.activeGroupPath;
+      if (path.length === 0) return {};
+      const activeNodes = getActiveNodes(state.nodes, path);
+      if (!activeNodes) return {};
+      const targetSgNode = activeNodes.find(sn => sn.id === targetNodeId);
+      if (!targetSgNode) return {};
+      // Determine type/label for __param_ virtual inputs
+      let socketType: import('../types/nodeGraph').DataType = targetSgNode.inputs[targetInputKey]?.type ?? 'float';
+      let socketLabel = targetSgNode.inputs[targetInputKey]?.label ?? targetInputKey;
+      if (targetInputKey.startsWith('__param_')) {
+        const paramKey = targetInputKey.slice('__param_'.length);
+        const def = getNodeDefinition(targetSgNode.type);
+        const pd = def?.paramDefs?.[paramKey];
+        if (pd) { socketType = (pd.type as import('../types/nodeGraph').DataType) ?? 'float'; socketLabel = pd.label; }
+      }
+      const newActiveNodes = activeNodes.map(sn => {
+        if (sn.id !== targetNodeId) return sn;
+        return {
+          ...sn,
+          inputs: {
+            ...sn.inputs,
+            [targetInputKey]: {
+              type: socketType,
+              label: socketLabel,
+              connection: { nodeId: sourceNodeId, outputKey: sourceOutputKey },
             },
-          };
-        }),
-      };
+          },
+        };
+      });
+      const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+      return { nodes: newTop ?? state.nodes };
     });
     get().compile();
   },
@@ -1974,31 +1975,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           }),
         };
       }
-      // Subgraph
-      const groupId = state.activeGroupId;
-      if (!groupId) return {};
-      return {
-        nodes: state.nodes.map(n => {
-          if (n.id !== groupId) return n;
-          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-          if (!sg) return n;
-          return {
-            ...n,
-            params: {
-              ...n.params,
-              subgraph: {
-                ...sg,
-                nodes: sg.nodes.map(sn => {
-                  if (sn.id !== nodeId) return sn;
-                  const newInput = { ...sn.inputs[inputKey] };
-                  delete newInput.connection;
-                  return { ...sn, inputs: { ...sn.inputs, [inputKey]: newInput } };
-                }),
-              },
-            },
-          };
-        }),
-      };
+      // Subgraph (handles depth 1 and 2)
+      const path = state.activeGroupPath;
+      if (path.length === 0) return {};
+      const activeNodes = getActiveNodes(state.nodes, path);
+      if (!activeNodes) return {};
+      const newActiveNodes = activeNodes.map(sn => {
+        if (sn.id !== nodeId) return sn;
+        const newInput = { ...sn.inputs[inputKey] };
+        delete newInput.connection;
+        return { ...sn, inputs: { ...sn.inputs, [inputKey]: newInput } };
+      });
+      const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+      return { nodes: newTop ?? state.nodes };
     });
     get().compile();
   },
@@ -2206,109 +2195,46 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   setNodeAssignOp: (nodeId, op) => {
-    const activeGroupId = get().activeGroupId;
     set(state => {
-      if (activeGroupId) {
-        // Operating inside a group — update the subgraph node
-        const groupNode = state.nodes.find(n => n.id === activeGroupId);
-        if (!groupNode) return {};
-        const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-        if (!sg) return {};
-        return {
-          nodes: state.nodes.map(n => {
-            if (n.id !== activeGroupId) return n;
-            return {
-              ...n,
-              params: {
-                ...n.params,
-                subgraph: {
-                  ...sg,
-                  nodes: sg.nodes.map(sn =>
-                    sn.id === nodeId ? { ...sn, assignOp: op } : sn
-                  ),
-                },
-              },
-            };
-          }),
-        };
+      const path = state.activeGroupPath;
+      if (path.length > 0) {
+        const activeNodes = getActiveNodes(state.nodes, path);
+        if (!activeNodes) return {};
+        const newActiveNodes = activeNodes.map(sn => sn.id === nodeId ? { ...sn, assignOp: op } : sn);
+        const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+        return { nodes: newTop ?? state.nodes };
       }
-      // Top-level node
-      return {
-        nodes: state.nodes.map(n =>
-          n.id === nodeId ? { ...n, assignOp: op } : n
-        ),
-      };
+      return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, assignOp: op } : n) };
     });
     get().compile();
   },
 
   setNodeAssignInit: (nodeId, expr) => {
-    const activeGroupId = get().activeGroupId;
     set(state => {
-      if (activeGroupId) {
-        const groupNode = state.nodes.find(n => n.id === activeGroupId);
-        if (!groupNode) return {};
-        const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-        if (!sg) return {};
-        return {
-          nodes: state.nodes.map(n => {
-            if (n.id !== activeGroupId) return n;
-            return {
-              ...n,
-              params: {
-                ...n.params,
-                subgraph: {
-                  ...sg,
-                  nodes: sg.nodes.map(sn =>
-                    sn.id === nodeId ? { ...sn, assignInit: expr } : sn
-                  ),
-                },
-              },
-            };
-          }),
-        };
+      const path = state.activeGroupPath;
+      if (path.length > 0) {
+        const activeNodes = getActiveNodes(state.nodes, path);
+        if (!activeNodes) return {};
+        const newActiveNodes = activeNodes.map(sn => sn.id === nodeId ? { ...sn, assignInit: expr } : sn);
+        const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+        return { nodes: newTop ?? state.nodes };
       }
-      // Top-level node
-      return {
-        nodes: state.nodes.map(n =>
-          n.id === nodeId ? { ...n, assignInit: expr } : n
-        ),
-      };
+      return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, assignInit: expr } : n) };
     });
     get().compile();
   },
 
   toggleNodeCarryMode: (nodeId) => {
-    const activeGroupId = get().activeGroupId;
     set(state => {
-      if (activeGroupId) {
-        const groupNode = state.nodes.find(n => n.id === activeGroupId);
-        if (!groupNode) return {};
-        const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-        if (!sg) return {};
-        return {
-          nodes: state.nodes.map(n => {
-            if (n.id !== activeGroupId) return n;
-            return {
-              ...n,
-              params: {
-                ...n.params,
-                subgraph: {
-                  ...sg,
-                  nodes: sg.nodes.map(sn =>
-                    sn.id === nodeId ? { ...sn, carryMode: !sn.carryMode } : sn
-                  ),
-                },
-              },
-            };
-          }),
-        };
+      const path = state.activeGroupPath;
+      if (path.length > 0) {
+        const activeNodes = getActiveNodes(state.nodes, path);
+        if (!activeNodes) return {};
+        const newActiveNodes = activeNodes.map(sn => sn.id === nodeId ? { ...sn, carryMode: !sn.carryMode } : sn);
+        const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+        return { nodes: newTop ?? state.nodes };
       }
-      return {
-        nodes: state.nodes.map(n =>
-          n.id === nodeId ? { ...n, carryMode: !n.carryMode } : n
-        ),
-      };
+      return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, carryMode: !n.carryMode } : n) };
     });
     get().compile();
   },
