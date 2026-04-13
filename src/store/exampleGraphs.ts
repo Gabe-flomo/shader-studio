@@ -4960,11 +4960,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: { preset: '5', scale: 0.1, offset: 0.5 },
       },
       {
-        id: 'mix_3', type: 'mix', position: { x: 700, y: 230 },
+        id: 'mix_3', type: 'mixVec3', position: { x: 700, y: 230 },
         inputs: {
-          a:    { type: 'vec3',  label: 'A',   connection: { nodeId: 'pal_a',  outputKey: 'color'   } },
-          b:    { type: 'vec3',  label: 'B',   connection: { nodeId: 'pal_b',  outputKey: 'color'   } },
-          fac:  { type: 'float', label: 'Fac', connection: { nodeId: 'grid_2', outputKey: 'checker' } },
+          a:   { type: 'vec3',  label: 'A',   connection: { nodeId: 'pal_a',  outputKey: 'color'   } },
+          b:   { type: 'vec3',  label: 'B',   connection: { nodeId: 'pal_b',  outputKey: 'color'   } },
+          fac: { type: 'float', label: 'Fac', connection: { nodeId: 'grid_2', outputKey: 'checker' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: {},
@@ -5166,7 +5166,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       },
       // Blend edges over original
       {
-        id: 'mix_6', type: 'mix', position: { x: 1080, y: 200 },
+        id: 'mix_6', type: 'mixVec3', position: { x: 1080, y: 200 },
         inputs: {
           a:   { type: 'vec3',  label: 'A (original)', connection: { nodeId: 'fv3_3', outputKey: 'output' } },
           b:   { type: 'vec3',  label: 'B (edges)',    connection: { nodeId: 'pal_5', outputKey: 'color'  } },

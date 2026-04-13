@@ -26,7 +26,7 @@ const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
   { label: 'Trig',       types: ['sin', 'cos', 'atan2'] },
   { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
   { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
-  { label: 'Interp',     types: ['clamp', 'mix', 'smoothstep', 'mod'] },
+  { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod'] },
   { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
   { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'luminance'] },
   { label: 'Vec2',       types: ['makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },

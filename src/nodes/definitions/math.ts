@@ -208,6 +208,20 @@ export const MixNode: NodeDefinition = {
   },
 };
 
+export const MixVec3Node: NodeDefinition = {
+  type: 'mixVec3', label: 'Mix (Color)', category: 'Math',
+  description: 'Blend two vec3 colors: mix(a, b, fac). fac=0 → A, fac=1 → B.',
+  inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' }, fac: { type: 'float', label: 'Fac' } },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { fac: 0.5 },
+  paramDefs: { fac: { label: 'Fac', type: 'float', min: 0, max: 1, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const o = `${node.id}_result`;
+    const fac = inputVars.fac || p(node.params.fac, 0.5);
+    return { code: `    vec3 ${o} = mix(${inputVars.a || 'vec3(0.0)'}, ${inputVars.b || 'vec3(1.0)'}, ${fac});\n`, outputVars: { result: o } };
+  },
+};
+
 export const ModNode: NodeDefinition = {
   type: 'mod', label: 'Mod', category: 'Math', description: 'Modulo: mod(x, period).',
   inputs: { input: { type: 'float', label: 'Input' }, period: { type: 'float', label: 'Period' } },
