@@ -42,7 +42,7 @@ export interface GraphNode {
   assignOp?: '=' | '+=' | '-=' | '*=' | '/=';
   /**
    * GLSL expression used to initialise the accumulator when assignOp !== '='.
-   * Defaults to the neutral element for the operator (0.0 for +/-, 1.0 for */).
+   * Defaults to the neutral element for the operator (0.0 for add/subtract, 1.0 for multiply/divide).
    * Can reference any previously-computed GLSL variable name.
    */
   assignInit?: string;
