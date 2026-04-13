@@ -26,6 +26,7 @@ import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
+import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
@@ -1016,6 +1017,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [editingSliderKey, setEditingSliderKey] = useState<string | null>(null);
   const [editingSliderValue, setEditingSliderValue] = useState('');
   const [showParamPicker, setShowParamPicker] = useState(false);
+  const [showInitModal, setShowInitModal] = useState(false);
 
   if (node.type === 'group') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
@@ -2140,25 +2142,41 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, fontFamily: 'monospace' }}>
             init
           </span>
-          <input
-            type="text"
-            value={node.assignInit ?? ''}
-            onChange={e => setNodeAssignInit(node.id, e.target.value)}
-            placeholder="default (0 or 1)"
-            title="GLSL initializer for the accumulator variable. Leave blank to use the neutral element (0.0 for +/-, 1.0 for *//). Can reference any previously-computed GLSL variable."
+          {/* Clickable chip — opens the expression picker modal */}
+          <button
+            onClick={() => setShowInitModal(true)}
+            title="Edit initializer expression — click to open expression picker"
             style={{
               flex: 1,
-              background: '#11111b',
-              border: '1px solid #45475a',
+              background: node.assignInit ? '#11111b' : 'transparent',
+              border: `1px solid ${node.assignInit ? '#45475a' : '#31324466'}`,
               borderRadius: '4px',
-              color: '#cdd6f4',
+              color: node.assignInit ? '#89b4fa' : '#45475a',
               fontSize: '11px',
               fontFamily: 'monospace',
               padding: '2px 6px',
-              outline: 'none',
+              cursor: 'pointer',
+              textAlign: 'left',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
               minWidth: 0,
             }}
-          />
+          >
+            {node.assignInit || 'default (0 or 1)'}
+          </button>
+          {node.assignInit && (
+            <button
+              onClick={() => setNodeAssignInit(node.id, '')}
+              title="Clear init expression (revert to neutral element)"
+              style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '12px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+            >
+              ×
+            </button>
+          )}
+          {showInitModal && (
+            <AssignInitModal node={node} onClose={() => setShowInitModal(false)} />
+          )}
         </div>
       )}
 
