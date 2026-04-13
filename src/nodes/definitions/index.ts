@@ -5,7 +5,7 @@
 import type { NodeDefinition } from '../../types/nodeGraph';
 
 // Sources
-export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode } from './sources';
+export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
@@ -79,7 +79,7 @@ export {
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode } from './sources';
+import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -132,6 +132,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   textureInput: TextureInputNode,
   prevFrame: PrevFrameNode,
   loopIndex: LoopIndexNode,
+  audioInput: AudioInputNode,
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,

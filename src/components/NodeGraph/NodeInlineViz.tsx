@@ -408,6 +408,103 @@ export function DesaturateBarViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Viz N — Audio Freq Range (audioInput) ────────────────────────────────────
+
+export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rawBands  = node.params._bands;
+  const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
+  const freqRange = typeof node.params.freq_range === 'number' ? node.params.freq_range : 200;
+  const mode      = (node.params.mode as string) ?? 'band';
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const logMin = Math.log10(20);
+    const logMax = Math.log10(20000);
+    const toX = (hz: number) =>
+      Math.round(((Math.log10(Math.max(20, Math.min(20000, hz))) - logMin) / (logMax - logMin)) * W);
+
+    // Background gradient
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0.0,  '#1a2a3a');
+    grad.addColorStop(0.25, '#1a3a2a');
+    grad.addColorStop(0.6,  '#2a2a1a');
+    grad.addColorStop(1.0,  '#2a1a1a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    if (mode === 'full') {
+      // Full spectrum — highlight entire range
+      ctx.fillStyle = 'rgba(137, 220, 235, 0.25)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(137, 220, 235, 0.7)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, 0, W, H);
+    } else {
+      // Draw each band
+      const BAND_COLORS = ['#89dceb', '#a6e3a1', '#fab387', '#f38ba8', '#cba6f7', '#f9e2af'];
+      for (let i = 0; i < bands.length; i++) {
+        const center = bands[i];
+        const lo = Math.max(20, center - freqRange);
+        const hi = Math.min(20000, center + freqRange);
+        const loX = toX(lo);
+        const hiX = toX(hi);
+        const col = BAND_COLORS[i % BAND_COLORS.length];
+
+        ctx.fillStyle = `${col}33`; // 20% opacity
+        ctx.fillRect(loX, 0, hiX - loX, H);
+        ctx.strokeStyle = `${col}bb`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(loX, 0.5, hiX - loX, H - 1);
+
+        // Center tick
+        const cx = toX(center);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx, 0);
+        ctx.lineTo(cx, H - 10);
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = col;
+        ctx.font = '8px monospace';
+        const label = center >= 1000 ? `${(center/1000).toFixed(1)}k` : `${Math.round(center)}`;
+        ctx.fillText(label, Math.min(cx + 2, W - 28), 9 + i * 9);
+      }
+    }
+
+    // Axis labels
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    const ticks: [number, string][] = [[100, '100'], [1000, '1k'], [5000, '5k'], [10000, '10k']];
+    for (const [hz, lbl] of ticks) {
+      const x = toX(hz);
+      ctx.fillText(lbl, Math.max(1, x - 5), H - 2);
+    }
+  }, [bands, freqRange, mode]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={40}
+        style={{ display: 'block', width: '100%', height: '40px' }}
+      />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -422,6 +519,7 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'lumaGrain':
     case 'temporalGrain':  return <NoisePatchViz      node={node} />;
     case 'desaturate':     return <DesaturateBarViz   node={node} />;
+    case 'audioInput':     return <AudioFreqRangeViz  node={node} />;
     default:               return null;
   }
 }
@@ -430,5 +528,5 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
 export const INLINE_VIZ_TYPES = new Set([
   'toneMap', 'palette', 'palettePreset', 'gradient',
   'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
-  'hueRange',
+  'hueRange', 'audioInput',
 ]);

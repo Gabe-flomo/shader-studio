@@ -14,6 +14,9 @@ export const SKIP_UNIFORM_TYPES = new Set([
   // Mandelbrot/Julia: zoom, max_iter, center_x/y, precision all affect code structure
   // and the center coordinates need JS-side DS splitting — must stay baked.
   'mandelbrot',
+  // audioInput: freq_center and freq_range are read by the audio engine in JS — they
+  // must NOT be converted to u_p_* uniform names; they stay as plain numbers in node.params.
+  'audioInput',
 ]);
 
 /** Default GLSL zero literal for a given type. */

@@ -11,6 +11,7 @@ import { ShortcutsPage } from './components/ShortcutsPage';
 import { GLSLPage } from './components/GLSLPage';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useNodeGraphStore } from './store/useNodeGraphStore';
+import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
 
@@ -43,6 +44,54 @@ const btnStyle = (active = false): React.CSSProperties => ({
   touchAction: 'manipulation' as const,
   whiteSpace: 'nowrap' as const,
 });
+
+// ── Audio master volume widget — shown when any audioInput node is in the graph ─
+function AudioMasterVolumeWidget() {
+  const nodes        = useNodeGraphStore(s => s.nodes);
+  const masterVolume = useNodeGraphStore(s => s.audioMasterVolume);
+  const setVolume    = useNodeGraphStore(s => s.setAudioMasterVolume);
+  const hasAudio     = nodes.some(n => n.type === 'audioInput');
+  const [paused, setPaused] = useState(false);
+  if (!hasAudio) return null;
+
+  const togglePause = () => {
+    if (paused) {
+      audioEngine.resumeAll();
+      setPaused(false);
+    } else {
+      audioEngine.pauseAll();
+      setPaused(true);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', bottom: 12, right: 12, zIndex: 20,
+      background: 'rgba(17,17,27,0.92)', border: '1px solid #45475a',
+      borderRadius: '8px', padding: '6px 10px',
+      display: 'flex', alignItems: 'center', gap: '8px',
+      backdropFilter: 'blur(8px)',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+    }}>
+      <span style={{ fontSize: '11px', color: '#89dceb' }}>♫</span>
+      <button
+        onClick={togglePause}
+        title={paused ? 'Resume all audio' : 'Pause all audio'}
+        style={{ background: 'none', border: 'none', color: paused ? '#f38ba8' : '#a6e3a1', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+      >{paused ? '▶' : '⏸'}</button>
+      <input
+        type="range"
+        min={0} max={1} step={0.01}
+        value={masterVolume}
+        onChange={e => setVolume(parseFloat(e.target.value))}
+        style={{ width: 72, accentColor: '#89dceb', cursor: 'pointer', opacity: paused ? 0.4 : 1 }}
+      />
+      <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
+        {Math.round(masterVolume * 100)}%
+      </span>
+    </div>
+  );
+}
 
 function App() {
   const {
@@ -317,6 +366,7 @@ function App() {
         {/* Full-screen shader preview as background */}
         <div style={{ position: 'absolute', inset: 0 }}>
           <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+          <AudioMasterVolumeWidget />
         </div>
 
         {/* Floating TopNav */}
@@ -554,7 +604,7 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /></div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

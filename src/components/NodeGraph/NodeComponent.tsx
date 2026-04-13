@@ -24,10 +24,12 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
+import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
-import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
+import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
+import { audioEngine } from '../../lib/audioEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 
@@ -64,11 +66,11 @@ interface Props {
   externalParamKeys?: Set<string>;
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
-const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap']);
+const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 
 const TYPE_COLORS: Record<string, string> = {
   float: '#f0a',
@@ -265,6 +267,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams   = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
@@ -341,6 +344,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
+  const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -380,6 +384,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPreviewActive, primaryOutputIsFloat, node.id]);
+
+  // ── Audio Input: sync freq params to engine each time they change ────────────
+  React.useEffect(() => {
+    if (node.type !== 'audioInput') return;
+    const rawBands = node.params._bands;
+    const bs: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
+    const range = typeof node.params.freq_range === 'number' ? node.params.freq_range : 200;
+    const m = (node.params.mode as string) ?? 'band';
+    audioEngine.updateFreqParams(node.id, bs, range, m);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, node.params._bands, node.params.freq_range, node.params.mode]);
+
+  // ── Audio Input: cleanup when node is removed ─────────────────────────────────
+  React.useEffect(() => {
+    if (node.type !== 'audioInput') return;
+    return () => {
+      audioEngine.removeAudio(node.id);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id]);
 
   if (!def) return null;
 
@@ -541,6 +565,225 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           ))}
         </div>
       </div>
+    );
+  }
+
+  // ── Audio Input node special card ────────────────────────────────────────────
+  if (node.type === 'audioInput') {
+    const hasFile      = !!(node.params._hasFile);
+    const fileName     = (node.params._fileName as string) || '';
+    const isNodePlaying = !!(node.params._isPlaying);
+    const rawBands     = node.params._bands;
+    const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
+    const freqRange    = typeof node.params.freq_range  === 'number' ? node.params.freq_range  : 200;
+    const mode         = (node.params.mode as string) ?? 'band';
+
+    const buildOutputs = (bs: number[]) =>
+      Object.fromEntries(bs.map((_, i) => [`amplitude_${i}`, { type: 'float' as const, label: `Band ${i}` }]));
+
+    const handleAddBand = () => {
+      const newBands = [...bands, 1000];
+      updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+      updateNodeOutputs(node.id, buildOutputs(newBands));
+    };
+
+    const handleRemoveBand = (i: number) => {
+      if (bands.length <= 1) return;
+      const newBands = bands.filter((_, idx) => idx !== i);
+      updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+      updateNodeOutputs(node.id, buildOutputs(newBands));
+    };
+
+    const handleAudioDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (!file.name.match(/\.(wav|mp3|ogg|aac|flac)$/i)) return;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const arrayBuffer = ev.target?.result as ArrayBuffer;
+        await audioEngine.loadAudio(node.id, arrayBuffer, file.name);
+        audioEngine.startAudio(node.id);
+        updateNodeParams(node.id, { _fileName: file.name, _hasFile: true, _isPlaying: true }, { immediate: true });
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    const togglePlay = () => {
+      if (isNodePlaying) {
+        audioEngine.stopAudio(node.id);
+        updateNodeParams(node.id, { _isPlaying: false }, { immediate: true });
+      } else {
+        if (audioEngine.isLoaded(node.id)) {
+          audioEngine.startAudio(node.id);
+          updateNodeParams(node.id, { _isPlaying: true }, { immediate: true });
+        }
+      }
+    };
+
+    return (
+      <>
+        <div
+          style={{
+            position: 'absolute', left: node.position.x, top: node.position.y,
+            background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
+            borderRadius: '8px', width: '240px', color: '#cdd6f4', fontSize: '12px',
+            userSelect: 'none', opacity: dimmed ? 0.2 : 1,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          }}
+        >
+          {/* Header */}
+          <div
+            onMouseDown={(e) => {
+              if (e.button === 2) return;
+              e.stopPropagation();
+              dragOffset.current = { x: e.clientX / zoom - node.position.x, y: e.clientY / zoom - node.position.y };
+              const onMove = (ev: MouseEvent) => {
+                if (!dragOffset.current) return;
+                updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
+              };
+              const onUp = () => {
+                dragOffset.current = null;
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+                setSelectedNodeId(isSelected ? null : node.id);
+              };
+              window.addEventListener('mousemove', onMove);
+              window.addEventListener('mouseup', onUp);
+            }}
+            style={{ background: '#313244', borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {/* Play/pause button */}
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={togglePlay}
+                title={isNodePlaying ? 'Pause' : 'Play'}
+                disabled={!hasFile}
+                style={{ background: 'none', border: 'none', color: !hasFile ? '#45475a' : isNodePlaying ? '#a6e3a1' : '#89dceb', cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
+              >{isNodePlaying ? '⏸' : '▶'}</button>
+              <span style={{ fontWeight: 600, fontSize: '11px', color: '#89dceb' }}>Audio Input</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {/* Open analyzer modal */}
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => setShowAudioInputModal(v => !v)}
+                title="Open Audio analyzer"
+                style={{ background: 'none', border: 'none', color: showAudioInputModal ? '#89dceb' : '#585b70', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+              >◉</button>
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+            </div>
+          </div>
+
+          {/* File drop zone */}
+          <div
+            onDrop={handleAudioDrop}
+            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+            onMouseDown={e => e.stopPropagation()}
+            style={{
+              padding: '6px 10px',
+              border: '1px dashed #45475a',
+              borderRadius: '4px',
+              margin: '6px 8px',
+              textAlign: 'center',
+              cursor: 'default',
+              background: '#181825',
+            }}
+          >
+            {hasFile ? (
+              <span style={{ fontSize: '10px', color: '#89dceb', fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                ♫ {fileName}
+              </span>
+            ) : (
+              <span style={{ fontSize: '10px', color: '#585b70' }}>Drop WAV / MP3 / OGG</span>
+            )}
+          </div>
+
+          {/* Params */}
+          <div style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '5px' }} onMouseDown={e => e.stopPropagation()}>
+            {/* Mode */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '10px', color: '#585b70', width: '60px', flexShrink: 0 }}>Mode</span>
+              <select
+                value={mode}
+                onChange={e => updateNodeParams(node.id, { mode: e.target.value }, { immediate: true })}
+                style={{ flex: 1, background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', fontSize: '10px', borderRadius: '4px', padding: '2px 4px', cursor: 'pointer' }}
+              >
+                <option value="band">Band</option>
+                <option value="full">Full Spectrum</option>
+              </select>
+            </div>
+            {/* Shared range */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '10px', color: '#585b70', width: '60px', flexShrink: 0 }}>Range Hz</span>
+              <input
+                type="range" min={0} max={10000} step={1}
+                value={freqRange}
+                disabled={mode === 'full'}
+                onChange={e => updateNodeParams(node.id, { freq_range: parseFloat(e.target.value) }, { immediate: true })}
+                style={{ flex: 1, accentColor: '#89dceb', cursor: mode === 'full' ? 'default' : 'pointer', opacity: mode === 'full' ? 0.3 : 1 }}
+              />
+              <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '42px', textAlign: 'right' }}>±{freqRange}</span>
+            </div>
+            {/* Band list */}
+            {mode !== 'full' && bands.map((center, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => handleRemoveBand(i)}
+                  disabled={bands.length <= 1}
+                  title="Remove band"
+                  style={{ background: 'none', border: 'none', color: bands.length <= 1 ? '#45475a' : '#585b70', cursor: bands.length <= 1 ? 'default' : 'pointer', fontSize: '11px', padding: '0', lineHeight: 1, flexShrink: 0 }}
+                >×</button>
+                <input
+                  type="range" min={20} max={20000} step={1}
+                  value={center}
+                  onChange={e => {
+                    const newBands = bands.map((c, idx) => idx === i ? parseFloat(e.target.value) : c);
+                    updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+                  }}
+                  style={{ flex: 1, accentColor: '#89dceb', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '38px', textAlign: 'right' }}>
+                  {center >= 1000 ? `${(center/1000).toFixed(1)}k` : `${center}`}
+                </span>
+              </div>
+            ))}
+            {/* Add band button */}
+            {mode !== 'full' && (
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={handleAddBand}
+                style={{ background: '#313244', border: '1px dashed #45475a', color: '#585b70', fontSize: '10px', borderRadius: '4px', padding: '3px', cursor: 'pointer', width: '100%', marginTop: '2px' }}
+              >+ Add Band</button>
+            )}
+          </div>
+
+          {/* Inline freq-range viz */}
+          <AudioFreqRangeViz node={node} />
+
+          {/* Output sockets */}
+          <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+            {Object.entries(node.outputs).map(([key, out]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                <div
+                  data-socket="out"
+                  ref={el => { registerSocket(node.id, 'out', key, el); }}
+                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                  style={{ width: 12, height: 12, borderRadius: '50%', background: TYPE_COLORS['float'] ?? '#f0a', border: `2px solid ${TYPE_COLORS['float'] ?? '#f0a'}`, cursor: 'crosshair', marginRight: '-6px' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Audio Input Modal (portal) */}
+        {showAudioInputModal && (
+          <AudioInputModal node={node} onClose={() => setShowAudioInputModal(false)} />
+        )}
+      </>
     );
   }
 

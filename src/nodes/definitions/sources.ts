@@ -166,6 +166,44 @@ export const TextureInputNode: NodeDefinition = {
   },
 };
 
+export const AudioInputNode: NodeDefinition = {
+  type: 'audioInput',
+  label: 'Audio Input',
+  category: 'Sources',
+  description: 'Load an audio file and output per-band frequency amplitudes as floats (0–1). Add multiple bands or use Full Spectrum mode for overall volume.',
+  inputs: {},
+  outputs: {
+    amplitude_0: { type: 'float', label: 'Band 0' },
+  },
+  defaultParams: {
+    freq_range:  200.0,
+    mode: 'band',
+    _bands: [200],
+    _fileName: '',
+    _hasFile: false,
+  },
+  paramDefs: {
+    freq_range: { label: 'Freq Range (Hz)', type: 'float', min: 0, max: 10000, step: 1 },
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: 'band', label: 'Frequency Band' },
+      { value: 'full', label: 'Full Spectrum'  },
+    ]},
+  },
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    const rawBands = node.params._bands;
+    const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
+    const lines: string[] = [];
+    const outputVars: Record<string, string> = {};
+    for (let i = 0; i < bands.length; i++) {
+      const outVar = `${id}_amplitude_${i}`;
+      lines.push(`    float ${outVar} = u_audio_${id}_${i};\n`);
+      outputVars[`amplitude_${i}`] = outVar;
+    }
+    return { code: lines.join(''), outputVars };
+  },
+};
+
 export const ConstantNode: NodeDefinition = {
   type: 'constant',
   label: 'Constant',
