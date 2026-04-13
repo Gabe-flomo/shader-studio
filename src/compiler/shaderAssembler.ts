@@ -380,19 +380,39 @@ export function generateFragmentShader(
                 nodeOutputs.set(innerPrefix + inn.id, { i: '0.0' });
               }
             }
-            // Build prefixed inner nodes
-            const innerPrefixedNodes: GraphNode[] = innerSubgraph.nodes.map(inn => ({
-              ...inn,
-              id: innerPrefix + inn.id,
-              inputs: Object.fromEntries(
-                Object.entries(inn.inputs).map(([k, inp]) => [
-                  k,
-                  inp.connection
-                    ? { ...inp, connection: { nodeId: innerPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
-                    : inp,
-                ]),
-              ),
-            }));
+            // Build prefixed inner nodes, applying param overrides from two sources:
+            // 1-level: subNode.params["inn.id::paramKey"] (inner group's own overrides)
+            // 2-level: node.params["nestedOrigId::inn.id::paramKey"] (outer group's surfaced param overrides)
+            const innerPrefixedNodes: GraphNode[] = innerSubgraph.nodes.map(inn => {
+              const override1Prefix = `${inn.id}::`;
+              const override2Prefix = `${nestedOrigId}::${inn.id}::`;
+              const innOverrides: Record<string, unknown> = {};
+              // Apply 1-level overrides from inner group node's own params
+              for (const [k, v] of Object.entries(subNode.params)) {
+                if (typeof k === 'string' && k.startsWith(override1Prefix)) {
+                  innOverrides[k.slice(override1Prefix.length)] = v;
+                }
+              }
+              // Apply 2-level overrides from outer group node's params (surfaced params)
+              for (const [k, v] of Object.entries(node.params)) {
+                if (typeof k === 'string' && k.startsWith(override2Prefix)) {
+                  innOverrides[k.slice(override2Prefix.length)] = v;
+                }
+              }
+              return {
+                ...inn,
+                id: innerPrefix + inn.id,
+                params: Object.keys(innOverrides).length > 0 ? { ...inn.params, ...innOverrides } : inn.params,
+                inputs: Object.fromEntries(
+                  Object.entries(inn.inputs).map(([k, inp]) => [
+                    k,
+                    inp.connection
+                      ? { ...inp, connection: { nodeId: innerPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
+                      : inp,
+                  ]),
+                ),
+              };
+            });
             const sortedInner = topologicalSort(innerPrefixedNodes.filter(inn => inn.type !== 'loopCarry'));
             for (const inn of sortedInner) {
               if (nodeOutputs.has(inn.id)) continue;
