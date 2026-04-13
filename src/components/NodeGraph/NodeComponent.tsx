@@ -1920,8 +1920,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         }}
       >
         <span
-          onDoubleClick={e => { e.stopPropagation(); setCollapsed(v => !v); }}
-          title={collapsed ? 'Double-click to expand' : 'Double-click to collapse'}
+          onDoubleClick={e => {
+            e.stopPropagation();
+            if (node.type === 'sceneGroup' && !savingMode) {
+              onEnterGroup?.(node.id);
+            } else {
+              setCollapsed(v => !v);
+            }
+          }}
+          title={node.type === 'sceneGroup' ? 'Double-click to enter scene' : collapsed ? 'Double-click to expand' : 'Double-click to collapse'}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', userSelect: 'none' }}
         >
           <span style={{ fontSize: '9px', opacity: 0.5, lineHeight: 1 }}>{collapsed ? '▶' : '▼'}</span>

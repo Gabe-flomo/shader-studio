@@ -101,7 +101,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     const subgraph = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
     if (!subgraph) return null;
     const map = new Map<string, Set<string>>();
-    for (const port of subgraph.inputPorts) {
+    for (const port of (subgraph.inputPorts ?? [])) {
       let set = map.get(port.toNodeId);
       if (!set) { set = new Set(); map.set(port.toNodeId, set); }
       set.add(port.toInputKey);
@@ -141,6 +141,13 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     if (!activeGroupId) return null;
     const gn = nodes.find(n => n.id === activeGroupId);
     return (gn?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined) ?? null;
+  }, [nodes, activeGroupId]);
+
+  // True when drilled into a sceneGroup (no input/output port terminals to show)
+  const isInsideSceneGroup = React.useMemo(() => {
+    if (!activeGroupId) return false;
+    const gn = nodes.find(n => n.id === activeGroupId);
+    return gn?.type === 'sceneGroup';
   }, [nodes, activeGroupId]);
 
   // Position the Group Output terminal to the right of all subgraph nodes
@@ -821,7 +828,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               const outerSg = outer?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
               gn = outerSg?.nodes.find(n => n.id === gid);
             }
-            const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : 'Group';
+            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : 'Group';
+            const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : defaultLbl;
             const isLast = depth === activeGroupPath.length - 1;
             return (
               <React.Fragment key={gid}>
@@ -875,6 +883,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           {(() => {
             const clickedNode = contextMenu.nodeId ? nodes.find(n => n.id === contextMenu.nodeId) : null;
             const isGroup = clickedNode?.type === 'group';
+            const isSceneGroup = clickedNode?.type === 'sceneGroup';
             const ids = useNodeGraphStore.getState().selectedNodeIds;
             const canGroup = ids.length >= 2 && !activeGroupId;
             return (
@@ -885,6 +894,14 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     setContextMenu(null);
                   }}>
                     Group Selection <span style={{ color: '#585b70', fontSize: '10px' }}>⌘G</span>
+                  </button>
+                )}
+                {isSceneGroup && clickedNode && (
+                  <button style={ctxBtnStyle} onClick={() => {
+                    enterGroup(clickedNode.id);
+                    setContextMenu(null);
+                  }}>
+                    Enter Scene Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
                   </button>
                 )}
                 {isGroup && clickedNode && (
@@ -1118,8 +1135,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           />
         ))}
 
-        {/* Group Output terminal — shown when inside a group view */}
-        {activeGroupId && activeSubgraph && groupOutputTerminalPos && (
+        {/* Group Output terminal — shown when inside a regular group view (not sceneGroup) */}
+        {activeGroupId && activeSubgraph && groupOutputTerminalPos && !isInsideSceneGroup && (
           <div
             data-node-id="__group_output__"
             style={{
@@ -1145,7 +1162,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             </div>
 
             {/* One row per output port */}
-            {activeSubgraph.outputPorts.map(port => {
+            {(activeSubgraph.outputPorts ?? []).map(port => {
               const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
               const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
               const srcDef   = srcNode ? getNodeDefinition(srcNode.type) : null;
@@ -1236,8 +1253,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           </div>
         )}
 
-        {/* Group Input terminal — shown when inside a group view */}
-        {activeGroupId && activeSubgraph && groupInputTerminalPos && (
+        {/* Group Input terminal — shown when inside a regular group view (not sceneGroup) */}
+        {activeGroupId && activeSubgraph && groupInputTerminalPos && !isInsideSceneGroup && (
           <div
             data-node-id="__group_input__"
             style={{
@@ -1263,7 +1280,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             </div>
 
             {/* One row per input port */}
-            {activeSubgraph.inputPorts.map(port => {
+            {(activeSubgraph.inputPorts ?? []).map(port => {
               const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
               const isDragging = !!dragConnection;
               return (

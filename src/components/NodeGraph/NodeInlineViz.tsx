@@ -1155,6 +1155,313 @@ export function WaveTextureViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Math Node Vizzes ─────────────────────────────────────────────────────────
+
+// Shared helper: draw a minimal curve plot
+function drawCurveGrid(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  ctx.fillStyle = '#11111b';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#1e1e2e';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+  }
+}
+
+// ── Smoothstep ────────────────────────────────────────────────────────────────
+export function SmoothstepViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const edge0 = typeof node.params.edge0 === 'number' ? node.params.edge0 : 0.1;
+  const edge1 = typeof node.params.edge1 === 'number' ? node.params.edge1 : 0.9;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawCurveGrid(ctx, W, H);
+
+    // Identity line
+    ctx.strokeStyle = '#313244';
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Smoothstep curve (X range: -0.1 to 1.1)
+    const xLo = -0.1, xHi = 1.1;
+    ctx.strokeStyle = '#89b4fa';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let px = 0; px <= W; px++) {
+      const x = xLo + (px / W) * (xHi - xLo);
+      const t = Math.max(0, Math.min(1, (x - edge0) / Math.max(edge1 - edge0, 0.0001)));
+      const y = t * t * (3 - 2 * t);
+      const py = H - y * H;
+      px === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // Edge markers
+    const toScreenX = (v: number) => ((v - xLo) / (xHi - xLo)) * W;
+    ctx.strokeStyle = '#585b70';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    [edge0, edge1].forEach(e => {
+      const ex = toScreenX(e);
+      if (ex >= 0 && ex <= W) {
+        ctx.beginPath(); ctx.moveTo(ex, 0); ctx.lineTo(ex, H); ctx.stroke();
+      }
+    });
+    ctx.setLineDash([]);
+
+    // Labels
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    ctx.fillText(`e0=${edge0.toFixed(2)}`, 3, H - 3);
+    ctx.fillText(`e1=${edge1.toFixed(2)}`, W - 60, 9);
+  }, [edge0, edge1]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={52} style={{ display: 'block', width: '100%', height: '52px' }} />
+    </div>
+  );
+}
+
+// ── Clamp ─────────────────────────────────────────────────────────────────────
+export function ClampViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lo = typeof node.params.lo === 'number' ? node.params.lo : 0;
+  const hi = typeof node.params.hi === 'number' ? node.params.hi : 1;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawCurveGrid(ctx, W, H);
+
+    // Display range: lo-0.2 to hi+0.2, clamped sensibly
+    const margin = Math.max(0.2, (hi - lo) * 0.2);
+    const xLo = lo - margin, xHi = hi + margin;
+    const yLo = Math.min(lo, lo - margin * 0.5), yHi = Math.max(hi, hi + margin * 0.5);
+    const range = Math.max(yHi - yLo, 0.001);
+    const toX = (v: number) => ((v - xLo) / (xHi - xLo)) * W;
+    const toY = (v: number) => H - ((v - yLo) / range) * H;
+
+    // Identity diagonal (behind)
+    ctx.strokeStyle = '#313244';
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(toX(xLo), toY(xLo)); ctx.lineTo(toX(xHi), toY(xHi)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Clamp curve: flat at lo, ramp, flat at hi
+    ctx.strokeStyle = '#a6e3a1';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let px = 0; px <= W; px++) {
+      const x = xLo + (px / W) * (xHi - xLo);
+      const y = Math.max(lo, Math.min(hi, x));
+      const py = toY(y);
+      px === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // Min/max tick lines
+    ctx.strokeStyle = '#585b70';
+    ctx.setLineDash([2, 2]);
+    ctx.lineWidth = 1;
+    const loX = toX(lo), hiX = toX(hi);
+    if (loX >= 0 && loX <= W) { ctx.beginPath(); ctx.moveTo(loX, 0); ctx.lineTo(loX, H); ctx.stroke(); }
+    if (hiX >= 0 && hiX <= W) { ctx.beginPath(); ctx.moveTo(hiX, 0); ctx.lineTo(hiX, H); ctx.stroke(); }
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    ctx.fillText(`min=${lo.toFixed(2)}`, 3, H - 3);
+    ctx.fillText(`max=${hi.toFixed(2)}`, W - 56, 9);
+  }, [lo, hi]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={52} style={{ display: 'block', width: '100%', height: '52px' }} />
+    </div>
+  );
+}
+
+// ── Mix (float) ───────────────────────────────────────────────────────────────
+export function MixViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const t = typeof node.params.t === 'number' ? node.params.t : 0.5;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Gradient bar: dark (A) to bright (B)
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, '#313244');
+    grad.addColorStop(1, '#cdd6f4');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 4, W, H - 12);
+
+    // Tick line at t
+    const tx = t * W;
+    ctx.strokeStyle = '#f9e2af';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, H); ctx.stroke();
+
+    // Output value dot
+    const outV = Math.round(t * 255);
+    ctx.fillStyle = `rgb(${outV},${outV},${outV})`;
+    ctx.beginPath(); ctx.arc(tx, H / 2, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#f9e2af';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    ctx.fillText('A', 4, H - 2);
+    ctx.fillText('B', W - 11, H - 2);
+    ctx.fillStyle = '#f9e2af';
+    ctx.fillText(`t=${t.toFixed(2)}`, tx > W * 0.7 ? tx - 38 : tx + 4, 9);
+  }, [t]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={36} style={{ display: 'block', width: '100%', height: '36px' }} />
+    </div>
+  );
+}
+
+// ── Mix Vec3 (color) ───────────────────────────────────────────────────────────
+export function MixVec3Viz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fac = typeof node.params.fac === 'number' ? node.params.fac : 0.5;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Gradient bar using default A=black(0,0,0), B=white(1,1,1) as placeholders
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, '#313244');
+    grad.addColorStop(1, '#cdd6f4');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 4, W, H - 12);
+
+    // Tick at fac
+    const fx = fac * W;
+    ctx.strokeStyle = '#cba6f7';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, H); ctx.stroke();
+
+    const outV = Math.round(fac * 255);
+    ctx.fillStyle = `rgb(${outV},${outV},${outV})`;
+    ctx.beginPath(); ctx.arc(fx, H / 2, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#cba6f7';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    ctx.fillText('A', 4, H - 2);
+    ctx.fillText('B', W - 11, H - 2);
+    ctx.fillStyle = '#cba6f7';
+    ctx.fillText(`fac=${fac.toFixed(2)}`, fx > W * 0.7 ? fx - 44 : fx + 4, 9);
+  }, [fac]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={36} style={{ display: 'block', width: '100%', height: '36px' }} />
+    </div>
+  );
+}
+
+// ── Map Range ─────────────────────────────────────────────────────────────────
+export function MapRangeViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const inMin  = typeof node.params.inMin  === 'number' ? node.params.inMin  : 0;
+  const inMax  = typeof node.params.inMax  === 'number' ? node.params.inMax  : 1;
+  const outMin = typeof node.params.outMin === 'number' ? node.params.outMin : 0;
+  const outMax = typeof node.params.outMax === 'number' ? node.params.outMax : 1;
+  const smooth = (node.params.smooth as string) === 'smoothstep';
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawCurveGrid(ctx, W, H);
+
+    const inRange  = Math.max(inMax  - inMin,  0.0001);
+    const outRange = Math.max(outMax - outMin, 0.0001);
+
+    // Display range adds 15% margin each side
+    const xMargin = inRange  * 0.2;
+    const yMargin = outRange * 0.2;
+    const xLo = inMin  - xMargin, xHi = inMax  + xMargin;
+    const yLo = Math.min(outMin, outMax) - yMargin;
+    const yHi = Math.max(outMin, outMax) + yMargin;
+    const ySpan = Math.max(yHi - yLo, 0.001);
+    const toY = (v: number) => H - ((v - yLo) / ySpan) * H;
+
+    // Curve
+    ctx.strokeStyle = smooth ? '#cba6f7' : '#f9e2af';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let px = 0; px <= W; px++) {
+      const x = xLo + (px / W) * (xHi - xLo);
+      let t = Math.max(0, Math.min(1, (x - inMin) / inRange));
+      if (smooth) t = t * t * (3 - 2 * t);
+      const y = outMin + t * (outMax - outMin);
+      const py = toY(y);
+      px === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // In range markers
+    ctx.strokeStyle = '#45475a';
+    ctx.setLineDash([2, 2]);
+    ctx.lineWidth = 1;
+    const toX = (v: number) => ((v - xLo) / (xHi - xLo)) * W;
+    [inMin, inMax].forEach(v => {
+      const ex = toX(v);
+      if (ex >= 0 && ex <= W) { ctx.beginPath(); ctx.moveTo(ex, 0); ctx.lineTo(ex, H); ctx.stroke(); }
+    });
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    ctx.fillText(`[${inMin.toFixed(1)},${inMax.toFixed(1)}]→[${outMin.toFixed(1)},${outMax.toFixed(1)}]`, 3, H - 3);
+  }, [inMin, inMax, outMin, outMax, smooth]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={52} style={{ display: 'block', width: '100%', height: '52px' }} />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -1175,6 +1482,11 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'brightnessContrast': return <BrightnessContrastViz node={node} />;
     case 'grid':           return <GridViz                node={node} />;
     case 'waveTexture':    return <WaveTextureViz         node={node} />;
+    case 'smoothstep':     return <SmoothstepViz          node={node} />;
+    case 'clamp':          return <ClampViz               node={node} />;
+    case 'mix':            return <MixViz                 node={node} />;
+    case 'mixVec3':        return <MixVec3Viz             node={node} />;
+    case 'mapRange':       return <MapRangeViz            node={node} />;
     default:               return null;
   }
 }
@@ -1185,4 +1497,5 @@ export const INLINE_VIZ_TYPES = new Set([
   'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
   'hueRange', 'audioInput',
   'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'waveTexture',
+  'smoothstep', 'clamp', 'mix', 'mixVec3', 'mapRange',
 ]);

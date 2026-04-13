@@ -67,10 +67,11 @@ export function validateGraph(
       const targetInput = def.inputs[inputKey];
       if (!targetInput) continue; // dynamic socket not in def — skip
 
-      // Allow float → vec3 broadcast coercion
+      // Allow float → vec2/vec3 broadcast coercion (GLSL fract/mix/etc work on any numeric type)
       const compatible =
         sourceOutputType === targetInput.type ||
-        (sourceOutputType === 'float' && targetInput.type === 'vec3');
+        (sourceOutputType === 'float' && targetInput.type === 'vec3') ||
+        (sourceOutputType === 'float' && targetInput.type === 'vec2');
 
       if (!compatible) {
         errors.push(
