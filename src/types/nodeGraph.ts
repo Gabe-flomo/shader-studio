@@ -182,3 +182,19 @@ export interface SubgraphData {
   inputPorts: GroupInputPort[];
   outputPorts: GroupOutputPort[];
 }
+
+/**
+ * A surfaced parameter from a nested inner group node.
+ * Stored as node.params.surfacedParams on an outer group that contains inner groups.
+ * Override values are stored as node.params["innerGroupId::nodeId::paramKey"].
+ */
+export interface SurfacedParam {
+  /** ID of the inner group node within the outer group's subgraph */
+  innerGroupId: string;
+  /** ID of the node inside the inner group's subgraph */
+  nodeId: string;
+  /** Param key on that inner node */
+  paramKey: string;
+  /** Optional label override shown on the slider */
+  label?: string;
+}

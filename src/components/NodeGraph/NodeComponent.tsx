@@ -25,11 +25,13 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { AudioInputModal } from './AudioInputModal';
+import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
+import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 
 interface Props {
   node: GraphNode;
@@ -872,6 +874,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [hoveredSliderKey, setHoveredSliderKey] = useState<string | null>(null);
   const [editingSliderKey, setEditingSliderKey] = useState<string | null>(null);
   const [editingSliderValue, setEditingSliderValue] = useState('');
+  const [showParamPicker, setShowParamPicker] = useState(false);
 
   if (node.type === 'group') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
@@ -1219,6 +1222,126 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
         {/* Inner node exposed params */}
         {subgraph && subgraph.nodes.map(innerNode => {
+          // ── Inner GROUP node — render surfaced params ──────────────────────────
+          if (innerNode.type === 'group') {
+            const surfacedParams: SurfacedParam[] = Array.isArray(node.params.surfacedParams)
+              ? (node.params.surfacedParams as SurfacedParam[]).filter(sp => sp.innerGroupId === innerNode.id)
+              : [];
+            const innerGroupSub = innerNode.params.subgraph as SubgraphData | undefined;
+            const hasInnerParams = innerGroupSub?.nodes.some(inn => {
+              const d = getNodeDefinition(inn.type);
+              return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
+            }) ?? false;
+            if (!hasInnerParams) return null;
+            if (surfacedParams.length === 0) return null;
+
+            const innerGroupLabel = typeof innerNode.params.label === 'string' ? innerNode.params.label : 'Inner Group';
+            const sectionLabelKey = `__sectionLabel_${innerNode.id}`;
+            const sectionLabel = typeof node.params[sectionLabelKey] === 'string'
+              ? node.params[sectionLabelKey] as string
+              : innerGroupLabel;
+
+            return (
+              <div key={innerNode.id} style={{ borderTop: '1px solid #313244' }}>
+                <div
+                  style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px', userSelect: 'none' }}
+                  onDoubleClick={e => {
+                    e.stopPropagation();
+                    setEditingSectionId(innerNode.id);
+                    setEditingSectionLabel(sectionLabel);
+                  }}
+                >
+                  {editingSectionId === innerNode.id ? (
+                    <input
+                      autoFocus
+                      value={editingSectionLabel}
+                      onChange={e => setEditingSectionLabel(e.target.value)}
+                      onBlur={() => {
+                        const trimmed = editingSectionLabel.trim();
+                        updateNodeParams(node.id, { [sectionLabelKey]: trimmed || innerGroupLabel });
+                        setEditingSectionId(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const trimmed = editingSectionLabel.trim();
+                          updateNodeParams(node.id, { [sectionLabelKey]: trimmed || innerGroupLabel });
+                          setEditingSectionId(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingSectionId(null);
+                        }
+                      }}
+                      onMouseDown={e => e.stopPropagation()}
+                      style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #585b70', color: '#a6adc8', fontSize: '9px', letterSpacing: '0.05em', outline: 'none', padding: 0, width: '100%', textTransform: 'uppercase' }}
+                    />
+                  ) : (
+                    <span style={{ flex: 1, cursor: 'text' }}>{sectionLabel.toUpperCase()}</span>
+                  )}
+                  <span style={{ color: '#6c7086', fontSize: '9px' }}>⬡</span>
+                </div>
+                {surfacedParams.map(sp => {
+                  const innNode = innerGroupSub?.nodes.find(n => n.id === sp.nodeId);
+                  if (!innNode) return null;
+                  const innDef = getNodeDefinition(innNode.type);
+                  const paramDef = innDef?.paramDefs?.[sp.paramKey];
+                  if (!paramDef) return null;
+                  const overrideKey = `${innerNode.id}::${sp.nodeId}::${sp.paramKey}`;
+                  const rawVal = node.params[overrideKey] ?? innNode.params[sp.paramKey];
+                  const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
+                  const step = paramDef.step ?? 0.01;
+                  const baseMax = paramDef.max ?? 1;
+                  const effMin = paramDef.min ?? 0;
+                  return (
+                    <div
+                      key={`${sp.nodeId}::${sp.paramKey}`}
+                      style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onMouseDown={e => e.stopPropagation()}
+                    >
+                      <span style={{ color: '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
+                        {sp.label ?? paramDef.label}
+                      </span>
+                      <input
+                        type="range"
+                        min={effMin}
+                        max={baseMax}
+                        step={step}
+                        value={Math.max(effMin, Math.min(baseMax, currentVal))}
+                        onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
+                        style={{ flex: 1, accentColor: '#cba6f7', cursor: 'pointer' }}
+                      />
+                      {editingSliderKey === `sp_${overrideKey}` ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: '1px solid #585b70' }}
+                          value={editingSliderValue}
+                          onChange={e => setEditingSliderValue(e.target.value)}
+                          onBlur={() => {
+                            const v = parseFloat(editingSliderValue);
+                            if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v });
+                            setEditingSliderKey(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { const v = parseFloat(editingSliderValue); if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v }); setEditingSliderKey(null); }
+                            if (e.key === 'Escape') setEditingSliderKey(null);
+                          }}
+                        />
+                      ) : (
+                        <span
+                          title="Double-click to edit"
+                          style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
+                          onDoubleClick={() => { setEditingSliderKey(`sp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
+                        >
+                          {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
+
+          // ── Regular inner node — show all float params ─────────────────────────
           const innerDef = getNodeDefinition(innerNode.type);
           const innerParamDefs = innerDef?.paramDefs ?? {};
           const paramEntries = Object.entries(innerParamDefs).filter(([, pd]) =>
@@ -1388,6 +1511,50 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             </div>
           );
         })}
+
+        {/* "Customize params" button — only shown when there are inner group nodes */}
+        {subgraph && subgraph.nodes.some(n => n.type === 'group') && (() => {
+          const hasAny = subgraph.nodes.some(innerGrp => {
+            if (innerGrp.type !== 'group') return false;
+            const sub = innerGrp.params.subgraph as SubgraphData | undefined;
+            return sub?.nodes.some(inn => {
+              const d = getNodeDefinition(inn.type);
+              return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
+            }) ?? false;
+          });
+          if (!hasAny) return null;
+          return (
+            <div
+              style={{ borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', position: 'relative' }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <button
+                onClick={e => { e.stopPropagation(); setShowParamPicker(v => !v); }}
+                onDoubleClick={e => e.stopPropagation()}
+                style={{
+                  fontSize: '10px',
+                  color: showParamPicker ? '#cba6f7' : '#585b70',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '1px 0',
+                  letterSpacing: '0.03em',
+                }}
+                title="Customise which inner-group params appear here"
+                onMouseEnter={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
+                onMouseLeave={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+              >
+                ⊕ params
+              </button>
+              {showParamPicker && (
+                <GroupParamPicker
+                  outerNode={node}
+                  onClose={() => setShowParamPicker(false)}
+                />
+              )}
+            </div>
+          );
+        })()}
       </div>
     );
   }
