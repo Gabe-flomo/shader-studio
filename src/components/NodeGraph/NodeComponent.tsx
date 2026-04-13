@@ -27,7 +27,7 @@ import { CustomFnModal } from './CustomFnModal';
 import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
-import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
+import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz, SdfPreviewViz, SDF_TYPES } from './NodeInlineViz';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
@@ -2179,6 +2179,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           )}
         </div>
       )}
+
+      {/* ── Always-visible SDF shape preview ── */}
+      {SDF_TYPES.has(node.type) && <SdfPreviewViz node={node} />}
 
       {/* ── Always-visible LFO waveform ── */}
       {LFO_TYPES.has(node.type) && (
