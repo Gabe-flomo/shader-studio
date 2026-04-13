@@ -152,64 +152,83 @@ export const GrainNode: NodeDefinition = {
   type: 'grain',
   label: 'Grain',
   category: 'Effects',
-  description: 'Add film grain to a color. Wire UV for screen-space variation.',
+  description: 'Film grain. Basic: uniform RGB noise. Luma: more grain in shadows. Temporal: pattern animates each frame (wire Time). Scale < 1 = coarser grain, Scale > 1 = finer.',
   inputs: {
-    color: { type: 'vec3',  label: 'Color'          },
-    uv:    { type: 'vec2',  label: 'UV'             },
-    seed:  { type: 'float', label: 'Seed (animate)' },
+    color: { type: 'vec3',  label: 'Color' },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    seed:  { type: 'float', label: 'Seed'  },
+    time:  { type: 'float', label: 'Time'  },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
-    uv:    { type: 'vec2', label: 'UV (pass-through)' },
   },
-  defaultParams: { amount: 0.05, seed: 0.0 },
+  defaultParams: { mode: 'basic', amount: 0.05, scale: 1.0, seed: 0.0 },
   paramDefs: {
-    amount: { label: 'Amount', type: 'float', min: 0.0,  max: 0.5,  step: 0.005 },
-    seed:   { label: 'Seed',   type: 'float', min: 0.0,  max: 1.0,  step: 0.01  },
+    mode: {
+      label: 'Mode', type: 'select',
+      options: [
+        { value: 'basic',    label: 'Basic'    },
+        { value: 'luma',     label: 'Luma'     },
+        { value: 'temporal', label: 'Temporal' },
+      ],
+    },
+    amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
+    scale:  { label: 'Scale',  type: 'float', min: 0.1, max: 8.0, step: 0.05  },
+    seed:   { label: 'Seed',   type: 'float', min: 0.0, max: 1.0, step: 0.01  },
   },
-  glslFunction: `float grainRand(vec2 n) {
+  glslFunction: `float _grainH(vec2 n) {
   return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
 }
-vec3 applyGrain(vec3 color, vec2 uv, float amount, float seed) {
+vec3 grainBasic(vec3 color, vec2 uv, float amount, float scale, float seed) {
+  vec2 s = uv * scale;
   return clamp(color + vec3(
-    mix(-amount, amount, fract(seed + grainRand(uv * 1234.5678))),
-    mix(-amount, amount, fract(seed + grainRand(uv * 876.5432))),
-    mix(-amount, amount, fract(seed + grainRand(uv * 3214.5678)))
+    mix(-amount, amount, fract(seed + _grainH(s * 1234.5678))),
+    mix(-amount, amount, fract(seed + _grainH(s * 876.5432))),
+    mix(-amount, amount, fract(seed + _grainH(s * 3214.5678)))
   ), 0.0, 1.0);
+}
+vec3 grainLuma(vec3 color, vec2 uv, float amount, float scale, float seed) {
+  float luma = dot(color, vec3(0.299, 0.587, 0.114));
+  float w = 1.0 - luma;
+  vec2 s = uv * scale;
+  float n = fract(sin(dot(s * 1234.5678 + seed, vec2(12.9898, 78.233))) * 43758.5453);
+  return clamp(color + vec3(mix(-amount, amount, n) * w), 0.0, 1.0);
+}
+vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
+  vec2 s = uv * scale + fract(time * 0.123456);
+  float n = fract(sin(dot(s, vec2(127.1, 311.7))) * 43758.5453);
+  return clamp(color + vec3(mix(-amount, amount, n)), 0.0, 1.0);
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
-    const colorVar  = inputVars.color ?? 'vec3(0.0)';
-    const uvVar     = inputVars.uv    ?? 'vec2(0.0)';
-    const amount    = p(node.params.amount, 0.05);
-    const seed      = inputVars.seed  ?? p(node.params.seed, 0.0);
-    const outVar    = `${node.id}_color`;
+    const id       = node.id;
+    const mode     = (node.params.mode as string) ?? 'basic';
+    const colorVar = inputVars.color ?? 'vec3(0.0)';
+    const uvVar    = inputVars.uv    ?? 'vec2(0.0)';
+    const amount   = p(node.params.amount, 0.05);
+    const scale    = p(node.params.scale,  1.0);
+    const seed     = inputVars.seed ?? p(node.params.seed, 0.0);
+    const timeVar  = inputVars.time ?? 'iTime';
+    const fnMap: Record<string, string> = {
+      basic:    `grainBasic(${colorVar}, ${uvVar}, ${amount}, ${scale}, ${seed})`,
+      luma:     `grainLuma(${colorVar}, ${uvVar}, ${amount}, ${scale}, ${seed})`,
+      temporal: `grainTemporal(${colorVar}, ${uvVar}, ${amount}, ${scale}, ${timeVar})`,
+    };
     return {
-      code: `    vec3 ${outVar} = applyGrain(${colorVar}, ${uvVar}, ${amount}, ${seed});\n`,
-      outputVars: { color: outVar, uv: uvVar },
+      code: `    vec3 ${id}_color = ${fnMap[mode] ?? fnMap.basic};\n`,
+      outputVars: { color: `${id}_color` },
     };
   },
 };
 
-// ─── Luma Grain ───────────────────────────────────────────────────────────────
+// ─── Legacy grain variants (hidden from palette, kept for backward compat) ────
 
 export const LumaGrainNode: NodeDefinition = {
-  type: 'lumaGrain',
-  label: 'Luma Grain',
-  category: 'Effects',
-  description: 'Shadow-weighted film grain — more noise in dark regions, less in highlights. Wire UV and a time seed for animation.',
-  inputs: {
-    color:  { type: 'vec3',  label: 'Color'  },
-    uv:     { type: 'vec2',  label: 'UV'     },
-    seed:   { type: 'float', label: 'Seed'   },
-  },
-  outputs: {
-    color: { type: 'vec3', label: 'Color' },
-  },
+  type: 'lumaGrain', label: 'Luma Grain', category: 'Effects',
+  description: 'Legacy — use Grain node (Luma mode) instead.',
+  inputs: { color: { type: 'vec3', label: 'Color' }, uv: { type: 'vec2', label: 'UV' }, seed: { type: 'float', label: 'Seed' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
   defaultParams: { amount: 0.06, seed: 0.0 },
-  paramDefs: {
-    amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
-    seed:   { label: 'Seed',   type: 'float', min: 0.0, max: 1.0, step: 0.01  },
-  },
+  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 }, seed: { label: 'Seed', type: 'float', min: 0.0, max: 1.0, step: 0.01 } },
   glslFunction: `vec3 applyLumaGrain(vec3 color, vec2 uv, float amount, float seed) {
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
   float w = 1.0 - luma;
@@ -217,52 +236,26 @@ export const LumaGrainNode: NodeDefinition = {
   return clamp(color + vec3(mix(-amount, amount, n) * w), 0.0, 1.0);
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const colorVar = inputVars.color ?? 'vec3(0.0)';
-    const uvVar    = inputVars.uv    ?? 'vec2(0.0)';
-    const amount   = p(node.params.amount, 0.06);
-    const seed     = inputVars.seed  ?? p(node.params.seed, 0.0);
-    return {
-      code: `    vec3 ${id}_color = applyLumaGrain(${colorVar}, ${uvVar}, ${amount}, ${seed});\n`,
-      outputVars: { color: `${id}_color` },
-    };
+    const id = node.id;
+    return { code: `    vec3 ${id}_color = applyLumaGrain(${inputVars.color ?? 'vec3(0.0)'}, ${inputVars.uv ?? 'vec2(0.0)'}, ${p(node.params.amount, 0.06)}, ${inputVars.seed ?? p(node.params.seed, 0.0)});\n`, outputVars: { color: `${id}_color` } };
   },
 };
 
-// ─── Temporal Grain ───────────────────────────────────────────────────────────
-
 export const TemporalGrainNode: NodeDefinition = {
-  type: 'temporalGrain',
-  label: 'Temporal Grain',
-  category: 'Effects',
-  description: 'Time-animated film grain — pattern changes each frame. Wire a Time node to the Time input.',
-  inputs: {
-    color: { type: 'vec3',  label: 'Color' },
-    uv:    { type: 'vec2',  label: 'UV'    },
-    time:  { type: 'float', label: 'Time'  },
-  },
-  outputs: {
-    color: { type: 'vec3', label: 'Color' },
-  },
+  type: 'temporalGrain', label: 'Temporal Grain', category: 'Effects',
+  description: 'Legacy — use Grain node (Temporal mode) instead.',
+  inputs: { color: { type: 'vec3', label: 'Color' }, uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
   defaultParams: { amount: 0.05 },
-  paramDefs: {
-    amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
-  },
+  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 } },
   glslFunction: `vec3 applyTemporalGrain(vec3 color, vec2 uv, float amount, float time) {
   vec2 uvt = uv + fract(time * 0.123456);
   float n = fract(sin(dot(uvt, vec2(127.1, 311.7))) * 43758.5453);
   return clamp(color + vec3(mix(-amount, amount, n)), 0.0, 1.0);
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const colorVar = inputVars.color ?? 'vec3(0.0)';
-    const uvVar    = inputVars.uv    ?? 'vec2(0.0)';
-    const amount   = p(node.params.amount, 0.05);
-    const timeVar  = inputVars.time  ?? 'iTime';
-    return {
-      code: `    vec3 ${id}_color = applyTemporalGrain(${colorVar}, ${uvVar}, ${amount}, ${timeVar});\n`,
-      outputVars: { color: `${id}_color` },
-    };
+    const id = node.id;
+    return { code: `    vec3 ${id}_color = applyTemporalGrain(${inputVars.color ?? 'vec3(0.0)'}, ${inputVars.uv ?? 'vec2(0.0)'}, ${p(node.params.amount, 0.05)}, ${inputVars.time ?? 'iTime'});\n`, outputVars: { color: `${id}_color` } };
   },
 };
 

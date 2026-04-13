@@ -16,6 +16,8 @@ const HIDDEN_NODES = new Set([
   'loopFloatAccumulate',
   'loopColorRingStep',
   'loopRingStep',
+  'lumaGrain',     // consolidated into Grain node (Luma mode)
+  'temporalGrain', // consolidated into Grain node (Temporal mode)
 ]);
 
 // ── Math node ordering & sub-groups ──────────────────────────────────────────

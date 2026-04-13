@@ -335,6 +335,8 @@ export function StepCurveViz({ node }: { node: GraphNode }) {
 export function NoisePatchViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const amount = typeof node.params.amount === 'number' ? node.params.amount : 0.05;
+  const scale  = typeof node.params.scale  === 'number' ? node.params.scale  : 1.0;
+  const mode   = (node.params.mode as string) ?? 'basic';
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -345,27 +347,33 @@ export function NoisePatchViz({ node }: { node: GraphNode }) {
     const img = ctx.createImageData(W, H);
 
     for (let i = 0; i < W * H; i++) {
-      const x = i % W, y = Math.floor(i / W);
-      const h = Math.sin(x * 12.9898 + y * 4.1414) * 43758.5453;
+      // Apply scale: scale > 1 = finer grain, scale < 1 = coarser blobs
+      const px = (i % W) * scale;
+      const py = Math.floor(i / W) * scale;
+      const h = Math.sin(px * 12.9898 + py * 4.1414) * 43758.5453;
       const n = (h - Math.floor(h)) - 0.5;
-      const val = Math.max(0, Math.min(1, 0.5 + n * amount * 2));
-      const px = Math.round(val * 255);
-      img.data[i * 4]     = px;
-      img.data[i * 4 + 1] = px;
-      img.data[i * 4 + 2] = px;
+      // Luma mode: weight noise toward zero (simulates shadow-only grain)
+      const w = mode === 'luma' ? 0.4 : 1.0;
+      const val = Math.max(0, Math.min(1, 0.5 + n * amount * 2 * w));
+      const pv = Math.round(val * 255);
+      img.data[i * 4]     = pv;
+      img.data[i * 4 + 1] = pv;
+      img.data[i * 4 + 2] = pv;
       img.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
 
-    // Amount bar
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, H - 11, W, 11);
+    // Bottom bar — left: amount, right: scale readout
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, H - 12, W, 12);
     ctx.fillStyle = '#a6e3a1';
-    ctx.fillRect(0, H - 11, Math.round(Math.min(1, amount / 0.5) * W), 11);
+    ctx.fillRect(0, H - 12, Math.round(Math.min(1, amount / 0.5) * (W * 0.6)), 12);
     ctx.fillStyle = '#6c7086';
     ctx.font = '8px monospace';
     ctx.fillText(`amt ${amount.toFixed(3)}`, 3, H - 2);
-  }, [amount]);
+    ctx.fillStyle = '#89b4fa';
+    ctx.fillText(`×${scale.toFixed(2)}`, W - 36, H - 2);
+  }, [amount, scale, mode]);
 
   return (
     <div style={VIZ_CONTAINER}>

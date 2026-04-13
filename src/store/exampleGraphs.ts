@@ -274,7 +274,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { amount: 0.04, seed: 0.0 },
+        params: { mode: 'basic', amount: 0.04, scale: 1.0, seed: 0.0 },
       },
       {
         id: 'output_5', type: 'output', position: { x: 1040, y: 220 },
@@ -3778,14 +3778,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: { mode: 'reinhard2' },
       },
       {
-        id: 'grain_4', type: 'lumaGrain', position: { x: 820, y: 200 },
+        id: 'grain_4', type: 'grain', position: { x: 820, y: 200 },
         inputs: {
           color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'tone_3',  outputKey: 'color' } },
           uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',    outputKey: 'uv'   } },
           seed:  { type: 'float', label: 'Seed',  connection: { nodeId: 'time_1',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { amount: 0.07, seed: 0.0 },
+        params: { mode: 'luma', amount: 0.07, scale: 1.0, seed: 0.0 },
       },
       {
         id: 'output_5', type: 'output', position: { x: 1060, y: 220 },
@@ -3818,14 +3818,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: { mode: 'aces' },
       },
       {
-        id: 'grain_4', type: 'temporalGrain', position: { x: 820, y: 200 },
+        id: 'grain_4', type: 'grain', position: { x: 820, y: 200 },
         inputs: {
           color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'tone_3',  outputKey: 'color' } },
           uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',    outputKey: 'uv'   } },
           time:  { type: 'float', label: 'Time',  connection: { nodeId: 'time_1',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { amount: 0.06 },
+        params: { mode: 'temporal', amount: 0.06, scale: 1.0, seed: 0.0 },
       },
       {
         id: 'output_5', type: 'output', position: { x: 1060, y: 220 },
