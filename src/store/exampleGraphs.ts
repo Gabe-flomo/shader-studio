@@ -5223,10 +5223,10 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       },
       // Fract for repeated rings
       {
-        id: 'fract_5', type: 'fract', position: { x: 880, y: 230 },
+        id: 'fract_5', type: 'fractRaw', position: { x: 880, y: 230 },
         inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'len_4', outputKey: 'output' } } },
         outputs: { output: { type: 'float', label: 'Output' } },
-        params: { scale: 1.0 },
+        params: {},
       },
       {
         id: 'pal_6', type: 'palettePreset', position: { x: 1060, y: 200 },
