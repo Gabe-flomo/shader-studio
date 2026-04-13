@@ -2420,6 +2420,110 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           });
         })()}
 
+        {/* ── Hue Range spectrum preview ── */}
+        {!collapsed && node.type === 'hueRange' && (() => {
+          const hc = typeof node.params.hue_center === 'number' ? node.params.hue_center : 0;
+          const hw = typeof node.params.hue_width  === 'number' ? node.params.hue_width  : 0.1;
+          const bv = typeof node.params.boost       === 'number' ? node.params.boost       : 2.0;
+          const left  = Math.max(0, Math.min(1, hc - hw));
+          const right = Math.max(0, Math.min(1, hc + hw));
+          const leftPct  = `${(left  * 100).toFixed(1)}%`;
+          const widthPct = `${((right - left) * 100).toFixed(1)}%`;
+          const centerHueDeg = Math.round(hc * 360);
+          const widthDeg     = Math.round(hw * 360);
+          const boostColor   = bv > 1.05 ? '#a6e3a1' : bv < 0.95 ? '#f38ba8' : '#6c7086';
+          return (
+            <div
+              style={{ padding: '4px 10px 6px' }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <div style={{
+                position: 'relative', height: '16px', borderRadius: '4px', overflow: 'hidden',
+                background: 'linear-gradient(to right, hsl(0,90%,55%),hsl(30,90%,55%),hsl(60,90%,55%),hsl(90,90%,55%),hsl(120,90%,55%),hsl(150,90%,55%),hsl(180,90%,55%),hsl(210,90%,55%),hsl(240,90%,55%),hsl(270,90%,55%),hsl(300,90%,55%),hsl(330,90%,55%),hsl(360,90%,55%))',
+                border: '1px solid #31324466',
+              }}>
+                {/* Dark veil outside selection */}
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.52)', pointerEvents: 'none' }} />
+                {/* Selection window — punches through the veil via box-shadow outline */}
+                <div style={{
+                  position: 'absolute', top: 0, bottom: 0,
+                  left: leftPct, width: widthPct,
+                  background: 'rgba(255,255,255,0.12)',
+                  outline: '1.5px solid rgba(255,255,255,0.7)',
+                  borderRadius: '2px',
+                  pointerEvents: 'none',
+                }} />
+                {/* Center tick */}
+                <div style={{
+                  position: 'absolute', top: '2px', bottom: '2px',
+                  left: `calc(${(hc * 100).toFixed(1)}% - 0.5px)`, width: '1.5px',
+                  background: 'rgba(255,255,255,0.95)',
+                  borderRadius: '1px',
+                  pointerEvents: 'none',
+                }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
+                <span style={{ fontSize: '9px', color: '#6c7086', fontFamily: 'monospace' }}>
+                  {centerHueDeg}° ± {widthDeg}°
+                </span>
+                <span style={{ fontSize: '9px', fontFamily: 'monospace', color: boostColor }}>
+                  ×{bv.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Tone Map curve preview ── */}
+        {!collapsed && node.type === 'toneMap' && (() => {
+          const mode = (node.params.mode as string) ?? 'aces';
+          type CurveFn = (x: number) => number;
+          const curves: Record<string, CurveFn> = {
+            aces:      x => Math.max(0, Math.min(1, (x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14))),
+            hable:     x => { x *= 16; const [A,B,C,D,E,F]=[0.15,0.5,0.1,0.2,0.02,0.3]; return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F; },
+            unreal:    x => Math.max(0, Math.min(1, x/(x+0.155)*1.019)),
+            tanh:      x => Math.max(0, Math.tanh(x)),
+            reinhard2: x => Math.max(0, Math.min(1, (x*(1+x/16))/(1+x))),
+            lottes:    x => { if (x <= 0) return 0; const [a,d,hm,mi,mo]=[1.6,0.977,8,0.18,0.267]; const b=(-Math.pow(mi,a)+Math.pow(hm,a)*mo)/((Math.pow(hm,a)-Math.pow(mi,a))*mo); const c2=(Math.pow(hm,a*d)*(-Math.pow(mi,a))+Math.pow(hm,a)*Math.pow(mi,a*d)*mo)/((Math.pow(hm,a*d)-Math.pow(mi,a*d))*mo); return Math.max(0,Math.min(1,Math.pow(x,a)/(Math.pow(x,a*d)*b+c2))); },
+            uchimura:  x => { const [P,a,m,l,c2,b]=[1,1,0.22,0.4,1.33,0]; const l0=(P-m)*l/a,S0=m+l0,S1=m+a*l0,C2=a*P/(P-S1),CP=-C2/P; const w0=1-Math.max(0,Math.min(1,x/m)); const w2=x>=S0?1:0; const w1=1-w0-w2; const T=m*Math.pow(Math.max(x/m,0.0001),c2)+b; const S=P-(P-S1)*Math.exp(CP*(x-S0)); return Math.max(0,Math.min(1,T*w0+(m+a*(x-m))*w1+S*w2)); },
+            agx:       x => { const v=Math.max(0,Math.min(1,(Math.log2(Math.max(x*0.84248,0.000061))-Math.log2(0.000061))/(Math.log2(256)-Math.log2(0.000061)))); return Math.max(0,Math.min(1,v*(v*(v*(1.67*v-4)+4.33)))); },
+          };
+          const fn = curves[mode] ?? curves.aces;
+          const W = 150, H = 48, N = 64, xMax = 1.4;
+          const pts = Array.from({ length: N }, (_, i) => {
+            const x = (i / (N - 1)) * xMax;
+            const y = fn(x);
+            return `${((x / xMax) * W).toFixed(1)},${(H - y * H).toFixed(1)}`;
+          }).join(' ');
+          const diag = `0,${H} ${((1/xMax)*W).toFixed(1)},0`;
+          return (
+            <div
+              style={{ padding: '4px 10px 6px' }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <svg
+                width={W} height={H}
+                style={{ display: 'block', width: '100%', borderRadius: '4px', background: '#11111b', border: '1px solid #31324466' }}
+                viewBox={`0 0 ${W} ${H}`}
+                preserveAspectRatio="none"
+              >
+                {/* Grid */}
+                <line x1={0} y1={H*0.5} x2={W} y2={H*0.5} stroke="#313244" strokeWidth="0.5" />
+                <line x1={(0.5/xMax)*W} y1={0} x2={(0.5/xMax)*W} y2={H} stroke="#313244" strokeWidth="0.5" />
+                <line x1={(1.0/xMax)*W} y1={0} x2={(1.0/xMax)*W} y2={H} stroke="#31324488" strokeWidth="0.5" />
+                {/* Linear reference */}
+                <polyline points={diag} fill="none" stroke="#45475a" strokeWidth="0.8" strokeDasharray="3,2" />
+                {/* Curve */}
+                <polyline points={pts} fill="none" stroke="#89b4fa" strokeWidth="1.5" strokeLinejoin="round" />
+              </svg>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                <span style={{ fontSize: '9px', color: '#45475a', fontFamily: 'monospace' }}>0</span>
+                <span style={{ fontSize: '9px', color: '#45475a', fontFamily: 'monospace' }}>in → {xMax}</span>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Outputs (always visible) ── */}
         {Object.entries(node.outputs).map(([key, output]) => {
           const isHovered = hoveredOutput === key;
