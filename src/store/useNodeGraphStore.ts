@@ -828,7 +828,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const groupNode = activeNodes.find(n => n.id === groupId);
     if (!groupNode || groupNode.type !== 'group') return null;
     const cloned = deepCloneGroupNode(groupNode);
-    const newNode = { ...cloned, position: { x: groupNode.position.x + 60, y: groupNode.position.y + 60 } };
+    // Clear all input connections — duplicate spawns unconnected
+    const clearedInputs = Object.fromEntries(
+      Object.entries(cloned.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])
+    );
+    const newNode = { ...cloned, inputs: clearedInputs, position: { x: groupNode.position.x + 60, y: groupNode.position.y + 60 } };
     if (activeGroupPath.length > 0) {
       const newActiveNodes = [...activeNodes, newNode];
       const newNodes = setActiveNodes(nodes, activeGroupPath, newActiveNodes);
@@ -891,7 +895,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         inputPorts.push({
           key: portKey,
           type: inp.type,
-          label: key,
+          label: inp.connection.outputKey !== key ? inp.connection.outputKey : key,
           toNodeId: sn.id,
           toInputKey: key,
         });
@@ -988,6 +992,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
     // Auto-surface params from any inner group nodes
     const surfacedParams = pickSurfacedParams([...originalNodes, loopIndexNode]);
+
+    // Add ps_ sockets for surfaced params from inner groups
+    for (const sp of surfacedParams) {
+      const psKey = `ps_${sp.innerGroupId}_${sp.nodeId}_${sp.paramKey}`;
+      const innerGrpNode = selectedNodes.find(n => n.id === sp.innerGroupId);
+      const innerSub = innerGrpNode?.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      const innNode = innerSub?.nodes.find(n => n.id === sp.nodeId);
+      if (!innNode) continue;
+      const innDef = getNodeDefinition(innNode.type);
+      const paramDef = innDef?.paramDefs?.[sp.paramKey];
+      if (!paramDef) continue;
+      groupInputSockets[psKey] = {
+        type: 'float' as import('../types/nodeGraph').DataType,
+        label: sp.label ?? paramDef.label,
+      };
+    }
 
     const groupNode: import('../types/nodeGraph').GraphNode = {
       id: groupId,
