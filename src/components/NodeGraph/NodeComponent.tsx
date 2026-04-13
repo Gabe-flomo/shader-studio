@@ -883,6 +883,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const inputPorts = subgraph?.inputPorts ?? [];
     const outputPorts = subgraph?.outputPorts ?? [];
     const groupIters = typeof node.params.iterations === 'number' ? node.params.iterations : 1;
+    const hasInnerGroups = subgraph?.nodes.some(n => n.type === 'group') ?? false;
+    const groupAccentColor = hasInnerGroups ? '#cba6f7' : '#89b4fa';
 
     const handleGroupHeaderMouseDown = (e: React.MouseEvent) => {
       if (e.button === 2) return;
@@ -923,14 +925,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           left: node.position.x,
           top: node.position.y,
           background: '#1e1e2e',
-          border: isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '2px dashed #585b70',
+          border: isMultiSelected ? `2px solid ${groupAccentColor}` : isSelected ? `1px solid ${groupAccentColor}` : `2px dashed ${groupAccentColor}`,
           borderRadius: '8px',
           minWidth: '200px',
           color: '#cdd6f4',
           fontSize: '12px',
           userSelect: 'none',
           opacity: dimmed ? 0.2 : 1,
-          boxShadow: isMultiSelected ? '0 0 12px #cba6f755, 0 4px 12px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.4)',
+          boxShadow: isMultiSelected ? `0 0 12px ${groupAccentColor}55, 0 4px 12px rgba(0,0,0,0.4)` : '0 4px 12px rgba(0,0,0,0.4)',
         }}
       >
         {/* Group header */}
@@ -940,179 +942,124 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           style={{
             background: '#313244',
             borderRadius: '6px 6px 0 0',
-            padding: '6px 10px',
+            padding: '5px 8px 5px 10px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             cursor: 'grab',
+            gap: '6px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '14px' }}>⬡</span>
-            <span style={{ fontWeight: 600, color: '#cba6f7' }}>{groupLabel}</span>
-            <span style={{ fontSize: '10px', color: '#585b70' }}>({nodeCount} node{nodeCount !== 1 ? 's' : ''})</span>
+          {/* Label + count */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+            <span style={{ fontSize: '13px', flexShrink: 0 }}>⬡</span>
+            <span style={{ fontWeight: 600, color: groupAccentColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{groupLabel}</span>
+            <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0 }}>({nodeCount})</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {/* Iterations slider — stopPropagation prevents double-click from entering group */}
-            <div
-              onMouseDown={e => e.stopPropagation()}
-              onDoubleClick={e => e.stopPropagation()}
-              style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
-              title={`Iterations: ${groupIters}`}
-            >
-              <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '18px' }}>×{groupIters}</span>
-              <input
-                type="range"
-                min={1}
-                max={16}
-                step={1}
-                value={groupIters}
-                onChange={e => {
-                  const v = Math.max(1, Math.min(16, Math.round(Number(e.target.value))));
-                  if (!isNaN(v)) updateNodeParams(node.id, { iterations: v }, { immediate: true });
-                }}
-                style={{ width: '52px', accentColor: '#cba6f7', cursor: 'pointer', margin: 0 }}
-              />
-            </div>
-            {/* Duplicate group button */}
+          {/* Action icons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+            {/* Duplicate */}
             <button
               onMouseDown={e => e.stopPropagation()}
               onDoubleClick={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); duplicateGroup(node.id); }}
               title="Duplicate group (independent copy)"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#585b70',
-                cursor: 'pointer',
-                fontSize: '13px',
-                padding: '0 3px',
-                lineHeight: 1,
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cba6f7')}
+              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = groupAccentColor)}
               onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
             >⧉</button>
-          </div>
-          {savingMode ? (
-            // ── Save-as-preset inline form ───────────────────────────────────
-            <div
+            {/* Save preset */}
+            <button
               onMouseDown={e => e.stopPropagation()}
-              style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, marginLeft: '6px' }}
-            >
-              <input
-                autoFocus
-                value={saveLabel}
-                onChange={e => setSaveLabel(e.target.value)}
-                placeholder="Name…"
-                onMouseDown={e => e.stopPropagation()}
-                style={{
-                  width: '80px',
-                  background: '#11111b',
-                  border: '1px solid #89b4fa',
-                  color: '#cdd6f4',
-                  borderRadius: '3px',
-                  padding: '1px 4px',
-                  fontSize: '10px',
-                  outline: 'none',
-                }}
-              />
-              <input
-                value={saveDescription}
-                onChange={e => setSaveDescription(e.target.value)}
-                placeholder="Description…"
-                onMouseDown={e => e.stopPropagation()}
-                style={{
-                  flex: 1,
-                  minWidth: '60px',
-                  background: '#11111b',
-                  border: '1px solid #45475a',
-                  color: '#cdd6f4',
-                  borderRadius: '3px',
-                  padding: '1px 4px',
-                  fontSize: '10px',
-                  outline: 'none',
-                }}
-              />
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => {
-                  if (saveLabel.trim()) {
-                    saveGroupPreset(node.id, saveLabel.trim(), saveDescription.trim());
-                    setSavedFlash(true);
-                    setTimeout(() => setSavedFlash(false), 700);
-                  }
-                  setSavingMode(false);
-                }}
-                style={{
-                  background: '#a6e3a1',
-                  border: 'none',
-                  color: '#1e1e2e',
-                  borderRadius: '3px',
-                  padding: '1px 5px',
-                  fontSize: '10px',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                }}
-              >✓</button>
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => setSavingMode(false)}
-                style={{
-                  background: 'none',
-                  border: '1px solid #585b70',
-                  color: '#6c7086',
-                  borderRadius: '3px',
-                  padding: '1px 5px',
-                  fontSize: '10px',
-                  cursor: 'pointer',
-                }}
-              >✕</button>
-            </div>
-          ) : (
-            <>
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => {
-                  setSaveLabel(typeof node.params.label === 'string' ? node.params.label : 'Group');
-                  setSaveDescription('');
-                  setSavingMode(true);
-                }}
-                onMouseEnter={() => setSaveHovered(true)}
-                onMouseLeave={() => setSaveHovered(false)}
-                title="Save as preset"
-                className={savedFlash ? 'group-save-flash' : ''}
-                style={{
-                  background: saveHovered ? 'rgba(166,227,161,0.15)' : 'none',
-                  border: `1px solid ${saveHovered || savedFlash ? '#a6e3a1' : '#585b70'}`,
-                  color: saveHovered || savedFlash ? '#a6e3a1' : '#a6adc8',
-                  borderRadius: '3px',
-                  padding: '1px 5px',
-                  fontSize: '10px',
-                  cursor: 'pointer',
-                  transition: 'color 0.15s, border-color 0.15s, background 0.15s',
-                }}
-              >
-                ⬇ Save
-              </button>
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => ungroupNode(node.id)}
-                title="Dissolve group"
-                style={{
-                  background: 'none',
-                  border: '1px solid #585b70',
-                  color: '#a6adc8',
-                  borderRadius: '3px',
-                  padding: '2px 6px',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                  lineHeight: 1,
-                }}
-              >
-                ✕
-              </button>
-            </>
-          )}
+              onClick={() => {
+                setSaveLabel(typeof node.params.label === 'string' ? node.params.label : 'Group');
+                setSaveDescription('');
+                setSavingMode(true);
+              }}
+              onMouseEnter={() => setSaveHovered(true)}
+              onMouseLeave={() => setSaveHovered(false)}
+              title="Save as preset"
+              className={savedFlash ? 'group-save-flash' : ''}
+              style={{
+                background: 'none', border: 'none',
+                color: saveHovered || savedFlash ? '#a6e3a1' : '#585b70',
+                cursor: 'pointer', fontSize: '12px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px',
+                transition: 'color 0.15s',
+              }}
+            >↓</button>
+            {/* Dissolve */}
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => ungroupNode(node.id)}
+              title="Dissolve group"
+              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+            >✕</button>
+          </div>
+        </div>
+
+        {/* Save-as-preset inline form — shown below header when savingMode is active */}
+        {savingMode && (
+          <div
+            onMouseDown={e => e.stopPropagation()}
+            style={{ background: '#252536', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px solid #313244' }}
+          >
+            <input
+              autoFocus
+              value={saveLabel}
+              onChange={e => setSaveLabel(e.target.value)}
+              placeholder="Name…"
+              onMouseDown={e => e.stopPropagation()}
+              style={{ flex: 1, minWidth: '70px', background: '#11111b', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
+            />
+            <input
+              value={saveDescription}
+              onChange={e => setSaveDescription(e.target.value)}
+              placeholder="Description…"
+              onMouseDown={e => e.stopPropagation()}
+              style={{ flex: 2, minWidth: '60px', background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
+            />
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => {
+                if (saveLabel.trim()) {
+                  saveGroupPreset(node.id, saveLabel.trim(), saveDescription.trim());
+                  setSavedFlash(true);
+                  setTimeout(() => setSavedFlash(false), 700);
+                }
+                setSavingMode(false);
+              }}
+              style={{ background: '#a6e3a1', border: 'none', color: '#1e1e2e', borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer', fontWeight: 700 }}
+            >✓</button>
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setSavingMode(false)}
+              style={{ background: 'none', border: '1px solid #585b70', color: '#6c7086', borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
+            >✕</button>
+          </div>
+        )}
+
+        {/* Iterations row — compact param row below header */}
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          onDoubleClick={e => e.stopPropagation()}
+          style={{ padding: '3px 10px 3px 10px', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid #252536', background: '#252536' }}
+        >
+          <span style={{ fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', minWidth: '60px' }}>ITERATIONS</span>
+          <span style={{ fontSize: '10px', color: groupIters > 1 ? groupAccentColor : '#585b70', minWidth: '16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>×{groupIters}</span>
+          <input
+            type="range"
+            min={1}
+            max={16}
+            step={1}
+            value={groupIters}
+            onChange={e => {
+              const v = Math.max(1, Math.min(16, Math.round(Number(e.target.value))));
+              if (!isNaN(v)) updateNodeParams(node.id, { iterations: v }, { immediate: true });
+            }}
+            style={{ flex: 1, accentColor: groupAccentColor, cursor: 'pointer', margin: 0 }}
+          />
         </div>
 
         {/* Port list */}
@@ -1284,6 +1231,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   const innDef = getNodeDefinition(innNode.type);
                   const paramDef = innDef?.paramDefs?.[sp.paramKey];
                   if (!paramDef) return null;
+                  const psKey = `ps_${innerNode.id}_${sp.nodeId}_${sp.paramKey}`;
+                  const psSocket = node.inputs[psKey];
+                  const externallyDriven = !!(psSocket?.connection);
                   const overrideKey = `${innerNode.id}::${sp.nodeId}::${sp.paramKey}`;
                   const rawVal = node.params[overrideKey] ?? innNode.params[sp.paramKey];
                   const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
@@ -1293,46 +1243,76 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   return (
                     <div
                       key={`${sp.nodeId}::${sp.paramKey}`}
-                      style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
                       onMouseDown={e => e.stopPropagation()}
                     >
-                      <span style={{ color: '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
+                      {/* ps_ socket dot */}
+                      <div
+                        ref={el => { registerSocket(node.id, 'in', psKey, el); }}
+                        onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, psKey); }}
+                        style={{
+                          position: 'absolute',
+                          left: isTouchDevice ? -6 : -5,
+                          width: isTouchDevice ? 16 : 8,
+                          height: isTouchDevice ? 16 : 8,
+                          borderRadius: '50%',
+                          background: externallyDriven ? '#f0a' : 'transparent',
+                          border: `1.5px solid ${externallyDriven ? '#f0a' : '#585b70'}`,
+                          cursor: 'crosshair',
+                          touchAction: 'manipulation',
+                        }}
+                      />
+                      <span style={{ color: externallyDriven ? '#a6adc8' : '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
                         {sp.label ?? paramDef.label}
                       </span>
-                      <input
-                        type="range"
-                        min={effMin}
-                        max={baseMax}
-                        step={step}
-                        value={Math.max(effMin, Math.min(baseMax, currentVal))}
-                        onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
-                        style={{ flex: 1, accentColor: '#cba6f7', cursor: 'pointer' }}
-                      />
-                      {editingSliderKey === `sp_${overrideKey}` ? (
-                        <input
-                          autoFocus
-                          type="text"
-                          style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: '1px solid #585b70' }}
-                          value={editingSliderValue}
-                          onChange={e => setEditingSliderValue(e.target.value)}
-                          onBlur={() => {
-                            const v = parseFloat(editingSliderValue);
-                            if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v });
-                            setEditingSliderKey(null);
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') { const v = parseFloat(editingSliderValue); if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v }); setEditingSliderKey(null); }
-                            if (e.key === 'Escape') setEditingSliderKey(null);
-                          }}
-                        />
+                      {externallyDriven ? (
+                        <>
+                          <span style={{ flex: 1, fontSize: '10px', color: '#585b70', fontStyle: 'italic' }}>wired</span>
+                          <button
+                            onMouseDown={e => e.stopPropagation()}
+                            onClick={() => disconnectInput(node.id, psKey)}
+                            style={{ fontSize: '9px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                            title="Disconnect"
+                          >×</button>
+                        </>
                       ) : (
-                        <span
-                          title="Double-click to edit"
-                          style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
-                          onDoubleClick={() => { setEditingSliderKey(`sp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
-                        >
-                          {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
-                        </span>
+                        <>
+                          <input
+                            type="range"
+                            min={effMin}
+                            max={baseMax}
+                            step={step}
+                            value={Math.max(effMin, Math.min(baseMax, currentVal))}
+                            onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
+                            style={{ flex: 1, accentColor: '#cba6f7', cursor: 'pointer' }}
+                          />
+                          {editingSliderKey === `sp_${overrideKey}` ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: '1px solid #585b70' }}
+                              value={editingSliderValue}
+                              onChange={e => setEditingSliderValue(e.target.value)}
+                              onBlur={() => {
+                                const v = parseFloat(editingSliderValue);
+                                if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v });
+                                setEditingSliderKey(null);
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') { const v = parseFloat(editingSliderValue); if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v }); setEditingSliderKey(null); }
+                                if (e.key === 'Escape') setEditingSliderKey(null);
+                              }}
+                            />
+                          ) : (
+                            <span
+                              title="Double-click to edit"
+                              style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
+                              onDoubleClick={() => { setEditingSliderKey(`sp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
+                            >
+                              {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   );
