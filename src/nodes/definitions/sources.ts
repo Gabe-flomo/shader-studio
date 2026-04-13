@@ -171,7 +171,9 @@ export const AudioInputNode: NodeDefinition = {
   label: 'Audio Input',
   category: 'Sources',
   description: 'Load an audio file and output per-band frequency amplitudes as floats (0–1). Add multiple bands or use Full Spectrum mode for overall volume.',
-  inputs: {},
+  inputs: {
+    band_0_center: { type: 'float', label: 'Band 0 Hz' },
+  },
   outputs: {
     amplitude_0: { type: 'float', label: 'Band 0' },
   },
@@ -179,6 +181,7 @@ export const AudioInputNode: NodeDefinition = {
     freq_range:  200.0,
     mode: 'band',
     _bands: [200],
+    _soloedBand: -1,
     _fileName: '',
     _hasFile: false,
   },
@@ -193,11 +196,13 @@ export const AudioInputNode: NodeDefinition = {
     const id = node.id;
     const rawBands = node.params._bands;
     const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
+    const soloedBand = typeof node.params._soloedBand === 'number' ? node.params._soloedBand : -1;
     const lines: string[] = [];
     const outputVars: Record<string, string> = {};
     for (let i = 0; i < bands.length; i++) {
       const outVar = `${id}_amplitude_${i}`;
-      lines.push(`    float ${outVar} = u_audio_${id}_${i};\n`);
+      const muted = soloedBand >= 0 && soloedBand !== i;
+      lines.push(`    float ${outVar} = ${muted ? '0.0' : `u_audio_${id}_${i}`};\n`);
       outputVars[`amplitude_${i}`] = outVar;
     }
     return { code: lines.join(''), outputVars };
