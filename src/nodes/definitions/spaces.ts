@@ -400,3 +400,166 @@ export const InfiniteRepeatSpaceNode: NodeDefinition = {
     };
   },
 };
+
+// ─── New Space Nodes (V2) ──────────────────────────────────────────────────────
+
+// WaveTexture — procedural bands/rings/directional waves
+export const WaveTextureNode: NodeDefinition = {
+  type: 'waveTexture', label: 'Wave Texture', category: 'Spaces',
+  description: 'Procedural wave pattern: bands, rings, or directional waves.',
+  inputs: {
+    uv:    { type: 'vec2',  label: 'UV' },
+    scale: { type: 'float', label: 'Scale' },
+    speed: { type: 'float', label: 'Speed' },
+    time:  { type: 'float', label: 'Time' },
+  },
+  outputs: { value: { type: 'float', label: 'Value' } },
+  defaultParams: { mode: 'bands', scale: 5.0, speed: 1.0, distortion: 0.0 },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: 'bands',    label: 'Bands' },
+      { value: 'rings',    label: 'Rings' },
+      { value: 'x',       label: 'X Axis' },
+      { value: 'y',       label: 'Y Axis' },
+      { value: 'diagonal',label: 'Diagonal' },
+    ]},
+    scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 20.0, step: 0.1 },
+    speed:      { label: 'Speed',      type: 'float', min: -5.0, max: 5.0, step: 0.1 },
+    distortion: { label: 'Distortion', type: 'float', min: 0.0, max: 5.0, step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const uv   = inputVars.uv    || 'vec2(0.0)';
+    const sc   = inputVars.scale || p(node.params.scale,      5.0);
+    const sp   = inputVars.speed || p(node.params.speed,      1.0);
+    const t    = inputVars.time  || '0.0';
+    const dist = p(node.params.distortion, 0.0);
+    const mode = String(node.params.mode || 'bands');
+    const modeExprs: Record<string, string> = {
+      bands:    `(${id}_p.x + ${id}_p.y) * ${sc}`,
+      rings:    `length(${id}_p) * ${sc}`,
+      x:        `${id}_p.x * ${sc}`,
+      y:        `${id}_p.y * ${sc}`,
+      diagonal: `(${id}_p.x + ${id}_p.y) * ${sc} * 0.7071`,
+    };
+    const waveExpr = modeExprs[mode] || modeExprs['bands'];
+    return {
+      code: [
+        `    vec2  ${id}_p     = ${uv} + sin(${uv}.yx * 3.14159 + ${t}) * ${dist};\n`,
+        `    float ${id}_value = sin(${waveExpr} - ${t} * ${sp}) * 0.5 + 0.5;\n`,
+      ].join(''),
+      outputVars: { value: `${id}_value` },
+    };
+  },
+};
+
+// MagicTexture — multicolored interference pattern (Blender-style)
+export const MagicTextureNode: NodeDefinition = {
+  type: 'magicTexture', label: 'Magic Texture', category: 'Spaces',
+  description: 'Multicolored interference / psychedelic pattern reminiscent of Blender\'s Magic texture.',
+  inputs: {
+    uv:    { type: 'vec2',  label: 'UV' },
+    scale: { type: 'float', label: 'Scale' },
+    time:  { type: 'float', label: 'Time' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { scale: 4.0, depth: 4, distortion: 1.0 },
+  paramDefs: {
+    scale:      { label: 'Scale',      type: 'float', min: 0.5, max: 20.0, step: 0.1 },
+    depth:      { label: 'Depth',      type: 'select', options: [1,2,3,4,5,6].map(n => ({ value: String(n), label: String(n) })) },
+    distortion: { label: 'Distortion', type: 'float', min: 0.0, max: 5.0, step: 0.1 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const uv   = inputVars.uv    || 'vec2(0.0)';
+    const sc   = inputVars.scale || p(node.params.scale, 4.0);
+    const t    = inputVars.time  || '0.0';
+    const dist = p(node.params.distortion, 1.0);
+    const depth = Math.max(1, Math.min(6, Number(node.params.depth) || 4));
+    const lines: string[] = [
+      `    vec2  ${id}_p  = ${uv} * ${sc};\n`,
+      `    float ${id}_x  = sin(${id}_p.x + sin(${id}_p.y + ${t}));\n`,
+      `    float ${id}_y  = cos(${id}_p.x - cos(${id}_p.y));\n`,
+    ];
+    for (let i = 1; i < depth; i++) {
+      lines.push(`    ${id}_x = sin(${id}_x * ${dist} + ${id}_p.y * float(${i}));\n`);
+      lines.push(`    ${id}_y = cos(${id}_y * ${dist} - ${id}_p.x * float(${i}));\n`);
+    }
+    lines.push(`    vec3 ${id}_color = 0.5 + 0.5 * vec3(${id}_x, ${id}_y, sin(${id}_x - ${id}_y));\n`);
+    return { code: lines.join(''), outputVars: { color: `${id}_color` } };
+  },
+};
+
+// Grid — outputs a grid/checkerboard mask + cell ID
+export const GridNode: NodeDefinition = {
+  type: 'grid', label: 'Grid', category: 'Spaces',
+  description: 'Grid lines + checkerboard mask with configurable cell size and line width.',
+  inputs: {
+    uv:        { type: 'vec2',  label: 'UV' },
+    scale:     { type: 'float', label: 'Scale' },
+    lineWidth: { type: 'float', label: 'Line Width' },
+  },
+  outputs: {
+    grid:        { type: 'float', label: 'Grid Lines' },
+    checker:     { type: 'float', label: 'Checker' },
+    cellUV:      { type: 'vec2',  label: 'Cell UV' },
+    cellID:      { type: 'vec2',  label: 'Cell ID' },
+  },
+  defaultParams: { scale: 4.0, lineWidth: 0.05 },
+  paramDefs: {
+    scale:     { label: 'Scale',      type: 'float', min: 0.5, max: 20.0, step: 0.1 },
+    lineWidth: { label: 'Line Width', type: 'float', min: 0.0, max: 0.5,  step: 0.005 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const uv  = inputVars.uv        || 'vec2(0.0)';
+    const sc  = inputVars.scale     || p(node.params.scale,     4.0);
+    const lw  = inputVars.lineWidth || p(node.params.lineWidth, 0.05);
+    return {
+      code: [
+        `    vec2  ${id}_suv    = ${uv} * ${sc};\n`,
+        `    vec2  ${id}_cellID = floor(${id}_suv);\n`,
+        `    vec2  ${id}_cuv    = fract(${id}_suv) - 0.5;\n`,
+        `    vec2  ${id}_edge   = abs(${id}_cuv);\n`,
+        `    float ${id}_grid   = step(0.5 - ${lw}, max(${id}_edge.x, ${id}_edge.y));\n`,
+        `    float ${id}_check  = mod(${id}_cellID.x + ${id}_cellID.y, 2.0);\n`,
+      ].join(''),
+      outputVars: {
+        grid:    `${id}_grid`,
+        checker: `${id}_check`,
+        cellUV:  `${id}_cuv`,
+        cellID:  `${id}_cellID`,
+      },
+    };
+  },
+};
+
+// Shear — shear/skew a UV coordinate
+export const ShearNode: NodeDefinition = {
+  type: 'shear', label: 'Shear', category: 'Spaces',
+  description: 'Shear/skew UV space: shift X by factor of Y and vice versa.',
+  inputs: {
+    uv:      { type: 'vec2',  label: 'UV' },
+    shearX:  { type: 'float', label: 'Shear X' },
+    shearY:  { type: 'float', label: 'Shear Y' },
+  },
+  outputs: { uv: { type: 'vec2', label: 'UV' } },
+  defaultParams: { shearX: 0.5, shearY: 0.0 },
+  paramDefs: {
+    shearX: { label: 'Shear X', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+    shearY: { label: 'Shear Y', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uv = inputVars.uv     || 'vec2(0.0)';
+    const sx = inputVars.shearX || p(node.params.shearX, 0.5);
+    const sy = inputVars.shearY || p(node.params.shearY, 0.0);
+    return {
+      code: [
+        `    vec2 ${id}_uvi = ${uv};\n`,
+        `    vec2 ${id}_uv  = vec2(${id}_uvi.x + ${sx} * ${id}_uvi.y, ${id}_uvi.y + ${sy} * ${id}_uvi.x);\n`,
+      ].join(''),
+      outputVars: { uv: `${id}_uv` },
+    };
+  },
+};

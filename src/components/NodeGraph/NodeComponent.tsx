@@ -89,6 +89,7 @@ const TYPE_COLORS: Record<string, string> = {
   vec2: '#0af',
   vec3: '#0fa',
   vec4: '#fa0',
+  scene3d: '#c8a',   // purple-ish for 3D scene wires
 };
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -2885,6 +2886,54 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+              </div>
+            );
+          }
+
+          if (paramDef.type === 'vec3color') {
+            // RGB color picker: three 0-1 float sliders rendered as a color swatch + inputs
+            const vals = Array.isArray(node.params[key]) ? (node.params[key] as number[]) : [0, 0, 0];
+            const r = Math.round((vals[0] ?? 0) * 255);
+            const g = Math.round((vals[1] ?? 0) * 255);
+            const b = Math.round((vals[2] ?? 0) * 255);
+            const hexColor = `rgb(${r},${g},${b})`;
+            return (
+              <div
+                key={key}
+                style={{ padding: '3px 10px 5px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '50px' }}>{paramDef.label}</span>
+                <div style={{ width: '16px', height: '16px', borderRadius: '3px', background: hexColor, border: '1px solid #45475a', flexShrink: 0 }} />
+                {[0, 1, 2].map(idx => (
+                  <input
+                    key={idx}
+                    type="number"
+                    style={{ ...INPUT_STYLE, width: '40px' }}
+                    min={0} max={1} step={0.01}
+                    value={vals[idx] ?? 0}
+                    onChange={e => setVec3Component(key, idx, e.target.value)}
+                  />
+                ))}
+              </div>
+            );
+          }
+
+          if (paramDef.type === 'bool') {
+            const val = node.params[key] !== false;
+            return (
+              <div
+                key={key}
+                style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <span style={{ color: '#6c7086', fontSize: '11px' }}>{paramDef.label}</span>
+                <input
+                  type="checkbox"
+                  checked={val}
+                  onChange={e => updateNodeParams(node.id, { [key]: e.target.checked })}
+                  style={{ cursor: 'pointer', accentColor: '#cba6f7' }}
+                />
               </div>
             );
           }

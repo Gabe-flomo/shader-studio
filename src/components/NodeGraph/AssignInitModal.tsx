@@ -46,10 +46,11 @@ const PALETTE_GROUPS = Array.from(new Set(INIT_PALETTE.map(e => e.group)));
 // Type display order + colours (match socket colours)
 const TYPE_ORDER: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 const TYPE_COLOR: Record<DataType, string> = {
-  float: '#f0a0c0',
-  vec2:  '#00aaff',
-  vec3:  '#00ffaa',
-  vec4:  '#ffaa00',
+  float:   '#f0a0c0',
+  vec2:    '#00aaff',
+  vec3:    '#00ffaa',
+  vec4:    '#ffaa00',
+  scene3d: '#cc88aa',
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────

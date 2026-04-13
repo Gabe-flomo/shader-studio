@@ -799,6 +799,106 @@ export function generateFragmentShader(
       continue;
     }
 
+    // ── Scene Group: compile subgraph as a named GLSL function ───────────────
+    if (node.type === 'sceneGroup') {
+      const subgraph = node.params.subgraph as SubgraphData | undefined;
+      if (!subgraph || subgraph.nodes.length === 0) {
+        nodeOutputs.set(node.id, { scene: 'MISSING_SCENE' });
+        continue;
+      }
+
+      const fnName = `mapScene_${node.id.replace(/-/g, '_')}`;
+      const sgPrefix = `${node.id}_sg_`;
+      const sceneFnLines: string[] = [];
+
+      // Pre-register ScenePosNode outputs so they resolve to 'p' (the fn parameter)
+      for (const sn of subgraph.nodes) {
+        if (sn.type === 'scenePos') {
+          nodeOutputs.set(sgPrefix + sn.id, { pos: 'p' });
+        }
+      }
+
+      // Apply port input overrides from the sceneGroup's own outer inputs
+      const sgPortOverrides = new Map<string, string>();
+      for (const port of subgraph.inputPorts) {
+        const outerVar = inputVars[port.key];
+        if (outerVar) sgPortOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
+      }
+
+      // Prefix all subgraph node IDs + connections
+      const sgPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => ({
+        ...subNode,
+        id: sgPrefix + subNode.id,
+        inputs: Object.fromEntries(
+          Object.entries(subNode.inputs).map(([k, inp]) => [
+            k,
+            inp.connection
+              ? { ...inp, connection: { nodeId: sgPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
+              : inp,
+          ]),
+        ),
+      }));
+
+      const sgSorted = topologicalSort(sgPrefixedNodes);
+      let sgLastFloatVar = '100.0';  // default return value (large dist = miss)
+
+      for (const sn of sgSorted) {
+        if (nodeOutputs.has(sn.id)) continue;  // scenePos already registered
+        const snDef = getNodeDefinition(sn.type);
+        if (!snDef) continue;
+
+        // Collect GLSL helper functions
+        if (snDef.glslFunction) functions.add(snDef.glslFunction);
+        if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => functions.add(h));
+
+        // Resolve input vars
+        const origId = sn.id.slice(sgPrefix.length);
+        const snInputVars: Record<string, string> = {};
+        for (const [k, inp] of Object.entries(sn.inputs)) {
+          const portKey = `${origId}:${k}`;
+          if (sgPortOverrides.has(portKey)) {
+            snInputVars[k] = sgPortOverrides.get(portKey)!;
+          } else if (inp.connection) {
+            const srcOut = nodeOutputs.get(inp.connection.nodeId);
+            if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
+          }
+          // Fallbacks
+          if (!snInputVars[k]) {
+            if (inp.defaultValue !== undefined) {
+              if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+              else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+            }
+          }
+        }
+
+        const snResult = snDef.generateGLSL(sn, snInputVars);
+        sceneFnLines.push(snResult.code);
+        nodeOutputs.set(sn.id, snResult.outputVars);
+
+        // Track last float output as candidate return value
+        for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
+          const outType = snDef.outputs[outKey]?.type;
+          if (outType === 'float') sgLastFloatVar = varName;
+        }
+      }
+
+      // Find return value from the subgraph's output port (if defined)
+      for (const port of subgraph.outputPorts) {
+        if (port.type === 'float') {
+          const srcOut = nodeOutputs.get(sgPrefix + port.fromNodeId);
+          if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
+        }
+      }
+
+      // Emit the GLSL function
+      const fnBody = sceneFnLines.join('');
+      const fnDef = `float ${fnName}(vec3 p) {\n${fnBody}    return ${sgLastFloatVar};\n}`;
+      functions.add(fnDef);
+
+      nodeOutputs.set(node.id, { scene: fnName });
+      continue;
+    }
+
     // ── Bypass: pass first input through to all outputs ───────────────────────
     if (node.bypassed) {
       const inputEntries = Object.entries(inputVars);

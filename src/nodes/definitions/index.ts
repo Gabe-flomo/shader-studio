@@ -15,6 +15,7 @@ export {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
   MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
+  WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
 } from './spaces';
 
 // 2D Primitives
@@ -36,6 +37,7 @@ export {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
+  VignetteNode, ScanlinesNode, SobelNode,
 } from './effects';
 export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 export { LoopCarryNode } from './loop';
@@ -55,8 +57,19 @@ export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode
 // Patterns
 export { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 
+// 3D SDF Primitives + Transforms
+export {
+  SphereSDF3DNode, BoxSDF3DNode, TorusSDF3DNode, CapsuleSDF3DNode,
+  CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
+  Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
+} from './sdf3d';
+
+// 3D Scene (composable)
+export { ScenePosNode, SceneGroupNode, RayRenderNode } from './scene3d';
+
 // Color
-export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode } from './color';
+export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
+  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
 
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
@@ -78,6 +91,8 @@ export {
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
   RemapNode,
+  CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
+  AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
 } from './math';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
@@ -88,6 +103,7 @@ import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
   MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
+  WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
 } from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
@@ -101,6 +117,7 @@ import {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
+  VignetteNode, ScanlinesNode, SobelNode,
 } from './effects';
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
@@ -109,7 +126,14 @@ import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNod
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
 import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
-import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode } from './color';
+import {
+  SphereSDF3DNode, BoxSDF3DNode, TorusSDF3DNode, CapsuleSDF3DNode,
+  CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
+  Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
+} from './sdf3d';
+import { ScenePosNode, SceneGroupNode, RayRenderNode } from './scene3d';
+import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
+  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
@@ -124,6 +148,8 @@ import {
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
   RemapNode,
+  CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
+  AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
 } from './math';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -156,6 +182,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sphericalSpace: SphericalSpaceNode,
   rippleSpace: RippleSpaceNode,
   infiniteRepeatSpace: InfiniteRepeatSpaceNode,
+  waveTexture: WaveTextureNode,
+  magicTexture: MagicTextureNode,
+  grid: GridNode,
+  shear: ShearNode,
   // 2D Primitives
   circleSDF: CircleSDFNode,
   boxSDF: BoxSDFNode,
@@ -198,6 +228,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   customFn: CustomFnNode,
   gravitationalLens: GravitationalLensNode,
   floatWarp: FloatWarpNode,
+  vignette: VignetteNode,
+  scanlines: ScanlinesNode,
+  sobel: SobelNode,
   // Loops (wired pair system)
   loopCarry:             LoopCarryNode,
   loopStart:             LoopStartNode,
@@ -237,6 +270,24 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   truchet: TruchetNode,
   metaballs: MetaballsNode,
   lissajous: LissajousNode,
+  // 3D SDF Primitives
+  sphereSDF3D: SphereSDF3DNode,
+  boxSDF3D: BoxSDF3DNode,
+  torusSDF3D: TorusSDF3DNode,
+  capsuleSDF3D: CapsuleSDF3DNode,
+  cylinderSDF3D: CylinderSDF3DNode,
+  coneSDF3D: ConeSDF3DNode,
+  octahedronSDF3D: OctahedronSDF3DNode,
+  // 3D Transforms
+  translate3D: Translate3DNode,
+  rotate3D: Rotate3DNode,
+  repeat3D: Repeat3DNode,
+  twist3D: Twist3DNode,
+  fold3D: Fold3DNode,
+  // 3D Scene (composable)
+  scenePos: ScenePosNode,
+  sceneGroup: SceneGroupNode,
+  rayRender: RayRenderNode,
   // Color
   palette: PaletteNode,
   palettePreset: PalettePresetNode,
@@ -246,6 +297,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   invert: InvertNode,
   desaturate: DesaturateNode,
   hueRange: HueRangeNode,
+  colorRamp: ColorRampNode,
+  blendModes: BlendModesNode,
+  brightnessContrast: BrightnessContrastNode,
+  blackbody: BlackbodyNode,
   // Output
   output: OutputNode,
   vec4Output: Vec4OutputNode,
@@ -288,6 +343,15 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   multiplyVec2: MultiplyVec2Node,
   normalizeVec2: NormalizeVec2Node,
   remap: RemapNode,
+  crossProduct: CrossProductNode,
+  reflect: ReflectNode,
+  complexMul: ComplexMulNode,
+  complexPow: ComplexPowNode,
+  angleToVec2: AngleToVec2Node,
+  vec2Angle: Vec2AngleNode,
+  luminance: LuminanceNode,
+  sign: SignNode,
+  step: StepNode,
   // Animation
   sineLFO: SineLFONode,
   squareLFO: SquareLFONode,

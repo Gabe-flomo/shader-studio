@@ -910,3 +910,119 @@ export const FloatWarpNode: NodeDefinition = {
     };
   },
 };
+
+// ─── New Effect Nodes (V2) ────────────────────────────────────────────────────
+
+// Vignette — smoothstep darkening around the edges
+export const VignetteNode: NodeDefinition = {
+  type: 'vignette', label: 'Vignette', category: 'Effects',
+  description: 'Add a soft darkening vignette around the edges of the frame.',
+  inputs: {
+    color:    { type: 'vec3',  label: 'Color' },
+    uv:       { type: 'vec2',  label: 'UV (0-1)' },
+    radius:   { type: 'float', label: 'Radius' },
+    softness: { type: 'float', label: 'Softness' },
+    strength: { type: 'float', label: 'Strength' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { radius: 0.65, softness: 0.45, strength: 1.0 },
+  paramDefs: {
+    radius:   { label: 'Radius',   type: 'float', min: 0.0, max: 1.5, step: 0.01 },
+    softness: { label: 'Softness', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const col = inputVars.color    || 'vec3(0.5)';
+    const uv  = inputVars.uv       || 'vec2(0.5)';
+    const rad = inputVars.radius   || p(node.params.radius,   0.65);
+    const sft = inputVars.softness || p(node.params.softness, 0.45);
+    const str = inputVars.strength || p(node.params.strength, 1.0);
+    return {
+      code: [
+        `    vec2  ${id}_vc  = ${uv} - 0.5;\n`,
+        `    float ${id}_d   = length(${id}_vc);\n`,
+        `    float ${id}_vig = smoothstep(${rad}, ${rad} - ${sft}, ${id}_d);\n`,
+        `    vec3  ${id}_result = ${col} * mix(1.0, ${id}_vig, ${str});\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+// Scanlines — CRT-style horizontal scan lines
+export const ScanlinesNode: NodeDefinition = {
+  type: 'scanlines', label: 'Scanlines', category: 'Effects',
+  description: 'Add CRT-style scanlines to a color.',
+  inputs: {
+    color:     { type: 'vec3',  label: 'Color' },
+    uv:        { type: 'vec2',  label: 'UV (0-1)' },
+    count:     { type: 'float', label: 'Line Count' },
+    intensity: { type: 'float', label: 'Intensity' },
+    time:      { type: 'float', label: 'Time (scroll)' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { count: 240.0, intensity: 0.3, scroll: 0.0 },
+  paramDefs: {
+    count:     { label: 'Line Count', type: 'float', min: 20.0, max: 600.0, step: 10.0 },
+    intensity: { label: 'Intensity',  type: 'float', min: 0.0,  max: 1.0,   step: 0.01 },
+    scroll:    { label: 'Scroll Spd', type: 'float', min: -5.0, max: 5.0,   step: 0.1 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const col = inputVars.color     || 'vec3(0.5)';
+    const uv  = inputVars.uv        || 'vec2(0.5)';
+    const cnt = inputVars.count     || p(node.params.count,     240.0);
+    const ity = inputVars.intensity || p(node.params.intensity, 0.3);
+    const t   = inputVars.time      || '0.0';
+    const spd = p(node.params.scroll, 0.0);
+    return {
+      code: [
+        `    float ${id}_line  = sin((${uv}.y + ${t} * ${spd}) * 3.14159 * ${cnt}) * 0.5 + 0.5;\n`,
+        `    vec3  ${id}_result = ${col} * (1.0 - ${ity} * (1.0 - ${id}_line));\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+// Sobel — edge detection using finite-difference Sobel operator on a grayscale value
+// Expects neighboring UV samples; for simplicity takes the color + UV and approximates
+// using fwidth (available in fragment shaders)
+export const SobelNode: NodeDefinition = {
+  type: 'sobel', label: 'Sobel Edges', category: 'Effects',
+  description: 'Sobel edge detection. Wire a float/luminance value and UV; outputs edge strength.',
+  inputs: {
+    value:    { type: 'float', label: 'Value' },
+    uv:       { type: 'vec2',  label: 'UV' },
+    strength: { type: 'float', label: 'Strength' },
+  },
+  outputs: {
+    edges:  { type: 'float', label: 'Edge Strength' },
+    result: { type: 'vec3',  label: 'Edge Color' },
+  },
+  defaultParams: { strength: 1.0, colorR: 1.0, colorG: 1.0, colorB: 1.0 },
+  paramDefs: {
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 10.0, step: 0.1 },
+    colorR:   { label: 'Color R',  type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+    colorG:   { label: 'Color G',  type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+    colorB:   { label: 'Color B',  type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const val = inputVars.value    || '0.0';
+    const str = inputVars.strength || p(node.params.strength, 1.0);
+    const r   = p(node.params.colorR, 1.0);
+    const g   = p(node.params.colorG, 1.0);
+    const b   = p(node.params.colorB, 1.0);
+    return {
+      code: [
+        `    float ${id}_dx    = dFdx(${val});\n`,
+        `    float ${id}_dy    = dFdy(${val});\n`,
+        `    float ${id}_edges = clamp(length(vec2(${id}_dx, ${id}_dy)) * ${str}, 0.0, 1.0);\n`,
+        `    vec3  ${id}_result = vec3(${r}, ${g}, ${b}) * ${id}_edges;\n`,
+      ].join(''),
+      outputVars: { edges: `${id}_edges`, result: `${id}_result` },
+    };
+  },
+};
