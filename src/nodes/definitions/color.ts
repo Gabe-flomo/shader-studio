@@ -309,7 +309,7 @@ export const HueRangeNode: NodeDefinition = {
   type: 'hueRange',
   label: 'Hue Range',
   category: 'Color',
-  description: 'Boost or isolate a hue band. Hue Center & Width are 0–1. Boost > 1 amplifies saturation in-range, < 1 suppresses it. Mask output is the soft hue weight.',
+  description: 'Boost or suppress a hue band\'s saturation. Boost > 1 = more vivid, < 1 = desaturate. Input space: RGB (default) or HSV (if already converted). Output is always RGB.',
   inputs: {
     color:      { type: 'vec3',  label: 'Color'      },
     hue_center: { type: 'float', label: 'Hue Center' },
@@ -320,26 +320,38 @@ export const HueRangeNode: NodeDefinition = {
     color: { type: 'vec3',  label: 'Color' },
     mask:  { type: 'float', label: 'Mask'  },
   },
-  defaultParams: { hue_center: 0.0, hue_width: 0.1, boost: 2.0 },
+  defaultParams: { input_space: 'rgb', hue_center: 0.0, hue_width: 0.1, boost: 2.0 },
   paramDefs: {
+    input_space: {
+      label: 'Input', type: 'select',
+      options: [
+        { value: 'rgb', label: 'RGB' },
+        { value: 'hsv', label: 'HSV' },
+      ],
+    },
     hue_center: { label: 'Hue Center', type: 'float', min: 0.0, max: 1.0, step: 0.005 },
     hue_width:  { label: 'Hue Width',  type: 'float', min: 0.0, max: 0.5, step: 0.005 },
     boost:      { label: 'Boost',      type: 'float', min: 0.0, max: 8.0, step: 0.05  },
   },
   glslFunction: HSV_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
-    const c  = inputVars.color      ?? 'vec3(0.5)';
-    const hc = inputVars.hue_center ?? p(node.params.hue_center, 0.0);
-    const hw = inputVars.hue_width  ?? p(node.params.hue_width,  0.1);
-    const bv = inputVars.boost      ?? p(node.params.boost,      2.0);
+    const id  = node.id;
+    const c   = inputVars.color      ?? 'vec3(0.5)';
+    const hc  = inputVars.hue_center ?? p(node.params.hue_center, 0.0);
+    const hw  = inputVars.hue_width  ?? p(node.params.hue_width,  0.1);
+    const bv  = inputVars.boost      ?? p(node.params.boost,      2.0);
+    const isHSVInput = (node.params.input_space as string) === 'hsv';
+    // When input is already HSV, skip the rgb2hsv conversion
+    const toHSV = isHSVInput ? c : `rgb2hsv(${c})`;
     return {
       code: [
-        `    vec3  ${id}_hsv    = rgb2hsv(${c});\n`,
-        `    float ${id}_hdiff  = abs(fract(${id}_hsv.x - ${hc} + 0.5) - 0.5);\n`,
-        `    float ${id}_mask   = clamp(1.0 - ${id}_hdiff / max(${hw}, 0.001), 0.0, 1.0);\n`,
-        `    float ${id}_newV   = ${id}_hsv.z * (1.0 + (${bv} - 1.0) * ${id}_mask);\n`,
-        `    vec3  ${id}_color  = hsv2rgb(vec3(${id}_hsv.x, ${id}_hsv.y, clamp(${id}_newV, 0.0, 1.0)));\n`,
+        `    vec3  ${id}_hsv   = ${toHSV};\n`,
+        `    float ${id}_hdiff = abs(fract(${id}_hsv.x - ${hc} + 0.5) - 0.5);\n`,
+        `    float ${id}_mask  = clamp(1.0 - ${id}_hdiff / max(${hw}, 0.001), 0.0, 1.0);\n`,
+        // Boost SATURATION (not value) — makes selected hue more/less vivid
+        `    float ${id}_newS  = ${id}_hsv.y * (1.0 + (${bv} - 1.0) * ${id}_mask);\n`,
+        // Always output RGB
+        `    vec3  ${id}_color = hsv2rgb(vec3(${id}_hsv.x, clamp(${id}_newS, 0.0, 1.0), ${id}_hsv.z));\n`,
       ].join(''),
       outputVars: { color: `${id}_color`, mask: `${id}_mask` },
     };

@@ -430,5 +430,5 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
 export const INLINE_VIZ_TYPES = new Set([
   'toneMap', 'palette', 'palettePreset', 'gradient',
   'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
-  // hueRange intentionally omitted — it shows BOTH ring + shader thumbnail
+  'hueRange',
 ]);

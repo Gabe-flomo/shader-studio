@@ -1716,10 +1716,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {isPreviewActive && !SKIP_PREVIEW.has(node.type) && INLINE_VIZ_TYPES.has(node.type) && (
         <NodeInlineViz node={node} />
       )}
-      {/* hueRange: show ring viz AND shader thumbnail (both useful) */}
-      {isPreviewActive && node.type === 'hueRange' && (
-        <NodeInlineViz node={node} />
-      )}
       {/* Default: shader thumbnail for float-output scope or vec3 render */}
       {isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && !INLINE_VIZ_TYPES.has(node.type) && (
         <div style={{ width: '100%', borderBottom: '1px solid #313244' }}>
