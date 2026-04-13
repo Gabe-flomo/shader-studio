@@ -75,12 +75,13 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'] as ExKey[] },
   { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupAdditiveRings','groupProductRings','groupCarryRotate','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
   { label: 'Loops',           color: '#89dceb', keys: ['loopRippleWarp','loopRotateSpiral','loopFloatDemo','loopChainedBody','loopZoomTunnel','loopAnimatedSpin','loopTwoStage','loopSpatialFloat','loopDenseRings','loopIterScale'] as ExKey[] },
-  { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal'] as ExKey[] },
+  { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal','newtonFractalClassic','newtonFractalZ5','lyapunovMarkus','lyapunovAABB','apollonianGasket'] as ExKey[] },
   { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','chladni3dDemo','chladni3dParticlesDemo','electronOrbitalDemo','orbitalVolume3dDemo','gravitationalLens'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'] as ExKey[] },
   { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','agxToneDemo','lumaGrainDemo','temporalGrainDemo','hueRangeDemo','angularGradient','shapeShowcase'] as ExKey[] },
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
-  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['raymarchSpheres','noiseFloatDemo','remapDemo'] as ExKey[] },
+  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['raymarchSpheres','noiseFloatDemo','remapDemo','mandelbulbClassic','mengerSponge','twistedBox'] as ExKey[] },
+  { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo'] as ExKey[] },
 ];
 
 

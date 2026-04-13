@@ -632,3 +632,351 @@ export const IFSNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Newton Fractal ───────────────────────────────────────────────────────────
+
+const NEWTON_EXTRAS = `
+vec2 cdiv(vec2 a, vec2 b) {
+    float d = dot(b, b);
+    return vec2(dot(a, b), a.y*b.x - a.x*b.y) / max(d, 1e-20);
+}`;
+
+const NEWTON_GLSL = FRACTAL_GLSL_HELPERS + '\n' + NEWTON_EXTRAS + '\n' + PALETTE_GLSL_FN;
+
+export const NewtonFractalNode: NodeDefinition = {
+  type: 'newtonFractal',
+  label: 'Newton Fractal',
+  category: 'Presets',
+  description: 'Newton\'s method root-finding on complex polynomials. Color = which root + convergence speed.',
+  inputs: {
+    uv:   { type: 'vec2',  label: 'UV'     },
+    time: { type: 'float', label: 'Time'   },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color'      },
+    iter:  { type: 'float', label: 'Smooth Iter' },
+    root:  { type: 'float', label: 'Root Index'  },
+  },
+  glslFunction: NEWTON_GLSL,
+  defaultParams: {
+    polynomial:     'z3-1',
+    max_iter:       48,
+    zoom:           1.5,
+    center_x:       0.0,
+    center_y:       0.0,
+    palette_preset: '1',
+    shade_power:    1.5,
+    convergence:    0.001,
+  },
+  paramDefs: {
+    polynomial: { label: 'Polynomial', type: 'select', options: [
+      { value: 'z3-1', label: 'z³ - 1' },
+      { value: 'z4-1', label: 'z⁴ - 1' },
+      { value: 'z5-1', label: 'z⁵ - 1' },
+      { value: 'z6-1', label: 'z⁶ - 1' },
+    ]},
+    max_iter:       { label: 'Max Iterations', type: 'float', min: 8,    max: 128, step: 4     },
+    zoom:           { label: 'Zoom',           type: 'float', min: 0.1,  max: 10,  step: 0.05  },
+    center_x:       { label: 'Center X',       type: 'float', min: -3,   max: 3,   step: 0.001 },
+    center_y:       { label: 'Center Y',       type: 'float', min: -3,   max: 3,   step: 0.001 },
+    palette_preset: { label: 'Palette',        type: 'select', options: PALETTE_PRESET_OPTIONS },
+    shade_power:    { label: 'Shade Power',    type: 'float', min: 0.5,  max: 4,   step: 0.1   },
+    convergence:    { label: 'Convergence ε',  type: 'float', min: 0.0001, max: 0.01, step: 0.0001 },
+  },
+
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uvVar  = inputVars.uv   ?? 'vec2(0.0)';
+
+    const poly      = (node.params.polynomial as string) ?? 'z3-1';
+    const maxIter   = Math.max(8, Math.round(typeof node.params.max_iter === 'number' ? node.params.max_iter : 48));
+    const zoom      = p(node.params.zoom, 1.5);
+    const cx        = p(node.params.center_x, 0.0);
+    const cy        = p(node.params.center_y, 0.0);
+    const shadePow  = p(node.params.shade_power, 1.5);
+    const eps       = p(node.params.convergence, 0.001);
+    const presIdx   = parseInt((node.params.palette_preset as string) ?? '1', 10);
+    const pres      = FRACTAL_PALETTE_PRESETS[Math.min(presIdx, FRACTAL_PALETTE_PRESETS.length - 1)];
+    const [pA, pB, pC, pD] = [paletteVec(pres.a), paletteVec(pres.b), paletteVec(pres.c), paletteVec(pres.d)];
+
+    type PolyDef = {
+      iterCode: string;
+      numRoots: number;
+      rootsCode: string;
+      rootFn: string;
+    };
+
+    function makePolyDef(polyKey: string): PolyDef {
+      const z = `${id}_z`;
+      switch (polyKey) {
+        case 'z4-1': return {
+          iterCode: `vec2 ${id}_z2 = cmul(${z}, ${z}); vec2 ${id}_fz = cmul(${id}_z2, ${id}_z2) - vec2(1.0, 0.0); vec2 ${id}_fpz = 4.0 * cmul(${id}_z2, ${z});`,
+          numRoots: 4,
+          rootsCode: `float ${id}_d0=length(${z}-vec2(1.0,0.0)); float ${id}_d1=length(${z}-vec2(0.0,1.0)); float ${id}_d2=length(${z}-vec2(-1.0,0.0)); float ${id}_d3=length(${z}-vec2(0.0,-1.0));`,
+          rootFn: `(${id}_d0<=${id}_d1&&${id}_d0<=${id}_d2&&${id}_d0<=${id}_d3)?0.0:(${id}_d1<=${id}_d2&&${id}_d1<=${id}_d3)?1.0:(${id}_d2<=${id}_d3)?2.0:3.0`,
+        };
+        case 'z5-1': return {
+          iterCode: `vec2 ${id}_z2 = cmul(${z}, ${z}); vec2 ${id}_z4 = cmul(${id}_z2, ${id}_z2); vec2 ${id}_fz = cmul(${id}_z4, ${z}) - vec2(1.0, 0.0); vec2 ${id}_fpz = 5.0 * ${id}_z4;`,
+          numRoots: 5,
+          rootsCode: `float ${id}_d0=length(${z}-vec2(1.0,0.0)); float ${id}_d1=length(${z}-vec2(0.30902,0.95106)); float ${id}_d2=length(${z}-vec2(-0.80902,0.58779)); float ${id}_d3=length(${z}-vec2(-0.80902,-0.58779)); float ${id}_d4=length(${z}-vec2(0.30902,-0.95106));`,
+          rootFn: `(${id}_d0<=${id}_d1&&${id}_d0<=${id}_d2&&${id}_d0<=${id}_d3&&${id}_d0<=${id}_d4)?0.0:(${id}_d1<=${id}_d2&&${id}_d1<=${id}_d3&&${id}_d1<=${id}_d4)?1.0:(${id}_d2<=${id}_d3&&${id}_d2<=${id}_d4)?2.0:(${id}_d3<=${id}_d4)?3.0:4.0`,
+        };
+        case 'z6-1': return {
+          iterCode: `vec2 ${id}_z2 = cmul(${z}, ${z}); vec2 ${id}_z3 = cmul(${id}_z2, ${z}); vec2 ${id}_fz = cmul(${id}_z3, ${id}_z3) - vec2(1.0, 0.0); vec2 ${id}_fpz = 6.0 * cmul(${id}_z3, ${id}_z2);`,
+          numRoots: 6,
+          rootsCode: `float ${id}_d0=length(${z}-vec2(1.0,0.0)); float ${id}_d1=length(${z}-vec2(0.5,0.86603)); float ${id}_d2=length(${z}-vec2(-0.5,0.86603)); float ${id}_d3=length(${z}-vec2(-1.0,0.0)); float ${id}_d4=length(${z}-vec2(-0.5,-0.86603)); float ${id}_d5=length(${z}-vec2(0.5,-0.86603));`,
+          rootFn: `(${id}_d0<=${id}_d1&&${id}_d0<=${id}_d2&&${id}_d0<=${id}_d3&&${id}_d0<=${id}_d4&&${id}_d0<=${id}_d5)?0.0:(${id}_d1<=${id}_d2&&${id}_d1<=${id}_d3&&${id}_d1<=${id}_d4&&${id}_d1<=${id}_d5)?1.0:(${id}_d2<=${id}_d3&&${id}_d2<=${id}_d4&&${id}_d2<=${id}_d5)?2.0:(${id}_d3<=${id}_d4&&${id}_d3<=${id}_d5)?3.0:(${id}_d4<=${id}_d5)?4.0:5.0`,
+        };
+        default: // z3-1
+          return {
+            iterCode: `vec2 ${id}_z2 = cmul(${z}, ${z}); vec2 ${id}_fz = cmul(${id}_z2, ${z}) - vec2(1.0, 0.0); vec2 ${id}_fpz = 3.0 * ${id}_z2;`,
+            numRoots: 3,
+            rootsCode: `float ${id}_d0=length(${z}-vec2(1.0,0.0)); float ${id}_d1=length(${z}-vec2(-0.5,0.86603)); float ${id}_d2=length(${z}-vec2(-0.5,-0.86603));`,
+            rootFn: `(${id}_d0<=${id}_d1&&${id}_d0<=${id}_d2)?0.0:(${id}_d1<=${id}_d2)?1.0:2.0`,
+          };
+      }
+    }
+
+    const pd = makePolyDef(poly);
+    const nRootsF = f(pd.numRoots);
+
+    let minDExpr: string;
+    if (pd.numRoots === 3) {
+      minDExpr = `min(${id}_d0, min(${id}_d1, ${id}_d2))`;
+    } else if (pd.numRoots === 4) {
+      minDExpr = `min(${id}_d0, min(${id}_d1, min(${id}_d2, ${id}_d3)))`;
+    } else if (pd.numRoots === 5) {
+      minDExpr = `min(${id}_d0, min(${id}_d1, min(${id}_d2, min(${id}_d3, ${id}_d4))))`;
+    } else {
+      minDExpr = `min(${id}_d0, min(${id}_d1, min(${id}_d2, min(${id}_d3, min(${id}_d4, ${id}_d5)))))`;
+    }
+
+    const code = [
+      `    // Newton Fractal (${poly})\n`,
+      `    vec2 ${id}_z = ${uvVar} / ${zoom} + vec2(${cx}, ${cy});\n`,
+      `    float ${id}_t = 0.0;\n`,
+      `    float ${id}_rootIdx = 0.0;\n`,
+      `    bool ${id}_conv = false;\n`,
+      `    for (float ${id}_i = 0.0; ${id}_i < ${maxIter}.0; ${id}_i++) {\n`,
+      `        ${pd.iterCode}\n`,
+      `        float ${id}_denom = dot(${id}_fpz, ${id}_fpz);\n`,
+      `        if (${id}_denom < 1e-20) break;\n`,
+      `        ${id}_z -= cdiv(${id}_fz, ${id}_fpz);\n`,
+      `        ${pd.rootsCode}\n`,
+      `        float ${id}_minD = ${minDExpr};\n`,
+      `        if (${id}_minD < ${eps}) {\n`,
+      `            ${id}_t = ${id}_i / ${maxIter}.0;\n`,
+      `            ${id}_rootIdx = ${pd.rootFn};\n`,
+      `            ${id}_conv = true;\n`,
+      `            break;\n`,
+      `        }\n`,
+      `    }\n`,
+      `    float ${id}_hue = ${id}_conv ? ${id}_rootIdx / ${nRootsF} : 0.0;\n`,
+      `    float ${id}_shade = ${id}_conv ? pow(1.0 - ${id}_t, ${shadePow}) : 0.0;\n`,
+      `    vec3 ${id}_palcol = palette(${id}_hue, ${pA}, ${pB}, ${pC}, ${pD});\n`,
+      `    vec3 ${id}_color = ${id}_palcol * ${id}_shade;\n`,
+      `    float ${id}_iter = ${id}_t;\n`,
+      `    float ${id}_root = ${id}_rootIdx / max(${nRootsF} - 1.0, 1.0);\n`,
+    ];
+
+    return {
+      code: code.join(''),
+      outputVars: { color: `${id}_color`, iter: `${id}_iter`, root: `${id}_root` },
+    };
+  },
+};
+
+// ─── Lyapunov Fractal ─────────────────────────────────────────────────────────
+
+export const LyapunovNode: NodeDefinition = {
+  type: 'lyapunov',
+  label: 'Lyapunov Fractal',
+  category: 'Presets',
+  description: 'Lyapunov exponent of the logistic map with alternating r-values. Blue=stable, gold=chaotic.',
+  inputs: {
+    uv:   { type: 'vec2',  label: 'UV'   },
+    time: { type: 'float', label: 'Time' },
+  },
+  outputs: {
+    color:     { type: 'vec3',  label: 'Color'     },
+    stability: { type: 'float', label: 'Stability' },
+  },
+  glslFunction: PALETTE_GLSL_FN,
+  defaultParams: {
+    sequence:   'AB',
+    r_min:      2.0,
+    r_max:      4.0,
+    warmup:     24,
+    iterations: 48,
+    lyap_scale: 1.5,
+  },
+  paramDefs: {
+    sequence: { label: 'Sequence', type: 'select', options: [
+      { value: 'AB',   label: 'AB (standard)'    },
+      { value: 'AABB', label: 'AABB'              },
+      { value: 'ABAB', label: 'ABAB'              },
+      { value: 'ABBA', label: 'ABBA (symmetric)'  },
+      { value: 'AAAB', label: 'AAAB'              },
+    ]},
+    r_min:      { label: 'r Min',      type: 'float', min: 1.0, max: 3.9, step: 0.01 },
+    r_max:      { label: 'r Max',      type: 'float', min: 2.0, max: 4.0, step: 0.01 },
+    warmup:     { label: 'Warmup',     type: 'float', min: 0,   max: 100, step: 4    },
+    iterations: { label: 'Iterations', type: 'float', min: 16,  max: 256, step: 8    },
+    lyap_scale: { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1  },
+  },
+
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uvVar = inputVars.uv ?? 'vec2(0.0)';
+
+    const seq       = (node.params.sequence as string) ?? 'AB';
+    const rMin      = p(node.params.r_min, 2.0);
+    const rMax      = p(node.params.r_max, 4.0);
+    const warmup    = Math.max(0, Math.round(typeof node.params.warmup     === 'number' ? node.params.warmup     : 24));
+    const iters     = Math.max(4, Math.round(typeof node.params.iterations === 'number' ? node.params.iterations : 48));
+    const lyapScale = p(node.params.lyap_scale, 1.5);
+
+    const seqArr = seq.split('').map(c => c === 'A' ? '0.0' : '1.0');
+    const seqLen = seqArr.length;
+
+    const totalIters = warmup + iters;
+
+    // Build warmup sequence selection code using ${id}_wi loop variable
+    let seqCodeWarmup = '';
+    for (let k = 0; k < seqLen; k++) {
+      const isFirst = k === 0;
+      const condition = `mod(${id}_wi, ${seqLen}.0) < ${k + 1}.0`;
+      seqCodeWarmup += `        ${isFirst ? '' : 'else '}if (${condition}) { ${id}_r = ${seqArr[k] === '0.0' ? `${id}_ra` : `${id}_rb`}; }\n`;
+    }
+    seqCodeWarmup += `        else { ${id}_r = ${id}_ra; }\n`;
+
+    // Build accumulation sequence selection code using ${id}_si loop variable
+    let seqCodeAccum = '';
+    for (let k = 0; k < seqLen; k++) {
+      const isFirst = k === 0;
+      const condition = `mod(${id}_si, ${seqLen}.0) < ${k + 1}.0`;
+      seqCodeAccum += `        ${isFirst ? '' : 'else '}if (${condition}) { ${id}_r = ${seqArr[k] === '0.0' ? `${id}_ra` : `${id}_rb`}; }\n`;
+    }
+    seqCodeAccum += `        else { ${id}_r = ${id}_ra; }\n`;
+
+    const code = [
+      `    // Lyapunov Fractal (seq=${seq})\n`,
+      `    float ${id}_ra = ${uvVar}.x * (${rMax} - ${rMin}) + ${rMin};\n`,
+      `    float ${id}_rb = ${uvVar}.y * (${rMax} - ${rMin}) + ${rMin};\n`,
+      `    float ${id}_x = 0.5;\n`,
+      `    float ${id}_lyap = 0.0;\n`,
+      `    float ${id}_r = ${id}_ra;\n`,
+      warmup > 0 ? [
+        `    for (float ${id}_wi = 0.0; ${id}_wi < ${warmup}.0; ${id}_wi++) {\n`,
+        seqCodeWarmup,
+        `        ${id}_x = ${id}_r * ${id}_x * (1.0 - ${id}_x);\n`,
+        `    }\n`,
+      ].join('') : '',
+      `    for (float ${id}_si = ${warmup}.0; ${id}_si < ${totalIters}.0; ${id}_si++) {\n`,
+      seqCodeAccum,
+      `        ${id}_x = ${id}_r * ${id}_x * (1.0 - ${id}_x);\n`,
+      `        float ${id}_deriv = abs(${id}_r * (1.0 - 2.0 * ${id}_x));\n`,
+      `        ${id}_lyap += log(max(${id}_deriv, 1e-10));\n`,
+      `    }\n`,
+      `    ${id}_lyap /= ${iters}.0;\n`,
+      `    float ${id}_nt = clamp(-${id}_lyap / ${lyapScale}, 0.0, 1.0);\n`,
+      `    float ${id}_ct = clamp(${id}_lyap  / ${lyapScale}, 0.0, 1.0);\n`,
+      `    vec3  ${id}_stable  = mix(vec3(0.0, 0.0, 0.0), vec3(0.05, 0.25, 1.0), sqrt(${id}_nt));\n`,
+      `    vec3  ${id}_chaotic = mix(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.75, 0.0), sqrt(${id}_ct));\n`,
+      `    vec3  ${id}_color   = ${id}_lyap < 0.0 ? ${id}_stable : ${id}_chaotic;\n`,
+      `    float ${id}_stability = 1.0 / (1.0 + exp(${id}_lyap * 3.0));\n`,
+    ];
+
+    return {
+      code: code.join(''),
+      outputVars: { color: `${id}_color`, stability: `${id}_stability` },
+    };
+  },
+};
+
+// ─── Apollonian Gasket ────────────────────────────────────────────────────────
+
+const APOLLONIAN_GLSL = FRACTAL_GLSL_HELPERS + '\n' + PALETTE_GLSL_FN;
+
+export const ApollonianNode: NodeDefinition = {
+  type: 'apollonian',
+  label: 'Apollonian Gasket',
+  category: 'Presets',
+  description: 'Circle-inversion fractal (Apollonian gasket / Kleinian group limit set). Outputs SDF and color.',
+  inputs: {
+    uv:   { type: 'vec2',  label: 'UV'   },
+    time: { type: 'float', label: 'Time' },
+  },
+  outputs: {
+    color:    { type: 'vec3',  label: 'Color'    },
+    distance: { type: 'float', label: 'Distance' },
+    orbit:    { type: 'float', label: 'Orbit'    },
+  },
+  glslFunction: APOLLONIAN_GLSL,
+  defaultParams: {
+    iterations:     8,
+    scale:          1.3,
+    zoom:           1.0,
+    center_x:       0.0,
+    center_y:       0.0,
+    palette_preset: '0',
+    color_scale:    1.0,
+    color_offset:   0.0,
+    animate:        0.0,
+  },
+  paramDefs: {
+    iterations:     { label: 'Iterations',   type: 'float', min: 1,   max: 24,  step: 1    },
+    scale:          { label: 'Scale',        type: 'float', min: 1.0, max: 3.0, step: 0.01 },
+    zoom:           { label: 'Zoom',         type: 'float', min: 0.1, max: 10,  step: 0.05 },
+    center_x:       { label: 'Center X',     type: 'float', min: -5,  max: 5,   step: 0.01 },
+    center_y:       { label: 'Center Y',     type: 'float', min: -5,  max: 5,   step: 0.01 },
+    animate:        { label: 'Animate',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    palette_preset: { label: 'Palette',      type: 'select', options: PALETTE_PRESET_OPTIONS },
+    color_scale:    { label: 'Color Scale',  type: 'float', min: 0.01, max: 5.0, step: 0.01 },
+    color_offset:   { label: 'Color Offset', type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
+  },
+
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uvVar   = inputVars.uv   ?? 'vec2(0.0)';
+    const timeVar = inputVars.time ?? '0.0';
+
+    const iters       = Math.max(1, Math.round(typeof node.params.iterations === 'number' ? node.params.iterations : 8));
+    const scale       = p(node.params.scale, 1.3);
+    const zoom        = p(node.params.zoom, 1.0);
+    const cx          = p(node.params.center_x, 0.0);
+    const cy          = p(node.params.center_y, 0.0);
+    const animate     = p(node.params.animate, 0.0);
+    const colorScale  = p(node.params.color_scale, 1.0);
+    const colorOffset = p(node.params.color_offset, 0.0);
+    const presIdx     = parseInt((node.params.palette_preset as string) ?? '0', 10);
+    const pres        = FRACTAL_PALETTE_PRESETS[Math.min(presIdx, FRACTAL_PALETTE_PRESETS.length - 1)];
+    const [pA, pB, pC, pD] = [paletteVec(pres.a), paletteVec(pres.b), paletteVec(pres.c), paletteVec(pres.d)];
+
+    const code = [
+      `    // Apollonian Gasket\n`,
+      `    vec2 ${id}_p = ${uvVar} / ${zoom} + vec2(${cx}, ${cy});\n`,
+      `    ${id}_p += ${animate} * vec2(cos(${timeVar} * 0.3), sin(${timeVar} * 0.2)) * 0.1;\n`,
+      `    float ${id}_s = 1.0;\n`,
+      `    float ${id}_orbit = 1e10;\n`,
+      `    for (float ${id}_i = 0.0; ${id}_i < ${iters}.0; ${id}_i++) {\n`,
+      `        ${id}_p = abs(${id}_p);\n`,
+      `        ${id}_p -= 0.5;\n`,
+      `        float ${id}_r2 = dot(${id}_p, ${id}_p);\n`,
+      `        float ${id}_k = ${scale} / max(${id}_r2, 0.001);\n`,
+      `        ${id}_p *= ${id}_k;\n`,
+      `        ${id}_s *= ${id}_k;\n`,
+      `        ${id}_orbit = min(${id}_orbit, length(${id}_p));\n`,
+      `    }\n`,
+      `    float ${id}_distance = (length(${id}_p) - 0.25) / ${id}_s;\n`,
+      `    float ${id}_t = log(${id}_orbit) * ${colorScale} + ${colorOffset};\n`,
+      `    vec3  ${id}_color = palette(${id}_t, ${pA}, ${pB}, ${pC}, ${pD});\n`,
+      `    ${id}_color *= 1.0 - exp(-${id}_s * 0.01);\n`,
+    ];
+
+    return {
+      code: code.join(''),
+      outputVars: { color: `${id}_color`, distance: `${id}_distance`, orbit: `${id}_orbit` },
+    };
+  },
+};

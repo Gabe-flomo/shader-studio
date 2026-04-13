@@ -3873,6 +3873,366 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+
+  // ── Newton Fractal z³-1 ───────────────────────────────────────────────────
+  newtonFractalClassic: {
+    label: 'Newton z³−1',
+    counter: 3,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 60, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'newton_1', type: 'newtonFractal', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3',  label: 'Color'       },
+          iter:  { type: 'float', label: 'Smooth Iter'  },
+          root:  { type: 'float', label: 'Root Index'   },
+        },
+        params: { polynomial: 'z3-1', max_iter: 48, zoom: 1.5, center_x: 0.0, center_y: 0.0, palette_preset: '1', shade_power: 1.5, convergence: 0.001 },
+      },
+      {
+        id: 'output_2', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'newton_1', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Newton Fractal z⁵-1 animated ────────────────────────────────────────
+  newtonFractalZ5: {
+    label: 'Newton z⁵−1',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'newton_2', type: 'newtonFractal', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: {
+          color: { type: 'vec3',  label: 'Color'      },
+          iter:  { type: 'float', label: 'Smooth Iter' },
+          root:  { type: 'float', label: 'Root Index'  },
+        },
+        params: { polynomial: 'z5-1', max_iter: 64, zoom: 1.8, center_x: 0.0, center_y: 0.0, palette_preset: '7', shade_power: 2.0, convergence: 0.001 },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'newton_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Lyapunov Fractal — Markus-Lyapunov style ──────────────────────────────
+  lyapunovMarkus: {
+    label: 'Lyapunov Fractal',
+    counter: 3,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 60, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'lyap_1', type: 'lyapunov', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color:     { type: 'vec3',  label: 'Color'     },
+          stability: { type: 'float', label: 'Stability' },
+        },
+        params: { sequence: 'AB', r_min: 2.0, r_max: 4.0, warmup: 24, iterations: 48, lyap_scale: 1.5 },
+      },
+      {
+        id: 'output_2', type: 'output', position: { x: 640, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'lyap_1', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Lyapunov AABB sequence ────────────────────────────────────────────────
+  lyapunovAABB: {
+    label: 'Lyapunov AABB',
+    counter: 3,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 60, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'lyap_1', type: 'lyapunov', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color:     { type: 'vec3',  label: 'Color'     },
+          stability: { type: 'float', label: 'Stability' },
+        },
+        params: { sequence: 'AABB', r_min: 2.5, r_max: 4.0, warmup: 32, iterations: 64, lyap_scale: 2.0 },
+      },
+      {
+        id: 'output_2', type: 'output', position: { x: 640, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'lyap_1', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Apollonian Gasket ─────────────────────────────────────────────────────
+  apollonianGasket: {
+    label: 'Apollonian Gasket',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'apoll_2', type: 'apollonian', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: {
+          color:    { type: 'vec3',  label: 'Color'    },
+          distance: { type: 'float', label: 'Distance' },
+          orbit:    { type: 'float', label: 'Orbit'    },
+        },
+        params: { iterations: 8, scale: 1.3, zoom: 1.0, center_x: 0.0, center_y: 0.0, animate: 0.4, palette_preset: '0', color_scale: 1.0, color_offset: 0.0 },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'apoll_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Mandelbulb 3D ─────────────────────────────────────────────────────────
+  mandelbulbClassic: {
+    label: 'Mandelbulb 3D',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'bulb_2', type: 'mandelbulb', position: { x: 320, y: 120 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: {
+          color: { type: 'vec3',  label: 'Color' },
+          depth: { type: 'float', label: 'Depth' },
+          orbit: { type: 'float', label: 'Orbit' },
+        },
+        params: { power: 8, max_iter: 12, max_steps: 80, max_dist: 5.0, surf_dist: 0.001, cam_dist: 3.5, cam_height: 1.2, cam_speed: 0.2, cam_fov: 1.5, light_x: 2.0, light_y: 4.0, light_z: 2.0, ambient: 0.05, specular: 32.0, ao_steps: 4, palette_preset: '4', bg_preset: '0' },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bulb_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Truchet Tiles ─────────────────────────────────────────────────────────
+  truchetTiles: {
+    label: 'Truchet Tiles',
+    counter: 3,
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 60, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'truch_1', type: 'truchet', position: { x: 320, y: 140 },
+        inputs: {
+          uv:      { type: 'vec2',  label: 'UV',      connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          time:    { type: 'float', label: 'Time'    },
+          color_a: { type: 'vec3',  label: 'Color A' },
+          color_b: { type: 'vec3',  label: 'Color B' },
+        },
+        outputs: {
+          color:    { type: 'vec3',  label: 'Color'    },
+          distance: { type: 'float', label: 'Distance' },
+          mask:     { type: 'float', label: 'Mask'     },
+        },
+        params: { scale: 10.0, line_width: 0.08, aa: 0.015, animate: 0.0, color_a: [0.05, 0.05, 0.12], color_b: [0.9, 0.85, 1.0] },
+      },
+      {
+        id: 'output_2', type: 'output', position: { x: 640, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'truch_1', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Animated Truchet ─────────────────────────────────────────────────────
+  truchetAnimated: {
+    label: 'Truchet Animated',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'truch_2', type: 'truchet', position: { x: 320, y: 140 },
+        inputs: {
+          uv:      { type: 'vec2',  label: 'UV',      connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:    { type: 'float', label: 'Time',    connection: { nodeId: 'time_1', outputKey: 'time' } },
+          color_a: { type: 'vec3',  label: 'Color A' },
+          color_b: { type: 'vec3',  label: 'Color B' },
+        },
+        outputs: {
+          color:    { type: 'vec3',  label: 'Color'    },
+          distance: { type: 'float', label: 'Distance' },
+          mask:     { type: 'float', label: 'Mask'     },
+        },
+        params: { scale: 8.0, line_width: 0.1, aa: 0.02, animate: 1.0, color_a: [0.08, 0.04, 0.16], color_b: [0.6, 0.9, 1.0] },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 640, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'truch_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Metaballs ─────────────────────────────────────────────────────────────
+  metaballsDemo: {
+    label: 'Metaballs',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'meta_2', type: 'metaballs', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+          pos1: { type: 'vec2',  label: 'Pos 1' },
+          pos2: { type: 'vec2',  label: 'Pos 2' },
+          pos3: { type: 'vec2',  label: 'Pos 3' },
+        },
+        outputs: {
+          color: { type: 'vec3',  label: 'Color' },
+          field: { type: 'float', label: 'Field' },
+        },
+        params: { radius1: 0.25, radius2: 0.2, radius3: 0.18, speed1: 0.7, speed2: 1.1, speed3: 0.5, palette_preset: '4', color_scale: 2.0 },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'meta_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Lissajous Curve SDF ───────────────────────────────────────────────────
+  lissajousDemo: {
+    label: 'Lissajous Curve',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'liss_2', type: 'lissajous', position: { x: 320, y: 140 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          delta: { type: 'float', label: 'Delta', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: {
+          color:    { type: 'vec3',  label: 'Color'    },
+          distance: { type: 'float', label: 'Distance' },
+        },
+        params: { freq_a: 3.0, freq_b: 2.0, thickness: 0.018, glow_width: 0.06, color_a: [0.1, 0.5, 1.0], color_b: [1.0, 0.3, 0.6] },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'liss_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Menger Sponge Raymarch ────────────────────────────────────────────────
+  mengerSponge: {
+    label: 'Menger Sponge',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'rm_2', type: 'raymarch3d', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: {
+          color:  { type: 'vec3',  label: 'Color'     },
+          depth:  { type: 'float', label: 'Depth'     },
+          normal: { type: 'vec3',  label: 'Normal'    },
+          occ:    { type: 'float', label: 'Occlusion' },
+          fog:    { type: 'float', label: 'Fog Mask'  },
+        },
+        params: {
+          scene: 'menger', max_steps: 100, max_dist: 20.0, surf_dist: 0.002,
+          cam_dist: 4.0, cam_height: 1.5, cam_speed: 0.2, cam_fov: 1.5,
+          shape_r: 1.0, blend_k: 0.3, repeat_x: 3.0, repeat_z: 3.0,
+          cone_angle: 0.4, twist_k: 0.0, round_r: 0.0,
+          light_x: 3.0, light_y: 6.0, light_z: 2.0,
+          ambient: 0.04, specular: 48.0,
+          fog_dist: 14.0, fog_color: [0.08, 0.08, 0.12],
+          palette_preset: '5', bg_preset: '8',
+          ao_steps: 5, noise_scale: 1.5, noise_strength: 0.0,
+        },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'rm_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Twisted Box Raymarch ──────────────────────────────────────────────────
+  twistedBox: {
+    label: 'Twisted Box',
+    counter: 4,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'rm_2', type: 'raymarch3d', position: { x: 320, y: 140 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: {
+          color:  { type: 'vec3',  label: 'Color'     },
+          depth:  { type: 'float', label: 'Depth'     },
+          normal: { type: 'vec3',  label: 'Normal'    },
+          occ:    { type: 'float', label: 'Occlusion' },
+          fog:    { type: 'float', label: 'Fog Mask'  },
+        },
+        params: {
+          scene: 'twisted_box', max_steps: 80, max_dist: 20.0, surf_dist: 0.001,
+          cam_dist: 4.5, cam_height: 1.5, cam_speed: 0.3, cam_fov: 1.5,
+          shape_r: 0.8, blend_k: 0.3, repeat_x: 3.0, repeat_z: 3.0,
+          cone_angle: 0.4, twist_k: 2.5, round_r: 0.15,
+          light_x: 3.0, light_y: 5.0, light_z: 3.0,
+          ambient: 0.05, specular: 32.0,
+          fog_dist: 16.0, fog_color: [0.6, 0.65, 0.8],
+          palette_preset: '1', bg_preset: '0',
+          ao_steps: 5, noise_scale: 1.5, noise_strength: 0.0,
+        },
+      },
+      {
+        id: 'output_3', type: 'output', position: { x: 660, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'rm_2', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

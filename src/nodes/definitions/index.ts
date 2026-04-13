@@ -44,13 +44,16 @@ export { LoopCarryNode } from './loop';
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 
 // Fractals
-export { MandelbrotNode, IFSNode } from './fractals';
+export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
 
 // Physics
 export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
 
 // 3D / Volumetric
-export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
+export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
+
+// Patterns
+export { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode } from './color';
@@ -102,9 +105,10 @@ import {
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
-import { MandelbrotNode, IFSNode } from './fractals';
+import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
-import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode } from './threed';
+import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
+import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
@@ -214,6 +218,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Fractals
   mandelbrot: MandelbrotNode,
   ifs: IFSNode,
+  newtonFractal: NewtonFractalNode,
+  lyapunov: LyapunovNode,
+  apollonian: ApollonianNode,
   // Physics
   chladni: ChladniNode,
   chladni3d: Chladni3DNode,
@@ -225,6 +232,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   chromaticAberration: ChromaticAberrationNode,
   combineRGB: CombineRGBNode,
   orbitalVolume3d: OrbitalVolume3DNode,
+  mandelbulb: MandelbulbNode,
+  // Patterns
+  truchet: TruchetNode,
+  metaballs: MetaballsNode,
+  lissajous: LissajousNode,
   // Color
   palette: PaletteNode,
   palettePreset: PalettePresetNode,
