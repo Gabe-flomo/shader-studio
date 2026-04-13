@@ -512,7 +512,8 @@ const _len  = (x: number, y: number) => Math.sqrt(x * x + y * y);
 const _dot  = (ax: number, ay: number, bx: number, by: number) => ax * bx + ay * by;
 const _clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 const _sign  = (x: number) => (x < 0 ? -1 : x > 0 ? 1 : 0);
-const _mix   = (a: number, b: number, t: number) => a + (b - a) * t;
+// (mix available for future use)
+// const _mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
 function evalSDF(px: number, py: number, type: string, params: Record<string, unknown>): number {
   const n = (k: string, def: number) => (typeof params[k] === 'number' ? (params[k] as number) : def);
@@ -739,10 +740,7 @@ function evalSDF(px: number, py: number, type: string, params: Record<string, un
       return Math.min(d1, d2) - r * 0.5;
     }
     case 'trapezoid': {
-      const qx2 = Math.abs(px);
-      const k1x = ry, k1y = he, k2x = (ry - r) * 0.5, k2y = he;
-      const ca = _clamp(qx2 - (qy2 > 0 ? r : ry) + 0, 0, 1);
-      const qy2 = py;
+      const qx2 = Math.abs(px), qy2 = py;
       const ba2x = r - ry, ba2y = -2 * he;
       const hv = _clamp(_dot(qx2 - ry, qy2 + he, ba2x, ba2y) / _dot(ba2x, ba2y, ba2x, ba2y), 0, 1);
       const dx = qx2 - ry - ba2x * hv, dy = qy2 + he - ba2y * hv;
@@ -763,7 +761,6 @@ function evalSDF(px: number, py: number, type: string, params: Record<string, un
     }
     case 'hyperbola': {
       const qx2 = Math.abs(px), qy2 = Math.abs(py) - k;
-      const cs = _len(qx2, qy2), si = cs === 0 ? 0 : qy2 / cs;
       return Math.abs(_len(qx2, qy2 - he) - _len(qx2, qy2 + he)) / 2 - he;
     }
     case 'circleWave': return Math.abs(_len(px, py) - r * (1 + tb * Math.sin(Math.atan2(py, px) * 8)));
@@ -798,9 +795,8 @@ function evalSDF(px: number, py: number, type: string, params: Record<string, un
       return Math.min(_len(qx2 - s2, qy2 - s2) - he, qy2 < s2 ? qx2 - s2 : (qx2 > 0 ? _len(qx2 - s2, qy2 - s2) - he : qy2 - s2));
     }
     case 'blobbyCross': {
-      const qx2 = Math.abs(px), qy2 = Math.abs(py);
-      const h2 = 0.5 / (0.5 + he * he / 9);
-      if (qy2 < qx2) { const t = qx2; qx2; } // swap if needed — simplified
+      let qx2 = Math.abs(px), qy2 = Math.abs(py);
+      if (qy2 < qx2) { const t = qx2; qx2 = qy2; qy2 = t; }
       const th2 = Math.atan2(qy2, qx2);
       const rr = (0.5 * he + (1 - he) * Math.pow(Math.cos(th2), 2)) * 0.5;
       return _len(qx2, qy2) - rr;
