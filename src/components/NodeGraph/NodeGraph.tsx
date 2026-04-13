@@ -60,6 +60,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   );
 
   const setGroupOutput          = useNodeGraphStore(s => s.setGroupOutput);
+  const addGroupOutput          = useNodeGraphStore(s => s.addGroupOutput);
+  const removeGroupOutput       = useNodeGraphStore(s => s.removeGroupOutput);
   const addGroupInput           = useNodeGraphStore(s => s.addGroupInput);
   const rerouteGroupInput       = useNodeGraphStore(s => s.rerouteGroupInput);
   const disconnectedNotice      = useNodeGraphStore(s => s.disconnectedNotice);
@@ -188,6 +190,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
+  const [editingOutputPortKey, setEditingOutputPortKey] = useState<string | null>(null);
+  const [editingOutputPortLabel, setEditingOutputPortLabel] = useState('');
 
   const canvasRef = useRef<HTMLDivElement>(null);
   // canvasEl is stored in state so getSocketPos always has a stable reference.
@@ -1091,7 +1095,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               position: 'absolute',
               left: groupOutputTerminalPos.x,
               top: groupOutputTerminalPos.y,
-              width: 170,
+              width: 180,
               background: '#1e1e2e',
               border: '1px solid #cba6f755',
               borderRadius: '8px',
@@ -1114,9 +1118,9 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
               const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
               const srcDef   = srcNode ? getNodeDefinition(srcNode.type) : null;
-              const srcLabel = typeof srcNode?.params?.label === 'string'
-                ? srcNode.params.label
-                : (srcDef?.label ?? srcNode?.type ?? '?');
+              const srcLabel = port.fromNodeId
+                ? (typeof srcNode?.params?.label === 'string' ? srcNode.params.label : (srcDef?.label ?? srcNode?.type ?? '?'))
+                : '— not connected —';
               const isDraggingCompatible = dragConnection
                 ? (() => { const src = displayNodes.find(n => n.id === dragConnection.sourceNodeId); return !!(src?.outputs[dragConnection.sourceOutputKey]); })()
                 : false;
@@ -1124,8 +1128,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                 <div
                   key={port.key}
                   style={{
-                    padding: '5px 10px 5px 16px',
-                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '5px 8px 5px 16px',
+                    display: 'flex', alignItems: 'center', gap: '5px',
                     position: 'relative',
                     background: isDraggingCompatible ? '#cba6f711' : 'transparent',
                   }}
@@ -1137,19 +1141,67 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     style={{
                       position: 'absolute', left: -5,
                       width: 10, height: 10, borderRadius: '50%',
-                      background: TYPE_COLORS[port.type] ?? '#888',
+                      background: port.fromNodeId ? (TYPE_COLORS[port.type] ?? '#888') : '#45475a',
                       cursor: 'crosshair',
                       border: isDraggingCompatible ? '2px solid white' : 'none',
                     }}
                   />
-                  <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '30px' }}>{port.label}</span>
-                  <span style={{ fontSize: '9px', color: '#585b70', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                  {/* Editable label */}
+                  {editingOutputPortKey === port.key ? (
+                    <input
+                      autoFocus
+                      value={editingOutputPortLabel}
+                      onMouseDown={e => e.stopPropagation()}
+                      onChange={e => setEditingOutputPortLabel(e.target.value)}
+                      onBlur={() => {
+                        if (editingOutputPortLabel.trim() && activeGroupId) {
+                          renameGroupPort(activeGroupId, port.key, 'out', editingOutputPortLabel.trim());
+                        }
+                        setEditingOutputPortKey(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                        if (e.key === 'Escape') setEditingOutputPortKey(null);
+                      }}
+                      style={{ width: '55px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #cba6f7', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                    />
+                  ) : (
+                    <span
+                      style={{ fontSize: '10px', color: '#a6adc8', minWidth: '30px', cursor: 'text', flexShrink: 0 }}
+                      title="Double-click to rename"
+                      onDoubleClick={() => { setEditingOutputPortKey(port.key); setEditingOutputPortLabel(port.label); }}
+                    >{port.label}</span>
+                  )}
+                  <span style={{ fontSize: '9px', color: port.fromNodeId ? '#585b70' : '#45475a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontStyle: port.fromNodeId ? 'normal' : 'italic' }}>
                     {srcLabel}
                   </span>
-                  <span style={{ fontSize: '9px', color: TYPE_COLORS[port.type] ?? '#888', flexShrink: 0 }}>{port.type}</span>
+                  {/* Delete button */}
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => activeGroupId && removeGroupOutput(activeGroupId, port.key)}
+                    title="Remove output port"
+                    style={{ fontSize: '10px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#f38ba8')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#585b70')}
+                  >×</button>
                 </div>
               );
             })}
+
+            {/* Add Output button */}
+            <div style={{ padding: '4px 8px 6px' }}>
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => activeGroupId && addGroupOutput(activeGroupId)}
+                style={{
+                  width: '100%', fontSize: '10px', padding: '3px',
+                  background: 'none', border: '1px solid #cba6f755',
+                  color: '#cba6f7', borderRadius: '3px', cursor: 'pointer',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#2a1f3d')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >+ Add Output</button>
+            </div>
           </div>
         )}
 

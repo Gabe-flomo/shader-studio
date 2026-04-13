@@ -169,6 +169,10 @@ interface NodeGraphState {
   clearDisconnectedNotice: () => void;
   /** Reassign a group output port to a different inner node's output */
   setGroupOutput: (groupId: string, outputPortKey: string, fromNodeId: string, fromOutputKey: string) => void;
+  /** Add a new empty output port to a group (user then wires an inner node to it) */
+  addGroupOutput: (groupId: string, type?: import('../types/nodeGraph').DataType, label?: string) => void;
+  /** Remove an output port from a group and disconnect any external connections to it */
+  removeGroupOutput: (groupId: string, portKey: string) => void;
   /** Add a new dynamic input port to a group (from inside the group view) */
   addGroupInput: (groupId: string, type: import('../types/nodeGraph').DataType, label: string) => void;
   /** Reroute an existing group input port to a different inner node socket */
@@ -1752,6 +1756,78 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               },
             },
           };
+        }),
+      };
+    });
+    get().compile();
+  },
+
+  addGroupOutput: (groupId, type = 'float', label) => {
+    pushHistory(get().nodes);
+    set(state => {
+      const groupNode = state.nodes.find(n => n.id === groupId);
+      if (!groupNode) return {};
+      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return {};
+      const existingKeys = new Set([
+        ...sg.inputPorts.map(p => p.key),
+        ...sg.outputPorts.map(p => p.key),
+      ]);
+      let idx = sg.outputPorts.length;
+      let portKey = `out${idx}`;
+      while (existingKeys.has(portKey)) portKey = `out${++idx}`;
+      const portLabel = label ?? `Output ${sg.outputPorts.length + 1}`;
+      const newPort: import('../types/nodeGraph').GroupOutputPort = {
+        key: portKey,
+        type,
+        label: portLabel,
+        fromNodeId: '',
+        fromOutputKey: '',
+      };
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          return {
+            ...n,
+            outputs: { ...n.outputs, [portKey]: { type, label: portLabel } },
+            params: { ...n.params, subgraph: { ...sg, outputPorts: [...sg.outputPorts, newPort] } },
+          };
+        }),
+      };
+    });
+    get().compile();
+  },
+
+  removeGroupOutput: (groupId, portKey) => {
+    pushHistory(get().nodes);
+    set(state => {
+      const groupNode = state.nodes.find(n => n.id === groupId);
+      if (!groupNode) return {};
+      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return {};
+      const newOutputs = { ...groupNode.outputs };
+      delete newOutputs[portKey];
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id === groupId) {
+            return {
+              ...n,
+              outputs: newOutputs,
+              params: { ...n.params, subgraph: { ...sg, outputPorts: sg.outputPorts.filter(p => p.key !== portKey) } },
+            };
+          }
+          // Disconnect any external nodes wired to this port
+          let changed = false;
+          const newInputs = { ...n.inputs };
+          for (const [key, inp] of Object.entries(n.inputs)) {
+            if (inp.connection?.nodeId === groupId && inp.connection?.outputKey === portKey) {
+              const newInp = { ...inp };
+              delete newInp.connection;
+              newInputs[key] = newInp;
+              changed = true;
+            }
+          }
+          return changed ? { ...n, inputs: newInputs } : n;
         }),
       };
     });

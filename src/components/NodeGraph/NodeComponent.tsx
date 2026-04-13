@@ -696,6 +696,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   // ── Group node special card ──────────────────────────────────────────────────
   const [editingPortKey, setEditingPortKey] = useState<string | null>(null);
   const [editingPortLabel, setEditingPortLabel] = useState('');
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [editingSectionLabel, setEditingSectionLabel] = useState('');
   const [savingMode, setSavingMode] = useState(false);
   const [saveLabel, setSaveLabel] = useState('');
   const [saveDescription, setSaveDescription] = useState('');
@@ -1055,11 +1057,57 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const innerLabel = typeof innerNode.params.label === 'string'
             ? innerNode.params.label
             : (innerDef?.label ?? innerNode.type);
+          const sectionLabelOverrideKey = `__sectionLabel_${innerNode.id}`;
+          const displayLabel = typeof node.params[sectionLabelOverrideKey] === 'string'
+            ? node.params[sectionLabelOverrideKey] as string
+            : innerLabel;
 
           return (
             <div key={innerNode.id} style={{ borderTop: '1px solid #313244' }}>
-              <div style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em' }}>
-                {innerLabel.toUpperCase()}
+              <div
+                style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', cursor: 'text', userSelect: 'none' }}
+                onDoubleClick={e => {
+                  e.stopPropagation();
+                  setEditingSectionId(innerNode.id);
+                  setEditingSectionLabel(displayLabel);
+                }}
+              >
+                {editingSectionId === innerNode.id ? (
+                  <input
+                    autoFocus
+                    value={editingSectionLabel}
+                    onChange={e => setEditingSectionLabel(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = editingSectionLabel.trim();
+                      updateNodeParams(node.id, { [sectionLabelOverrideKey]: trimmed || innerLabel });
+                      setEditingSectionId(null);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const trimmed = editingSectionLabel.trim();
+                        updateNodeParams(node.id, { [sectionLabelOverrideKey]: trimmed || innerLabel });
+                        setEditingSectionId(null);
+                      } else if (e.key === 'Escape') {
+                        setEditingSectionId(null);
+                      }
+                    }}
+                    onMouseDown={e => e.stopPropagation()}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid #585b70',
+                      color: '#a6adc8',
+                      fontSize: '9px',
+                      letterSpacing: '0.05em',
+                      outline: 'none',
+                      padding: 0,
+                      width: '100%',
+                      textTransform: 'uppercase',
+                    }}
+                  />
+                ) : (
+                  displayLabel.toUpperCase()
+                )}
               </div>
               {visibleParams.map(([paramKey, paramDef]) => {
                 if (paramDef.type !== 'float') return null;
