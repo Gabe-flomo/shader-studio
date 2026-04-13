@@ -3725,6 +3725,154 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── AgX / Filmic Tone Map — shows all 8 tone-map operators ───────────────────
+  agxToneDemo: {
+    label: 'AgX Tone Map',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',  type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1',type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fractal_2', type: 'fractalLoop', position: { x: 280, y: 80 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
+        params: { iterations: 5, fract_scale: 1.6, scale_exp: 1.1, ring_freq: 6.0, glow: 0.008, glow_pow: 1.0, iter_offset: 0.35, time_scale: 0.3, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'tone_3', type: 'toneMap', position: { x: 620, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fractal_2', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'agx' },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 860, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Luma Grain — shadow-weighted grain (bright areas stay clean) ──────────────
+  lumaGrainDemo: {
+    label: 'Luma Grain',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',  type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1',type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fractal_2', type: 'fractalLoop', position: { x: 280, y: 80 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
+        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, ring_freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.4, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'tone_3', type: 'toneMap', position: { x: 600, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fractal_2', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'reinhard2' },
+      },
+      {
+        id: 'grain_4', type: 'lumaGrain', position: { x: 820, y: 200 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'tone_3',  outputKey: 'color' } },
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',    outputKey: 'uv'   } },
+          seed:  { type: 'float', label: 'Seed',  connection: { nodeId: 'time_1',  outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { amount: 0.07, seed: 0.0 },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 1060, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'grain_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Temporal Grain — time-animated grain, changes each frame ─────────────────
+  temporalGrainDemo: {
+    label: 'Temporal Grain',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',  type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1',type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fractal_2', type: 'fractalLoop', position: { x: 280, y: 80 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
+        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, ring_freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.4, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'tone_3', type: 'toneMap', position: { x: 600, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fractal_2', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' },
+      },
+      {
+        id: 'grain_4', type: 'temporalGrain', position: { x: 820, y: 200 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'tone_3',  outputKey: 'color' } },
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',    outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time',  connection: { nodeId: 'time_1',  outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { amount: 0.06 },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 1060, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'grain_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Hue Range — isolate / boost a hue band ────────────────────────────────────
+  hueRangeDemo: {
+    label: 'Hue Range Boost',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',  type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1',type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fractal_2', type: 'fractalLoop', position: { x: 280, y: 80 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
+        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, ring_freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.4, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'tone_3', type: 'toneMap', position: { x: 600, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fractal_2', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' },
+      },
+      {
+        id: 'hue_4', type: 'hueRange', position: { x: 830, y: 200 },
+        inputs: {
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_3', outputKey: 'color' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, mask: { type: 'float', label: 'Mask' } },
+        params: { hue_center: 0.6, hue_width: 0.12, boost: 2.5 },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 1080, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hue_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

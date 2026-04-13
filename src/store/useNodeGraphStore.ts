@@ -2308,6 +2308,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
     // Always save to localStorage (belt-and-suspenders)
     localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
+    window.dispatchEvent(new CustomEvent('customfn-changed'));
     // Also write to disk if a folder is configured
     const dir = getCustomFnDir();
     if (dir) {
@@ -2320,6 +2321,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   deleteCustomFn: (id) => {
     // Remove from localStorage
     localStorage.removeItem(`${CFP_PREFIX}${id}`);
+    window.dispatchEvent(new CustomEvent('customfn-changed'));
     // Remove from disk if folder is set — find by matching id in filename
     const dir = getCustomFnDir();
     if (dir) {
@@ -2351,6 +2353,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
         }
       }
+      window.dispatchEvent(new CustomEvent('customfn-changed'));
     } catch {}
   },
 

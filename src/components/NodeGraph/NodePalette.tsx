@@ -76,7 +76,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','mandelbrotExplorer','domainWarpFractal'] as ExKey[] },
   { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','chladni3dDemo','chladni3dParticlesDemo','electronOrbitalDemo','orbitalVolume3dDemo','gravitationalLens'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'] as ExKey[] },
-  { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','angularGradient','shapeShowcase'] as ExKey[] },
+  { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','agxToneDemo','lumaGrainDemo','temporalGrainDemo','hueRangeDemo','angularGradient','shapeShowcase'] as ExKey[] },
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
   { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['raymarchSpheres','noiseFloatDemo','remapDemo'] as ExKey[] },
 ];
@@ -162,11 +162,15 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     setUserPresets(merged);
   };
 
-  // Load from disk on mount + refresh on window focus
+  // Load from disk on mount + refresh on window focus or any save/delete
   useEffect(() => {
     refreshPresets();
     window.addEventListener('focus', refreshPresets);
-    return () => window.removeEventListener('focus', refreshPresets);
+    window.addEventListener('customfn-changed', refreshPresets);
+    return () => {
+      window.removeEventListener('focus', refreshPresets);
+      window.removeEventListener('customfn-changed', refreshPresets);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
