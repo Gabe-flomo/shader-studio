@@ -11,6 +11,7 @@ import { ShortcutsPage } from './components/ShortcutsPage';
 import { GLSLPage } from './components/GLSLPage';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useNodeGraphStore } from './store/useNodeGraphStore';
+import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
 
@@ -50,7 +51,19 @@ function AudioMasterVolumeWidget() {
   const masterVolume = useNodeGraphStore(s => s.audioMasterVolume);
   const setVolume    = useNodeGraphStore(s => s.setAudioMasterVolume);
   const hasAudio     = nodes.some(n => n.type === 'audioInput');
+  const [paused, setPaused] = useState(false);
   if (!hasAudio) return null;
+
+  const togglePause = () => {
+    if (paused) {
+      audioEngine.resumeAll();
+      setPaused(false);
+    } else {
+      audioEngine.pauseAll();
+      setPaused(true);
+    }
+  };
+
   return (
     <div style={{
       position: 'absolute', bottom: 12, right: 12, zIndex: 20,
@@ -61,12 +74,17 @@ function AudioMasterVolumeWidget() {
       boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
     }}>
       <span style={{ fontSize: '11px', color: '#89dceb' }}>♫</span>
+      <button
+        onClick={togglePause}
+        title={paused ? 'Resume all audio' : 'Pause all audio'}
+        style={{ background: 'none', border: 'none', color: paused ? '#f38ba8' : '#a6e3a1', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+      >{paused ? '▶' : '⏸'}</button>
       <input
         type="range"
         min={0} max={1} step={0.01}
         value={masterVolume}
         onChange={e => setVolume(parseFloat(e.target.value))}
-        style={{ width: 72, accentColor: '#89dceb', cursor: 'pointer' }}
+        style={{ width: 72, accentColor: '#89dceb', cursor: 'pointer', opacity: paused ? 0.4 : 1 }}
       />
       <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
         {Math.round(masterVolume * 100)}%
