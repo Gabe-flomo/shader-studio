@@ -676,7 +676,8 @@ export function generateFragmentShader(
             const varName = `${node.id}_ao_${sn.id}_${outKey}`;
             outVars[outKey] = varName;
             const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType);
-            mainCode.push(`    ${actualType} ${varName} = ${neutral};\n`);
+            const initExpr = sn.assignInit?.trim() || neutral;
+            mainCode.push(`    ${actualType} ${varName} = ${initExpr};\n`);
           }
           accumNodeVarNames[sn.id] = outVars;
         }
@@ -855,8 +856,34 @@ export function generateFragmentShader(
       nodeOutputs.set(node.id, placeholderResult.outputVars);
     } else {
       const result = def.generateGLSL(patchedNode, inputVars);
-      mainCode.push(result.code);
-      nodeOutputs.set(node.id, result.outputVars);
+
+      // ── assignOp in the MAIN GRAPH ─────────────────────────────────────────
+      // When assignOp is set (and not the default '='), declare an accumulator
+      // variable initialised with assignInit (or the neutral element), run the
+      // node's generated code, then apply the compound op.  Downstream nodes
+      // see the accumulated variable instead of the raw output.
+      if (node.assignOp && node.assignOp !== '=') {
+        const isMultiply = node.assignOp === '*=' || node.assignOp === '/=';
+        const accVars: Record<string, string> = {};
+        for (const outKey of Object.keys(result.outputVars)) {
+          const outSock = def.outputs[outKey];
+          const actualType = outSock?.type ?? 'float';
+          const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType as DataType);
+          const initExpr = node.assignInit?.trim() || neutral;
+          const accVar = `${node.id}_ao_${outKey}`;
+          mainCode.push(`    ${actualType} ${accVar} = ${initExpr};\n`);
+          accVars[outKey] = accVar;
+        }
+        mainCode.push(result.code);
+        for (const [outKey, accVar] of Object.entries(accVars)) {
+          const freshVar = result.outputVars[outKey];
+          if (freshVar) mainCode.push(`    ${accVar} ${node.assignOp} ${freshVar};\n`);
+        }
+        nodeOutputs.set(node.id, accVars);
+      } else {
+        mainCode.push(result.code);
+        nodeOutputs.set(node.id, result.outputVars);
+      }
     }
   }
 

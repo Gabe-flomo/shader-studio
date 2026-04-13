@@ -221,6 +221,11 @@ interface NodeGraphState {
    * Controls how its outputs accumulate across iterations in a loop group.
    */
   setNodeAssignOp: (nodeId: string, op: import('../types/nodeGraph').GraphNode['assignOp']) => void;
+  /**
+   * Set the assignInit expression on a node — the GLSL initializer used when assignOp !== '='.
+   * Can reference any previously-computed GLSL variable name.
+   */
+  setNodeAssignInit: (nodeId: string, expr: string) => void;
   /** Toggle carry mode on a node inside an iterated group. */
   toggleNodeCarryMode: (nodeId: string) => void;
 
@@ -2231,6 +2236,42 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return {
         nodes: state.nodes.map(n =>
           n.id === nodeId ? { ...n, assignOp: op } : n
+        ),
+      };
+    });
+    get().compile();
+  },
+
+  setNodeAssignInit: (nodeId, expr) => {
+    const activeGroupId = get().activeGroupId;
+    set(state => {
+      if (activeGroupId) {
+        const groupNode = state.nodes.find(n => n.id === activeGroupId);
+        if (!groupNode) return {};
+        const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return {};
+        return {
+          nodes: state.nodes.map(n => {
+            if (n.id !== activeGroupId) return n;
+            return {
+              ...n,
+              params: {
+                ...n.params,
+                subgraph: {
+                  ...sg,
+                  nodes: sg.nodes.map(sn =>
+                    sn.id === nodeId ? { ...sn, assignInit: expr } : sn
+                  ),
+                },
+              },
+            };
+          }),
+        };
+      }
+      // Top-level node
+      return {
+        nodes: state.nodes.map(n =>
+          n.id === nodeId ? { ...n, assignInit: expr } : n
         ),
       };
     });

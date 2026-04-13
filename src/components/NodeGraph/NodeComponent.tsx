@@ -284,6 +284,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
   const setNodeAssignOp    = useNodeGraphStore(s => s.setNodeAssignOp);
+  const setNodeAssignInit  = useNodeGraphStore(s => s.setNodeAssignInit);
   const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
@@ -1461,7 +1462,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             );
           }
 
-          // ── Regular inner node — show all float params ─────────────────────────
+          // ── Regular inner node — show float params (minus hidden ones) ───────────
           const innerDef = getNodeDefinition(innerNode.type);
           const innerParamDefs = innerDef?.paramDefs ?? {};
           const paramEntries = Object.entries(innerParamDefs).filter(([, pd]) =>
@@ -1471,12 +1472,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
           // Filter out internally-driven params (have __param_ connection inside group)
           // Also hide when a regular input socket with the same name is wired
+          // Also hide params the user has opted to hide via GroupParamPicker
+          const hiddenParams: string[] = Array.isArray(node.params.hiddenParams)
+            ? (node.params.hiddenParams as string[])
+            : [];
           const visibleParams = paramEntries.filter(([paramKey]) => {
             if (innerNode.inputs[`__param_${paramKey}`]?.connection) return false;
             const matchingInput = Object.entries(innerNode.inputs).find(
               ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
             );
-            return !matchingInput;
+            if (matchingInput) return false;
+            if (hiddenParams.includes(`${innerNode.id}::${paramKey}`)) return false;
+            return true;
           });
           if (visibleParams.length === 0) return null;
 
@@ -1632,17 +1639,28 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           );
         })}
 
-        {/* "Customize params" button — only shown when there are inner group nodes */}
-        {subgraph && subgraph.nodes.some(n => n.type === 'group') && (() => {
-          const hasAny = subgraph.nodes.some(innerGrp => {
-            if (innerGrp.type !== 'group') return false;
-            const sub = innerGrp.params.subgraph as SubgraphData | undefined;
-            return sub?.nodes.some(inn => {
-              const d = getNodeDefinition(inn.type);
-              return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
-            }) ?? false;
-          });
+        {/* "Customize params" button — shown for any group with float params */}
+        {subgraph && (() => {
+          const SKIP_PARAM_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant', 'loopIndex', 'loopCarry', 'group']);
+          const hasInnerGroupNodes = subgraph.nodes.some(n => n.type === 'group');
+          // For outer groups: check inner-group subgraph nodes
+          // For regular groups: check direct subgraph nodes
+          const hasAny = hasInnerGroupNodes
+            ? subgraph.nodes.some(innerGrp => {
+                if (innerGrp.type !== 'group') return false;
+                const sub = innerGrp.params.subgraph as SubgraphData | undefined;
+                return sub?.nodes.some(inn => {
+                  const d = getNodeDefinition(inn.type);
+                  return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
+                }) ?? false;
+              })
+            : subgraph.nodes.some(n => {
+                if (SKIP_PARAM_TYPES.has(n.type)) return false;
+                const d = getNodeDefinition(n.type);
+                return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
+              });
           if (!hasAny) return null;
+          const accentColor = hasInnerGroupNodes ? '#cba6f7' : '#89b4fa';
           return (
             <div
               style={{ borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', position: 'relative' }}
@@ -1653,14 +1671,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onDoubleClick={e => e.stopPropagation()}
                 style={{
                   fontSize: '10px',
-                  color: showParamPicker ? '#cba6f7' : '#585b70',
+                  color: showParamPicker ? accentColor : '#585b70',
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
                   padding: '1px 0',
                   letterSpacing: '0.03em',
                 }}
-                title="Customise which inner-group params appear here"
+                title={hasInnerGroupNodes ? 'Customise which inner-group params appear here' : 'Show or hide params on this group card'}
                 onMouseEnter={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
                 onMouseLeave={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
               >
@@ -2006,8 +2024,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ↺
             </button>
           )}
-          {/* Divider before loop-only controls */}
-          {isInsideLoop && (
+          {/* Divider before loop/assign controls */}
+          {!['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
             <span style={{ width: '1px', height: '14px', background: '#45475a88', margin: '0 3px', flexShrink: 0 }} />
           )}
           {/* Carry mode — only shown inside a group with iterations > 1 */}
@@ -2033,13 +2051,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ⟳
             </button>
           )}
-          {/* assignOp — only shown inside a group with iterations > 1 */}
-          {isInsideLoop && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
+          {/* assignOp — available everywhere (not just inside loops) */}
+          {!['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
             <select
               onMouseDown={e => e.stopPropagation()}
               value={assignOp}
               onChange={e => setNodeAssignOp(node.id, e.target.value as import('../../types/nodeGraph').GraphNode['assignOp'])}
-              title="Assign operator: how this node's output combines across loop iterations"
+              title="Assign operator: declare an accumulator and combine this node's output (+= -= *= /=)"
               style={{
                 background: assignOp !== '=' ? '#45475a' : '#1e1e2e',
                 border: assignOp !== '=' ? '1px solid #89b4fa88' : '1px solid #45475a',
@@ -2105,6 +2123,44 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           )}
         </div>
       </div>
+
+      {/* ── assignInit row — shown when assignOp is an accumulator op ── */}
+      {assignOp !== '=' && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 8px',
+            borderBottom: '1px solid #31324488',
+            background: '#1e1e2e88',
+          }}
+        >
+          <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, fontFamily: 'monospace' }}>
+            init
+          </span>
+          <input
+            type="text"
+            value={node.assignInit ?? ''}
+            onChange={e => setNodeAssignInit(node.id, e.target.value)}
+            placeholder="default (0 or 1)"
+            title="GLSL initializer for the accumulator variable. Leave blank to use the neutral element (0.0 for +/-, 1.0 for *//). Can reference any previously-computed GLSL variable."
+            style={{
+              flex: 1,
+              background: '#11111b',
+              border: '1px solid #45475a',
+              borderRadius: '4px',
+              color: '#cdd6f4',
+              fontSize: '11px',
+              fontFamily: 'monospace',
+              padding: '2px 6px',
+              outline: 'none',
+              minWidth: 0,
+            }}
+          />
+        </div>
+      )}
 
       {/* ── Always-visible LFO waveform ── */}
       {LFO_TYPES.has(node.type) && (

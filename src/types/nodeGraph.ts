@@ -30,16 +30,22 @@ export interface GraphNode {
   /** When true the node is skipped — inputs are passed through to outputs */
   bypassed?: boolean;
   /**
-   * Assignment operator for this node's outputs when inside an iterated group.
-   * Controls how each iteration's result combines with previous iterations:
-   *   '='  — overwrite (default: only last iteration's value survives)
-   *   '+=' — add (accumulate across iterations, e.g. finalColor += col * d)
-   *   '-=' — subtract
-   *   '*=' — multiply
-   *   '/=' — divide
-   * Only meaningful inside an iterated group (iterations > 1).
+   * Assignment operator applied to this node's output via an accumulator variable.
+   * Works everywhere — main graph, inside a group (with or without iterations):
+   *   '='  — overwrite (default, no accumulator)
+   *   '+=' — acc = assignInit; acc += nodeOutput
+   *   '-=' — acc = assignInit; acc -= nodeOutput
+   *   '*=' — acc = assignInit; acc *= nodeOutput
+   *   '/=' — acc = assignInit; acc /= nodeOutput
+   * Inside an iterated group the accumulator persists across iterations.
    */
   assignOp?: '=' | '+=' | '-=' | '*=' | '/=';
+  /**
+   * GLSL expression used to initialise the accumulator when assignOp !== '='.
+   * Defaults to the neutral element for the operator (0.0 for +/-, 1.0 for */).
+   * Can reference any previously-computed GLSL variable name.
+   */
+  assignInit?: string;
   /**
    * Carry mode — when true inside an iterated group, this node's first output
    * feeds back as its own first type-matching input each iteration.
