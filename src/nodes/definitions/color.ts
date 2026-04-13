@@ -72,7 +72,7 @@ interface PalettePreset {
   phase:     [number, number, number];
 }
 
-const PALETTE_PRESETS: PalettePreset[] = [
+export const PALETTE_PRESETS: PalettePreset[] = [
   { name: 'IQ Blue-Teal',  offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.1,0.2] },
   { name: 'IQ Rainbow',    offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.33,0.67] },
   { name: 'IQ Warm',       offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.3,0.2,0.2] },
