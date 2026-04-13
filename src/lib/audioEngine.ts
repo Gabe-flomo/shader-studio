@@ -20,6 +20,8 @@ interface AudioNodeState {
 let ctx: AudioContext | null = null;
 let masterGainNode: GainNode | null = null;
 let _masterVolume = 0.7;
+let _masterPaused = false;
+const _pausedNodeIds = new Set<string>(); // nodes that were playing when pauseAll was called
 
 const nodes = new Map<string, AudioNodeState>();
 
@@ -178,6 +180,29 @@ function getMasterVolume(): number {
   return _masterVolume;
 }
 
+function pauseAll(): void {
+  _masterPaused = true;
+  _pausedNodeIds.clear();
+  for (const [nodeId, state] of nodes) {
+    if (state.isPlaying) {
+      _pausedNodeIds.add(nodeId);
+      stopAudio(nodeId);
+    }
+  }
+}
+
+function resumeAll(): void {
+  _masterPaused = false;
+  for (const nodeId of _pausedNodeIds) {
+    startAudio(nodeId);
+  }
+  _pausedNodeIds.clear();
+}
+
+function isMasterPaused(): boolean {
+  return _masterPaused;
+}
+
 function isLoaded(nodeId: string): boolean {
   return nodes.has(nodeId);
 }
@@ -207,6 +232,9 @@ export const audioEngine = {
   updateFreqParams,
   setMasterVolume,
   getMasterVolume,
+  pauseAll,
+  resumeAll,
+  isMasterPaused,
   isLoaded,
   isPlaying,
   getFileName,
