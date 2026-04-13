@@ -169,7 +169,11 @@ export function generateFragmentShader(
       textureUniforms[`u_tex_${node.id}`] = node.id;
     }
     if (node.type === 'audioInput') {
-      audioUniforms[`u_audio_${node.id}`] = node.id;
+      const rawBands = node.params._bands;
+      const bands: unknown[] = Array.isArray(rawBands) ? rawBands : [200];
+      for (let i = 0; i < bands.length; i++) {
+        audioUniforms[`u_audio_${node.id}_${i}`] = node.id;
+      }
     }
     if (node.type === 'prevFrame') {
       isStateful = true;

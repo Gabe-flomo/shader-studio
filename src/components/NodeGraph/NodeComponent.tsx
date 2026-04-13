@@ -267,6 +267,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams   = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
@@ -387,13 +388,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   // ── Audio Input: sync freq params to engine each time they change ────────────
   React.useEffect(() => {
     if (node.type !== 'audioInput') return;
-    const freqCenter = typeof node.params.freq_center === 'number' ? node.params.freq_center : 200;
-    const freqRange  = node.params.mode === 'full'
-      ? 0
-      : typeof node.params.freq_range === 'number' ? node.params.freq_range : 200;
-    audioEngine.updateFreqParams(node.id, freqCenter, freqRange);
+    const rawBands = node.params._bands;
+    const bs: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
+    const range = typeof node.params.freq_range === 'number' ? node.params.freq_range : 200;
+    const m = (node.params.mode as string) ?? 'band';
+    audioEngine.updateFreqParams(node.id, bs, range, m);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id, node.params.freq_center, node.params.freq_range, node.params.mode]);
+  }, [node.id, node.params._bands, node.params.freq_range, node.params.mode]);
 
   // ── Audio Input: cleanup when node is removed ─────────────────────────────────
   React.useEffect(() => {
@@ -572,9 +573,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const hasFile      = !!(node.params._hasFile);
     const fileName     = (node.params._fileName as string) || '';
     const isNodePlaying = !!(node.params._isPlaying);
-    const freqCenter   = typeof node.params.freq_center === 'number' ? node.params.freq_center : 200;
+    const rawBands     = node.params._bands;
+    const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
     const freqRange    = typeof node.params.freq_range  === 'number' ? node.params.freq_range  : 200;
     const mode         = (node.params.mode as string) ?? 'band';
+
+    const buildOutputs = (bs: number[]) =>
+      Object.fromEntries(bs.map((_, i) => [`amplitude_${i}`, { type: 'float' as const, label: `Band ${i}` }]));
+
+    const handleAddBand = () => {
+      const newBands = [...bands, 1000];
+      updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+      updateNodeOutputs(node.id, buildOutputs(newBands));
+    };
+
+    const handleRemoveBand = (i: number) => {
+      if (bands.length <= 1) return;
+      const newBands = bands.filter((_, idx) => idx !== i);
+      updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+      updateNodeOutputs(node.id, buildOutputs(newBands));
+    };
 
     const handleAudioDrop = (e: React.DragEvent) => {
       e.preventDefault();
@@ -687,7 +705,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           <div style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '5px' }} onMouseDown={e => e.stopPropagation()}>
             {/* Mode */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '10px', color: '#585b70', width: '68px', flexShrink: 0 }}>Mode</span>
+              <span style={{ fontSize: '10px', color: '#585b70', width: '60px', flexShrink: 0 }}>Mode</span>
               <select
                 value={mode}
                 onChange={e => updateNodeParams(node.id, { mode: e.target.value }, { immediate: true })}
@@ -697,21 +715,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 <option value="full">Full Spectrum</option>
               </select>
             </div>
-            {/* Freq Center */}
+            {/* Shared range */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '10px', color: '#585b70', width: '68px', flexShrink: 0 }}>Center Hz</span>
-              <input
-                type="range" min={20} max={20000} step={1}
-                value={freqCenter}
-                disabled={mode === 'full'}
-                onChange={e => updateNodeParams(node.id, { freq_center: parseFloat(e.target.value) }, { immediate: true })}
-                style={{ flex: 1, accentColor: '#89dceb', cursor: mode === 'full' ? 'default' : 'pointer', opacity: mode === 'full' ? 0.3 : 1 }}
-              />
-              <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '42px', textAlign: 'right' }}>{freqCenter}</span>
-            </div>
-            {/* Freq Range */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '10px', color: '#585b70', width: '68px', flexShrink: 0 }}>Range Hz</span>
+              <span style={{ fontSize: '10px', color: '#585b70', width: '60px', flexShrink: 0 }}>Range Hz</span>
               <input
                 type="range" min={0} max={10000} step={1}
                 value={freqRange}
@@ -721,22 +727,56 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               />
               <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '42px', textAlign: 'right' }}>±{freqRange}</span>
             </div>
+            {/* Band list */}
+            {mode !== 'full' && bands.map((center, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={() => handleRemoveBand(i)}
+                  disabled={bands.length <= 1}
+                  title="Remove band"
+                  style={{ background: 'none', border: 'none', color: bands.length <= 1 ? '#45475a' : '#585b70', cursor: bands.length <= 1 ? 'default' : 'pointer', fontSize: '11px', padding: '0', lineHeight: 1, flexShrink: 0 }}
+                >×</button>
+                <input
+                  type="range" min={20} max={20000} step={1}
+                  value={center}
+                  onChange={e => {
+                    const newBands = bands.map((c, idx) => idx === i ? parseFloat(e.target.value) : c);
+                    updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+                  }}
+                  style={{ flex: 1, accentColor: '#89dceb', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '38px', textAlign: 'right' }}>
+                  {center >= 1000 ? `${(center/1000).toFixed(1)}k` : `${center}`}
+                </span>
+              </div>
+            ))}
+            {/* Add band button */}
+            {mode !== 'full' && (
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={handleAddBand}
+                style={{ background: '#313244', border: '1px dashed #45475a', color: '#585b70', fontSize: '10px', borderRadius: '4px', padding: '3px', cursor: 'pointer', width: '100%', marginTop: '2px' }}
+              >+ Add Band</button>
+            )}
           </div>
 
           {/* Inline freq-range viz */}
           <AudioFreqRangeViz node={node} />
 
-          {/* Output socket */}
+          {/* Output sockets */}
           <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-              <span style={{ fontSize: '10px', color: '#a6adc8' }}>Amplitude</span>
-              <div
-                data-socket="out"
-                ref={el => { registerSocket(node.id, 'out', 'amplitude', el); }}
-                onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, 'amplitude', e); }}
-                style={{ width: 12, height: 12, borderRadius: '50%', background: TYPE_COLORS['float'] ?? '#f0a', border: `2px solid ${TYPE_COLORS['float'] ?? '#f0a'}`, cursor: 'crosshair', marginRight: '-6px' }}
-              />
-            </div>
+            {Object.entries(node.outputs).map(([key, out]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                <div
+                  data-socket="out"
+                  ref={el => { registerSocket(node.id, 'out', key, el); }}
+                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                  style={{ width: 12, height: 12, borderRadius: '50%', background: TYPE_COLORS['float'] ?? '#f0a', border: `2px solid ${TYPE_COLORS['float'] ?? '#f0a'}`, cursor: 'crosshair', marginRight: '-6px' }}
+                />
+              </div>
+            ))}
           </div>
         </div>
         {/* Audio Input Modal (portal) */}

@@ -240,6 +240,7 @@ interface NodeGraphState {
   removeNode: (nodeId: string) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
+  updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
   setPreviewNodeId: (id: string | null) => void;
 
   connectNodes: (
@@ -1864,6 +1865,16 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (_compileTimer) clearTimeout(_compileTimer);
       _compileTimer = setTimeout(() => { get().compile(); }, 500);
     }
+  },
+
+  updateNodeOutputs: (nodeId, outputs) => {
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        n.id === nodeId ? { ...n, outputs } : n
+      ),
+    }));
+    if (_compileTimer) { clearTimeout(_compileTimer); _compileTimer = null; }
+    get().compile();
   },
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
