@@ -29,6 +29,33 @@ function labelToSlug(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'fn';
 }
 
+/**
+ * Directly save a CustomFnPreset from caller-supplied data.
+ * Writes to localStorage, optionally to disk, and fires the
+ * 'customfn-changed' CustomEvent so NodePalette refreshes.
+ */
+export function saveCustomFnPreset(
+  data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string },
+): void {
+  const preset: CustomFnPreset = {
+    id: `cfp_${Date.now()}`,
+    label: data.label || 'Custom Fn',
+    inputs: data.inputs ?? [],
+    outputType: data.outputType ?? 'float',
+    body: data.body ?? '0.0',
+    glslFunctions: data.glslFunctions ?? '',
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
+  window.dispatchEvent(new CustomEvent('customfn-changed'));
+  const dir = getCustomFnDir();
+  if (dir) {
+    const slug = labelToSlug(preset.label);
+    const filename = `${slug}_${preset.id}.json`;
+    writeTextFileAtPath(`${dir}/${filename}`, JSON.stringify(preset, null, 2));
+  }
+}
+
 /** Read all saved custom-fn presets from localStorage. */
 export function loadCustomFns(): CustomFnPreset[] {
   const out: CustomFnPreset[] = [];
@@ -2295,7 +2322,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   // ─── Custom-fn presets ──────────────────────────────────────────────────────
 
   saveCustomFn: (nodeId) => {
-    const node = get().nodes.find(n => n.id === nodeId);
+    // Search top-level nodes first
+    let node = get().nodes.find(n => n.id === nodeId);
+    // If not found at top level, search inside group subgraphs
+    if (!node) {
+      outer: for (const n of get().nodes) {
+        const sg = (n.params.subgraph as { nodes?: GraphNode[] } | undefined);
+        if (sg?.nodes) {
+          for (const sn of sg.nodes) {
+            if (sn.id === nodeId) { node = sn; break outer; }
+          }
+        }
+      }
+    }
     if (!node || node.type !== 'customFn') return;
     const preset: CustomFnPreset = {
       id: `cfp_${Date.now()}`,

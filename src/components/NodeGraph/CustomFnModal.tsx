@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, saveCustomFnPreset } from '../../store/useNodeGraphStore';
 
 // ─── GLSL function palette (same entries as ExprModal) ───────────────────────
 
@@ -76,13 +76,21 @@ interface Props {
 }
 
 export function CustomFnModal({ node, onClose }: Props) {
-  const { updateNodeParams, updateNodeSockets, saveCustomFn } = useNodeGraphStore();
+  const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fnRef   = useRef<HTMLTextAreaElement | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
   const handleSavePreset = () => {
-    saveCustomFn(node.id);
+    // Read params directly from the node prop (always up-to-date via controlled inputs)
+    // This avoids any store node-lookup issues (e.g. nodes inside group subgraphs).
+    saveCustomFnPreset({
+      label:         (node.params.label as string) || 'Custom Fn',
+      inputs:        (node.params.inputs as Parameters<typeof saveCustomFnPreset>[0]['inputs']) ?? [],
+      outputType:    ((node.params.outputType as string) || 'float') as Parameters<typeof saveCustomFnPreset>[0]['outputType'],
+      body:          typeof node.params.body === 'string' ? node.params.body : '0.0',
+      glslFunctions: typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '',
+    });
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 1500);
   };
