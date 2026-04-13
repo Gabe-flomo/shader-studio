@@ -55,7 +55,7 @@ const OP_REPEAT_POLAR_GLSL = `vec2 opRepeatPolar(vec2 p, float n) {
 }`;
 
 export const SdBoxNode: NodeDefinition = {
-  type: 'sdBox', label: 'sdBox', category: 'SDF',
+  type: 'sdBox', label: 'sdBox', category: '2D Primitives',
   description: 'Signed distance to a 2D box (IQ)',
   inputs: {
     p: { type: 'vec2', label: 'P' },
@@ -76,7 +76,7 @@ export const SdBoxNode: NodeDefinition = {
 };
 
 export const SdSegmentNode: NodeDefinition = {
-  type: 'sdSegment', label: 'sdSegment', category: 'SDF',
+  type: 'sdSegment', label: 'sdSegment', category: '2D Primitives',
   description: 'Signed distance to a 2D line segment (IQ)',
   inputs: {
     p: { type: 'vec2', label: 'P' },
@@ -98,7 +98,7 @@ export const SdSegmentNode: NodeDefinition = {
 };
 
 export const SdEllipseNode: NodeDefinition = {
-  type: 'sdEllipse', label: 'sdEllipse', category: 'SDF',
+  type: 'sdEllipse', label: 'sdEllipse', category: '2D Primitives',
   description: 'Signed distance to a 2D ellipse (IQ)',
   inputs: {
     p:  { type: 'vec2', label: 'P' },
@@ -118,7 +118,7 @@ export const SdEllipseNode: NodeDefinition = {
 };
 
 export const OpRepeatNode: NodeDefinition = {
-  type: 'opRepeat', label: 'opRepeat', category: 'SDF',
+  type: 'opRepeat', label: 'opRepeat', category: '2D Primitives',
   description: 'Infinite domain repetition — tiles p every s units',
   inputs: {
     p: { type: 'vec2', label: 'P' },
@@ -139,7 +139,7 @@ export const OpRepeatNode: NodeDefinition = {
 };
 
 export const OpRepeatPolarNode: NodeDefinition = {
-  type: 'opRepeatPolar', label: 'opRepeatPolar', category: 'SDF',
+  type: 'opRepeatPolar', label: 'opRepeatPolar', category: '2D Primitives',
   description: 'Polar domain repetition — n-fold rotational symmetry',
   inputs: {
     p: { type: 'vec2', label: 'P' },

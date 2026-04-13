@@ -157,6 +157,18 @@ export const TanhNode: NodeDefinition = {
   },
 };
 
+export const MinMathNode: NodeDefinition = {
+  type: 'minMath', label: 'Min', category: 'Math', description: 'Minimum of two floats.',
+  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
+  outputs: { result: { type: 'float', label: 'Result' } },
+  defaultParams: { b: 0.0 },
+  paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const o = `${node.id}_result`;
+    return { code: `    float ${o} = min(${inputVars.a || '0.0'}, ${inputVars.b || p(node.params.b, 0.0)});\n`, outputVars: { result: o } };
+  },
+};
+
 export const MaxNode: NodeDefinition = {
   type: 'max', label: 'Max', category: 'Math', description: 'Maximum of two floats.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },

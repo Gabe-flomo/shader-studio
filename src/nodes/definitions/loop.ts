@@ -25,7 +25,7 @@ import type { NodeDefinition, DataType } from '../../types/nodeGraph';
 export const LoopCarryNode: NodeDefinition = {
   type: 'loopCarry',
   label: 'Loop Carry',
-  category: 'Loop',
+  category: 'Loops',
   description: 'Carry variable across loop iterations. Init = starting value, Next = updated value each iteration, Value = current iteration value.',
 
   inputs: {

@@ -25,7 +25,7 @@ const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
   { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
   { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
   { label: 'Interp',     types: ['clamp', 'mix', 'smoothstep', 'mod'] },
-  { label: 'Compare',    types: ['min', 'max'] },
+  { label: 'Compare',    types: ['minMath', 'max'] },
   { label: 'Geometry',   types: ['length', 'dot'] },
   { label: 'Vec2',       types: ['makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2'] },
   { label: 'Vec3',       types: ['makeVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
@@ -51,8 +51,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Noise:           '#74c7ec',  // sky blue
   Effects:         '#f38ba8',  // pink
   Loops:           '#89dceb',  // cyan
-  '2D Primitives': '#f9e2af',  // yellow
-  SDF:             '#f5c2e7',  // light pink
+  '2D Primitives': '#f9e2af',  // yellow — includes SDF nodes
   Combiners:       '#cba6f7',  // purple
   Spaces:          '#f2cdcd',  // rose — UV space warp nodes
   Science:         '#94e2d5',  // teal
@@ -60,11 +59,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   Output:          '#94e2d5',  // teal
 };
 
-// Preferred display order for categories (unlisted categories fall at the end alphabetically)
+// Preferred display order for categories — alphabetical, with Output pinned last
 const CATEGORY_ORDER = [
-  'Sources', 'Spaces', 'Transforms', 'Math', 'Color', 'Noise',
-  'Effects', 'Loops', '2D Primitives', 'SDF', 'Combiners',
-  'Science', 'Presets', 'Output',
+  'Color', 'Combiners', 'Effects', 'Loops', 'Math', 'Noise',
+  'Presets', 'Science', 'Spaces', 'Sources', 'Transforms', '2D Primitives',
+  'Output',
 ];
 
 // ── Example folders ───────────────────────────────────────────────────────────
@@ -115,7 +114,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   ];
 
   const loadExampleGraph = useNodeGraphStore(s => s.loadExampleGraph);
-  const [examplesExpanded, setExamplesExpanded] = useState(true);
+  const [examplesExpanded, setExamplesExpanded] = useState(false);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
   const toggleFolder = (label: string) =>
     setOpenFolders(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
@@ -267,11 +266,11 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
             padding: '2px 3px',
             lineHeight: 1,
             fontSize: '11px',
-            color: isFav ? '#f9e2af' : '#45475a',
+            color: isFav ? '#f9e2af' : '#a6adc8',
             transition: 'color 0.1s',
           }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#fab387' : '#a6adc8')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#f9e2af' : '#45475a')}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#fab387' : '#ffffff')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#f9e2af' : '#a6adc8')}
         >★</button>
       </div>
     );
@@ -501,7 +500,9 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
           const isOpen   = open.has(category);
           const color    = CATEGORY_COLORS[category] ?? '#888';
           const rawNodes = getNodesByCategory(category).filter(d => !HIDDEN_NODES.has(d.type));
-          const nodes    = category === 'Math' ? sortMathNodes(rawNodes) : rawNodes;
+          const nodes    = category === 'Math'
+            ? sortMathNodes(rawNodes)
+            : [...rawNodes].sort((a, b) => a.label.localeCompare(b.label));
           if (nodes.length === 0) return null;
           return (
             <div key={category} style={{ marginBottom: '2px' }}>
@@ -539,7 +540,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
                 <div style={{ marginTop: '2px', paddingLeft: '4px' }}>
                   {category === 'Math' ? (
                     MATH_GROUPS.map(group => {
-                      const groupNodes = nodes.filter(d => group.types.includes(d.type));
+                      const groupNodes = nodes.filter(d => group.types.includes(d.type)).sort((a, b) => a.label.localeCompare(b.label));
                       if (groupNodes.length === 0) return null;
                       return (
                         <div key={group.label}>
