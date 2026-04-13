@@ -473,7 +473,42 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   setRawGlslShader: (shader) => set({ rawGlslShader: shader }),
   setActiveGroupId: (id) => {
-    if (!id) { set({ activeGroupId: null }); return; }
+    if (!id) {
+      // ── On exit: stamp any unstamped nodes as originals ──────────────────────
+      // This protects the "first session" structure — anything built before the
+      // first exit is locked; only nodes added in later sessions can be deleted.
+      const exitingGroupId = get().activeGroupId;
+      if (exitingGroupId) {
+        set(state => {
+          const gn = state.nodes.find(n => n.id === exitingGroupId);
+          const sg = gn?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return { activeGroupId: null };
+          const alreadyAllStamped = sg.nodes.every(n => n.params?._groupOriginal);
+          if (alreadyAllStamped) return { activeGroupId: null };
+          return {
+            activeGroupId: null,
+            nodes: state.nodes.map(n => {
+              if (n.id !== exitingGroupId) return n;
+              return {
+                ...n,
+                params: {
+                  ...n.params,
+                  subgraph: {
+                    ...sg,
+                    nodes: sg.nodes.map(sn =>
+                      sn.params?._groupOriginal ? sn : { ...sn, params: { ...sn.params, _groupOriginal: true } }
+                    ),
+                  },
+                },
+              };
+            }),
+          };
+        });
+      } else {
+        set({ activeGroupId: null });
+      }
+      return;
+    }
 
     // ── Migrate legacy groups on enter ───────────────────────────────────────
     // Groups created before the _groupOriginal / auto-LoopIndex feature was
@@ -482,7 +517,29 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(state => {
       const groupNode = state.nodes.find(n => n.id === id);
       const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-      if (!sg) return { activeGroupId: id };
+      if (!sg) {
+        // Group was added from palette with no subgraph — initialise an empty one
+        // and inject a LoopIndex so the iteration counter `i` is always available.
+        const loopIndexNode: import('../types/nodeGraph').GraphNode = {
+          id: `loopidx_${Date.now()}`,
+          type: 'loopIndex',
+          position: { x: 200, y: 200 },
+          inputs: {},
+          outputs: { i: { type: 'float' as import('../types/nodeGraph').DataType, label: 'i' } },
+          params: { _groupOriginal: true },
+        };
+        const emptySubgraph: import('../types/nodeGraph').SubgraphData = {
+          nodes: [loopIndexNode],
+          inputPorts: [],
+          outputPorts: [],
+        };
+        return {
+          activeGroupId: id,
+          nodes: state.nodes.map(n =>
+            n.id === id ? { ...n, params: { ...n.params, subgraph: emptySubgraph } } : n
+          ),
+        };
+      }
 
       const alreadyMigrated = sg.nodes.some(n => n.params?._groupOriginal);
       const hasLoopIndex    = sg.nodes.some(n => n.type === 'loopIndex');
@@ -499,10 +556,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (!hasLoopIndex) {
         const xs = stampedNodes.map(n => n.position.x);
         const ys = stampedNodes.map(n => n.position.y);
+        const minX = xs.length ? Math.min(...xs) : 420;
+        const minY = ys.length ? Math.min(...ys) : 200;
         const loopIndexNode: import('../types/nodeGraph').GraphNode = {
           id: `loopidx_${Date.now()}`,
           type: 'loopIndex',
-          position: { x: Math.min(...xs) - 220, y: Math.min(...ys) },
+          position: { x: minX - 220, y: minY },
           inputs: {},
           outputs: { i: { type: 'float', label: 'i' } },
           params: { _groupOriginal: true },

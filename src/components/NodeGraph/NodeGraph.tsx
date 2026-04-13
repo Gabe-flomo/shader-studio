@@ -79,7 +79,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     if (!activeGroupId) return nodes;
     const groupNode = nodes.find(n => n.id === activeGroupId);
     const subgraph = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-    return subgraph?.nodes ?? nodes;
+    return subgraph?.nodes ?? [];
   }, [nodes, activeGroupId]);
 
   // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
