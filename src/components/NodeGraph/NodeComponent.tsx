@@ -703,6 +703,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [saveDescription, setSaveDescription] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
   const [saveHovered, setSaveHovered] = useState(false);
+  const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
+  const [hoveredSliderKey, setHoveredSliderKey] = useState<string | null>(null);
 
   if (node.type === 'group') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
@@ -1117,9 +1119,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 const overrideKey = `${innerNode.id}::${paramKey}`;
                 const rawVal = node.params[overrideKey] ?? innerNode.params[paramKey];
                 const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
-                const min = paramDef.min ?? 0;
-                const max = paramDef.max ?? 1;
                 const step = paramDef.step ?? 0.01;
+                const innerBidir = innerNode.params[`__scBidir_${paramKey}`] === true;
+                const innerCustomMax = typeof innerNode.params[`__scMax_${paramKey}`] === 'number' ? innerNode.params[`__scMax_${paramKey}`] as number : null;
+                const baseMax = paramDef.max ?? 1;
+                const effMax = innerCustomMax ?? baseMax;
+                const effMin = innerBidir ? -effMax : (innerCustomMax != null ? 0 : (paramDef.min ?? 0));
 
                 return (
                   <div
@@ -1160,11 +1165,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       <>
                         <input
                           type="range"
-                          min={min}
-                          max={max}
+                          min={effMin}
+                          max={effMax}
                           step={step}
-                          value={currentVal}
+                          value={Math.max(effMin, Math.min(effMax, currentVal))}
                           onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
+                          onDoubleClick={() => updateNodeParams(node.id, { [overrideKey]: (effMin + effMax) / 2 })}
                           style={{ flex: 1, accentColor: '#89b4fa', cursor: 'pointer' }}
                         />
                         <span style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -2077,15 +2083,33 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               );
             }
             const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
-            const min = paramDef.min ?? 0;
-            const max = paramDef.max ?? 1;
             const step = paramDef.step ?? 0.01;
+            const bidir = node.params[`__scBidir_${key}`] === true;
+            const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
+            const baseMax = paramDef.max ?? 1;
+            const effMax = customMax ?? baseMax;
+            const effMin = bidir ? -effMax : (customMax != null ? 0 : (paramDef.min ?? 0));
+            const isConfigOpen = openSliderConfig === key;
+
+            const handleNumberCommit = (raw: string) => {
+              const n = parseFloat(raw);
+              if (isNaN(n)) return;
+              const absN = Math.abs(n);
+              if (absN > effMax || (bidir && n < effMin)) {
+                updateNodeParams(node.id, { [`__scMax_${key}`]: absN });
+              }
+              setFloat(key, String(n));
+            };
+
             return (
               <div
                 key={key}
-                style={{ padding: '3px 10px 3px 16px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
+                style={{ padding: '3px 10px 3px 16px', position: 'relative' }}
                 onMouseDown={e => e.stopPropagation()}
+                onMouseEnter={() => setHoveredSliderKey(key)}
+                onMouseLeave={() => setHoveredSliderKey(prev => prev === key ? null : prev)}
               >
+                {/* socket dot */}
                 {activeGroupId && (
                   <div
                     ref={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
@@ -2102,23 +2126,85 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     }}
                   />
                 )}
-                <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '60px' }}>{paramDef.label}</span>
-                <input
-                  type="range"
-                  style={RANGE_STYLE}
-                  min={min}
-                  max={max}
-                  step={step}
-                  value={val}
-                  onChange={e => setFloat(key, e.target.value)}
-                />
-                <input
-                  type="number"
-                  style={INPUT_STYLE}
-                  step={step}
-                  value={val}
-                  onChange={e => setFloat(key, e.target.value)}
-                />
+                {/* Main slider row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
+                  <input
+                    type="range"
+                    style={RANGE_STYLE}
+                    min={effMin}
+                    max={effMax}
+                    step={step}
+                    value={Math.max(effMin, Math.min(effMax, val))}
+                    onChange={e => setFloat(key, e.target.value)}
+                    onDoubleClick={() => setFloat(key, String((effMin + effMax) / 2))}
+                  />
+                  <input
+                    type="number"
+                    style={INPUT_STYLE}
+                    step={step}
+                    value={val}
+                    onChange={e => setFloat(key, e.target.value)}
+                    onBlur={e => handleNumberCommit(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleNumberCommit((e.target as HTMLInputElement).value); }}
+                    onDoubleClick={() => setFloat(key, String((effMin + effMax) / 2))}
+                  />
+                  {/* Gear button */}
+                  <button
+                    onClick={() => setOpenSliderConfig(prev => prev === key ? null : key)}
+                    title="Slider settings"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '0 1px', lineHeight: 1, fontSize: '10px',
+                      color: isConfigOpen ? '#cba6f7' : '#585b70',
+                      opacity: hoveredSliderKey === key || isConfigOpen ? 1 : 0,
+                      transition: 'opacity 0.15s, color 0.1s',
+                      flexShrink: 0,
+                    }}
+                  >⚙</button>
+                </div>
+                {/* Config panel */}
+                {isConfigOpen && (
+                  <div
+                    style={{
+                      margin: '4px 0 2px',
+                      background: '#181825',
+                      border: '1px solid #313244',
+                      borderRadius: '5px',
+                      padding: '6px 8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '5px',
+                    }}
+                    onMouseDown={e => e.stopPropagation()}
+                  >
+                    {/* Bidirectional row */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={bidir}
+                        onChange={e => updateNodeParams(node.id, { [`__scBidir_${key}`]: e.target.checked })}
+                        style={{ accentColor: '#cba6f7', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '10px', color: '#a6adc8' }}>Bidirectional</span>
+                    </label>
+                    {/* Range display + reset */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '9px', color: '#585b70', flex: 1 }}>
+                        Range: {effMin.toFixed(step < 0.1 ? 2 : 1)} → {effMax.toFixed(step < 0.1 ? 2 : 1)}
+                      </span>
+                      {customMax != null && (
+                        <button
+                          onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null })}
+                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '3px', cursor: 'pointer', padding: '1px 5px' }}
+                          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                          title="Reset to default range"
+                        >Reset</button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           }
