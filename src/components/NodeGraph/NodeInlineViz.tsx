@@ -869,21 +869,312 @@ export function SdfPreviewViz({ node }: { node: GraphNode }) {
 
 export { SDF_TYPES };
 
+// ─── Viz N+1 — Color Ramp Strip (colorRamp) ───────────────────────────────────
+
+export function ColorRampViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stops = Array.isArray(node.params.stops) ? node.params.stops as { t: number; r: number; g: number; b: number }[] : [];
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    if (stops.length === 0) {
+      ctx.fillStyle = '#11111b';
+      ctx.fillRect(0, 0, W, H);
+      return;
+    }
+
+    const sorted = [...stops].sort((a, b) => a.t - b.t);
+
+    for (let i = 0; i < W; i++) {
+      const t = i / (W - 1);
+      let r = sorted[0].r, g = sorted[0].g, b = sorted[0].b;
+
+      if (sorted.length === 1) {
+        r = sorted[0].r; g = sorted[0].g; b = sorted[0].b;
+      } else if (t <= sorted[0].t) {
+        r = sorted[0].r; g = sorted[0].g; b = sorted[0].b;
+      } else if (t >= sorted[sorted.length - 1].t) {
+        const last = sorted[sorted.length - 1];
+        r = last.r; g = last.g; b = last.b;
+      } else {
+        for (let s = 0; s < sorted.length - 1; s++) {
+          const s0 = sorted[s], s1 = sorted[s + 1];
+          if (t >= s0.t && t <= s1.t) {
+            const span = s1.t - s0.t;
+            const f = span < 1e-6 ? 0 : (t - s0.t) / span;
+            r = s0.r + (s1.r - s0.r) * f;
+            g = s0.g + (s1.g - s0.g) * f;
+            b = s0.b + (s1.b - s0.b) * f;
+            break;
+          }
+        }
+      }
+
+      ctx.fillStyle = `rgb(${Math.round(Math.max(0,Math.min(1,r))*255)},${Math.round(Math.max(0,Math.min(1,g))*255)},${Math.round(Math.max(0,Math.min(1,b))*255)})`;
+      ctx.fillRect(i, 0, 1, H);
+    }
+  }, [stops]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={160}
+        height={40}
+        style={{ display: 'block', width: '100%', height: '32px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz N+2 — Blackbody Temperature Strip (blackbody) ────────────────────────
+
+function blackbodyJS(k: number): [number, number, number] {
+  const r = k < 6600 ? 1.0 : Math.pow(k / 100 - 60, -0.1332) * 1.2926;
+  const g = k < 6600
+    ? (Math.log(Math.max(k / 100, 1)) * 0.3913 - 0.6319)
+    : Math.pow(k / 100 - 60, -0.0755) * 1.1298;
+  const b = k >= 6600 ? 1.0 : k < 1900 ? 0.0 : (Math.log(k / 100 - 10) * 0.5433 - 1.9628);
+  return [Math.max(0, Math.min(1, r)), Math.max(0, Math.min(1, g)), Math.max(0, Math.min(1, b))];
+}
+
+export function BlackbodyViz(_props: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    const K_MIN = 1000, K_MAX = 12000;
+    for (let i = 0; i < W; i++) {
+      const k = K_MIN + (i / (W - 1)) * (K_MAX - K_MIN);
+      const [r, g, b] = blackbodyJS(k);
+      ctx.fillStyle = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+      ctx.fillRect(i, 0, 1, H);
+    }
+  }, []);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={160}
+        height={32}
+        style={{ display: 'block', width: '100%', height: '32px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz N+3 — Brightness/Contrast Curve (brightnessContrast) ─────────────────
+
+export function BrightnessContrastViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const brightness = typeof node.params.brightness === 'number' ? node.params.brightness : 0;
+  const contrast   = typeof node.params.contrast   === 'number' ? node.params.contrast   : 1;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+    }
+
+    // Identity diagonal (dashed, dim)
+    ctx.strokeStyle = '#45475a';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Actual curve: y = (x - 0.5) * contrast + 0.5 + brightness, clamped [0,1]
+    ctx.strokeStyle = '#fab387';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const x = i / W;
+      const y = Math.max(0, Math.min(1, (x - 0.5) * contrast + 0.5 + brightness));
+      const py = H - y * H;
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+  }, [brightness, contrast]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={80}
+        height={80}
+        style={{ display: 'block', width: '80px', height: '80px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz N+4 — Grid Preview (grid) ───────────────────────────────────────────
+
+export function GridViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scale     = typeof node.params.scale     === 'number' ? node.params.scale     : 4;
+  const lineWidth = typeof node.params.lineWidth === 'number' ? node.params.lineWidth : 0.05;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    const cells = Math.max(1, Math.min(Math.round(scale), 12));
+    const cellW = W / cells;
+    const cellH = H / cells;
+    const lw = Math.max(0.5, lineWidth * cellW);
+
+    // Draw white cell interiors
+    ctx.fillStyle = '#2a2a3a';
+    for (let row = 0; row < cells; row++) {
+      for (let col = 0; col < cells; col++) {
+        const x = col * cellW + lw / 2;
+        const y = row * cellH + lw / 2;
+        const cw = cellW - lw;
+        const ch = cellH - lw;
+        if (cw > 0 && ch > 0) ctx.fillRect(x, y, cw, ch);
+      }
+    }
+
+    // Grid lines
+    ctx.strokeStyle = '#585b70';
+    ctx.lineWidth = lw;
+    for (let i = 0; i <= cells; i++) {
+      const x = i * cellW;
+      const y = i * cellH;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  }, [scale, lineWidth]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={80}
+        height={80}
+        style={{ display: 'block', width: '80px', height: '80px', imageRendering: 'pixelated' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz N+5 — Wave Texture Preview (waveTexture) ─────────────────────────────
+
+export function WaveTextureViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mode  = (node.params.mode as string) ?? 'bands';
+  const scale = typeof node.params.scale === 'number' ? node.params.scale : 4;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#89b4fa';
+    ctx.lineWidth = 1.5;
+
+    if (mode === 'rings') {
+      // Concentric circles
+      const cx = W / 2, cy = H / 2;
+      const maxR = Math.sqrt(cx * cx + cy * cy);
+      const step = maxR / (scale * 1.5);
+      for (let r = step / 2; r < maxR; r += step) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else {
+      // Oscillating horizontal lines
+      const numLines = Math.max(2, Math.round(scale));
+      for (let l = 0; l < numLines; l++) {
+        const baseY = ((l + 0.5) / numLines) * H;
+        const amp = H / numLines / 2.5;
+        ctx.beginPath();
+        for (let i = 0; i <= W; i++) {
+          const x = i / W;
+          let offset = 0;
+          if (mode === 'x' || mode === 'bands') {
+            offset = Math.sin(x * Math.PI * 2 * scale) * amp;
+          } else if (mode === 'y') {
+            offset = Math.sin(baseY / H * Math.PI * 2 * scale) * amp;
+          } else if (mode === 'diagonal') {
+            offset = Math.sin((x + baseY / H) * Math.PI * 2 * scale) * amp;
+          }
+          const py = baseY + offset;
+          i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+        }
+        ctx.stroke();
+      }
+    }
+  }, [mode, scale]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={160}
+        height={60}
+        style={{ display: 'block', width: '100%', height: '60px' }}
+      />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
   switch (node.type) {
-    case 'toneMap':        return <ToneCurveViz      node={node} />;
+    case 'toneMap':        return <ToneCurveViz          node={node} />;
     case 'palette':
     case 'palettePreset':
-    case 'gradient':       return <GradientStripViz  node={node} />;
-    case 'hueRange':       return <HueRingViz         node={node} />;
-    case 'posterize':      return <StepCurveViz       node={node} />;
+    case 'gradient':       return <GradientStripViz      node={node} />;
+    case 'hueRange':       return <HueRingViz             node={node} />;
+    case 'posterize':      return <StepCurveViz           node={node} />;
     case 'grain':
     case 'lumaGrain':
-    case 'temporalGrain':  return <NoisePatchViz      node={node} />;
-    case 'desaturate':     return <DesaturateBarViz   node={node} />;
-    case 'audioInput':     return <AudioFreqRangeViz  node={node} />;
+    case 'temporalGrain':  return <NoisePatchViz          node={node} />;
+    case 'desaturate':     return <DesaturateBarViz       node={node} />;
+    case 'audioInput':     return <AudioFreqRangeViz      node={node} />;
+    case 'colorRamp':      return <ColorRampViz           node={node} />;
+    case 'blackbody':      return <BlackbodyViz           node={node} />;
+    case 'brightnessContrast': return <BrightnessContrastViz node={node} />;
+    case 'grid':           return <GridViz                node={node} />;
+    case 'waveTexture':    return <WaveTextureViz         node={node} />;
     default:               return null;
   }
 }
@@ -893,4 +1184,5 @@ export const INLINE_VIZ_TYPES = new Set([
   'toneMap', 'palette', 'palettePreset', 'gradient',
   'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
   'hueRange', 'audioInput',
+  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'waveTexture',
 ]);
