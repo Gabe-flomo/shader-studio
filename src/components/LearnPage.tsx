@@ -939,7 +939,7 @@ fract(time * 0.2) // sawtooth ramp 0→1 repeating
 mod(time, 4.0)    // 0→4 repeating ramp`}</CodeBlock>
 
           <h3 style={S.subTitle}>Mouse</h3>
-          <p style={S.p">Cursor position as <TypeBadge type="vec2" /> in UV space. Subtract from UV and feed to CircleSDF for a circle that follows the cursor.</p>
+          <p style={S.p}>Cursor position as <TypeBadge type="vec2" /> in UV space. Subtract from UV and feed to CircleSDF for a circle that follows the cursor.</p>
 
           <h3 style={S.subTitle}>Audio Input</h3>
           <p style={S.p}>FFT analysis of microphone/audio. Outputs: <C>bass</C>, <C>mid</C>, <C>high</C>, <C>sub</C>, <C>presence</C>, <C>brilliance</C>, <C>volume</C> — all floats. Drive any parameter for audio-reactive visuals.</p>
@@ -1058,7 +1058,7 @@ mod(time, 4.0)    // 0→4 repeating ramp`}</CodeBlock>
           <p style={S.p}>Dropdown with 8 pre-configured palettes — quick beautiful colors without tuning parameters.</p>
 
           <h3 style={S.subTitle}>ColorRamp</h3>
-          <p style={S.p">Multi-stop gradient — maps a float <C>t</C> (0→1) through up to 8 custom color stops. More expressive than Palette when you need specific colors at specific positions.</p>
+          <p style={S.p}>Multi-stop gradient — maps a float <C>t</C> (0→1) through up to 8 custom color stops. More expressive than Palette when you need specific colors at specific positions.</p>
 
           <h3 style={S.subTitle}>Blackbody</h3>
           <p style={S.p}>Converts color temperature (Kelvin) to physically-based RGB. 1000K = deep red embers, 3000K = warm tungsten, 5500K = noon sunlight, 12000K = blue-white star. Drive with FBM noise scaled to 1000–6500K for fire effects.</p>
