@@ -5552,7 +5552,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 5.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 2.0, lightY: 4.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.8, albedoB: 0.7 },
+        params: { camDist: 5.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, shadow_soft: 'off', lightX: 2.0, lightY: 4.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.8, albedoB: 0.7 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5714,7 +5714,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // ── 3D: Infinite Falling ──────────────────────────────────────────────────────
   infiniteFalling3D: {
     label: '3D: Infinite Falling',
-    counter: 9,
+    counter: 5,
     nodes: [
       { id: 'hc_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'hc_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
@@ -5776,42 +5776,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hc_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.0, lightY: 2.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.8, albedoB: 0.9 },
-      },
-      // depth + iter → palette coloring
-      {
-        id: 'hc_mul_iter', type: 'multiply', position: { x: 820, y: 340 },
-        inputs: {
-          a: { type: 'float', label: 'A', connection: { nodeId: 'hc_ray', outputKey: 'iter'  } },
-          b: { type: 'float', label: 'B' },
-        },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 8.0 },
+        params: { color_mode: 'distance', dist_scale: 0.04, iter_scale: 0.005, pal_r: 0.0, pal_g: 0.33, pal_b: 0.67, camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, shadow_soft: 'off', bgR: 0.0, bgG: 0.0, bgB: 0.0 },
       },
       {
-        id: 'hc_add_t', type: 'add', position: { x: 820, y: 240 },
-        inputs: {
-          a: { type: 'float', label: 'A', connection: { nodeId: 'hc_ray',      outputKey: 'depth'  } },
-          b: { type: 'float', label: 'B', connection: { nodeId: 'hc_mul_iter', outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'hc_pal', type: 'palette', position: { x: 1020, y: 240 },
-        inputs: {
-          t: { type: 'float', label: 'T', connection: { nodeId: 'hc_add_t', outputKey: 'result' } },
-          offset_r: { type: 'float', label: 'offset.r' }, offset_g: { type: 'float', label: 'offset.g' }, offset_b: { type: 'float', label: 'offset.b' },
-          amplitude_r: { type: 'float', label: 'amplitude.r' }, amplitude_g: { type: 'float', label: 'amplitude.g' }, amplitude_b: { type: 'float', label: 'amplitude.b' },
-          freq_r: { type: 'float', label: 'freq.r' }, freq_g: { type: 'float', label: 'freq.g' }, freq_b: { type: 'float', label: 'freq.b' },
-          phase_r: { type: 'float', label: 'phase.r' }, phase_g: { type: 'float', label: 'phase.g' }, phase_b: { type: 'float', label: 'phase.b' },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
-      },
-      {
-        id: 'hc_out', type: 'output', position: { x: 1260, y: 240 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hc_pal', outputKey: 'color' } } },
+        id: 'hc_out', type: 'output', position: { x: 820, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hc_ray', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],
@@ -5820,7 +5789,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // ── 3D: Spiral World ──────────────────────────────────────────────────────────
   spiralWorld3D: {
     label: '3D: Spiral World',
-    counter: 8,
+    counter: 5,
     nodes: [
       { id: 'hd_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'hd_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
@@ -5902,33 +5871,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hd_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.5, lightY: 2.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.8, albedoG: 0.5, albedoB: 0.9 },
-      },
-      // depth + iter → rainbow palette
-      {
-        id: 'hd_add', type: 'add', position: { x: 820, y: 260 },
-        inputs: {
-          a: { type: 'float', label: 'A', connection: { nodeId: 'hd_ray', outputKey: 'depth' } },
-          b: { type: 'float', label: 'B', connection: { nodeId: 'hd_ray', outputKey: 'iter'  } },
-        },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: {},
+        params: { color_mode: 'distance', dist_scale: 0.04, iter_scale: 0.005, pal_r: 0.0, pal_g: 0.33, pal_b: 0.67, camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, shadow_soft: 'off', bgR: 0.0, bgG: 0.0, bgB: 0.0 },
       },
       {
-        id: 'hd_pal', type: 'palette', position: { x: 1020, y: 260 },
-        inputs: {
-          t: { type: 'float', label: 'T', connection: { nodeId: 'hd_add', outputKey: 'result' } },
-          offset_r: { type: 'float', label: 'offset.r' }, offset_g: { type: 'float', label: 'offset.g' }, offset_b: { type: 'float', label: 'offset.b' },
-          amplitude_r: { type: 'float', label: 'amplitude.r' }, amplitude_g: { type: 'float', label: 'amplitude.g' }, amplitude_b: { type: 'float', label: 'amplitude.b' },
-          freq_r: { type: 'float', label: 'freq.r' }, freq_g: { type: 'float', label: 'freq.g' }, freq_b: { type: 'float', label: 'freq.b' },
-          phase_r: { type: 'float', label: 'phase.r' }, phase_g: { type: 'float', label: 'phase.g' }, phase_b: { type: 'float', label: 'phase.b' },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
-      },
-      {
-        id: 'hd_out', type: 'output', position: { x: 1260, y: 260 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hd_pal', outputKey: 'color' } } },
+        id: 'hd_out', type: 'output', position: { x: 820, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hd_ray', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],

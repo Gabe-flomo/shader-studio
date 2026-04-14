@@ -94,38 +94,55 @@ export const RayRenderNode: NodeDefinition = {
     iter:   { type: 'float', label: 'Iter Count' },
   },
   defaultParams: {
-    camDist:    3.0,
-    camAngle:   0.6,
+    color_mode:  'lit',
+    camDist:     3.0,
+    camAngle:    0.6,
     camRotSpeed: 0.0,
-    fov:        1.5,
-    maxSteps:   64,
-    maxDist:    20.0,
+    fov:         1.5,
+    maxSteps:    64,
+    maxDist:     20.0,
+    dist_scale:  0.04,
+    iter_scale:  0.005,
+    pal_r:       0.0,
+    pal_g:       0.33,
+    pal_b:       0.67,
+    bgR: 0.85, bgG: 0.90, bgB: 0.95,
+    shadow_soft:  'on',
+    ao_strength:  1.0,
     lightX:     1.0,
     lightY:     2.0,
     lightZ:     3.0,
-    bgR: 0.85, bgG: 0.90, bgB: 0.95,
     albedoR: 0.6, albedoG: 0.65, albedoB: 0.7,
-    ao_strength:  1.0,
-    shadow_soft:  'on',
   },
   paramDefs: {
+    color_mode: { label: 'Color Mode', type: 'select', options: [
+      { value: 'lit',      label: 'Lit (PBR)'           },
+      { value: 'distance', label: 'Distance (Kishimisu)' },
+      { value: 'normal',   label: 'Normals'              },
+      { value: 'iter',     label: 'Iter Count'           },
+    ]},
     camDist:     { label: 'Cam Dist',    type: 'float', min: 0.5, max: 20.0, step: 0.05 },
     camAngle:    { label: 'Cam Angle',   type: 'float', min: 0.0, max: 6.28,  step: 0.02 },
     camRotSpeed: { label: 'Rot Speed',   type: 'float', min: 0.0, max: 2.0,   step: 0.01 },
     fov:         { label: 'FOV',         type: 'float', min: 0.5, max: 3.14,  step: 0.05 },
     maxSteps: { label: 'Max Steps', type: 'select', options: [32,64,96,128].map(n => ({ value: String(n), label: String(n) })) },
     maxDist:  { label: 'Max Dist',  type: 'float', min: 5.0, max: 100.0, step: 1.0 },
-    lightX:   { label: 'Light X',   type: 'float', min: -10.0, max: 10.0, step: 0.1 },
-    lightY:   { label: 'Light Y',   type: 'float', min: -10.0, max: 10.0, step: 0.1 },
-    lightZ:   { label: 'Light Z',   type: 'float', min: -10.0, max: 10.0, step: 0.1 },
+    dist_scale:  { label: 'Dist Scale',  type: 'float', min: 0.0, max: 0.3,  step: 0.001 },
+    iter_scale:  { label: 'Iter Scale',  type: 'float', min: 0.0, max: 0.05, step: 0.0005 },
+    pal_r:       { label: 'Palette R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+    pal_g:       { label: 'Palette G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+    pal_b:       { label: 'Palette B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
     bgR:      { label: 'BG R',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     bgG:      { label: 'BG G',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     bgB:      { label: 'BG B',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    shadow_soft: { label: 'Soft Shadows', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
+    ao_strength: { label: 'AO Strength', type: 'float', min: 0.0, max: 2.0, step: 0.05 },
+    lightX:   { label: 'Light X',   type: 'float', min: -10.0, max: 10.0, step: 0.1 },
+    lightY:   { label: 'Light Y',   type: 'float', min: -10.0, max: 10.0, step: 0.1 },
+    lightZ:   { label: 'Light Z',   type: 'float', min: -10.0, max: 10.0, step: 0.1 },
     albedoR:  { label: 'Albedo R',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     albedoG:  { label: 'Albedo G',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     albedoB:  { label: 'Albedo B',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    ao_strength: { label: 'AO Strength', type: 'float', min: 0.0, max: 2.0, step: 0.05 },
-    shadow_soft: { label: 'Soft Shadows', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -151,44 +168,77 @@ export const RayRenderNode: NodeDefinition = {
     const cam_rot_v = inputVars.cam_rot_v || '0.0';
     const aoStr     = p(node.params.ao_strength, 1.0);
     const shadowSoft = (node.params.shadow_soft as string) ?? 'on';
+    const colorMode  = (node.params.color_mode as string) ?? 'lit';
+    const distScale  = p(node.params.dist_scale, 0.04);
+    const iterScale  = p(node.params.iter_scale, 0.005);
+    const palR       = p(node.params.pal_r, 0.0);
+    const palG       = p(node.params.pal_g, 0.33);
+    const palB       = p(node.params.pal_b, 0.67);
 
-    return {
-      code: [
-        // Camera setup — angle is static + optional rotation speed
-        `    float ${id}_ang = ${camAngle} + ${time} * ${rotSpeed};\n`,
-        `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, 0.8, cos(${id}_ang)*${camDist});\n`,
-        `    vec3  ${id}_ta  = vec3(0.0);\n`,
-        `    vec3  ${id}_fwd = normalize(${id}_ta - ${id}_ro);\n`,
-        `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,
-        `    vec3  ${id}_up2 = cross(${id}_fwd, ${id}_rgt);\n`,
-        `    vec3  ${id}_rd  = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
-        // Apply horizontal rotation around Y (cam_rot_h) and vertical tilt (cam_rot_v)
-        `    float ${id}_crh = ${cam_rot_h};\n`,
-        `    float ${id}_crv = ${cam_rot_v};\n`,
-        `    vec3  ${id}_rd2 = ${id}_rd;\n`,
-        `    ${id}_rd2.xz = vec2(cos(${id}_crh)*${id}_rd.x + sin(${id}_crh)*${id}_rd.z, -sin(${id}_crh)*${id}_rd.x + cos(${id}_crh)*${id}_rd.z);\n`,
-        `    ${id}_rd2.yz = vec2(cos(${id}_crv)*${id}_rd2.y - sin(${id}_crv)*${id}_rd2.z, sin(${id}_crv)*${id}_rd2.y + cos(${id}_crv)*${id}_rd2.z);\n`,
-        `    ${id}_rd = ${id}_rd2;\n`,
-        // Ray march — track step count for iter output
-        `    float ${id}_t   = 0.001;\n`,
-        `    float ${id}_hit = 0.0;\n`,
-        `    int   ${id}_si  = 0;\n`,
-        `    for (int ${id}_i = 0; ${id}_i < ${maxSteps}; ${id}_i++) {\n`,
-        `        vec3  ${id}_rp = ${id}_ro + ${id}_t * ${id}_rd;\n`,
-        `        float ${id}_d  = ${sceneFn}(${id}_rp);\n`,
-        `        if (${id}_d < 0.0005) { ${id}_hit = 1.0; ${id}_si = ${id}_i; break; }\n`,
-        `        ${id}_t += ${id}_d;\n`,
-        `        if (${id}_t > ${maxDist}) { ${id}_si = ${id}_i; break; }\n`,
-        `    }\n`,
-        `    float ${id}_iter = float(${id}_si) / float(${maxSteps});\n`,
-        // Normal estimation
-        `    vec3  ${id}_hp  = ${id}_ro + ${id}_t * ${id}_rd;\n`,
-        `    float ${id}_e   = 0.001;\n`,
-        `    vec3  ${id}_n   = normalize(vec3(\n`,
-        `        ${sceneFn}(${id}_hp+vec3(${id}_e,0.0,0.0)) - ${sceneFn}(${id}_hp-vec3(${id}_e,0.0,0.0)),\n`,
-        `        ${sceneFn}(${id}_hp+vec3(0.0,${id}_e,0.0)) - ${sceneFn}(${id}_hp-vec3(0.0,${id}_e,0.0)),\n`,
-        `        ${sceneFn}(${id}_hp+vec3(0.0,0.0,${id}_e)) - ${sceneFn}(${id}_hp-vec3(0.0,0.0,${id}_e))\n`,
-        `    ));\n`,
+    // Shared: camera + ray march + normal — always emitted
+    const sharedCode = [
+      // Camera setup — angle is static + optional rotation speed
+      `    float ${id}_ang = ${camAngle} + ${time} * ${rotSpeed};\n`,
+      `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, 0.8, cos(${id}_ang)*${camDist});\n`,
+      `    vec3  ${id}_ta  = vec3(0.0);\n`,
+      `    vec3  ${id}_fwd = normalize(${id}_ta - ${id}_ro);\n`,
+      `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,
+      `    vec3  ${id}_up2 = cross(${id}_fwd, ${id}_rgt);\n`,
+      `    vec3  ${id}_rd  = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+      // Apply horizontal rotation around Y (cam_rot_h) and vertical tilt (cam_rot_v)
+      `    float ${id}_crh = ${cam_rot_h};\n`,
+      `    float ${id}_crv = ${cam_rot_v};\n`,
+      `    vec3  ${id}_rd2 = ${id}_rd;\n`,
+      `    ${id}_rd2.xz = vec2(cos(${id}_crh)*${id}_rd.x + sin(${id}_crh)*${id}_rd.z, -sin(${id}_crh)*${id}_rd.x + cos(${id}_crh)*${id}_rd.z);\n`,
+      `    ${id}_rd2.yz = vec2(cos(${id}_crv)*${id}_rd2.y - sin(${id}_crv)*${id}_rd2.z, sin(${id}_crv)*${id}_rd2.y + cos(${id}_crv)*${id}_rd2.z);\n`,
+      `    ${id}_rd = ${id}_rd2;\n`,
+      // Ray march — track step count for iter output
+      `    float ${id}_t   = 0.001;\n`,
+      `    float ${id}_hit = 0.0;\n`,
+      `    int   ${id}_si  = 0;\n`,
+      `    for (int ${id}_i = 0; ${id}_i < ${maxSteps}; ${id}_i++) {\n`,
+      `        vec3  ${id}_rp = ${id}_ro + ${id}_t * ${id}_rd;\n`,
+      `        float ${id}_d  = ${sceneFn}(${id}_rp);\n`,
+      `        if (${id}_d < 0.0005) { ${id}_hit = 1.0; ${id}_si = ${id}_i; break; }\n`,
+      `        ${id}_t += ${id}_d;\n`,
+      `        if (${id}_t > ${maxDist}) { ${id}_si = ${id}_i; break; }\n`,
+      `    }\n`,
+      `    float ${id}_iter = float(${id}_si) / float(${maxSteps});\n`,
+      // Normal estimation
+      `    vec3  ${id}_hp  = ${id}_ro + ${id}_t * ${id}_rd;\n`,
+      `    float ${id}_e   = 0.001;\n`,
+      `    vec3  ${id}_n   = normalize(vec3(\n`,
+      `        ${sceneFn}(${id}_hp+vec3(${id}_e,0.0,0.0)) - ${sceneFn}(${id}_hp-vec3(${id}_e,0.0,0.0)),\n`,
+      `        ${sceneFn}(${id}_hp+vec3(0.0,${id}_e,0.0)) - ${sceneFn}(${id}_hp-vec3(0.0,${id}_e,0.0)),\n`,
+      `        ${sceneFn}(${id}_hp+vec3(0.0,0.0,${id}_e)) - ${sceneFn}(${id}_hp-vec3(0.0,0.0,${id}_e))\n`,
+      `    ));\n`,
+      `    vec3  ${id}_bg  = vec3(${bgr}, ${bgg}, ${bgb});\n`,
+    ].join('');
+
+    // Mode-specific coloring code
+    let coloringCode: string;
+
+    if (colorMode === 'distance') {
+      coloringCode = [
+        // Kishimisu palette coloring: distance + iter count drives hue
+        `    float ${id}_pal_t = ${id}_t * ${distScale} + ${id}_iter * ${iterScale};\n`,
+        `    vec3  ${id}_pal_c = vec3(${palR}, ${palG}, ${palB});\n`,
+        `    vec3  ${id}_lit   = 0.5 + 0.5 * cos(6.28318 * (vec3(${id}_pal_t) + ${id}_pal_c));\n`,
+        `    vec3  ${id}_color = mix(${id}_lit, ${id}_bg, 1.0 - ${id}_hit);\n`,
+      ].join('');
+    } else if (colorMode === 'normal') {
+      coloringCode = [
+        `    vec3  ${id}_lit   = ${id}_n * 0.5 + 0.5;\n`,
+        `    vec3  ${id}_color = mix(${id}_lit, ${id}_bg, 1.0 - ${id}_hit);\n`,
+      ].join('');
+    } else if (colorMode === 'iter') {
+      coloringCode = [
+        `    vec3  ${id}_lit   = vec3(${id}_iter);\n`,
+        `    vec3  ${id}_color = mix(${id}_lit, ${id}_bg, 1.0 - ${id}_hit);\n`,
+      ].join('');
+    } else {
+      // 'lit' — full PBR lighting with shadow + AO
+      coloringCode = [
         // Lighting — key light direction
         `    vec3  ${id}_ld  = normalize(vec3(${lx}, ${ly}, ${lz}));\n`,
         `    float ${id}_dif = clamp(dot(${id}_n, ${id}_ld), 0.0, 1.0);\n`,
@@ -229,11 +279,17 @@ export const RayRenderNode: NodeDefinition = {
         `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
         // Fog / background blend
         `    float ${id}_fog = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
-        `    vec3  ${id}_bg  = vec3(${bgr}, ${bgg}, ${bgb});\n`,
         `    vec3  ${id}_color = mix(mix(${id}_lit, ${id}_bg, ${id}_fog), ${id}_bg, 1.0 - ${id}_hit);\n`,
-        `    float ${id}_depth = ${id}_hit > 0.5 ? ${id}_t / ${maxDist} : 1.0;\n`,
-        `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
-      ].join(''),
+      ].join('');
+    }
+
+    const finalCode = [
+      `    float ${id}_depth = ${id}_hit > 0.5 ? ${id}_t / ${maxDist} : 1.0;\n`,
+      `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
+    ].join('');
+
+    return {
+      code: sharedCode + coloringCode + finalCode,
       outputVars: {
         color:  `${id}_color`,
         depth:  `${id}_depth`,
