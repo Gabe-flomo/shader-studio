@@ -395,7 +395,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     if (!dragConnection) return null;
     // Synthetic Group Input terminal
     if (dragConnection.sourceNodeId === '__group_input__' && activeSubgraph) {
-      return activeSubgraph.inputPorts.find(p => p.key === dragConnection.sourceOutputKey)?.type ?? null;
+      return (activeSubgraph.inputPorts ?? []).find(p => p.key === dragConnection.sourceOutputKey)?.type ?? null;
     }
     const srcNode = displayNodes.find(n => n.id === dragConnection.sourceNodeId);
     if (!srcNode) return null;
@@ -1058,7 +1058,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           )}
 
           {/* Group output port edges — drawn from inner node outputs to the terminal */}
-          {activeSubgraph && activeSubgraph.outputPorts.map(port => {
+          {activeSubgraph && (activeSubgraph.outputPorts ?? []).map(port => {
             const fromPos = getSocketPos(port.fromNodeId, 'out', port.fromOutputKey, canvasEl, zoom, pan);
             const toPos   = getSocketPos('__group_output__', 'in', port.key, canvasEl, zoom, pan);
             if (!fromPos || !toPos) return null;
@@ -1075,7 +1075,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           })}
 
           {/* Group input port edges — drawn from the terminal to each routed inner node */}
-          {activeSubgraph && activeSubgraph.inputPorts.filter(p => p.toNodeId && p.toInputKey).map(port => {
+          {activeSubgraph && (activeSubgraph.inputPorts ?? []).filter(p => p.toNodeId && p.toInputKey).map(port => {
             const fromPos = getSocketPos('__group_input__', 'out', port.key, canvasEl, zoom, pan);
             const toPos   = getSocketPos(port.toNodeId, 'in', port.toInputKey, canvasEl, zoom, pan);
             if (!fromPos || !toPos) return null;
