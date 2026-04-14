@@ -827,19 +827,31 @@ export function generateFragmentShader(
         if (outerVar) sgPortOverrides.set(`${port.toNodeId}:${port.toInputKey}`, outerVar);
       }
 
-      // Prefix all subgraph node IDs + connections
-      const sgPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => ({
-        ...subNode,
-        id: sgPrefix + subNode.id,
-        inputs: Object.fromEntries(
-          Object.entries(subNode.inputs).map(([k, inp]) => [
-            k,
-            inp.connection
-              ? { ...inp, connection: { nodeId: sgPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
-              : inp,
-          ]),
-        ),
-      }));
+      // Prefix all subgraph node IDs + connections, applying any nodeId::paramKey overrides
+      const sgPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
+        // Collect param overrides stored on the outer sceneGroup node as "innerNodeId::paramKey"
+        const overridePrefix = `${subNode.id}::`;
+        const paramOverrides: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(node.params)) {
+          if (key.startsWith(overridePrefix)) {
+            paramOverrides[key.slice(overridePrefix.length)] = val;
+          }
+        }
+
+        return {
+          ...subNode,
+          id: sgPrefix + subNode.id,
+          params: { ...subNode.params, ...paramOverrides },
+          inputs: Object.fromEntries(
+            Object.entries(subNode.inputs).map(([k, inp]) => [
+              k,
+              inp.connection
+                ? { ...inp, connection: { nodeId: sgPrefix + inp.connection.nodeId, outputKey: inp.connection.outputKey } }
+                : inp,
+            ]),
+          ),
+        };
+      });
 
       const sgSorted = topologicalSort(sgPrefixedNodes);
       let sgLastFloatVar = '100.0';  // default return value (large dist = miss)
