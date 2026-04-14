@@ -1260,7 +1260,6 @@ float gaussBlurWeight(float x, float y, float sigma) {
     const radius  = p(node.params.radius, 4.0);
     const quality = (node.params.quality as string) ?? 'standard';
     const half_n  = quality === 'fast' ? 1 : quality === 'high' ? 3 : 2;
-    const n       = half_n * 2 + 1;
     const sigma   = half_n === 1 ? '1.0' : half_n === 3 ? '2.0' : '1.5';
 
     const lines: string[] = [
