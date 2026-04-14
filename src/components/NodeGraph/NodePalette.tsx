@@ -85,13 +85,14 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlVoronoi','mobiusWarp','infiniteMirror','uvWarpDemo','curlWarpDemo','swirlWarpDemo','displaceDemo','smoothWarpDemo','polarRings','hyperbolicCircles'] as ExKey[] },
   { label: 'Color & Lighting',color: '#fab387', keys: ['animatedPalette','fbmLandscape','kaleidoscopeNoise','hsvDemo','posterizeDemo','invertDemo','desaturateDemo','glowCircle','glowShape','toneMapDemo','agxToneDemo','lumaGrainDemo','temporalGrainDemo','hueRangeDemo','angularGradient','shapeShowcase','colorRampDemo','colorRampFBM','colorRampWave','blackbodyDemo','blackbodyFire','blackbodyStar','blendModesDemo','blendOverlayDemo','blendSoftLight'] as ExKey[] },
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
-  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['noiseFloatDemo','remapDemo','mandelbulbClassic','mengerSponge','twistedBox','sphereScene3D','torusScene3D','twoShapes3D','infiniteBoxes3D','helloSphere3D','shapesAndGround3D','infiniteFalling3D','spiralWorld3D','softMetaballs3D'] as ExKey[] },
+  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['noiseFloatDemo','remapDemo','mandelbulbClassic','mengerSponge','twistedBox','sphereScene3D','torusScene3D','twoShapes3D','infiniteBoxes3D','helloSphere3D','shapesAndGround3D','infiniteFalling3D','spiralWorld3D','softMetaballs3D','kishimisu3D'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic'] as ExKey[] },
   { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },
   { label: 'Math & Complex',  color: '#b4befe', keys: ['complexPowFlower','luminanceTint','weightedNoiseOctaves','weightedSdfBlend'] as ExKey[] },
-  { label: 'Lighting & Compositing', color: '#89dceb', keys: ['neonFloorGrid','spectralLens','alphaLayerDemo','neonGI','threePointLights','movingLight','softCloudLayers'] as ExKey[] },
+  { label: 'Lighting & Compositing', color: '#89dceb', keys: ['neonFloorGrid','spectralLens','alphaLayerDemo','threePointLights','movingLight','softCloudLayers'] as ExKey[] },
   { label: 'Effects & Spaces', color: '#f2cdcd', keys: ['retroTunnel','barrelChroma'] as ExKey[] },
+  { label: 'Particles',        color: '#cba6f7', keys: ['particleFountain','particleFlowDrift','particleSpiralVortex','particleOrbitCloud','particleRain','particleExplosion','particleMouseAttract'] as ExKey[] },
 ];
 
 

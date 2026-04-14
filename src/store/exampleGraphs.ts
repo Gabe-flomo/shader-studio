@@ -5320,7 +5320,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5387,7 +5387,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5470,7 +5470,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5545,7 +5545,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5596,7 +5596,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ha_ray', type: 'rayRender', position: { x: 560, y: 80 },
+        id: 'ha_ray', type: 'rayMarch', position: { x: 560, y: 80 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'ha_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'ha_uv',    outputKey: 'uv'   } },
@@ -5694,7 +5694,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'hb_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'hb_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hb_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hb_uv',    outputKey: 'uv'   } },
@@ -5769,7 +5769,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'hc_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'hc_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hc_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hc_uv',    outputKey: 'uv'   } },
@@ -5895,7 +5895,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'hd_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'hd_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hd_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hd_uv',    outputKey: 'uv'   } },
@@ -6039,7 +6039,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'he_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'he_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'he_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'he_uv',    outputKey: 'uv'   } },
@@ -6137,7 +6137,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'nc_ray', type: 'rayRender', position: { x: 560, y: 100 },
+        id: 'nc_ray', type: 'rayMarch', position: { x: 560, y: 100 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'nc_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'nc_uv',    outputKey: 'uv'   } },
@@ -6217,7 +6217,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'di_ray', type: 'rayRender', position: { x: 560, y: 100 },
+        id: 'di_ray', type: 'rayMarch', position: { x: 560, y: 100 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'di_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'di_uv',    outputKey: 'uv'   } },
@@ -6682,6 +6682,168 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'oc_out', type: 'output', position: { x: 1020, y: 380 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'oc_glow', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Particle: Rain ─────────────────────────────────────────────────────────
+  particleRain: {
+    label: 'Particles: Rain',
+    counter: 8,
+    nodes: [
+      { id: 'pr_uv',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'pr_time', type: 'time', position: { x: 40, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'pr_emit', type: 'particleEmitter', position: { x: 280, y: 260 },
+        inputs: {
+          position: { type: 'vec2', label: 'Spawn Position' },
+          time:     { type: 'float', label: 'Time', connection: { nodeId: 'pr_time', outputKey: 'time' } },
+          field:    { type: 'vec2', label: 'Field Dir' },
+        },
+        outputs: {
+          nearest_dist: { type: 'float', label: 'Nearest Dist (SDF)' },
+          nearest_uv:   { type: 'vec2',  label: 'Nearest UV' },
+          nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
+          density:      { type: 'float', label: 'Density' },
+        },
+        params: { max_particles: 120, lifetime: 1.8, speed: 0.9, angle_dir: 270, angle_spread: 0.08, physics_mode: 'free', gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.0, despawn_radius: 2.5, seed: 5.0, density_radius: 0.04 },
+      },
+      {
+        id: 'pr_circ', type: 'circleSDF', position: { x: 540, y: 200 },
+        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'pr_emit', outputKey: 'nearest_uv' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.006, posX: 0.0, posY: 0.0 },
+      },
+      {
+        id: 'pr_col', type: 'makeVec3', position: { x: 540, y: 360 },
+        inputs: {},
+        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
+        params: { r: 0.5, g: 0.75, b: 0.95 },
+      },
+      {
+        id: 'pr_glow', type: 'glowLayer', position: { x: 760, y: 270 },
+        inputs: {
+          d:         { type: 'float', label: 'SDF',   connection: { nodeId: 'pr_circ', outputKey: 'distance' } },
+          color:     { type: 'vec3',  label: 'Color', connection: { nodeId: 'pr_col',  outputKey: 'rgb'      } },
+          intensity: { type: 'float', label: 'Intensity' },
+          power:     { type: 'float', label: 'Power' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Glow' } },
+        params: { intensity: 0.004, power: 1.8 },
+      },
+      {
+        id: 'pr_out', type: 'output', position: { x: 980, y: 286 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pr_glow', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Particle: Explosion ────────────────────────────────────────────────────
+  particleExplosion: {
+    label: 'Particles: Explosion',
+    counter: 9,
+    nodes: [
+      { id: 'pe2_uv',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'pe2_time', type: 'time', position: { x: 40, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'pe2_emit', type: 'particleEmitter', position: { x: 280, y: 260 },
+        inputs: {
+          position: { type: 'vec2', label: 'Spawn Position' },
+          time:     { type: 'float', label: 'Time', connection: { nodeId: 'pe2_time', outputKey: 'time' } },
+          field:    { type: 'vec2', label: 'Field Dir' },
+        },
+        outputs: {
+          nearest_dist: { type: 'float', label: 'Nearest Dist (SDF)' },
+          nearest_uv:   { type: 'vec2',  label: 'Nearest UV' },
+          nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
+          density:      { type: 'float', label: 'Density' },
+        },
+        params: { max_particles: 60, lifetime: 1.2, speed: 0.6, angle_dir: 0, angle_spread: 1.0, physics_mode: 'free', gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.0, despawn_radius: 1.0, seed: 21.0, density_radius: 0.05 },
+      },
+      {
+        id: 'pe2_pal', type: 'palettePreset', position: { x: 540, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'pe2_emit', outputKey: 'nearest_age' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '7' },
+      },
+      {
+        id: 'pe2_glow', type: 'glowLayer', position: { x: 760, y: 270 },
+        inputs: {
+          d:         { type: 'float', label: 'SDF',   connection: { nodeId: 'pe2_emit', outputKey: 'nearest_dist' } },
+          color:     { type: 'vec3',  label: 'Color', connection: { nodeId: 'pe2_pal',  outputKey: 'color'        } },
+          intensity: { type: 'float', label: 'Intensity' },
+          power:     { type: 'float', label: 'Power' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Glow' } },
+        params: { intensity: 0.008, power: 1.2 },
+      },
+      {
+        id: 'pe2_out', type: 'output', position: { x: 980, y: 286 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pe2_glow', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Particle: Mouse Attractor ──────────────────────────────────────────────
+  particleMouseAttract: {
+    label: 'Particles: Mouse Attract',
+    counter: 9,
+    nodes: [
+      { id: 'pm_uv',    type: 'uv',    position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'pm_time',  type: 'time',  position: { x: 40, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'pm_mouse', type: 'mouse', position: { x: 40, y: 500 }, inputs: {}, outputs: { position: { type: 'vec2', label: 'Position' }, click: { type: 'float', label: 'Click' } }, params: {} },
+      {
+        id: 'pm_gf', type: 'gravityField', position: { x: 280, y: 200 },
+        inputs: {
+          uv:        { type: 'vec2',  label: 'UV',            connection: { nodeId: 'pm_uv',    outputKey: 'uv'       } },
+          attractor: { type: 'vec2',  label: 'Attractor Pos', connection: { nodeId: 'pm_mouse', outputKey: 'position' } },
+          strength:  { type: 'float', label: 'Strength' },
+        },
+        outputs: {
+          dir:     { type: 'vec2',  label: 'Direction' },
+          dist:    { type: 'float', label: 'Distance'  },
+          falloff: { type: 'float', label: 'Falloff'   },
+        },
+        params: { mode: 'attract', falloff: 'squared', strength: 0.8, min_dist: 0.02 },
+      },
+      {
+        id: 'pm_emit', type: 'particleEmitter', position: { x: 540, y: 300 },
+        inputs: {
+          position: { type: 'vec2',  label: 'Spawn Position' },
+          time:     { type: 'float', label: 'Time',      connection: { nodeId: 'pm_time', outputKey: 'time' } },
+          field:    { type: 'vec2',  label: 'Field Dir', connection: { nodeId: 'pm_gf',   outputKey: 'dir'  } },
+        },
+        outputs: {
+          nearest_dist: { type: 'float', label: 'Nearest Dist (SDF)' },
+          nearest_uv:   { type: 'vec2',  label: 'Nearest UV' },
+          nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
+          density:      { type: 'float', label: 'Density' },
+        },
+        params: { max_particles: 100, lifetime: 3.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, physics_mode: 'field_only', gravity_x: 0, gravity_y: 0, field_strength: 1.8, despawn_radius: 3.0, seed: 3.0, density_radius: 0.05 },
+      },
+      {
+        id: 'pm_pal', type: 'palettePreset', position: { x: 780, y: 220 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'pm_emit', outputKey: 'nearest_age' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '6' },
+      },
+      {
+        id: 'pm_glow', type: 'glowLayer', position: { x: 780, y: 380 },
+        inputs: {
+          d:         { type: 'float', label: 'SDF',   connection: { nodeId: 'pm_emit', outputKey: 'nearest_dist' } },
+          color:     { type: 'vec3',  label: 'Color', connection: { nodeId: 'pm_pal',  outputKey: 'color'        } },
+          intensity: { type: 'float', label: 'Intensity' },
+          power:     { type: 'float', label: 'Power' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Glow' } },
+        params: { intensity: 0.006, power: 1.4 },
+      },
+      {
+        id: 'pm_out', type: 'output', position: { x: 1020, y: 380 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pm_glow', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
     ],
