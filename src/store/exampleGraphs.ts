@@ -6473,7 +6473,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
           density:      { type: 'float', label: 'Density'            },
         },
-        params: { max_particles: 80, lifetime: 2.0, speed: 0.4, angle_dir: 90, angle_spread: 0.25, physics_mode: 'gravity', gravity_x: 0.0, gravity_y: 0.8, field_strength: 1.0, despawn_radius: 2.0, seed: 0.0, density_radius: 0.05 },
+        params: { max_particles: 70, lifetime: 2.0, speed: 0.4, angle_dir: 90, angle_spread: 0.25, gravity_x: 0.0, gravity_y: 0.8, field_strength: 1.0, despawn_radius: 2.0, seed: 0.0, density_radius: 0.05 },
       },
       {
         id: 'pf_circ', type: 'circleSDF', position: { x: 560, y: 200 },
@@ -6539,7 +6539,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
           density:      { type: 'float', label: 'Density'            },
         },
-        params: { max_particles: 100, lifetime: 4.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, physics_mode: 'field_only', gravity_x: 0, gravity_y: 0, field_strength: 1.2, despawn_radius: 2.5, seed: 42.0, density_radius: 0.05 },
+        params: { max_particles: 80, lifetime: 4.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.2, despawn_radius: 2.5, seed: 42.0, density_radius: 0.05 },
       },
       {
         id: 'fd_pal', type: 'palettePreset', position: { x: 780, y: 200 },
@@ -6599,7 +6599,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
           density:      { type: 'float', label: 'Density'            },
         },
-        params: { max_particles: 150, lifetime: 6.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, physics_mode: 'field_only', gravity_x: 0, gravity_y: 0, field_strength: 2.0, despawn_radius: 3.0, seed: 7.0, density_radius: 0.05 },
+        params: { max_particles: 80, lifetime: 5.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.8, despawn_radius: 3.0, seed: 7.0, density_radius: 0.05 },
       },
       {
         id: 'sv_pal', type: 'palettePreset', position: { x: 780, y: 200 },
@@ -6660,7 +6660,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
           density:      { type: 'float', label: 'Density'            },
         },
-        params: { max_particles: 150, lifetime: 5.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, physics_mode: 'field_only', gravity_x: 0, gravity_y: 0, field_strength: 1.5, despawn_radius: 2.5, seed: 13.0, density_radius: 0.05 },
+        params: { max_particles: 80, lifetime: 5.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.5, despawn_radius: 2.5, seed: 13.0, density_radius: 0.05 },
       },
       {
         id: 'oc_pal', type: 'palettePreset', position: { x: 780, y: 200 },
@@ -6707,7 +6707,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
           density:      { type: 'float', label: 'Density' },
         },
-        params: { max_particles: 120, lifetime: 1.8, speed: 0.9, angle_dir: 270, angle_spread: 0.08, physics_mode: 'free', gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.0, despawn_radius: 2.5, seed: 5.0, density_radius: 0.04 },
+        params: { max_particles: 80, lifetime: 1.8, speed: 0.9, angle_dir: 270, angle_spread: 0.08, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.0, despawn_radius: 2.5, seed: 5.0, density_radius: 0.04 },
       },
       {
         id: 'pr_circ', type: 'circleSDF', position: { x: 540, y: 200 },
@@ -6760,7 +6760,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
           density:      { type: 'float', label: 'Density' },
         },
-        params: { max_particles: 60, lifetime: 1.2, speed: 0.6, angle_dir: 0, angle_spread: 1.0, physics_mode: 'free', gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.0, despawn_radius: 1.0, seed: 21.0, density_radius: 0.05 },
+        params: { max_particles: 60, lifetime: 1.2, speed: 0.6, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.0, despawn_radius: 1.0, seed: 21.0, density_radius: 0.05 },
       },
       {
         id: 'pe2_pal', type: 'palettePreset', position: { x: 540, y: 200 },
@@ -6822,7 +6822,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age (0=new, 1=old)' },
           density:      { type: 'float', label: 'Density' },
         },
-        params: { max_particles: 100, lifetime: 3.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, physics_mode: 'field_only', gravity_x: 0, gravity_y: 0, field_strength: 1.8, despawn_radius: 3.0, seed: 3.0, density_radius: 0.05 },
+        params: { max_particles: 80, lifetime: 3.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.8, despawn_radius: 3.0, seed: 3.0, density_radius: 0.05 },
       },
       {
         id: 'pm_pal', type: 'palettePreset', position: { x: 780, y: 220 },

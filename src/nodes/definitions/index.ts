@@ -72,7 +72,7 @@ export {
 } from './sdf3d';
 
 // 3D Scene (composable)
-export { ScenePosNode, SceneGroupNode, RayRenderNode } from './scene3d';
+export { ScenePosNode, SceneGroupNode, RayRenderNode, RayMarchNode, RayMarchLitNode } from './scene3d';
 
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -144,7 +144,7 @@ import {
   Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
   PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
 } from './sdf3d';
-import { ScenePosNode, SceneGroupNode, RayRenderNode } from './scene3d';
+import { ScenePosNode, SceneGroupNode, RayRenderNode, RayMarchNode, RayMarchLitNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
@@ -316,6 +316,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   scenePos: ScenePosNode,
   sceneGroup: SceneGroupNode,
   rayRender: RayRenderNode,
+  rayMarch: RayMarchNode,
+  rayMarchLit: RayMarchLitNode,
   // Color
   palette: PaletteNode,
   palettePreset: PalettePresetNode,

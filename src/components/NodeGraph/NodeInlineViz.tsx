@@ -1522,6 +1522,76 @@ export function AddColorsViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Viz — Particle Emitter ───────────────────────────────────────────────────
+
+export function ParticleEmitterViz({ node }: { node: GraphNode }) {
+  const count    = Number(node.params.max_particles ?? 50);
+  const lifetime = Number(node.params.lifetime ?? 2.0);
+  const speed    = Number(node.params.speed ?? 0.3);
+  const angleDir = Number(node.params.angle_dir ?? 90);
+  const spread   = Number(node.params.angle_spread ?? 1.0);
+  const isFieldFlow = speed < 0.001;
+  const rate     = Math.round(count / Math.max(0.1, lifetime));
+
+  // Simple hash for dot placement (JS-side, deterministic)
+  const jHash = (n: number, s: number) => {
+    let x = Math.abs(Math.sin(n * 127.1 + s * 311.7)) * 43758.5453;
+    return x - Math.floor(x);
+  };
+
+  const cx = 24, cy = 28;
+  const dots = Array.from({ length: 12 }, (_, i) => {
+    if (isFieldFlow) {
+      // Random scattered positions across the mini canvas
+      return {
+        x: jHash(i * 0.17, 1) * 48,
+        y: jHash(i * 0.23, 1) * 48,
+        alpha: 0.4 + jHash(i, 2) * 0.6,
+        size: 2 + jHash(i * 0.5, 3) * 2,
+      };
+    } else {
+      // Fan out from center based on angle/spread
+      const base = (angleDir * Math.PI / 180);
+      const rand = jHash(i * 0.31, 0) * Math.PI * 2;
+      const a    = rand + (base - rand) * (1 - spread);
+      const d    = 4 + (i / 11) * 18;
+      return {
+        x: cx + Math.cos(a) * d,
+        y: cy - Math.sin(a) * d, // flip for screen coords
+        alpha: 0.3 + (1 - i / 11) * 0.7,
+        size: 1.5 + (1 - i / 11) * 2,
+      };
+    }
+  });
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <svg width={48} height={48} style={{ flexShrink: 0, overflow: 'visible' }}>
+        {isFieldFlow ? null : (
+          // Spawn point
+          <circle cx={cx} cy={cy} r={3} fill="#cba6f7" opacity={0.9} />
+        )}
+        {dots.map((d, i) => (
+          <circle
+            key={i}
+            cx={d.x} cy={d.y} r={d.size / 2}
+            fill="#cba6f7"
+            opacity={d.alpha}
+          />
+        ))}
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontSize: '12px', color: '#cba6f7', fontFamily: 'monospace', fontWeight: 600 }}>
+          ~{rate} / sec
+        </span>
+        <span style={{ fontSize: '9px', color: '#6c7086', lineHeight: 1.3 }}>
+          {isFieldFlow ? 'field flow' : `${count} pts • ${lifetime.toFixed(1)}s`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -1550,6 +1620,7 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'multiplyVec3':   return <ScaleColorViz          node={node} />;
     case 'addVec3':
     case 'addColor':       return <AddColorsViz           node={node} />;
+    case 'particleEmitter': return <ParticleEmitterViz   node={node} />;
     default:               return null;
   }
 }
@@ -1562,4 +1633,5 @@ export const INLINE_VIZ_TYPES = new Set([
   'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'waveTexture',
   'smoothstep', 'clamp', 'mix', 'mixVec3', 'mapRange',
   'multiplyVec3', 'addVec3', 'addColor',
+  'particleEmitter',
 ]);
