@@ -279,8 +279,23 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     // Per-node Uint8Array buffers for audio FFT data — allocated once, reused each frame
     const audioFreqBuffers = new Map<string, Uint8Array>();
 
-    function animate() {
+    // ── Render at 30fps max regardless of display refresh rate ───────────────
+    // On 120Hz ProMotion displays, uncapped rAF renders 120fps and spins the fan
+    // even on trivial shaders. 30fps halves GPU load vs 60Hz and quarters vs 120Hz.
+    const TARGET_FPS = 30;
+    const FRAME_MS   = 1000 / TARGET_FPS;   // ~33.3 ms
+    let lastFrameTime = 0;
+
+    function animate(now: number) {
       animFrameRef.current = requestAnimationFrame(animate);
+
+      // Skip entirely when the browser tab is not visible
+      if (document.hidden) return;
+
+      // FPS gate — skip this callback if not enough wall-clock time has elapsed
+      if (now - lastFrameTime < FRAME_MS) return;
+      lastFrameTime = now;
+
       material.uniforms.u_time.value = clock.getElapsedTime();
 
       // ── Audio engine tick: push amplitude uniforms + draw live spectrum ──
