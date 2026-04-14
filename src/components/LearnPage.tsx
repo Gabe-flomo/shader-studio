@@ -512,6 +512,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const sec17Ref = useRef<HTMLDivElement>(null);
   const sec3dRef = useRef<HTMLDivElement>(null);
   const secParticlesRef = useRef<HTMLDivElement>(null);
+  const secBlurRef = useRef<HTMLDivElement>(null);
   const secAppRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -582,6 +583,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
         <span style={S.tocSection}>Advanced</span>
         <TocLink label="Animation" targetRef={sec12Ref} />
         <TocLink label="Effects" targetRef={sec13Ref} />
+        <TocLink label="Blur & Lens" targetRef={secBlurRef} />
         <TocLink label="Fractals" targetRef={sec14Ref} />
         <TocLink label="Particles & Fields" targetRef={secParticlesRef} />
         <TocLink label="3D / Raymarch" targetRef={sec15Ref} />
@@ -1460,6 +1462,120 @@ result = FBM(p2)          // final sample`}</CodeBlock>
           <p style={S.p}>
             Full GLSL function — declare inputs by name, specify the output type, and write a complete function body. For when Expr is too limited and you need multiple statements, local variables, or loops.
           </p>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION — BLUR & LENS
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={secBlurRef as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Blur &amp; Lens Effects</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            Five nodes for photographic post-processing: Gaussian blur, radial (zoom) blur, tilt-shift,
+            a full lens simulation with focal length and aperture, and temporal motion blur.
+            All five use the <strong style={{ color: T.textBold }}>prev-frame ping-pong</strong> system — they
+            read the previous frame's render target to gather neighbouring pixel colors.
+          </p>
+
+          <NodeDiagram
+            nodes={[
+              { label: 'UV',           type: 'source'    },
+              { label: 'Scene Nodes',  type: 'transform' },
+              { label: 'Blur / Lens',  type: 'effect', outputs: ['result'] },
+              { label: 'Output',       type: 'output'    },
+            ]}
+            arrows={[
+              { from: 0, to: 1, label: 'uv' },
+              { from: 1, to: 2, label: 'color + uv' },
+              { from: 2, to: 3, label: 'result' },
+            ]}
+            caption="Standard blur pipeline — wire your scene color + UV into the blur node, result to Output."
+          />
+
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>How it works:</strong> The blur nodes take a <C>color</C> input
+            (the current fragment's scene color) as their center sample, then read <C>u_prevFrame</C> at
+            neighbouring UV positions for the surrounding taps. For static or slow-moving content the result
+            converges to a correct blur within 1–2 frames. Fast motion creates natural trailing.
+          </p>
+
+          <h3 style={S.subTitle}>Gaussian Blur</h3>
+          <p style={S.p}>
+            Smooth photographic blur using a weighted Gaussian kernel. Three quality levels:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Fast</strong> — 3×3 (9 taps). Good for real-time preview.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Standard</strong> — 5×5 (25 taps). Best trade-off.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>High</strong> — 7×7 (49 taps). Smoothest result, heavier on GPU.</li>
+          </ul>
+          <p style={S.p}>
+            The <C>radius</C> slider controls blur strength in pixels (0.5–20). Connect <C>UV</C> → <C>Gaussian
+            Blur.uv</C> and your scene color → <C>Gaussian Blur.color</C>.
+          </p>
+          <TryIt exampleKey="gaussianBlurDemo" label="Gaussian Blur Demo" onTry={tryExample} />
+
+          <h3 style={S.subTitle}>Radial Blur</h3>
+          <p style={S.p}>
+            Zoom/spin blur that samples along the radial direction away from a <C>center</C> point. Creates the
+            classic lens-zoom or rotation-blur look. Wire <C>Mouse UV</C> to <C>center</C> for
+            interactive control. <C>strength</C> is the maximum sample distance (0–0.08 in UV space);{' '}
+            <C>edge falloff</C> ramps the blur strength toward the edges for a natural lens feel.
+          </p>
+
+          <h3 style={S.subTitle}>Tilt-Shift Blur</h3>
+          <p style={S.p}>
+            Variable-radius blur that keeps a narrow band of the image sharp and blurs everything else —
+            the classic miniature / model-world look. Key parameters:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><C>focus_center</C> — where the sharp band sits in UV space (−1 to 1).</li>
+            <li style={S.li}><C>band_width</C> — half-width of the in-focus zone.</li>
+            <li style={S.li}><C>max_blur</C> — maximum blur radius in pixels at full defocus.</li>
+            <li style={S.li}><C>tilt_angle</C> — rotates the focus band for diagonal tilt effects (−60° to 60°).</li>
+            <li style={S.li}><C>axis</C> — Horizontal (default) or Vertical focus band orientation.</li>
+          </ul>
+          <p style={S.p}>
+            The node also outputs a <C>mask</C> float (0 = in-focus, 1 = fully blurred) that you can
+            use to drive vignette, desaturation, or color grading.
+          </p>
+          <TryIt exampleKey="tiltShiftScene" label="Tilt-Shift Demo" onTry={tryExample} />
+
+          <h3 style={S.subTitle}>Lens Blur</h3>
+          <p style={S.p}>
+            Full camera lens simulation. The circle of confusion (CoC) for each pixel is computed from its
+            distance to the <C>focal_point</C>; pixels farther away receive a larger bokeh disc blur. Parameters:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Focal Length</strong> — 24mm (wide, gradual falloff) through 135mm (telephoto, very shallow DoF).</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Aperture</strong> — f/1.4 (wide open, heavy bokeh) through f/8 (stopped down, nearly sharp everywhere).</li>
+            <li style={S.li}><C>focus_distance</C> — in-focus radius in UV units. Pixels within this radius stay sharp.</li>
+            <li style={S.li}><C>bokeh_shape</C> — Disc (circular), Hex (6-blade aperture), or Oct (8-blade aperture).</li>
+            <li style={S.li}><C>boost</C> — multiplier on the CoC size for artistic exaggeration.</li>
+          </ul>
+          <p style={S.p}>
+            Wire <C>Mouse UV</C> → <C>focal_point</C> to interactively pick the focus point. Try 85mm + f/2 +
+            hexagonal bokeh for a cinematic portrait feel.
+          </p>
+          <TryIt exampleKey="lensBokeh" label="Lens Blur / Bokeh" onTry={tryExample} />
+
+          <h3 style={S.subTitle}>Motion Blur</h3>
+          <p style={S.p}>
+            Temporal accumulation: each frame blends the current scene with a decayed copy of the previous frame,
+            producing smooth motion trails. This is the simplest of the blur nodes — just a <C>mix()</C> between
+            current and previous frame.
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><C>persistence</C> — fraction of the previous frame kept (0 = no trails, 0.98 = very long trails). Default 0.65.</li>
+            <li style={S.li}><C>feedback_gain</C> — brightness multiplier on the output, prevents wash-out at high persistence values.</li>
+            <li style={S.li}><C>decay_rgb</C> — per-channel fade tint. Warm tones give fire-like ember trails; cool tones give ghost/ice effects.</li>
+          </ul>
+          <Tip>
+            Motion Blur works best on animated content. For a static scene it converges to the original
+            color within a few frames. Try tinting the decay channels — e.g. decay_r=1.0, decay_g=0.95,
+            decay_b=0.85 for warm golden trails.
+          </Tip>
+          <TryIt exampleKey="motionBlurTrails" label="Motion Blur Trails" onTry={tryExample} />
         </div>
 
         {/* ── Particles & Fields ──────────────────────────────────────────────── */}

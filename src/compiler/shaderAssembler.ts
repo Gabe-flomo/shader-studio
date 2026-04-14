@@ -175,7 +175,10 @@ export function generateFragmentShader(
         audioUniforms[`u_audio_${node.id}_${i}`] = node.id;
       }
     }
-    if (node.type === 'prevFrame' || node.type === 'radianceCascadesApprox') {
+    if (node.type === 'prevFrame' || node.type === 'radianceCascadesApprox' ||
+        node.type === 'gaussianBlur' || node.type === 'radialBlur' ||
+        node.type === 'tiltShiftBlur' || node.type === 'lensBlur' ||
+        node.type === 'motionBlur') {
       isStateful = true;
     }
   }
