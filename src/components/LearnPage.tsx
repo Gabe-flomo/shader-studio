@@ -510,6 +510,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const sec15Ref = useRef<HTMLDivElement>(null);
   const sec16Ref = useRef<HTMLDivElement>(null);
   const sec17Ref = useRef<HTMLDivElement>(null);
+  const sec3dRef = useRef<HTMLDivElement>(null);
   const secAppRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -582,6 +583,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
         <TocLink label="Effects" targetRef={sec13Ref} />
         <TocLink label="Fractals" targetRef={sec14Ref} />
         <TocLink label="3D / Raymarch" targetRef={sec15Ref} />
+        <TocLink label="3D Composable" targetRef={sec3dRef} />
         <TocLink label="Import / Export" targetRef={sec16Ref} />
 
         <span style={S.tocSection}>Reference</span>
@@ -2401,6 +2403,88 @@ temperature = 1000.0 + fbm_value * 5500.0
             RayRender input. It cannot be wired into math or color nodes. Think of it as carrying compiled
             scene code, not a data value.
           </Warn>
+        </div>
+
+        {/* ── 3D Composable Scenes ── */}
+        <div ref={sec3dRef as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>3D Composable Scenes</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            The composable 3D system lets you build raymarched scenes from individual nodes rather than writing raw GLSL.
+            Five node types form the pipeline: <strong>ScenePos</strong>, SDF primitives, transform nodes, <strong>SceneGroup</strong>, and <strong>RayRender</strong>.
+          </p>
+
+          <p style={S.subTitle}>The Flow: ScenePos → SDF → SceneGroup → RayRender</p>
+          <p style={S.p}>
+            Inside a <strong>SceneGroup</strong>, <strong>ScenePos</strong> outputs the current ray position <code>p</code>.
+            Feed it through any chain of transforms and SDFs. The final distance float goes to the SceneGroup output port,
+            which compiles the subgraph into a GLSL function. Outside the group, connect <strong>SceneGroup → RayRender</strong> along with UV and Time.
+          </p>
+          <pre style={S.code}>{`// Compiled from the SceneGroup subgraph:
+float mapScene_abc123(vec3 p) {
+    float sdf_dist = sdf3d_sphere(p, 0.5);
+    return sdf_dist;
+}
+// RayRender marches rays against mapScene_abc123`}</pre>
+
+          <p style={S.subTitle}>Order of Operations</p>
+          <Warn>
+            Transform nodes <em>must come before</em> the SDF node in the chain, not after.
+            The SDF evaluates distance from the <em>transformed</em> position — if you connect the SDF first and the transform second,
+            the transform has no effect. Always wire: <strong>ScenePos → Transform → SDF → output</strong>.
+          </Warn>
+
+          <p style={S.subTitle}>Infinite Space Repetition</p>
+          <p style={S.p}>
+            <strong>Repeat3D</strong> folds space so every point sees a copy of the scene within a cell. The implementation
+            uses a mod-based fold: <code>mod(p + 0.5*cell, cell) - 0.5*cell</code>. One SDF becomes infinitely tiled with no
+            extra cost — only the primitive inside the cell is evaluated.
+          </p>
+          <pre style={S.code}>{`// Repeat3D mental model:
+//   cellX=2.0, cellY=2.0, cellZ=2.0
+//   every 2 units in each direction, space resets
+// Chain: ScenePos → Repeat3D → SphereSDF3D`}</pre>
+
+          <Tip>
+            To create a flying-forward effect, add a <strong>Translate3D</strong> node <em>before</em> <strong>Repeat3D</strong> and wire <strong>Time</strong> into the Z offset.
+            The entire repeated field scrolls toward the camera.
+          </Tip>
+
+          <p style={S.subTitle}>Domain Warp Nodes: SinWarp3D &amp; SpiralWarp3D</p>
+          <p style={S.p}>
+            <strong>SinWarp3D</strong> displaces one axis by a sine of another: <code>p.y += sin(p.x * freq + time) * amp</code>.
+            <strong>SpiralWarp3D</strong> rotates the chosen plane by an angle proportional to the point's distance from the origin,
+            creating a vortex. Both distort the SDF metric — keep amplitude below 0.15 for SinWarp and frequency below 1.5 for SpiralWarp
+            to avoid over-stepping artifacts.
+          </p>
+
+          <Warn>
+            Domain warp nodes break the Lipschitz condition of the SDF. If you see grainy or missing surfaces,
+            reduce the warp amplitude or increase <strong>Max Steps</strong> on the RayRender node.
+          </Warn>
+
+          <p style={S.subTitle}>RayRender Outputs: color, depth, normal, iter</p>
+          <ul style={S.ul}>
+            <li style={S.li}><strong>color</strong> — fully shaded vec3 with diffuse + ambient + fog.</li>
+            <li style={S.li}><strong>depth</strong> — normalized hit distance (0 = camera, 1 = max dist / miss).</li>
+            <li style={S.li}><strong>normal</strong> — world-space surface normal vec3, range −1 to 1. Zero on miss.</li>
+            <li style={S.li}><strong>iter</strong> — normalized step count 0–1. High values (near 1) indicate expensive regions.</li>
+          </ul>
+
+          <p style={S.subTitle}>Normal-Based Coloring</p>
+          <p style={S.p}>
+            The raw <strong>normal</strong> output has components in −1 to 1. To turn it into a visible color, remap to 0–1:
+            wire <code>normal</code> into <strong>MultiplyVec3</strong> (scale = 0.5) then <strong>AddVec3</strong> (b = 0.5, 0.5, 0.5).
+            The result is a classic normal-map RGB where X=red, Y=green, Z=blue.
+          </p>
+
+          <p style={S.subTitle}>Iteration Count Shading</p>
+          <p style={S.p}>
+            Wire <strong>iter</strong> (multiplied by a factor like 8) into a <strong>Palette</strong> node's <code>t</code> input
+            to color surfaces by marching cost. Cheap regions stay one color; complex or thin features glow differently.
+            Combine with depth for a depth + cost composite.
+          </p>
         </div>
 
         {/* Bottom padding */}

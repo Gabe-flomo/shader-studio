@@ -5562,6 +5562,536 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── 3D: Hello Sphere ─────────────────────────────────────────────────────────
+  helloSphere3D: {
+    label: '3D: Hello Sphere',
+    counter: 7,
+    nodes: [
+      { id: 'ha_uv',   type: 'uv',   position: { x: 50, y: 50  }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'ha_time', type: 'time', position: { x: 50, y: 150 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ha_scene', type: 'sceneGroup', position: { x: 300, y: 100 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Hello Sphere',
+          subgraph: {
+            nodes: [
+              {
+                id: 'ha_sp_sg', type: 'scenePos', position: { x: 80, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'ha_sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'ha_sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.5 },
+              },
+            ],
+            outputNodeId: 'ha_sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ha_ray', type: 'rayRender', position: { x: 580, y: 80 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'ha_scene', outputKey: 'scene' } },
+          uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'ha_uv',    outputKey: 'uv'   } },
+          time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'ha_time',  outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
+        params: { camDist: 2.5, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.0, lightY: 2.0, lightZ: 3.0, bgR: 0.03, bgG: 0.03, bgB: 0.07, albedoR: 0.4, albedoG: 0.6, albedoB: 1.0 },
+      },
+      {
+        id: 'ha_f2v', type: 'floatToVec3', position: { x: 830, y: 160 },
+        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'ha_ray', outputKey: 'depth' } } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'ha_out', type: 'output', position: { x: 1060, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ha_f2v', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Shapes + Ground ───────────────────────────────────────────────────────
+  shapesAndGround3D: {
+    label: '3D: Shapes + Ground',
+    counter: 5,
+    nodes: [
+      { id: 'hb_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'hb_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'hb_scene', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Shapes + Ground',
+          subgraph: {
+            nodes: [
+              {
+                id: 'hb_sp', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              // Sphere translated left
+              {
+                id: 'hb_trS', type: 'translate3D', position: { x: 240, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hb_sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: -0.5, ty: 0.0, tz: 0.0 },
+              },
+              {
+                id: 'hb_sph', type: 'sphereSDF3D', position: { x: 430, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hb_trS', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.35 },
+              },
+              // Box translated right
+              {
+                id: 'hb_trB', type: 'translate3D', position: { x: 240, y: 280 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hb_sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: 0.5, ty: 0.0, tz: 0.0 },
+              },
+              {
+                id: 'hb_box', type: 'boxSDF3D', position: { x: 430, y: 280 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hb_trB', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { sizeX: 0.3, sizeY: 0.3, sizeZ: 0.3 },
+              },
+              // Ground plane
+              {
+                id: 'hb_gnd', type: 'planeSDF3D', position: { x: 240, y: 440 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'hb_sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { height: -0.5 },
+              },
+              // Smooth min: sphere + box
+              {
+                id: 'hb_sm1', type: 'smoothMin', position: { x: 620, y: 180 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'hb_sph', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'hb_box', outputKey: 'dist' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { k: 0.2 },
+              },
+              // Min with ground
+              {
+                id: 'hb_mn2', type: 'minMath', position: { x: 800, y: 310 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'hb_sm1', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'hb_gnd', outputKey: 'dist'   } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: {},
+              },
+            ],
+            outputNodeId: 'hb_mn2',
+            outputKey: 'result',
+          },
+        },
+      },
+      {
+        id: 'hb_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hb_scene', outputKey: 'scene' } },
+          uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hb_uv',    outputKey: 'uv'   } },
+          time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hb_time',  outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.5, bgR: 0.03, bgG: 0.04, bgB: 0.08, albedoR: 0.6, albedoG: 0.7, albedoB: 0.9 },
+      },
+      {
+        id: 'hb_out', type: 'output', position: { x: 820, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hb_ray', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Infinite Falling ──────────────────────────────────────────────────────
+  infiniteFalling3D: {
+    label: '3D: Infinite Falling',
+    counter: 9,
+    nodes: [
+      { id: 'hc_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'hc_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'hc_scene', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Infinite Falling',
+          subgraph: {
+            nodes: [
+              {
+                id: 'hc_sp', type: 'scenePos', position: { x: 60, y: 180 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'hc_tm', type: 'time', position: { x: 60, y: 300 },
+                inputs: {},
+                outputs: { time: { type: 'float', label: 'Time' } },
+                params: {},
+              },
+              // Translate Z by time to create flying-forward motion
+              {
+                id: 'hc_tr', type: 'translate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos: { type: 'vec3',  label: 'Position', connection: { nodeId: 'hc_sp', outputKey: 'pos'  } },
+                  tz:  { type: 'float', label: 'Z',        connection: { nodeId: 'hc_tm', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: 0.0, ty: 0.0, tz: 0.0 },
+              },
+              // Repeat space
+              {
+                id: 'hc_rep', type: 'repeat3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hc_tr', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.2, cellY: 1.2, cellZ: 2.5 },
+              },
+              // Octahedron
+              {
+                id: 'hc_oct', type: 'octahedronSDF3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hc_rep', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.2 },
+              },
+            ],
+            outputNodeId: 'hc_oct',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'hc_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hc_scene', outputKey: 'scene' } },
+          uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hc_uv',    outputKey: 'uv'   } },
+          time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hc_time',  outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
+        params: { camDist: 4.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.0, lightY: 2.0, lightZ: 3.0, bgR: 0.02, bgG: 0.02, bgB: 0.06, albedoR: 0.5, albedoG: 0.8, albedoB: 0.9 },
+      },
+      // depth + iter → palette coloring
+      {
+        id: 'hc_mul_iter', type: 'multiply', position: { x: 820, y: 340 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'hc_ray', outputKey: 'iter'  } },
+          b: { type: 'float', label: 'B' },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 8.0 },
+      },
+      {
+        id: 'hc_add_t', type: 'add', position: { x: 820, y: 240 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'hc_ray',      outputKey: 'depth'  } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'hc_mul_iter', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'hc_pal', type: 'palette', position: { x: 1020, y: 240 },
+        inputs: {
+          t: { type: 'float', label: 'T', connection: { nodeId: 'hc_add_t', outputKey: 'result' } },
+          offset_r: { type: 'float', label: 'offset.r' }, offset_g: { type: 'float', label: 'offset.g' }, offset_b: { type: 'float', label: 'offset.b' },
+          amplitude_r: { type: 'float', label: 'amplitude.r' }, amplitude_g: { type: 'float', label: 'amplitude.g' }, amplitude_b: { type: 'float', label: 'amplitude.b' },
+          freq_r: { type: 'float', label: 'freq.r' }, freq_g: { type: 'float', label: 'freq.g' }, freq_b: { type: 'float', label: 'freq.b' },
+          phase_r: { type: 'float', label: 'phase.r' }, phase_g: { type: 'float', label: 'phase.g' }, phase_b: { type: 'float', label: 'phase.b' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'hc_out', type: 'output', position: { x: 1260, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hc_pal', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Spiral World ──────────────────────────────────────────────────────────
+  spiralWorld3D: {
+    label: '3D: Spiral World',
+    counter: 8,
+    nodes: [
+      { id: 'hd_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'hd_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'hd_scene', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Spiral World',
+          subgraph: {
+            nodes: [
+              {
+                id: 'hd_sp', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'hd_tm', type: 'time', position: { x: 60, y: 330 },
+                inputs: {},
+                outputs: { time: { type: 'float', label: 'Time' } },
+                params: {},
+              },
+              // Translate Z by time
+              {
+                id: 'hd_tr', type: 'translate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos: { type: 'vec3',  label: 'Position', connection: { nodeId: 'hd_sp', outputKey: 'pos'  } },
+                  tz:  { type: 'float', label: 'Z',        connection: { nodeId: 'hd_tm', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: 0.0, ty: 0.0, tz: 0.0 },
+              },
+              // Repeat
+              {
+                id: 'hd_rep', type: 'repeat3D', position: { x: 420, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hd_tr', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.5, cellY: 1.5, cellZ: 2.0 },
+              },
+              // Sin Warp
+              {
+                id: 'hd_swp', type: 'sinWarp3D', position: { x: 600, y: 180 },
+                inputs: {
+                  p:    { type: 'vec3',  label: 'Position', connection: { nodeId: 'hd_rep', outputKey: 'pos'  } },
+                  time: { type: 'float', label: 'Time',     connection: { nodeId: 'hd_tm',  outputKey: 'time' } },
+                },
+                outputs: { p: { type: 'vec3', label: 'Warped Position' } },
+                params: { distort_axis: 'y', source_axis: 'x', frequency: 2.5, amplitude: 0.1 },
+              },
+              // Spiral Warp
+              {
+                id: 'hd_spw', type: 'spiralWarp3D', position: { x: 780, y: 180 },
+                inputs: {
+                  p:    { type: 'vec3',  label: 'Position', connection: { nodeId: 'hd_swp', outputKey: 'p'    } },
+                  time: { type: 'float', label: 'Time',     connection: { nodeId: 'hd_tm',  outputKey: 'time' } },
+                },
+                outputs: { p: { type: 'vec3', label: 'Spiraled Position' } },
+                params: { rotation_plane: 'xy', frequency: 0.4 },
+              },
+              // Octahedron
+              {
+                id: 'hd_oct', type: 'octahedronSDF3D', position: { x: 960, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hd_spw', outputKey: 'p' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.25 },
+              },
+            ],
+            outputNodeId: 'hd_oct',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'hd_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hd_scene', outputKey: 'scene' } },
+          uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hd_uv',    outputKey: 'uv'   } },
+          time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hd_time',  outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
+        params: { camDist: 4.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.5, lightY: 2.0, lightZ: 3.0, bgR: 0.02, bgG: 0.02, bgB: 0.05, albedoR: 0.8, albedoG: 0.5, albedoB: 0.9 },
+      },
+      // depth + iter → rainbow palette
+      {
+        id: 'hd_add', type: 'add', position: { x: 820, y: 260 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'hd_ray', outputKey: 'depth' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'hd_ray', outputKey: 'iter'  } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'hd_pal', type: 'palette', position: { x: 1020, y: 260 },
+        inputs: {
+          t: { type: 'float', label: 'T', connection: { nodeId: 'hd_add', outputKey: 'result' } },
+          offset_r: { type: 'float', label: 'offset.r' }, offset_g: { type: 'float', label: 'offset.g' }, offset_b: { type: 'float', label: 'offset.b' },
+          amplitude_r: { type: 'float', label: 'amplitude.r' }, amplitude_g: { type: 'float', label: 'amplitude.g' }, amplitude_b: { type: 'float', label: 'amplitude.b' },
+          freq_r: { type: 'float', label: 'freq.r' }, freq_g: { type: 'float', label: 'freq.g' }, freq_b: { type: 'float', label: 'freq.b' },
+          phase_r: { type: 'float', label: 'phase.r' }, phase_g: { type: 'float', label: 'phase.g' }, phase_b: { type: 'float', label: 'phase.b' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'hd_out', type: 'output', position: { x: 1260, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hd_pal', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Soft Metaballs ────────────────────────────────────────────────────────
+  softMetaballs3D: {
+    label: '3D: Soft Metaballs',
+    counter: 6,
+    nodes: [
+      { id: 'he_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'he_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'he_scene', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Soft Metaballs',
+          subgraph: {
+            nodes: [
+              {
+                id: 'he_sp', type: 'scenePos', position: { x: 60, y: 250 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'he_tm', type: 'time', position: { x: 60, y: 380 },
+                inputs: {},
+                outputs: { time: { type: 'float', label: 'Time' } },
+                params: {},
+              },
+              // Sphere A — static center
+              {
+                id: 'he_sphA', type: 'sphereSDF3D', position: { x: 250, y: 120 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'he_sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.35 },
+              },
+              // Sphere B — rotated around Y by time
+              {
+                id: 'he_rotB', type: 'rotate3D', position: { x: 250, y: 260 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'he_sp', outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'he_tm', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'y', angle: 0.0 },
+              },
+              {
+                id: 'he_trB', type: 'translate3D', position: { x: 440, y: 260 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'he_rotB', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: 0.6, ty: 0.0, tz: 0.0 },
+              },
+              {
+                id: 'he_sphB', type: 'sphereSDF3D', position: { x: 620, y: 260 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'he_trB', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.3 },
+              },
+              // Sphere C — rotated at different speed
+              {
+                id: 'he_rotC', type: 'rotate3D', position: { x: 250, y: 400 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'he_sp', outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'he_tm', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'z', angle: 0.0 },
+              },
+              {
+                id: 'he_trC', type: 'translate3D', position: { x: 440, y: 400 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'he_rotC', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: 0.0, ty: 0.55, tz: 0.0 },
+              },
+              {
+                id: 'he_sphC', type: 'sphereSDF3D', position: { x: 620, y: 400 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'he_trC', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.28 },
+              },
+              // Smooth union A+B
+              {
+                id: 'he_sm1', type: 'smoothMin', position: { x: 820, y: 190 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'he_sphA', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'he_sphB', outputKey: 'dist' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { k: 0.3 },
+              },
+              // Smooth union (A+B)+C
+              {
+                id: 'he_sm2', type: 'smoothMin', position: { x: 1000, y: 300 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'he_sm1',  outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'he_sphC', outputKey: 'dist'   } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { k: 0.3 },
+              },
+            ],
+            outputNodeId: 'he_sm2',
+            outputKey: 'result',
+          },
+        },
+      },
+      {
+        id: 'he_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'he_scene', outputKey: 'scene' } },
+          uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'he_uv',    outputKey: 'uv'   } },
+          time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'he_time',  outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
+        params: { camDist: 3.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, bgR: 0.02, bgG: 0.02, bgB: 0.06, albedoR: 0.9, albedoG: 0.6, albedoB: 0.4 },
+      },
+      // Normal-based coloring: normal * 0.5 + 0.5
+      {
+        id: 'he_nmul', type: 'multiplyVec3', position: { x: 820, y: 200 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'he_ray', outputKey: 'normal' } },
+          scale: { type: 'float', label: 'Scale' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { scale: 0.5 },
+      },
+      {
+        id: 'he_nadd', type: 'addVec3', position: { x: 1020, y: 200 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'he_nmul', outputKey: 'result' } },
+          b: { type: 'vec3', label: 'B' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { bx: 0.5, by: 0.5, bz: 0.5 },
+      },
+      // Mix lit color with normal color using hit mask
+      {
+        id: 'he_mix', type: 'mixVec3', position: { x: 1080, y: 340 },
+        inputs: {
+          a:   { type: 'vec3',  label: 'A',   connection: { nodeId: 'he_ray',  outputKey: 'color'  } },
+          b:   { type: 'vec3',  label: 'B',   connection: { nodeId: 'he_nadd', outputKey: 'result' } },
+          t:   { type: 'float', label: 'T' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { t: 0.5 },
+      },
+      {
+        id: 'he_out', type: 'output', position: { x: 1300, y: 340 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'he_mix', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

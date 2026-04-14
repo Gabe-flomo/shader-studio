@@ -79,16 +79,19 @@ export const RayRenderNode: NodeDefinition = {
   type: 'rayRender', label: 'Ray Render', category: '3D Scene',
   description: 'Full sphere-tracer. Connect a Scene Group to the Scene input. Outputs shaded color and raw depth.',
   inputs: {
-    scene:   { type: 'scene3d', label: 'Scene' },
-    uv:      { type: 'vec2',  label: 'UV' },
-    time:    { type: 'float', label: 'Time' },
-    camDist: { type: 'float', label: 'Cam Distance' },
-    fov:     { type: 'float', label: 'FOV' },
+    scene:     { type: 'scene3d', label: 'Scene' },
+    uv:        { type: 'vec2',  label: 'UV' },
+    time:      { type: 'float', label: 'Time' },
+    camDist:   { type: 'float', label: 'Cam Distance' },
+    fov:       { type: 'float', label: 'FOV' },
+    cam_rot_h: { type: 'float', label: 'Cam Rot H' },
+    cam_rot_v: { type: 'float', label: 'Cam Rot V' },
   },
   outputs: {
     color:  { type: 'vec3',  label: 'Color' },
     depth:  { type: 'float', label: 'Depth' },
     normal: { type: 'vec3',  label: 'Normal' },
+    iter:   { type: 'float', label: 'Iter Count' },
   },
   defaultParams: {
     camDist:    3.0,
@@ -140,6 +143,8 @@ export const RayRenderNode: NodeDefinition = {
     const ar = p(node.params.albedoR, 0.6);
     const ag = p(node.params.albedoG, 0.7);
     const ab = p(node.params.albedoB, 0.9);
+    const cam_rot_h = inputVars.cam_rot_h || '0.0';
+    const cam_rot_v = inputVars.cam_rot_v || '0.0';
 
     return {
       code: [
@@ -151,16 +156,25 @@ export const RayRenderNode: NodeDefinition = {
         `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,
         `    vec3  ${id}_up2 = cross(${id}_fwd, ${id}_rgt);\n`,
         `    vec3  ${id}_rd  = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
-        // Ray march
+        // Apply horizontal rotation around Y (cam_rot_h) and vertical tilt (cam_rot_v)
+        `    float ${id}_crh = ${cam_rot_h};\n`,
+        `    float ${id}_crv = ${cam_rot_v};\n`,
+        `    vec3  ${id}_rd2 = ${id}_rd;\n`,
+        `    ${id}_rd2.xz = vec2(cos(${id}_crh)*${id}_rd.x + sin(${id}_crh)*${id}_rd.z, -sin(${id}_crh)*${id}_rd.x + cos(${id}_crh)*${id}_rd.z);\n`,
+        `    ${id}_rd2.yz = vec2(cos(${id}_crv)*${id}_rd2.y - sin(${id}_crv)*${id}_rd2.z, sin(${id}_crv)*${id}_rd2.y + cos(${id}_crv)*${id}_rd2.z);\n`,
+        `    ${id}_rd = ${id}_rd2;\n`,
+        // Ray march — track step count for iter output
         `    float ${id}_t   = 0.001;\n`,
         `    float ${id}_hit = 0.0;\n`,
+        `    int   ${id}_si  = 0;\n`,
         `    for (int ${id}_i = 0; ${id}_i < ${maxSteps}; ${id}_i++) {\n`,
         `        vec3  ${id}_rp = ${id}_ro + ${id}_t * ${id}_rd;\n`,
         `        float ${id}_d  = ${sceneFn}(${id}_rp);\n`,
-        `        if (${id}_d < 0.0005) { ${id}_hit = 1.0; break; }\n`,
+        `        if (${id}_d < 0.0005) { ${id}_hit = 1.0; ${id}_si = ${id}_i; break; }\n`,
         `        ${id}_t += ${id}_d;\n`,
-        `        if (${id}_t > ${maxDist}) break;\n`,
+        `        if (${id}_t > ${maxDist}) { ${id}_si = ${id}_i; break; }\n`,
         `    }\n`,
+        `    float ${id}_iter = float(${id}_si) / float(${maxSteps});\n`,
         // Normal estimation
         `    vec3  ${id}_hp  = ${id}_ro + ${id}_t * ${id}_rd;\n`,
         `    float ${id}_e   = 0.001;\n`,
@@ -186,6 +200,7 @@ export const RayRenderNode: NodeDefinition = {
         color:  `${id}_color`,
         depth:  `${id}_depth`,
         normal: `${id}_normal`,
+        iter:   `${id}_iter`,
       },
     };
   },

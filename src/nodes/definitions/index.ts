@@ -62,6 +62,7 @@ export {
   SphereSDF3DNode, BoxSDF3DNode, TorusSDF3DNode, CapsuleSDF3DNode,
   CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
   Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
+  PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
 } from './sdf3d';
 
 // 3D Scene (composable)
@@ -130,6 +131,7 @@ import {
   SphereSDF3DNode, BoxSDF3DNode, TorusSDF3DNode, CapsuleSDF3DNode,
   CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
   Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
+  PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, RayRenderNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -278,12 +280,17 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   cylinderSDF3D: CylinderSDF3DNode,
   coneSDF3D: ConeSDF3DNode,
   octahedronSDF3D: OctahedronSDF3DNode,
+  planeSDF3D: PlaneSDF3DNode,
   // 3D Transforms
   translate3D: Translate3DNode,
   rotate3D: Rotate3DNode,
   repeat3D: Repeat3DNode,
   twist3D: Twist3DNode,
   fold3D: Fold3DNode,
+  scale3d: Scale3DNode,
+  rotateAxis3D: RotateAxis3DNode,
+  sinWarp3D: SinWarp3DNode,
+  spiralWarp3D: SpiralWarp3DNode,
   // 3D Scene (composable)
   scenePos: ScenePosNode,
   sceneGroup: SceneGroupNode,
