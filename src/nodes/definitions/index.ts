@@ -41,7 +41,6 @@ export {
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  ChromaticAberrationAutoNode,
 } from './effects';
 export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 export { LoopCarryNode } from './loop';
@@ -54,6 +53,9 @@ export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNod
 
 // Physics
 export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
+
+// Particles & Fields
+export { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
 
 // 3D / Volumetric
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
@@ -70,7 +72,7 @@ export {
 } from './sdf3d';
 
 // 3D Scene (composable)
-export { ScenePosNode, SceneGroupNode, RayRenderNode, RayMarchNode, RayMarchLitNode } from './scene3d';
+export { ScenePosNode, SceneGroupNode, RayRenderNode } from './scene3d';
 
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -127,13 +129,13 @@ import {
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  ChromaticAberrationAutoNode,
 } from './effects';
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
+import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
 import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import {
@@ -142,7 +144,7 @@ import {
   Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
   PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
 } from './sdf3d';
-import { ScenePosNode, SceneGroupNode, RayRenderNode, RayMarchNode, RayMarchLitNode } from './scene3d';
+import { ScenePosNode, SceneGroupNode, RayRenderNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
@@ -247,7 +249,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   scanlines: ScanlinesNode,
   sobel: SobelNode,
   radianceCascadesApprox: RadianceCascadesApproxNode,
-  chromaticAberrationAuto: ChromaticAberrationAutoNode,
   // Loops (wired pair system)
   loopCarry:             LoopCarryNode,
   loopStart:             LoopStartNode,
@@ -276,6 +277,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   chladni3d: Chladni3DNode,
   chladni3dParticles: Chladni3DParticlesNode,
   electronOrbital: ElectronOrbitalNode,
+  // Particles & Fields
+  particleEmitter: ParticleEmitterNode,
+  vectorField:     VectorFieldNode,
+  gravityField:    GravityFieldNode,
+  spiralField:     SpiralFieldNode,
   // 3D / Volumetric
   raymarch3d: RaymarchNode,
   volumeClouds: VolumeCloudsNode,
@@ -309,9 +315,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // 3D Scene (composable)
   scenePos: ScenePosNode,
   sceneGroup: SceneGroupNode,
-  rayRender: RayRenderNode,   // keep for backward compat (saved graphs)
-  rayMarch: RayMarchNode,
-  rayMarchLit: RayMarchLitNode,
+  rayRender: RayRenderNode,
   // Color
   palette: PaletteNode,
   palettePreset: PalettePresetNode,
