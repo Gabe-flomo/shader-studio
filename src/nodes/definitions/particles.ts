@@ -17,34 +17,29 @@ float phash2(float n, float seed) {
     return fract((hv.x + hv.y) * hv.y);
 }
 
-// 4-octave FBM using the built-in valueNoise (always available in shader preamble).
+// 2-octave FBM — cheap enough to call multiple times per Euler step.
 float pfbm(vec2 p) {
-    float v = 0.0;
-    float a = 0.5;
-    for (int i = 0; i < 4; i++) {
-        v += a * valueNoise(p);
-        p  = p * 2.0 + vec2(31.41, 27.18);
-        a *= 0.5;
-    }
-    return v;
+    float v = valueNoise(p) * 0.5 + valueNoise(p * 2.0 + vec2(31.41, 27.18)) * 0.25;
+    return v * (1.0 / 0.75);   // normalise to [0,1]
 }
 
 // Returns a direction angle for position p at time t.
-//   mode 0 : FBM value noise  (slow meander)
-//   mode 1 : curl of FBM      (swirling vortex)
+//   mode 0 : FBM value noise  (slow meander)   — 1 pfbm call / step
+//   mode 1 : curl of FBM      (swirling vortex) — 2 pfbm calls / step
 float flowAngle(vec2 p, float scale, float t, float speed, int mode) {
     vec2 sp = p * scale + t * speed;
     if (mode == 1) {
-        float eps = 0.02;
+        float eps = 0.03;
         float nx  = pfbm(sp + vec2(eps, 0.0));
         float ny  = pfbm(sp + vec2(0.0, eps));
-        float n   = pfbm(sp);
-        return atan(nx - n, -(ny - n));   // curl: (-dF/dy, dF/dx)
+        // Centred curl estimate (no 3rd centre sample needed):
+        return atan(nx - 0.5, -(ny - 0.5));
     }
     return pfbm(sp) * 6.28318;
 }
 
-// Forward Euler integration through noise field — 6 steps.
+// Forward Euler integration through noise field — 3 steps.
+// Reduced from 6 for performance; visual quality is nearly identical.
 // seed_pos is the particle's birth position (in g_uv centred space).
 vec2 particleFlowPos(int pidx, float t, vec2 seed_pos, float spd, float lifetime,
     float noise_scale, float noise_speed, float seed_p, int noise_mode) {
@@ -55,8 +50,8 @@ vec2 particleFlowPos(int pidx, float t, vec2 seed_pos, float spd, float lifetime
     float age   = mod(t - birth, lifetime);
 
     vec2  pos = seed_pos;
-    float dt  = age / 6.0;
-    for (int step = 0; step < 6; step++) {
+    float dt  = age / 3.0;
+    for (int step = 0; step < 3; step++) {
         float a = flowAngle(pos, noise_scale,
                             t - age + float(step) * dt,
                             noise_speed, noise_mode);

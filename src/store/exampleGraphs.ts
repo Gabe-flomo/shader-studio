@@ -6526,7 +6526,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           density:      { type: 'float', label: 'Density'       },
         },
         params: {
-          flow_mode: 'noise', max_particles: 60, lifetime: 5.0, speed: 0.45,
+          flow_mode: 'noise', max_particles: 40, lifetime: 5.0, speed: 0.45,
           noise_type: 'curl', noise_scale: 2.5, noise_speed: 0.25, spawn_radius: 1.8,
           angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0,
           field_strength: 1.2, despawn_radius: 2.5, seed: 42.0, density_radius: 0.04,
@@ -6577,7 +6577,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           density:      { type: 'float', label: 'Density'       },
         },
         params: {
-          flow_mode: 'noise', max_particles: 60, lifetime: 6.0, speed: 0.3,
+          flow_mode: 'noise', max_particles: 40, lifetime: 6.0, speed: 0.3,
           noise_type: 'curl', noise_scale: 1.5, noise_speed: 0.12, spawn_radius: 1.5,
           angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0,
           field_strength: 1.8, despawn_radius: 3.0, seed: 7.0, density_radius: 0.045,
