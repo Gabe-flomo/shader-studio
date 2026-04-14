@@ -79,7 +79,12 @@ function emitSharedMarchCode(
 ): string {
   return [
     `    float ${id}_ang = ${camAngle} + ${time} * ${rotSpeed};\n`,
-    `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, 0.8, cos(${id}_ang)*${camDist});\n`,
+    // Camera height scales with distance (≈30%) so the elevation angle stays constant.
+    // This prevents the "tipping down" effect at low camDist values where a fixed
+    // height (0.8) would dominate and produce a near-vertical look direction,
+    // eventually collapsing the right-vector via cross(worldUp, fwd) → zero.
+    `    float ${id}_ch  = max(${camDist} * 0.3, 0.15);\n`,
+    `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, ${id}_ch, cos(${id}_ang)*${camDist});\n`,
     `    vec3  ${id}_ta  = vec3(0.0);\n`,
     `    vec3  ${id}_fwd = normalize(${id}_ta - ${id}_ro);\n`,
     `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,

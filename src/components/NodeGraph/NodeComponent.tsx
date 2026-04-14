@@ -89,7 +89,7 @@ const TYPE_COLORS: Record<string, string> = {
   vec2: '#0af',
   vec3: '#0fa',
   vec4: '#fa0',
-  scene3d: '#c8a',   // purple-ish for 3D scene wires
+  scene3d: '#cc88aa',  // pastel pink for 3D scene wires
 };
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -1028,7 +1028,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const outputPorts = subgraph?.outputPorts ?? [];
     const groupIters = typeof node.params.iterations === 'number' ? node.params.iterations : 1;
     const hasInnerGroups = subgraph?.nodes.some(n => n.type === 'group') ?? false;
-    const groupAccentColor = hasInnerGroups ? '#cba6f7' : '#89b4fa';
+    const isSceneGroup = node.type === 'sceneGroup';
+    // SceneGroup gets the scene3d wire color (pastel pink); nested groups get mauve; regular groups get blue
+    const groupAccentColor = isSceneGroup ? '#cc88aa' : (hasInnerGroups ? '#cba6f7' : '#89b4fa');
 
     const handleGroupHeaderMouseDown = (e: React.MouseEvent) => {
       if (e.button === 2) return;
@@ -1096,7 +1098,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         >
           {/* Label + count */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
-            <span style={{ fontSize: '13px', flexShrink: 0 }}>⬡</span>
+            <span style={{ fontSize: '13px', flexShrink: 0 }}>{isSceneGroup ? '◉' : '⬡'}</span>
             <span style={{ fontWeight: 600, color: groupAccentColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{groupLabel}</span>
             <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0 }}>({nodeCount})</span>
           </div>
@@ -1131,15 +1133,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 transition: 'color 0.15s',
               }}
             >↓</button>
-            {/* Dissolve */}
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => ungroupNode(node.id)}
-              title="Dissolve group"
-              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-            >✕</button>
+            {/* Dissolve — only for regular groups, not scene groups */}
+            {!isSceneGroup && (
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => ungroupNode(node.id)}
+                title="Dissolve group"
+                style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+              >✕</button>
+            )}
           </div>
         </div>
 
@@ -1265,6 +1269,31 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
           {/* Outputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+            {/* SceneGroup: always show the scene output socket */}
+            {isSceneGroup && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', color: '#cc88aa' }}>Scene</span>
+                <div
+                  data-socket="out"
+                  ref={el => { registerSocket(node.id, 'out', 'scene', el); }}
+                  onMouseDown={e => onStartConnection(node.id, 'scene', e)}
+                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, 'scene'); }}
+                  style={{
+                    width: isTouchDevice ? 20 : 10,
+                    height: isTouchDevice ? 20 : 10,
+                    borderRadius: '50%',
+                    background: TYPE_COLORS['scene3d'] ?? '#cc88aa',
+                    cursor: 'crosshair',
+                    position: 'relative',
+                    right: isTouchDevice ? -20 : -14,
+                    touchAction: 'manipulation',
+                    boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === 'scene'
+                      ? `0 0 0 3px ${TYPE_COLORS['scene3d'] ?? '#cc88aa'}, 0 0 10px ${TYPE_COLORS['scene3d'] ?? '#cc88aa'}`
+                      : undefined,
+                  }}
+                />
+              </div>
+            )}
             {outputPorts.map(port => (
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {editingPortKey === ('out_' + port.key) ? (
@@ -2195,16 +2224,22 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         </div>
       )}
 
-      {/* ── Always-visible SDF shape preview ── */}
-      {SDF_TYPES.has(node.type) && <SdfPreviewViz node={node} />}
+      {/* ── SDF shape preview — only when 👁 is active ── */}
+      {SDF_TYPES.has(node.type) && isPreviewActive && <SdfPreviewViz node={node} />}
 
-      {/* ── Always-visible LFO waveform ── */}
+      {/* ── LFO waveform — canvas is always in DOM for scope registry, but hidden unless 👁 active ── */}
       {LFO_TYPES.has(node.type) && (
         <canvas
           ref={scopeCanvasRef}
           width={240}
           height={64}
-          style={{ display: 'block', width: '100%', height: '64px', borderBottom: '1px solid #313244' }}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: isPreviewActive ? '64px' : '0',
+            overflow: 'hidden',
+            borderBottom: isPreviewActive ? '1px solid #313244' : 'none',
+          }}
         />
       )}
 
