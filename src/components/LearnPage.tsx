@@ -540,7 +540,6 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const secNoiseRef = useRef<HTMLDivElement>(null);
   const secAnimRef = useRef<HTMLDivElement>(null);
   const secGroupsRef = useRef<HTMLDivElement>(null);
-  const secLoopsRef = useRef<HTMLDivElement>(null);
   const secEffectsRef = useRef<HTMLDivElement>(null);
   const sec2dLightRef = useRef<HTMLDivElement>(null);
   const sec3dHowRef = useRef<HTMLDivElement>(null);
