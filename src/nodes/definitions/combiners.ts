@@ -338,6 +338,153 @@ export const SDFOutlineNode: NodeDefinition = {
   },
 };
 
+// ── Alpha Blend Node ─────────────────────────────────────────────────────────
+
+export const AlphaBlendNode: NodeDefinition = {
+  type: 'alphaBlend',
+  label: 'Alpha Blend',
+  category: 'Combiners',
+  description: "Composites a top RGBA layer over bottom using correct alpha composition. Fixes the GLSL mix() alpha bug. Mode 'corrected' = GIMP-style (recommended).",
+  inputs: {
+    bottom:   { type: 'vec3',  label: 'Bottom Color' },
+    top:      { type: 'vec3',  label: 'Top Color'    },
+    bottom_a: { type: 'float', label: 'Bottom Alpha' },
+    top_a:    { type: 'float', label: 'Top Alpha'    },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+  },
+  defaultParams: { blend_mode: 'corrected' },
+  paramDefs: {
+    blend_mode: {
+      label: 'Blend Mode', type: 'select',
+      options: [
+        { value: 'corrected', label: 'Corrected (GIMP)' },
+        { value: 'naive',     label: 'Naive'            },
+        { value: 'additive',  label: 'Additive'         },
+        { value: 'multiply',  label: 'Multiply'         },
+      ],
+    },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const bottomV  = inputVars.bottom   || 'vec3(0.0)';
+    const topV     = inputVars.top      || 'vec3(0.0)';
+    const bottomA  = inputVars.bottom_a || '0.0';
+    const topA     = inputVars.top_a    || '0.0';
+    const mode     = (node.params.blend_mode as string) ?? 'corrected';
+    let colorCode: string;
+    let alphaCode: string;
+    switch (mode) {
+      case 'naive':
+        colorCode = `mix(${bottomV}, ${topV}, ${topA})`;
+        alphaCode = `mix(${bottomA}, 1.0, ${topA})`;
+        break;
+      case 'additive':
+        colorCode = `${bottomV} + ${topV} * ${topA}`;
+        alphaCode = `min(${bottomA} + ${topA}, 1.0)`;
+        break;
+      case 'multiply':
+        colorCode = `${bottomV} * ${topV}`;
+        alphaCode = `${bottomA} * ${topA}`;
+        break;
+      default: { // corrected
+        colorCode = `mix(${bottomV}, ${topV}, ${topA})`;
+        alphaCode = `mix(${bottomA}, min(${topA} + ${bottomA}, 1.0), ${topA})`;
+        break;
+      }
+    }
+    return {
+      code: [
+        `    vec3  ${id}_color = ${colorCode};\n`,
+        `    float ${id}_alpha = ${alphaCode};\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color`, alpha: `${id}_alpha` },
+    };
+  },
+};
+
+// ── Point Light 2D Node ──────────────────────────────────────────────────────
+
+export const Light2DNode: NodeDefinition = {
+  type: 'light2d',
+  label: 'Point Light 2D',
+  category: 'Effects',
+  description: '2D point light with falloff models. Connect UV as pixel pos, light_pos as light center. Combine multiple lights with Add. Multiply combined light by scene color.',
+  inputs: {
+    uv:        { type: 'vec2',  label: 'UV'         },
+    light_pos: { type: 'vec2',  label: 'Light Pos'  },
+    color:     { type: 'vec3',  label: 'Color'      },
+    intensity: { type: 'float', label: 'Intensity'  },
+    radius:    { type: 'float', label: 'Radius'     },
+    sdf_dist:  { type: 'float', label: 'SDF Dist'   },
+  },
+  outputs: {
+    light:   { type: 'vec3',  label: 'Light'   },
+    falloff: { type: 'float', label: 'Falloff' },
+    dist:    { type: 'float', label: 'Dist'    },
+  },
+  defaultParams: {
+    falloff_model: 'squared',
+    intensity:     1.0,
+    radius:        2.0,
+    gamma_correct: 'false',
+  },
+  paramDefs: {
+    falloff_model: {
+      label: 'Falloff Model', type: 'select',
+      options: [
+        { value: 'squared', label: 'Squared (physical)' },
+        { value: 'inverse', label: 'Inverse'            },
+        { value: 'linear',  label: 'Linear'             },
+      ],
+    },
+    intensity:     { label: 'Intensity', type: 'float', min: 0.0,  max: 10.0, step: 0.05 },
+    radius:        { label: 'Radius',    type: 'float', min: 0.1,  max: 20.0, step: 0.1  },
+    gamma_correct: { label: 'Gamma',     type: 'select', options: [
+      { value: 'false', label: 'Off' },
+      { value: 'true',  label: 'On'  },
+    ]},
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const uvVar   = inputVars.uv        || 'vec2(0.0)';
+    const posVar  = inputVars.light_pos || 'vec2(0.0)';
+    const colVar  = inputVars.color     || 'vec3(1.0)';
+    const iVar    = inputVars.intensity || p(node.params.intensity, 1.0);
+    const rVar    = inputVars.radius    || p(node.params.radius, 2.0);
+    const model   = (node.params.falloff_model as string) ?? 'squared';
+    const gamma   = (node.params.gamma_correct as string) ?? 'false';
+    // If sdf_dist is connected, use it; otherwise compute length
+    const distExpr = inputVars.sdf_dist
+      ? inputVars.sdf_dist
+      : `length(${uvVar} - ${posVar})`;
+    let falloffExpr: string;
+    switch (model) {
+      case 'inverse':
+        falloffExpr = gamma === 'true'
+          ? `${iVar} * pow(1.0 / max(${id}_dist, 0.001), 1.0/2.2)`
+          : `${iVar} / max(${id}_dist, 0.001)`;
+        break;
+      case 'linear':
+        falloffExpr = `${iVar} * max(1.0 - ${id}_dist * ${rVar}, 0.0)`;
+        break;
+      default: // squared
+        falloffExpr = `${iVar} * pow(max(1.0 - ${id}_dist * ${rVar}, 0.0), 2.0)`;
+        break;
+    }
+    return {
+      code: [
+        `    float ${id}_dist    = ${distExpr};\n`,
+        `    float ${id}_falloff = ${falloffExpr};\n`,
+        `    vec3  ${id}_light   = ${colVar} * ${id}_falloff;\n`,
+      ].join(''),
+      outputVars: { light: `${id}_light`, falloff: `${id}_falloff`, dist: `${id}_dist` },
+    };
+  },
+};
+
 export const SDFColorizeNode: NodeDefinition = {
   type: 'sdfColorize',
   label: 'SDF Colorize',

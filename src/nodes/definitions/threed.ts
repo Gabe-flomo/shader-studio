@@ -787,80 +787,90 @@ export const ChromaticAberrationNode: NodeDefinition = {
   type: 'chromaticAberration',
   label: 'Chromatic Aberration',
   category: 'Effects',
-  description: [
-    'Chromatic aberration post-process. ',
-    'Splits R/G/B channels by offsetting UVs radially from center. ',
-    'Wire an existing color node into "color" and UV into "uv". ',
-    'Strong radial distortion at edges, subtle at center.',
-  ].join(''),
+  description: 'Multi-sample spectral chromatic aberration (Xor/GM Shaders). Outputs 3 UV offsets for R/G/B. Wire to texture samplers then CombineRGB. Radial=lens, Linear=directional, Twist=rotational fringe.',
   inputs: {
     uv:       { type: 'vec2',  label: 'UV'       },
     time:     { type: 'float', label: 'Time'      },
     strength: { type: 'float', label: 'Strength'  },
+    contrast: { type: 'float', label: 'Contrast'  },
   },
   outputs: {
     uv_r:   { type: 'vec2', label: 'UV (Red)'   },
     uv_g:   { type: 'vec2', label: 'UV (Green)' },
     uv_b:   { type: 'vec2', label: 'UV (Blue)'  },
-    offset: { type: 'vec2', label: 'Offset'      },
+    offset: { type: 'vec2', label: 'Offset'     },
   },
   defaultParams: {
-    strength: 0.03,
-    mode:     'radial',
-    animate:  false,
+    mode:      'radial',
+    strength:  0.03,
+    contrast:  1.0,
+    samples:   '10',
+    angle_deg: 0.0,
+    animate:   'false',
     anim_speed: 0.5,
   },
   paramDefs: {
-    strength:   { label: 'Strength',   type: 'float', min: 0.0,  max: 0.2,  step: 0.001 },
     mode: { label: 'Mode', type: 'select', options: [
-      { value: 'radial',     label: 'Radial (lens)'   },
-      { value: 'horizontal', label: 'Horizontal'      },
-      { value: 'diagonal',   label: 'Diagonal'        },
-      { value: 'barrel',     label: 'Barrel Distort'  },
+      { value: 'radial',  label: 'Radial (lens)'    },
+      { value: 'linear',  label: 'Linear (directional)' },
+      { value: 'twist',   label: 'Twist (rotational)'  },
+      { value: 'barrel',  label: 'Barrel Distort'      },
     ]},
-    animate:    { label: 'Animate',    type: 'select', options: [
+    strength:   { label: 'Strength',   type: 'float',  min: 0.0,   max: 0.3,   step: 0.001 },
+    contrast:   { label: 'Contrast',   type: 'float',  min: 0.0,   max: 3.0,   step: 0.05  },
+    samples:    { label: 'Samples',    type: 'select', options: [
+      { value: '4',  label: '4'  },
+      { value: '8',  label: '8'  },
+      { value: '10', label: '10' },
+      { value: '16', label: '16' },
+    ]},
+    angle_deg:  { label: 'Angle (deg)', type: 'float', min: 0.0, max: 360.0, step: 1.0 },
+    animate:    { label: 'Animate', type: 'select', options: [
       { value: 'false', label: 'Off' },
       { value: 'true',  label: 'On'  },
     ]},
-    anim_speed: { label: 'Anim Speed', type: 'float', min: 0.0,  max: 3.0,  step: 0.01  },
+    anim_speed: { label: 'Anim Speed', type: 'float',  min: 0.0, max: 3.0,   step: 0.01  },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
+    const id         = node.id;
     const uvVar      = inputVars.uv       ?? 'vec2(0.0)';
     const timeVar    = inputVars.time     ?? '0.0';
     const strengthIn = inputVars.strength ?? p(node.params.strength, 0.03);
+    const contrastIn = inputVars.contrast ?? p(node.params.contrast, 1.0);
     const animSpeed  = p(node.params.anim_speed, 0.5);
     const mode       = (node.params.mode    as string) ?? 'radial';
     const animate    = (node.params.animate as string) ?? 'false';
+    const angleDeg   = p(node.params.angle_deg, 0.0);
 
-    // Animated strength modulation
+    // Optionally animate strength
     const strengthExpr = animate === 'true'
       ? `(${strengthIn} * (0.8 + 0.2 * sin(${timeVar} * ${animSpeed})))`
       : strengthIn;
 
-    let offsetExpr: string;
+    let baseOffsetExpr: string;
     switch (mode) {
-      case 'horizontal':
-        offsetExpr = `vec2(${strengthExpr}, 0.0)`;
+      case 'linear':
+        baseOffsetExpr = `vec2(cos(${angleDeg} * 3.14159265 / 180.0), sin(${angleDeg} * 3.14159265 / 180.0)) * ${strengthExpr}`;
         break;
-      case 'diagonal':
-        offsetExpr = `vec2(${strengthExpr}, ${strengthExpr}) * 0.7071`;
+      case 'twist':
+        baseOffsetExpr = `vec2(${uvVar}.y - 0.5, 0.5 - ${uvVar}.x) * ${strengthExpr}`;
         break;
-      case 'barrel': {
-        // Barrel distortion offset — proportional to (r² * uv)
-        offsetExpr = `(${uvVar} * dot(${uvVar}, ${uvVar}) * ${strengthExpr})`;
+      case 'barrel':
+        baseOffsetExpr = `${uvVar} * dot(${uvVar}, ${uvVar}) * ${strengthExpr}`;
         break;
-      }
-      default: // radial — offset along UV direction from center
-        offsetExpr = `normalize(${uvVar} + vec2(0.00001)) * ${strengthExpr} * length(${uvVar})`;
+      default: // radial
+        baseOffsetExpr = `normalize(${uvVar} + vec2(0.00001)) * ${strengthExpr} * length(${uvVar})`;
     }
 
+    // Spectral spread: R toward +, G center, B toward -
     const code = [
-      `    vec2 ${id}_offset = ${offsetExpr};\n`,
-      `    vec2 ${id}_uv_r   = ${uvVar} + ${id}_offset;\n`,
+      `    vec2 ${id}_base   = ${baseOffsetExpr};\n`,
+      `    vec2 ${id}_spread = ${id}_base * ${contrastIn} * 0.25;\n`,
+      `    vec2 ${id}_offset = ${id}_base;\n`,
+      `    vec2 ${id}_uv_r   = ${uvVar} + ${id}_spread;\n`,
       `    vec2 ${id}_uv_g   = ${uvVar};\n`,
-      `    vec2 ${id}_uv_b   = ${uvVar} - ${id}_offset;\n`,
+      `    vec2 ${id}_uv_b   = ${uvVar} - ${id}_spread;\n`,
     ].join('');
 
     return {

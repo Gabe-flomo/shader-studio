@@ -602,3 +602,63 @@ export const StepNode: NodeDefinition = {
     };
   },
 };
+
+export const WeightedAverageNode: NodeDefinition = {
+  type: 'weightedAverage',
+  label: 'Weighted Average',
+  category: 'Math',
+  description: 'Weighted average of 2–4 float inputs. Great for combining noise octaves.',
+  inputs: {
+    a: { type: 'float', label: 'A' },
+    b: { type: 'float', label: 'B' },
+    c: { type: 'float', label: 'C' },
+    d: { type: 'float', label: 'D' },
+  },
+  outputs: {
+    result:       { type: 'float', label: 'Result'       },
+    total_weight: { type: 'float', label: 'Total Weight' },
+  },
+  defaultParams: { w1: 1.0, w2: 1.0, w3: 0.0, w4: 0.0, inputs_used: '2' },
+  paramDefs: {
+    w1:          { label: 'W1',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w2:          { label: 'W2',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w3:          { label: 'W3',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w4:          { label: 'W4',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    inputs_used: { label: 'Inputs Used', type: 'select', options: [
+      { value: '2', label: '2' },
+      { value: '3', label: '3' },
+      { value: '4', label: '4' },
+    ]},
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const aV  = inputVars.a || '0.0';
+    const bV  = inputVars.b || '0.0';
+    const cV  = inputVars.c || '0.0';
+    const dV  = inputVars.d || '0.0';
+    const w1  = p(node.params.w1, 1.0);
+    const w2  = p(node.params.w2, 1.0);
+    const w3  = p(node.params.w3, 0.0);
+    const w4  = p(node.params.w4, 0.0);
+    const n   = (node.params.inputs_used as string) ?? '2';
+    let sumCode: string;
+    let wCode: string;
+    if (n === '4') {
+      sumCode = `${w1} * ${aV} + ${w2} * ${bV} + ${w3} * ${cV} + ${w4} * ${dV}`;
+      wCode   = `${w1} + ${w2} + ${w3} + ${w4}`;
+    } else if (n === '3') {
+      sumCode = `${w1} * ${aV} + ${w2} * ${bV} + ${w3} * ${cV}`;
+      wCode   = `${w1} + ${w2} + ${w3}`;
+    } else {
+      sumCode = `${w1} * ${aV} + ${w2} * ${bV}`;
+      wCode   = `${w1} + ${w2}`;
+    }
+    return {
+      code: [
+        `    float ${id}_total_weight = max(${wCode}, 0.00001);\n`,
+        `    float ${id}_result = (${sumCode}) / ${id}_total_weight;\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result`, total_weight: `${id}_total_weight` },
+    };
+  },
+};

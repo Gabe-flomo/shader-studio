@@ -90,6 +90,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic'] as ExKey[] },
   { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },
   { label: 'Math & Complex',  color: '#b4befe', keys: ['complexPowFlower','luminanceTint'] as ExKey[] },
+  { label: 'Lighting & Compositing', color: '#89dceb', keys: ['neonFloorGrid','spectralLens','alphaLayerDemo'] as ExKey[] },
 ];
 
 

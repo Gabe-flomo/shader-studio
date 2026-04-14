@@ -16,6 +16,7 @@ export {
   MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
+  Perspective2DNode,
 } from './spaces';
 
 // 2D Primitives
@@ -30,6 +31,7 @@ export {
   SmoothMaxNode, SmoothSubtractNode,
   BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
   GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
+  AlphaBlendNode, Light2DNode,
 } from './combiners';
 
 // Effects / Loops
@@ -38,6 +40,7 @@ export {
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
+  RadianceCascadesApproxNode,
 } from './effects';
 export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 export { LoopCarryNode } from './loop';
@@ -94,6 +97,7 @@ export {
   RemapNode,
   CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
+  WeightedAverageNode,
 } from './math';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
@@ -105,6 +109,7 @@ import {
   MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
+  Perspective2DNode,
 } from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
@@ -113,12 +118,14 @@ import {
   SmoothMaxNode, SmoothSubtractNode,
   BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
   GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
+  AlphaBlendNode, Light2DNode,
 } from './combiners';
 import {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
+  RadianceCascadesApproxNode,
 } from './effects';
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
@@ -152,6 +159,7 @@ import {
   RemapNode,
   CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
+  WeightedAverageNode,
 } from './math';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -188,6 +196,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   magicTexture: MagicTextureNode,
   grid: GridNode,
   shear: ShearNode,
+  perspective2d: Perspective2DNode,
   // 2D Primitives
   circleSDF: CircleSDFNode,
   boxSDF: BoxSDFNode,
@@ -214,6 +223,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   glowLayer: GlowLayerNode,
   sdfOutline: SDFOutlineNode,
   sdfColorize: SDFColorizeNode,
+  alphaBlend: AlphaBlendNode,
+  light2d: Light2DNode,
   // Effects
   makeLight: MakeLightNode,
   abs: AbsNode,
@@ -233,6 +244,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   vignette: VignetteNode,
   scanlines: ScanlinesNode,
   sobel: SobelNode,
+  radianceCascadesApprox: RadianceCascadesApproxNode,
   // Loops (wired pair system)
   loopCarry:             LoopCarryNode,
   loopStart:             LoopStartNode,
@@ -360,6 +372,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   luminance: LuminanceNode,
   sign: SignNode,
   step: StepNode,
+  weightedAverage: WeightedAverageNode,
   // Animation
   sineLFO: SineLFONode,
   squareLFO: SquareLFONode,

@@ -1026,3 +1026,93 @@ export const SobelNode: NodeDefinition = {
     };
   },
 };
+
+// ── Radiance Cascades 2D ─────────────────────────────────────────────────────
+
+const RC2D_GLSL = `vec3 rcSampleScene_rc2d(vec2 uv) {
+    vec2 sampleUV = clamp(uv * 0.5 + 0.5, 0.0, 1.0);
+    return texture2D(u_prevFrame, sampleUV).rgb;
+}
+vec4 rcMarchRay_rc2d(vec2 origin, float angle, float rayLen, float dt, float emitThresh) {
+    vec2 dir = vec2(cos(angle), sin(angle));
+    for (float t = 0.0; t < rayLen; t += dt) {
+        vec2 pos = origin + dir * t;
+        if (abs(pos.x) > 1.0 || abs(pos.y) > 1.0) return vec4(0.0);
+        vec3 s = rcSampleScene_rc2d(pos);
+        float lum = dot(s, vec3(0.299, 0.587, 0.114));
+        if (lum > emitThresh) return vec4(s, 1.0);
+    }
+    return vec4(0.0);
+}
+vec3 rcRadiance_rc2d(vec2 uv, int nRays, float rayLen, float dt, float c1s, float emitThresh, vec3 sky) {
+    vec3 rad = vec3(0.0);
+    float step_angle = 6.28318 / float(nRays);
+    for (int i = 0; i < 16; i++) {
+        if (i >= nRays) break;
+        float angle = float(i) * step_angle;
+        vec4 c0 = rcMarchRay_rc2d(uv, angle, rayLen, dt, emitThresh);
+        if (c0.a > 0.5) {
+            rad += c0.rgb;
+        } else {
+            vec4 c1 = rcMarchRay_rc2d(uv, angle, rayLen * 4.0, dt * 2.0, emitThresh);
+            rad += c1.a > 0.5 ? c1.rgb : sky;
+        }
+    }
+    return rad / float(nRays);
+}`;
+
+export const RadianceCascadesApproxNode: NodeDefinition = {
+  type: 'radianceCascadesApprox',
+  label: 'Radiance Cascades 2D',
+  category: 'Effects',
+  description: 'Per-pixel 2D global illumination using Radiance Cascades (Sannikov, 2024). Uses Prev Frame as emitter scene — bright pixels cast light. Wire PrevFrame node to scene, then connect UV here. 2-level approximation runs in a single pass.',
+  inputs: {
+    uv:        { type: 'vec2', label: 'UV'        },
+    sky_color: { type: 'vec3', label: 'Sky Color' },
+  },
+  outputs: {
+    radiance: { type: 'vec3',  label: 'Radiance' },
+    gi_r:     { type: 'float', label: 'GI Red'   },
+    gi_g:     { type: 'float', label: 'GI Green' },
+    gi_b:     { type: 'float', label: 'GI Blue'  },
+  },
+  defaultParams: {
+    ray_count:      8.0,
+    ray_length:     0.3,
+    ray_step:       0.02,
+    c1_scale:       2.0,
+    emit_threshold: 0.7,
+  },
+  paramDefs: {
+    ray_count:      { label: 'Ray Count',       type: 'float', min: 4.0,   max: 16.0, step: 4.0  },
+    ray_length:     { label: 'Ray Length',      type: 'float', min: 0.05,  max: 1.0,  step: 0.01 },
+    ray_step:       { label: 'Ray Step',        type: 'float', min: 0.005, max: 0.05, step: 0.005},
+    c1_scale:       { label: 'Cascade 1 Scale', type: 'float', min: 1.0,   max: 4.0,  step: 0.5  },
+    emit_threshold: { label: 'Emit Threshold',  type: 'float', min: 0.3,   max: 1.0,  step: 0.05 },
+  },
+  glslFunction: RC2D_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id         = node.id;
+    const uvVar      = inputVars.uv        || 'vec2(0.0)';
+    const skyVar     = inputVars.sky_color || 'vec3(0.0)';
+    const rayCount   = p(node.params.ray_count,      8.0);
+    const rayLen     = p(node.params.ray_length,     0.3);
+    const rayStep    = p(node.params.ray_step,       0.02);
+    const c1Scale    = p(node.params.c1_scale,       2.0);
+    const emitThresh = p(node.params.emit_threshold, 0.7);
+    return {
+      code: [
+        `    vec3  ${id}_radiance = rcRadiance_rc2d(${uvVar}, int(${rayCount}), ${rayLen}, ${rayStep}, ${c1Scale}, ${emitThresh}, ${skyVar});\n`,
+        `    float ${id}_gi_r = ${id}_radiance.r;\n`,
+        `    float ${id}_gi_g = ${id}_radiance.g;\n`,
+        `    float ${id}_gi_b = ${id}_radiance.b;\n`,
+      ].join(''),
+      outputVars: {
+        radiance: `${id}_radiance`,
+        gi_r:     `${id}_gi_r`,
+        gi_g:     `${id}_gi_g`,
+        gi_b:     `${id}_gi_b`,
+      },
+    };
+  },
+};

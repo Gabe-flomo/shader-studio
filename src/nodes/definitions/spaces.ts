@@ -563,3 +563,61 @@ export const ShearNode: NodeDefinition = {
     };
   },
 };
+
+// ── Perspective 2D ────────────────────────────────────────────────────────────
+
+export const Perspective2DNode: NodeDefinition = {
+  type: 'perspective2d',
+  label: 'Perspective 2D',
+  category: 'Spaces',
+  description: 'Fake 3D perspective projection for 2D UVs. ratio=0: flat. ratio=1: mild. ratio=2+: dramatic. Use Y axis for floor, X for wall.',
+  inputs: {
+    uv:    { type: 'vec2',  label: 'UV'    },
+    ratio: { type: 'float', label: 'Ratio' },
+  },
+  outputs: {
+    uv:    { type: 'vec2',  label: 'UV'    },
+    depth: { type: 'float', label: 'Depth' },
+  },
+  defaultParams: { ratio: 1.0, axis: 'y', flip: 'false' },
+  paramDefs: {
+    ratio: { label: 'Ratio', type: 'float', min: 0.0, max: 5.0, step: 0.05 },
+    axis:  { label: 'Axis',  type: 'select', options: [
+      { value: 'y',  label: 'Y (floor)'  },
+      { value: 'x',  label: 'X (wall)'   },
+      { value: 'xy', label: 'XY (tunnel)'},
+    ]},
+    flip:  { label: 'Flip',  type: 'select', options: [
+      { value: 'false', label: 'Off' },
+      { value: 'true',  label: 'On'  },
+    ]},
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const uvVar   = inputVars.uv    || 'vec2(0.0)';
+    const ratioV  = inputVars.ratio || p(node.params.ratio, 1.0);
+    const axis    = (node.params.axis as string) ?? 'y';
+    const flip    = (node.params.flip as string) ?? 'false';
+    const sign    = flip === 'true' ? '-1.0' : '1.0';
+    let denomExpr: string;
+    switch (axis) {
+      case 'x':
+        denomExpr = `1.0 - ${uvVar}.x * ${ratioV}`;
+        break;
+      case 'xy':
+        denomExpr = `1.0 - (${uvVar}.x + ${uvVar}.y) * 0.5 * ${ratioV}`;
+        break;
+      default: // y
+        denomExpr = `1.0 - ${sign} * ${uvVar}.y * ${ratioV}`;
+        break;
+    }
+    return {
+      code: [
+        `    float ${id}_denom = max(${denomExpr}, 0.001);\n`,
+        `    vec2  ${id}_uv    = ${uvVar} / ${id}_denom;\n`,
+        `    float ${id}_depth = 1.0 - ${id}_denom;\n`,
+      ].join(''),
+      outputVars: { uv: `${id}_uv`, depth: `${id}_depth` },
+    };
+  },
+};
