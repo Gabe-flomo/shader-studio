@@ -286,7 +286,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     const FRAME_MS   = 1000 / TARGET_FPS;   // ~33.3 ms
     let lastFrameTime = 0;
 
-    function animate(now: number) {
+    function animate(now: number = 0) {
       animFrameRef.current = requestAnimationFrame(animate);
 
       // Skip entirely when the browser tab is not visible
