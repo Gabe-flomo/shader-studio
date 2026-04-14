@@ -6509,46 +6509,37 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // ── Particle: Flow Field Drift ────────────────────────────────────────────────
   particleFlowDrift: {
     label: 'Particles: Flow Field',
-    counter: 9,
+    counter: 5,
     nodes: [
-      { id: 'fd_uv',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
-      { id: 'fd_time', type: 'time', position: { x: 40,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'fd_time', type: 'time', position: { x: 40,  y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
       {
-        id: 'fd_vf', type: 'vectorField', position: { x: 280, y: 180 },
+        id: 'fd_emit', type: 'particleEmitter', position: { x: 280, y: 280 },
         inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'fd_uv',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'fd_time', outputKey: 'time' } },
-        },
-        outputs: {
-          dir:   { type: 'vec2',  label: 'Direction'   },
-          angle: { type: 'float', label: 'Angle (rad)' },
-          str:   { type: 'float', label: 'Strength'    },
-        },
-        params: { mode: 'curl', scale: 3.0, speed: 0.2, strength: 0.5, octaves: 3 },
-      },
-      {
-        id: 'fd_emit', type: 'particleEmitter', position: { x: 540, y: 280 },
-        inputs: {
-          position: { type: 'vec2',  label: 'Spawn Position' },
-          time:     { type: 'float', label: 'Time',     connection: { nodeId: 'fd_time', outputKey: 'time' } },
-          field:    { type: 'vec2',  label: 'Field Dir', connection: { nodeId: 'fd_vf',   outputKey: 'dir'  } },
+          position: { type: 'vec2',  label: 'Spawn / Center' },
+          time:     { type: 'float', label: 'Time', connection: { nodeId: 'fd_time', outputKey: 'time' } },
+          field:    { type: 'vec2',  label: 'Field Dir' },
         },
         outputs: {
           nearest_dist: { type: 'float', label: 'Nearest Dist' },
-          nearest_uv:   { type: 'vec2',  label: 'Nearest UV'         },
-          nearest_age:  { type: 'float', label: 'Age' },
-          density:      { type: 'float', label: 'Density'            },
+          nearest_uv:   { type: 'vec2',  label: 'Nearest UV'   },
+          nearest_age:  { type: 'float', label: 'Age'           },
+          density:      { type: 'float', label: 'Density'       },
         },
-        params: { max_particles: 80, lifetime: 4.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.2, despawn_radius: 2.5, seed: 42.0, density_radius: 0.05 },
+        params: {
+          flow_mode: 'noise', max_particles: 60, lifetime: 5.0, speed: 0.45,
+          noise_type: 'curl', noise_scale: 2.5, noise_speed: 0.25, spawn_radius: 1.8,
+          angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0,
+          field_strength: 1.2, despawn_radius: 2.5, seed: 42.0, density_radius: 0.04,
+        },
       },
       {
-        id: 'fd_pal', type: 'palettePreset', position: { x: 780, y: 200 },
+        id: 'fd_pal', type: 'palettePreset', position: { x: 540, y: 200 },
         inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fd_emit', outputKey: 'nearest_age' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '3' },
       },
       {
-        id: 'fd_glow', type: 'glowLayer', position: { x: 780, y: 360 },
+        id: 'fd_glow', type: 'glowLayer', position: { x: 540, y: 360 },
         inputs: {
           d:         { type: 'float', label: 'SDF',       connection: { nodeId: 'fd_emit', outputKey: 'nearest_dist' } },
           color:     { type: 'vec3',  label: 'Color',     connection: { nodeId: 'fd_pal',  outputKey: 'color'        } },
@@ -6559,7 +6550,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: { intensity: 0.005, power: 1.3 },
       },
       {
-        id: 'fd_out', type: 'output', position: { x: 1020, y: 360 },
+        id: 'fd_out', type: 'output', position: { x: 780, y: 360 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fd_glow', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
@@ -6569,46 +6560,37 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // ── Particle: Spiral Vortex ───────────────────────────────────────────────────
   particleSpiralVortex: {
     label: 'Particles: Spiral Vortex',
-    counter: 10,
+    counter: 5,
     nodes: [
-      { id: 'sv_uv',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
-      { id: 'sv_time', type: 'time', position: { x: 40,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'sv_time', type: 'time', position: { x: 40, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
       {
-        id: 'sv_sf', type: 'spiralField', position: { x: 280, y: 200 },
+        id: 'sv_emit', type: 'particleEmitter', position: { x: 280, y: 280 },
         inputs: {
-          uv:       { type: 'vec2',  label: 'UV',       connection: { nodeId: 'sv_uv',   outputKey: 'uv'  } },
-          center:   { type: 'vec2',  label: 'Center'   },
-          strength: { type: 'float', label: 'Strength' },
-        },
-        outputs: {
-          dir:  { type: 'vec2',  label: 'Spiral Dir' },
-          dist: { type: 'float', label: 'Distance'   },
-        },
-        params: { strength: 0.8, spiral_ratio: 0.6, falloff: 'linear', spin_dir: 'ccw' },
-      },
-      {
-        id: 'sv_emit', type: 'particleEmitter', position: { x: 540, y: 280 },
-        inputs: {
-          position: { type: 'vec2',  label: 'Spawn Position' },
-          time:     { type: 'float', label: 'Time',      connection: { nodeId: 'sv_time', outputKey: 'time' } },
-          field:    { type: 'vec2',  label: 'Field Dir',  connection: { nodeId: 'sv_sf',   outputKey: 'dir'  } },
+          position: { type: 'vec2',  label: 'Spawn / Center' },
+          time:     { type: 'float', label: 'Time', connection: { nodeId: 'sv_time', outputKey: 'time' } },
+          field:    { type: 'vec2',  label: 'Field Dir' },
         },
         outputs: {
           nearest_dist: { type: 'float', label: 'Nearest Dist' },
-          nearest_uv:   { type: 'vec2',  label: 'Nearest UV'         },
-          nearest_age:  { type: 'float', label: 'Age' },
-          density:      { type: 'float', label: 'Density'            },
+          nearest_uv:   { type: 'vec2',  label: 'Nearest UV'   },
+          nearest_age:  { type: 'float', label: 'Age'           },
+          density:      { type: 'float', label: 'Density'       },
         },
-        params: { max_particles: 80, lifetime: 5.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.8, despawn_radius: 3.0, seed: 7.0, density_radius: 0.05 },
+        params: {
+          flow_mode: 'noise', max_particles: 60, lifetime: 6.0, speed: 0.3,
+          noise_type: 'curl', noise_scale: 1.5, noise_speed: 0.12, spawn_radius: 1.5,
+          angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0,
+          field_strength: 1.8, despawn_radius: 3.0, seed: 7.0, density_radius: 0.045,
+        },
       },
       {
-        id: 'sv_pal', type: 'palettePreset', position: { x: 780, y: 200 },
+        id: 'sv_pal', type: 'palettePreset', position: { x: 540, y: 200 },
         inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'sv_emit', outputKey: 'nearest_age' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '2' },
       },
       {
-        id: 'sv_glow', type: 'glowLayer', position: { x: 780, y: 380 },
+        id: 'sv_glow', type: 'glowLayer', position: { x: 540, y: 360 },
         inputs: {
           d:         { type: 'float', label: 'SDF',       connection: { nodeId: 'sv_emit', outputKey: 'nearest_dist' } },
           color:     { type: 'vec3',  label: 'Color',     connection: { nodeId: 'sv_pal',  outputKey: 'color'        } },
@@ -6619,7 +6601,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: { intensity: 0.007, power: 1.4 },
       },
       {
-        id: 'sv_out', type: 'output', position: { x: 1020, y: 380 },
+        id: 'sv_out', type: 'output', position: { x: 780, y: 360 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sv_glow', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
@@ -6660,7 +6642,13 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age' },
           density:      { type: 'float', label: 'Density'            },
         },
-        params: { max_particles: 80, lifetime: 5.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.5, despawn_radius: 2.5, seed: 13.0, density_radius: 0.05 },
+        params: {
+          flow_mode: 'gravity', max_particles: 80, lifetime: 5.0, speed: 0.0,
+          spawn_radius: 1.0, field_strength: 1.5,
+          angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0,
+          despawn_radius: 2.5, seed: 13.0, density_radius: 0.05,
+          noise_type: 'curl', noise_scale: 2.0, noise_speed: 0.3,
+        },
       },
       {
         id: 'oc_pal', type: 'palettePreset', position: { x: 780, y: 200 },
@@ -6822,7 +6810,13 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           nearest_age:  { type: 'float', label: 'Age' },
           density:      { type: 'float', label: 'Density' },
         },
-        params: { max_particles: 80, lifetime: 3.0, speed: 0.0, angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0, field_strength: 1.8, despawn_radius: 3.0, seed: 3.0, density_radius: 0.05 },
+        params: {
+          flow_mode: 'gravity', max_particles: 80, lifetime: 3.0, speed: 0.0,
+          spawn_radius: 1.5, field_strength: 1.8,
+          angle_dir: 0, angle_spread: 1.0, gravity_x: 0.0, gravity_y: 0.0,
+          despawn_radius: 3.0, seed: 3.0, density_radius: 0.05,
+          noise_type: 'curl', noise_scale: 2.0, noise_speed: 0.3,
+        },
       },
       {
         id: 'pm_pal', type: 'palettePreset', position: { x: 780, y: 220 },

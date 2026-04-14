@@ -1014,7 +1014,7 @@ export function generateFragmentShader(
     .map(name => `uniform float ${name};`)
     .join('\n');
 
-  const fragmentShader = `precision mediump float;
+  const fragmentShader = `precision highp float;
 #define PI 3.1415926538
 #define TAU 6.2831853072
 
