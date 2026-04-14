@@ -1222,3 +1222,395 @@ export const ChromaticAberrationAutoNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Gaussian Blur ────────────────────────────────────────────────────────────
+// Samples u_prevFrame with a Gaussian kernel. Center tap = color input (current
+// scene, sharp). Surrounding taps read the previous frame so the blur
+// converges to a correct result within 1–2 frames for static/slow content.
+
+export const GaussianBlurNode: NodeDefinition = {
+  type: 'gaussianBlur',
+  label: 'Gaussian Blur',
+  category: 'Effects',
+  description: 'Smooth photographic blur. Wire your scene color + UV, then connect the result to Output. Converges to correct blur within 1–2 frames for static content.',
+  inputs: {
+    color: { type: 'vec3', label: 'Color' },
+    uv:    { type: 'vec2', label: 'UV'    },
+  },
+  outputs: {
+    result: { type: 'vec3', label: 'Result' },
+  },
+  defaultParams: { radius: 4.0, quality: 'standard' },
+  paramDefs: {
+    radius:  { label: 'Radius (px)', type: 'float', min: 0.5, max: 20.0, step: 0.5 },
+    quality: { label: 'Quality', type: 'select', options: [
+      { value: 'fast',     label: 'Fast (3×3)'     },
+      { value: 'standard', label: 'Standard (5×5)' },
+      { value: 'high',     label: 'High (7×7)'     },
+    ]},
+  },
+  glslFunction: `
+float gaussBlurWeight(float x, float y, float sigma) {
+  return exp(-0.5 * (x*x + y*y) / (sigma*sigma));
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const col     = inputVars.color || 'vec3(0.0)';
+    const uvVar   = inputVars.uv    || 'g_uv';
+    const radius  = p(node.params.radius, 4.0);
+    const quality = (node.params.quality as string) ?? 'standard';
+    const half_n  = quality === 'fast' ? 1 : quality === 'high' ? 3 : 2;
+    const n       = half_n * 2 + 1;
+    const sigma   = half_n === 1 ? '1.0' : half_n === 3 ? '2.0' : '1.5';
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
+      `    vec3  ${id}_acc  = ${col};\n`,
+      `    float ${id}_wsum = 1.0;\n`,
+    ];
+
+    for (let gx = -half_n; gx <= half_n; gx++) {
+      for (let gy = -half_n; gy <= half_n; gy++) {
+        if (gx === 0 && gy === 0) continue;
+        const w = `gaussBlurWeight(${f(gx)}, ${f(gy)}, ${sigma})`;
+        lines.push(
+          `    { float ${id}_w = ${w}; ` +
+          `${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(gx)}, ${f(gy)}) * ${id}_px * ${radius}, 0.0, 1.0)).rgb * ${id}_w; ` +
+          `${id}_wsum += ${id}_w; }\n`,
+        );
+      }
+    }
+    lines.push(`    vec3 ${id}_result = ${id}_acc / ${id}_wsum;\n`);
+
+    return { code: lines.join(''), outputVars: { result: `${id}_result` } };
+  },
+};
+
+// ─── Radial Blur ──────────────────────────────────────────────────────────────
+// Samples u_prevFrame along the radial direction from a center point, creating
+// a zoom/spin blur effect. Center tap = color input.
+
+export const RadialBlurNode: NodeDefinition = {
+  type: 'radialBlur',
+  label: 'Radial Blur',
+  category: 'Effects',
+  description: 'Zoom/spin blur radiating outward from a center point. Wire Mouse UV to center for interactive control.',
+  inputs: {
+    color:  { type: 'vec3', label: 'Color'  },
+    uv:     { type: 'vec2', label: 'UV'     },
+    center: { type: 'vec2', label: 'Center' },
+  },
+  outputs: {
+    result: { type: 'vec3', label: 'Result' },
+  },
+  defaultParams: { strength: 0.02, samples: '16', falloff: 1.0 },
+  paramDefs: {
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 0.08, step: 0.001 },
+    samples:  { label: 'Samples',  type: 'select', options: [
+      { value: '8',  label: '8 (fast)'    },
+      { value: '16', label: '16 (medium)' },
+      { value: '24', label: '24 (high)'   },
+    ]},
+    falloff: { label: 'Edge Falloff', type: 'float', min: 0.0, max: 2.0, step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const col      = inputVars.color  || 'vec3(0.0)';
+    const uvVar    = inputVars.uv     || 'g_uv';
+    const ctrVar   = inputVars.center || 'vec2(0.0)';
+    const strength = p(node.params.strength, 0.02);
+    const falloff  = p(node.params.falloff,  1.0);
+    const nSamples = parseInt((node.params.samples as string) ?? '16', 10);
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01  = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_ctr01 = clamp(${ctrVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_dir   = ${id}_uv01 - ${id}_ctr01;\n`,
+      `    float ${id}_dist  = length(${id}_dir);\n`,
+      `    float ${id}_fo    = pow(${id}_dist, ${falloff});\n`,
+      `    vec2  ${id}_step  = (${id}_dist > 0.0001 ? normalize(${id}_dir) : vec2(0.0)) * ${strength} * ${id}_fo;\n`,
+      `    vec3  ${id}_acc   = ${col};\n`,
+      `    float ${id}_ns    = ${f(nSamples)}.0;\n`,
+    ];
+
+    for (let i = 1; i <= nSamples; i++) {
+      const t = f(i / nSamples);
+      lines.push(
+        `    ${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 - ${id}_step * ${t}, 0.0, 1.0)).rgb;\n`,
+      );
+    }
+    lines.push(`    vec3 ${id}_result = ${id}_acc / (${id}_ns + 1.0);\n`);
+
+    return { code: lines.join(''), outputVars: { result: `${id}_result` } };
+  },
+};
+
+// ─── Tilt-Shift Blur ──────────────────────────────────────────────────────────
+// Variable-radius blur whose strength increases with distance from a tilted
+// focus band, simulating a miniature / tilt-shift lens.
+
+export const TiltShiftBlurNode: NodeDefinition = {
+  type: 'tiltShiftBlur',
+  label: 'Tilt-Shift Blur',
+  category: 'Effects',
+  description: 'Miniature / tilt-shift effect. A focus band stays sharp; blur increases away from it. Tilt the band angle for creative looks.',
+  inputs: {
+    color: { type: 'vec3',  label: 'Color'        },
+    uv:    { type: 'vec2',  label: 'UV'           },
+  },
+  outputs: {
+    result: { type: 'vec3',  label: 'Result'      },
+    mask:   { type: 'float', label: 'Focus Mask'  },
+  },
+  defaultParams: {
+    focus_center: 0.0,
+    band_width:   0.25,
+    max_blur:     6.0,
+    tilt_angle:   0.0,
+    axis:         'horizontal',
+  },
+  paramDefs: {
+    focus_center: { label: 'Focus Center', type: 'float', min: -1.0,  max: 1.0,  step: 0.01 },
+    band_width:   { label: 'Band Width',   type: 'float', min: 0.02,  max: 0.6,  step: 0.01 },
+    max_blur:     { label: 'Max Blur (px)',type: 'float', min: 1.0,   max: 16.0, step: 0.5  },
+    tilt_angle:   { label: 'Tilt Angle°',  type: 'float', min: -60.0, max: 60.0, step: 1.0  },
+    axis: { label: 'Axis', type: 'select', options: [
+      { value: 'horizontal', label: 'Horizontal' },
+      { value: 'vertical',   label: 'Vertical'   },
+    ]},
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id     = node.id;
+    const col    = inputVars.color || 'vec3(0.0)';
+    const uvVar  = inputVars.uv    || 'g_uv';
+    const fc     = p(node.params.focus_center, 0.0);
+    const bw     = p(node.params.band_width,   0.25);
+    const mb     = p(node.params.max_blur,     6.0);
+    const angle  = p(node.params.tilt_angle,   0.0);
+    const isVert = (node.params.axis as string) === 'vertical';
+
+    // For horizontal axis: focus plane is along X, distance measured in Y.
+    // tiltDir is perpendicular to the focus band.
+    const tiltDir = isVert
+      ? `vec2(cos(${angle} * 0.01745329), sin(${angle} * 0.01745329))`
+      : `vec2(-sin(${angle} * 0.01745329), cos(${angle} * 0.01745329))`;
+
+    // The blur kernel runs perpendicular to the tilt direction for best quality.
+    const blurDir = isVert
+      ? `vec2(-sin(${angle} * 0.01745329), cos(${angle} * 0.01745329))`
+      : `vec2(cos(${angle} * 0.01745329), sin(${angle} * 0.01745329))`;
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01  = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_px    = 1.0 / u_resolution;\n`,
+      `    vec2  ${id}_td    = ${tiltDir};\n`,
+      `    float ${id}_dist  = abs(dot(${uvVar} - vec2(0.0, ${fc}), ${id}_td));\n`,
+      `    float ${id}_mask  = clamp((${id}_dist - ${bw}) / (1.0 - ${bw}), 0.0, 1.0);\n`,
+      `    float ${id}_br    = ${id}_mask * ${mb};\n`,
+      `    vec2  ${id}_bd    = ${blurDir};\n`,
+      `    vec3  ${id}_acc   = ${col};\n`,
+      `    float ${id}_wsum  = 1.0;\n`,
+    ];
+
+    // 9-tap 1D Gaussian along blur direction, variable radius
+    const offsets = [-4, -3, -2, -1, 1, 2, 3, 4];
+    for (const o of offsets) {
+      const w = `exp(-0.5 * ${f(o * o)} / (${id}_br * ${id}_br + 0.0001))`;
+      lines.push(
+        `    { float ${id}_w${o < 0 ? 'n' + Math.abs(o) : o} = ${w}; ` +
+        `${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 + ${id}_bd * ${f(o)} * ${id}_px * ${id}_br, 0.0, 1.0)).rgb * ${id}_w${o < 0 ? 'n' + Math.abs(o) : o}; ` +
+        `${id}_wsum += ${id}_w${o < 0 ? 'n' + Math.abs(o) : o}; }\n`,
+      );
+    }
+    lines.push(`    vec3 ${id}_result = ${id}_acc / ${id}_wsum;\n`);
+
+    return {
+      code: lines.join(''),
+      outputVars: { result: `${id}_result`, mask: `${id}_mask` },
+    };
+  },
+};
+
+// ─── Lens Blur ────────────────────────────────────────────────────────────────
+// Simulates a camera lens with configurable focal length and aperture.
+// Circle-of-confusion size drives a bokeh-disc sample pattern on u_prevFrame.
+
+const LENS_BLUR_GLSL = `
+vec3 lensBlurDisc(sampler2D tex, vec2 uv01, vec2 px, float coc, vec3 center) {
+  vec3 acc = center;
+  float wsum = 1.0;
+  // 12-tap golden-angle spiral disc
+  for (int i = 1; i <= 12; i++) {
+    float t = float(i) / 12.0;
+    float angle = t * 2.3999632 * 12.0;
+    float r = sqrt(t);
+    vec2 off = vec2(cos(angle), sin(angle)) * r * coc * px;
+    acc += texture2D(tex, clamp(uv01 + off, 0.0, 1.0)).rgb;
+    wsum += 1.0;
+  }
+  return acc / wsum;
+}
+vec3 lensBlurHex(sampler2D tex, vec2 uv01, vec2 px, float coc, vec3 center) {
+  vec3 acc = center;
+  float wsum = 1.0;
+  // 6 vertices + 6 edge midpoints
+  for (int i = 0; i < 12; i++) {
+    float a = float(i) * 0.5235988; // pi/6
+    float r = (mod(float(i), 2.0) < 0.5) ? 1.0 : 0.866;
+    vec2 off = vec2(cos(a), sin(a)) * r * coc * px;
+    acc += texture2D(tex, clamp(uv01 + off, 0.0, 1.0)).rgb;
+    wsum += 1.0;
+  }
+  return acc / wsum;
+}
+vec3 lensBlurOct(sampler2D tex, vec2 uv01, vec2 px, float coc, vec3 center) {
+  vec3 acc = center;
+  float wsum = 1.0;
+  // 8 vertices + 8 edge midpoints
+  for (int i = 0; i < 16; i++) {
+    float a = float(i) * 0.3926991; // pi/8
+    float r = (mod(float(i), 2.0) < 0.5) ? 1.0 : 0.9239;
+    vec2 off = vec2(cos(a), sin(a)) * r * coc * px;
+    acc += texture2D(tex, clamp(uv01 + off, 0.0, 1.0)).rgb;
+    wsum += 1.0;
+  }
+  return acc / wsum;
+}`;
+
+export const LensBlurNode: NodeDefinition = {
+  type: 'lensBlur',
+  label: 'Lens Blur',
+  category: 'Effects',
+  description: 'Simulate a camera lens with focal length and aperture. Pixels far from the focal point get a bokeh blur disc. Try 35mm f/1.4 for cinematic portraits.',
+  inputs: {
+    color:       { type: 'vec3', label: 'Color'       },
+    uv:          { type: 'vec2', label: 'UV'          },
+    focal_point: { type: 'vec2', label: 'Focal Point' },
+  },
+  outputs: {
+    result: { type: 'vec3',  label: 'Result' },
+    coc:    { type: 'float', label: 'CoC'    },
+  },
+  defaultParams: {
+    focal_length:   '50mm',
+    aperture:       'f2.8',
+    focus_distance: 0.25,
+    bokeh_shape:    'disc',
+    boost:          1.0,
+  },
+  paramDefs: {
+    focal_length: { label: 'Focal Length', type: 'select', options: [
+      { value: '24mm',  label: '24mm (wide)'      },
+      { value: '35mm',  label: '35mm (street)'    },
+      { value: '50mm',  label: '50mm (standard)'  },
+      { value: '75mm',  label: '75mm (portrait)'  },
+      { value: '85mm',  label: '85mm (portrait)'  },
+      { value: '135mm', label: '135mm (telephoto)' },
+    ]},
+    aperture: { label: 'Aperture', type: 'select', options: [
+      { value: 'f1.4', label: 'f/1.4 (wide open)' },
+      { value: 'f2',   label: 'f/2'                },
+      { value: 'f2.8', label: 'f/2.8'              },
+      { value: 'f4',   label: 'f/4'                },
+      { value: 'f5.6', label: 'f/5.6'              },
+      { value: 'f8',   label: 'f/8 (stopped down)' },
+    ]},
+    focus_distance: { label: 'Focus Distance', type: 'float', min: 0.02, max: 1.5,  step: 0.01 },
+    bokeh_shape: { label: 'Bokeh Shape', type: 'select', options: [
+      { value: 'disc', label: 'Disc (circular)'  },
+      { value: 'hex',  label: 'Hex (6-blade)'    },
+      { value: 'oct',  label: 'Oct (8-blade)'    },
+    ]},
+    boost: { label: 'Boost', type: 'float', min: 0.1, max: 4.0, step: 0.05 },
+  },
+  glslFunction: LENS_BLUR_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const col   = inputVars.color       || 'vec3(0.0)';
+    const uvVar = inputVars.uv          || 'g_uv';
+    const fpVar = inputVars.focal_point || 'vec2(0.0)';
+
+    const focalFactors: Record<string, string> = {
+      '24mm': '1.0', '35mm': '1.6', '50mm': '2.5',
+      '75mm': '3.8', '85mm': '4.4', '135mm': '7.2',
+    };
+    const apertureFactors: Record<string, string> = {
+      'f1.4': '1.0', 'f2': '0.71', 'f2.8': '0.5',
+      'f4': '0.35', 'f5.6': '0.25', 'f8': '0.18',
+    };
+
+    const fl    = (node.params.focal_length as string) ?? '50mm';
+    const ap    = (node.params.aperture     as string) ?? 'f2.8';
+    const shape = (node.params.bokeh_shape  as string) ?? 'disc';
+    const ffac  = focalFactors[fl]  ?? '2.5';
+    const afac  = apertureFactors[ap] ?? '0.5';
+    const fd    = p(node.params.focus_distance, 0.25);
+    const boost = p(node.params.boost, 1.0);
+
+    const samplerFn = shape === 'hex' ? 'lensBlurHex' : shape === 'oct' ? 'lensBlurOct' : 'lensBlurDisc';
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
+      `    float ${id}_dist = length(${uvVar} - ${fpVar});\n`,
+      `    float ${id}_coc  = max(0.0, ${id}_dist - ${fd}) * ${ffac} * ${afac} * ${boost};\n`,
+      `    vec3  ${id}_result = ${samplerFn}(u_prevFrame, ${id}_uv01, ${id}_px, ${id}_coc, ${col});\n`,
+    ];
+
+    return {
+      code: lines.join(''),
+      outputVars: { result: `${id}_result`, coc: `${id}_coc` },
+    };
+  },
+};
+
+// ─── Motion Blur ─────────────────────────────────────────────────────────────
+// Temporal accumulation: blends current scene with the previous frame.
+// Creates smooth motion trails for animated shaders. Fast-moving elements
+// leave beautiful light streaks; persistence controls how long trails linger.
+
+export const MotionBlurNode: NodeDefinition = {
+  type: 'motionBlur',
+  label: 'Motion Blur',
+  category: 'Effects',
+  description: 'Temporal accumulation motion blur. Blends the current frame with the previous frame to create motion trails. Adjust persistence to control trail length.',
+  inputs: {
+    color: { type: 'vec3', label: 'Color' },
+    uv:    { type: 'vec2', label: 'UV'   },
+  },
+  outputs: {
+    result: { type: 'vec3', label: 'Result' },
+  },
+  defaultParams: {
+    persistence:   0.65,
+    feedback_gain: 1.0,
+    decay_r: 1.0, decay_g: 1.0, decay_b: 1.0,
+  },
+  paramDefs: {
+    persistence:   { label: 'Persistence',    type: 'float', min: 0.0, max: 0.98, step: 0.01 },
+    feedback_gain: { label: 'Feedback Gain',  type: 'float', min: 0.5, max: 2.0,  step: 0.01 },
+    decay_r: { label: 'Decay R', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    decay_g: { label: 'Decay G', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    decay_b: { label: 'Decay B', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const col   = inputVars.color || 'vec3(0.0)';
+    const uvVar = inputVars.uv    || 'g_uv';
+    const pers  = p(node.params.persistence,   0.65);
+    const gain  = p(node.params.feedback_gain, 1.0);
+    const dr    = p(node.params.decay_r, 1.0);
+    const dg    = p(node.params.decay_g, 1.0);
+    const db    = p(node.params.decay_b, 1.0);
+
+    return {
+      code: [
+        `    vec2  ${id}_uv01   = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+        `    vec3  ${id}_prev   = texture2D(u_prevFrame, ${id}_uv01).rgb * vec3(${dr}, ${dg}, ${db});\n`,
+        `    vec3  ${id}_result = clamp(mix(${col}, ${id}_prev, ${pers}) * ${gain}, 0.0, 1.0);\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};

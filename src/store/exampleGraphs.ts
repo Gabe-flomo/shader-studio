@@ -6843,6 +6843,166 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Gaussian Blur Demo ────────────────────────────────────────────────────
+  gaussianBlurDemo: {
+    label: 'Gaussian Blur',
+    counter: 6,
+    nodes: [
+      { id: 'gb_uv',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'gb_time', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'gb_fbm', type: 'fbm', position: { x: 280, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'gb_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'gb_time', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV' } },
+        params: { octaves: 5, lacunarity: 2.0, gain: 0.5, scale: 1.2, time_scale: 0.05 },
+      },
+      {
+        id: 'gb_pal', type: 'palettePreset', position: { x: 530, y: 160 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'gb_fbm', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '3' },
+      },
+      {
+        id: 'gb_blur', type: 'gaussianBlur', position: { x: 780, y: 160 },
+        inputs: {
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gb_pal', outputKey: 'color' } },
+          uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'gb_uv',  outputKey: 'uv'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { radius: 5.0, quality: 'standard' },
+      },
+      {
+        id: 'gb_out', type: 'output', position: { x: 1040, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gb_blur', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Motion Blur Trails ────────────────────────────────────────────────────
+  motionBlurTrails: {
+    label: 'Motion Blur Trails',
+    counter: 5,
+    nodes: [
+      { id: 'mb_uv',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'mb_time', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'mb_frac', type: 'fractalLoop', position: { x: 310, y: 120 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'mb_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'mb_time', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, uv_final: { type: 'vec2', label: 'UV Final' }, uv0: { type: 'vec2', label: 'UV0' } },
+        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, ring_freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.6, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'mb_blur', type: 'motionBlur', position: { x: 700, y: 200 },
+        inputs: {
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mb_frac', outputKey: 'color' } },
+          uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'mb_uv',   outputKey: 'uv'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { persistence: 0.72, feedback_gain: 1.0, decay_r: 1.0, decay_g: 0.95, decay_b: 0.9 },
+      },
+      {
+        id: 'mb_out', type: 'output', position: { x: 960, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mb_blur', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Tilt-Shift Miniature ──────────────────────────────────────────────────
+  tiltShiftScene: {
+    label: 'Tilt-Shift',
+    counter: 6,
+    nodes: [
+      { id: 'ts_uv',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'ts_time', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ts_fbm', type: 'fbm', position: { x: 280, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'ts_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'ts_time', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV' } },
+        params: { octaves: 6, lacunarity: 2.0, gain: 0.5, scale: 2.0, time_scale: 0.03 },
+      },
+      {
+        id: 'ts_pal', type: 'palettePreset', position: { x: 530, y: 160 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'ts_fbm', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '5' },
+      },
+      {
+        id: 'ts_blur', type: 'tiltShiftBlur', position: { x: 780, y: 160 },
+        inputs: {
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ts_pal',  outputKey: 'color' } },
+          uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'ts_uv',   outputKey: 'uv'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' }, mask: { type: 'float', label: 'Focus Mask' } },
+        params: { focus_center: 0.0, band_width: 0.2, max_blur: 8.0, tilt_angle: 12.0, axis: 'horizontal' },
+      },
+      {
+        id: 'ts_out', type: 'output', position: { x: 1040, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ts_blur', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Lens Blur / Bokeh ─────────────────────────────────────────────────────
+  lensBokeh: {
+    label: 'Lens Blur Bokeh',
+    counter: 7,
+    nodes: [
+      { id: 'lb_uv',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'lb_time', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'lb_vor', type: 'voronoi', position: { x: 280, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'lb_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'lb_time', outputKey: 'time' } },
+        },
+        outputs: { dist: { type: 'float', label: 'Distance' }, uv: { type: 'vec2', label: 'UV' } },
+        params: { scale: 4.0, jitter: 0.9, time_scale: 0.08 },
+      },
+      {
+        id: 'lb_pal', type: 'palettePreset', position: { x: 530, y: 100 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'lb_vor', outputKey: 'dist' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '8' },
+      },
+      {
+        id: 'lb_glow', type: 'glowLayer', position: { x: 530, y: 280 },
+        inputs: {
+          d:     { type: 'float', label: 'SDF',   connection: { nodeId: 'lb_vor', outputKey: 'dist' } },
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'lb_pal', outputKey: 'color' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Glow' } },
+        params: { intensity: 0.015, power: 1.2 },
+      },
+      {
+        id: 'lb_lens', type: 'lensBlur', position: { x: 800, y: 200 },
+        inputs: {
+          color: { type: 'vec3', label: 'Color',       connection: { nodeId: 'lb_glow', outputKey: 'result' } },
+          uv:    { type: 'vec2', label: 'UV',          connection: { nodeId: 'lb_uv',   outputKey: 'uv'     } },
+          focal_point: { type: 'vec2', label: 'Focal Point' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' }, coc: { type: 'float', label: 'CoC' } },
+        params: { focal_length: '85mm', aperture: 'f2', focus_distance: 0.2, bokeh_shape: 'hex', boost: 1.5 },
+      },
+      {
+        id: 'lb_out', type: 'output', position: { x: 1060, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'lb_lens', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
