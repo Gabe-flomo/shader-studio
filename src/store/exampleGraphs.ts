@@ -5320,14 +5320,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 3.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.4, albedoG: 0.6, albedoB: 1.0 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 3.0, albedoR: 0.4, albedoG: 0.6, albedoB: 1.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, shadow_soft: 'on', ao_strength: 1.0 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5387,14 +5387,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.9, albedoG: 0.5, albedoB: 0.2 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, albedoR: 0.9, albedoG: 0.5, albedoB: 0.2, bgR: 0.85, bgG: 0.90, bgB: 0.95, shadow_soft: 'on', ao_strength: 1.0 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5470,14 +5470,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.7, albedoG: 0.8, albedoB: 0.9 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 3.0, albedoR: 0.7, albedoG: 0.8, albedoB: 0.9, bgR: 0.85, bgG: 0.90, bgB: 0.95, shadow_soft: 'on', ao_strength: 1.0 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5545,14 +5545,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 5.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, shadow_soft: 'off', lightX: 2.0, lightY: 4.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.8, albedoB: 0.7 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 5.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 2.0, lightY: 4.0, lightZ: 3.0, albedoR: 0.5, albedoG: 0.8, albedoB: 0.7, bgR: 0.85, bgG: 0.90, bgB: 0.95, shadow_soft: 'off', ao_strength: 1.0 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5596,14 +5596,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ha_ray', type: 'rayRender', position: { x: 560, y: 80 },
+        id: 'ha_ray', type: 'rayMarchLit', position: { x: 560, y: 80 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'ha_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'ha_uv',    outputKey: 'uv'   } },
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'ha_time',  outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 2.5, camAngle: 0.5, camRotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.0, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 2.5, camAngle: 0.5, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.0, lightY: 2.5, lightZ: 2.0, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55, bgR: 0.85, bgG: 0.90, bgB: 0.95, shadow_soft: 'on', ao_strength: 1.0 },
       },
       {
         id: 'ha_out', type: 'output', position: { x: 860, y: 140 },
@@ -5694,14 +5694,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'hb_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'hb_ray', type: 'rayMarchLit', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hb_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hb_uv',    outputKey: 'uv'   } },
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hb_time',  outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.5, camAngle: 0.6, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.5, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55, bgR: 0.85, bgG: 0.90, bgB: 0.95, shadow_soft: 'on', ao_strength: 1.0 },
       },
       {
         id: 'hb_out', type: 'output', position: { x: 820, y: 200 },
@@ -5714,7 +5714,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // ── 3D: Infinite Falling ──────────────────────────────────────────────────────
   infiniteFalling3D: {
     label: '3D: Infinite Falling',
-    counter: 5,
+    counter: 9,
     nodes: [
       { id: 'hc_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'hc_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
@@ -5769,18 +5769,37 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'hc_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'hc_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hc_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hc_uv',    outputKey: 'uv'   } },
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hc_time',  outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { color_mode: 'distance', dist_scale: 0.04, iter_scale: 0.005, pal_r: 0.0, pal_g: 0.33, pal_b: 0.67, camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, shadow_soft: 'off', bgR: 0.0, bgG: 0.0, bgB: 0.0 },
+        outputs: { dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 4.0, camAngle: 0.0, rotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0 },
       },
+      // dist * 0.04
+      { id: 'hc_dm', type: 'multiply', position: { x: 820, y: 160 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'hc_ray', outputKey: 'dist' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.04 } },
+      // iter * 0.005
+      { id: 'hc_im', type: 'multiply', position: { x: 820, y: 280 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'hc_ray', outputKey: 'iter' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.005 } },
+      // sum
+      { id: 'hc_sum', type: 'add', position: { x: 1020, y: 200 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'hc_dm',  outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'hc_im',  outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
+      // palette
+      { id: 'hc_pal', type: 'palettePreset', position: { x: 1220, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'hc_sum', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '1' } },
       {
-        id: 'hc_out', type: 'output', position: { x: 820, y: 240 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hc_ray', outputKey: 'color' } } },
+        id: 'hc_out', type: 'output', position: { x: 1440, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hc_pal', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],
@@ -5789,7 +5808,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // ── 3D: Spiral World ──────────────────────────────────────────────────────────
   spiralWorld3D: {
     label: '3D: Spiral World',
-    counter: 5,
+    counter: 10,
     nodes: [
       { id: 'hd_uv',   type: 'uv',   position: { x: 50, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'hd_time', type: 'time', position: { x: 50, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
@@ -5864,18 +5883,37 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'hd_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'hd_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hd_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hd_uv',    outputKey: 'uv'   } },
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hd_time',  outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { color_mode: 'distance', dist_scale: 0.04, iter_scale: 0.005, pal_r: 0.0, pal_g: 0.33, pal_b: 0.67, camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, shadow_soft: 'off', bgR: 0.0, bgG: 0.0, bgB: 0.0 },
+        outputs: { dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 4.0, camAngle: 0.0, rotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0 },
       },
+      // dist * 0.04
+      { id: 'hd_dm', type: 'multiply', position: { x: 820, y: 160 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'hd_ray', outputKey: 'dist' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.04 } },
+      // iter * 0.005
+      { id: 'hd_im', type: 'multiply', position: { x: 820, y: 280 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'hd_ray', outputKey: 'iter' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.005 } },
+      // sum
+      { id: 'hd_sum', type: 'add', position: { x: 1020, y: 200 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'hd_dm',  outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'hd_im',  outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
+      // palette
+      { id: 'hd_pal', type: 'palettePreset', position: { x: 1220, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'hd_sum', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '1' } },
       {
-        id: 'hd_out', type: 'output', position: { x: 820, y: 260 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hd_ray', outputKey: 'color' } } },
+        id: 'hd_out', type: 'output', position: { x: 1440, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'hd_pal', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],
@@ -5986,14 +6024,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'he_ray', type: 'rayRender', position: { x: 560, y: 180 },
+        id: 'he_ray', type: 'rayMarchLit', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'he_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'he_uv',    outputKey: 'uv'   } },
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'he_time',  outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.0, camAngle: 0.7, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.0, camAngle: 0.7, rotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55, bgR: 0.85, bgG: 0.90, bgB: 0.95, shadow_soft: 'on', ao_strength: 1.0 },
       },
       // Normal-based coloring: normal * 0.5 + 0.5
       {
@@ -6084,14 +6122,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'nc_ray', type: 'rayRender', position: { x: 560, y: 100 },
+        id: 'nc_ray', type: 'rayMarch', position: { x: 560, y: 100 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'nc_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'nc_uv',    outputKey: 'uv'   } },
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'nc_time',  outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.0, camAngle: 0.6, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        outputs: { dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0 },
       },
       // Normal → * 0.5 + 0.5 → output (remaps -1..1 to 0..1)
       {
@@ -6164,14 +6202,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'di_ray', type: 'rayRender', position: { x: 560, y: 100 },
+        id: 'di_ray', type: 'rayMarch', position: { x: 560, y: 100 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'di_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'di_uv',    outputKey: 'uv'   } },
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'di_time',  outputKey: 'time' } },
         },
-        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.0, camAngle: 0.5, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        outputs: { dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.0, camAngle: 0.5, rotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0 },
       },
       // iter * 0.015
       {
@@ -6200,6 +6238,84 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'di_out', type: 'output', position: { x: 1420, y: 220 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'di_pal', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Kishimisu Style ──────────────────────────────────────────────────────
+  // Classic palette coloring: col = palette(dist * 0.04 + iter * 0.005)
+  // No lighting — pure kishimisu flavor from the famous tutorial.
+  kishimisu3D: {
+    label: '3D: Kishimisu',
+    counter: 9,
+    nodes: [
+      { id: 'ki_uv',   type: 'uv',   position: { x: 50, y: 80  }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'ki_time', type: 'time', position: { x: 50, y: 180 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ki_scene', type: 'sceneGroup', position: { x: 300, y: 120 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Kishimisu Scene',
+          subgraph: {
+            nodes: [
+              { id: 'ki_sp', type: 'scenePos', position: { x: 60, y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'ki_tm', type: 'time', position: { x: 60, y: 280 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              // Translate Z by time for flythrough
+              { id: 'ki_tr', type: 'translate3D', position: { x: 240, y: 160 },
+                inputs: {
+                  pos: { type: 'vec3',  label: 'Position', connection: { nodeId: 'ki_sp', outputKey: 'pos'  } },
+                  tz:  { type: 'float', label: 'Z',        connection: { nodeId: 'ki_tm', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } }, params: { tx: 0.0, ty: 0.0, tz: 0.0 } },
+              // Repeat space
+              { id: 'ki_rep', type: 'repeat3D', position: { x: 440, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'ki_tr', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } }, params: { cellX: 1.5, cellY: 1.5, cellZ: 2.0 } },
+              // Octahedron
+              { id: 'ki_oct', type: 'octahedronSDF3D', position: { x: 640, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'ki_rep', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { size: 0.22 } },
+            ],
+            outputNodeId: 'ki_oct',
+            outputKey: 'dist',
+          },
+        },
+      },
+      // RayMarch — raw outputs, no lighting
+      {
+        id: 'ki_ray', type: 'rayMarch', position: { x: 560, y: 80 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'ki_scene', outputKey: 'scene' } },
+          uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'ki_uv',    outputKey: 'uv'   } },
+          time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'ki_time',  outputKey: 'time' } },
+        },
+        outputs: { dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.5, camAngle: 0.0, rotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 25.0 },
+      },
+      // dist * 0.04
+      { id: 'ki_dm', type: 'multiply', position: { x: 820, y: 60 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'ki_ray', outputKey: 'dist' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.04 } },
+      // iter * 0.005
+      { id: 'ki_im', type: 'multiply', position: { x: 820, y: 180 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'ki_ray', outputKey: 'iter' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.005 } },
+      // sum = dist*0.04 + iter*0.005
+      { id: 'ki_sum', type: 'add', position: { x: 1020, y: 100 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'ki_dm', outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'ki_im', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
+      // Palette coloring
+      { id: 'ki_pal', type: 'palettePreset', position: { x: 1220, y: 100 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'ki_sum', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { preset: '1' } },
+      {
+        id: 'ki_out', type: 'output', position: { x: 1440, y: 130 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ki_pal', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],

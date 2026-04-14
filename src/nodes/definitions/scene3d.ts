@@ -7,15 +7,16 @@
  *  SceneGroupNode — a group-like container whose subgraph is compiled as a named
  *                   GLSL function `float mapScene_<id>(vec3 p)`.  Its output is
  *                   of type `scene3d` — just the function name string on the wire.
- *  RayRenderNode  — a full sphere-tracer that calls the `scene3d` function.
- *                   Outputs: color (vec3), depth (float).
+ *  RayMarchNode   — camera + march only, outputs raw data: dist, depth, normal, iter, hit.
+ *  RayMarchLitNode — camera + march + AO + shadows + PBR diffuse, outputs color + raw data.
+ *  RayRenderNode  — legacy node kept for backward compatibility with saved graphs.
  *
  * Compiler contract (shaderAssembler.ts):
  *   - When a node of type 'sceneGroup' is encountered, its subgraph is compiled
  *     into a standalone GLSL function and added to the functions set.
  *   - ScenePosNode inside a sceneGroup outputs the literal string 'p' (the func arg).
  *   - The sceneGroup's `scene3d` output var is the function name, e.g. `mapScene_<id>`.
- *   - RayRenderNode receives this as its `scene` inputVar and plugs it into the march loop.
+ *   - RayMarchNode/RayMarchLitNode receive this as their `scene` inputVar and plug it into the march loop.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p } from './helpers';
@@ -50,7 +51,7 @@ export const ScenePosNode: NodeDefinition = {
 
 export const SceneGroupNode: NodeDefinition = {
   type: 'sceneGroup', label: 'Scene Group', category: '3D Scene',
-  description: 'Wrap SDF nodes into a composable 3D scene. Connect ScenePos → SDF chain → output. Wire the scene3d output into RayRender.',
+  description: 'Wrap SDF nodes into a composable 3D scene. Connect ScenePos → SDF chain → output. Wire the scene3d output into RayMarch or RayMarchLit.',
   // Sockets are populated dynamically (same pattern as GroupNode)
   inputs: {},
   outputs: { scene: { type: 'scene3d', label: 'Scene' } },
@@ -60,24 +61,257 @@ export const SceneGroupNode: NodeDefinition = {
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };
 
-// ─── RayRenderNode ─────────────────────────────────────────────────────────────
-// Full sphere-tracer that calls a `scene3d` function (mapScene_<id>).
-// The `scene` input is a scene3d wire carrying the function name string.
+// ─── Shared camera + march GLSL emitter ───────────────────────────────────────
+// Returns the shared code string for camera setup + ray march + normal estimation.
+// Used by both RayMarchNode and RayMarchLitNode.
 
-const RAY_RENDER_GLSL = `
-vec3 rayRenderNormal(float(*sdf)(vec3), vec3 p) {
-    float eps = 0.001;
-    return normalize(vec3(
-        sdf(vec3(p.x+eps,p.y,p.z)) - sdf(vec3(p.x-eps,p.y,p.z)),
-        sdf(vec3(p.x,p.y+eps,p.z)) - sdf(vec3(p.x,p.y-eps,p.z)),
-        sdf(vec3(p.x,p.y,p.z+eps)) - sdf(vec3(p.x,p.y,p.z-eps))
-    ));
-}`;
-// Note: function pointers aren't in GLSL ES 1.00. RayRenderNode embeds the scene call inline.
+function emitSharedMarchCode(
+  id: string,
+  uv: string,
+  time: string,
+  sceneFn: string,
+  camDist: string,
+  camAngle: string,
+  rotSpeed: string,
+  fov: string,
+  maxSteps: number,
+  maxDist: string,
+): string {
+  return [
+    `    float ${id}_ang = ${camAngle} + ${time} * ${rotSpeed};\n`,
+    `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, 0.8, cos(${id}_ang)*${camDist});\n`,
+    `    vec3  ${id}_ta  = vec3(0.0);\n`,
+    `    vec3  ${id}_fwd = normalize(${id}_ta - ${id}_ro);\n`,
+    `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,
+    `    vec3  ${id}_up2 = cross(${id}_fwd, ${id}_rgt);\n`,
+    `    vec3  ${id}_rd  = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+    `    float ${id}_t   = 0.001;\n`,
+    `    float ${id}_hit = 0.0;\n`,
+    `    int   ${id}_si  = 0;\n`,
+    `    for (int ${id}_i = 0; ${id}_i < ${maxSteps}; ${id}_i++) {\n`,
+    `        vec3  ${id}_rp = ${id}_ro + ${id}_t * ${id}_rd;\n`,
+    `        float ${id}_d  = ${sceneFn}(${id}_rp);\n`,
+    `        if (${id}_d < 0.0005) { ${id}_hit = 1.0; ${id}_si = ${id}_i; break; }\n`,
+    `        ${id}_t += ${id}_d;\n`,
+    `        if (${id}_t > ${maxDist}) { ${id}_si = ${id}_i; break; }\n`,
+    `    }\n`,
+    `    float ${id}_iter = float(${id}_si) / float(${maxSteps});\n`,
+    `    vec3  ${id}_hp  = ${id}_ro + ${id}_t * ${id}_rd;\n`,
+    `    float ${id}_e   = 0.001;\n`,
+    `    vec3  ${id}_n   = normalize(vec3(\n`,
+    `        ${sceneFn}(${id}_hp+vec3(${id}_e,0.0,0.0)) - ${sceneFn}(${id}_hp-vec3(${id}_e,0.0,0.0)),\n`,
+    `        ${sceneFn}(${id}_hp+vec3(0.0,${id}_e,0.0)) - ${sceneFn}(${id}_hp-vec3(0.0,${id}_e,0.0)),\n`,
+    `        ${sceneFn}(${id}_hp+vec3(0.0,0.0,${id}_e)) - ${sceneFn}(${id}_hp-vec3(0.0,0.0,${id}_e))\n`,
+    `    ));\n`,
+    `    float ${id}_dist   = ${id}_t;\n`,
+    `    float ${id}_depth  = ${id}_hit > 0.5 ? ${id}_t / ${maxDist} : 1.0;\n`,
+    `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
+  ].join('');
+}
+
+// ─── Common paramDefs shared by both march nodes ──────────────────────────────
+
+const COMMON_MARCH_PARAM_DEFS = {
+  camDist:   { label: 'Cam Dist',  type: 'float' as const, min: 0.5, max: 20.0,  step: 0.05 },
+  camAngle:  { label: 'Cam Angle', type: 'float' as const, min: 0.0, max: 6.28,  step: 0.02 },
+  rotSpeed:  { label: 'Rot Speed', type: 'float' as const, min: 0.0, max: 2.0,   step: 0.01 },
+  fov:       { label: 'FOV',       type: 'float' as const, min: 0.5, max: 3.14,  step: 0.05 },
+  maxSteps:  { label: 'Max Steps', type: 'float' as const, min: 8,   max: 256,   step: 4    },
+  maxDist:   { label: 'Max Dist',  type: 'float' as const, min: 5.0, max: 100.0, step: 1.0  },
+};
+
+// ─── RayMarchNode ──────────────────────────────────────────────────────────────
+// Camera + march only. No color computation.
+// Outputs raw data: dist, depth, normal, iter, hit.
+
+export const RayMarchNode: NodeDefinition = {
+  type: 'rayMarch', label: 'Ray March', category: '3D Scene',
+  description: 'Camera + sphere-march. Outputs raw hit data (dist, depth, normal, iter, hit) — no color. Connect to palette/math nodes for custom coloring.',
+  inputs: {
+    scene:    { type: 'scene3d', label: 'Scene' },
+    uv:       { type: 'vec2',   label: 'UV' },
+    time:     { type: 'float',  label: 'Time' },
+    camDist:  { type: 'float',  label: 'Cam Distance' },
+    camAngle: { type: 'float',  label: 'Cam Angle' },
+    rotSpeed: { type: 'float',  label: 'Rot Speed' },
+    fov:      { type: 'float',  label: 'FOV' },
+    maxDist:  { type: 'float',  label: 'Max Dist' },
+  },
+  outputs: {
+    dist:   { type: 'float', label: 'Distance' },
+    depth:  { type: 'float', label: 'Depth' },
+    normal: { type: 'vec3',  label: 'Normal' },
+    iter:   { type: 'float', label: 'Iter' },
+    hit:    { type: 'float', label: 'Hit' },
+  },
+  defaultParams: {
+    camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0,
+  },
+  paramDefs: COMMON_MARCH_PARAM_DEFS,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const uv       = inputVars.uv       || 'g_uv';
+    const time     = inputVars.time     || 'u_time';
+    const sceneFn  = inputVars.scene    || 'MISSING_SCENE_FN';
+    const camDist  = inputVars.camDist  || p(node.params.camDist,  3.0);
+    const camAngle = inputVars.camAngle || p(node.params.camAngle, 0.6);
+    const rotSpeed = inputVars.rotSpeed || p(node.params.rotSpeed, 0.0);
+    const fov      = inputVars.fov      || p(node.params.fov,      1.5);
+    const maxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 64));
+    const maxDist  = inputVars.maxDist  || p(node.params.maxDist,  20.0);
+
+    const code = emitSharedMarchCode(id, uv, time, sceneFn, camDist, camAngle, rotSpeed, fov, maxSteps, maxDist);
+
+    return {
+      code,
+      outputVars: {
+        dist:   `${id}_dist`,
+        depth:  `${id}_depth`,
+        normal: `${id}_normal`,
+        iter:   `${id}_iter`,
+        hit:    `${id}_hit`,
+      },
+    };
+  },
+};
+
+// ─── RayMarchLitNode ──────────────────────────────────────────────────────────
+// Camera + march + AO + optional soft shadows + PBR diffuse.
+// Outputs: color (vec3) + all 5 raw outputs from RayMarchNode.
+
+export const RayMarchLitNode: NodeDefinition = {
+  type: 'rayMarchLit', label: 'Ray March Lit', category: '3D Scene',
+  description: 'Full sphere-tracer with PBR lighting, soft shadows and AO. Outputs shaded color plus raw hit data.',
+  inputs: {
+    scene:    { type: 'scene3d', label: 'Scene' },
+    uv:       { type: 'vec2',   label: 'UV' },
+    time:     { type: 'float',  label: 'Time' },
+    camDist:  { type: 'float',  label: 'Cam Distance' },
+    camAngle: { type: 'float',  label: 'Cam Angle' },
+    rotSpeed: { type: 'float',  label: 'Rot Speed' },
+    fov:      { type: 'float',  label: 'FOV' },
+    maxDist:  { type: 'float',  label: 'Max Dist' },
+    lightX:   { type: 'float',  label: 'Light X' },
+    lightY:   { type: 'float',  label: 'Light Y' },
+    lightZ:   { type: 'float',  label: 'Light Z' },
+    albedoR:  { type: 'float',  label: 'Albedo R' },
+    albedoG:  { type: 'float',  label: 'Albedo G' },
+    albedoB:  { type: 'float',  label: 'Albedo B' },
+  },
+  outputs: {
+    color:  { type: 'vec3',  label: 'Color' },
+    dist:   { type: 'float', label: 'Distance' },
+    depth:  { type: 'float', label: 'Depth' },
+    normal: { type: 'vec3',  label: 'Normal' },
+    iter:   { type: 'float', label: 'Iter' },
+    hit:    { type: 'float', label: 'Hit' },
+  },
+  defaultParams: {
+    camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0,
+    lightX: 1.0, lightY: 2.0, lightZ: 3.0,
+    albedoR: 0.6, albedoG: 0.65, albedoB: 0.7,
+    shadow_soft: 'on', ao_strength: 1.0,
+    bgR: 0.85, bgG: 0.90, bgB: 0.95,
+  },
+  paramDefs: {
+    ...COMMON_MARCH_PARAM_DEFS,
+    shadow_soft: { label: 'Soft Shadows', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
+    ao_strength: { label: 'AO Strength', type: 'float', min: 0.0, max: 2.0, step: 0.05 },
+    bgR: { label: 'BG R', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    bgG: { label: 'BG G', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    bgB: { label: 'BG B', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const uv       = inputVars.uv       || 'g_uv';
+    const time     = inputVars.time     || 'u_time';
+    const sceneFn  = inputVars.scene    || 'MISSING_SCENE_FN';
+    const camDist  = inputVars.camDist  || p(node.params.camDist,  3.0);
+    const camAngle = inputVars.camAngle || p(node.params.camAngle, 0.6);
+    const rotSpeed = inputVars.rotSpeed || p(node.params.rotSpeed, 0.0);
+    const fov      = inputVars.fov      || p(node.params.fov,      1.5);
+    const maxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 64));
+    const maxDist  = inputVars.maxDist  || p(node.params.maxDist,  20.0);
+    const lx       = inputVars.lightX   || p(node.params.lightX,  1.0);
+    const ly       = inputVars.lightY   || p(node.params.lightY,  2.0);
+    const lz       = inputVars.lightZ   || p(node.params.lightZ,  3.0);
+    const ar       = inputVars.albedoR  || p(node.params.albedoR, 0.6);
+    const ag       = inputVars.albedoG  || p(node.params.albedoG, 0.65);
+    const ab       = inputVars.albedoB  || p(node.params.albedoB, 0.7);
+    const bgr      = p(node.params.bgR, 0.85);
+    const bgg      = p(node.params.bgG, 0.90);
+    const bgb      = p(node.params.bgB, 0.95);
+    const aoStr    = p(node.params.ao_strength, 1.0);
+    const shadowSoft = (node.params.shadow_soft as string) ?? 'on';
+
+    const sharedCode = emitSharedMarchCode(id, uv, time, sceneFn, camDist, camAngle, rotSpeed, fov, maxSteps, maxDist);
+
+    const litCode = [
+      `    vec3  ${id}_bg  = vec3(${bgr}, ${bgg}, ${bgb});\n`,
+      // Lighting — key light direction
+      `    vec3  ${id}_ld  = normalize(vec3(${lx}, ${ly}, ${lz}));\n`,
+      `    float ${id}_dif = clamp(dot(${id}_n, ${id}_ld), 0.0, 1.0);\n`,
+      // Sky-dome ambient: brighter hemisphere
+      `    float ${id}_amb = 0.4 + 0.6 * (${id}_n.y * 0.5 + 0.5);\n`,
+      // Soft shadows (penumbra ray march toward light)
+      ...(shadowSoft === 'on' ? [
+        `    float ${id}_sha = 1.0;\n`,
+        `    vec3  ${id}_sro = ${id}_hp + ${id}_n * 0.002;\n`,
+        `    float ${id}_st  = 0.01;\n`,
+        `    for (int ${id}_si2 = 0; ${id}_si2 < 24; ${id}_si2++) {\n`,
+        `        float ${id}_sd = ${sceneFn}(${id}_sro + ${id}_ld * ${id}_st);\n`,
+        `        if (${id}_sd < 0.0001) { ${id}_sha = 0.0; break; }\n`,
+        `        ${id}_sha = min(${id}_sha, 8.0 * ${id}_sd / ${id}_st);\n`,
+        `        ${id}_st += ${id}_sd;\n`,
+        `        if (${id}_st > 5.0) break;\n`,
+        `    }\n`,
+        `    ${id}_sha = clamp(${id}_sha, 0.0, 1.0);\n`,
+        `    ${id}_dif *= ${id}_sha;\n`,
+      ] : []),
+      // Ambient occlusion (5-step march along normal)
+      `    float ${id}_ao = 0.0;\n`,
+      `    float ${id}_ao_scale = 1.0;\n`,
+      `    for (int ${id}_aoi = 1; ${id}_aoi < 6; ${id}_aoi++) {\n`,
+      `        float ${id}_ao_d = float(${id}_aoi) * 0.08;\n`,
+      `        float ${id}_ao_s = ${id}_ao_d - ${sceneFn}(${id}_hp + ${id}_n * ${id}_ao_d);\n`,
+      `        ${id}_ao += ${id}_ao_s * ${id}_ao_scale;\n`,
+      `        ${id}_ao_scale *= 0.5;\n`,
+      `    }\n`,
+      `    ${id}_ao = clamp(1.0 - 3.0 * ${id}_ao, 0.0, 1.0);\n`,
+      // Blend AO by strength parameter
+      `    float ${id}_ao_f = mix(1.0, ${id}_ao, clamp(${aoStr}, 0.0, 2.0));\n`,
+      `    ${id}_dif *= ${id}_ao_f;\n`,
+      `    ${id}_amb *= ${id}_ao_f;\n`,
+      // Final shading — warm key light + subtle sky colour
+      `    vec3  ${id}_alb = vec3(${ar}, ${ag}, ${ab});\n`,
+      `    vec3  ${id}_sky = vec3(0.5, 0.7, 1.0) * ${id}_amb * 0.6;\n`,
+      `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
+      // Fog / background blend
+      `    float ${id}_fog = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
+      `    vec3  ${id}_color = mix(mix(${id}_lit, ${id}_bg, ${id}_fog), ${id}_bg, 1.0 - ${id}_hit);\n`,
+    ].join('');
+
+    return {
+      code: sharedCode + litCode,
+      outputVars: {
+        color:  `${id}_color`,
+        dist:   `${id}_dist`,
+        depth:  `${id}_depth`,
+        normal: `${id}_normal`,
+        iter:   `${id}_iter`,
+        hit:    `${id}_hit`,
+      },
+    };
+  },
+};
+
+// ─── RayRenderNode ─────────────────────────────────────────────────────────────
+// LEGACY — kept for backward compatibility with saved graphs.
+// New graphs should use RayMarchNode or RayMarchLitNode instead.
 
 export const RayRenderNode: NodeDefinition = {
-  type: 'rayRender', label: 'Ray Render', category: '3D Scene',
-  description: 'Full sphere-tracer. Connect a Scene Group to the Scene input. Outputs shaded color and raw depth.',
+  type: 'rayRender', label: 'Ray Render (Legacy)', category: '3D Scene',
+  description: 'Legacy sphere-tracer. Use RayMarch or RayMarchLit for new graphs.',
   inputs: {
     scene:     { type: 'scene3d', label: 'Scene' },
     uv:        { type: 'vec2',  label: 'UV' },
@@ -299,6 +533,3 @@ export const RayRenderNode: NodeDefinition = {
     };
   },
 };
-
-// Suppress unused import
-void (RAY_RENDER_GLSL as unknown);
