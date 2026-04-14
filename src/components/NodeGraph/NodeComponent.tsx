@@ -1020,9 +1020,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showParamPicker, setShowParamPicker] = useState(false);
   const [showInitModal, setShowInitModal] = useState(false);
 
-  if (node.type === 'group') {
+  if (node.type === 'group' || node.type === 'sceneGroup') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-    const groupLabel = typeof node.params.label === 'string' ? node.params.label : 'Group';
+    const groupLabel = typeof node.params.label === 'string' ? node.params.label : (node.type === 'sceneGroup' ? 'Scene Group' : 'Group');
     const nodeCount = subgraph?.nodes.length ?? 0;
     const inputPorts = subgraph?.inputPorts ?? [];
     const outputPorts = subgraph?.outputPorts ?? [];
@@ -1184,8 +1184,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           </div>
         )}
 
-        {/* Iterations row — compact param row below header */}
-        <div
+        {/* Iterations row — compact param row below header (group only) */}
+        {node.type === 'group' && <div
           onMouseDown={e => e.stopPropagation()}
           onDoubleClick={e => e.stopPropagation()}
           style={{ padding: '3px 10px 3px 10px', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid #252536', background: '#252536' }}
@@ -1204,7 +1204,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             }}
             style={{ flex: 1, accentColor: groupAccentColor, cursor: 'pointer', margin: 0 }}
           />
-        </div>
+        </div>}
 
         {/* Port list */}
         <div style={{ padding: '6px 10px', display: 'flex', gap: '12px', justifyContent: 'space-between' }}>

@@ -103,8 +103,10 @@ export const RayRenderNode: NodeDefinition = {
     lightX:     1.0,
     lightY:     2.0,
     lightZ:     3.0,
-    bgR: 0.05, bgG: 0.05, bgB: 0.08,
-    albedoR: 0.6, albedoG: 0.7, albedoB: 0.9,
+    bgR: 0.85, bgG: 0.90, bgB: 0.95,
+    albedoR: 0.6, albedoG: 0.65, albedoB: 0.7,
+    ao_strength:  1.0,
+    shadow_soft:  'on',
   },
   paramDefs: {
     camDist:     { label: 'Cam Dist',    type: 'float', min: 0.5, max: 20.0, step: 0.05 },
@@ -122,6 +124,8 @@ export const RayRenderNode: NodeDefinition = {
     albedoR:  { label: 'Albedo R',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     albedoG:  { label: 'Albedo G',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     albedoB:  { label: 'Albedo B',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    ao_strength: { label: 'AO Strength', type: 'float', min: 0.0, max: 2.0, step: 0.05 },
+    shadow_soft: { label: 'Soft Shadows', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -137,14 +141,16 @@ export const RayRenderNode: NodeDefinition = {
     const lx = p(node.params.lightX, 1.0);
     const ly = p(node.params.lightY, 2.0);
     const lz = p(node.params.lightZ, 3.0);
-    const bgr = p(node.params.bgR, 0.05);
-    const bgg = p(node.params.bgG, 0.05);
-    const bgb = p(node.params.bgB, 0.08);
+    const bgr = p(node.params.bgR, 0.85);
+    const bgg = p(node.params.bgG, 0.90);
+    const bgb = p(node.params.bgB, 0.95);
     const ar = p(node.params.albedoR, 0.6);
-    const ag = p(node.params.albedoG, 0.7);
-    const ab = p(node.params.albedoB, 0.9);
+    const ag = p(node.params.albedoG, 0.65);
+    const ab = p(node.params.albedoB, 0.7);
     const cam_rot_h = inputVars.cam_rot_h || '0.0';
     const cam_rot_v = inputVars.cam_rot_v || '0.0';
+    const aoStr     = p(node.params.ao_strength, 1.0);
+    const shadowSoft = (node.params.shadow_soft as string) ?? 'on';
 
     return {
       code: [
@@ -183,12 +189,44 @@ export const RayRenderNode: NodeDefinition = {
         `        ${sceneFn}(${id}_hp+vec3(0.0,${id}_e,0.0)) - ${sceneFn}(${id}_hp-vec3(0.0,${id}_e,0.0)),\n`,
         `        ${sceneFn}(${id}_hp+vec3(0.0,0.0,${id}_e)) - ${sceneFn}(${id}_hp-vec3(0.0,0.0,${id}_e))\n`,
         `    ));\n`,
-        // Lighting
+        // Lighting — key light direction
         `    vec3  ${id}_ld  = normalize(vec3(${lx}, ${ly}, ${lz}));\n`,
         `    float ${id}_dif = clamp(dot(${id}_n, ${id}_ld), 0.0, 1.0);\n`,
-        `    float ${id}_amb = 0.1 + 0.15 * (${id}_n.y * 0.5 + 0.5);\n`,
+        // Sky-dome ambient: brighter hemisphere
+        `    float ${id}_amb = 0.4 + 0.6 * (${id}_n.y * 0.5 + 0.5);\n`,
+        // Soft shadows (penumbra ray march toward light)
+        ...(shadowSoft === 'on' ? [
+          `    float ${id}_sha = 1.0;\n`,
+          `    vec3  ${id}_sro = ${id}_hp + ${id}_n * 0.002;\n`,
+          `    float ${id}_st  = 0.01;\n`,
+          `    for (int ${id}_si2 = 0; ${id}_si2 < 24; ${id}_si2++) {\n`,
+          `        float ${id}_sd = ${sceneFn}(${id}_sro + ${id}_ld * ${id}_st);\n`,
+          `        if (${id}_sd < 0.0001) { ${id}_sha = 0.0; break; }\n`,
+          `        ${id}_sha = min(${id}_sha, 8.0 * ${id}_sd / ${id}_st);\n`,
+          `        ${id}_st += ${id}_sd;\n`,
+          `        if (${id}_st > 5.0) break;\n`,
+          `    }\n`,
+          `    ${id}_sha = clamp(${id}_sha, 0.0, 1.0);\n`,
+          `    ${id}_dif *= ${id}_sha;\n`,
+        ] : []),
+        // Ambient occlusion (5-step march along normal)
+        `    float ${id}_ao = 0.0;\n`,
+        `    float ${id}_ao_scale = 1.0;\n`,
+        `    for (int ${id}_aoi = 1; ${id}_aoi < 6; ${id}_aoi++) {\n`,
+        `        float ${id}_ao_d = float(${id}_aoi) * 0.08;\n`,
+        `        float ${id}_ao_s = ${id}_ao_d - ${sceneFn}(${id}_hp + ${id}_n * ${id}_ao_d);\n`,
+        `        ${id}_ao += ${id}_ao_s * ${id}_ao_scale;\n`,
+        `        ${id}_ao_scale *= 0.5;\n`,
+        `    }\n`,
+        `    ${id}_ao = clamp(1.0 - 3.0 * ${id}_ao, 0.0, 1.0);\n`,
+        // Blend AO by strength parameter (0 = no AO, 1+ = full)
+        `    float ${id}_ao_f = mix(1.0, ${id}_ao, clamp(${aoStr}, 0.0, 2.0));\n`,
+        `    ${id}_dif *= ${id}_ao_f;\n`,
+        `    ${id}_amb *= ${id}_ao_f;\n`,
+        // Final shading — warm key light + subtle sky colour
         `    vec3  ${id}_alb = vec3(${ar}, ${ag}, ${ab});\n`,
-        `    vec3  ${id}_lit = ${id}_alb * (${id}_dif + ${id}_amb);\n`,
+        `    vec3  ${id}_sky = vec3(0.5, 0.7, 1.0) * ${id}_amb * 0.6;\n`,
+        `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
         // Fog / background blend
         `    float ${id}_fog = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
         `    vec3  ${id}_bg  = vec3(${bgr}, ${bgg}, ${bgb});\n`,

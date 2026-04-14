@@ -175,7 +175,7 @@ export function generateFragmentShader(
         audioUniforms[`u_audio_${node.id}_${i}`] = node.id;
       }
     }
-    if (node.type === 'prevFrame') {
+    if (node.type === 'prevFrame' || node.type === 'radianceCascadesApprox') {
       isStateful = true;
     }
   }

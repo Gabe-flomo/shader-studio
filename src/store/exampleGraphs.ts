@@ -5327,7 +5327,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 3.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 3.0, bgR: 0.05, bgG: 0.05, bgB: 0.10, albedoR: 0.4, albedoG: 0.6, albedoB: 1.0 },
+        params: { camDist: 3.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.4, albedoG: 0.6, albedoB: 1.0 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5394,7 +5394,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, bgR: 0.02, bgG: 0.02, bgB: 0.06, albedoR: 0.9, albedoG: 0.5, albedoB: 0.2 },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.9, albedoG: 0.5, albedoB: 0.2 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5477,7 +5477,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 3.0, bgR: 0.03, bgG: 0.03, bgB: 0.06, albedoR: 0.7, albedoG: 0.8, albedoB: 0.9 },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.7, albedoG: 0.8, albedoB: 0.9 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5552,7 +5552,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
-        params: { camDist: 5.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 2.0, lightY: 4.0, lightZ: 3.0, bgR: 0.02, bgG: 0.02, bgB: 0.05, albedoR: 0.5, albedoG: 0.8, albedoB: 0.7 },
+        params: { camDist: 5.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 2.0, lightY: 4.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.8, albedoB: 0.7 },
       },
       {
         id: 'output_4', type: 'output', position: { x: 820, y: 200 },
@@ -5603,7 +5603,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'ha_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 2.5, camAngle: 0.5, camRotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.0, lightY: 2.5, lightZ: 2.0, bgR: 0.65, bgG: 0.75, bgB: 0.85, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        params: { camDist: 2.5, camAngle: 0.5, camRotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0, lightX: 1.0, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
       },
       {
         id: 'ha_out', type: 'output', position: { x: 860, y: 140 },
@@ -5701,7 +5701,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hb_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.5, camAngle: 0.6, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.65, bgG: 0.75, bgB: 0.85, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        params: { camDist: 3.5, camAngle: 0.6, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
       },
       {
         id: 'hb_out', type: 'output', position: { x: 820, y: 200 },
@@ -5776,7 +5776,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hc_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.0, lightY: 2.0, lightZ: 3.0, bgR: 0.02, bgG: 0.02, bgB: 0.06, albedoR: 0.5, albedoG: 0.8, albedoB: 0.9 },
+        params: { camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.0, lightY: 2.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.8, albedoB: 0.9 },
       },
       // depth + iter → palette coloring
       {
@@ -5902,7 +5902,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'hd_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.5, lightY: 2.0, lightZ: 3.0, bgR: 0.02, bgG: 0.02, bgB: 0.05, albedoR: 0.8, albedoG: 0.5, albedoB: 0.9 },
+        params: { camDist: 4.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.5, maxSteps: 96, maxDist: 30.0, lightX: 1.5, lightY: 2.0, lightZ: 3.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.8, albedoG: 0.5, albedoB: 0.9 },
       },
       // depth + iter → rainbow palette
       {
@@ -6046,7 +6046,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'he_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.0, camAngle: 0.7, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.65, bgG: 0.75, bgB: 0.85, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        params: { camDist: 3.0, camAngle: 0.7, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
       },
       // Normal-based coloring: normal * 0.5 + 0.5
       {
@@ -6144,7 +6144,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'nc_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.0, camAngle: 0.6, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.65, bgG: 0.75, bgB: 0.85, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        params: { camDist: 3.0, camAngle: 0.6, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
       },
       // Normal → * 0.5 + 0.5 → output (remaps -1..1 to 0..1)
       {
@@ -6224,7 +6224,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float',  label: 'Time',  connection: { nodeId: 'di_time',  outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter Count' } },
-        params: { camDist: 3.0, camAngle: 0.5, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.65, bgG: 0.75, bgB: 0.85, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
+        params: { camDist: 3.0, camAngle: 0.5, camRotSpeed: 0.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.85, bgG: 0.90, bgB: 0.95, albedoR: 0.5, albedoG: 0.5, albedoB: 0.55 },
       },
       // iter * 0.015
       {
@@ -6457,24 +6457,26 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     counter: 9,
     nodes: [
       { id: 'wsb_uv', type: 'uv', position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // Three circle SDFs at different positions
       {
-        id: 'wsb_sdf1', type: 'circleSDF', position: { x: 280, y: 120 },
+        id: 'wsb_sdf1', type: 'circleSDF', position: { x: 280, y: 100 },
         inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'wsb_uv', outputKey: 'uv' } } },
         outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.2, posX: -0.3, posY: 0.0 },
+        params: { radius: 0.25, posX: -0.4, posY: 0.0 },
       },
       {
         id: 'wsb_sdf2', type: 'circleSDF', position: { x: 280, y: 280 },
         inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'wsb_uv', outputKey: 'uv' } } },
         outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.2, posX: 0.3, posY: 0.2 },
+        params: { radius: 0.25, posX: 0.4, posY: 0.0 },
       },
       {
-        id: 'wsb_sdf3', type: 'circleSDF', position: { x: 280, y: 440 },
+        id: 'wsb_sdf3', type: 'circleSDF', position: { x: 280, y: 460 },
         inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'wsb_uv', outputKey: 'uv' } } },
         outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.2, posX: 0.0, posY: -0.3 },
+        params: { radius: 0.25, posX: 0.0, posY: 0.4 },
       },
+      // WeightedAverage: w2=3 pulls the blend toward the right circle
       {
         id: 'wsb_wa', type: 'weightedAverage', position: { x: 560, y: 280 },
         inputs: {
@@ -6483,22 +6485,29 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           c: { type: 'float', label: 'C', connection: { nodeId: 'wsb_sdf3', outputKey: 'distance' } },
         },
         outputs: { result: { type: 'float', label: 'Result' }, total_weight: { type: 'float', label: 'Total Weight' } },
-        params: { w1: 1.0, w2: 2.0, w3: 1.0, w4: 0.0, inputs_used: '3' },
+        params: { w1: 1.0, w2: 3.0, w3: 1.0, w4: 0.0, inputs_used: '3' },
       },
+      // Scale × 5 to create visible distance rings, then fract for contour lines
       {
-        id: 'wsb_ss', type: 'smoothstep', position: { x: 800, y: 280 },
-        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'wsb_wa', outputKey: 'result' } } },
+        id: 'wsb_scale', type: 'multiply', position: { x: 800, y: 280 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'wsb_wa', outputKey: 'result' } } },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { edge0: 0.02, edge1: -0.02 },
+        params: { b: 5.0 },
       },
       {
-        id: 'wsb_pal', type: 'palettePreset', position: { x: 1040, y: 280 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'wsb_ss', outputKey: 'result' } } },
+        id: 'wsb_fract', type: 'fractRaw', position: { x: 1000, y: 280 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'wsb_scale', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: {},
+      },
+      {
+        id: 'wsb_pal', type: 'palettePreset', position: { x: 1200, y: 280 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'wsb_fract', outputKey: 'output' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '0' },
+        params: { preset: '3' },
       },
       {
-        id: 'wsb_out', type: 'output', position: { x: 1280, y: 280 },
+        id: 'wsb_out', type: 'output', position: { x: 1440, y: 280 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'wsb_pal', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
@@ -6506,134 +6515,71 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   },
 
   // ── Neon GI — Radiance Cascades 2D ───────────────────────────────────────
+  // RC samples u_prevFrame for emitters. A circle SDF emitter adds bright
+  // color to the frame; RC diffuses that light across the canvas.
   neonGI: {
     label: 'Neon GI (Radiance Cascades)',
-    counter: 18,
+    counter: 9,
     nodes: [
-      { id: 'ng_uv',   type: 'uv',   position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      // Three circle SDFs for emitters
+      { id: 'ng_uv',  type: 'uv', position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // Sky color: dark purple background for the GI fallback
       {
-        id: 'ng_sdf1', type: 'circleSDF', position: { x: 280, y: 100 },
-        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ng_uv', outputKey: 'uv' } } },
-        outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.08, posX: -0.5, posY: 0.3 },
-      },
-      {
-        id: 'ng_sdf2', type: 'circleSDF', position: { x: 280, y: 280 },
-        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ng_uv', outputKey: 'uv' } } },
-        outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.08, posX: 0.4, posY: -0.2 },
-      },
-      {
-        id: 'ng_sdf3', type: 'circleSDF', position: { x: 280, y: 460 },
-        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ng_uv', outputKey: 'uv' } } },
-        outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.08, posX: 0.0, posY: 0.5 },
-      },
-      // Smoothstep each SDF to get a filled circle
-      {
-        id: 'ng_fill1', type: 'smoothstep', position: { x: 520, y: 100 },
-        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'ng_sdf1', outputKey: 'distance' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { edge0: 0.02, edge1: -0.01 },
-      },
-      {
-        id: 'ng_fill2', type: 'smoothstep', position: { x: 520, y: 280 },
-        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'ng_sdf2', outputKey: 'distance' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { edge0: 0.02, edge1: -0.01 },
-      },
-      {
-        id: 'ng_fill3', type: 'smoothstep', position: { x: 520, y: 460 },
-        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'ng_sdf3', outputKey: 'distance' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { edge0: 0.02, edge1: -0.01 },
-      },
-      // Static neon colors for each emitter
-      {
-        id: 'ng_col1', type: 'makeVec3', position: { x: 760, y: 60 },
+        id: 'ng_sky', type: 'makeVec3', position: { x: 40, y: 500 },
         inputs: {},
         outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 1.0, g: 0.1, b: 0.5 },
+        params: { r: 0.02, g: 0.0, b: 0.08 },
       },
+      // Radiance Cascades GI — samples prev frame for emitters, sky_color as fallback
       {
-        id: 'ng_col2', type: 'makeVec3', position: { x: 760, y: 240 },
-        inputs: {},
-        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 0.1, g: 0.8, b: 1.0 },
-      },
-      {
-        id: 'ng_col3', type: 'makeVec3', position: { x: 760, y: 420 },
-        inputs: {},
-        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 1.0, g: 0.8, b: 0.1 },
-      },
-      // Scale color by fill amount (float * color)
-      {
-        id: 'ng_e1', type: 'multiplyVec3', position: { x: 1000, y: 60 },
+        id: 'ng_rc', type: 'radianceCascadesApprox', position: { x: 300, y: 360 },
         inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'ng_col1',  outputKey: 'rgb'    } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ng_fill1', outputKey: 'result' } },
+          uv:        { type: 'vec2', label: 'UV',        connection: { nodeId: 'ng_uv',  outputKey: 'uv'  } },
+          sky_color: { type: 'vec3', label: 'Sky Color', connection: { nodeId: 'ng_sky', outputKey: 'rgb' } },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 1.0 },
-      },
-      {
-        id: 'ng_e2', type: 'multiplyVec3', position: { x: 1000, y: 240 },
-        inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'ng_col2',  outputKey: 'rgb'    } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ng_fill2', outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 1.0 },
-      },
-      {
-        id: 'ng_e3', type: 'multiplyVec3', position: { x: 1000, y: 420 },
-        inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'ng_col3',  outputKey: 'rgb'    } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ng_fill3', outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 1.0 },
-      },
-      // Combine emitters
-      {
-        id: 'ng_add1', type: 'addVec3', position: { x: 1240, y: 140 },
-        inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'ng_e1', outputKey: 'result' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'ng_e2', outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'ng_add2', type: 'addVec3', position: { x: 1240, y: 320 },
-        inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'ng_add1', outputKey: 'result' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'ng_e3', outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      // Radiance Cascades GI node
-      {
-        id: 'ng_rc', type: 'radianceCascadesApprox', position: { x: 280, y: 640 },
-        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'ng_uv', outputKey: 'uv' } } },
         outputs: { radiance: { type: 'vec3', label: 'Radiance' }, gi_r: { type: 'float', label: 'GI Red' }, gi_g: { type: 'float', label: 'GI Green' }, gi_b: { type: 'float', label: 'GI Blue' } },
         params: { ray_count: 8.0, ray_length: 0.4, ray_step: 0.02, c1_scale: 2.0, emit_threshold: 0.7 },
       },
-      // Add GI radiance to emitter scene
+      // Emitter: bright neon circle (hot pink) that lights up the scene
       {
-        id: 'ng_final', type: 'addVec3', position: { x: 1240, y: 420 },
+        id: 'ng_sdf', type: 'circleSDF', position: { x: 300, y: 120 },
+        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ng_uv', outputKey: 'uv' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.1, posX: -0.3, posY: 0.2 },
+      },
+      {
+        id: 'ng_fill', type: 'smoothstep', position: { x: 560, y: 120 },
+        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'ng_sdf', outputKey: 'distance' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { edge0: 0.02, edge1: -0.01 },
+      },
+      {
+        id: 'ng_emitcol', type: 'makeVec3', position: { x: 560, y: 260 },
+        inputs: {},
+        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
+        params: { r: 1.0, g: 0.15, b: 0.6 },
+      },
+      // emitter color × fill mask → bright circle
+      {
+        id: 'ng_emitter', type: 'multiplyVec3', position: { x: 800, y: 180 },
         inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'ng_add2', outputKey: 'result' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'ng_rc', outputKey: 'radiance' } },
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'ng_emitcol', outputKey: 'rgb'    } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ng_fill',    outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { scale: 1.0 },
+      },
+      // Add GI radiance to emitter circle
+      {
+        id: 'ng_final', type: 'addVec3', position: { x: 1040, y: 300 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'ng_rc',      outputKey: 'radiance' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'ng_emitter', outputKey: 'result'   } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: {},
       },
       {
-        id: 'ng_out', type: 'output', position: { x: 1480, y: 420 },
+        id: 'ng_out', type: 'output', position: { x: 1280, y: 300 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ng_final', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
@@ -6643,54 +6589,46 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // ── Three-Point Lighting 2D — Multiple Light2D nodes ─────────────────────
   threePointLights: {
     label: 'Three-Point Lighting 2D',
-    counter: 11,
+    counter: 10,
     nodes: [
-      { id: 'tpl_uv', type: 'uv', position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      // Subject circle SDF
+      { id: 'tpl_uv', type: 'uv', position: { x: 40, y: 400 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // Subject: filled white circle as the scene mask
       {
         id: 'tpl_circ', type: 'circleSDF', position: { x: 280, y: 180 },
         inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'tpl_uv', outputKey: 'uv' } } },
         outputs: { distance: { type: 'float', label: 'Distance' } },
         params: { radius: 0.35, posX: 0.0, posY: 0.0 },
       },
-      // Soft filled circle mask
       {
         id: 'tpl_mask', type: 'smoothstep', position: { x: 520, y: 180 },
         inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'tpl_circ', outputKey: 'distance' } } },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { edge0: 0.05, edge1: -0.01 },
+        params: { edge0: 0.02, edge1: -0.01 },
       },
-      // White scene color (circle fill)
+      // Light 1: key light (warm white, top-left) at (-0.5, 0.4)
       {
-        id: 'tpl_white', type: 'floatToVec3', position: { x: 760, y: 180 },
-        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'tpl_mask', outputKey: 'result' } } },
-        outputs: { rgb: { type: 'vec3', label: 'Color' } },
-        params: {},
-      },
-      // Light 1: key light (warm white, top-left)
-      {
-        id: 'tpl_l1', type: 'light2d', position: { x: 280, y: 400 },
+        id: 'tpl_l1', type: 'light2d', position: { x: 280, y: 380 },
         inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'tpl_uv', outputKey: 'uv' } } },
         outputs: { light: { type: 'vec3', label: 'Light' }, falloff: { type: 'float', label: 'Falloff' }, dist: { type: 'float', label: 'Dist' } },
-        params: { falloff_model: 'squared', intensity: 2.0, radius: 1.5, gamma_correct: 'false', light_pos_x: -0.6, light_pos_y: 0.5, colorR: 1.0, colorG: 0.95, colorB: 0.8 },
+        params: { falloff_model: 'squared', intensity: 2.0, radius: 1.5, gamma_correct: 'false', light_pos_x: -0.5, light_pos_y: 0.4, colorR: 1.0, colorG: 0.95, colorB: 0.8 },
       },
-      // Light 2: fill light (cool blue, right)
+      // Light 2: fill light (cool blue, right) at (0.6, 0.2)
       {
-        id: 'tpl_l2', type: 'light2d', position: { x: 280, y: 560 },
+        id: 'tpl_l2', type: 'light2d', position: { x: 280, y: 540 },
         inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'tpl_uv', outputKey: 'uv' } } },
         outputs: { light: { type: 'vec3', label: 'Light' }, falloff: { type: 'float', label: 'Falloff' }, dist: { type: 'float', label: 'Dist' } },
-        params: { falloff_model: 'squared', intensity: 1.2, radius: 1.5, gamma_correct: 'false', light_pos_x: 0.7, light_pos_y: 0.3, colorR: 0.4, colorG: 0.6, colorB: 1.0 },
+        params: { falloff_model: 'squared', intensity: 1.2, radius: 1.5, gamma_correct: 'false', light_pos_x: 0.6, light_pos_y: 0.2, colorR: 0.4, colorG: 0.6, colorB: 1.0 },
       },
-      // Light 3: rim light (orange, bottom)
+      // Light 3: rim light (orange, bottom) at (0.0, -0.7)
       {
-        id: 'tpl_l3', type: 'light2d', position: { x: 280, y: 720 },
+        id: 'tpl_l3', type: 'light2d', position: { x: 280, y: 700 },
         inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'tpl_uv', outputKey: 'uv' } } },
         outputs: { light: { type: 'vec3', label: 'Light' }, falloff: { type: 'float', label: 'Falloff' }, dist: { type: 'float', label: 'Dist' } },
-        params: { falloff_model: 'squared', intensity: 3.0, radius: 2.0, gamma_correct: 'false', light_pos_x: 0.0, light_pos_y: -0.8, colorR: 1.0, colorG: 0.5, colorB: 0.1 },
+        params: { falloff_model: 'squared', intensity: 3.0, radius: 2.0, gamma_correct: 'false', light_pos_x: 0.0, light_pos_y: -0.7, colorR: 1.0, colorG: 0.5, colorB: 0.1 },
       },
-      // Add lights together
+      // Add all three lights together
       {
-        id: 'tpl_ladd1', type: 'addVec3', position: { x: 560, y: 480 },
+        id: 'tpl_ladd1', type: 'addVec3', position: { x: 560, y: 460 },
         inputs: {
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'tpl_l1', outputKey: 'light' } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'tpl_l2', outputKey: 'light' } },
@@ -6699,38 +6637,27 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: {},
       },
       {
-        id: 'tpl_ladd2', type: 'addVec3', position: { x: 800, y: 600 },
+        id: 'tpl_ladd2', type: 'addVec3', position: { x: 800, y: 580 },
         inputs: {
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'tpl_ladd1', outputKey: 'result' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'tpl_l3', outputKey: 'light' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'tpl_l3',    outputKey: 'light'  } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: {},
       },
-      // Multiply total light by scene circle
+      // Multiply combined light by the circle mask → lit subject on black
       {
-        id: 'tpl_mul', type: 'multiplyVec3', position: { x: 1040, y: 400 },
+        id: 'tpl_mul', type: 'multiplyVec3', position: { x: 1040, y: 380 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tpl_white', outputKey: 'rgb' } },
-          scale: { type: 'float', label: 'Scale' },
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'tpl_ladd2', outputKey: 'result' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'tpl_mask',  outputKey: 'result' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: { scale: 1.0 },
       },
-      // Mix scene-lit and light sum
       {
-        id: 'tpl_litmul', type: 'mixVec3', position: { x: 1040, y: 580 },
-        inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'tpl_mul', outputKey: 'result' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'tpl_ladd2', outputKey: 'result' } },
-          fac: { type: 'float', label: 'Fac', connection: { nodeId: 'tpl_mask', outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { fac: 0.5 },
-      },
-      {
-        id: 'tpl_out', type: 'output', position: { x: 1300, y: 580 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tpl_ladd2', outputKey: 'result' } } },
+        id: 'tpl_out', type: 'output', position: { x: 1280, y: 380 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tpl_mul', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
     ],
@@ -6811,74 +6738,66 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Retro Tunnel — Perspective2D XY tunnel ────────────────────────────────
+  // ── Retro Tunnel — Perspective2D floor grid with depth fog ───────────────
   retroTunnel: {
     label: 'Retro Tunnel',
-    counter: 11,
+    counter: 10,
     nodes: [
-      { id: 'rt_uv',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'rt_time', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // Perspective warp (tunnel mode)
+      { id: 'rt_uv', type: 'uv', position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // Perspective warp: XY tunnel mode, ratio=1.5
       {
-        id: 'rt_persp', type: 'perspective2d', position: { x: 280, y: 200 },
+        id: 'rt_persp', type: 'perspective2d', position: { x: 280, y: 300 },
         inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'rt_uv', outputKey: 'uv' } } },
         outputs: { uv: { type: 'vec2', label: 'UV' }, depth: { type: 'float', label: 'Depth' } },
-        params: { ratio: 2.0, axis: 'xy', flip: 'false' },
+        params: { ratio: 1.5, axis: 'xy', flip: 'false' },
       },
-      // Scale up for tiling
+      // Scale perspective UV × 8 for tiling density
       {
-        id: 'rt_scale', type: 'multiplyVec2', position: { x: 520, y: 200 },
+        id: 'rt_scale', type: 'multiplyVec2', position: { x: 520, y: 160 },
         inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'rt_persp', outputKey: 'uv' } } },
         outputs: { result: { type: 'vec2', label: 'Result' } },
         params: { scale: 8.0 },
       },
-      // fract the scaled UV for tile repeat (uses input/output keys)
+      // Tile: fract centers each cell around 0
       {
-        id: 'rt_fract', type: 'fract', position: { x: 760, y: 200 },
+        id: 'rt_fract', type: 'fract', position: { x: 760, y: 160 },
         inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'rt_scale', outputKey: 'result' } } },
         outputs: { output: { type: 'vec2', label: 'Output' } },
         params: { scale: 1.0 },
       },
-      // length of fract UV for dot/ring pattern
+      // Length of tiled UV → radial pattern per cell
       {
-        id: 'rt_len', type: 'length', position: { x: 1000, y: 200 },
+        id: 'rt_len', type: 'length', position: { x: 1000, y: 160 },
         inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'rt_fract', outputKey: 'output' } } },
         outputs: { output: { type: 'float', label: 'Output' } },
         params: { scale: 1.0 },
       },
-      // Palette color for tiles
+      // Palette color from the tile distance pattern
       {
-        id: 'rt_pal', type: 'palettePreset', position: { x: 1240, y: 200 },
+        id: 'rt_pal', type: 'palettePreset', position: { x: 1200, y: 160 },
         inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'rt_len', outputKey: 'output' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '9' },
       },
-      // Depth fog: invert depth (1 - depth) using negate + add
+      // Depth fog: depth=1 near camera, 0 at horizon → use depth directly as brightness
       {
-        id: 'rt_negdepth', type: 'negate', position: { x: 520, y: 420 },
+        id: 'rt_clamp', type: 'clamp', position: { x: 1000, y: 440 },
         inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'rt_persp', outputKey: 'depth' } } },
-        outputs: { output: { type: 'float', label: 'Output' } },
-        params: {},
-      },
-      {
-        id: 'rt_invdepth', type: 'add', position: { x: 760, y: 420 },
-        inputs: {
-          a: { type: 'float', label: 'A', connection: { nodeId: 'rt_negdepth', outputKey: 'output' } },
-        },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 1.0 },
+        params: { lo: 0.0, hi: 1.0 },
       },
+      // Darken far tiles: multiply color by depth (bright near, dark far)
       {
-        id: 'rt_mul', type: 'multiplyVec3', position: { x: 1480, y: 300 },
+        id: 'rt_mul', type: 'multiplyVec3', position: { x: 1420, y: 280 },
         inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'rt_pal',      outputKey: 'color'  } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'rt_invdepth', outputKey: 'result' } },
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'rt_pal',   outputKey: 'color'  } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'rt_clamp', outputKey: 'result' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: { scale: 1.0 },
       },
       {
-        id: 'rt_out', type: 'output', position: { x: 1720, y: 300 },
+        id: 'rt_out', type: 'output', position: { x: 1640, y: 280 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'rt_mul', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
@@ -7066,56 +6985,66 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   },
 
   // ── Alpha Layer Demo — AlphaBlend compositing ─────────────────────────────
+  // Orange circle composited over an FBM noise background using AlphaBlend.
   alphaLayerDemo: {
     label: 'Alpha Layer Demo',
-    counter: 9,
+    counter: 8,
     nodes: [
-      { id: 'ald_uv',   type: 'uv',   position: { x: 40,  y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'ald_time', type: 'time', position: { x: 40,  y: 420 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // Bottom layer: FBM noise as background color
+      { id: 'ald_uv', type: 'uv', position: { x: 40, y: 320 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // Bottom layer: FBM noise → palettePreset
       {
-        id: 'ald_fbm', type: 'fbm', position: { x: 280, y: 160 },
-        inputs: {
-          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'ald_uv',   outputKey: 'uv'   } },
-          time: { type: 'float', label: 'Time', connection: { nodeId: 'ald_time', outputKey: 'time' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' }, value: { type: 'float', label: 'Value' } },
-        params: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 3.0, timeScale: 0.1 },
-      },
-      // Top layer: palette-colored circle
-      {
-        id: 'ald_circ', type: 'circleSDF', position: { x: 280, y: 400 },
+        id: 'ald_fbm', type: 'fbm', position: { x: 280, y: 140 },
         inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'ald_uv', outputKey: 'uv' } } },
-        outputs: { sdf: { type: 'float', label: 'SDF' } },
-        params: { radius: 0.4, cx: 0.0, cy: 0.0 },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 3.0, time_scale: 0.0 },
       },
       {
-        id: 'ald_pal', type: 'palettePreset', position: { x: 500, y: 400 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'ald_time', outputKey: 'time' } } },
+        id: 'ald_bgpal', type: 'palettePreset', position: { x: 520, y: 140 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'ald_fbm', outputKey: 'value' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: 'IQ Warm Sunset', t: 0.0 },
+        params: { preset: '1' },
       },
-      // Alpha mask from the circle SDF (1 inside, 0 outside)
+      // Top layer: static vec3(0.9, 0.5, 0.2) orange
       {
-        id: 'ald_mask', type: 'smoothstep', position: { x: 500, y: 560 },
-        inputs: { x: { type: 'float', label: 'x', connection: { nodeId: 'ald_circ', outputKey: 'sdf' } } },
+        id: 'ald_topcol', type: 'makeVec3', position: { x: 280, y: 520 },
+        inputs: {},
+        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
+        params: { r: 0.9, g: 0.5, b: 0.2 },
+      },
+      // Circle SDF → smoothstep alpha mask (1 inside, 0 outside)
+      {
+        id: 'ald_circ', type: 'circleSDF', position: { x: 280, y: 340 },
+        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ald_uv', outputKey: 'uv' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.32, posX: 0.0, posY: 0.0 },
+      },
+      {
+        id: 'ald_mask', type: 'smoothstep', position: { x: 520, y: 340 },
+        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'ald_circ', outputKey: 'distance' } } },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { edge0: 0.02, edge1: -0.02 },
+        params: { edge0: 0.02, edge1: -0.01 },
       },
-      // AlphaBlend: composite circle on top of FBM
+      // bottom_a = 1.0 (opaque background), top_a = circle mask
       {
-        id: 'ald_blend', type: 'alphaBlend', position: { x: 760, y: 320 },
+        id: 'ald_bota', type: 'constant', position: { x: 520, y: 480 },
+        inputs: {},
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { value: 1.0 },
+      },
+      // AlphaBlend: orange circle over noise background
+      {
+        id: 'ald_blend', type: 'alphaBlend', position: { x: 800, y: 340 },
         inputs: {
-          bottom:   { type: 'vec3',  label: 'Bottom Color', connection: { nodeId: 'ald_fbm',  outputKey: 'color' } },
-          top:      { type: 'vec3',  label: 'Top Color',    connection: { nodeId: 'ald_pal',  outputKey: 'color' } },
-          bottom_a: { type: 'float', label: 'Bottom Alpha' },
-          top_a:    { type: 'float', label: 'Top Alpha',    connection: { nodeId: 'ald_mask', outputKey: 'result' } },
+          bottom:   { type: 'vec3',  label: 'Bottom Color', connection: { nodeId: 'ald_bgpal',  outputKey: 'color'  } },
+          top:      { type: 'vec3',  label: 'Top Color',    connection: { nodeId: 'ald_topcol', outputKey: 'rgb'    } },
+          bottom_a: { type: 'float', label: 'Bottom Alpha', connection: { nodeId: 'ald_bota',   outputKey: 'value'  } },
+          top_a:    { type: 'float', label: 'Top Alpha',    connection: { nodeId: 'ald_mask',   outputKey: 'result' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
         params: { blend_mode: 'corrected' },
       },
       {
-        id: 'ald_out', type: 'output', position: { x: 1000, y: 320 },
+        id: 'ald_out', type: 'output', position: { x: 1060, y: 340 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ald_blend', outputKey: 'color' } } },
         outputs: {}, params: {},
       },

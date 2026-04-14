@@ -1116,3 +1116,109 @@ export const RadianceCascadesApproxNode: NodeDefinition = {
     };
   },
 };
+
+// ─── ChromaticAberrationAutoNode ──────────────────────────────────────────────
+// Self-contained chromatic aberration node: UV in → split R/G/B UVs + composite color out.
+// When no scene color is wired, shows a built-in glow-ring visualization.
+
+export const ChromaticAberrationAutoNode: NodeDefinition = {
+  type: 'chromaticAberrationAuto',
+  label: 'Chroma Aberration Auto',
+  category: 'Effects',
+  description: 'Self-contained chromatic aberration: takes UV + optional scene color (vec3), applies spectral channel split, outputs a composited vec3 with R/G/B shifted. Uses glow-ring visualization if no color input is wired. Great as a one-node CA effect.',
+  inputs: {
+    uv:       { type: 'vec2',  label: 'UV'                  },
+    time:     { type: 'float', label: 'Time'                 },
+    color:    { type: 'vec3',  label: 'Scene Color (opt)'    },
+    strength: { type: 'float', label: 'Strength'             },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color'    },
+    uv_r:  { type: 'vec2', label: 'UV Red'   },
+    uv_g:  { type: 'vec2', label: 'UV Green' },
+    uv_b:  { type: 'vec2', label: 'UV Blue'  },
+  },
+  defaultParams: {
+    mode:       'radial',
+    strength:   0.04,
+    contrast:   1.5,
+    angle_deg:  0.0,
+    animate:    'true',
+    anim_speed: 0.4,
+  },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: 'radial',  label: 'Radial'  },
+      { value: 'linear',  label: 'Linear'  },
+      { value: 'twist',   label: 'Twist'   },
+      { value: 'barrel',  label: 'Barrel'  },
+    ]},
+    strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 0.2,  step: 0.001 },
+    contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05  },
+    angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1     },
+    animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
+    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01  },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const uvVar   = inputVars.uv       ?? 'g_uv';
+    const timeVar = inputVars.time     ?? '0.0';
+    const strIn   = inputVars.strength ?? p(node.params.strength, 0.04);
+    const cont    = p(node.params.contrast, 1.5);
+    const mode    = (node.params.mode as string) ?? 'radial';
+    const animate = (node.params.animate as string) ?? 'true';
+    const aspd    = p(node.params.anim_speed, 0.4);
+    const ang     = p(node.params.angle_deg, 0.0);
+
+    const strExpr = animate === 'true'
+      ? `(${strIn} * (0.8 + 0.2 * sin(${timeVar} * ${aspd})))`
+      : strIn;
+
+    let baseOff: string;
+    switch (mode) {
+      case 'linear':
+        baseOff = `(vec2(cos(${ang} * 3.14159 / 180.0), sin(${ang} * 3.14159 / 180.0)) * ${strExpr})`;
+        break;
+      case 'twist':
+        baseOff = `(vec2(${uvVar}.y - 0.5, 0.5 - ${uvVar}.x) * ${strExpr})`;
+        break;
+      case 'barrel':
+        baseOff = `(${uvVar} * dot(${uvVar}, ${uvVar}) * ${strExpr})`;
+        break;
+      default: // radial
+        baseOff = `(normalize(${uvVar} + vec2(0.00001)) * ${strExpr} * length(${uvVar}))`;
+    }
+
+    const spread   = `(${baseOff} * ${cont} * 0.25)`;
+    const hasColor = !!inputVars.color;
+
+    const parts: string[] = [
+      `    vec2 ${id}_uv_r = ${uvVar} + ${spread};\n`,
+      `    vec2 ${id}_uv_g = ${uvVar};\n`,
+      `    vec2 ${id}_uv_b = ${uvVar} - ${spread};\n`,
+    ];
+
+    if (!hasColor) {
+      parts.push(
+        `    float ${id}_gr = 0.02 / (length(${id}_uv_r) + 0.001);\n`,
+        `    float ${id}_gg = 0.02 / (length(${id}_uv_g) + 0.001);\n`,
+        `    float ${id}_gb = 0.02 / (length(${id}_uv_b) + 0.001);\n`,
+        `    vec3 ${id}_color = clamp(vec3(${id}_gr, ${id}_gg, ${id}_gb), 0.0, 1.0);\n`,
+      );
+    } else {
+      parts.push(
+        `    vec3 ${id}_color = ${inputVars.color!} + vec3(${spread}.x, 0.0, -(${spread}).x) * 2.0;\n`,
+      );
+    }
+
+    return {
+      code: parts.join(''),
+      outputVars: {
+        color: `${id}_color`,
+        uv_r:  `${id}_uv_r`,
+        uv_g:  `${id}_uv_g`,
+        uv_b:  `${id}_uv_b`,
+      },
+    };
+  },
+};

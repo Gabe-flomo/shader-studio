@@ -41,6 +41,7 @@ export {
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
+  ChromaticAberrationAutoNode,
 } from './effects';
 export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 export { LoopCarryNode } from './loop';
@@ -126,6 +127,7 @@ import {
   ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
+  ChromaticAberrationAutoNode,
 } from './effects';
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
@@ -245,6 +247,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   scanlines: ScanlinesNode,
   sobel: SobelNode,
   radianceCascadesApprox: RadianceCascadesApproxNode,
+  chromaticAberrationAuto: ChromaticAberrationAutoNode,
   // Loops (wired pair system)
   loopCarry:             LoopCarryNode,
   loopStart:             LoopStartNode,

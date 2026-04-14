@@ -723,6 +723,25 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const groupNode = state.nodes.find(n => n.id === id);
       const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
       if (!sg) {
+        if (groupNode?.type === 'sceneGroup') {
+          // SceneGroup added from palette — initialise with a ScenePos node.
+          const scenePosNode: import('../types/nodeGraph').GraphNode = {
+            id: `scenepos_${Date.now()}`,
+            type: 'scenePos',
+            position: { x: 200, y: 200 },
+            inputs: {},
+            outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+            params: { _groupOriginal: true },
+          };
+          const emptySceneSubgraph = { nodes: [scenePosNode], outputNodeId: '', outputKey: '' };
+          return {
+            activeGroupId: id,
+            activeGroupPath: [id],
+            nodes: state.nodes.map(n =>
+              n.id === id ? { ...n, params: { ...n.params, subgraph: emptySceneSubgraph } } : n
+            ),
+          };
+        }
         // Group was added from palette with no subgraph — initialise an empty one
         // and inject a LoopIndex so the iteration counter `i` is always available.
         const loopIndexNode: import('../types/nodeGraph').GraphNode = {
@@ -743,6 +762,21 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           activeGroupPath: [id],
           nodes: state.nodes.map(n =>
             n.id === id ? { ...n, params: { ...n.params, subgraph: emptySubgraph } } : n
+          ),
+        };
+      }
+
+      // For sceneGroup: skip LoopIndex migration entirely.
+      if (groupNode?.type === 'sceneGroup') {
+        const alreadyMigratedSg = sg.nodes.some(n => n.params?._groupOriginal);
+        if (alreadyMigratedSg) return { activeGroupId: id, activeGroupPath: [id] };
+        // Stamp existing nodes as originals
+        const stampedSgNodes = sg.nodes.map(n => ({ ...n, params: { ...n.params, _groupOriginal: true } }));
+        return {
+          activeGroupId: id,
+          activeGroupPath: [id],
+          nodes: state.nodes.map(n =>
+            n.id === id ? { ...n, params: { ...n.params, subgraph: { ...sg, nodes: stampedSgNodes } } } : n
           ),
         };
       }
@@ -822,8 +856,44 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   exitGroup: () => {
     const path = get().activeGroupPath;
     if (path.length === 0) return;
+    const exitingId = path[path.length - 1];
     const newPath = path.slice(0, -1);
-    set({ activeGroupPath: newPath, activeGroupId: newPath[newPath.length - 1] ?? null });
+    set(state => {
+      const exitingNode = state.nodes.find(n => n.id === exitingId);
+      if (exitingNode?.type === 'sceneGroup') {
+        const sg = exitingNode.params.subgraph as { nodes: import('../types/nodeGraph').GraphNode[] } | undefined;
+        const newPsSockets: Record<string, import('../types/nodeGraph').InputSocket> = {};
+        let anyNew = false;
+        if (sg?.nodes) {
+          for (const sn of sg.nodes) {
+            const snDef = getNodeDefinition(sn.type);
+            if (!snDef?.paramDefs) continue;
+            for (const [paramKey, paramDef] of Object.entries(snDef.paramDefs)) {
+              if ((paramDef as import('../types/nodeGraph').ParamDef).type !== 'float') continue;
+              if ((paramDef as import('../types/nodeGraph').ParamDef).step === 1) continue;
+              const psKey = `ps_${sn.id}_${paramKey}`;
+              if (!exitingNode.inputs[psKey]) {
+                newPsSockets[psKey] = {
+                  type: 'float' as import('../types/nodeGraph').DataType,
+                  label: (paramDef as import('../types/nodeGraph').ParamDef).label,
+                };
+                anyNew = true;
+              }
+            }
+          }
+        }
+        if (anyNew) {
+          return {
+            activeGroupPath: newPath,
+            activeGroupId: newPath[newPath.length - 1] ?? null,
+            nodes: state.nodes.map(n =>
+              n.id === exitingId ? { ...n, inputs: { ...n.inputs, ...newPsSockets } } : n
+            ),
+          };
+        }
+      }
+      return { activeGroupPath: newPath, activeGroupId: newPath[newPath.length - 1] ?? null };
+    });
   },
 
   exitToRoot: () => {
@@ -2241,11 +2311,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   toggleBypass: (nodeId) => {
     pushHistory(get().nodes);
-    set(state => ({
-      nodes: state.nodes.map(n =>
-        n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n
-      ),
-    }));
+    set(state => {
+      const path = state.activeGroupPath;
+      if (path.length > 0) {
+        const activeNodes = getActiveNodes(state.nodes, path);
+        if (!activeNodes) return {};
+        const newActiveNodes = activeNodes.map(n => n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n);
+        const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
+        return { nodes: newTop ?? state.nodes };
+      }
+      return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n) };
+    });
     get().compile();
   },
 
