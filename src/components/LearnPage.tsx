@@ -1389,7 +1389,7 @@ p_repeated = mod(p + 0.5*period, period) - 0.5*period;
           <h2 style={S.sectionTitle}>3D SDF Primitives</h2>
           <div style={S.divider} />
 
-          <p style={S.p">All primitives take a <C>Position: vec3</C> input and output a <C>Distance: float</C>. Wire ScenePos (optionally through transforms) into the Position input.</p>
+          <p style={S.p}>All primitives take a <C>Position: vec3</C> input and output a <C>Distance: float</C>. Wire ScenePos (optionally through transforms) into the Position input.</p>
 
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
             {([
@@ -1431,7 +1431,7 @@ p_repeated = mod(p + 0.5*period, period) - 0.5*period;
           </ul>
 
           <h3 style={S.subTitle}>Inputs</h3>
-          <p style={S.p"><C>scene3d</C> (from SceneGroup), <C>uv</C> (vec2), <C>time</C> (float), plus wirable camera sockets: <C>camDist</C>, <C>camAngle</C>, <C>rotSpeed</C>, <C>fov</C>, <C>maxDist</C>. <C>maxSteps</C> is slider-only (compile-time constant).</p>
+          <p style={S.p}><C>scene3d</C> (from SceneGroup), <C>uv</C> (vec2), <C>time</C> (float), plus wirable camera sockets: <C>camDist</C>, <C>camAngle</C>, <C>rotSpeed</C>, <C>fov</C>, <C>maxDist</C>. <C>maxSteps</C> is slider-only (compile-time constant).</p>
 
           <h3 style={S.subTitle}>Example: Normal Visualization</h3>
           <NodeDiagram
@@ -1461,7 +1461,7 @@ p_repeated = mod(p + 0.5*period, period) - 0.5*period;
           </p>
 
           <h3 style={S.subTitle}>Additional Inputs</h3>
-          <p style={S.p">All camera params are wirable sockets (<C>camDist</C>, <C>camAngle</C>, <C>rotSpeed</C>, <C>fov</C>, <C>maxDist</C>). Also: <C>lightX/Y/Z</C>, <C>albedoR/G/B</C> as wirable sockets. <C>maxSteps</C> is slider-only.</p>
+          <p style={S.p}>All camera params are wirable sockets (<C>camDist</C>, <C>camAngle</C>, <C>rotSpeed</C>, <C>fov</C>, <C>maxDist</C>). Also: <C>lightX/Y/Z</C>, <C>albedoR/G/B</C> as wirable sockets. <C>maxSteps</C> is slider-only.</p>
 
           <h3 style={S.subTitle}>RayMarch vs RayMarchLit</h3>
           <CompareTable
@@ -1533,7 +1533,7 @@ p_repeated = mod(p + 0.5*period, period) - 0.5*period;
           ]} />
 
           <h3 style={S.subTitle}>Combining Two SDFs</h3>
-          <p style={S.p">Inside the SceneGroup, add a second SDF (e.g. <C>TorusSDF3D</C>). Feed both distances into a <C>Min</C> node — the minimum distance is the SDF union, showing whichever surface is closer. Use <C>SmoothMin</C> for soft metaball-like blending.</p>
+          <p style={S.p}>Inside the SceneGroup, add a second SDF (e.g. <C>TorusSDF3D</C>). Feed both distances into a <C>Min</C> node — the minimum distance is the SDF union, showing whichever surface is closer. Use <C>SmoothMin</C> for soft metaball-like blending.</p>
           <TryIt exampleKey="helloSphere3D" label="Hello Sphere 3D" onTry={tryExample} />
         </div>
 
@@ -1550,13 +1550,13 @@ p_repeated = mod(p + 0.5*period, period) - 0.5*period;
           <CodeBlock>{`t = dist * 0.04 + iter * 0.005
 color = palette(t)`}</CodeBlock>
 
-          <p style={S.p">The two components work together:</p>
+          <p style={S.p}>The two components work together:</p>
           <ul style={S.ul}>
             <li style={S.li}><strong style={{ color: T.textBold }}>dist × 0.04</strong> — total ray travel distance. Surfaces close to the camera = small dist = one end of palette. Far surfaces = large dist = other end. Creates depth-based color banding.</li>
             <li style={S.li}><strong style={{ color: T.textBold }}>iter × 0.005</strong> — normalized step count. Edges and thin features cost more steps → higher iter → shifts the palette offset. Creates natural edge darkening and highlighting.</li>
           </ul>
 
-          <p style={S.p">The 0.04 and 0.005 scales are tunable. Larger values = more palette cycles across depth. Try 0.02/0.003 for subtler variation, or 0.08/0.01 for more intense cycling.</p>
+          <p style={S.p}>The 0.04 and 0.005 scales are tunable. Larger values = more palette cycles across depth. Try 0.02/0.003 for subtler variation, or 0.08/0.01 for more intense cycling.</p>
 
           <NodeDiagram
             nodes={[
@@ -1579,7 +1579,7 @@ color = palette(t)`}</CodeBlock>
           <h2 style={S.sectionTitle}>3D Transforms</h2>
           <div style={S.divider} />
 
-          <p style={S.p">Transform nodes take <TypeBadge type="vec3" /> in and output <TypeBadge type="vec3" />. Place them between ScenePos and a primitive. The order matters — transforms compose left-to-right.</p>
+          <p style={S.p}>Transform nodes take <TypeBadge type="vec3" /> in and output <TypeBadge type="vec3" />. Place them between ScenePos and a primitive. The order matters — transforms compose left-to-right.</p>
 
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
             {([
@@ -1632,7 +1632,7 @@ color = palette(t)`}</CodeBlock>
           <CodeBlock>{`// Chladni formula:
 cos(n*PI*x) * cos(m*PI*y) - cos(m*PI*x) * cos(n*PI*y) = 0
 density = exp(-abs(chladni(x,y)) * sharpness)`}</CodeBlock>
-          <p style={S.p">Also available: <C>Chladni3D</C> (volumetric 3D modes) and <C>Chladni3DParticles</C> (particle-based depth rendering).</p>
+          <p style={S.p}>Also available: <C>Chladni3D</C> (volumetric 3D modes) and <C>Chladni3DParticles</C> (particle-based depth rendering).</p>
 
           <h3 style={S.subTitle}>Electron Orbital</h3>
           <p style={S.p}>Visualizes hydrogen wavefunction probability density <C>|ψ|²</C> using quantum numbers n (principal/shell), l (azimuthal), m (magnetic). Uses real spherical harmonics and associated Laguerre polynomials.</p>
@@ -1658,7 +1658,7 @@ uniform float u_time;       // elapsed time in seconds
 uniform vec2 u_mouse;       // mouse position (normalized)`}</CodeBlock>
 
           <h3 style={S.subTitle}>Video Recording</h3>
-          <p style={S.p">Press <C>Cmd+R</C> to start recording. Formats: H.264 (web-friendly), ProRes 422 HQ (lossless), FFV1 (open-source lossless). Configure resolution and duration.</p>
+          <p style={S.p}>Press <C>Cmd+R</C> to start recording. Formats: H.264 (web-friendly), ProRes 422 HQ (lossless), FFV1 (open-source lossless). Configure resolution and duration.</p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
