@@ -232,12 +232,13 @@ float ffAngle(vec2 p, float scale, float quant, int mode) {
     vec2  sp = p * scale;
     float n  = fbmFF(sp, 4, 2.0, 0.5);
     if (mode == 1) {
-        // Curl: take two offset FBM samples and use the gradient perpendicular
+        // Curl: gradient of noise field, rotated 90° counter-clockwise
+        // curl(f) = (-∂f/∂y, ∂f/∂x)  →  angle = atan(∂f/∂x, -∂f/∂y)
+        // eps cancels in atan so we omit division for numerical cleanliness
         float eps = 0.01;
         float nx  = fbmFF(sp + vec2(eps, 0.0), 4, 2.0, 0.5);
         float ny  = fbmFF(sp + vec2(0.0, eps), 4, 2.0, 0.5);
-        // Curl of the noise field = rotate gradient 90 degrees
-        return atan((ny - n) / eps, -(nx - n) / eps);
+        return atan((nx - n), -(ny - n));
     }
     float angle = n * 6.28318;
     if (mode == 2 && quant > 0.001) {
@@ -330,9 +331,11 @@ export const FlowFieldNode: NodeDefinition = {
       // Outer loop: one curve per seed
       `    for (int ${id}_ci = 0; ${id}_ci < ${curves}; ${id}_ci++) {\n`,
       `        float ${id}_cf  = float(${id}_ci);\n`,
-      // Seed spread across [-1.0, 1.0] using golden-ratio hash (Hobbs: grid or random)
-      `        vec2  ${id}_h   = noiseHash2(vec2(${id}_cf * 0.61803, ${id}_cf * 0.38197));\n`,
-      `        vec2  ${id}_pos = ${id}_h * 1.2;\n`,
+      // Two uncorrelated golden-ratio sequences for seed spread — inputs stay in [0,1]
+      // to avoid float32 precision loss in sin-based hashes at large arguments
+      `        float ${id}_hx  = fract(${id}_cf * 0.61803398);\n`,
+      `        float ${id}_hy  = fract(${id}_cf * 0.61803398 + 0.5);\n`,
+      `        vec2  ${id}_pos = (vec2(${id}_hx, ${id}_hy) - 0.5) * 2.4;\n`,
       // Cosine palette colour for this curve (varies by curve index)
       `        float ${id}_ct  = ${id}_cf / float(${curves}) + ${palOff};\n`,
       `        vec3  ${id}_pc  = ${vec3Str(pA)} + ${vec3Str(pB)} * cos(6.28318 * (${vec3Str(pC)} * ${id}_ct + ${vec3Str(pD)}));\n`,
@@ -345,15 +348,18 @@ export const FlowFieldNode: NodeDefinition = {
       `            float ${id}_d   = length(${uvVar} - ${id}_pos);\n`,
       `            float ${id}_fw  = fwidth(${id}_d);\n`,
       `            float ${id}_line = smoothstep(${lineWidth} * ${lineSoft} + ${id}_fw, ${lineWidth}, ${id}_d);\n`,
-      // Accumulate colour (front-to-back — later steps overwrite with alpha blend)
-      `            float ${id}_w   = ${id}_line * (1.0 - float(${id}_si) / float(${steps}) * 0.4);\n`,
-      `            ${id}_color   += ${id}_pc * ${id}_w;\n`,
-      `            ${id}_density += ${id}_w;\n`,
+      // Front-to-back alpha compositing: each contribution is gated by remaining transparency.
+      // contrib = w * (1 - accumulated_density) — naturally clamps color to [0,1] at any curve count.
+      `            float ${id}_w       = ${id}_line * (1.0 - float(${id}_si) / float(${steps}) * 0.4);\n`,
+      `            float ${id}_contrib = ${id}_w * clamp(1.0 - ${id}_density, 0.0, 1.0);\n`,
+      `            ${id}_color        += ${id}_pc * ${id}_contrib;\n`,
+      `            ${id}_density      += ${id}_contrib;\n`,
       // Step: advance position along the field angle
       `            ${id}_pos += vec2(cos(${id}_ang), sin(${id}_ang)) * ${stepSize};\n`,
       `        }\n`,
       `    }\n`,
-      `    ${id}_color   = ${id}_color / (${id}_color + vec3(1.0));\n`,  // Reinhard tone map
+      // Compositing kept values in [0,1] naturally — apply gamma 2.2 correction only
+      `    ${id}_color   = pow(clamp(${id}_color, 0.0, 1.0), vec3(0.4545));\n`,
       `    ${id}_density = clamp(${id}_density, 0.0, 1.0);\n`,
     ].join('');
 
