@@ -103,7 +103,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   useEffect(() => {
     const container = canvasRef.current!;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     renderer.setSize(1, 1);
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
@@ -279,10 +279,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     // Per-node Uint8Array buffers for audio FFT data — allocated once, reused each frame
     const audioFreqBuffers = new Map<string, Uint8Array>();
 
-    // ── Render at 30fps max regardless of display refresh rate ───────────────
+    // ── Render at 60fps max regardless of display refresh rate ───────────────
     // On 120Hz ProMotion displays, uncapped rAF renders 120fps and spins the fan
-    // even on trivial shaders. 30fps halves GPU load vs 60Hz and quarters vs 120Hz.
-    const TARGET_FPS = 30;
+    // even on trivial shaders. 60fps is smooth without being excessive.
+    const TARGET_FPS = 60;
     const FRAME_MS   = 1000 / TARGET_FPS;   // ~33.3 ms
     let lastFrameTime = 0;
 
