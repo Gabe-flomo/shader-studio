@@ -5320,7 +5320,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5387,7 +5387,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5470,7 +5470,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5545,7 +5545,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ray_3', type: 'rayMarchLit', position: { x: 560, y: 180 },
+        id: 'ray_3', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
           uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
@@ -5596,7 +5596,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'ha_ray', type: 'rayMarchLit', position: { x: 560, y: 80 },
+        id: 'ha_ray', type: 'rayMarch', position: { x: 560, y: 80 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'ha_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'ha_uv',    outputKey: 'uv'   } },
@@ -5694,7 +5694,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'hb_ray', type: 'rayMarchLit', position: { x: 560, y: 180 },
+        id: 'hb_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'hb_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'hb_uv',    outputKey: 'uv'   } },
@@ -6024,7 +6024,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         },
       },
       {
-        id: 'he_ray', type: 'rayMarchLit', position: { x: 560, y: 180 },
+        id: 'he_ray', type: 'rayMarch', position: { x: 560, y: 180 },
         inputs: {
           scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'he_scene', outputKey: 'scene' } },
           uv:    { type: 'vec2',   label: 'UV',    connection: { nodeId: 'he_uv',    outputKey: 'uv'   } },
@@ -6572,78 +6572,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'wsb_out', type: 'output', position: { x: 1440, y: 280 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'wsb_pal', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
-  // ── Neon GI — Radiance Cascades 2D ───────────────────────────────────────
-  // RC samples u_prevFrame for emitters. A circle SDF emitter adds bright
-  // color to the frame; RC diffuses that light across the canvas.
-  neonGI: {
-    label: 'Neon GI (Radiance Cascades)',
-    counter: 9,
-    nodes: [
-      { id: 'ng_uv',  type: 'uv', position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      // Sky color: dark purple background for the GI fallback
-      {
-        id: 'ng_sky', type: 'makeVec3', position: { x: 40, y: 500 },
-        inputs: {},
-        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 0.02, g: 0.0, b: 0.08 },
-      },
-      // Radiance Cascades GI — samples prev frame for emitters, sky_color as fallback
-      {
-        id: 'ng_rc', type: 'radianceCascadesApprox', position: { x: 300, y: 360 },
-        inputs: {
-          uv:        { type: 'vec2', label: 'UV',        connection: { nodeId: 'ng_uv',  outputKey: 'uv'  } },
-          sky_color: { type: 'vec3', label: 'Sky Color', connection: { nodeId: 'ng_sky', outputKey: 'rgb' } },
-        },
-        outputs: { radiance: { type: 'vec3', label: 'Radiance' }, gi_r: { type: 'float', label: 'GI Red' }, gi_g: { type: 'float', label: 'GI Green' }, gi_b: { type: 'float', label: 'GI Blue' } },
-        params: { ray_count: 8.0, ray_length: 0.4, ray_step: 0.02, c1_scale: 2.0, emit_threshold: 0.7 },
-      },
-      // Emitter: bright neon circle (hot pink) that lights up the scene
-      {
-        id: 'ng_sdf', type: 'circleSDF', position: { x: 300, y: 120 },
-        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ng_uv', outputKey: 'uv' } } },
-        outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.1, posX: -0.3, posY: 0.2 },
-      },
-      {
-        id: 'ng_fill', type: 'smoothstep', position: { x: 560, y: 120 },
-        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'ng_sdf', outputKey: 'distance' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { edge0: 0.02, edge1: -0.01 },
-      },
-      {
-        id: 'ng_emitcol', type: 'makeVec3', position: { x: 560, y: 260 },
-        inputs: {},
-        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 1.0, g: 0.15, b: 0.6 },
-      },
-      // emitter color × fill mask → bright circle
-      {
-        id: 'ng_emitter', type: 'multiplyVec3', position: { x: 800, y: 180 },
-        inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'ng_emitcol', outputKey: 'rgb'    } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ng_fill',    outputKey: 'result' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 1.0 },
-      },
-      // Add GI radiance to emitter circle
-      {
-        id: 'ng_final', type: 'addVec3', position: { x: 1040, y: 300 },
-        inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'ng_rc',      outputKey: 'radiance' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'ng_emitter', outputKey: 'result'   } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'ng_out', type: 'output', position: { x: 1280, y: 300 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ng_final', outputKey: 'result' } } },
         outputs: {}, params: {},
       },
     ],

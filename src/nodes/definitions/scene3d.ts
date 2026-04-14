@@ -143,6 +143,7 @@ export const RayMarchNode: NodeDefinition = {
     maxDist:  { type: 'float',  label: 'Max Dist' },
   },
   outputs: {
+    color:  { type: 'vec3',  label: 'Color' },
     dist:   { type: 'float', label: 'Distance' },
     depth:  { type: 'float', label: 'Depth' },
     normal: { type: 'vec3',  label: 'Normal' },
@@ -151,8 +152,14 @@ export const RayMarchNode: NodeDefinition = {
   },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0,
+    bgR: 0.85, bgG: 0.90, bgB: 0.95,
   },
-  paramDefs: COMMON_MARCH_PARAM_DEFS,
+  paramDefs: {
+    ...COMMON_MARCH_PARAM_DEFS,
+    bgR: { label: 'BG R', type: 'float' as const, min: 0.0, max: 1.0, step: 0.01 },
+    bgG: { label: 'BG G', type: 'float' as const, min: 0.0, max: 1.0, step: 0.01 },
+    bgB: { label: 'BG B', type: 'float' as const, min: 0.0, max: 1.0, step: 0.01 },
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
     const uv       = inputVars.uv       || 'g_uv';
@@ -167,9 +174,18 @@ export const RayMarchNode: NodeDefinition = {
 
     const code = emitSharedMarchCode(id, uv, time, sceneFn, camDist, camAngle, rotSpeed, fov, maxSteps, maxDist);
 
+    const bgr = p(node.params.bgR, 0.85);
+    const bgg = p(node.params.bgG, 0.90);
+    const bgb = p(node.params.bgB, 0.95);
+    const colorCode = [
+      `    vec3  ${id}_bg    = vec3(${bgr}, ${bgg}, ${bgb});\n`,
+      `    vec3  ${id}_color = ${id}_hit > 0.5 ? (${id}_normal * 0.5 + 0.5) : ${id}_bg;\n`,
+    ].join('');
+
     return {
-      code,
+      code: code + colorCode,
       outputVars: {
+        color:  `${id}_color`,
         dist:   `${id}_dist`,
         depth:  `${id}_depth`,
         normal: `${id}_normal`,

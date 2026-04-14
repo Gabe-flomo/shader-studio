@@ -38,7 +38,22 @@ export function CodePanel({ code, onClose, highlightNodeId }: Props) {
   // Split code into annotated lines
   const prefix = highlightNodeId ? `${highlightNodeId}_` : null;
   const lines = code ? code.split('\n') : ['// No shader compiled yet'];
-  let isFirstMatch = true;
+
+  // Pre-compute preferred scroll target: first match inside void main, fallback to first match anywhere
+  const scrollToLineIdx = (() => {
+    if (!prefix) return -1;
+    let firstAny = -1;
+    let inMain = false;
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trimStart();
+      if (trimmed.startsWith('void main')) inMain = true;
+      if (lines[i].includes(prefix)) {
+        if (firstAny === -1) firstAny = i;
+        if (inMain) return i; // first match inside main — use this
+      }
+    }
+    return firstAny; // fallback: first match anywhere
+  })();
 
   return (
     <div
@@ -128,9 +143,8 @@ export function CodePanel({ code, onClose, highlightNodeId }: Props) {
         {lines.map((line, i) => {
           const isMatch = !!(prefix && line.includes(prefix));
           let refProp: ((el: HTMLDivElement | null) => void) | undefined;
-          if (isMatch && isFirstMatch) {
+          if (i === scrollToLineIdx) {
             refProp = setFirstMatch;
-            isFirstMatch = false;
           }
           return (
             <div

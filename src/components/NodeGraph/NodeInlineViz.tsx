@@ -1462,6 +1462,66 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Viz — Scale Color (multiplyVec3) ─────────────────────────────────────────
+export function ScaleColorViz({ node }: { node: GraphNode }) {
+  const scale = typeof node.params.scale === 'number' ? node.params.scale : 1.0;
+  const MAX = 4;
+  const norm = Math.max(0, Math.min(1, scale / MAX));
+  const brightness = Math.round(20 + norm * 60);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontSize: '9px', color: '#6c7086', width: '30px', flexShrink: 0, fontFamily: 'monospace' }}>scale</span>
+      <div style={{ flex: 1, height: '8px', background: `linear-gradient(to right, #11111b, hsl(225,40%,${brightness}%))`, borderRadius: '4px', position: 'relative', overflow: 'visible' }}>
+        <div style={{
+          position: 'absolute',
+          top: '-3px',
+          left: `${Math.min(100, norm * 100)}%`,
+          width: '2px',
+          height: '14px',
+          background: '#f9e2af',
+          borderRadius: '1px',
+          transform: 'translateX(-50%)',
+        }} />
+      </div>
+      <span style={{ fontSize: '9px', color: '#f9e2af', width: '36px', textAlign: 'right', fontFamily: 'monospace', flexShrink: 0 }}>
+        ×{scale.toFixed(2)}
+      </span>
+    </div>
+  );
+}
+
+// ─── Viz — Add Colors (addVec3, addColor) ─────────────────────────────────────
+export function AddColorsViz({ node }: { node: GraphNode }) {
+  const scale = typeof node.params.scale === 'number' ? node.params.scale : null;
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: 5,
+        background: 'linear-gradient(135deg, #334, #556)',
+        border: '1px solid #45475a',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '9px', color: '#a6adc8', fontFamily: 'monospace',
+      }}>A</div>
+      <span style={{ fontSize: '13px', color: '#6c7086', lineHeight: 1 }}>+</span>
+      <div style={{
+        width: 28, height: 28, borderRadius: 5,
+        background: 'linear-gradient(135deg, #343, #565)',
+        border: '1px solid #45475a',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '9px', color: '#a6adc8', fontFamily: 'monospace',
+      }}>B</div>
+      {scale !== null && (
+        <>
+          <span style={{ fontSize: '10px', color: '#6c7086' }}>×</span>
+          <span style={{ fontSize: '9px', color: '#f9e2af', fontFamily: 'monospace' }}>{scale.toFixed(2)}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -1487,6 +1547,9 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'mix':            return <MixViz                 node={node} />;
     case 'mixVec3':        return <MixVec3Viz             node={node} />;
     case 'mapRange':       return <MapRangeViz            node={node} />;
+    case 'multiplyVec3':   return <ScaleColorViz          node={node} />;
+    case 'addVec3':
+    case 'addColor':       return <AddColorsViz           node={node} />;
     default:               return null;
   }
 }
@@ -1498,4 +1561,5 @@ export const INLINE_VIZ_TYPES = new Set([
   'hueRange', 'audioInput',
   'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'waveTexture',
   'smoothstep', 'clamp', 'mix', 'mixVec3', 'mapRange',
+  'multiplyVec3', 'addVec3', 'addColor',
 ]);
