@@ -92,6 +92,8 @@ export const RayRenderNode: NodeDefinition = {
   },
   defaultParams: {
     camDist:    3.0,
+    camAngle:   0.6,
+    camRotSpeed: 0.0,
     fov:        1.5,
     maxSteps:   64,
     maxDist:    20.0,
@@ -102,8 +104,10 @@ export const RayRenderNode: NodeDefinition = {
     albedoR: 0.6, albedoG: 0.7, albedoB: 0.9,
   },
   paramDefs: {
-    camDist:  { label: 'Cam Dist',  type: 'float', min: 0.5, max: 20.0, step: 0.05 },
-    fov:      { label: 'FOV',       type: 'float', min: 0.5, max: 3.14,  step: 0.05 },
+    camDist:     { label: 'Cam Dist',    type: 'float', min: 0.5, max: 20.0, step: 0.05 },
+    camAngle:    { label: 'Cam Angle',   type: 'float', min: 0.0, max: 6.28,  step: 0.02 },
+    camRotSpeed: { label: 'Rot Speed',   type: 'float', min: 0.0, max: 2.0,   step: 0.01 },
+    fov:         { label: 'FOV',         type: 'float', min: 0.5, max: 3.14,  step: 0.05 },
     maxSteps: { label: 'Max Steps', type: 'select', options: [32,64,96,128].map(n => ({ value: String(n), label: String(n) })) },
     maxDist:  { label: 'Max Dist',  type: 'float', min: 5.0, max: 100.0, step: 1.0 },
     lightX:   { label: 'Light X',   type: 'float', min: -10.0, max: 10.0, step: 0.1 },
@@ -122,6 +126,8 @@ export const RayRenderNode: NodeDefinition = {
     const time     = inputVars.time    || 'u_time';
     const sceneFn  = inputVars.scene   || 'MISSING_SCENE_FN';
     const camDist  = inputVars.camDist || p(node.params.camDist, 3.0);
+    const camAngle = p(node.params.camAngle, 0.6);
+    const rotSpeed = p(node.params.camRotSpeed, 0.0);
     const fov      = inputVars.fov     || p(node.params.fov, 1.5);
     const maxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 64));
     const maxDist  = p(node.params.maxDist, 20.0);
@@ -137,8 +143,9 @@ export const RayRenderNode: NodeDefinition = {
 
     return {
       code: [
-        // Camera setup
-        `    vec3  ${id}_ro  = vec3(sin(${time}*0.3)*${camDist}, 0.8, cos(${time}*0.3)*${camDist});\n`,
+        // Camera setup — angle is static + optional rotation speed
+        `    float ${id}_ang = ${camAngle} + ${time} * ${rotSpeed};\n`,
+        `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, 0.8, cos(${id}_ang)*${camDist});\n`,
         `    vec3  ${id}_ta  = vec3(0.0);\n`,
         `    vec3  ${id}_fwd = normalize(${id}_ta - ${id}_ro);\n`,
         `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,
