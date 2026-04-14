@@ -399,3 +399,194 @@ export const Fold3DNode: NodeDefinition = {
   },
 };
 
+// ─── New 3D Nodes ─────────────────────────────────────────────────────────────
+
+export const PlaneSDF3DNode: NodeDefinition = {
+  type: 'planeSDF3D',
+  label: 'Plane 3D',
+  category: '3D Primitives',
+  description: 'Infinite horizontal plane. Distance = p.y - height. Use as ground or ceiling.',
+  inputs: {
+    p:      { type: 'vec3',  label: 'Position' },
+    height: { type: 'float', label: 'Height'   },
+  },
+  outputs: { dist: { type: 'float', label: 'Distance' } },
+  defaultParams: { height: -0.75 },
+  paramDefs: {
+    height: { label: 'Height (Y)', type: 'float', min: -5, max: 5, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const pVar = inputVars.p      ?? 'vec3(0.0)';
+    const h    = inputVars.height ?? String(node.params.height ?? -0.75);
+    const id   = node.id;
+    return {
+      code: `    float ${id}_dist = ${pVar}.y - (${h});\n`,
+      outputVars: { dist: `${id}_dist` },
+    };
+  },
+};
+
+export const Scale3DNode: NodeDefinition = {
+  type: 'scale3d',
+  label: 'Scale 3D',
+  category: '3D Transforms',
+  description: 'Scale a 3D position for SDF evaluation with automatic metric correction. Wire scaled position into SDF nodes, then wire their distance output back into the dist input.',
+  inputs: {
+    p:     { type: 'vec3',  label: 'Position (in)' },
+    dist:  { type: 'float', label: 'SDF Dist (in)' },
+    scale: { type: 'float', label: 'Scale'         },
+  },
+  outputs: {
+    p:    { type: 'vec3',  label: 'Scaled Position' },
+    dist: { type: 'float', label: 'Corrected Dist'  },
+  },
+  defaultParams: { scale: 2.0 },
+  paramDefs: {
+    scale: { label: 'Scale', type: 'float', min: 0.01, max: 10.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const pVar  = inputVars.p     ?? 'vec3(0.0)';
+    const dVar  = inputVars.dist  ?? '0.0';
+    const s     = inputVars.scale ?? String(node.params.scale ?? 2.0);
+    const id    = node.id;
+    return {
+      code: [
+        `    vec3  ${id}_p    = ${pVar} * ${s};\n`,
+        `    float ${id}_dist = ${dVar} / ${s};\n`,
+      ].join(''),
+      outputVars: { p: `${id}_p`, dist: `${id}_dist` },
+    };
+  },
+};
+
+const ROTATE_AXIS_3D_GLSL = `
+vec3 rotateAxis3d_fn(vec3 p, vec3 axis, float angle) {
+    float c = cos(angle); float s = sin(angle);
+    return p * c + cross(axis, p) * s + axis * dot(axis, p) * (1.0 - c);
+}`;
+
+export const RotateAxis3DNode: NodeDefinition = {
+  type: 'rotateAxis3D',
+  label: 'Rotate Axis 3D',
+  category: '3D Transforms',
+  description: 'Rotate a 3D position around an arbitrary normalized axis (Rodrigues formula).',
+  inputs: {
+    p:     { type: 'vec3',  label: 'Position' },
+    axis:  { type: 'vec3',  label: 'Axis (normalized)' },
+    angle: { type: 'float', label: 'Angle (radians)'   },
+  },
+  outputs: { p: { type: 'vec3', label: 'Rotated' } },
+  defaultParams: { ax: 0.0, ay: 1.0, az: 0.0, angle: 0.0 },
+  paramDefs: {
+    ax:    { label: 'Axis X', type: 'float', min: -1, max: 1, step: 0.01 },
+    ay:    { label: 'Axis Y', type: 'float', min: -1, max: 1, step: 0.01 },
+    az:    { label: 'Axis Z', type: 'float', min: -1, max: 1, step: 0.01 },
+    angle: { label: 'Angle',  type: 'float', min: -6.283, max: 6.283, step: 0.01 },
+  },
+  glslFunction: ROTATE_AXIS_3D_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const pVar  = inputVars.p     ?? 'vec3(0.0)';
+    const ax    = node.params.ax  ?? 0.0;
+    const ay    = node.params.ay  ?? 1.0;
+    const az    = node.params.az  ?? 0.0;
+    const axisV = inputVars.axis  ?? `normalize(vec3(${ax},${ay},${az}))`;
+    const ang   = inputVars.angle ?? String(node.params.angle ?? 0.0);
+    const id    = node.id;
+    return {
+      code: `    vec3 ${id}_p = rotateAxis3d_fn(${pVar}, ${axisV}, ${ang});\n`,
+      outputVars: { p: `${id}_p` },
+    };
+  },
+};
+
+export const SinWarp3DNode: NodeDefinition = {
+  type: 'sinWarp3D',
+  label: 'Sin Warp 3D',
+  category: '3D Transforms',
+  description: 'Sinusoidal domain warp. Distorts one axis by sin(another axis * frequency + time) * amplitude. Keep amplitude < 0.15 to avoid SDF metric artifacts.',
+  inputs: {
+    p:         { type: 'vec3',  label: 'Position'   },
+    time:      { type: 'float', label: 'Time'        },
+    frequency: { type: 'float', label: 'Frequency'   },
+    amplitude: { type: 'float', label: 'Amplitude'   },
+  },
+  outputs: { p: { type: 'vec3', label: 'Warped Position' } },
+  defaultParams: {
+    distort_axis: 'y',
+    source_axis:  'x',
+    frequency: 2.0,
+    amplitude: 0.1,
+  },
+  paramDefs: {
+    distort_axis: { label: 'Distort Axis', type: 'select', options: [
+      { value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' },
+    ]},
+    source_axis: { label: 'Source Axis', type: 'select', options: [
+      { value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' },
+    ]},
+    frequency: { label: 'Frequency', type: 'float', min: 0.01, max: 20.0, step: 0.1 },
+    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,  max: 2.0,  step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const pVar = inputVars.p         ?? 'vec3(0.0)';
+    const t    = inputVars.time      ?? 'u_time';
+    const freq = inputVars.frequency ?? String(node.params.frequency ?? 2.0);
+    const amp  = inputVars.amplitude ?? String(node.params.amplitude ?? 0.1);
+    const da   = (node.params.distort_axis as string) ?? 'y';
+    const sa   = (node.params.source_axis  as string) ?? 'x';
+    const id   = node.id;
+    return {
+      code: [
+        `    vec3 ${id}_p = ${pVar};\n`,
+        `    ${id}_p.${da} += sin(${id}_p.${sa} * ${freq} + ${t}) * ${amp};\n`,
+      ].join(''),
+      outputVars: { p: `${id}_p` },
+    };
+  },
+};
+
+export const SpiralWarp3DNode: NodeDefinition = {
+  type: 'spiralWarp3D',
+  label: 'Spiral Warp 3D',
+  category: '3D Transforms',
+  description: 'Rotate a 3D position around an axis by an angle proportional to distance from origin. Creates spiral/vortex distortion. Keep frequency < 1.5 to avoid artifacts.',
+  inputs: {
+    p:         { type: 'vec3',  label: 'Position'       },
+    time:      { type: 'float', label: 'Time'           },
+    frequency: { type: 'float', label: 'Spiral Freq'    },
+  },
+  outputs: { p: { type: 'vec3', label: 'Spiraled Position' } },
+  defaultParams: {
+    rotation_plane: 'xy',
+    frequency: 0.5,
+  },
+  paramDefs: {
+    rotation_plane: { label: 'Rotation Plane', type: 'select', options: [
+      { value: 'xy', label: 'XY (around Z)' },
+      { value: 'xz', label: 'XZ (around Y)' },
+      { value: 'yz', label: 'YZ (around X)' },
+    ]},
+    frequency: { label: 'Frequency', type: 'float', min: -5.0, max: 5.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const pVar  = inputVars.p         ?? 'vec3(0.0)';
+    const t     = inputVars.time      ?? 'u_time';
+    const freq  = inputVars.frequency ?? String(node.params.frequency ?? 0.5);
+    const plane = (node.params.rotation_plane as string) ?? 'xy';
+    const id    = node.id;
+    const angle = `(length(${pVar}) * ${freq} + ${t})`;
+    const c = `cos(${angle})`, s = `sin(${angle})`;
+    let rotLine: string;
+    if (plane === 'xy')
+      rotLine = `    ${id}_p.xy = vec2(${c}*${id}_p.x - ${s}*${id}_p.y, ${s}*${id}_p.x + ${c}*${id}_p.y);\n`;
+    else if (plane === 'xz')
+      rotLine = `    ${id}_p.xz = vec2(${c}*${id}_p.x - ${s}*${id}_p.z, ${s}*${id}_p.x + ${c}*${id}_p.z);\n`;
+    else
+      rotLine = `    ${id}_p.yz = vec2(${c}*${id}_p.y - ${s}*${id}_p.z, ${s}*${id}_p.y + ${c}*${id}_p.z);\n`;
+    return {
+      code: [`    vec3 ${id}_p = ${pVar};\n`, rotLine].join(''),
+      outputVars: { p: `${id}_p` },
+    };
+  },
+};
+
