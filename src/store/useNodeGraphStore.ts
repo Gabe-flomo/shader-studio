@@ -1560,12 +1560,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   addNode: (type, position, overrideParams?) => {
     // ── 3D scene companion spawning ──────────────────────────────────────────
-    // Adding a RayMarch/RayMarchLit node auto-spawns a SceneGroup to the left
-    // (pre-wired scene→scene). Adding a SceneGroup auto-spawns a RayMarchLit
-    // to the right. Only at the top level — not inside a group drill-down.
+    // Adding a RayMarch node auto-spawns a SceneGroup to the left (pre-wired
+    // scene→scene). Adding a SceneGroup auto-spawns a RayMarch to the right.
+    // Only at the top level — not inside a group drill-down.
     // overrideParams guard prevents triggering from programmatic calls.
     if (!get().activeGroupId && !overrideParams) {
-      if (type === 'rayMarch' || type === 'rayMarchLit') {
+      if (type === 'rayMarch') {
         get().spawnGraph(
           position,
           [
@@ -2662,9 +2662,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     try {
       const { nodes: rawNodes } = JSON.parse(raw) as { nodes: GraphNode[] };
       if (Array.isArray(rawNodes)) {
-        const nodes = rawNodes.map(n => migrateNodeParams(n, getNodeDefinition));
+        // Strip in-memory audio state — audio buffers are not persisted, so
+        // _isPlaying / _hasFile would crash the audio engine on load.
+        const sanitized = rawNodes.map(n => {
+          if (n.type === 'audioInput') {
+            return { ...n, params: { ...n.params, _isPlaying: false, _hasFile: false, _fileName: '' } };
+          }
+          return n;
+        });
+        const nodes = sanitized.map(n => migrateNodeParams(n, getNodeDefinition));
         syncCounterFromNodes(nodes);
-        set({ nodes, previewNodeId: null });
+        // Reset group navigation so a saved graph that was captured inside a
+        // subgraph doesn't leave the editor stranded in a non-existent group.
+        set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
         get().compile();
       }
     } catch {}

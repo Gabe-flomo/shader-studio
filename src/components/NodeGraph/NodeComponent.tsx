@@ -622,11 +622,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       updateNodeParams(node.id, { _soloedBand: soloedBand === i ? -1 : i }, { immediate: true });
     };
 
-    const handleAudioDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const file = e.dataTransfer.files[0];
-      if (!file) return;
+    const audioFileInputRef = useRef<HTMLInputElement>(null);
+
+    const loadAudioFile = (file: File) => {
       if (!file.name.match(/\.(wav|mp3|ogg|aac|flac)$/i)) return;
       const reader = new FileReader();
       reader.onload = async (ev) => {
@@ -636,6 +634,22 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         updateNodeParams(node.id, { _fileName: file.name, _hasFile: true, _isPlaying: true }, { immediate: true });
       };
       reader.readAsArrayBuffer(file);
+    };
+
+    const handleAudioDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      loadAudioFile(file);
+    };
+
+    const handleAudioFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      loadAudioFile(file);
+      // Reset so the same file can be re-selected
+      e.target.value = '';
     };
 
     const togglePlay = () => {
@@ -707,18 +721,28 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             </div>
           </div>
 
-          {/* File drop zone */}
+          {/* Hidden file input for click-to-upload */}
+          <input
+            ref={audioFileInputRef}
+            type="file"
+            accept="audio/*,.wav,.mp3,.ogg,.aac,.flac"
+            style={{ display: 'none' }}
+            onChange={handleAudioFileInput}
+          />
+
+          {/* File drop zone — click or drag to load audio */}
           <div
             onDrop={handleAudioDrop}
             onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
             onMouseDown={e => e.stopPropagation()}
+            onClick={() => audioFileInputRef.current?.click()}
             style={{
               padding: '6px 10px',
               border: '1px dashed #45475a',
               borderRadius: '4px',
               margin: '6px 8px',
               textAlign: 'center',
-              cursor: 'default',
+              cursor: 'pointer',
               background: '#181825',
             }}
           >
@@ -727,7 +751,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 ♫ {fileName}
               </span>
             ) : (
-              <span style={{ fontSize: '10px', color: '#585b70' }}>Drop WAV / MP3 / OGG</span>
+              <span style={{ fontSize: '10px', color: '#585b70' }}>Click or drop WAV / MP3 / OGG</span>
             )}
           </div>
 
