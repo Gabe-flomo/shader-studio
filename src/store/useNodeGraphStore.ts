@@ -199,6 +199,9 @@ interface NodeGraphState {
   // Stateful rendering — true when a PrevFrame node exists in the graph
   isStateful: boolean;
 
+  /** Maps nodeId → GLSL slug, e.g. "node_49" → "cos_49". Used for code-panel highlighting. */
+  nodeSlugMap: Map<string, string>;
+
   // Raw GLSL editor override — when set, ShaderCanvas uses this shader instead of the compiled graph
   rawGlslShader: string | null;
   setRawGlslShader: (shader: string | null) => void;
@@ -670,6 +673,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   audioMasterVolume: 0.7,
   nodePreviews: {},
   isStateful: false,
+  nodeSlugMap: new Map(),
   rawGlslShader: null,
   disconnectedNotice: null,
   groupPresets: loadGroupPresets(),
@@ -2458,6 +2462,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       textureUniforms: result.textureUniforms,
       audioUniforms: result.audioUniforms,
       isStateful: result.isStateful,
+      nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Clear stale probe values when graph recompiles
       nodeProbeValues: null,
     });

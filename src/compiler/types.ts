@@ -27,6 +27,12 @@ export interface CompilationResult {
    * ping-pong render targets when this is set.
    */
   isStateful: boolean;
+  /**
+   * Maps nodeId → short GLSL slug (e.g. "node_49" → "cos_49").
+   * Used by CodePanel to highlight the lines belonging to a selected node.
+   * Absent on validation-failure results.
+   */
+  nodeSlugMap?: Map<string, string>;
 }
 
 export const VERTEX_SHADER = `varying vec2 vUv;

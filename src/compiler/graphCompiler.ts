@@ -57,7 +57,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
     const sortedNodes = topologicalSort(nodes, allInternalIds, loopPairChains);
 
     // 4. Assemble fragment shader
-    const { fragmentShader, nodeOutputVars, paramUniforms, textureUniforms, audioUniforms, isStateful } =
+    const { fragmentShader, nodeOutputVars, paramUniforms, textureUniforms, audioUniforms, isStateful, nodeSlugMap } =
       generateFragmentShader(sortedNodes, nodes, allInternalIds, loopPairChains);
 
     return {
@@ -69,6 +69,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       textureUniforms,
       audioUniforms,
       isStateful,
+      nodeSlugMap,
     };
   } catch (error) {
     return {

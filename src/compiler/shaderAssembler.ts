@@ -185,6 +185,7 @@ export function generateFragmentShader(
   }
 
   const usedSlugs = new Set<string>();
+  const nodeSlugMap = new Map<string, string>(); // nodeId → slug
 
   for (const node of sortedNodes) {
     const def = getNodeDefinition(node.type);
@@ -202,6 +203,7 @@ export function generateFragmentShader(
 
     // Compute slug once per node for all GLSL variable naming (NOT for nodeOutputs keys)
     const nodeSlug = computeNodeSlug(node, usedSlugs);
+    nodeSlugMap.set(node.id, nodeSlug);
 
     // ── Loop Start: register carry var — loopEnd owns the actual GLSL emission ─
     if (node.type === 'loopStart') {
@@ -1180,5 +1182,5 @@ void main() {
     g_uv.x *= u_resolution.x / u_resolution.y;
 ${mainCode.join('')}}`.trim();
 
-  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, audioUniforms, isStateful };
+  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, audioUniforms, isStateful, nodeSlugMap };
 }

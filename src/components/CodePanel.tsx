@@ -4,9 +4,10 @@ interface Props {
   code: string;
   onClose: () => void;
   highlightNodeId?: string | null;
+  nodeSlugMap?: Map<string, string>;
 }
 
-export function CodePanel({ code, onClose, highlightNodeId }: Props) {
+export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props) {
   const [copied, setCopied] = useState(false);
   const firstMatchRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -36,7 +37,11 @@ export function CodePanel({ code, onClose, highlightNodeId }: Props) {
   }, []);
 
   // Split code into annotated lines
-  const prefix = highlightNodeId ? `${highlightNodeId}_` : null;
+  // Use the slug for the selected node so the prefix matches the GLSL variable names
+  const highlightSlug = highlightNodeId
+    ? (nodeSlugMap?.get(highlightNodeId) ?? highlightNodeId)
+    : null;
+  const prefix = highlightSlug ? `${highlightSlug}_` : null;
   const lines = code ? code.split('\n') : ['// No shader compiled yet'];
 
   // Pre-compute preferred scroll target: first match inside void main, fallback to first match anywhere
@@ -87,9 +92,9 @@ export function CodePanel({ code, onClose, highlightNodeId }: Props) {
           <span style={{ fontSize: '11px', fontWeight: 600, color: '#89b4fa', letterSpacing: '0.04em' }}>
             Fragment Shader
           </span>
-          {highlightNodeId && (
+          {highlightSlug && (
             <span style={{ fontSize: '10px', color: '#f9e2af', fontFamily: 'monospace', opacity: 0.8 }}>
-              ↳ {highlightNodeId}
+              ↳ {highlightSlug}
             </span>
           )}
         </div>
