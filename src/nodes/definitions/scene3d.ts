@@ -110,9 +110,9 @@ function emitSharedMarchCode(
     `        ${sceneFn}(${id}_hp+vec3(0.0,0.0,${id}_e)) - ${sceneFn}(${id}_hp-vec3(0.0,0.0,${id}_e))\n`,
     `    ));\n`,
     `    float ${id}_dist   = ${id}_t;\n`,
-    // Depth measures scene-space distance only — subtract camera-to-origin length so
-    // the camera offset doesn't bake into the value and brighten silhouette edges.
-    `    float ${id}_depth  = ${id}_hit > 0.5 ? clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0) : 1.0;\n`,
+    // Depth: raw camera-to-hit distance normalised by maxDist.
+    // Background pixels naturally reach t≈maxDist so depth→1 without special casing.
+    `    float ${id}_depth  = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
     `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
   ].join('');
 }
@@ -201,142 +201,9 @@ export const RayMarchNode: NodeDefinition = {
   },
 };
 
-// ─── RayMarchLitNode ──────────────────────────────────────────────────────────
-// Camera + march + AO + optional soft shadows + PBR diffuse.
-// Outputs: color (vec3) + all 5 raw outputs from RayMarchNode.
-
-export const RayMarchLitNode: NodeDefinition = {
-  type: 'rayMarchLit', label: 'Ray March Lit', category: '3D Scene',
-  description: 'Full sphere-tracer with PBR lighting, soft shadows and AO. Outputs shaded color plus raw hit data.',
-  inputs: {
-    scene:    { type: 'scene3d', label: 'Scene' },
-    uv:       { type: 'vec2',   label: 'UV' },
-    time:     { type: 'float',  label: 'Time' },
-    camDist:  { type: 'float',  label: 'Cam Distance' },
-    camAngle: { type: 'float',  label: 'Cam Angle' },
-    rotSpeed: { type: 'float',  label: 'Rot Speed' },
-    fov:      { type: 'float',  label: 'FOV' },
-    maxDist:  { type: 'float',  label: 'Max Dist' },
-    lightX:   { type: 'float',  label: 'Light X' },
-    lightY:   { type: 'float',  label: 'Light Y' },
-    lightZ:   { type: 'float',  label: 'Light Z' },
-    albedoR:  { type: 'float',  label: 'Albedo R' },
-    albedoG:  { type: 'float',  label: 'Albedo G' },
-    albedoB:  { type: 'float',  label: 'Albedo B' },
-  },
-  outputs: {
-    color:     { type: 'vec3',  label: 'Color' },
-    dist:      { type: 'float', label: 'Distance' },
-    depth:     { type: 'float', label: 'Depth' },
-    normal:    { type: 'vec3',  label: 'Normal' },
-    iter:      { type: 'float', label: 'Iter' },
-    iterCount: { type: 'float', label: 'Iter Count' },
-    hit:       { type: 'float', label: 'Hit' },
-  },
-  defaultParams: {
-    camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0,
-    lightX: 1.0, lightY: 2.0, lightZ: 3.0,
-    albedoR: 0.6, albedoG: 0.65, albedoB: 0.7,
-    shadow_soft: 'on', ao_strength: 1.0,
-    bgR: 0.85, bgG: 0.90, bgB: 0.95,
-  },
-  paramDefs: {
-    ...COMMON_MARCH_PARAM_DEFS,
-    shadow_soft: { label: 'Soft Shadows', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
-    ao_strength: { label: 'AO Strength', type: 'float', min: 0.0, max: 2.0, step: 0.05 },
-    bgR: { label: 'BG R', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    bgG: { label: 'BG G', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    bgB: { label: 'BG B', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const uv       = inputVars.uv       || 'g_uv';
-    const time     = inputVars.time     || 'u_time';
-    const sceneFn  = inputVars.scene    || 'MISSING_SCENE_FN';
-    const camDist  = inputVars.camDist  || p(node.params.camDist,  3.0);
-    const camAngle = inputVars.camAngle || p(node.params.camAngle, 0.6);
-    const rotSpeed = inputVars.rotSpeed || p(node.params.rotSpeed, 0.0);
-    const fov      = inputVars.fov      || p(node.params.fov,      1.5);
-    const maxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 64));
-    const maxDist  = inputVars.maxDist  || p(node.params.maxDist,  20.0);
-    const lx       = inputVars.lightX   || p(node.params.lightX,  1.0);
-    const ly       = inputVars.lightY   || p(node.params.lightY,  2.0);
-    const lz       = inputVars.lightZ   || p(node.params.lightZ,  3.0);
-    const ar       = inputVars.albedoR  || p(node.params.albedoR, 0.6);
-    const ag       = inputVars.albedoG  || p(node.params.albedoG, 0.65);
-    const ab       = inputVars.albedoB  || p(node.params.albedoB, 0.7);
-    const bgr      = p(node.params.bgR, 0.85);
-    const bgg      = p(node.params.bgG, 0.90);
-    const bgb      = p(node.params.bgB, 0.95);
-    const aoStr    = p(node.params.ao_strength, 1.0);
-    const shadowSoft = (node.params.shadow_soft as string) ?? 'on';
-
-    const sharedCode = emitSharedMarchCode(id, uv, time, sceneFn, camDist, camAngle, rotSpeed, fov, maxSteps, maxDist);
-
-    const litCode = [
-      `    vec3  ${id}_bg  = vec3(${bgr}, ${bgg}, ${bgb});\n`,
-      // Lighting — key light direction
-      `    vec3  ${id}_ld  = normalize(vec3(${lx}, ${ly}, ${lz}));\n`,
-      `    float ${id}_dif = clamp(dot(${id}_n, ${id}_ld), 0.0, 1.0);\n`,
-      // Sky-dome ambient: brighter hemisphere
-      `    float ${id}_amb = 0.4 + 0.6 * (${id}_n.y * 0.5 + 0.5);\n`,
-      // Soft shadows (penumbra ray march toward light)
-      ...(shadowSoft === 'on' ? [
-        `    float ${id}_sha = 1.0;\n`,
-        `    vec3  ${id}_sro = ${id}_hp + ${id}_n * 0.002;\n`,
-        `    float ${id}_st  = 0.01;\n`,
-        `    for (int ${id}_si2 = 0; ${id}_si2 < 24; ${id}_si2++) {\n`,
-        `        float ${id}_sd = ${sceneFn}(${id}_sro + ${id}_ld * ${id}_st);\n`,
-        `        if (${id}_sd < 0.0001) { ${id}_sha = 0.0; break; }\n`,
-        `        ${id}_sha = min(${id}_sha, 8.0 * ${id}_sd / ${id}_st);\n`,
-        `        ${id}_st += ${id}_sd;\n`,
-        `        if (${id}_st > 5.0) break;\n`,
-        `    }\n`,
-        `    ${id}_sha = clamp(${id}_sha, 0.0, 1.0);\n`,
-        `    ${id}_dif *= ${id}_sha;\n`,
-      ] : []),
-      // Ambient occlusion (5-step march along normal)
-      `    float ${id}_ao = 0.0;\n`,
-      `    float ${id}_ao_scale = 1.0;\n`,
-      `    for (int ${id}_aoi = 1; ${id}_aoi < 6; ${id}_aoi++) {\n`,
-      `        float ${id}_ao_d = float(${id}_aoi) * 0.08;\n`,
-      `        float ${id}_ao_s = ${id}_ao_d - ${sceneFn}(${id}_hp + ${id}_n * ${id}_ao_d);\n`,
-      `        ${id}_ao += ${id}_ao_s * ${id}_ao_scale;\n`,
-      `        ${id}_ao_scale *= 0.5;\n`,
-      `    }\n`,
-      `    ${id}_ao = clamp(1.0 - 3.0 * ${id}_ao, 0.0, 1.0);\n`,
-      // Blend AO by strength parameter
-      `    float ${id}_ao_f = mix(1.0, ${id}_ao, clamp(${aoStr}, 0.0, 2.0));\n`,
-      `    ${id}_dif *= ${id}_ao_f;\n`,
-      `    ${id}_amb *= ${id}_ao_f;\n`,
-      // Final shading — warm key light + subtle sky colour
-      `    vec3  ${id}_alb = vec3(${ar}, ${ag}, ${ab});\n`,
-      `    vec3  ${id}_sky = vec3(0.5, 0.7, 1.0) * ${id}_amb * 0.6;\n`,
-      `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
-      // Fog / background blend — same camera-offset correction as depth to avoid
-      // silhouette brightening from the camera-to-scene portion of the ray.
-      `    float ${id}_fog = clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0);\n`,
-      `    vec3  ${id}_color = mix(mix(${id}_lit, ${id}_bg, ${id}_fog), ${id}_bg, 1.0 - ${id}_hit);\n`,
-    ].join('');
-
-    return {
-      code: sharedCode + litCode,
-      outputVars: {
-        color:     `${id}_color`,
-        dist:      `${id}_dist`,
-        depth:     `${id}_depth`,
-        normal:    `${id}_normal`,
-        iter:      `${id}_iter`,
-        iterCount: `${id}_iterCount`,
-        hit:       `${id}_hit`,
-      },
-    };
-  },
-};
-
 // ─── RayRenderNode ─────────────────────────────────────────────────────────────
 // LEGACY — kept for backward compatibility with saved graphs.
-// New graphs should use RayMarchNode or RayMarchLitNode instead.
+// New graphs should use RayMarchNode instead.
 
 export const RayRenderNode: NodeDefinition = {
   type: 'rayRender', label: 'Ray Render (Legacy)', category: '3D Scene',
@@ -548,7 +415,7 @@ export const RayRenderNode: NodeDefinition = {
     }
 
     const finalCode = [
-      `    float ${id}_depth = ${id}_hit > 0.5 ? clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0) : 1.0;\n`,
+      `    float ${id}_depth = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
       `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
     ].join('');
 
