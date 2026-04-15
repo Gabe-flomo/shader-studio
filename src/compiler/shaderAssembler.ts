@@ -153,7 +153,7 @@ export function generateFragmentShader(
   allNodes: GraphNode[],
   _loopInternalIds: Set<string>,
   loopPairChains: Map<string, LoopPairChain> = new Map(),
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; isStateful: boolean } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string> } {
   const nodeMap    = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
   const functions  = new Set<string>();
