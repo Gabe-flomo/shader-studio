@@ -846,11 +846,36 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   enterGroup: (id) => {
-    const { activeGroupPath } = get();
+    const { activeGroupPath, nodes } = get();
     if (activeGroupPath.length >= 2) return; // max depth
-    set(state => ({ activeGroupPath: [...state.activeGroupPath, id] }));
-    // Also update activeGroupId for backward compat
-    set(() => ({ activeGroupId: id }));
+
+    // ── Initialise a fresh SceneGroup subgraph if needed ─────────────────────
+    // setActiveGroupId handles this for its own path, but enterGroup is the
+    // normal entry point from the UI (double-click / context menu). Without this,
+    // a brand-new SceneGroup has no subgraph and any attempt to add nodes into it
+    // is silently dropped by addNode's `if (!sg) return n` guard.
+    const groupNode = nodes.find(n => n.id === id);
+    if (groupNode?.type === 'sceneGroup' && !groupNode.params?.subgraph) {
+      const scenePosNode: import('../types/nodeGraph').GraphNode = {
+        id: `scenepos_${Date.now()}`,
+        type: 'scenePos',
+        position: { x: 200, y: 200 },
+        inputs: {},
+        outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+        params: { _groupOriginal: true },
+      };
+      const emptySceneSubgraph = { nodes: [scenePosNode], outputNodeId: '', outputKey: '' };
+      set(state => ({
+        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupId: id,
+        nodes: state.nodes.map(n =>
+          n.id === id ? { ...n, params: { ...n.params, subgraph: emptySceneSubgraph } } : n
+        ),
+      }));
+      return;
+    }
+
+    set(state => ({ activeGroupPath: [...state.activeGroupPath, id], activeGroupId: id }));
   },
 
   exitGroup: () => {
@@ -1534,6 +1559,36 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addNode: (type, position, overrideParams?) => {
+    // ── 3D scene companion spawning ──────────────────────────────────────────
+    // Adding a RayMarch/RayMarchLit node auto-spawns a SceneGroup to the left
+    // (pre-wired scene→scene). Adding a SceneGroup auto-spawns a RayMarchLit
+    // to the right. Only at the top level — not inside a group drill-down.
+    // overrideParams guard prevents triggering from programmatic calls.
+    if (!get().activeGroupId && !overrideParams) {
+      if (type === 'rayMarch' || type === 'rayMarchLit') {
+        get().spawnGraph(
+          position,
+          [
+            { type: 'sceneGroup', relPos: { x: -380, y: 0 } },
+            { type,               relPos: { x: 0,    y: 0 } },
+          ],
+          [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
+        );
+        return;
+      }
+      if (type === 'sceneGroup') {
+        get().spawnGraph(
+          position,
+          [
+            { type: 'sceneGroup',  relPos: { x: 0,   y: 0 } },
+            { type: 'rayMarch',    relPos: { x: 380, y: 0 } },
+          ],
+          [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
+        );
+        return;
+      }
+    }
+
     pushHistory(get().nodes);
     const def = getNodeDefinition(type);
     if (!def) {
@@ -1599,17 +1654,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       params: mergedParams,
     };
 
-    const activeGroupId = get().activeGroupId;
+    const { activeGroupId, activeGroupPath } = get();
     if (activeGroupId) {
-      // Inside a group view — insert into the group's subgraph instead of top level
-      set(state => ({
-        nodes: state.nodes.map(n => {
-          if (n.id !== activeGroupId) return n;
-          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-          if (!sg) return n;
-          return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: [...sg.nodes, newNode] } } };
-        }),
-      }));
+      // Inside a group view — insert into the active subgraph.
+      // Use the path-based helper so nested groups (depth > 1) are handled correctly;
+      // the old flat activeGroupId lookup only worked for top-level groups.
+      set(state => {
+        const currentActive = getActiveNodes(state.nodes, activeGroupPath);
+        if (!currentActive) return state; // subgraph not initialised — shouldn't happen after enterGroup fix
+        const newActive = [...currentActive, newNode];
+        const newNodes = setActiveNodes(state.nodes, activeGroupPath, newActive);
+        return newNodes ? { nodes: newNodes } : state;
+      });
     } else {
       set(state => ({ nodes: [...state.nodes, newNode] }));
     }
