@@ -220,6 +220,12 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const [boxSelect, setBoxSelect] = useState<{
     startX: number; startY: number; curX: number; curY: number;
   } | null>(null);
+  // Ref keeps latest boxSelect for window-level event handlers (avoids stale closures)
+  const boxSelectRef = useRef(boxSelect);
+  boxSelectRef.current = boxSelect;
+
+  // Wire badge: prevent badge from vanishing when mouse moves from stroke to badge
+  const wireLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   // canvasEl is stored in state so getSocketPos always has a stable reference.
@@ -413,7 +419,35 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       const onSocket = !!target.closest('[data-socket]');
       if (!onNode && !onSocket) {
         deselectAll();
-        setBoxSelect({ startX: e.clientX, startY: e.clientY, curX: e.clientX, curY: e.clientY });
+        const startX = e.clientX, startY = e.clientY;
+        setBoxSelect({ startX, startY, curX: startX, curY: startY });
+
+        // Use window-level listeners so drag + release outside the canvas still works
+        const onMove = (mv: MouseEvent) => {
+          setBoxSelect(prev => prev ? { ...prev, curX: mv.clientX, curY: mv.clientY } : null);
+        };
+        const onUp = () => {
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          const bs = boxSelectRef.current;
+          setBoxSelect(null);
+          if (!bs) return;
+          const rectLeft   = Math.min(bs.startX, bs.curX);
+          const rectTop    = Math.min(bs.startY, bs.curY);
+          const rectRight  = Math.max(bs.startX, bs.curX);
+          const rectBottom = Math.max(bs.startY, bs.curY);
+          if (rectRight - rectLeft < 4 && rectBottom - rectTop < 4) return;
+          document.querySelectorAll<HTMLElement>('[data-node-id]').forEach(el => {
+            const id = el.dataset.nodeId;
+            if (!id || id === '__group_output__' || id === '__group_input__') return;
+            const r = el.getBoundingClientRect();
+            if (r.left < rectRight && r.right > rectLeft && r.top < rectBottom && r.bottom > rectTop) {
+              useNodeGraphStore.getState().selectNode(id, true);
+            }
+          });
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
       }
     }
   }, [deselectAll]);
@@ -556,24 +590,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       dragRafRef.current = null;
     }
     setDragConnection(null);
-
-    // Feature 3: finalize box select
-    if (boxSelect) {
-      const rectLeft   = Math.min(boxSelect.startX, boxSelect.curX);
-      const rectTop    = Math.min(boxSelect.startY, boxSelect.curY);
-      const rectRight  = Math.max(boxSelect.startX, boxSelect.curX);
-      const rectBottom = Math.max(boxSelect.startY, boxSelect.curY);
-      if (rectRight - rectLeft > 4 || rectBottom - rectTop > 4) {
-        document.querySelectorAll<HTMLElement>('[data-node-id]').forEach(el => {
-          const id = el.dataset.nodeId;
-          if (!id || id === '__group_output__' || id === '__group_input__') return;
-          const r = el.getBoundingClientRect();
-          const overlaps = r.left < rectRight && r.right > rectLeft && r.top < rectBottom && r.bottom > rectTop;
-          if (overlaps) selectNode(id, true);
-        });
-      }
-      setBoxSelect(null);
-    }
   };
 
   // ── Canvas touch handlers (pan + connection cancel) ──────────────────────
@@ -1150,6 +1166,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                   to={toPos}
                   dataType={lineType}
                   onWireEnter={() => {
+                    if (wireLeaveTimerRef.current) { clearTimeout(wireLeaveTimerRef.current); wireLeaveTimerRef.current = null; }
                     if (!canvasRect) return;
                     const midWorldX = (fromPos.x + toPos.x) / 2;
                     const midWorldY = (fromPos.y + toPos.y) / 2;
@@ -1161,7 +1178,9 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                       midY: midWorldY * zoom + pan.y + canvasRect.top,
                     });
                   }}
-                  onWireLeave={() => setHoveredWire(null)}
+                  onWireLeave={() => {
+                    wireLeaveTimerRef.current = setTimeout(() => setHoveredWire(null), 120);
+                  }}
                 />
               );
             })
@@ -1508,21 +1527,27 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         <div
           style={{
             position: 'fixed',
-            left: hoveredWire.midX - 10,
-            top:  hoveredWire.midY - 10,
-            width: 20, height: 20, borderRadius: '50%',
+            left: hoveredWire.midX - 14,
+            top:  hoveredWire.midY - 14,
+            width: 28, height: 28, borderRadius: '50%',
             background: '#89b4fa',
             color: '#1e1e2e',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '14px', fontWeight: 700,
+            fontSize: '16px', fontWeight: 700,
             cursor: 'pointer',
             zIndex: 60,
             boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
             transition: 'transform 0.1s',
             userSelect: 'none',
           }}
-          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.2)')}
-          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+          onMouseEnter={e => {
+            if (wireLeaveTimerRef.current) { clearTimeout(wireLeaveTimerRef.current); wireLeaveTimerRef.current = null; }
+            e.currentTarget.style.transform = 'scale(1.2)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)';
+            setHoveredWire(null);
+          }}
           onClick={() => setWireInsertOpen(true)}
         >
           +

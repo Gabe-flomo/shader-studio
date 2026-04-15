@@ -34,7 +34,7 @@ export function ConnectionLine({ from, to, dataType, onWireEnter, onWireLeave }:
         <path
           d={path}
           stroke="transparent"
-          strokeWidth={12}
+          strokeWidth={20}
           fill="none"
           style={{ pointerEvents: 'stroke', cursor: 'crosshair' }}
           onMouseEnter={onWireEnter}
