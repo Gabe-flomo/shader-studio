@@ -1581,7 +1581,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           position,
           [
             { type: 'sceneGroup',  relPos: { x: 0,   y: 0 } },
-            { type: 'rayMarchLit', relPos: { x: 380, y: 0 } },
+            { type: 'rayMarch',    relPos: { x: 380, y: 0 } },
           ],
           [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
         );
