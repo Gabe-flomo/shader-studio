@@ -1330,7 +1330,7 @@ export const RadialBlurNode: NodeDefinition = {
       `    float ${id}_fo    = pow(${id}_dist, ${falloff});\n`,
       `    vec2  ${id}_step  = (${id}_dist > 0.0001 ? normalize(${id}_dir) : vec2(0.0)) * ${strength} * ${id}_fo;\n`,
       `    vec3  ${id}_acc   = ${col};\n`,
-      `    float ${id}_ns    = ${f(nSamples)}.0;\n`,
+      `    float ${id}_ns    = ${f(nSamples)};\n`,
     ];
 
     for (let i = 1; i <= nSamples; i++) {
