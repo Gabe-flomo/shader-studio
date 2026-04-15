@@ -83,8 +83,6 @@ const BUILTINS = new Set([
   'findLSB','findMSB','umulExtended','imulExtended',
 ]);
 
-// Swizzle component characters (only valid after a dot on a vec)
-const SWIZZLE_CHARS = /^[xyzwrgbastpq]+$/;
 
 interface Token { text: string; color: string; }
 
