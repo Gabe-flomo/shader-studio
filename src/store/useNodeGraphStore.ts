@@ -1559,6 +1559,36 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addNode: (type, position, overrideParams?) => {
+    // ── 3D scene companion spawning ──────────────────────────────────────────
+    // Adding a RayMarch/RayMarchLit node auto-spawns a SceneGroup to the left
+    // (pre-wired scene→scene). Adding a SceneGroup auto-spawns a RayMarchLit
+    // to the right. Only at the top level — not inside a group drill-down.
+    // overrideParams guard prevents triggering from programmatic calls.
+    if (!get().activeGroupId && !overrideParams) {
+      if (type === 'rayMarch' || type === 'rayMarchLit') {
+        get().spawnGraph(
+          position,
+          [
+            { type: 'sceneGroup', relPos: { x: -380, y: 0 } },
+            { type,               relPos: { x: 0,    y: 0 } },
+          ],
+          [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
+        );
+        return;
+      }
+      if (type === 'sceneGroup') {
+        get().spawnGraph(
+          position,
+          [
+            { type: 'sceneGroup',  relPos: { x: 0,   y: 0 } },
+            { type: 'rayMarchLit', relPos: { x: 380, y: 0 } },
+          ],
+          [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
+        );
+        return;
+      }
+    }
+
     pushHistory(get().nodes);
     const def = getNodeDefinition(type);
     if (!def) {
