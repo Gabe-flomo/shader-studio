@@ -2666,6 +2666,162 @@ float mapScene_abc123(vec3 p) {
             to color surfaces by marching cost. Cheap regions stay one color; complex or thin features glow differently.
             Combine with depth for a depth + cost composite.
           </p>
+
+          {/* ── Isolating object vs background ── */}
+          <h3 style={S.subTitle}>Isolating Object vs Background with <C>hit</C></h3>
+          <p style={S.p}>
+            The <strong>hit</strong> output is <C>1.0</C> on any surface the ray touched and <C>0.0</C> where the ray escaped
+            to the background. This makes it the cleanest mask in the system. Wire it into a <strong>MixVec3</strong> node
+            to choose independently between two colors:
+          </p>
+          <pre style={S.code}>{`// Pattern: mix(background, objectColor, hit)
+// hit=0 → pure background, hit=1 → pure object color, nothing bleeds through
+
+RayMarch.hit  ──→ MixVec3.fac
+bgColor       ──→ MixVec3.a      // shown when hit=0
+objectColor   ──→ MixVec3.b      // shown when hit=1
+              MixVec3 → output`}</pre>
+          <Tip>
+            To color the background a solid color, build a <strong>FloatToVec3</strong> or <strong>MakeVec3</strong> node
+            with your three RGB constants and wire it into <C>MixVec3.a</C>. The object color goes into <C>b</C>.
+          </Tip>
+
+          {/* ── Gradients and depth ── */}
+          <h3 style={S.subTitle}>Getting Nice Gradients from Depth</h3>
+          <p style={S.p}>
+            The raw <strong>depth</strong> output is <C>t / maxDist</C> — the fraction of the max march distance the ray
+            travelled. For a typical scene (camera at 2.5 units, maxDist 20), the sphere surface sits at <C>depth ≈ 0.10–0.15</C>
+            and the background is <C>1.0</C>. That means only 15% of the 0–1 range is used by the actual object — feed it
+            straight into a palette and you get one narrow sliver of color on the sphere plus one color for the entire background.
+          </p>
+          <p style={S.p}>
+            Always <strong>remap</strong> before a palette or color ramp:
+          </p>
+          <pre style={S.code}>{`// Example: camera at camDist=2.5, sphere at origin
+// depth of sphere surface: roughly 0.10 to 0.14
+// Remap that range to 0–1 to use the full color gradient
+
+Remap node:
+  inMin  → 0.08   (just before the near surface)
+  inMax  → 0.20   (just past the far surface)
+  outMin → 0.0
+  outMax → 1.0
+
+Then feed Remap.result → ColorRamp.t`}</pre>
+          <Warn>
+            Feeding raw <strong>dist</strong> (scene-unit ray length) directly into a palette causes moiré interference
+            rings. The dist value can be 2–20+ and the palette's sin-based color cycling fires many times across that
+            range. Always remap or clamp to a tight 0–1 window first.
+          </Warn>
+          <Tip>
+            Gate the depth color with <C>hit</C>: <C>mix(bgColor, depthColor, hit)</C>. Without this, background pixels
+            have <C>depth = 1.0</C> which falls into your palette and makes the sky look like part of the gradient.
+          </Tip>
+
+          {/* ── Normal direction tricks ── */}
+          <h3 style={S.subTitle}>Coloring with Normal Direction</h3>
+          <p style={S.p}>
+            The surface <strong>normal</strong> is a free directional signal. Each component tells you which way a face
+            points, which maps naturally to lighting and color effects:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><strong>normal.y</strong> — <C>+1</C> = top face, <C>0</C> = side, <C>-1</C> = underside.
+              Remap to 0–1 and feed into a ColorRamp for height-based tinting. Ground planes will be bright, undersides dark.</li>
+            <li style={S.li}><strong>normal.x</strong> — left/right facing. Use for rim lighting: objects facing the camera's
+              left are lit differently from right-facing surfaces.</li>
+            <li style={S.li}><strong>dot(normal, lightDir)</strong> — manually compute diffuse shading. If you add a
+              <strong>MakeVec3</strong> for a light direction and dot it with the normal, you get a cheap but controllable
+              Lambertian shading term.</li>
+          </ul>
+          <pre style={S.code}>{`// Top-light tint: warm on top, cool underneath
+// ExtractY → Remap(inMin:-1, inMax:1, outMin:0, outMax:1) → ColorRamp → MixVec3 → output
+//
+// Normal map visualization (the default rayMarch "color" output does this):
+// normal * 0.5 + 0.5  →  (0,0,0) on backward faces, (1,1,1) on forward, full RGB spectrum`}</pre>
+
+          {/* ── Smooth surfaces ── */}
+          <h3 style={S.subTitle}>Smooth Surfaces and Metaballs with <C>smoothMin</C></h3>
+          <p style={S.p}>
+            The standard boolean union (<strong>minMath</strong>) creates a hard crease where two shapes meet.
+            <strong>smoothMin</strong> blends them with a smooth C1-continuous curve controlled by the <C>k</C> parameter:
+          </p>
+          <pre style={S.code}>{`// k = 0.0  → identical to hard min (sharp crease)
+// k = 0.1  → tight smooth blend, shapes stay distinct
+// k = 0.3  → classic metaball feel, shapes merge when close
+// k = 1.0  → very wide blend, shapes deform each other from a distance
+
+// Chain:
+ScenePos → Sphere A
+ScenePos → Sphere B
+smoothMin(a=Sphere A, b=Sphere B, k=0.3) → SceneGroup output`}</pre>
+          <Tip>
+            For animated metaballs: rotate or translate one sphere's position using <strong>Rotate3D</strong> driven by
+            <strong>Time</strong> before feeding into the SDF. As the sphere orbits, the smoothMin blend follows naturally.
+          </Tip>
+          <Warn>
+            Very large <C>k</C> values relative to your scene scale cause shapes to inflate — the smooth region extends
+            outward from both surfaces. If the shapes disappear, reduce <C>k</C> or move them closer together.
+          </Warn>
+
+          {/* ── SDF glow ── */}
+          <h3 style={S.subTitle}>SDF-Based Glow and Edge Lighting</h3>
+          <p style={S.p}>
+            In 2D, glow comes from the SDF value itself (negative inside, positive outside, zero at the surface).
+            In 3D ray marching the march loop <em>stops</em> at the surface, so the SDF value at the hit point is always ≈ 0 —
+            you don't have access to the "how far outside the surface is this pixel" value after the march.
+          </p>
+          <p style={S.p}>
+            Instead, use these approaches to fake glow:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}>
+              <strong>Edge glow via iter</strong> — at silhouette edges the ray grazes the surface and takes many more steps.
+              The <strong>iter</strong> output is highest at edges. Wire <C>iter → makeLight → palette → multiplyVec3 → output</C>
+              to get a bright rim around the shape.
+            </li>
+            <li style={S.li}>
+              <strong>Fresnel-style glow via normal.z</strong> — the Z component of the normal is the dot product with the
+              camera forward vector. At silhouette edges, <C>normal.z ≈ 0</C>. Compute <C>1.0 - abs(normal.z)</C> using
+              an <strong>Abs</strong> and <strong>Subtract</strong> node to get a bright edge, zero in the center.
+              Feed into <strong>makeLight</strong> or a ColorRamp for a glowing rim effect.
+            </li>
+            <li style={S.li}>
+              <strong>Depth falloff glow</strong> — use a remapped <strong>depth</strong> inverted (<C>1.0 - depth</C>)
+              to make closer surfaces brighter. Multiply by <strong>hit</strong> to mask out the background.
+              Gives a soft "fog light" feel where the closest parts of the object glow most.
+            </li>
+          </ul>
+          <pre style={S.code}>{`// Rim glow recipe (Fresnel approximation):
+// 1. RayMarch.normal → ExtractZ → Abs
+// 2. Subtract: a=1.0 (constant), b=abs.result   →  1 - |n.z|
+// 3. Multiply by hit to zero out background
+// 4. makeLight(distance=subtract.result, brightness=6.0)
+// 5. palettePreset(t=time) → multiplyVec3(scale=glow) → output
+//
+// Result: bright neon rim at the silhouette, dark in the center`}</pre>
+
+          {/* ── SDF-based depth compositing ── */}
+          <h3 style={S.subTitle}>Compositing Multiple Objects by Depth</h3>
+          <p style={S.p}>
+            The current system doesn't have material IDs, so all objects in one SceneGroup share one color output.
+            To give different objects different colors, use two separate SceneGroup + RayMarch pairs and composite them
+            by depth:
+          </p>
+          <pre style={S.code}>{`// Two-object color compositing:
+//
+// SceneGroup A (sphere) → RayMarch A → color A, depth A, hit A
+// SceneGroup B (box)    → RayMarch B → color B, depth B, hit B
+//
+// Pick whichever is closer:
+// depthTest = step(depthA, depthB)  →  1.0 if A is closer, 0.0 if B is closer
+// finalColor = mix(colorB, colorA, depthTest * hitA)
+//
+// Or simpler: just layer with hit as the alpha mask:
+// mix(colorB, colorA, hitA)  →  A always draws on top of B where it hits`}</pre>
+          <Tip>
+            This costs two full raymarch passes per frame — double the GPU work. Keep it to 2–3 objects maximum,
+            or put objects that share a color in the same SceneGroup.
+          </Tip>
         </div>
 
         {/* Bottom padding */}
