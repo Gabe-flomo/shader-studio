@@ -1,5 +1,15 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
 
 interface LearnPageProps {
   onNavigateToStudio: () => void;
@@ -47,9 +57,13 @@ const S = {
 
   content: {
     flex: 1,
+    minWidth: 0,
     overflowY: 'auto' as const,
+    overflowX: 'hidden' as const,
     padding: '32px 52px',
     maxWidth: '900px',
+    userSelect: 'text' as const,
+    WebkitUserSelect: 'text' as const,
   } as React.CSSProperties,
 
   sectionTitle: {
@@ -101,6 +115,8 @@ const S = {
     whiteSpace: 'pre' as const,
     overflowX: 'auto' as const,
     lineHeight: 1.6,
+    maxWidth: '100%',
+    boxSizing: 'border-box' as const,
   } as React.CSSProperties,
 
   codeWrapper: {
@@ -308,7 +324,7 @@ function typeColor(type: DiagramNode['type']): string {
 function NodeDiagram({ nodes, arrows, caption }: NodeDiagramProps) {
   // Simple horizontal layout — each node is a box, connected by arrows
   return (
-    <div style={{ marginBottom: '16px', marginTop: '8px' }}>
+    <div style={{ marginBottom: '16px', marginTop: '8px', maxWidth: '100%' }}>
       <div
         style={{
           background: T.surface2,
@@ -316,6 +332,8 @@ function NodeDiagram({ nodes, arrows, caption }: NodeDiagramProps) {
           borderRadius: '8px',
           padding: '16px 20px',
           overflowX: 'auto',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'nowrap', minWidth: 'max-content' }}>
@@ -397,7 +415,7 @@ interface BuildStep {
 
 function StepBuilder({ steps }: { steps: BuildStep[] }) {
   return (
-    <div style={{ marginBottom: '20px' }}>
+    <div style={{ marginBottom: '20px', maxWidth: '100%' }}>
       {steps.map((step, i) => (
         <div
           key={i}
@@ -406,6 +424,7 @@ function StepBuilder({ steps }: { steps: BuildStep[] }) {
             gap: '16px',
             marginBottom: '12px',
             alignItems: 'flex-start',
+            minWidth: 0,
           }}
         >
           {/* Step number */}
@@ -430,7 +449,7 @@ function StepBuilder({ steps }: { steps: BuildStep[] }) {
           </div>
 
           {/* Content */}
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: T.textBold, marginBottom: '4px' }}>
               {step.title}
             </div>
@@ -467,30 +486,33 @@ function TypeBadge({ type, label }: { type: string; label?: string }) {
 // ─── Data flow table ──────────────────────────────────────────────────────────
 function DataTable({ rows }: { rows: [string, string, string][] }) {
   return (
-    <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
-      <thead>
-        <tr>
-          {['Type', 'Means', 'Example'].map(h => (
-            <th key={h} style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(([type, means, ex], i) => (
-          <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
-            <td style={{ padding: '6px 10px' }}><TypeBadge type={type} /></td>
-            <td style={{ padding: '6px 10px', color: T.text }}>{means}</td>
-            <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{ex}</td>
+    <div style={{ overflowX: 'auto', marginBottom: '14px', maxWidth: '100%' }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
+        <thead>
+          <tr>
+            {['Type', 'Means', 'Example'].map(h => (
+              <th key={h} style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>{h}</th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map(([type, means, ex], i) => (
+            <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+              <td style={{ padding: '6px 10px' }}><TypeBadge type={type} /></td>
+              <td style={{ padding: '6px 10px', color: T.text }}>{means}</td>
+              <td style={{ padding: '6px 10px', fontFamily: 'monospace', color: T.green, fontSize: '11px' }}>{ex}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 // ─── Main component ──────────────────────────────────────────────────────────
 export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const { loadExampleGraph } = useNodeGraphStore();
+  const isMobile = useIsMobile();
 
   const sec0Ref = useRef<HTMLDivElement>(null);
   const sec1Ref = useRef<HTMLDivElement>(null);
@@ -514,7 +536,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const secParticlesRef = useRef<HTMLDivElement>(null);
   const secBlurRef = useRef<HTMLDivElement>(null);
   const secAppRef = useRef<HTMLDivElement>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
 
   function tryExample(key: string) {
     loadExampleGraph(key);
@@ -523,46 +545,64 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
 
   return (
     <div style={S.page}>
+      {/* ── Mobile sidebar backdrop ── */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 99,
+            background: 'rgba(0,0,0,0.5)',
+          }}
+        />
+      )}
+
       {/* ── Sidebar TOC ── */}
       <nav style={{
         ...S.sidebar,
-        width: sidebarOpen ? '196px' : '32px',
+        width: sidebarOpen ? '196px' : (isMobile ? '0px' : '32px'),
         transition: 'width 0.2s ease',
         overflow: 'hidden',
-        position: 'relative',
+        position: isMobile ? 'absolute' : 'relative',
+        zIndex: isMobile ? 100 : undefined,
+        height: '100%',
+        boxShadow: isMobile && sidebarOpen ? '4px 0 20px rgba(0,0,0,0.5)' : 'none',
       }}>
-        {/* Toggle button — always visible */}
-        <button
-          onClick={() => setSidebarOpen(v => !v)}
-          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          style={{
-            position: sidebarOpen ? 'absolute' : 'static',
-            top: sidebarOpen ? '12px' : undefined,
-            right: sidebarOpen ? '8px' : undefined,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '20px',
-            height: '20px',
-            background: 'none',
-            border: 'none',
-            color: '#585b70',
-            cursor: 'pointer',
-            fontSize: '12px',
-            borderRadius: '3px',
-            flexShrink: 0,
-            margin: sidebarOpen ? undefined : '8px auto',
-            padding: 0,
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#cdd6f4')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#585b70')}
-        >
-          {sidebarOpen ? '◀' : '▶'}
-        </button>
+        {/* Toggle button — only shown on desktop when sidebar is open */}
+        {!isMobile && (
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            style={{
+              position: sidebarOpen ? 'absolute' : 'static',
+              top: sidebarOpen ? '12px' : undefined,
+              right: sidebarOpen ? '8px' : undefined,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '20px',
+              height: '20px',
+              background: 'none',
+              border: 'none',
+              color: '#585b70',
+              cursor: 'pointer',
+              fontSize: '12px',
+              borderRadius: '3px',
+              flexShrink: 0,
+              margin: sidebarOpen ? undefined : '8px auto',
+              padding: 0,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#cdd6f4')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#585b70')}
+          >
+            {sidebarOpen ? '◀' : '▶'}
+          </button>
+        )}
 
         {/* TOC content — hidden when collapsed */}
         {sidebarOpen && <>
-        <span style={{ ...S.tocSection, paddingTop: '2px' }}>Shader Studio</span>
+        <span style={{ ...S.tocSection, paddingTop: isMobile ? '12px' : '2px' }}>Shader Studio</span>
 
         <span style={S.tocSection}>Getting Started</span>
         <TocLink label="Introduction" targetRef={sec0Ref} />
@@ -597,10 +637,35 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
       </nav>
 
       {/* ── Scrollable content ── */}
-      <main style={S.content}>
+      <main style={{ ...S.content, padding: isMobile ? '20px 16px' : '32px 52px' }}>
         {/* Header */}
         <div style={{ marginBottom: '8px' }}>
-          <h1 style={{ fontSize: '22px', fontWeight: 700, color: T.textBold, marginBottom: '6px', letterSpacing: '-0.02em' }}>
+          {/* Mobile TOC toggle */}
+          {isMobile && (
+            <button
+              onClick={() => setSidebarOpen(v => !v)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: T.surface,
+                border: `1px solid ${T.border}`,
+                borderRadius: '6px',
+                color: T.dim,
+                fontSize: '11px',
+                padding: '5px 10px',
+                cursor: 'pointer',
+                marginBottom: '16px',
+                fontFamily: 'system-ui, sans-serif',
+                letterSpacing: '0.03em',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = T.textBold)}
+              onMouseLeave={e => (e.currentTarget.style.color = T.dim)}
+            >
+              ☰ Contents
+            </button>
+          )}
+          <h1 style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 700, color: T.textBold, marginBottom: '6px', letterSpacing: '-0.02em' }}>
             Shader Studio Guide
           </h1>
           <p style={{ ...S.p, color: T.dim, marginBottom: 0 }}>
@@ -687,7 +752,8 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
           </p>
 
           <h3 style={S.subTitle}>Keyboard Shortcuts Quick Reference</h3>
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+          <div style={{ overflowX: 'auto', marginBottom: '14px', maxWidth: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Action</th>
@@ -720,6 +786,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
               ))}
             </tbody>
           </table>
+          </div>
           <Tip>Hold <C>1</C>, <C>2</C>, or <C>3</C> to highlight nodes by type — useful for finding specific nodes in a complex graph.</Tip>
         </div>
 
@@ -832,7 +899,8 @@ void main() {
           </p>
 
           <h3 style={S.subTitle}>Type Conversion Nodes</h3>
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+          <div style={{ overflowX: 'auto', marginBottom: '14px', maxWidth: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>From</th>
@@ -857,6 +925,7 @@ void main() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -1153,7 +1222,8 @@ uv = fract(uv * 1.5) - 0.5;
           </p>
 
           <h3 style={S.subTitle}>Loop Step Nodes</h3>
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+          <div style={{ overflowX: 'auto', marginBottom: '14px', maxWidth: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Node</th>
@@ -1178,6 +1248,7 @@ uv = fract(uv * 1.5) - 0.5;
               ))}
             </tbody>
           </table>
+          </div>
 
           <h3 style={S.subTitle}>Example: Building a Spiral</h3>
           <CodeBlock>{`UV → LoopStart(vec2, iter=8)
@@ -1288,7 +1359,8 @@ result = FBM(p2)          // final sample`}</CodeBlock>
           </p>
 
           <h3 style={S.subTitle}>HSV</h3>
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+          <div style={{ overflowX: 'auto', marginBottom: '14px', maxWidth: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Component</th>
@@ -1310,6 +1382,7 @@ result = FBM(p2)          // final sample`}</CodeBlock>
               ))}
             </tbody>
           </table>
+          </div>
           <p style={S.p}>Wire <C>Time → Hue</C> for a continuously cycling color wheel effect.</p>
 
           <h3 style={S.subTitle}>Posterize</h3>
@@ -1385,7 +1458,8 @@ result = FBM(p2)          // final sample`}</CodeBlock>
           <p style={S.p}>
             Low-Frequency Oscillators generate repeating waveforms. All share the same parameters: Frequency, Amplitude, and Offset.
           </p>
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+          <div style={{ overflowX: 'auto', marginBottom: '14px', maxWidth: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600 }}>Node</th>
@@ -1410,6 +1484,7 @@ result = FBM(p2)          // final sample`}</CodeBlock>
               ))}
             </tbody>
           </table>
+          </div>
           <p style={S.p}>
             Example: breathing circle — <C>SineLFO → Remap(-1, 1 to 0.1, 0.4) → CircleSDF.radius</C>. The radius oscillates smoothly between 0.1 and 0.4.
           </p>
@@ -1857,7 +1932,8 @@ uniform vec2 u_mouse;       // mouse position (normalized)`}</CodeBlock>
           <h2 style={S.sectionTitle}>Node Reference</h2>
           <div style={S.divider} />
 
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '14px', fontSize: '12px' }}>
+          <div style={{ overflowX: 'auto', marginBottom: '14px', maxWidth: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '5px 10px', color: T.dim, borderBottom: `1px solid ${T.border}`, fontWeight: 600, width: '140px' }}>Category</th>
@@ -1892,6 +1968,7 @@ uniform vec2 u_mouse;       // mouse position (normalized)`}</CodeBlock>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
