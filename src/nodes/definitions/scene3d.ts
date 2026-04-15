@@ -110,7 +110,9 @@ function emitSharedMarchCode(
     `        ${sceneFn}(${id}_hp+vec3(0.0,0.0,${id}_e)) - ${sceneFn}(${id}_hp-vec3(0.0,0.0,${id}_e))\n`,
     `    ));\n`,
     `    float ${id}_dist   = ${id}_t;\n`,
-    `    float ${id}_depth  = ${id}_hit > 0.5 ? ${id}_t / ${maxDist} : 1.0;\n`,
+    // Depth measures scene-space distance only — subtract camera-to-origin length so
+    // the camera offset doesn't bake into the value and brighten silhouette edges.
+    `    float ${id}_depth  = ${id}_hit > 0.5 ? clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0) : 1.0;\n`,
     `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
   ].join('');
 }
@@ -311,8 +313,9 @@ export const RayMarchLitNode: NodeDefinition = {
       `    vec3  ${id}_alb = vec3(${ar}, ${ag}, ${ab});\n`,
       `    vec3  ${id}_sky = vec3(0.5, 0.7, 1.0) * ${id}_amb * 0.6;\n`,
       `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
-      // Fog / background blend
-      `    float ${id}_fog = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
+      // Fog / background blend — same camera-offset correction as depth to avoid
+      // silhouette brightening from the camera-to-scene portion of the ray.
+      `    float ${id}_fog = clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0);\n`,
       `    vec3  ${id}_color = mix(mix(${id}_lit, ${id}_bg, ${id}_fog), ${id}_bg, 1.0 - ${id}_hit);\n`,
     ].join('');
 
@@ -537,14 +540,15 @@ export const RayRenderNode: NodeDefinition = {
         `    vec3  ${id}_alb = vec3(${ar}, ${ag}, ${ab});\n`,
         `    vec3  ${id}_sky = vec3(0.5, 0.7, 1.0) * ${id}_amb * 0.6;\n`,
         `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
-        // Fog / background blend
-        `    float ${id}_fog = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
+        // Fog / background blend — subtract camera distance so scene objects don't
+        // inherit the camera-to-scene ray length, which would wash out silhouette edges.
+        `    float ${id}_fog = clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0);\n`,
         `    vec3  ${id}_color = mix(mix(${id}_lit, ${id}_bg, ${id}_fog), ${id}_bg, 1.0 - ${id}_hit);\n`,
       ].join('');
     }
 
     const finalCode = [
-      `    float ${id}_depth = ${id}_hit > 0.5 ? ${id}_t / ${maxDist} : 1.0;\n`,
+      `    float ${id}_depth = ${id}_hit > 0.5 ? clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0) : 1.0;\n`,
       `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
     ].join('');
 
