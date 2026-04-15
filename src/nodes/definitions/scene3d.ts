@@ -100,7 +100,8 @@ function emitSharedMarchCode(
     `        ${id}_t += ${id}_d;\n`,
     `        if (${id}_t > ${maxDist}) { ${id}_si = ${id}_i; break; }\n`,
     `    }\n`,
-    `    float ${id}_iter = float(${id}_si) / float(${maxSteps});\n`,
+    `    float ${id}_iter      = float(${id}_si) / float(${maxSteps});\n`,
+    `    float ${id}_iterCount = float(${id}_si);\n`,
     `    vec3  ${id}_hp  = ${id}_ro + ${id}_t * ${id}_rd;\n`,
     `    float ${id}_e   = 0.001;\n`,
     `    vec3  ${id}_n   = normalize(vec3(\n`,
@@ -109,7 +110,9 @@ function emitSharedMarchCode(
     `        ${sceneFn}(${id}_hp+vec3(0.0,0.0,${id}_e)) - ${sceneFn}(${id}_hp-vec3(0.0,0.0,${id}_e))\n`,
     `    ));\n`,
     `    float ${id}_dist   = ${id}_t;\n`,
-    `    float ${id}_depth  = ${id}_hit > 0.5 ? ${id}_t / ${maxDist} : 1.0;\n`,
+    // Depth measures scene-space distance only — subtract camera-to-origin length so
+    // the camera offset doesn't bake into the value and brighten silhouette edges.
+    `    float ${id}_depth  = ${id}_hit > 0.5 ? clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0) : 1.0;\n`,
     `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
   ].join('');
 }
@@ -143,12 +146,13 @@ export const RayMarchNode: NodeDefinition = {
     maxDist:  { type: 'float',  label: 'Max Dist' },
   },
   outputs: {
-    color:  { type: 'vec3',  label: 'Color' },
-    dist:   { type: 'float', label: 'Distance' },
-    depth:  { type: 'float', label: 'Depth' },
-    normal: { type: 'vec3',  label: 'Normal' },
-    iter:   { type: 'float', label: 'Iter' },
-    hit:    { type: 'float', label: 'Hit' },
+    color:     { type: 'vec3',  label: 'Color' },
+    dist:      { type: 'float', label: 'Distance' },
+    depth:     { type: 'float', label: 'Depth' },
+    normal:    { type: 'vec3',  label: 'Normal' },
+    iter:      { type: 'float', label: 'Iter' },
+    iterCount: { type: 'float', label: 'Iter Count' },
+    hit:       { type: 'float', label: 'Hit' },
   },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0,
@@ -185,12 +189,13 @@ export const RayMarchNode: NodeDefinition = {
     return {
       code: code + colorCode,
       outputVars: {
-        color:  `${id}_color`,
-        dist:   `${id}_dist`,
-        depth:  `${id}_depth`,
-        normal: `${id}_normal`,
-        iter:   `${id}_iter`,
-        hit:    `${id}_hit`,
+        color:     `${id}_color`,
+        dist:      `${id}_dist`,
+        depth:     `${id}_depth`,
+        normal:    `${id}_normal`,
+        iter:      `${id}_iter`,
+        iterCount: `${id}_iterCount`,
+        hit:       `${id}_hit`,
       },
     };
   },
@@ -220,12 +225,13 @@ export const RayMarchLitNode: NodeDefinition = {
     albedoB:  { type: 'float',  label: 'Albedo B' },
   },
   outputs: {
-    color:  { type: 'vec3',  label: 'Color' },
-    dist:   { type: 'float', label: 'Distance' },
-    depth:  { type: 'float', label: 'Depth' },
-    normal: { type: 'vec3',  label: 'Normal' },
-    iter:   { type: 'float', label: 'Iter' },
-    hit:    { type: 'float', label: 'Hit' },
+    color:     { type: 'vec3',  label: 'Color' },
+    dist:      { type: 'float', label: 'Distance' },
+    depth:     { type: 'float', label: 'Depth' },
+    normal:    { type: 'vec3',  label: 'Normal' },
+    iter:      { type: 'float', label: 'Iter' },
+    iterCount: { type: 'float', label: 'Iter Count' },
+    hit:       { type: 'float', label: 'Hit' },
   },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0,
@@ -307,20 +313,22 @@ export const RayMarchLitNode: NodeDefinition = {
       `    vec3  ${id}_alb = vec3(${ar}, ${ag}, ${ab});\n`,
       `    vec3  ${id}_sky = vec3(0.5, 0.7, 1.0) * ${id}_amb * 0.6;\n`,
       `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
-      // Fog / background blend
-      `    float ${id}_fog = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
+      // Fog / background blend — same camera-offset correction as depth to avoid
+      // silhouette brightening from the camera-to-scene portion of the ray.
+      `    float ${id}_fog = clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0);\n`,
       `    vec3  ${id}_color = mix(mix(${id}_lit, ${id}_bg, ${id}_fog), ${id}_bg, 1.0 - ${id}_hit);\n`,
     ].join('');
 
     return {
       code: sharedCode + litCode,
       outputVars: {
-        color:  `${id}_color`,
-        dist:   `${id}_dist`,
-        depth:  `${id}_depth`,
-        normal: `${id}_normal`,
-        iter:   `${id}_iter`,
-        hit:    `${id}_hit`,
+        color:     `${id}_color`,
+        dist:      `${id}_dist`,
+        depth:     `${id}_depth`,
+        normal:    `${id}_normal`,
+        iter:      `${id}_iter`,
+        iterCount: `${id}_iterCount`,
+        hit:       `${id}_hit`,
       },
     };
   },
@@ -532,14 +540,15 @@ export const RayRenderNode: NodeDefinition = {
         `    vec3  ${id}_alb = vec3(${ar}, ${ag}, ${ab});\n`,
         `    vec3  ${id}_sky = vec3(0.5, 0.7, 1.0) * ${id}_amb * 0.6;\n`,
         `    vec3  ${id}_lit = ${id}_alb * (${id}_dif * vec3(1.0, 0.9, 0.8) + ${id}_sky + ${id}_amb * 0.2);\n`,
-        // Fog / background blend
-        `    float ${id}_fog = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
+        // Fog / background blend — subtract camera distance so scene objects don't
+        // inherit the camera-to-scene ray length, which would wash out silhouette edges.
+        `    float ${id}_fog = clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0);\n`,
         `    vec3  ${id}_color = mix(mix(${id}_lit, ${id}_bg, ${id}_fog), ${id}_bg, 1.0 - ${id}_hit);\n`,
       ].join('');
     }
 
     const finalCode = [
-      `    float ${id}_depth = ${id}_hit > 0.5 ? ${id}_t / ${maxDist} : 1.0;\n`,
+      `    float ${id}_depth = ${id}_hit > 0.5 ? clamp((${id}_t - length(${id}_ro)) / ${maxDist}, 0.0, 1.0) : 1.0;\n`,
       `    vec3  ${id}_normal = ${id}_n * ${id}_hit;\n`,
     ].join('');
 
