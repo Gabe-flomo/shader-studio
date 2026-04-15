@@ -61,8 +61,9 @@ export function slugifyLabel(label: string): string {
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[^a-z0-9_]/g, '')
-    .replace(/^_+|_+$/g, '')
-    .replace(/_+/g, '_')
+    .replace(/^[^a-z_]+/, '')  // strip any leading non-letter/non-underscore chars
+    .replace(/^_+|_+$/g, '')   // strip leading/trailing underscores
+    .replace(/__+/g, '_')      // collapse consecutive underscores
     .slice(0, 16);
 }
 
@@ -86,9 +87,17 @@ export function computeNodeSlug(node: GraphNode, usedSlugs: Set<string>): string
       ? node.params.label.trim()
       : null;
 
-  const base = customLabel
+  let base = customLabel
     ? slugifyLabel(customLabel)
-    : (TYPE_ABBREV[node.type] ?? node.type.slice(0, 10).toLowerCase());
+    : (TYPE_ABBREV[node.type] ?? node.type.slice(0, 10).toLowerCase().replace(/[^a-z0-9_]/g, ''));
+
+  // Guard all GLSL identifier rules on the base:
+  // 1. gl_ prefix is reserved by the GLSL spec
+  if (base.startsWith('gl_')) base = `n_${base}`;
+  // 2. Empty base (e.g. label was all special chars) → fall back to type abbrev or 'nd'
+  if (!base) base = TYPE_ABBREV[node.type] ?? 'nd';
+  // 3. Must not start with a digit
+  if (/^\d/.test(base)) base = `n_${base}`;
 
   // Extract the trailing numeric part from the ID for a short, unique suffix.
   // For node_49 → "49"; for group_1775985976579 → last 4 digits "6579".
