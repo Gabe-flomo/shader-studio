@@ -65,6 +65,8 @@ interface Props {
   externalInputKeys?: Set<string>;
   /** When inside a group view, set of param keys that are driven by external ps_ connections */
   externalParamKeys?: Set<string>;
+  /** Option-click on a socket: open filtered node search palette */
+  onAltClickSocket?: (nodeId: string, key: string, dir: 'in' | 'out', type: string, e: React.MouseEvent) => void;
 }
 
 // Maps slider position (0–1000) to Hz using a dampened log scale (power=0.6)
@@ -263,7 +265,7 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
@@ -2411,9 +2413,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }}
                 onMouseEnter={() => setHoveredInput(key)}
                 onMouseLeave={() => setHoveredInput(null)}
+                onMouseDown={(e) => {
+                  if (e.altKey && !isConnected && !isExternal) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onAltClickSocket?.(node.id, key, 'in', input.type, e);
+                  }
+                }}
                 onMouseUp={(e) => {
                   e.stopPropagation();
                   if (isExternal) return;
+                  if (e.altKey && !isConnected) return; // handled by onMouseDown
                   if (isConnected) {
                     disconnectInput(node.id, key);
                   } else {
@@ -3104,7 +3114,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               <div
                 data-socket="out"
                 ref={el => registerSocket(node.id, 'out', key, el)}
-                onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                onMouseDown={e => {
+                  if (e.altKey) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onAltClickSocket?.(node.id, key, 'out', output.type, e);
+                    return;
+                  }
+                  e.stopPropagation();
+                  onStartConnection(node.id, key, e);
+                }}
                 onTouchEnd={e => {
                   e.stopPropagation();
                   e.preventDefault();

@@ -3,6 +3,7 @@ import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
+import { NodeSearchPalette } from './NodeSearchPalette';
 import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
 import { collectLoopPairChains } from '../../compiler/topoSort';
@@ -77,6 +78,9 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
   const removeNode          = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
+  const selectNode          = useNodeGraphStore(s => s.selectNode);
+  const deselectAll         = useNodeGraphStore(s => s.deselectAll);
+  const disconnectInput     = useNodeGraphStore(s => s.disconnectInput);
 
   // When drilling into a group, show its subgraph nodes instead
   const displayNodes = React.useMemo(() => {
@@ -196,6 +200,26 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
   const [editingOutputPortKey, setEditingOutputPortKey] = useState<string | null>(null);
   const [editingOutputPortLabel, setEditingOutputPortLabel] = useState('');
+
+  // ── Feature 1: Option-click socket → filtered palette ──────────────────────
+  const [pendingSocket, setPendingSocket] = useState<{
+    nodeId: string; key: string; dir: 'in' | 'out'; type: string;
+    screenX: number; screenY: number;
+  } | null>(null);
+
+  // ── Feature 2: Wire hover → + badge ────────────────────────────────────────
+  const [hoveredWire, setHoveredWire] = useState<{
+    fromNodeId: string; fromOutputKey: string;
+    toNodeId: string; toInputKey: string;
+    fromType: string; toType: string;
+    midX: number; midY: number;
+  } | null>(null);
+  const [wireInsertOpen, setWireInsertOpen] = useState(false);
+
+  // ── Feature 3: Box/marquee select ──────────────────────────────────────────
+  const [boxSelect, setBoxSelect] = useState<{
+    startX: number; startY: number; curX: number; curY: number;
+  } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   // canvasEl is stored in state so getSocketPos always has a stable reference.
@@ -346,40 +370,53 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     }
   }, []);
 
-  // ── Canvas mouse down — pan on middle-click, space+drag, or option+drag ──
+  // ── Canvas mouse down — pan on middle-click, space+drag, or option+drag; box select otherwise ──
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     const isMiddle    = e.button === 1;
     const isSpaceDrag = spaceDown.current  && e.button === 0;
     const isOptionDrag = optionDown.current && e.button === 0;
-    if (!isMiddle && !isSpaceDrag && !isOptionDrag) return;
-    e.preventDefault();
-    isPanning.current  = true;
-    panStart.current   = { x: e.clientX, y: e.clientY };
-    panOrigin.current  = { ...panRef.current };
-    if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
-    document.body.style.userSelect = 'none';
-    (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = 'none';
+    if (isMiddle || isSpaceDrag || isOptionDrag) {
+      e.preventDefault();
+      isPanning.current  = true;
+      panStart.current   = { x: e.clientX, y: e.clientY };
+      panOrigin.current  = { ...panRef.current };
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+      (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = 'none';
 
-    const onMove = (ev: MouseEvent) => {
-      if (!isPanning.current) return;
-      setPan({
-        x: panOrigin.current.x + (ev.clientX - panStart.current.x),
-        y: panOrigin.current.y + (ev.clientY - panStart.current.y),
-      });
-    };
-    const onUp = () => {
-      isPanning.current = false;
-      document.body.style.userSelect = '';
-      (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = '';
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup',   onUp);
-      if (canvasRef.current)
-        canvasRef.current.style.cursor =
-          spaceDown.current || optionDown.current ? 'grab' : 'default';
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup',   onUp);
-  }, []);
+      const onMove = (ev: MouseEvent) => {
+        if (!isPanning.current) return;
+        setPan({
+          x: panOrigin.current.x + (ev.clientX - panStart.current.x),
+          y: panOrigin.current.y + (ev.clientY - panStart.current.y),
+        });
+      };
+      const onUp = () => {
+        isPanning.current = false;
+        document.body.style.userSelect = '';
+        (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = '';
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup',   onUp);
+        if (canvasRef.current)
+          canvasRef.current.style.cursor =
+            spaceDown.current || optionDown.current ? 'grab' : 'default';
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup',   onUp);
+      return;
+    }
+
+    // Feature 3: box select — left button on bare canvas (not a node/socket)
+    if (e.button === 0) {
+      const target = e.target as HTMLElement;
+      const onNode   = !!target.closest('[data-node-id]');
+      const onSocket = !!target.closest('[data-socket]');
+      if (!onNode && !onSocket) {
+        deselectAll();
+        setBoxSelect({ startX: e.clientX, startY: e.clientY, curX: e.clientX, curY: e.clientY });
+      }
+    }
+  }, [deselectAll]);
 
   // ── Connection drag ─────────────────────────────────────────────────────────
   const dragRafRef = useRef<number | null>(null);
@@ -487,6 +524,9 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   };
 
   const handleMouseMove = (event: React.MouseEvent) => {
+    if (boxSelect) {
+      setBoxSelect(prev => prev ? { ...prev, curX: event.clientX, curY: event.clientY } : null);
+    }
     if (!dragConnection) return;
     const x = event.clientX;
     const y = event.clientY;
@@ -516,6 +556,24 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       dragRafRef.current = null;
     }
     setDragConnection(null);
+
+    // Feature 3: finalize box select
+    if (boxSelect) {
+      const rectLeft   = Math.min(boxSelect.startX, boxSelect.curX);
+      const rectTop    = Math.min(boxSelect.startY, boxSelect.curY);
+      const rectRight  = Math.max(boxSelect.startX, boxSelect.curX);
+      const rectBottom = Math.max(boxSelect.startY, boxSelect.curY);
+      if (rectRight - rectLeft > 4 || rectBottom - rectTop > 4) {
+        document.querySelectorAll<HTMLElement>('[data-node-id]').forEach(el => {
+          const id = el.dataset.nodeId;
+          if (!id || id === '__group_output__' || id === '__group_input__') return;
+          const r = el.getBoundingClientRect();
+          const overlaps = r.left < rectRight && r.right > rectLeft && r.top < rectBottom && r.bottom > rectTop;
+          if (overlaps) selectNode(id, true);
+        });
+      }
+      setBoxSelect(null);
+    }
   };
 
   // ── Canvas touch handlers (pan + connection cancel) ──────────────────────
@@ -558,6 +616,42 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     const nodeId = nodeEl?.dataset.nodeId ?? null;
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
   }, []);
+
+  // ── Feature 1: Alt-click socket handler ─────────────────────────────────────
+  const handleAltClickSocket = useCallback((
+    nodeId: string, key: string, dir: 'in' | 'out', type: string, e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    setPendingSocket({ nodeId, key, dir, type, screenX: e.clientX, screenY: e.clientY });
+  }, []);
+
+  const handleAltSocketNodePlaced = useCallback((newNodeId: string) => {
+    if (!pendingSocket) return;
+    const newNode = useNodeGraphStore.getState().nodes.find(n => n.id === newNodeId)
+      ?? (() => {
+        // also check subgraph nodes
+        const { activeGroupPath } = useNodeGraphStore.getState();
+        return getActiveNodes(useNodeGraphStore.getState().nodes, activeGroupPath)?.find(n => n.id === newNodeId);
+      })();
+    if (!newNode) return;
+    const newDef = getNodeDefinition(newNode.type);
+    if (!newDef) return;
+
+    if (pendingSocket.dir === 'in') {
+      // new node → pendingSocket node
+      const firstOutputKey = Object.keys(newNode.outputs)[0];
+      if (firstOutputKey) {
+        connectNodes(newNodeId, firstOutputKey, pendingSocket.nodeId, pendingSocket.key);
+      }
+    } else {
+      // pendingSocket node → new node
+      const firstInputKey = Object.keys(newNode.inputs)[0];
+      if (firstInputKey) {
+        connectNodes(pendingSocket.nodeId, pendingSocket.key, newNodeId, firstInputKey);
+      }
+    }
+    setPendingSocket(null);
+  }, [pendingSocket, connectNodes]);
 
   // ── Fit to screen helper ────────────────────────────────────────────────────
   const handleFitView = useCallback(() => {
@@ -986,7 +1080,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             left: 0,
             width: '100000px',
             height: '100000px',
-            pointerEvents: 'none',
             overflow: 'visible',
           }}
         >
@@ -1045,6 +1138,10 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               // fall back to the live node's outputs so wires get the right colour.
               const lineType = srcDef?.outputs[input.connection.outputKey]?.type
                 ?? sourceNode.outputs[input.connection.outputKey]?.type;
+              const toType   = input.type as string;
+              const fromNodeId    = input.connection.nodeId;
+              const fromOutputKey = input.connection.outputKey;
+              const canvasRect    = canvasEl?.getBoundingClientRect();
 
               return (
                 <ConnectionLine
@@ -1052,6 +1149,19 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                   from={fromPos}
                   to={toPos}
                   dataType={lineType}
+                  onWireEnter={() => {
+                    if (!canvasRect) return;
+                    const midWorldX = (fromPos.x + toPos.x) / 2;
+                    const midWorldY = (fromPos.y + toPos.y) / 2;
+                    setHoveredWire({
+                      fromNodeId, fromOutputKey,
+                      toNodeId: node.id, toInputKey: inputKey,
+                      fromType: lineType ?? 'float', toType,
+                      midX: midWorldX * zoom + pan.x + canvasRect.left,
+                      midY: midWorldY * zoom + pan.y + canvasRect.top,
+                    });
+                  }}
+                  onWireLeave={() => setHoveredWire(null)}
                 />
               );
             })
@@ -1132,6 +1242,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             hasError={errorNodeIds.has(node.id)}
             externalInputKeys={externalPortMap?.get(node.id)}
             externalParamKeys={externalParamMap?.get(node.id)}
+            onAltClickSocket={handleAltClickSocket}
           />
         ))}
 
@@ -1371,6 +1482,100 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           </div>
         )}
       </div>
+
+      {/* Feature 3: Box/marquee select rect */}
+      {boxSelect && (() => {
+        const left   = Math.min(boxSelect.startX, boxSelect.curX);
+        const top    = Math.min(boxSelect.startY, boxSelect.curY);
+        const width  = Math.abs(boxSelect.curX - boxSelect.startX);
+        const height = Math.abs(boxSelect.curY - boxSelect.startY);
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              left, top, width, height,
+              border: '1px dashed #89b4fa',
+              background: 'rgba(137,180,250,0.05)',
+              pointerEvents: 'none',
+              zIndex: 50,
+            }}
+          />
+        );
+      })()}
+
+      {/* Feature 2: Wire hover + badge */}
+      {hoveredWire && !wireInsertOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            left: hoveredWire.midX - 10,
+            top:  hoveredWire.midY - 10,
+            width: 20, height: 20, borderRadius: '50%',
+            background: '#89b4fa',
+            color: '#1e1e2e',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '14px', fontWeight: 700,
+            cursor: 'pointer',
+            zIndex: 60,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+            transition: 'transform 0.1s',
+            userSelect: 'none',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.2)')}
+          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+          onClick={() => setWireInsertOpen(true)}
+        >
+          +
+        </div>
+      )}
+
+      {/* Feature 2: Wire insert palette */}
+      {wireInsertOpen && hoveredWire && (() => {
+        const wv = hoveredWire;
+        return (
+          <NodeSearchPalette
+            open={true}
+            onClose={() => { setWireInsertOpen(false); setHoveredWire(null); }}
+            filterOutputType={wv.fromType}
+            filterInputType={wv.toType}
+            spawnPosition={screenToWorld(wv.midX, wv.midY)}
+            onNodePlaced={(newNodeId) => {
+              // Disconnect existing connection
+              disconnectInput(wv.toNodeId, wv.toInputKey);
+              // Wire: from → new node first input, new node first output → to
+              const newNode = useNodeGraphStore.getState().nodes.find(n => n.id === newNodeId)
+                ?? getActiveNodes(useNodeGraphStore.getState().nodes, useNodeGraphStore.getState().activeGroupPath)?.find(n => n.id === newNodeId);
+              if (newNode) {
+                const firstIn  = Object.keys(newNode.inputs)[0];
+                const firstOut = Object.keys(newNode.outputs)[0];
+                if (firstIn)  connectNodes(wv.fromNodeId, wv.fromOutputKey, newNodeId, firstIn);
+                if (firstOut) connectNodes(newNodeId, firstOut, wv.toNodeId, wv.toInputKey);
+              }
+              setWireInsertOpen(false);
+              setHoveredWire(null);
+            }}
+          />
+        );
+      })()}
+
+      {/* Feature 1: Alt-click socket filtered palette */}
+      {pendingSocket && (() => {
+        const ps = pendingSocket;
+        const worldSpawn = screenToWorld(ps.screenX, ps.screenY);
+        const spawnPos = ps.dir === 'in'
+          ? { x: worldSpawn.x - 200, y: worldSpawn.y - 40 }
+          : { x: worldSpawn.x + 150, y: worldSpawn.y - 40 };
+        return (
+          <NodeSearchPalette
+            open={true}
+            onClose={() => setPendingSocket(null)}
+            spawnPosition={spawnPos}
+            filterOutputType={ps.dir === 'in'  ? ps.type : undefined}
+            filterInputType={ps.dir === 'out' ? ps.type : undefined}
+            onNodePlaced={handleAltSocketNodePlaced}
+          />
+        );
+      })()}
     </div>
   );
 }
