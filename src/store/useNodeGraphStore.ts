@@ -537,12 +537,12 @@ function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[])
  */
 function deepCloneGroupNode(groupNode: GraphNode): GraphNode {
   const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-  const newGroupId = `group_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const newGroupId = `node_${nodeIdCounter++}`;
   if (!subgraph) return { ...groupNode, id: newGroupId };
 
   const idMap = new Map<string, string>();
   for (const sn of subgraph.nodes) {
-    idMap.set(sn.id, `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    idMap.set(sn.id, `node_${nodeIdCounter++}`);
   }
   const newSubNodes = subgraph.nodes.map(sn => {
     const newId = idMap.get(sn.id)!;
@@ -1091,7 +1091,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Auto-inject a LoopIndex node so iteration counter `i` is always accessible
     const loopIndexNode: import('../types/nodeGraph').GraphNode = {
-      id: `loopidx_${Date.now()}`,
+      id: `node_${nodeIdCounter++}`,
       type: 'loopIndex',
       position: { x: Math.min(...xs) - 220, y: Math.min(...ys) },
       inputs: {},
@@ -1099,7 +1099,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       params: { _groupOriginal: true },
     };
 
-    const groupId = `group_${Date.now()}`;
+    const groupId = `node_${nodeIdCounter++}`;
     const subgraph: import('../types/nodeGraph').SubgraphData = {
       nodes: [...originalNodes, loopIndexNode],
       inputPorts,
@@ -1442,7 +1442,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       groupOutputSockets[p.key] = { type: p.type, label: p.label };
     }
 
-    const groupId = `group_${Date.now()}`;
+    const groupId = `node_${nodeIdCounter++}`;
     const pos = position ?? { x: 200 + Math.random() * 100, y: 200 + Math.random() * 100 };
     const groupNode: GraphNode = {
       id: groupId,
