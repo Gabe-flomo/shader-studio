@@ -97,6 +97,8 @@ export function computeNodeSlug(node: GraphNode, usedSlugs: Set<string>): string
   const num = rawNum.length <= 4 ? rawNum : rawNum.slice(-4);
 
   let candidate = `${base}_${num}`;
+  // GLSL identifiers must not start with a digit (e.g. label "3D Warp" → "3d_warp_N")
+  if (/^\d/.test(candidate)) candidate = `n_${candidate}`;
   if (!usedSlugs.has(candidate)) {
     usedSlugs.add(candidate);
     return candidate;
