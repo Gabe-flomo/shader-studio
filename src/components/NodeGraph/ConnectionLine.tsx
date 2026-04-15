@@ -9,20 +9,38 @@ interface Props {
   from: { x: number; y: number };
   to: { x: number; y: number };
   dataType?: string;
+  onWireEnter?: () => void;
+  onWireLeave?: () => void;
 }
 
-export function ConnectionLine({ from, to, dataType }: Props) {
+export function ConnectionLine({ from, to, dataType, onWireEnter, onWireLeave }: Props) {
   const midX = (from.x + to.x) / 2;
   const path = `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`;
   const color = (dataType && TYPE_COLORS[dataType]) ? TYPE_COLORS[dataType] : '#666';
 
   return (
-    <path
-      d={path}
-      stroke={color}
-      strokeWidth={2.5}
-      fill="none"
-      strokeOpacity={0.8}
-    />
+    <g>
+      {/* Visual path */}
+      <path
+        d={path}
+        stroke={color}
+        strokeWidth={2.5}
+        fill="none"
+        strokeOpacity={0.8}
+        style={{ pointerEvents: 'none' }}
+      />
+      {/* Hit-detection path — wider transparent stroke, only rendered when hover handlers provided */}
+      {(onWireEnter || onWireLeave) && (
+        <path
+          d={path}
+          stroke="transparent"
+          strokeWidth={12}
+          fill="none"
+          style={{ pointerEvents: 'stroke', cursor: 'crosshair' }}
+          onMouseEnter={onWireEnter}
+          onMouseLeave={onWireLeave}
+        />
+      )}
+    </g>
   );
 }

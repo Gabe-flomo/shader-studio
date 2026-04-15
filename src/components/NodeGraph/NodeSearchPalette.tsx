@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { NODE_REGISTRY } from '../../nodes/definitions';
+import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
@@ -72,14 +72,44 @@ function scoreEntry(entry: SearchEntry, query: string): number {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// ── Type compatibility helpers ─────────────────────────────────────────────────
+// float can feed into any type; anything can feed into float (promotion)
+function outputMatchesFilter(nodeType: string, filterOutputType: string): boolean {
+  const def = getNodeDefinition(nodeType);
+  if (!def) return false;
+  return Object.values(def.outputs).some(o => {
+    if (o.type === filterOutputType) return true;
+    // float is universally compatible as a source
+    if (o.type === 'float') return true;
+    return false;
+  });
+}
+
+function inputMatchesFilter(nodeType: string, filterInputType: string): boolean {
+  const def = getNodeDefinition(nodeType);
+  if (!def) return false;
+  return Object.values(def.inputs).some(i => {
+    if (i.type === filterInputType) return true;
+    // float output can feed into any type
+    if (filterInputType === 'float') return true;
+    return false;
+  });
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   /** Where to place the node — centre of the current viewport if not provided */
   spawnPosition?: { x: number; y: number };
+  /** If set, only show nodes that have at least one output compatible with this type */
+  filterOutputType?: string;
+  /** If set, only show nodes that have at least one input compatible with this type */
+  filterInputType?: string;
+  /** Called after addNode with the new node's ID */
+  onNodePlaced?: (nodeId: string) => void;
 }
 
-export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
+export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputType, filterInputType, onNodePlaced }: Props) {
   const { addNode } = useNodeGraphStore();
   const groupPresets = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
@@ -92,13 +122,20 @@ export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
 
   // Filtered + ranked results
   const results = useMemo<SearchEntry[]>(() => {
-    if (!query) return ALL_ENTRIES.slice(0, 80); // show all (scrollable)
-    return ALL_ENTRIES
+    const base = (filterOutputType || filterInputType)
+      ? ALL_ENTRIES.filter(e => {
+          if (filterOutputType && !outputMatchesFilter(e.type, filterOutputType)) return false;
+          if (filterInputType  && !inputMatchesFilter(e.type,  filterInputType))  return false;
+          return true;
+        })
+      : ALL_ENTRIES;
+    if (!query) return base.slice(0, 80);
+    return base
       .map(e => ({ entry: e, score: scoreEntry(e, query) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.entry.def.label.localeCompare(b.entry.def.label))
       .map(({ entry }) => entry);
-  }, [query]);
+  }, [query, filterOutputType, filterInputType]);
 
   // Group results by category
   const grouped = useMemo(() => {
@@ -136,9 +173,10 @@ export function NodeSearchPalette({ open, onClose, spawnPosition }: Props) {
 
   const place = useCallback((type: string) => {
     const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
-    addNode(type, pos);
+    const newId = addNode(type, pos);
+    if (newId && onNodePlaced) onNodePlaced(newId);
     onClose();
-  }, [addNode, spawnPosition, onClose]);
+  }, [addNode, spawnPosition, onClose, onNodePlaced]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { onClose(); return; }

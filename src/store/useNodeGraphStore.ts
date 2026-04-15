@@ -233,7 +233,7 @@ interface NodeGraphState {
   toggleNodeCarryMode: (nodeId: string) => void;
 
   // Actions
-  addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => void;
+  addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => string | undefined;
   /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
@@ -1578,7 +1578,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           ],
           [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
         );
-        return;
+        return undefined;
       }
       if (type === 'sceneGroup') {
         get().spawnGraph(
@@ -1589,7 +1589,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           ],
           [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
         );
-        return;
+        return undefined;
       }
     }
 
@@ -1662,6 +1662,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (activeGroupId) {
       // Inside a group view — insert into the active subgraph.
       // Use the path-based helper so nested groups (depth > 1) are handled correctly;
+
       // the old flat activeGroupId lookup only worked for top-level groups.
       set(state => {
         const currentActive = getActiveNodes(state.nodes, activeGroupPath);
@@ -1674,6 +1675,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       set(state => ({ nodes: [...state.nodes, newNode] }));
     }
     get().compile();
+    return nodeId;
   },
 
   spawnGraph: (origin, nodeSpecs, edges) => {
