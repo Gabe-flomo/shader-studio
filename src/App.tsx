@@ -101,6 +101,7 @@ function App() {
     nodeProbeValues, selectedNodeId, nodes: graphNodes,
     groupNodes, deselectAll,
     searchPaletteOpen, setSearchPaletteOpen,
+    nodeSlugMap,
   } = useNodeGraphStore();
 
   // Build probe display for selected node — shown in status bar instead of "hover for color"
@@ -616,7 +617,7 @@ function App() {
             </button>
 
             <NodeGraph />
-            {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} />}
+            {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
           </div>
 
           {/* Divider — wider touch target for tablet */}
@@ -699,7 +700,7 @@ function App() {
               </button>
 
               <NodeGraph />
-              {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} />}
+              {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
             </>
           )}
           {page === 'glsl' && <GLSLPage />}
