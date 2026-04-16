@@ -574,7 +574,9 @@ export const SpiralWarp3DNode: NodeDefinition = {
     const freq  = inputVars.frequency ?? String(node.params.frequency ?? 0.5);
     const plane = (node.params.rotation_plane as string) ?? 'xy';
     const id    = node.id;
-    const angle = `(length(${pVar}) * ${freq} + ${t})`;
+    // Use the 2D length in the rotation plane (axis-correct, keeps Lipschitz constant ≈ 1)
+    const radLen = plane === 'xy' ? `length(${pVar}.xy)` : plane === 'xz' ? `length(${pVar}.xz)` : `length(${pVar}.yz)`;
+    const angle = `(${radLen} * ${freq} + ${t})`;
     const c = `cos(${angle})`, s = `sin(${angle})`;
     let rotLine: string;
     if (plane === 'xy')

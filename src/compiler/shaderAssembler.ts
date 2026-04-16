@@ -1020,9 +1020,12 @@ export function generateFragmentShader(
         return Number.isInteger(n) ? `${n}.0` : String(n);
       };
       const mlMaxDist = fmtP(node.params.maxDist, 20.0);
-      const bgr = fmtP(node.params.bgR, 0.85);
-      const bgg = fmtP(node.params.bgG, 0.90);
-      const bgb = fmtP(node.params.bgB, 0.95);
+      const bgr  = fmtP(node.params.bgR,      0.85);
+      const bgg  = fmtP(node.params.bgG,      0.90);
+      const bgb  = fmtP(node.params.bgB,      0.95);
+      const albr = fmtP(node.params.albedoR,  0.6);
+      const albg = fmtP(node.params.albedoG,  0.7);
+      const albb = fmtP(node.params.albedoB,  0.9);
 
       // ── Compile subgraph as a warp body function ────────────────────────────
       // The function signature is:
@@ -1191,8 +1194,11 @@ export function generateFragmentShader(
         `    float ${nodeSlug}_dist   = ${nodeSlug}_t;\n`,
         `    float ${nodeSlug}_depth  = clamp(${nodeSlug}_t / ${mlMaxDist}, 0.0, 1.0);\n`,
         `    vec3  ${nodeSlug}_normal = ${nodeSlug}_n * ${nodeSlug}_hit;\n`,
-        `    vec3  ${nodeSlug}_bg    = vec3(${bgr}, ${bgg}, ${bgb});\n`,
-        `    vec3  ${nodeSlug}_color = ${nodeSlug}_hit > 0.5 ? (${nodeSlug}_normal * 0.5 + 0.5) : ${nodeSlug}_bg;\n`,
+        `    vec3  ${nodeSlug}_bg     = vec3(${bgr}, ${bgg}, ${bgb});\n`,
+        `    vec3  ${nodeSlug}_ld     = normalize(vec3(1.5, 2.0, 1.0));\n`,
+        `    float ${nodeSlug}_diff   = max(0.0, dot(${nodeSlug}_n, ${nodeSlug}_ld));\n`,
+        `    vec3  ${nodeSlug}_alb    = vec3(${albr}, ${albg}, ${albb});\n`,
+        `    vec3  ${nodeSlug}_color  = ${nodeSlug}_hit > 0.5 ? ${nodeSlug}_alb * (0.15 + 0.85 * ${nodeSlug}_diff) : ${nodeSlug}_bg;\n`,
       ].join('');
 
       mainCode.push(marchCode);
