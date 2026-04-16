@@ -9191,6 +9191,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: {
           label: 'March Loop',
           maxSteps: 80, maxDist: 20.0, bgR: 0.03, bgG: 0.03, bgB: 0.08,
+          albedoR: 0.5, albedoG: 0.75, albedoB: 0.9,
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
@@ -9260,6 +9261,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: {
           label: 'Twist Loop',
           maxSteps: 96, maxDist: 20.0, bgR: 0.03, bgG: 0.02, bgB: 0.08,
+          albedoR: 0.3, albedoG: 0.7, albedoB: 0.95,
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
@@ -9282,9 +9284,9 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: March Loop — Sinusoidal Bend ─────────────────────────────────────────
-  mlgSinBend: {
-    label: '3D: March Loop — Sinusoidal Bend',
+  // ── 3D: March Loop — Repeat Body (fold space, infinite copies from one object) ──
+  mlgRepeatBody: {
+    label: '3D: March Loop — Repeat Body',
     counter: 6,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
@@ -9296,31 +9298,25 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
-        params: { camDist: 3.0, camAngle: 0.3, rotSpeed: 0.1, fov: 1.6 },
+        params: { camDist: 2.5, camAngle: 0.3, rotSpeed: 0.12, fov: 1.6 },
       },
       {
         id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Sphere Grid',
+          label: 'Single Octahedron',
           subgraph: {
             nodes: [
               { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
               {
-                id: 'rep_sg', type: 'repeat3D', position: { x: 260, y: 150 },
+                id: 'oct_sg', type: 'octahedronSDF3D', position: { x: 270, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
-                params: { cellX: 1.5, cellY: 1.5, cellZ: 1.5 },
-              },
-              {
-                id: 'sph_sg', type: 'sphereSDF3D', position: { x: 450, y: 150 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.35 },
+                params: { size: 0.38 },
               },
             ],
-            outputNodeId: 'sph_sg',
+            outputNodeId: 'oct_sg',
             outputKey: 'dist',
           },
         },
@@ -9339,16 +9335,17 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
         },
         params: {
-          label: 'Sin Bend Loop',
-          maxSteps: 96, maxDist: 20.0, bgR: 0.02, bgG: 0.02, bgB: 0.06,
+          label: 'Repeat Body',
+          maxSteps: 80, maxDist: 20.0, bgR: 0.02, bgG: 0.02, bgB: 0.05,
+          albedoR: 0.4, albedoG: 0.7, albedoB: 0.85,
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
               {
-                id: 'sin_b1', type: 'sinWarp3D', position: { x: 280, y: 150 },
-                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
-                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
-                params: { distort_axis: 'y', source_axis: 'x', frequency: 3.0, amplitude: 0.2 },
+                id: 'rep_b1', type: 'repeat3D', position: { x: 270, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.3, cellY: 1.3, cellZ: 1.3 },
               },
             ],
             inputPorts: [], outputPorts: [],
@@ -9416,6 +9413,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: {
           label: 'Double Fold Loop',
           maxSteps: 128, maxDist: 20.0, bgR: 0.01, bgG: 0.01, bgB: 0.04,
+          albedoR: 0.9, albedoG: 0.85, albedoB: 0.6,
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
@@ -9503,6 +9501,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: {
           label: 'Spiral Loop',
           maxSteps: 96, maxDist: 25.0, bgR: 0.02, bgG: 0.04, bgB: 0.08,
+          albedoR: 0.4, albedoG: 0.8, albedoB: 0.6,
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
@@ -9525,9 +9524,9 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: March Loop — Layered Warp (spiral + sin) ─────────────────────────────
-  mlgLayeredWarp: {
-    label: '3D: March Loop — Layered Warp',
+  // ── 3D: March Loop — Spiral + Fold (layered isometric warps) ─────────────────
+  mlgSpiralFold: {
+    label: '3D: March Loop — Spiral + Fold',
     counter: 6,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
@@ -9539,7 +9538,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
-        params: { camDist: 3.5, camAngle: 0.4, rotSpeed: 0.15, fov: 1.5 },
+        params: { camDist: 3.5, camAngle: 0.4, rotSpeed: 0.12, fov: 1.5 },
       },
       {
         id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
@@ -9582,8 +9581,9 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
         },
         params: {
-          label: 'Layered Warp Loop',
-          maxSteps: 96, maxDist: 20.0, bgR: 0.03, bgG: 0.04, bgB: 0.08,
+          label: 'Spiral+Fold Loop',
+          maxSteps: 96, maxDist: 20.0, bgR: 0.03, bgG: 0.02, bgB: 0.06,
+          albedoR: 0.5, albedoG: 0.65, albedoB: 0.95,
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
@@ -9591,13 +9591,13 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
                 id: 'spiral_b1', type: 'spiralWarp3D', position: { x: 270, y: 150 },
                 inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
                 outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
-                params: { rotation_plane: 'xz', frequency: 0.5 },
+                params: { rotation_plane: 'xz', frequency: 0.6 },
               },
               {
-                id: 'sin_b1', type: 'sinWarp3D', position: { x: 470, y: 150 },
-                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'spiral_b1', outputKey: 'p' } } },
-                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
-                params: { distort_axis: 'y', source_axis: 'x', frequency: 2.5, amplitude: 0.12 },
+                id: 'fold_b1', type: 'fold3D', position: { x: 470, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'spiral_b1', outputKey: 'p' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { foldX: true, foldY: false, foldZ: true },
               },
             ],
             inputPorts: [], outputPorts: [],
@@ -9665,6 +9665,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: {
           label: 'Twist-Fold Loop',
           maxSteps: 96, maxDist: 20.0, bgR: 0.02, bgG: 0.03, bgB: 0.07,
+          albedoR: 0.7, albedoG: 0.9, albedoB: 0.5,
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
@@ -9693,9 +9694,9 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: March Loop — Sin then Spiral ─────────────────────────────────────────
-  mlgSinSpiral: {
-    label: '3D: March Loop — Sin then Spiral',
+  // ── 3D: March Loop — Twist then Repeat ───────────────────────────────────────
+  mlgTwistRepeat: {
+    label: '3D: March Loop — Twist then Repeat',
     counter: 6,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
@@ -9707,31 +9708,25 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
-        params: { camDist: 3.5, camAngle: 0.4, rotSpeed: 0.12, fov: 1.6 },
+        params: { camDist: 3.0, camAngle: 0.4, rotSpeed: 0.15, fov: 1.6 },
       },
       {
         id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Octa Repeat',
+          label: 'Box',
           subgraph: {
             nodes: [
               { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
               {
-                id: 'rep_sg', type: 'repeat3D', position: { x: 260, y: 150 },
+                id: 'box_sg', type: 'boxSDF3D', position: { x: 270, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
-                params: { cellX: 1.4, cellY: 1.4, cellZ: 1.4 },
-              },
-              {
-                id: 'oct_sg', type: 'octahedronSDF3D', position: { x: 460, y: 150 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { size: 0.3 },
+                params: { sizeX: 0.38, sizeY: 0.38, sizeZ: 0.38 },
               },
             ],
-            outputNodeId: 'oct_sg',
+            outputNodeId: 'box_sg',
             outputKey: 'dist',
           },
         },
@@ -9750,22 +9745,23 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
         },
         params: {
-          label: 'Sin→Spiral Loop',
-          maxSteps: 96, maxDist: 20.0, bgR: 0.02, bgG: 0.03, bgB: 0.06,
+          label: 'Twist+Repeat Loop',
+          maxSteps: 96, maxDist: 20.0, bgR: 0.02, bgG: 0.02, bgB: 0.05,
+          albedoR: 0.85, albedoG: 0.55, albedoB: 0.35,  // warm orange
           subgraph: {
             nodes: [
               { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
               {
-                id: 'sin_b1', type: 'sinWarp3D', position: { x: 270, y: 150 },
-                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
-                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
-                params: { distort_axis: 'z', source_axis: 'y', frequency: 2.0, amplitude: 0.15 },
+                id: 'twist_b1', type: 'twist3D', position: { x: 270, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Twisted Pos' } },
+                params: { k: 0.8 },
               },
               {
-                id: 'spiral_b1', type: 'spiralWarp3D', position: { x: 470, y: 150 },
-                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'sin_b1', outputKey: 'p' } } },
-                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
-                params: { rotation_plane: 'xy', frequency: 0.4 },
+                id: 'rep_b1', type: 'repeat3D', position: { x: 470, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'twist_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.4, cellY: 1.4, cellZ: 1.4 },
               },
             ],
             inputPorts: [], outputPorts: [],

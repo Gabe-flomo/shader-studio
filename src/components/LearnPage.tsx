@@ -2966,12 +2966,12 @@ float d     = mapScene_<id>(rp);           // SDF sees warped space`}</CodeBlock
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
             <TryIt exampleKey="mlgOctaField"    label="Octahedron Field"  onTry={tryExample} />
             <TryIt exampleKey="mlgTwistColumn"  label="Twist Per Step"    onTry={tryExample} />
-            <TryIt exampleKey="mlgSinBend"      label="Sin Bend"          onTry={tryExample} />
+            <TryIt exampleKey="mlgRepeatBody"   label="Repeat Body"       onTry={tryExample} />
             <TryIt exampleKey="mlgFoldCrystal"  label="Mirror Crystal"    onTry={tryExample} />
             <TryIt exampleKey="mlgSpiralTunnel" label="Spiral Tunnel"     onTry={tryExample} />
-            <TryIt exampleKey="mlgLayeredWarp"  label="Layered Warp"      onTry={tryExample} />
+            <TryIt exampleKey="mlgSpiralFold"   label="Spiral + Fold"     onTry={tryExample} />
             <TryIt exampleKey="mlgTwistFold"    label="Twist Then Fold"   onTry={tryExample} />
-            <TryIt exampleKey="mlgSinSpiral"    label="Sin Then Spiral"   onTry={tryExample} />
+            <TryIt exampleKey="mlgTwistRepeat"  label="Twist + Repeat"    onTry={tryExample} />
           </div>
         </div>
 
