@@ -2954,24 +2954,24 @@ vec3 rp     = marchBody_<id>(rp_raw, t);  // warped position
 float d     = mapScene_<id>(rp);           // SDF sees warped space`}</CodeBlock>
           </div>
           <p style={S.p}>
-            Connect a <strong>MarchCamera</strong> (<TypeBadge type="vec3" /> ro + rd) and a <strong>SceneGroup</strong> (<TypeBadge type="scene3d" />) to the MarchLoopGroup inputs. Double-click the node to enter the subgraph and build the loop body. <strong>MarchPos</strong> is pre-populated inside — chain any 3D transform nodes off it.
+            Connect a <strong>MarchCamera</strong> (<TypeBadge type="vec3" /> ro + rd) to the MarchLoopGroup. Double-click the node to enter the subgraph — a <strong>SceneGroup</strong> and <strong>MarchPos</strong> are pre-populated inside. Chain 3D transform nodes between MarchPos and SceneGroup's <strong>pos</strong> input to warp the march space. <strong>MarchDist</strong> gives the accumulated ray distance — wire it into Twist3D or SpiralWarp3D's <em>angle</em> input for depth-dependent effects.
           </p>
           <Tip>
-            Unlike SpaceWarpGroup (which uses a separate <C>spacewarp</C> input on RayMarch), MarchLoopGroup owns the entire march loop. The outputs include <C>color</C>, <C>normal</C>, <C>depth</C>, <C>iter</C>, <C>hit</C>, and <C>pos</C> — wire any of them downstream for custom shading.
+            MarchLoopGroup owns the entire march loop. The SceneGroup lives <em>inside</em> the body subgraph — connect MarchPos → [warps] → SceneGroup.pos. The outputs include <C>color</C>, <C>normal</C>, <C>depth</C>, <C>iter</C>, <C>hit</C>, and <C>pos</C> for custom downstream shading.
           </Tip>
           <Warn>
-            The same Lipschitz warnings as SpaceWarpGroup apply here. Large warp amplitudes cause over-stepping artifacts. Increase <strong>Max Steps</strong> on the MarchLoopGroup node if you see noise or holes.
+            Only isometric (distance-preserving) warps are safe inside the march loop: rotations, folds, and domain repetition. Avoid large-amplitude sinusoidal warps — they shrink the SDF metric and cause over-stepping artifacts. Increase <strong>Max Steps</strong> if you see holes or noise.
           </Warn>
           <p style={{ ...S.p, fontWeight: 600, color: T.textBold }}>Eight example uses:</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
-            <TryIt exampleKey="mlgOctaField"    label="Octahedron Field"  onTry={tryExample} />
-            <TryIt exampleKey="mlgTwistColumn"  label="Twist Per Step"    onTry={tryExample} />
-            <TryIt exampleKey="mlgRepeatBody"   label="Repeat Body"       onTry={tryExample} />
-            <TryIt exampleKey="mlgFoldCrystal"  label="Mirror Crystal"    onTry={tryExample} />
-            <TryIt exampleKey="mlgSpiralTunnel" label="Spiral Tunnel"     onTry={tryExample} />
-            <TryIt exampleKey="mlgSpiralFold"   label="Spiral + Fold"     onTry={tryExample} />
-            <TryIt exampleKey="mlgTwistFold"    label="Twist Then Fold"   onTry={tryExample} />
-            <TryIt exampleKey="mlgTwistRepeat"  label="Twist + Repeat"    onTry={tryExample} />
+            <TryIt exampleKey="mlgBaseline"    label="Baseline Sphere"   onTry={tryExample} />
+            <TryIt exampleKey="mlgTwistSpace"  label="Twist Space"       onTry={tryExample} />
+            <TryIt exampleKey="mlgSpiralDepth" label="Spiral Depth"      onTry={tryExample} />
+            <TryIt exampleKey="mlgFoldMirror"  label="Fold Mirror"       onTry={tryExample} />
+            <TryIt exampleKey="mlgRepeatSpace" label="Repeat Space"      onTry={tryExample} />
+            <TryIt exampleKey="mlgTwistFold"   label="Twist + Fold"      onTry={tryExample} />
+            <TryIt exampleKey="mlgSpiralFold"  label="Spiral + Fold"     onTry={tryExample} />
+            <TryIt exampleKey="mlgDeepTunnel"  label="Deep Tunnel"       onTry={tryExample} />
           </div>
         </div>
 

@@ -38,7 +38,7 @@ export {
 export {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
-  ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
+  ExprNode, ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode,
@@ -70,10 +70,17 @@ export {
   CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
   Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
   PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
+  RoundedBoxSDF3DNode, BoxFrameSDF3DNode, EllipsoidSDF3DNode, CappedTorusSDF3DNode,
+  LinkSDF3DNode, PyramidSDF3DNode, HexPrismSDF3DNode, TriPrismSDF3DNode,
+  CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode, VerticalCapsuleSDF3DNode,
+  SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
+  SDFSmoothUnionNode, SDFSmoothSubtractNode, SDFSmoothIntersectNode,
+  SDFRoundNode, SDFOnionNode,
+  Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
 } from './sdf3d';
 
 // 3D Scene (composable)
-export { ScenePosNode, SceneGroupNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, MarchPosNode, MarchDistNode, MarchLoopGroupNode } from './scene3d';
+export { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode } from './scene3d';
 
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -118,7 +125,7 @@ import {
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
 import {
-  SmoothMinNode, MinNode, MaxNode2, SubtractNode2,
+  SmoothMinNode, MinNode, MaxNode2,
   SmoothMaxNode, SmoothSubtractNode,
   BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
   GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
@@ -127,7 +134,7 @@ import {
 import {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
-  ExprNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
+  ExprNode, ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode,
@@ -145,8 +152,15 @@ import {
   CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
   Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
   PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
+  RoundedBoxSDF3DNode, BoxFrameSDF3DNode, EllipsoidSDF3DNode, CappedTorusSDF3DNode,
+  LinkSDF3DNode, PyramidSDF3DNode, HexPrismSDF3DNode, TriPrismSDF3DNode,
+  CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode, VerticalCapsuleSDF3DNode,
+  SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
+  SDFSmoothUnionNode, SDFSmoothSubtractNode, SDFSmoothIntersectNode,
+  SDFRoundNode, SDFOnionNode,
+  Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
 } from './sdf3d';
-import { ScenePosNode, SceneGroupNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, MarchPosNode, MarchDistNode, MarchLoopGroupNode } from './scene3d';
+import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
@@ -219,7 +233,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   smoothMin: SmoothMinNode,
   min: MinNode,
   sdfMax: MaxNode2,
-  sdfSubtract: SubtractNode2,
   smoothMax: SmoothMaxNode,
   smoothSubtract: SmoothSubtractNode,
   blend: BlendNode,
@@ -244,6 +257,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   accumulateLoop: AccumulateLoopNode,
   forLoop: ForLoopNode,
   expr: ExprNode,
+  exprNode: ExprBlockNode,
   customFn: CustomFnNode,
   gravitationalLens: GravitationalLensNode,
   floatWarp: FloatWarpNode,
@@ -309,6 +323,28 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   coneSDF3D: ConeSDF3DNode,
   octahedronSDF3D: OctahedronSDF3DNode,
   planeSDF3D: PlaneSDF3DNode,
+  // 3D Primitives (new)
+  roundedBoxSDF3D: RoundedBoxSDF3DNode,
+  boxFrameSDF3D: BoxFrameSDF3DNode,
+  ellipsoidSDF3D: EllipsoidSDF3DNode,
+  cappedTorusSDF3D: CappedTorusSDF3DNode,
+  linkSDF3D: LinkSDF3DNode,
+  pyramidSDF3D: PyramidSDF3DNode,
+  hexPrismSDF3D: HexPrismSDF3DNode,
+  triPrismSDF3D: TriPrismSDF3DNode,
+  cappedConeSDF3D: CappedConeSDF3DNode,
+  roundedCylinderSDF3D: RoundedCylinderSDF3DNode,
+  solidAngleSDF3D: SolidAngleSDF3DNode,
+  verticalCapsuleSDF3D: VerticalCapsuleSDF3DNode,
+  // 3D Boolean Ops (new)
+  sdfUnion: SDFUnionNode,
+  sdfSubtract: SDFSubtractNode,
+  sdfIntersect: SDFIntersectNode,
+  sdfSmoothUnion: SDFSmoothUnionNode,
+  sdfSmoothSubtract: SDFSmoothSubtractNode,
+  sdfSmoothIntersect: SDFSmoothIntersectNode,
+  sdfRound: SDFRoundNode,
+  sdfOnion: SDFOnionNode,
   // 3D Transforms
   translate3D: Translate3DNode,
   rotate3D: Rotate3DNode,
@@ -319,15 +355,23 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   rotateAxis3D: RotateAxis3DNode,
   sinWarp3D: SinWarp3DNode,
   spiralWarp3D: SpiralWarp3DNode,
+  // 3D Transforms (new)
+  bend3D: Bend3DNode,
+  limitedRepeat3D: LimitedRepeat3DNode,
+  polarRepeat3D: PolarRepeat3DNode,
+  displace3D: Displace3DNode,
   // 3D Scene (composable)
   scenePos: ScenePosNode,
+  sceneOutput: SceneOutputNode,
   sceneGroup: SceneGroupNode,
   spaceWarpGroup: SpaceWarpGroupNode,
   rayRender: RayRenderNode,
   rayMarch: RayMarchNode,
   marchCamera: MarchCameraNode,
+  forwardCamera: ForwardCameraNode,  // kept for backward compat — not shown in palette
   marchPos: MarchPosNode,
   marchDist: MarchDistNode,
+  marchOutput: MarchWarpOutputNode,
   marchLoopGroup: MarchLoopGroupNode,
   // Color
   palette: PaletteNode,

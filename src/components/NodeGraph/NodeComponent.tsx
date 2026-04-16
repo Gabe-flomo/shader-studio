@@ -24,6 +24,7 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
+import { ExprBlockModal } from './ExprBlockModal';
 import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
@@ -361,6 +362,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
+  const [showExprBlockModal, setShowExprBlockModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
@@ -1244,6 +1246,33 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         <div style={{ padding: '6px 10px', display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
           {/* Inputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {/* MarchLoopGroup: render definition-based inputs */}
+            {isMarchLoopGroup && Object.entries(node.inputs).map(([key, input]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div
+                  ref={el => { registerSocket(node.id, 'in', key, el); }}
+                  onMouseUp={e => {
+                    e.stopPropagation();
+                    if (node.inputs[key]?.connection) {
+                      disconnectInput(node.id, key);
+                    } else {
+                      onEndConnection(node.id, key);
+                    }
+                  }}
+                  style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: node.inputs[key]?.connection
+                      ? (TYPE_COLORS[input.type] ?? '#888')
+                      : '#1e1e2e',
+                    border: `2px solid ${TYPE_COLORS[input.type] ?? '#888'}`,
+                    cursor: 'crosshair',
+                    position: 'relative', left: -14,
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <span style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14 }}>{input.label}</span>
+              </div>
+            ))}
             {inputPorts.map((port) => (
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* Socket dot */}
@@ -1299,6 +1328,31 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
           {/* Outputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+            {/* MarchLoopGroup: render definition-based outputs */}
+            {isMarchLoopGroup && Object.entries(node.outputs).map(([key, output]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{output.label}</span>
+                <div
+                  data-socket="out"
+                  ref={el => { registerSocket(node.id, 'out', key, el); }}
+                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
+                  style={{
+                    width: isTouchDevice ? 20 : 10,
+                    height: isTouchDevice ? 20 : 10,
+                    borderRadius: '50%',
+                    background: TYPE_COLORS[output.type] ?? '#888',
+                    cursor: 'crosshair',
+                    position: 'relative',
+                    right: isTouchDevice ? -20 : -14,
+                    touchAction: 'manipulation',
+                    boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key
+                      ? `0 0 0 3px ${TYPE_COLORS[output.type] ?? '#888'}, 0 0 10px ${TYPE_COLORS[output.type] ?? '#888'}`
+                      : undefined,
+                  }}
+                />
+              </div>
+            ))}
             {/* SceneGroup: always show the scene output socket */}
             {isSceneGroup && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2037,6 +2091,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               👁
             </button>
           )}
+          {/* ExprBlock modal button — shown on exprNode */}
+          {node.type === 'exprNode' && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowExprBlockModal(v => !v)}
+              title="Open Expr Block editor"
+              style={{
+                background: showExprBlockModal ? '#a6e3a122' : 'none',
+                border: showExprBlockModal ? '1px solid #a6e3a155' : 'none',
+                color: showExprBlockModal ? '#a6e3a1' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '12px',
+                lineHeight: 1,
+                padding: '1px 4px',
+                borderRadius: '3px',
+              }}
+            >
+              ⟴
+            </button>
+          )}
           {/* Expr modal expand button — shown on Expr and FloatWarp nodes */}
           {(node.type === 'expr' || node.type === 'floatWarp') && (
             <button
@@ -2352,11 +2426,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const isConnected = !!input.connection;
           const isExternal = externalInputKeys?.has(key) ?? false;
 
-          // CustomFn slider inputs are rendered as sliders below — skip socket row
+          // CustomFn slider inputs without connection: rendered as sliders below — skip socket row
+          // ExprNode: always show socket row (slider appears alongside, greyed when connected)
           if (node.type === 'customFn') {
             const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) || [];
             const cfInp = cfInputs.find(c => c.name === key);
-            if (cfInp?.slider != null) return null;
+            if (cfInp?.slider != null && !isConnected) return null;
           }
 
           // For Expr node: show name-edit field inline with each input slot
@@ -2542,6 +2617,92 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             </div>
           );
         })}
+
+        {/* ── ExprBlock per-line warp editor (exprNode only) ── */}
+        {!collapsed && node.type === 'exprNode' && (() => {
+          const lines = (node.params.lines as Array<{ lhs: string; op: string; rhs: string }> | undefined) ?? [];
+          const result = (node.params.result as string | undefined) ?? 'p';
+          const OPS = ['=', '+=', '-=', '*=', '/='];
+          const inputBg = '#11111b';
+          const inputBorder = '1px solid #45475a';
+          const inputStyle: React.CSSProperties = {
+            background: inputBg, border: inputBorder, color: '#cdd6f4',
+            padding: '2px 5px', borderRadius: '3px', fontSize: '10px',
+            fontFamily: 'monospace', outline: 'none',
+          };
+          return (
+            <div
+              style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '4px' }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <span style={{ fontSize: '10px', color: '#6c7086', marginBottom: '1px' }}>Warp Lines</span>
+
+              {lines.map((line, i) => (
+                <div key={i} style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                  {/* LHS */}
+                  <input
+                    type="text"
+                    value={line.lhs}
+                    onChange={e => {
+                      const next = lines.map((l, j) => j === i ? { ...l, lhs: e.target.value } : l);
+                      updateNodeParams(node.id, { lines: next });
+                    }}
+                    placeholder="p.xy"
+                    style={{ ...inputStyle, width: '52px' }}
+                  />
+                  {/* Operator */}
+                  <select
+                    value={line.op}
+                    onChange={e => {
+                      const next = lines.map((l, j) => j === i ? { ...l, op: e.target.value } : l);
+                      updateNodeParams(node.id, { lines: next });
+                    }}
+                    style={{ background: inputBg, border: inputBorder, color: '#89b4fa', fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none' }}
+                  >
+                    {OPS.map(op => <option key={op} value={op}>{op}</option>)}
+                  </select>
+                  {/* RHS expression */}
+                  <input
+                    type="text"
+                    value={line.rhs}
+                    onChange={e => {
+                      const next = lines.map((l, j) => j === i ? { ...l, rhs: e.target.value } : l);
+                      updateNodeParams(node.id, { lines: next });
+                    }}
+                    placeholder="expression…"
+                    style={{ ...inputStyle, flex: 1, color: '#a6e3a1' }}
+                  />
+                  {/* Remove row */}
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => updateNodeParams(node.id, { lines: lines.filter((_, j) => j !== i) })}
+                    style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
+                    title="Remove line"
+                  >×</button>
+                </div>
+              ))}
+
+              {/* Add line */}
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => updateNodeParams(node.id, { lines: [...lines, { lhs: 'p', op: '=', rhs: '' }] })}
+                style={{ alignSelf: 'flex-start', background: '#313244', border: 'none', color: '#a6adc8', cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '3px', marginTop: '1px' }}
+              >+ line</button>
+
+              {/* Return expression */}
+              <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginTop: '2px' }}>
+                <span style={{ fontSize: '10px', color: '#6c7086', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>return</span>
+                <input
+                  type="text"
+                  value={result}
+                  onChange={e => updateNodeParams(node.id, { result: e.target.value })}
+                  placeholder="p"
+                  style={{ ...inputStyle, flex: 1, color: '#89b4fa', border: '1px solid #45475a' }}
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Params (hidden when collapsed) ── */}
         {!collapsed && Object.entries(paramDefs).map(([key, paramDef]) => {
@@ -3028,27 +3189,31 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           return null;
         })}
 
-        {/* ── CustomFn slider params (hidden when collapsed) ── */}
-        {!collapsed && node.type === 'customFn' && (() => {
+        {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}
+        {!collapsed && (node.type === 'customFn' || node.type === 'exprNode') && (() => {
           const cfInputs = (node.params.inputs as Array<{ name: string; type: string; slider?: { min: number; max: number } | null }>) || [];
           const sliderInputs = cfInputs.filter(inp => inp.type === 'float' && inp.slider != null);
           if (sliderInputs.length === 0) return null;
           return sliderInputs.map(inp => {
             const sl = inp.slider!;
-            const val = typeof node.params[inp.name] === 'number' ? (node.params[inp.name] as number) : 0;
+            // For exprNode, check if the input socket is wired — if so, the wire controls it
+            const isWired = node.type === 'exprNode' && !!(node.inputs[inp.name]?.connection);
+            const val = typeof node.params[inp.name] === 'number' ? (node.params[inp.name] as number) : (sl.min + sl.max) / 2;
             const range = sl.max - sl.min || 1;
             const step = range <= 2 ? 0.001 : range <= 10 ? 0.01 : 0.1;
             return (
               <div
                 key={inp.name}
-                style={{ padding: '3px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}
+                style={{ padding: '3px 10px', display: 'flex', flexDirection: 'column', gap: '2px', opacity: isWired ? 0.4 : 1 }}
                 onMouseDown={e => e.stopPropagation()}
+                title={isWired ? `${inp.name} is driven by input wire` : undefined}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#6c7086', fontSize: '11px' }}>{inp.name}</span>
+                  <span style={{ color: '#6c7086', fontSize: '11px' }}>{inp.name}{isWired ? ' ⟵' : ''}</span>
                   <input
                     type="number"
-                    style={{ ...INPUT_STYLE, width: '56px' }}
+                    disabled={isWired}
+                    style={{ ...INPUT_STYLE, width: '56px', opacity: isWired ? 0.5 : 1 }}
                     value={val}
                     step={step}
                     onChange={e => {
@@ -3063,10 +3228,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   max={sl.max}
                   step={step}
                   value={val}
-                  style={{ width: '100%', accentColor: '#cba6f7', cursor: 'pointer' }}
+                  disabled={isWired}
+                  style={{ width: '100%', accentColor: '#cba6f7', cursor: isWired ? 'default' : 'pointer' }}
                   onChange={e => {
-                    const v = parseFloat(e.target.value);
-                    updateNodeParams(node.id, { [inp.name]: v }, { immediate: true });
+                    if (!isWired) {
+                      const v = parseFloat(e.target.value);
+                      updateNodeParams(node.id, { [inp.name]: v }, { immediate: true });
+                    }
                   }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -3165,6 +3333,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {/* ── Expr modal ── */}
       {showExprModal && (node.type === 'expr' || node.type === 'floatWarp') && (
         <ExprModal node={node} onClose={() => setShowExprModal(false)} />
+      )}
+
+      {/* ── ExprBlock modal ── */}
+      {showExprBlockModal && node.type === 'exprNode' && (
+        <ExprBlockModal node={node} onClose={() => setShowExprBlockModal(false)} />
       )}
 
       {/* ── CustomFn modal ── */}

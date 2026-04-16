@@ -686,6 +686,114 @@ export const ExprNode: NodeDefinition = {
   },
 };
 
+// ─── Expr Block Node ─────────────────────────────────────────────────────────
+// A GLSL statement block where each input key becomes a local variable name.
+// Write sequential warp expressions: "p.xy = p.xy * rot2D(t * 0.2); p.y += sin(t * 1.5) * 0.3; p"
+// The LAST semicolon-separated token is the return expression. All others are statements.
+// Block scope isolates locals from the surrounding function — no name collisions.
+// Inputs: p (vec3), t / time / mx / my / a / b (float).
+// For loops or multi-line code blocks: use CustomFn node instead.
+
+export const ExprBlockNode: NodeDefinition = {
+  type: 'exprNode',
+  label: 'Expr Block',
+  category: 'Sources',
+  description: [
+    'Generalized multi-statement GLSL warp block.',
+    'Click ⟴ to open the editor and define any inputs (with optional sliders).',
+    'Each input name becomes a local variable. Write assignment lines then set the return expression.',
+  ].join(' '),
+  // Dynamic — populated from params.inputs via addNode() / updateNodeSockets()
+  inputs: {},
+  outputs: {
+    result: { type: 'vec3', label: 'Result (vec3)' },
+  },
+  defaultParams: {
+    // Dynamic inputs — each entry becomes a socket + local variable
+    inputs: [] as Array<{ name: string; type: string; slider: { min: number; max: number } | null }>,
+    outputType: 'vec3',
+    // Per-line warp statements
+    lines: [] as Array<{ lhs: string; op: string; rhs: string }>,
+    result: 'p',
+    // Legacy field kept for backward compatibility with old saved graphs
+    expr: 'p',
+  },
+  // No paramDefs needed — inputs + lines are handled by ExprBlockModal and inline UI
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const outType = (node.params.outputType as string) || 'vec3';
+    const outVar  = `${id}_result`;
+
+    const decls: string[] = [];
+
+    // ── Determine input declarations ─────────────────────────────────────────
+    const dynamicInputs = node.params.inputs as Array<{ name: string; type: string; slider: unknown }> | undefined;
+
+    if (dynamicInputs && dynamicInputs.length > 0) {
+      // New format: declare one local per dynamic input
+      for (const inp of dynamicInputs) {
+        const fallback = inp.type === 'vec3' ? 'vec3(0.0)' : inp.type === 'vec2' ? 'vec2(0.0)' : '0.0';
+        const val = inputVars[inp.name] || fallback;
+        decls.push(`        ${inp.type} ${inp.name} = ${val};\n`);
+      }
+    } else {
+      // Legacy fallback: fixed set of variables (p, t, time, mx, my, a, b)
+      // Works for old saved graphs that have these keys in node.inputs.
+      const legacyDefs: Array<{ key: string; type: string; fallback: string }> = [
+        { key: 'p',    type: 'vec3',  fallback: 'vec3(0.0)' },
+        { key: 't',    type: 'float', fallback: '0.0'       },
+        { key: 'time', type: 'float', fallback: 'u_time'    },
+        { key: 'mx',   type: 'float', fallback: '0.0'       },
+        { key: 'my',   type: 'float', fallback: '0.0'       },
+        { key: 'a',    type: 'float', fallback: '0.0'       },
+        { key: 'b',    type: 'float', fallback: '0.0'       },
+      ];
+      for (const def of legacyDefs) {
+        const val = inputVars[def.key] || def.fallback;
+        decls.push(`        ${def.type} ${def.key} = ${val};\n`);
+      }
+    }
+
+    const stmts: string[] = [];
+
+    // ── Per-line format (lines + result) ─────────────────────────────────────
+    const lines = node.params.lines as Array<{ lhs: string; op: string; rhs: string }> | undefined;
+    const resultExpr = (node.params.result as string | undefined)?.trim() || '';
+
+    if (lines && lines.length > 0) {
+      for (const line of lines) {
+        if (line.lhs && line.rhs) {
+          stmts.push(`        ${line.lhs} ${line.op || '='} ${line.rhs};\n`);
+        }
+      }
+      stmts.push(`        ${outVar} = ${resultExpr || 'p'};\n`);
+    } else {
+      // ── Legacy semicolon-separated expr format (backward compat) ─────────
+      const rawExpr = ((node.params.expr as string) || 'p').trim();
+      const parts = rawExpr.split(';').map(s => s.trim()).filter(s => s.length > 0);
+      if (parts.length <= 1) {
+        stmts.push(`        ${outVar} = ${parts[0] ?? 'p'};\n`);
+      } else {
+        for (let i = 0; i < parts.length - 1; i++) {
+          stmts.push(`        ${parts[i]};\n`);
+        }
+        stmts.push(`        ${outVar} = ${parts[parts.length - 1]};\n`);
+      }
+    }
+
+    const code = [
+      `    ${outType} ${outVar};\n`,
+      `    {\n`,
+      ...decls,
+      ...stmts,
+      `    }\n`,
+    ].join('');
+
+    return { code, outputVars: { result: outVar } };
+  },
+};
+
 export const CustomFnNode: NodeDefinition = {
   type: 'customFn',
   label: 'Custom Fn',

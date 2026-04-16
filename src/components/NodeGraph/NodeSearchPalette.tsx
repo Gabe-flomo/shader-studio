@@ -30,7 +30,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ── Types to hide from the palette (internal / special) ───────────────────────
-const HIDDEN_TYPES = new Set(['group', 'loopStart', 'loopEnd']);
+const HIDDEN_TYPES = new Set(['group', 'loopStart', 'loopEnd', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup']);
 
 // ── Build searchable list once ─────────────────────────────────────────────────
 interface SearchEntry {
