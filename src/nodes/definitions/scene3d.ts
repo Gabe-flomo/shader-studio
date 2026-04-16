@@ -61,6 +61,142 @@ export const SceneGroupNode: NodeDefinition = {
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };
 
+// ─── MarchCameraNode ──────────────────────────────────────────────────────────
+// Camera setup for ray marching. Outputs ray origin (ro) and ray direction (rd).
+// Pair with MarchLoopGroupNode: camera → march loop → coloring nodes.
+
+export const MarchCameraNode: NodeDefinition = {
+  type: 'marchCamera', label: 'March Camera', category: '3D Scene',
+  description: 'Camera setup for ray marching. Outputs ray origin (ro) and ray direction (rd). Connect to a March Loop Group.',
+  inputs: {
+    uv:       { type: 'vec2',  label: 'UV' },
+    time:     { type: 'float', label: 'Time' },
+    camDist:  { type: 'float', label: 'Cam Distance' },
+    camAngle: { type: 'float', label: 'Cam Angle' },
+    rotSpeed: { type: 'float', label: 'Rot Speed' },
+    fov:      { type: 'float', label: 'FOV' },
+  },
+  outputs: {
+    ro: { type: 'vec3', label: 'Ray Origin' },
+    rd: { type: 'vec3', label: 'Ray Dir' },
+  },
+  defaultParams: {
+    camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5,
+  },
+  paramDefs: {
+    camDist:  { label: 'Cam Dist',  type: 'float' as const, min: 0.5, max: 20.0, step: 0.05 },
+    camAngle: { label: 'Cam Angle', type: 'float' as const, min: 0.0, max: 6.28,  step: 0.02 },
+    rotSpeed: { label: 'Rot Speed', type: 'float' as const, min: 0.0, max: 2.0,   step: 0.01 },
+    fov:      { label: 'FOV',       type: 'float' as const, min: 0.5, max: 3.14,  step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const uv       = inputVars.uv       || 'g_uv';
+    const time     = inputVars.time     || 'u_time';
+    const camDist  = inputVars.camDist  || p(node.params.camDist,  3.0);
+    const camAngle = inputVars.camAngle || p(node.params.camAngle, 0.6);
+    const rotSpeed = inputVars.rotSpeed || p(node.params.rotSpeed, 0.0);
+    const fov      = inputVars.fov      || p(node.params.fov,      1.5);
+
+    const code = [
+      `    float ${id}_ang = ${camAngle} + ${time} * ${rotSpeed};\n`,
+      `    float ${id}_ch  = max(${camDist} * 0.3, 0.15);\n`,
+      `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, ${id}_ch, cos(${id}_ang)*${camDist});\n`,
+      `    vec3  ${id}_ta  = vec3(0.0);\n`,
+      `    vec3  ${id}_fwd = normalize(${id}_ta - ${id}_ro);\n`,
+      `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,
+      `    vec3  ${id}_up2 = cross(${id}_fwd, ${id}_rgt);\n`,
+      `    vec3  ${id}_rd  = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+    ].join('');
+
+    return {
+      code,
+      outputVars: { ro: `${id}_ro`, rd: `${id}_rd` },
+    };
+  },
+};
+
+// ─── MarchPosNode ─────────────────────────────────────────────────────────────
+// Inside a marchLoopGroup, outputs the current ray march position (vec3).
+// The compiler pre-registers this node's output as the `id_mp` function parameter.
+
+export const MarchPosNode: NodeDefinition = {
+  type: 'marchPos', label: 'March Pos', category: '3D Scene',
+  description: 'Inside a March Loop Group: outputs the current ray march position (vec3). Connect to SDF primitives and warp nodes.',
+  inputs: {},
+  outputs: { pos: { type: 'vec3', label: 'Position' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    // Pre-registered by the compiler. Fallback for preview compilation.
+    return {
+      code: `    vec3 ${id}_pos = vec3(0.0);\n`,
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
+// ─── MarchDistNode ────────────────────────────────────────────────────────────
+// Inside a marchLoopGroup, outputs the current accumulated ray march distance.
+// The compiler pre-registers this node's output as the `id_bt` function parameter.
+
+export const MarchDistNode: NodeDefinition = {
+  type: 'marchDist', label: 'March Dist', category: '3D Scene',
+  description: 'Inside a March Loop Group: outputs the current ray march distance (float t). Use for distance-dependent warp effects.',
+  inputs: {},
+  outputs: { t: { type: 'float', label: 'March Dist' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    // Pre-registered by the compiler. Fallback for preview compilation.
+    return {
+      code: `    float ${id}_t = 0.0;\n`,
+      outputVars: { t: `${id}_t` },
+    };
+  },
+};
+
+// ─── MarchLoopGroupNode ────────────────────────────────────────────────────────
+// A container node whose subgraph is compiled as a GLSL body-warp helper
+// `vec3 marchBody_<slug>(vec3 <slug>_mp, float <slug>_bt)` called inside the
+// ray march loop. Receives ro/rd from a MarchCamera and a scene3d SDF function.
+// Double-click to enter the subgraph; MarchPos pre-populated inside.
+
+export const MarchLoopGroupNode: NodeDefinition = {
+  type: 'marchLoopGroup', label: 'March Loop Group', category: '3D Scene',
+  description: 'Composable ray march loop with an editable body subgraph. Connect MarchCamera (ro/rd) + SceneGroup (scene), then double-click to build the loop body. MarchPos gives the current march position inside.',
+  inputs: {
+    ro:    { type: 'vec3',    label: 'Ray Origin' },
+    rd:    { type: 'vec3',    label: 'Ray Dir' },
+    scene: { type: 'scene3d', label: 'Scene' },
+  },
+  outputs: {
+    color:     { type: 'vec3',  label: 'Color' },
+    dist:      { type: 'float', label: 'Distance' },
+    depth:     { type: 'float', label: 'Depth' },
+    normal:    { type: 'vec3',  label: 'Normal' },
+    iter:      { type: 'float', label: 'Iter' },
+    iterCount: { type: 'float', label: 'Iter Count' },
+    hit:       { type: 'float', label: 'Hit' },
+    pos:       { type: 'vec3',  label: 'Hit Pos' },
+  },
+  defaultParams: {
+    maxSteps: 64, maxDist: 20.0,
+    bgR: 0.85, bgG: 0.90, bgB: 0.95,
+  },
+  paramDefs: {
+    maxSteps: { label: 'Max Steps', type: 'float' as const, min: 8,   max: 256,   step: 4    },
+    maxDist:  { label: 'Max Dist',  type: 'float' as const, min: 5.0, max: 100.0, step: 1.0  },
+    bgR: { label: 'BG R', type: 'float' as const, min: 0.0, max: 1.0, step: 0.01 },
+    bgG: { label: 'BG G', type: 'float' as const, min: 0.0, max: 1.0, step: 0.01 },
+    bgB: { label: 'BG B', type: 'float' as const, min: 0.0, max: 1.0, step: 0.01 },
+  },
+  // Stub — real code is generated by the compiler when it encounters type === 'marchLoopGroup'
+  generateGLSL: () => ({ code: '', outputVars: {} }),
+};
+
 // ─── SpaceWarpGroupNode ────────────────────────────────────────────────────────
 // A container node whose subgraph is compiled as a vec3→vec3 GLSL function.
 // The compiler special-cases type === 'spaceWarpGroup' and emits a named function

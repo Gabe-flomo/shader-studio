@@ -146,11 +146,12 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     return (gn?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined) ?? null;
   }, [nodes, activeGroupId]);
 
-  // True when drilled into a sceneGroup (no input/output port terminals to show)
+  // True when drilled into a scene-style group (sceneGroup, spaceWarpGroup, marchLoopGroup)
+  // These don't show the Group Input/Output port terminals — they manage their own body.
   const isInsideSceneGroup = React.useMemo(() => {
     if (!activeGroupId) return false;
     const gn = nodes.find(n => n.id === activeGroupId);
-    return gn?.type === 'sceneGroup';
+    return gn?.type === 'sceneGroup' || gn?.type === 'spaceWarpGroup' || gn?.type === 'marchLoopGroup';
   }, [nodes, activeGroupId]);
 
   // Position the Group Output terminal to the right of all subgraph nodes
@@ -937,7 +938,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               const outerSg = outer?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
               gn = outerSg?.nodes.find(n => n.id === gid);
             }
-            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : 'Group';
+            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : 'Group';
             const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : defaultLbl;
             const isLast = depth === activeGroupPath.length - 1;
             return (
@@ -993,6 +994,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             const clickedNode = contextMenu.nodeId ? nodes.find(n => n.id === contextMenu.nodeId) : null;
             const isGroup = clickedNode?.type === 'group';
             const isSceneGroup = clickedNode?.type === 'sceneGroup';
+            const isSpaceWarpGroup = clickedNode?.type === 'spaceWarpGroup';
+            const isMarchLoopGroup = clickedNode?.type === 'marchLoopGroup';
             const ids = useNodeGraphStore.getState().selectedNodeIds;
             const canGroup = ids.length >= 2 && !activeGroupId;
             return (
@@ -1011,6 +1014,22 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     setContextMenu(null);
                   }}>
                     Enter Scene Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                  </button>
+                )}
+                {isSpaceWarpGroup && clickedNode && (
+                  <button style={ctxBtnStyle} onClick={() => {
+                    enterGroup(clickedNode.id);
+                    setContextMenu(null);
+                  }}>
+                    Enter Space Warp Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                  </button>
+                )}
+                {isMarchLoopGroup && clickedNode && (
+                  <button style={ctxBtnStyle} onClick={() => {
+                    enterGroup(clickedNode.id);
+                    setContextMenu(null);
+                  }}>
+                    Enter March Loop Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
                   </button>
                 )}
                 {isGroup && clickedNode && (
