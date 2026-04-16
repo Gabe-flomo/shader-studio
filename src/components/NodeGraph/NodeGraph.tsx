@@ -78,7 +78,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
   const removeNode          = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
-  const selectNode          = useNodeGraphStore(s => s.selectNode);
   const deselectAll         = useNodeGraphStore(s => s.deselectAll);
   const disconnectInput     = useNodeGraphStore(s => s.disconnectInput);
 
