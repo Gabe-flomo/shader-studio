@@ -9132,6 +9132,654 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── 3D: March Loop — Octahedron Field (identity walk) ────────────────────────
+  mlgOctaField: {
+    label: '3D: March Loop — Octahedron Field',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.5, rotSpeed: 0.15, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Octahedra',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'rep_sg', type: 'repeat3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.2, cellY: 1.2, cellZ: 1.2 },
+              },
+              {
+                id: 'oct_sg', type: 'octahedronSDF3D', position: { x: 450, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.35 },
+              },
+            ],
+            outputNodeId: 'oct_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'March Loop',
+          maxSteps: 80, maxDist: 20.0, bgR: 0.03, bgG: 0.03, bgB: 0.08,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: March Loop — Twist Per Step ──────────────────────────────────────────
+  mlgTwistColumn: {
+    label: '3D: March Loop — Twist Per Step',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 4.5, camAngle: 0.4, rotSpeed: 0.2, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Box Pillar',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'box_sg', type: 'boxSDF3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { sizeX: 0.35, sizeY: 1.5, sizeZ: 0.35 },
+              },
+            ],
+            outputNodeId: 'box_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'Twist Loop',
+          maxSteps: 96, maxDist: 20.0, bgR: 0.03, bgG: 0.02, bgB: 0.08,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'twist_b1', type: 'twist3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Twisted Pos' } },
+                params: { k: 1.5 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: March Loop — Sinusoidal Bend ─────────────────────────────────────────
+  mlgSinBend: {
+    label: '3D: March Loop — Sinusoidal Bend',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.3, rotSpeed: 0.1, fov: 1.6 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere Grid',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'rep_sg', type: 'repeat3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.5, cellY: 1.5, cellZ: 1.5 },
+              },
+              {
+                id: 'sph_sg', type: 'sphereSDF3D', position: { x: 450, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.35 },
+              },
+            ],
+            outputNodeId: 'sph_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'Sin Bend Loop',
+          maxSteps: 96, maxDist: 20.0, bgR: 0.02, bgG: 0.02, bgB: 0.06,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'sin_b1', type: 'sinWarp3D', position: { x: 280, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { distort_axis: 'y', source_axis: 'x', frequency: 3.0, amplitude: 0.2 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: March Loop — Mirror Crystal (double fold) ────────────────────────────
+  mlgFoldCrystal: {
+    label: '3D: March Loop — Mirror Crystal',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 2.5, camAngle: 0.5, rotSpeed: 0.2, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'sph_sg', type: 'sphereSDF3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.45 },
+              },
+            ],
+            outputNodeId: 'sph_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'Double Fold Loop',
+          maxSteps: 128, maxDist: 20.0, bgR: 0.01, bgG: 0.01, bgB: 0.04,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'fold_b1', type: 'fold3D', position: { x: 270, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { foldX: true, foldY: true, foldZ: true },
+              },
+              {
+                id: 'fold_b2', type: 'fold3D', position: { x: 460, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'fold_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { foldX: true, foldY: false, foldZ: true },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: March Loop — Spiral Torus Tunnel ─────────────────────────────────────
+  mlgSpiralTunnel: {
+    label: '3D: March Loop — Spiral Torus Tunnel',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 2.0, camAngle: 0.3, rotSpeed: 0.1, fov: 2.0 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Torus Grid',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'rep_sg', type: 'repeat3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 2.0, cellY: 2.0, cellZ: 2.0 },
+              },
+              {
+                id: 'tor_sg', type: 'torusSDF3D', position: { x: 460, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { majorR: 0.65, minorR: 0.18 },
+              },
+            ],
+            outputNodeId: 'tor_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'Spiral Loop',
+          maxSteps: 96, maxDist: 25.0, bgR: 0.02, bgG: 0.04, bgB: 0.08,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'spiral_b1', type: 'spiralWarp3D', position: { x: 280, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { rotation_plane: 'xz', frequency: 0.6 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: March Loop — Layered Warp (spiral + sin) ─────────────────────────────
+  mlgLayeredWarp: {
+    label: '3D: March Loop — Layered Warp',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.4, rotSpeed: 0.15, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Capsule Grid',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'rep_sg', type: 'repeat3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.4, cellY: 1.4, cellZ: 1.4 },
+              },
+              {
+                id: 'cap_sg', type: 'capsuleSDF3D', position: { x: 460, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { height: 0.5, radius: 0.15 },
+              },
+            ],
+            outputNodeId: 'cap_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'Layered Warp Loop',
+          maxSteps: 96, maxDist: 20.0, bgR: 0.03, bgG: 0.04, bgB: 0.08,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'spiral_b1', type: 'spiralWarp3D', position: { x: 270, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { rotation_plane: 'xz', frequency: 0.5 },
+              },
+              {
+                id: 'sin_b1', type: 'sinWarp3D', position: { x: 470, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'spiral_b1', outputKey: 'p' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { distort_axis: 'y', source_axis: 'x', frequency: 2.5, amplitude: 0.12 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: March Loop — Twist Then Fold ─────────────────────────────────────────
+  mlgTwistFold: {
+    label: '3D: March Loop — Twist Then Fold',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.5, rotSpeed: 0.25, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'sph_sg', type: 'sphereSDF3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.5 },
+              },
+            ],
+            outputNodeId: 'sph_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'Twist-Fold Loop',
+          maxSteps: 96, maxDist: 20.0, bgR: 0.02, bgG: 0.03, bgB: 0.07,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'twist_b1', type: 'twist3D', position: { x: 270, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Twisted Pos' } },
+                params: { k: 1.2 },
+              },
+              {
+                id: 'fold_b1', type: 'fold3D', position: { x: 460, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'twist_b1', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { foldX: true, foldY: false, foldZ: true },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: March Loop — Sin then Spiral ─────────────────────────────────────────
+  mlgSinSpiral: {
+    label: '3D: March Loop — Sin then Spiral',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.4, rotSpeed: 0.12, fov: 1.6 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 280, y: 80 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Octa Repeat',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'rep_sg', type: 'repeat3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.4, cellY: 1.4, cellZ: 1.4 },
+              },
+              {
+                id: 'oct_sg', type: 'octahedronSDF3D', position: { x: 460, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.3 },
+              },
+            ],
+            outputNodeId: 'oct_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 560, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          label: 'Sin→Spiral Loop',
+          maxSteps: 96, maxDist: 20.0, bgR: 0.02, bgG: 0.03, bgB: 0.06,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b1', type: 'marchPos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'sin_b1', type: 'sinWarp3D', position: { x: 270, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b1', outputKey: 'pos' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { distort_axis: 'z', source_axis: 'y', frequency: 2.0, amplitude: 0.15 },
+              },
+              {
+                id: 'spiral_b1', type: 'spiralWarp3D', position: { x: 470, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'sin_b1', outputKey: 'p' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { rotation_plane: 'xy', frequency: 0.4 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
