@@ -914,6 +914,16 @@ export function generateFragmentShader(
             paramOverrides[key.slice(overridePrefix.length)] = val;
           }
         }
+        // ps_ external socket connections: wire GLSL vars into inner node params
+        // e.g. outer input key "ps_hd_tr_ty" → innerNodeId="hd_tr", paramKey="ty"
+        const snDef = getNodeDefinition(subNode.type);
+        if (snDef?.paramDefs) {
+          for (const paramKey of Object.keys(snDef.paramDefs)) {
+            const psKey = `ps_${subNode.id}_${paramKey}`;
+            const externalVar = inputVars[psKey];
+            if (externalVar) paramOverrides[paramKey] = externalVar;
+          }
+        }
 
         return {
           ...subNode,
