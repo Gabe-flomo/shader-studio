@@ -1004,6 +1004,137 @@ export function generateFragmentShader(
       continue;
     }
 
+    // ── Space Warp Group: compile subgraph as a vec3→vec3 warp GLSL function ────
+    if (node.type === 'spaceWarpGroup') {
+      const subgraph = node.params.subgraph as SubgraphData | undefined;
+      if (!subgraph || subgraph.nodes.length === 0) {
+        nodeOutputs.set(node.id, { warp: '' });
+        continue;
+      }
+
+      const fnName   = `warpSpace_${nodeSlug}`;
+      const swPrefix = `${nodeSlug}_sw_`;
+      const warpFnLines: string[] = [];
+
+      // Build slug map for ALL subgraph nodes BEFORE pre-registration
+      const swSubSlugMap = new Map<string, string>();
+      for (const sn of subgraph.nodes) {
+        swSubSlugMap.set(sn.id, computeNodeSlug(sn, usedSlugs));
+      }
+
+      // Pre-register ScenePosNode outputs as 'p' (the function parameter)
+      for (const sn of subgraph.nodes) {
+        if (sn.type === 'scenePos') {
+          const spSlug = swSubSlugMap.get(sn.id) ?? sn.id;
+          nodeOutputs.set(swPrefix + spSlug, { pos: 'p' });
+        }
+      }
+
+      // Port input overrides from the outer node's inputs (slug-keyed)
+      const swPortOverrides = new Map<string, string>();
+      for (const port of (subgraph.inputPorts ?? [])) {
+        const outerVar = inputVars[port.key];
+        if (outerVar) {
+          const mappedToNodeId = swSubSlugMap.get(port.toNodeId) ?? port.toNodeId;
+          swPortOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
+        }
+      }
+
+      // Prefix all subgraph node IDs + connections using slug-based ids
+      const swPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
+        const subSlug = swSubSlugMap.get(subNode.id)!;
+        const overridePrefix = `${subNode.id}::`;
+        const paramOverrides: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(node.params)) {
+          if (key.startsWith(overridePrefix)) {
+            paramOverrides[key.slice(overridePrefix.length)] = val;
+          }
+        }
+        // ps_ external socket connections inject GLSL vars as param overrides
+        const snDef = getNodeDefinition(subNode.type);
+        if (snDef?.paramDefs) {
+          for (const paramKey of Object.keys(snDef.paramDefs)) {
+            const psKey = `ps_${subNode.id}_${paramKey}`;
+            const externalVar = inputVars[psKey];
+            if (externalVar) paramOverrides[paramKey] = externalVar;
+          }
+        }
+        return {
+          ...subNode,
+          id: swPrefix + subSlug,
+          params: { ...subNode.params, ...paramOverrides },
+          inputs: Object.fromEntries(
+            Object.entries(subNode.inputs).map(([k, inp]) => [
+              k,
+              inp.connection
+                ? { ...inp, connection: {
+                    nodeId: swPrefix + (swSubSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId),
+                    outputKey: inp.connection.outputKey,
+                  }}
+                : inp,
+            ]),
+          ),
+        };
+      });
+
+      const swSorted = topologicalSort(swPrefixedNodes);
+      let swLastVec3Var = 'p';  // default: identity warp
+
+      for (const sn of swSorted) {
+        if (nodeOutputs.has(sn.id)) continue;  // scenePos already pre-registered
+        const snDef = getNodeDefinition(sn.type);
+        if (!snDef) continue;
+
+        if (snDef.glslFunction) functions.add(snDef.glslFunction);
+        if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => functions.add(h));
+
+        const origId = sn.id.slice(swPrefix.length);
+        const snInputVars: Record<string, string> = {};
+        for (const [k, inp] of Object.entries(sn.inputs)) {
+          const portKey = `${origId}:${k}`;
+          if (swPortOverrides.has(portKey)) {
+            snInputVars[k] = swPortOverrides.get(portKey)!;
+          } else if (inp.connection) {
+            const srcOut = nodeOutputs.get(inp.connection.nodeId);
+            if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
+          }
+          if (!snInputVars[k]) {
+            if (inp.defaultValue !== undefined) {
+              if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+              else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+            }
+          }
+        }
+
+        const snResult = snDef.generateGLSL(sn, snInputVars);
+        warpFnLines.push(snResult.code);
+        nodeOutputs.set(sn.id, snResult.outputVars);
+
+        // Track last vec3 output as the warp return value
+        for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
+          const outType = snDef.outputs[outKey]?.type;
+          if (outType === 'vec3') swLastVec3Var = varName;
+        }
+      }
+
+      // Find return value from the subgraph's output port (if defined)
+      for (const port of (subgraph.outputPorts ?? [])) {
+        if (port.type === 'vec3') {
+          const mappedFromNodeId = swSubSlugMap.get(port.fromNodeId) ?? port.fromNodeId;
+          const srcOut = nodeOutputs.get(swPrefix + mappedFromNodeId);
+          if (srcOut?.[port.fromOutputKey]) swLastVec3Var = srcOut[port.fromOutputKey];
+        }
+      }
+
+      // Emit the named GLSL function
+      const fnBody = warpFnLines.join('');
+      const fnDef = `vec3 ${fnName}(vec3 p) {\n${fnBody}    return ${swLastVec3Var};\n}`;
+      functions.add(fnDef);
+
+      nodeOutputs.set(node.id, { warp: fnName });
+      continue;
+    }
+
     // ── Bypass: pass first input through to all outputs ───────────────────────
     if (node.bypassed) {
       const inputEntries = Object.entries(inputVars);

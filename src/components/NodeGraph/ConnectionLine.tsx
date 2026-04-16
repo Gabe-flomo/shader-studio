@@ -1,8 +1,10 @@
 const TYPE_COLORS: Record<string, string> = {
-  float: '#f0a0c0',
-  vec2:  '#00aaff',
-  vec3:  '#00ffaa',
-  vec4:  '#ffaa00',
+  float:       '#f0a0c0',
+  vec2:        '#00aaff',
+  vec3:        '#00ffaa',
+  vec4:        '#ffaa00',
+  scene3d:     '#cc88aa',
+  spacewarp3d: '#aa88cc',
 };
 
 interface Props {
