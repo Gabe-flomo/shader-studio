@@ -1004,6 +1004,211 @@ export function generateFragmentShader(
       continue;
     }
 
+    // ── March Loop Group: compile subgraph as a position-warp helper + march loop ─
+    if (node.type === 'marchLoopGroup') {
+      const subgraph = node.params.subgraph as SubgraphData | undefined;
+
+      // Resolve external inputs
+      const mlRo      = inputVars.ro    || 'vec3(0.0, 0.0, 3.0)';
+      const mlRd      = inputVars.rd    || 'vec3(0.0, 0.0, -1.0)';
+      const mlSceneFn = inputVars.scene || 'MISSING_SCENE_FN';
+      const mlMaxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 64));
+      // Local float param formatter (mirrors p() from helpers.ts)
+      const fmtP = (val: unknown, fb: number): string => {
+        if (typeof val === 'string') return val;
+        const n = typeof val === 'number' ? val : fb;
+        return Number.isInteger(n) ? `${n}.0` : String(n);
+      };
+      const mlMaxDist = fmtP(node.params.maxDist, 20.0);
+      const bgr = fmtP(node.params.bgR, 0.85);
+      const bgg = fmtP(node.params.bgG, 0.90);
+      const bgb = fmtP(node.params.bgB, 0.95);
+
+      // ── Compile subgraph as a warp body function ────────────────────────────
+      // The function signature is:
+      //   vec3 marchBody_<slug>(vec3 <slug>_mp, float <slug>_bt)
+      // MarchPos nodes pre-register their `pos` output as `<slug>_mp`.
+      // MarchDist nodes pre-register their `t` output as `<slug>_bt`.
+      // The function returns the last vec3 in the subgraph (identity if empty).
+      let warpBodyFn = '';  // empty = identity (no body function emitted)
+
+      if (subgraph && subgraph.nodes.length > 0) {
+        const warpFnName = `marchBody_${nodeSlug}`;
+        const mlPrefix   = `${nodeSlug}_ml_`;
+        const bodyLines: string[] = [];
+
+        // Build slug map for all subgraph nodes
+        const mlSubSlugMap = new Map<string, string>();
+        for (const sn of subgraph.nodes) {
+          mlSubSlugMap.set(sn.id, computeNodeSlug(sn, usedSlugs));
+        }
+
+        // Pre-register marchPos outputs as the function's position parameter
+        // Pre-register marchDist outputs as the function's distance parameter
+        for (const sn of subgraph.nodes) {
+          if (sn.type === 'marchPos') {
+            const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
+            nodeOutputs.set(mlPrefix + slug, { pos: `${nodeSlug}_mp` });
+          }
+          if (sn.type === 'marchDist') {
+            const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
+            nodeOutputs.set(mlPrefix + slug, { t: `${nodeSlug}_bt` });
+          }
+        }
+
+        // Port input overrides from the outer node's inputs (slug-keyed)
+        const mlPortOverrides = new Map<string, string>();
+        for (const port of (subgraph.inputPorts ?? [])) {
+          const outerVar = inputVars[port.key];
+          if (outerVar) {
+            const mappedToNodeId = mlSubSlugMap.get(port.toNodeId) ?? port.toNodeId;
+            mlPortOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
+          }
+        }
+
+        // Prefix all subgraph node IDs + connections using slug-based ids
+        const mlPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
+          const subSlug = mlSubSlugMap.get(subNode.id)!;
+          const overridePrefix = `${subNode.id}::`;
+          const paramOverrides: Record<string, unknown> = {};
+          for (const [key, val] of Object.entries(node.params)) {
+            if (key.startsWith(overridePrefix)) {
+              paramOverrides[key.slice(overridePrefix.length)] = val;
+            }
+          }
+          const snDef = getNodeDefinition(subNode.type);
+          if (snDef?.paramDefs) {
+            for (const paramKey of Object.keys(snDef.paramDefs)) {
+              const psKey = `ps_${subNode.id}_${paramKey}`;
+              const externalVar = inputVars[psKey];
+              if (externalVar) paramOverrides[paramKey] = externalVar;
+            }
+          }
+          return {
+            ...subNode,
+            id: mlPrefix + subSlug,
+            params: { ...subNode.params, ...paramOverrides },
+            inputs: Object.fromEntries(
+              Object.entries(subNode.inputs).map(([k, inp]) => [
+                k,
+                inp.connection
+                  ? { ...inp, connection: {
+                      nodeId: mlPrefix + (mlSubSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId),
+                      outputKey: inp.connection.outputKey,
+                    }}
+                  : inp,
+              ]),
+            ),
+          };
+        });
+
+        const mlSorted = topologicalSort(mlPrefixedNodes);
+        // Default return value: identity warp (march pos unchanged)
+        let mlLastVec3Var = `${nodeSlug}_mp`;
+
+        for (const sn of mlSorted) {
+          if (nodeOutputs.has(sn.id)) continue;  // marchPos/marchDist already pre-registered
+          const snDef = getNodeDefinition(sn.type);
+          if (!snDef) continue;
+
+          if (snDef.glslFunction) functions.add(snDef.glslFunction);
+          if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => functions.add(h));
+
+          const origId = sn.id.slice(mlPrefix.length);
+          const snInputVars: Record<string, string> = {};
+          for (const [k, inp] of Object.entries(sn.inputs)) {
+            const portKey = `${origId}:${k}`;
+            if (mlPortOverrides.has(portKey)) {
+              snInputVars[k] = mlPortOverrides.get(portKey)!;
+            } else if (inp.connection) {
+              const srcOut = nodeOutputs.get(inp.connection.nodeId);
+              if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
+            }
+            if (!snInputVars[k]) {
+              // Uniform passthrough nodes inside the body helper emit globals directly
+              if (inp.type === 'float' && (k === 'time' || k === 't')) snInputVars[k] = 'u_time';
+              else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) snInputVars[k] = 'g_uv';
+              else if (inp.defaultValue !== undefined) {
+                if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+              }
+            }
+          }
+
+          const snResult = snDef.generateGLSL(sn, snInputVars);
+          bodyLines.push(snResult.code);
+          nodeOutputs.set(sn.id, snResult.outputVars);
+
+          // Track last vec3 output as the warp return value
+          for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
+            const outType = snDef.outputs[outKey]?.type;
+            if (outType === 'vec3') mlLastVec3Var = varName;
+          }
+        }
+
+        // Override return value from the subgraph's output port (if defined)
+        for (const port of (subgraph.outputPorts ?? [])) {
+          if (port.type === 'vec3') {
+            const mappedFromNodeId = mlSubSlugMap.get(port.fromNodeId) ?? port.fromNodeId;
+            const srcOut = nodeOutputs.get(mlPrefix + mappedFromNodeId);
+            if (srcOut?.[port.fromOutputKey]) mlLastVec3Var = srcOut[port.fromOutputKey];
+          }
+        }
+
+        // Emit the named GLSL body function into the preamble
+        const fnBody = bodyLines.join('');
+        const fnDef = `vec3 ${warpFnName}(vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt) {\n${fnBody}    return ${mlLastVec3Var};\n}`;
+        functions.add(fnDef);
+        warpBodyFn = warpFnName;
+      }
+
+      // ── Emit the march loop into main ──────────────────────────────────────
+      const warpPos = (expr: string, t: string): string =>
+        warpBodyFn ? `${warpBodyFn}(${expr}, ${t})` : expr;
+
+      const marchCode = [
+        `    float ${nodeSlug}_t   = 0.001;\n`,
+        `    float ${nodeSlug}_hit = 0.0;\n`,
+        `    int   ${nodeSlug}_si  = 0;\n`,
+        `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
+        `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+        `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
+        `        float ${nodeSlug}_d  = ${mlSceneFn}(${nodeSlug}_rp);\n`,
+        `        if (${nodeSlug}_d < 0.0005) { ${nodeSlug}_hit = 1.0; ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+        `        ${nodeSlug}_t += ${nodeSlug}_d;\n`,
+        `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+        `    }\n`,
+        `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
+        `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
+        `    vec3  ${nodeSlug}_hp_raw  = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+        `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
+        `    float ${nodeSlug}_e   = 0.001;\n`,
+        `    vec3  ${nodeSlug}_n   = normalize(vec3(\n`,
+        `        ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw+vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`)}) - ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw-vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`)}),\n`,
+        `        ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw+vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`)}) - ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw-vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`)}),\n`,
+        `        ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw+vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`)}) - ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw-vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`)})\n`,
+        `    ));\n`,
+        `    float ${nodeSlug}_dist   = ${nodeSlug}_t;\n`,
+        `    float ${nodeSlug}_depth  = clamp(${nodeSlug}_t / ${mlMaxDist}, 0.0, 1.0);\n`,
+        `    vec3  ${nodeSlug}_normal = ${nodeSlug}_n * ${nodeSlug}_hit;\n`,
+        `    vec3  ${nodeSlug}_bg    = vec3(${bgr}, ${bgg}, ${bgb});\n`,
+        `    vec3  ${nodeSlug}_color = ${nodeSlug}_hit > 0.5 ? (${nodeSlug}_normal * 0.5 + 0.5) : ${nodeSlug}_bg;\n`,
+      ].join('');
+
+      mainCode.push(marchCode);
+      nodeOutputs.set(node.id, {
+        color:     `${nodeSlug}_color`,
+        dist:      `${nodeSlug}_dist`,
+        depth:     `${nodeSlug}_depth`,
+        normal:    `${nodeSlug}_normal`,
+        iter:      `${nodeSlug}_iter`,
+        iterCount: `${nodeSlug}_iterCount`,
+        hit:       `${nodeSlug}_hit`,
+        pos:       `${nodeSlug}_hp`,
+      });
+      continue;
+    }
+
     // ── Space Warp Group: compile subgraph as a vec3→vec3 warp GLSL function ────
     if (node.type === 'spaceWarpGroup') {
       const subgraph = node.params.subgraph as SubgraphData | undefined;

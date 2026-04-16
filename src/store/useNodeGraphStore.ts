@@ -746,6 +746,48 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             ),
           };
         }
+        if (groupNode?.type === 'spaceWarpGroup') {
+          // SpaceWarpGroup added from palette — initialise with a ScenePos node.
+          const scenePosNode: import('../types/nodeGraph').GraphNode = {
+            id: `scenepos_${Date.now()}`,
+            type: 'scenePos',
+            position: { x: 200, y: 200 },
+            inputs: {},
+            outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+            params: { _groupOriginal: true },
+          };
+          const emptySubgraph = { nodes: [scenePosNode], outputNodeId: '', outputKey: '' };
+          return {
+            activeGroupId: id,
+            activeGroupPath: [id],
+            nodes: state.nodes.map(n =>
+              n.id === id ? { ...n, params: { ...n.params, subgraph: emptySubgraph } } : n
+            ),
+          };
+        }
+        if (groupNode?.type === 'marchLoopGroup') {
+          // MarchLoopGroup added from palette — initialise with a MarchPos node.
+          const marchPosNode: import('../types/nodeGraph').GraphNode = {
+            id: `marchpos_${Date.now()}`,
+            type: 'marchPos',
+            position: { x: 200, y: 200 },
+            inputs: {},
+            outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+            params: { _groupOriginal: true },
+          };
+          const emptySubgraph: import('../types/nodeGraph').SubgraphData = {
+            nodes: [marchPosNode],
+            inputPorts: [],
+            outputPorts: [],
+          };
+          return {
+            activeGroupId: id,
+            activeGroupPath: [id],
+            nodes: state.nodes.map(n =>
+              n.id === id ? { ...n, params: { ...n.params, subgraph: emptySubgraph } } : n
+            ),
+          };
+        }
         // Group was added from palette with no subgraph — initialise an empty one
         // and inject a LoopIndex so the iteration counter `i` is always available.
         const loopIndexNode: import('../types/nodeGraph').GraphNode = {
@@ -770,8 +812,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         };
       }
 
-      // For sceneGroup: skip LoopIndex migration entirely.
-      if (groupNode?.type === 'sceneGroup') {
+      // For scene-style groups: skip LoopIndex migration entirely.
+      if (groupNode?.type === 'sceneGroup' || groupNode?.type === 'spaceWarpGroup' || groupNode?.type === 'marchLoopGroup') {
         const alreadyMigratedSg = sg.nodes.some(n => n.params?._groupOriginal);
         if (alreadyMigratedSg) return { activeGroupId: id, activeGroupPath: [id] };
         // Stamp existing nodes as originals
@@ -878,6 +920,47 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }));
       return;
     }
+    if (groupNode?.type === 'spaceWarpGroup' && !groupNode.params?.subgraph) {
+      const scenePosNode: import('../types/nodeGraph').GraphNode = {
+        id: `scenepos_${Date.now()}`,
+        type: 'scenePos',
+        position: { x: 200, y: 200 },
+        inputs: {},
+        outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+        params: { _groupOriginal: true },
+      };
+      set(state => ({
+        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupId: id,
+        nodes: state.nodes.map(n =>
+          n.id === id ? { ...n, params: { ...n.params, subgraph: { nodes: [scenePosNode], outputNodeId: '', outputKey: '' } } } : n
+        ),
+      }));
+      return;
+    }
+    if (groupNode?.type === 'marchLoopGroup' && !groupNode.params?.subgraph) {
+      const marchPosNode: import('../types/nodeGraph').GraphNode = {
+        id: `marchpos_${Date.now()}`,
+        type: 'marchPos',
+        position: { x: 200, y: 200 },
+        inputs: {},
+        outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+        params: { _groupOriginal: true },
+      };
+      const emptySubgraph: import('../types/nodeGraph').SubgraphData = {
+        nodes: [marchPosNode],
+        inputPorts: [],
+        outputPorts: [],
+      };
+      set(state => ({
+        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupId: id,
+        nodes: state.nodes.map(n =>
+          n.id === id ? { ...n, params: { ...n.params, subgraph: emptySubgraph } } : n
+        ),
+      }));
+      return;
+    }
 
     set(state => ({ activeGroupPath: [...state.activeGroupPath, id], activeGroupId: id }));
   },
@@ -889,7 +972,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const newPath = path.slice(0, -1);
     set(state => {
       const exitingNode = state.nodes.find(n => n.id === exitingId);
-      if (exitingNode?.type === 'sceneGroup') {
+      const isSceneStyleGroup = exitingNode?.type === 'sceneGroup' || exitingNode?.type === 'spaceWarpGroup' || exitingNode?.type === 'marchLoopGroup';
+      if (isSceneStyleGroup) {
         const sg = exitingNode.params.subgraph as { nodes: import('../types/nodeGraph').GraphNode[] } | undefined;
         const newPsSockets: Record<string, import('../types/nodeGraph').InputSocket> = {};
         let anyNew = false;
@@ -1588,6 +1672,36 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             { type: 'rayMarch',    relPos: { x: 380, y: 0 } },
           ],
           [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
+        );
+        return undefined;
+      }
+      if (type === 'marchLoopGroup') {
+        // Auto-spawn a MarchCamera to the left, pre-wired ro/rd → marchLoopGroup
+        get().spawnGraph(
+          position,
+          [
+            { type: 'marchCamera',    relPos: { x: -380, y: 0 } },
+            { type: 'marchLoopGroup', relPos: { x: 0,    y: 0 } },
+          ],
+          [
+            { from: 0, fromKey: 'ro', to: 1, toKey: 'ro' },
+            { from: 0, fromKey: 'rd', to: 1, toKey: 'rd' },
+          ],
+        );
+        return undefined;
+      }
+      if (type === 'marchCamera') {
+        // Auto-spawn a MarchLoopGroup to the right, pre-wired
+        get().spawnGraph(
+          position,
+          [
+            { type: 'marchCamera',    relPos: { x: 0,   y: 0 } },
+            { type: 'marchLoopGroup', relPos: { x: 380, y: 0 } },
+          ],
+          [
+            { from: 0, fromKey: 'ro', to: 1, toKey: 'ro' },
+            { from: 0, fromKey: 'rd', to: 1, toKey: 'rd' },
+          ],
         );
         return undefined;
       }

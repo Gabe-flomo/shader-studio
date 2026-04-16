@@ -1047,17 +1047,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showParamPicker, setShowParamPicker] = useState(false);
   const [showInitModal, setShowInitModal] = useState(false);
 
-  if (node.type === 'group' || node.type === 'sceneGroup') {
+  if (node.type === 'group' || node.type === 'sceneGroup' || node.type === 'spaceWarpGroup' || node.type === 'marchLoopGroup') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-    const groupLabel = typeof node.params.label === 'string' ? node.params.label : (node.type === 'sceneGroup' ? 'Scene Group' : 'Group');
+    const defaultLabel = node.type === 'sceneGroup' ? 'Scene Group' : node.type === 'spaceWarpGroup' ? 'Space Warp Group' : node.type === 'marchLoopGroup' ? 'March Loop Group' : 'Group';
+    const groupLabel = typeof node.params.label === 'string' ? node.params.label : defaultLabel;
     const nodeCount = subgraph?.nodes.length ?? 0;
     const inputPorts = subgraph?.inputPorts ?? [];
     const outputPorts = subgraph?.outputPorts ?? [];
     const groupIters = typeof node.params.iterations === 'number' ? node.params.iterations : 1;
     const hasInnerGroups = subgraph?.nodes.some(n => n.type === 'group') ?? false;
     const isSceneGroup = node.type === 'sceneGroup';
-    // SceneGroup gets the scene3d wire color (pastel pink); nested groups get mauve; regular groups get blue
-    const groupAccentColor = isSceneGroup ? '#cc88aa' : (hasInnerGroups ? '#cba6f7' : '#89b4fa');
+    const isSpaceWarpGroup = node.type === 'spaceWarpGroup';
+    const isMarchLoopGroup = node.type === 'marchLoopGroup';
+    // Color per type
+    const groupAccentColor = isSceneGroup ? '#cc88aa' : isSpaceWarpGroup ? '#aa88cc' : isMarchLoopGroup ? '#88aacc' : (hasInnerGroups ? '#cba6f7' : '#89b4fa');
 
     const handleGroupHeaderMouseDown = (e: React.MouseEvent) => {
       if (e.button === 2) return;
@@ -1125,7 +1128,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         >
           {/* Label + count */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
-            <span style={{ fontSize: '13px', flexShrink: 0 }}>{isSceneGroup ? '◉' : '⬡'}</span>
+            <span style={{ fontSize: '13px', flexShrink: 0 }}>{isSceneGroup ? '◉' : isSpaceWarpGroup ? '⟳' : isMarchLoopGroup ? '⟲' : '⬡'}</span>
             <span style={{ fontWeight: 600, color: groupAccentColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{groupLabel}</span>
             <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0 }}>({nodeCount})</span>
           </div>
