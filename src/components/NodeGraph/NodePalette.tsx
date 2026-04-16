@@ -87,7 +87,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
   { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['helloSphere3D','translate3D','rotate3D','twoShapes3D','softMetaballs3D','fold3D','sinWarp3D','repeat3D','planeSDF3D','torusScene3D','rayMarchOutputs3D','shapesAndGround3D','infiniteFalling3D','spiralWorld3D','kaleido3DBox'] as ExKey[] },
   { label: 'Space Warp',      color: '#aa88cc', keys: ['spacewarpTwistColumn','spacewarpInfiniteField','spacewarpRippleTerrain','spacewarpFoldMirror','spacewarpSpiralVortex'] as ExKey[] },
-  { label: 'March Loop',      color: '#88aacc', keys: ['mlgOctaField','mlgTwistColumn','mlgRepeatBody','mlgFoldCrystal','mlgSpiralTunnel','mlgSpiralFold','mlgTwistFold','mlgTwistRepeat'] as ExKey[] },
+  { label: 'March Loop',      color: '#88aacc', keys: ['mlgBaseline','mlgTwistSpace','mlgSpiralDepth','mlgFoldMirror','mlgRepeatSpace','mlgTwistFold','mlgSpiralFold','mlgDeepTunnel'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic'] as ExKey[] },
   { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },

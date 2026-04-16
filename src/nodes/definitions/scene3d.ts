@@ -51,9 +51,13 @@ export const ScenePosNode: NodeDefinition = {
 
 export const SceneGroupNode: NodeDefinition = {
   type: 'sceneGroup', label: 'Scene Group', category: '3D Scene',
-  description: 'Wrap SDF nodes into a composable 3D scene. Connect ScenePos → SDF chain → output. Wire the scene3d output into RayMarch or RayMarchLit.',
-  // Sockets are populated dynamically (same pattern as GroupNode)
-  inputs: {},
+  description: 'Wrap SDF nodes into a composable 3D scene. Inside a March Loop Group: connect the warp chain → pos input to specify the evaluation point. ScenePos inside always gives the function argument "p".',
+  // pos input: when inside a MarchLoopGroup body, connects to the warp chain output.
+  // The compiler uses this connection to set the call-site argument in the march loop.
+  // ScenePos inside the subgraph still resolves to 'p' regardless.
+  inputs: {
+    pos: { type: 'vec3', label: 'Position' },
+  },
   outputs: { scene: { type: 'scene3d', label: 'Scene' } },
   defaultParams: {},
   paramDefs: {},
@@ -143,17 +147,18 @@ export const MarchPosNode: NodeDefinition = {
 
 export const MarchDistNode: NodeDefinition = {
   type: 'marchDist', label: 'March Dist', category: '3D Scene',
-  description: 'Inside a March Loop Group: outputs the current ray march distance (float t). Use for distance-dependent warp effects.',
+  description: 'Inside a March Loop Group: outputs the current accumulated ray march distance (float). Wire into Twist3D or SpiralWarp3D angle input for depth-dependent effects.',
   inputs: {},
-  outputs: { t: { type: 'float', label: 'March Dist' } },
+  outputs: { dist: { type: 'float', label: 'March Dist' } },
   defaultParams: {},
   paramDefs: {},
   generateGLSL: (node: GraphNode) => {
     const id = node.id;
     // Pre-registered by the compiler. Fallback for preview compilation.
+    // Output key is 'dist'; GLSL var name is still id_t (the march accumulator).
     return {
       code: `    float ${id}_t = 0.0;\n`,
-      outputVars: { t: `${id}_t` },
+      outputVars: { dist: `${id}_t` },
     };
   },
 };
@@ -166,11 +171,14 @@ export const MarchDistNode: NodeDefinition = {
 
 export const MarchLoopGroupNode: NodeDefinition = {
   type: 'marchLoopGroup', label: 'March Loop Group', category: '3D Scene',
-  description: 'Composable ray march loop with an editable body subgraph. Connect MarchCamera (ro/rd) + SceneGroup (scene), then double-click to build the loop body. MarchPos gives the current march position inside.',
+  description: 'Composable ray march loop. Connect MarchCamera (ro/rd), then double-click to build the loop body. Place a SceneGroup inside the body subgraph with MarchPos → [warps] → SceneGroup.pos. MarchDist gives the accumulated ray distance for depth-dependent effects.',
   inputs: {
-    ro:    { type: 'vec3',    label: 'Ray Origin' },
-    rd:    { type: 'vec3',    label: 'Ray Dir' },
-    scene: { type: 'scene3d', label: 'Scene' },
+    ro:    { type: 'vec3',  label: 'Ray Origin' },
+    rd:    { type: 'vec3',  label: 'Ray Dir' },
+    uv:    { type: 'vec2',  label: 'UV' },
+    time:  { type: 'float', label: 'Time' },
+    // 'scene' kept for backward compatibility with older saved graphs (not shown in UI)
+    // but still resolved by the compiler via inputVars.scene
   },
   outputs: {
     color:     { type: 'vec3',  label: 'Color' },
@@ -183,19 +191,20 @@ export const MarchLoopGroupNode: NodeDefinition = {
     pos:       { type: 'vec3',  label: 'Hit Pos' },
   },
   defaultParams: {
-    maxSteps: 64, maxDist: 20.0,
-    bgR: 0.85, bgG: 0.90, bgB: 0.95,
+    maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+    bgR: 0.0, bgG: 0.0, bgB: 0.0,
     albedoR: 0.6, albedoG: 0.7, albedoB: 0.9,
   },
   paramDefs: {
-    maxSteps: { label: 'Max Steps', type: 'float' as const, min: 8,   max: 256,   step: 4    },
-    maxDist:  { label: 'Max Dist',  type: 'float' as const, min: 5.0, max: 100.0, step: 1.0  },
-    bgR:      { label: 'BG R',      type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
-    bgG:      { label: 'BG G',      type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
-    bgB:      { label: 'BG B',      type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
-    albedoR:  { label: 'Albedo R',  type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
-    albedoG:  { label: 'Albedo G',  type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
-    albedoB:  { label: 'Albedo B',  type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
+    maxSteps:  { label: 'Max Steps',  type: 'float' as const, min: 8,   max: 256,   step: 4    },
+    maxDist:   { label: 'Max Dist',   type: 'float' as const, min: 5.0, max: 100.0, step: 1.0  },
+    stepScale: { label: 'Step Scale', type: 'float' as const, min: 0.3, max: 1.0,   step: 0.05 },
+    bgR:       { label: 'BG R',       type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
+    bgG:       { label: 'BG G',       type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
+    bgB:       { label: 'BG B',       type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
+    albedoR:   { label: 'Albedo R',   type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
+    albedoG:   { label: 'Albedo G',   type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
+    albedoB:   { label: 'Albedo B',   type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01 },
   },
   // Stub — real code is generated by the compiler when it encounters type === 'marchLoopGroup'
   generateGLSL: () => ({ code: '', outputVars: {} }),

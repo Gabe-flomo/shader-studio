@@ -344,10 +344,11 @@ export const Repeat3DNode: NodeDefinition = {
 
 export const Twist3DNode: NodeDefinition = {
   type: 'twist3D', label: 'Twist 3D', category: '3D Transforms',
-  description: 'Twist 3D space around the Y axis by a given amount.',
+  description: 'Twist 3D space around the Y axis by a given amount. Wire MarchDist → angle for depth-dependent twist.',
   inputs: {
-    pos: { type: 'vec3',  label: 'Position' },
-    k:   { type: 'float', label: 'Twist Amount' },
+    pos:   { type: 'vec3',  label: 'Position' },
+    k:     { type: 'float', label: 'Twist Amount' },
+    angle: { type: 'float', label: 'Angle (override)' },
   },
   outputs: { pos: { type: 'vec3', label: 'Twisted Pos' } },
   defaultParams: { k: 2.0 },
@@ -356,9 +357,11 @@ export const Twist3DNode: NodeDefinition = {
     const id  = node.id;
     const pos = inputVars.pos || 'vec3(0.0)';
     const k   = inputVars.k   || p(node.params.k, 2.0);
+    // angle input overrides the default k * pos.y computation when wired
+    const twAngle = inputVars.angle ?? `${k} * (${pos}).y`;
     return {
       code: [
-        `    float ${id}_twA = ${k} * (${pos}).y;\n`,
+        `    float ${id}_twA = ${twAngle};\n`,
         `    float ${id}_twC = cos(${id}_twA); float ${id}_twS = sin(${id}_twA);\n`,
         `    vec3  ${id}_pos = vec3(${id}_twC * (${pos}).x - ${id}_twS * (${pos}).z, (${pos}).y, ${id}_twS * (${pos}).x + ${id}_twC * (${pos}).z);\n`,
       ].join(''),
@@ -549,11 +552,12 @@ export const SpiralWarp3DNode: NodeDefinition = {
   type: 'spiralWarp3D',
   label: 'Spiral Warp 3D',
   category: '3D Transforms',
-  description: 'Rotate a 3D position around an axis by an angle proportional to distance from origin. Creates spiral/vortex distortion. Keep frequency < 1.5 to avoid artifacts.',
+  description: 'Rotate a 3D position around an axis by an angle proportional to distance from origin. Creates spiral/vortex distortion. Keep frequency < 1.5 to avoid artifacts. Wire MarchDist → angle for depth-driven spiral.',
   inputs: {
-    p:         { type: 'vec3',  label: 'Position'       },
-    time:      { type: 'float', label: 'Time'           },
-    frequency: { type: 'float', label: 'Spiral Freq'    },
+    p:         { type: 'vec3',  label: 'Position'          },
+    time:      { type: 'float', label: 'Time'               },
+    frequency: { type: 'float', label: 'Spiral Freq'        },
+    angle:     { type: 'float', label: 'Angle (override)'   },
   },
   outputs: { p: { type: 'vec3', label: 'Spiraled Position' } },
   defaultParams: {
@@ -576,8 +580,9 @@ export const SpiralWarp3DNode: NodeDefinition = {
     const id    = node.id;
     // Use the 2D length in the rotation plane (axis-correct, keeps Lipschitz constant ≈ 1)
     const radLen = plane === 'xy' ? `length(${pVar}.xy)` : plane === 'xz' ? `length(${pVar}.xz)` : `length(${pVar}.yz)`;
-    const angle = `(${radLen} * ${freq} + ${t})`;
-    const c = `cos(${angle})`, s = `sin(${angle})`;
+    // angle input overrides the default radial * freq + time computation when wired
+    const angleExpr = inputVars.angle ?? `(${radLen} * ${freq} + ${t})`;
+    const c = `cos(${angleExpr})`, s = `sin(${angleExpr})`;
     let rotLine: string;
     if (plane === 'xy')
       rotLine = `    ${id}_p.xy = vec2(${c}*${id}_p.x - ${s}*${id}_p.y, ${s}*${id}_p.x + ${c}*${id}_p.y);\n`;

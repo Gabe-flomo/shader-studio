@@ -939,16 +939,55 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return;
     }
     if (groupNode?.type === 'marchLoopGroup' && !groupNode.params?.subgraph) {
+      const ts = Date.now();
       const marchPosNode: import('../types/nodeGraph').GraphNode = {
-        id: `marchpos_${Date.now()}`,
+        id: `marchpos_${ts}`,
         type: 'marchPos',
-        position: { x: 200, y: 200 },
+        position: { x: 80, y: 160 },
         inputs: {},
         outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
         params: { _groupOriginal: true },
       };
-      const emptySubgraph: import('../types/nodeGraph').SubgraphData = {
-        nodes: [marchPosNode],
+      // Default SceneGroup inside the body with a SphereSDF inside
+      const scenePosInner: import('../types/nodeGraph').GraphNode = {
+        id: `sp_inner_${ts}`,
+        type: 'scenePos',
+        position: { x: 80, y: 150 },
+        inputs: {},
+        outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+        params: {},
+      };
+      const sphereInner: import('../types/nodeGraph').GraphNode = {
+        id: `sdf_inner_${ts}`,
+        type: 'sphereSDF3D',
+        position: { x: 280, y: 150 },
+        inputs: {
+          pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position',
+            connection: { nodeId: `sp_inner_${ts}`, outputKey: 'pos' } },
+        },
+        outputs: { dist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'Distance' } },
+        params: { radius: 0.35 },
+      };
+      const sceneGroupNode: import('../types/nodeGraph').GraphNode = {
+        id: `scenegroup_${ts}`,
+        type: 'sceneGroup',
+        position: { x: 340, y: 160 },
+        inputs: {
+          pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position',
+            connection: { nodeId: `marchpos_${ts}`, outputKey: 'pos' } },
+        },
+        outputs: { scene: { type: 'scene3d' as import('../types/nodeGraph').DataType, label: 'Scene' } },
+        params: {
+          label: 'Scene',
+          subgraph: {
+            nodes: [scenePosInner, sphereInner],
+            inputPorts: [],
+            outputPorts: [],
+          },
+        },
+      };
+      const defaultSubgraph: import('../types/nodeGraph').SubgraphData = {
+        nodes: [marchPosNode, sceneGroupNode],
         inputPorts: [],
         outputPorts: [],
       };
@@ -956,7 +995,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         activeGroupPath: [...state.activeGroupPath, id],
         activeGroupId: id,
         nodes: state.nodes.map(n =>
-          n.id === id ? { ...n, params: { ...n.params, subgraph: emptySubgraph } } : n
+          n.id === id ? { ...n, params: { ...n.params, subgraph: defaultSubgraph } } : n
         ),
       }));
       return;

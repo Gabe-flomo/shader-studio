@@ -1009,20 +1009,20 @@ export function generateFragmentShader(
       const subgraph = node.params.subgraph as SubgraphData | undefined;
 
       // Resolve external inputs
-      const mlRo      = inputVars.ro    || 'vec3(0.0, 0.0, 3.0)';
-      const mlRd      = inputVars.rd    || 'vec3(0.0, 0.0, -1.0)';
-      const mlSceneFn = inputVars.scene || 'MISSING_SCENE_FN';
-      const mlMaxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 64));
+      const mlRo  = inputVars.ro || 'vec3(0.0, 0.0, 3.0)';
+      const mlRd  = inputVars.rd || 'vec3(0.0, 0.0, -1.0)';
+      const mlMaxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 80));
       // Local float param formatter (mirrors p() from helpers.ts)
       const fmtP = (val: unknown, fb: number): string => {
         if (typeof val === 'string') return val;
         const n = typeof val === 'number' ? val : fb;
         return Number.isInteger(n) ? `${n}.0` : String(n);
       };
-      const mlMaxDist = fmtP(node.params.maxDist, 20.0);
-      const bgr  = fmtP(node.params.bgR,      0.85);
-      const bgg  = fmtP(node.params.bgG,      0.90);
-      const bgb  = fmtP(node.params.bgB,      0.95);
+      const mlMaxDist   = fmtP(node.params.maxDist,  20.0);
+      const mlStepScale = fmtP(node.params.stepScale,  1.0);
+      const bgr  = fmtP(node.params.bgR,      0.0);
+      const bgg  = fmtP(node.params.bgG,      0.0);
+      const bgb  = fmtP(node.params.bgB,      0.0);
       const albr = fmtP(node.params.albedoR,  0.6);
       const albg = fmtP(node.params.albedoG,  0.7);
       const albb = fmtP(node.params.albedoB,  0.9);
@@ -1031,9 +1031,12 @@ export function generateFragmentShader(
       // The function signature is:
       //   vec3 marchBody_<slug>(vec3 <slug>_mp, float <slug>_bt)
       // MarchPos nodes pre-register their `pos` output as `<slug>_mp`.
-      // MarchDist nodes pre-register their `t` output as `<slug>_bt`.
-      // The function returns the last vec3 in the subgraph (identity if empty).
+      // MarchDist nodes pre-register their `dist` (and `t`) output as `<slug>_bt`.
+      // SceneGroup nodes found in the body are compiled inline → sceneFnName.
+      // The warp body function returns the last vec3 before SceneGroup.
       let warpBodyFn = '';  // empty = identity (no body function emitted)
+      // sceneFnName: set from SceneGroup inside body, or fall back to inputVars.scene
+      let sceneFnName = '';
 
       if (subgraph && subgraph.nodes.length > 0) {
         const warpFnName = `marchBody_${nodeSlug}`;
@@ -1048,6 +1051,7 @@ export function generateFragmentShader(
 
         // Pre-register marchPos outputs as the function's position parameter
         // Pre-register marchDist outputs as the function's distance parameter
+        // (both 'dist' and 't' keys for backward compatibility)
         for (const sn of subgraph.nodes) {
           if (sn.type === 'marchPos') {
             const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
@@ -1055,7 +1059,7 @@ export function generateFragmentShader(
           }
           if (sn.type === 'marchDist') {
             const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
-            nodeOutputs.set(mlPrefix + slug, { t: `${nodeSlug}_bt` });
+            nodeOutputs.set(mlPrefix + slug, { dist: `${nodeSlug}_bt`, t: `${nodeSlug}_bt` });
           }
         }
 
@@ -1114,6 +1118,129 @@ export function generateFragmentShader(
           const snDef = getNodeDefinition(sn.type);
           if (!snDef) continue;
 
+          // ── Time / Mouse passthrough inside body ──────────────────────────
+          if (sn.type === 'time') {
+            nodeOutputs.set(sn.id, { time: 'u_time' });
+            continue;
+          }
+          if (sn.type === 'mousePos' || sn.type === 'mouse') {
+            nodeOutputs.set(sn.id, { mouse: 'u_mouse', xy: 'u_mouse.xy' });
+            continue;
+          }
+
+          // ── SceneGroup inside body: compile inline as mapScene function ────
+          if (sn.type === 'sceneGroup') {
+            const sgSubgraph = sn.params.subgraph as SubgraphData | undefined;
+            if (sgSubgraph && sgSubgraph.nodes.length > 0) {
+              // Slug for THIS sceneGroup node (slug portion after mlPrefix)
+              const sgSlugInBody = sn.id.slice(mlPrefix.length);
+              const sceneFnNameLocal = `mapScene_${sgSlugInBody}`;
+              const sgInnerPrefix = `${sgSlugInBody}_sg_`;
+
+              // Build slug map for inner SceneGroup subgraph nodes
+              const sgInnerSlugMap = new Map<string, string>();
+              for (const inn of sgSubgraph.nodes) {
+                sgInnerSlugMap.set(inn.id, computeNodeSlug(inn, usedSlugs));
+              }
+
+              // Pre-register ScenePosNode outputs as 'p' (the function parameter)
+              for (const inn of sgSubgraph.nodes) {
+                if (inn.type === 'scenePos') {
+                  const spSlug = sgInnerSlugMap.get(inn.id) ?? inn.id;
+                  nodeOutputs.set(sgInnerPrefix + spSlug, { pos: 'p' });
+                }
+              }
+
+              // Build prefixed inner nodes
+              const sgInnerPrefixedNodes: GraphNode[] = sgSubgraph.nodes.map(inn => {
+                const innSlug = sgInnerSlugMap.get(inn.id)!;
+                const overridePrefix2 = `${inn.id}::`;
+                const innerParamOverrides: Record<string, unknown> = {};
+                for (const [k, v] of Object.entries(sn.params)) {
+                  if (typeof k === 'string' && k.startsWith(overridePrefix2)) {
+                    innerParamOverrides[k.slice(overridePrefix2.length)] = v;
+                  }
+                }
+                return {
+                  ...inn,
+                  id: sgInnerPrefix + innSlug,
+                  params: Object.keys(innerParamOverrides).length > 0
+                    ? { ...inn.params, ...innerParamOverrides }
+                    : inn.params,
+                  inputs: Object.fromEntries(
+                    Object.entries(inn.inputs).map(([k, inp]) => [
+                      k,
+                      inp.connection
+                        ? { ...inp, connection: {
+                            nodeId: sgInnerPrefix + (sgInnerSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId),
+                            outputKey: inp.connection.outputKey,
+                          }}
+                        : inp,
+                    ]),
+                  ),
+                };
+              });
+
+              const sgInnerSorted = topologicalSort(sgInnerPrefixedNodes);
+              let sgLastFloatVar = '100.0';
+              const sceneFnLines: string[] = [];
+
+              for (const sgn of sgInnerSorted) {
+                if (nodeOutputs.has(sgn.id)) continue; // scenePos already registered
+                const sgnDef = getNodeDefinition(sgn.type);
+                if (!sgnDef) continue;
+
+                if (sgnDef.glslFunction) functions.add(sgnDef.glslFunction);
+                sgnDef.glslFunctions?.forEach(h => functions.add(h));
+
+                const sgnInputVars: Record<string, string> = {};
+                for (const [k, inp] of Object.entries(sgn.inputs)) {
+                  if (inp.connection) {
+                    const srcOut = nodeOutputs.get(inp.connection.nodeId);
+                    if (srcOut?.[inp.connection.outputKey]) sgnInputVars[k] = srcOut[inp.connection.outputKey];
+                  }
+                  if (!sgnInputVars[k]) {
+                    if (inp.defaultValue !== undefined) {
+                      if (typeof inp.defaultValue === 'number') {
+                        sgnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                      } else if (Array.isArray(inp.defaultValue)) {
+                        sgnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                      }
+                    } else if (inp.type === 'float' && (k === 'time' || k === 't')) {
+                      sgnInputVars[k] = 'u_time';
+                    }
+                  }
+                }
+
+                const sgnResult = sgnDef.generateGLSL(sgn, sgnInputVars);
+                sceneFnLines.push(sgnResult.code);
+                nodeOutputs.set(sgn.id, sgnResult.outputVars);
+
+                // Track last float output as candidate return value
+                for (const [outKey, varName] of Object.entries(sgnResult.outputVars)) {
+                  if (sgnDef.outputs[outKey]?.type === 'float') sgLastFloatVar = varName;
+                }
+              }
+
+              // Check outputPorts for explicit return value
+              for (const port of (sgSubgraph.outputPorts ?? [])) {
+                if (port.type === 'float') {
+                  const mappedFromId = sgInnerSlugMap.get(port.fromNodeId) ?? port.fromNodeId;
+                  const srcOut = nodeOutputs.get(sgInnerPrefix + mappedFromId);
+                  if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
+                }
+              }
+
+              // Emit the GLSL scene function into the preamble
+              const sgFnBody = sceneFnLines.join('');
+              const sgFnDef = `float ${sceneFnNameLocal}(vec3 p) {\n${sgFnBody}    return ${sgLastFloatVar};\n}`;
+              functions.add(sgFnDef);
+              sceneFnName = sceneFnNameLocal;
+              nodeOutputs.set(sn.id, { scene: sceneFnNameLocal });
+            }
+            continue; // SceneGroup does not contribute to bodyLines
+          }
+
           if (snDef.glslFunction) functions.add(snDef.glslFunction);
           if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => functions.add(h));
 
@@ -1165,6 +1292,9 @@ export function generateFragmentShader(
         warpBodyFn = warpFnName;
       }
 
+      // Resolve the scene function: body SceneGroup takes priority, then external scene wire
+      const mlSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
+
       // ── Emit the march loop into main ──────────────────────────────────────
       const warpPos = (expr: string, t: string): string =>
         warpBodyFn ? `${warpBodyFn}(${expr}, ${t})` : expr;
@@ -1178,7 +1308,7 @@ export function generateFragmentShader(
         `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
         `        float ${nodeSlug}_d  = ${mlSceneFn}(${nodeSlug}_rp);\n`,
         `        if (${nodeSlug}_d < 0.0005) { ${nodeSlug}_hit = 1.0; ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
-        `        ${nodeSlug}_t += ${nodeSlug}_d;\n`,
+        `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale};\n`,
         `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
         `    }\n`,
         `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
