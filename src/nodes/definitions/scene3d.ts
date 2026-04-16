@@ -120,6 +120,41 @@ export const MarchCameraNode: NodeDefinition = {
   },
 };
 
+// ─── ForwardCameraNode ────────────────────────────────────────────────────────
+// Fixed forward-facing pinhole camera — no orbit. ro = vec3(0,0,-camDist),
+// rd = normalize(vec3(uv, fov)). Ideal for tunnel / fly-through scenes where
+// the warp lives entirely in the march loop body.
+
+export const ForwardCameraNode: NodeDefinition = {
+  type: 'forwardCamera', label: 'Camera (Forward)', category: '3D Scene',
+  description: 'Fixed forward-facing camera. ro sits at (0,0,−camDist) and rd = normalize(vec3(uv, fov)). No orbit — all motion lives inside the MLG body warp.',
+  inputs: {
+    uv: { type: 'vec2', label: 'UV' },
+  },
+  outputs: {
+    ro: { type: 'vec3', label: 'Ray Origin' },
+    rd: { type: 'vec3', label: 'Ray Dir' },
+  },
+  defaultParams: { camDist: 3.0, fov: 1.0 },
+  paramDefs: {
+    camDist: { label: 'Cam Dist', type: 'float' as const, min: 0.1, max: 20.0, step: 0.1 },
+    fov:     { label: 'FOV',      type: 'float' as const, min: 0.3, max: 3.0,  step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const uv  = inputVars.uv || 'g_uv';
+    const d   = p(node.params.camDist, 3.0);
+    const fov = p(node.params.fov,     1.0);
+    return {
+      code: [
+        `    vec3 ${id}_ro = vec3(0.0, 0.0, -${d});\n`,
+        `    vec3 ${id}_rd = normalize(vec3((${uv}).x, (${uv}).y, ${fov}));\n`,
+      ].join(''),
+      outputVars: { ro: `${id}_ro`, rd: `${id}_rd` },
+    };
+  },
+};
+
 // ─── MarchPosNode ─────────────────────────────────────────────────────────────
 // Inside a marchLoopGroup, outputs the current ray march position (vec3).
 // The compiler pre-registers this node's output as the `id_mp` function parameter.
@@ -163,6 +198,51 @@ export const MarchDistNode: NodeDefinition = {
   },
 };
 
+// ─── SceneOutputNode ──────────────────────────────────────────────────────────
+// Visual terminator inside a SceneGroup subgraph.  Wire the last SDF distance
+// here to clearly show the chain end.  The SceneGroup compiler picks up the
+// last float output in topological order, so this node also correctly marks
+// the return value of the generated mapScene_<id> function.
+
+export const SceneOutputNode: NodeDefinition = {
+  type: 'sceneOutput', label: 'Scene Output', category: '3D Scene',
+  description: 'Inside a Scene Group: marks the final SDF output. Connect the last SDF distance here — this becomes the return value of the scene function.',
+  inputs:  { dist: { type: 'float', label: 'Distance' } },
+  outputs: { dist: { type: 'float', label: 'Distance' } },
+  defaultParams: {},
+  paramDefs:    {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const dist = inputVars.dist || '100.0';
+    return {
+      code: `    float ${id}_dist = ${dist};\n`,
+      outputVars: { dist: `${id}_dist` },
+    };
+  },
+};
+
+// ─── MarchWarpOutputNode ──────────────────────────────────────────────────────
+// Visual terminator inside a MarchLoopGroup warp subgraph.  Wire the final
+// warped position here.  The MLG compiler picks up the last vec3 output in
+// topological order, so this also correctly marks the warp function's return.
+
+export const MarchWarpOutputNode: NodeDefinition = {
+  type: 'marchOutput', label: 'Warp Output', category: '3D Scene',
+  description: 'Inside a March Loop Group subgraph: marks the final warped position. Connect the last vec3 from your warp chain here.',
+  inputs:  { pos: { type: 'vec3', label: 'Position' } },
+  outputs: { pos: { type: 'vec3', label: 'Position' } },
+  defaultParams: {},
+  paramDefs:    {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const pos = inputVars.pos || 'vec3(0.0)';
+    return {
+      code: `    vec3 ${id}_pos = ${pos};\n`,
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
 // ─── MarchLoopGroupNode ────────────────────────────────────────────────────────
 // A container node whose subgraph is compiled as a GLSL body-warp helper
 // `vec3 marchBody_<slug>(vec3 <slug>_mp, float <slug>_bt)` called inside the
@@ -173,12 +253,11 @@ export const MarchLoopGroupNode: NodeDefinition = {
   type: 'marchLoopGroup', label: 'March Loop Group', category: '3D Scene',
   description: 'Composable ray march loop. Connect MarchCamera (ro/rd), then double-click to build the loop body. Place a SceneGroup inside the body subgraph with MarchPos → [warps] → SceneGroup.pos. MarchDist gives the accumulated ray distance for depth-dependent effects.',
   inputs: {
-    ro:    { type: 'vec3',  label: 'Ray Origin' },
-    rd:    { type: 'vec3',  label: 'Ray Dir' },
-    uv:    { type: 'vec2',  label: 'UV' },
-    time:  { type: 'float', label: 'Time' },
-    // 'scene' kept for backward compatibility with older saved graphs (not shown in UI)
-    // but still resolved by the compiler via inputVars.scene
+    ro:    { type: 'vec3',    label: 'Ray Origin' },
+    rd:    { type: 'vec3',    label: 'Ray Dir' },
+    scene: { type: 'scene3d', label: 'Scene' },
+    uv:    { type: 'vec2',    label: 'UV' },
+    time:  { type: 'float',   label: 'Time' },
   },
   outputs: {
     color:     { type: 'vec3',  label: 'Color' },

@@ -57,7 +57,7 @@ export function resolveInputVars(
           inputVars[inputKey] = rawVar;
         }
       }
-    } else if (node.type === 'customFn' && typeof node.params[inputKey] === 'number') {
+    } else if ((node.type === 'customFn' || node.type === 'exprNode') && typeof node.params[inputKey] === 'number') {
       const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
       const cfInp = cfInputs.find(c => c.name === inputKey);
       if (cfInp?.slider != null) {
@@ -103,7 +103,7 @@ function resolveLoopBodyInputVars(
     } else if (sock.connection) {
       const src = nodeOutputs.get(sock.connection.nodeId);
       inputVars[k] = src?.[sock.connection.outputKey] ?? defaultGlslVal(sock.type);
-    } else if (bodyNode.type === 'customFn' && typeof bodyNode.params[k] === 'number') {
+    } else if ((bodyNode.type === 'customFn' || bodyNode.type === 'exprNode') && typeof bodyNode.params[k] === 'number') {
       const cfInputs = (bodyNode.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
       const cfInp = cfInputs.find(c => c.name === k);
       if (cfInp?.slider != null) {
@@ -1124,7 +1124,13 @@ export function generateFragmentShader(
             continue;
           }
           if (sn.type === 'mousePos' || sn.type === 'mouse') {
-            nodeOutputs.set(sn.id, { mouse: 'u_mouse', xy: 'u_mouse.xy' });
+            // Emit normalized mouse (same space as UV node) into body function.
+            // Exposes .x and .y so Mouse node outputs work inside MLG body.
+            const mId = sn.id;
+            bodyLines.push(`    vec2 ${mId}_uv = (u_mouse / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`);
+            bodyLines.push(`    float ${mId}_x = ${mId}_uv.x;\n`);
+            bodyLines.push(`    float ${mId}_y = ${mId}_uv.y;\n`);
+            nodeOutputs.set(sn.id, { mouse: `${mId}_uv`, xy: `${mId}_uv`, x: `${mId}_x`, y: `${mId}_y` });
             continue;
           }
 
@@ -1245,6 +1251,19 @@ export function generateFragmentShader(
           if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => functions.add(h));
 
           const origId = sn.id.slice(mlPrefix.length);
+          // Apply param overrides stored on the outer MLG node using "innerNodeId::paramName" keys
+          // (same pattern used by GroupParamPicker so sliders on the MLG affect body nodes)
+          const bodyParamOverrides: Record<string, unknown> = {};
+          const bodyOverridePrefix = `${origId}::`;
+          for (const [k, v] of Object.entries(node.params)) {
+            if (typeof k === 'string' && k.startsWith(bodyOverridePrefix)) {
+              bodyParamOverrides[k.slice(bodyOverridePrefix.length)] = v;
+            }
+          }
+          const snEffective = Object.keys(bodyParamOverrides).length > 0
+            ? { ...sn, params: { ...sn.params, ...bodyParamOverrides } }
+            : sn;
+
           const snInputVars: Record<string, string> = {};
           for (const [k, inp] of Object.entries(sn.inputs)) {
             const portKey = `${origId}:${k}`;
@@ -1265,7 +1284,7 @@ export function generateFragmentShader(
             }
           }
 
-          const snResult = snDef.generateGLSL(sn, snInputVars);
+          const snResult = snDef.generateGLSL(snEffective, snInputVars);
           bodyLines.push(snResult.code);
           nodeOutputs.set(sn.id, snResult.outputVars);
 
@@ -1607,6 +1626,10 @@ vec2 rotate(vec2 v, float angle) {
     return vec2(v.x * cos(angle) - v.y * sin(angle),
                 v.x * sin(angle) + v.y * cos(angle));
 }
+// 2D rotation matrix — returns mat2; use as: p.xy = p.xy * rot2D(angle)
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// Smooth minimum — blends two SDF values; k=0.1 tight, k=0.5 wide blob
+float smin(float a, float b, float k) { float h=max(k-abs(a-b),0.)/k; return min(a,b)-h*h*h*k*(1./6.); }
 // Signed distance — axis-aligned box
 float sdBox(vec2 p, vec2 b) {
     vec2 d = abs(p) - b;

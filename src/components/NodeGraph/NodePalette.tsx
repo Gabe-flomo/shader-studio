@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import type { CustomFnPreset } from '../../types/customFnPreset';
+import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
 
 // ── Nodes hidden from the palette (still functional in existing graphs) ───────
@@ -18,6 +19,13 @@ const HIDDEN_NODES = new Set([
   'loopRingStep',
   'lumaGrain',     // consolidated into Grain node (Luma mode)
   'temporalGrain', // consolidated into Grain node (Temporal mode)
+  'forwardCamera', // superseded by MarchCamera — kept in registry for backward compat
+  'marchPos',      // auto-added to MLG subgraph, not user-selectable
+  'marchDist',     // auto-added to MLG subgraph, not user-selectable
+  'marchOutput',   // auto-added to MLG subgraph, not user-selectable
+  'scenePos',      // auto-added to SceneGroup subgraph, not user-selectable
+  'sceneOutput',   // auto-added to SceneGroup subgraph, not user-selectable
+  'spaceWarpGroup', // no examples remain; hidden but kept for backward compat
 ]);
 
 // ── Math node ordering & sub-groups ──────────────────────────────────────────
@@ -86,8 +94,8 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','animatedPalette','colorRampDemo','colorRampFBM','colorRampWave','hsvDemo','blackbodyDemo','blackbodyFire','blackbodyStar','blendModesDemo','blendOverlayDemo','blendSoftLight','toneMapDemo','agxToneDemo','desaturateDemo','hueRangeDemo','posterizeDemo','invertDemo','lumaGrainDemo','temporalGrainDemo','angularGradient','shapeShowcase','fbmLandscape'] as ExKey[] },
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
   { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['helloSphere3D','translate3D','rotate3D','twoShapes3D','softMetaballs3D','fold3D','sinWarp3D','repeat3D','planeSDF3D','torusScene3D','rayMarchOutputs3D','shapesAndGround3D','infiniteFalling3D','spiralWorld3D','kaleido3DBox'] as ExKey[] },
-  { label: 'Space Warp',      color: '#aa88cc', keys: ['spacewarpTwistColumn','spacewarpInfiniteField','spacewarpRippleTerrain','spacewarpFoldMirror','spacewarpSpiralVortex'] as ExKey[] },
-  { label: 'March Loop',      color: '#88aacc', keys: ['mlgBaseline','mlgTwistSpace','mlgSpiralDepth','mlgFoldMirror','mlgRepeatSpace','mlgTwistFold','mlgSpiralFold','mlgDeepTunnel'] as ExKey[] },
+  { label: '3D SDF',          color: '#89dceb', keys: ['sdfBooleanShowcase','sdfOnionShell','sdfPrimitivesShowcase','sdfPolarRepeat','sdfSmoothMetaballs','sdfRoundedBox','sdfBoxFrame','sdfCappedCone','sdfHexPrism','sdfBend3D','sdfIntersectDemo'] as ExKey[] },
+  { label: 'March Loop',      color: '#88aacc', keys: ['mlgIQTunnel','mlgBaseline','mlgSpiralTunnel','mlgRepeatGrid','mlgWiggleTunnel','mlgAbsFold','mlgTwistSpace','mlgSpiralDepth','mlgFoldMirror','mlgRepeatSpace','mlgTwistFold','mlgSpiralFold','mlgDeepTunnel'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic'] as ExKey[] },
   { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },
@@ -194,6 +202,12 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   // Current presets folder path (for display)
   const [presetsDir, setPresetsDir] = useState<string>(() => getCustomFnDir());
 
+  // User-saved ExprBlock presets
+  const [exprPresets, setExprPresets] = useState<ExprPreset[]>(() => loadExprPresets());
+  const [hoverExprPresetId, setHoverExprPresetId] = useState<string | null>(null);
+
+  const refreshExprPresets = () => setExprPresets(loadExprPresets());
+
   // Merge localStorage presets with disk presets (dedup by id)
   const refreshPresets = async () => {
     const local = loadCustomFns();
@@ -217,6 +231,14 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
       window.removeEventListener('focus', refreshPresets);
       window.removeEventListener('customfn-changed', refreshPresets);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh ExprBlock presets on mount and when changed
+  useEffect(() => {
+    refreshExprPresets();
+    window.addEventListener('exprpreset-changed', refreshExprPresets);
+    return () => window.removeEventListener('exprpreset-changed', refreshExprPresets);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -471,7 +493,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               Examples
             </span>
           </button>
-          {examplesExpanded && EXAMPLE_FOLDERS.map(folder => {
+          {examplesExpanded && EXAMPLE_FOLDERS.filter(folder => folder.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
             const isOpen = openFolders.has(folder.label);
             return (
               <div key={folder.label} style={{ marginBottom: '1px' }}>
@@ -939,6 +961,82 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
                   >
                     ×
                   </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── Expr Block Presets ── */}
+      {!isSearching && (
+        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
+          <div style={{
+            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: '#a6e3a1',
+            paddingLeft: '4px', marginBottom: '4px',
+          }}>
+            Expr Block Presets
+          </div>
+
+          {exprPresets.length === 0 ? (
+            <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
+              Open an Expr Block node and click "↑ Save Preset"
+            </div>
+          ) : (
+            exprPresets.map((preset: ExprPreset) => (
+              <div
+                key={preset.id}
+                style={{ position: 'relative', marginBottom: '2px' }}
+                onMouseEnter={() => setHoverExprPresetId(preset.id)}
+                onMouseLeave={() => setHoverExprPresetId(null)}
+              >
+                <button
+                  onClick={() => {
+                    const x = 200 + Math.random() * 120;
+                    const y = 120 + Math.random() * 200;
+                    addNode('exprNode', { x, y }, {
+                      label:      preset.label,
+                      inputs:     preset.inputs,
+                      outputType: preset.outputType,
+                      lines:      preset.lines,
+                      result:     preset.result,
+                    });
+                    onNodeAdded?.();
+                  }}
+                  title={`Add "${preset.label}" as an Expr Block node`}
+                  style={{
+                    display: 'block', width: '100%',
+                    padding: '5px 28px 5px 10px',
+                    background: '#0e1e12',
+                    border: '1px solid #a6e3a133',
+                    color: '#a6e3a1', cursor: 'pointer',
+                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#132419')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0e1e12')}
+                >
+                  ⟴ {preset.label}
+                </button>
+                {hoverExprPresetId === preset.id && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      deleteExprPreset(preset.id);
+                      refreshExprPresets();
+                    }}
+                    title="Remove this preset"
+                    style={{
+                      position: 'absolute', right: '4px', top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none', border: 'none',
+                      color: '#585b70', cursor: 'pointer',
+                      fontSize: '13px', padding: '0 4px', lineHeight: 1,
+                    }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                  >×</button>
                 )}
               </div>
             ))

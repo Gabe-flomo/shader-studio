@@ -127,8 +127,22 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
             for (const inn of innerSub.nodes) {
               if (inn.type === 'loopIndex' || inn.type === 'loopCarry') continue;
               const innDef = getNodeDefinition(inn.type);
+              const innLabel = typeof inn.params.label === 'string' ? inn.params.label : (innDef?.label ?? inn.type);
+
+              // ExprBlock: derive rows from dynamic slider inputs (params.inputs)
+              if (inn.type === 'exprNode') {
+                const dynInputs = inn.params.inputs as Array<{ name: string; type: string; slider: { min: number; max: number } | null }> | undefined;
+                for (const inp of (dynInputs ?? [])) {
+                  if (inp.type !== 'float' || !inp.slider) continue;
+                  if (inn.inputs[inp.name]?.connection) continue;
+                  const psKey = `ps_${innerGroup.id}_${inn.id}_${inp.name}`;
+                  const wired = !!(outerNode.inputs[psKey]?.connection);
+                  rows.push({ nodeId: inn.id, nodeLabel: innLabel, paramKey: inp.name, paramLabel: inp.name, wired });
+                }
+                continue;
+              }
+
               if (!innDef?.paramDefs) continue;
-              const innLabel = typeof inn.params.label === 'string' ? inn.params.label : (innDef.label ?? inn.type);
 
               for (const [paramKey, paramDef] of Object.entries(innDef.paramDefs)) {
                 if (paramDef.type !== 'float' || paramDef.step === 1) continue;
@@ -190,26 +204,38 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
             .filter(n => !SKIP_TYPES.has(n.type))
             .map(innerNode => {
               const innerDef = getNodeDefinition(innerNode.type);
-              if (!innerDef?.paramDefs) return null;
               const innerLabel = typeof innerNode.params.label === 'string'
                 ? innerNode.params.label
-                : (innerDef.label ?? innerNode.type);
+                : (innerDef?.label ?? innerNode.type);
 
               type Row = { paramKey: string; paramLabel: string; wired: boolean };
               const rows: Row[] = [];
 
-              for (const [paramKey, paramDef] of Object.entries(innerDef.paramDefs)) {
-                if (paramDef.type !== 'float' || paramDef.step === 1) continue;
-                // Skip params driven by internal connections
-                if (innerNode.inputs[`__param_${paramKey}`]?.connection) continue;
-                const matchingInput = Object.entries(innerNode.inputs).find(
-                  ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
-                );
-                if (matchingInput) continue;
-                // Check if wired via ps_ socket on the group
-                const psKey = `ps_${innerNode.id}_${paramKey}`;
-                const wired = !!(outerNode.inputs[psKey]?.connection);
-                rows.push({ paramKey, paramLabel: paramDef.label, wired });
+              // ExprBlock: derive rows from dynamic slider inputs (params.inputs)
+              if (innerNode.type === 'exprNode') {
+                const dynInputs = innerNode.params.inputs as Array<{ name: string; type: string; slider: { min: number; max: number } | null }> | undefined;
+                for (const inp of (dynInputs ?? [])) {
+                  if (inp.type !== 'float' || !inp.slider) continue;
+                  if (innerNode.inputs[inp.name]?.connection) continue; // wired input overrides slider
+                  const psKey = `ps_${innerNode.id}_${inp.name}`;
+                  const wired = !!(outerNode.inputs[psKey]?.connection);
+                  rows.push({ paramKey: inp.name, paramLabel: inp.name, wired });
+                }
+              } else {
+                if (!innerDef?.paramDefs) return null;
+                for (const [paramKey, paramDef] of Object.entries(innerDef.paramDefs)) {
+                  if (paramDef.type !== 'float' || paramDef.step === 1) continue;
+                  // Skip params driven by internal connections
+                  if (innerNode.inputs[`__param_${paramKey}`]?.connection) continue;
+                  const matchingInput = Object.entries(innerNode.inputs).find(
+                    ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
+                  );
+                  if (matchingInput) continue;
+                  // Check if wired via ps_ socket on the group
+                  const psKey = `ps_${innerNode.id}_${paramKey}`;
+                  const wired = !!(outerNode.inputs[psKey]?.connection);
+                  rows.push({ paramKey, paramLabel: paramDef.label, wired });
+                }
               }
 
               if (rows.length === 0) return null;
