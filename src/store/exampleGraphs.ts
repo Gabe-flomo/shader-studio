@@ -8720,6 +8720,418 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── 3D: Space Warp — Twisted Column ──────────────────────────────────────────
+  spacewarpTwistColumn: {
+    label: '3D: Space Warp — Twisted Column',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 120 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Twisted Column Scene',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'box_sg', type: 'boxSDF3D', position: { x: 300, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { sizeX: 0.4, sizeY: 1.1, sizeZ: 0.4 },
+              },
+            ],
+            outputNodeId: 'box_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'warp_3', type: 'spaceWarpGroup', position: { x: 300, y: 360 },
+        inputs: {},
+        outputs: { warp: { type: 'spacewarp3d', label: 'Warp' } },
+        params: {
+          label: 'Twist Warp',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sw', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'twist_sw', type: 'twist3D', position: { x: 300, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sw', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Twisted Pos' } },
+                params: { k: 2.5 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ray_4', type: 'rayMarch', position: { x: 580, y: 220 },
+        inputs: {
+          scene:     { type: 'scene3d',     label: 'Scene',      connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          spacewarp: { type: 'spacewarp3d', label: 'Space Warp', connection: { nodeId: 'warp_3',  outputKey: 'warp'  } },
+          uv:        { type: 'vec2',        label: 'UV',         connection: { nodeId: 'uv_0',    outputKey: 'uv'    } },
+          time:      { type: 'float',       label: 'Time',       connection: { nodeId: 'time_1',  outputKey: 'time'  } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 4.0, camAngle: 0.6, camRotSpeed: 0.3, fov: 1.5, maxSteps: 80, maxDist: 20.0, bgR: 0.02, bgG: 0.02, bgB: 0.08, albedoR: 0.3, albedoG: 0.7, albedoB: 0.95 },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 840, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Space Warp — Infinite Field ──────────────────────────────────────────
+  spacewarpInfiniteField: {
+    label: '3D: Space Warp — Infinite Field',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 120 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Octahedron Scene',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'octa_sg', type: 'octahedronSDF3D', position: { x: 300, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.35 },
+              },
+            ],
+            outputNodeId: 'octa_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'warp_3', type: 'spaceWarpGroup', position: { x: 300, y: 360 },
+        inputs: {},
+        outputs: { warp: { type: 'spacewarp3d', label: 'Warp' } },
+        params: {
+          label: 'Repeat Warp',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sw', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'rep_sw', type: 'repeat3D', position: { x: 300, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sw', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 1.2, cellY: 1.2, cellZ: 1.2 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ray_4', type: 'rayMarch', position: { x: 580, y: 220 },
+        inputs: {
+          scene:     { type: 'scene3d',     label: 'Scene',      connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          spacewarp: { type: 'spacewarp3d', label: 'Space Warp', connection: { nodeId: 'warp_3',  outputKey: 'warp'  } },
+          uv:        { type: 'vec2',        label: 'UV',         connection: { nodeId: 'uv_0',    outputKey: 'uv'    } },
+          time:      { type: 'float',       label: 'Time',       connection: { nodeId: 'time_1',  outputKey: 'time'  } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 1.5, camAngle: 0.3, camRotSpeed: 0.15, fov: 1.5, maxSteps: 100, maxDist: 30.0, bgR: 0.0, bgG: 0.0, bgB: 0.0 },
+      },
+      {
+        id: 'mul_5', type: 'multiply', position: { x: 840, y: 300 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'ray_4', outputKey: 'iter' } },
+          b: { type: 'float', label: 'B', defaultValue: 6.0 },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pal_6', type: 'palettePreset', position: { x: 1060, y: 300 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'mul_5', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1280, y: 300 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Space Warp — Ripple Terrain ──────────────────────────────────────────
+  spacewarpRippleTerrain: {
+    label: '3D: Space Warp — Ripple Terrain',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 120 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Flat Slab Scene',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'box_sg', type: 'boxSDF3D', position: { x: 300, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { sizeX: 3.0, sizeY: 0.05, sizeZ: 3.0 },
+              },
+            ],
+            outputNodeId: 'box_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'warp_3', type: 'spaceWarpGroup', position: { x: 300, y: 360 },
+        inputs: {},
+        outputs: { warp: { type: 'spacewarp3d', label: 'Warp' } },
+        params: {
+          label: 'Ripple Warp',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sw', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'sin1_sw', type: 'sinWarp3D', position: { x: 260, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sw', outputKey: 'pos' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { distort_axis: 'y', source_axis: 'x', frequency: 2.5, amplitude: 0.35 },
+              },
+              {
+                id: 'sin2_sw', type: 'sinWarp3D', position: { x: 480, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'sin1_sw', outputKey: 'p' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { distort_axis: 'y', source_axis: 'z', frequency: 1.8, amplitude: 0.25 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ray_4', type: 'rayMarch', position: { x: 580, y: 220 },
+        inputs: {
+          scene:     { type: 'scene3d',     label: 'Scene',      connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          spacewarp: { type: 'spacewarp3d', label: 'Space Warp', connection: { nodeId: 'warp_3',  outputKey: 'warp'  } },
+          uv:        { type: 'vec2',        label: 'UV',         connection: { nodeId: 'uv_0',    outputKey: 'uv'    } },
+          time:      { type: 'float',       label: 'Time',       connection: { nodeId: 'time_1',  outputKey: 'time'  } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 5.0, camAngle: 0.0, camRotSpeed: 0.0, fov: 1.2, maxSteps: 120, maxDist: 30.0, bgR: 0.05, bgG: 0.05, bgB: 0.1 },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 840, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Space Warp — Octant Mirror ───────────────────────────────────────────
+  spacewarpFoldMirror: {
+    label: '3D: Space Warp — Octant Mirror',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 120 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Offset Sphere Scene',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'tr_sg', type: 'translate3D', position: { x: 260, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: 0.4, ty: 0.3, tz: 0.3 },
+              },
+              {
+                id: 'sph_sg', type: 'sphereSDF3D', position: { x: 460, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.25 },
+              },
+            ],
+            outputNodeId: 'sph_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'warp_3', type: 'spaceWarpGroup', position: { x: 300, y: 360 },
+        inputs: {},
+        outputs: { warp: { type: 'spacewarp3d', label: 'Warp' } },
+        params: {
+          label: 'Fold Warp',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sw', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'fold_sw', type: 'fold3D', position: { x: 300, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sw', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { foldX: true, foldY: true, foldZ: true },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ray_4', type: 'rayMarch', position: { x: 580, y: 220 },
+        inputs: {
+          scene:     { type: 'scene3d',     label: 'Scene',      connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          spacewarp: { type: 'spacewarp3d', label: 'Space Warp', connection: { nodeId: 'warp_3',  outputKey: 'warp'  } },
+          uv:        { type: 'vec2',        label: 'UV',         connection: { nodeId: 'uv_0',    outputKey: 'uv'    } },
+          time:      { type: 'float',       label: 'Time',       connection: { nodeId: 'time_1',  outputKey: 'time'  } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 3.5, camAngle: 0.5, camRotSpeed: 0.25, fov: 1.5, maxSteps: 80, maxDist: 20.0, bgR: 0.02, bgG: 0.02, bgB: 0.06, albedoR: 0.9, albedoG: 0.4, albedoB: 0.6 },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 840, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Space Warp — Spiral Vortex ───────────────────────────────────────────
+  spacewarpSpiralVortex: {
+    label: '3D: Space Warp — Spiral Vortex',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 120 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Torus Scene',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'torus_sg', type: 'torusSDF3D', position: { x: 300, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { majorR: 0.6, minorR: 0.18 },
+              },
+            ],
+            outputNodeId: 'torus_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'warp_3', type: 'spaceWarpGroup', position: { x: 300, y: 360 },
+        inputs: {},
+        outputs: { warp: { type: 'spacewarp3d', label: 'Warp' } },
+        params: {
+          label: 'Spiral Warp',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sw', type: 'scenePos', position: { x: 100, y: 150 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'spiral_sw', type: 'spiralWarp3D', position: { x: 300, y: 150 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sw', outputKey: 'pos' } } },
+                outputs: { p: { type: 'vec3', label: 'Warped Pos' } },
+                params: { rotation_plane: 'xz', frequency: 0.7 },
+              },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ray_4', type: 'rayMarch', position: { x: 580, y: 220 },
+        inputs: {
+          scene:     { type: 'scene3d',     label: 'Scene',      connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          spacewarp: { type: 'spacewarp3d', label: 'Space Warp', connection: { nodeId: 'warp_3',  outputKey: 'warp'  } },
+          uv:        { type: 'vec2',        label: 'UV',         connection: { nodeId: 'uv_0',    outputKey: 'uv'    } },
+          time:      { type: 'float',       label: 'Time',       connection: { nodeId: 'time_1',  outputKey: 'time'  } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, hit: { type: 'float', label: 'Hit' } },
+        params: { camDist: 4.0, camAngle: 0.4, camRotSpeed: 0.2, fov: 1.5, maxSteps: 100, maxDist: 20.0, bgR: 0.03, bgG: 0.02, bgB: 0.08, albedoR: 0.6, albedoG: 0.3, albedoB: 0.9 },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 840, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
