@@ -1757,6 +1757,64 @@ Creates dark region at lens center.
 
 ---
 
+## Space Warp Group
+
+A **SpaceWarpGroup** wraps a vec3→vec3 coordinate transform into a GLSL function that is applied at every point along every ray, before the SDF is evaluated. Because the warp runs before the SDF on every march step, every object in the scene is affected uniformly — you bend the entire coordinate field, not just one object.
+
+### SpaceWarpGroup vs. transforms inside SceneGroup
+
+| | SceneGroup transform | SpaceWarpGroup |
+|---|---|---|
+| Scope | One object (the SDF inside the group) | Every object in the scene |
+| Example | Rotate3D before SphereSDF3D → only that sphere rotates | Fold3D in SpaceWarpGroup → every object is mirrored |
+| Typical use | Positioning / animating individual shapes | Global spatial distortion (repeat, twist, fold, warp) |
+
+A transform chain inside a SceneGroup moves one object. A SpaceWarpGroup bends the entire coordinate field — a single sphere placed at (0.4, 0.3, 0.3) appears as 8 spheres after a Fold3D warp because the fold mirrors all three axes simultaneously.
+
+### How to build a SpaceWarpGroup
+
+1. Add a **SpaceWarpGroup** node to the canvas.
+2. Inside its subgraph: **ScenePos** gives you the input march position as `vec3`.
+3. Chain any 3D Transform nodes (Twist3D, Repeat3D, Fold3D, SinWarp3D, SpiralWarp3D, Rotate3D, Translate3D, etc.).
+4. The final `vec3` output of the chain is the warped position — no explicit output node needed inside the subgraph.
+5. Connect the purple **spacewarp3d** wire from the SpaceWarpGroup output to the `spacewarp` input on the RayMarch node.
+
+### GLSL produced by SpaceWarpGroup
+
+```glsl
+// SpaceWarpGroup compiles your subgraph into:
+vec3 warpSpace_<id>(vec3 p) {
+    // your transform nodes become inline GLSL here
+    vec3 twisted = /* Twist3D computation */;
+    return twisted;
+}
+
+// Inside the ray march loop, before the SDF:
+vec3 rp_raw = ro + t * rd;          // unwarped march position
+vec3 rp     = warpSpace_<id>(rp_raw); // warped — this is what the SDF sees
+float d     = mapScene_<id>(rp);
+```
+
+### Five example uses
+
+- **Twisted Column** — Twist3D inside a SpaceWarpGroup bends a tall box SDF into a helical column. The twist parameter `k` controls tightness.
+- **Infinite Field** — Repeat3D tiles space into an infinite grid of octahedra. One SDF, infinite copies, no extra GPU cost per tile. (Inspired by Inigo Quilez's corridor shaders.)
+- **Ripple Terrain** — Two chained SinWarp3D nodes (X→Y and Z→Y) create an animated undulating ground plane from a flat box SDF. Both animate automatically via `u_time`.
+- **Octant Mirror** — Fold3D with all three axes enabled mirrors one sphere (offset from the origin) into all 8 octants simultaneously. Move the Translate3D offset to reposition all 8 copies at once.
+- **Spiral Vortex** — SpiralWarp3D rotates the XZ plane by an angle proportional to distance from the origin, warping a torus into a swirling vortex. Animates automatically via `u_time`.
+
+### Warning: SDF metric distortion
+
+SpaceWarpGroup breaks the **Lipschitz condition** of the SDF. The distance values the SDF returns are measured in warped space, not world space — the warp "stretches" the metric. Large warp amplitudes cause the ray marcher to over-step, producing graininess, holes, or missing surfaces.
+
+To fix artifacts: reduce the warp amplitude, or increase **Max Steps** on the RayMarch node.
+
+### Note on animated warps
+
+`u_time` is a global GLSL uniform. **SinWarp3D** and **SpiralWarp3D** inside a SpaceWarpGroup read it automatically — no explicit Time node connection is needed inside the subgraph. The warp animates as long as the shader is running.
+
+---
+
 ## Mathematical Reference
 
 ### Vector Operations

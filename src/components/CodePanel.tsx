@@ -216,9 +216,43 @@ interface Props {
   nodeSlugMap?: Map<string, string>;
 }
 
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 0.85; // fraction of window height
+const LS_KEY = 'codePanel_height';
+
 export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props) {
   const [copied, setCopied] = useState(false);
   const firstMatchRef = useRef<HTMLDivElement | null>(null);
+
+  // Resizable height — persisted to localStorage
+  const [height, setHeight] = useState<number>(() => {
+    const stored = localStorage.getItem(LS_KEY);
+    return stored ? Math.max(MIN_HEIGHT, Number(stored)) : 240;
+  });
+
+  const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = height;
+    const onMove = (mv: MouseEvent) => {
+      const next = Math.min(
+        Math.floor(window.innerHeight * MAX_HEIGHT),
+        Math.max(MIN_HEIGHT, startH + (startY - mv.clientY)),
+      );
+      setHeight(next);
+    };
+    const onUp = (mv: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      const final = Math.min(
+        Math.floor(window.innerHeight * MAX_HEIGHT),
+        Math.max(MIN_HEIGHT, startH + (startY - mv.clientY)),
+      );
+      localStorage.setItem(LS_KEY, String(final));
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [height]);
 
   const handleCopy = async () => {
     try {
@@ -265,11 +299,22 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props
 
   return (
     <div style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, height: '240px',
+      position: 'absolute', bottom: 0, left: 0, right: 0, height,
       background: '#181825', borderTop: '1px solid #313244',
       display: 'flex', flexDirection: 'column', zIndex: 20,
       boxShadow: '0 -4px 16px rgba(0,0,0,0.4)',
     }}>
+      {/* Drag-to-resize handle */}
+      <div
+        onMouseDown={onResizeMouseDown}
+        style={{
+          position: 'absolute', top: -3, left: 0, right: 0, height: 6,
+          cursor: 'ns-resize', zIndex: 1,
+          background: 'transparent',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#89b4fa33')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+      />
       {/* Toolbar */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',

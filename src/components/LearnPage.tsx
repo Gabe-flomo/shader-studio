@@ -2899,6 +2899,41 @@ smoothMin(a=Sphere A, b=Sphere B, k=0.3) → SceneGroup output`}</pre>
             This costs two full raymarch passes per frame — double the GPU work. Keep it to 2–3 objects maximum,
             or put objects that share a color in the same SceneGroup.
           </Tip>
+
+          {/* ── Space Warp Group ── */}
+          <h3 style={S.subTitle}>Space Warp Group</h3>
+          <p style={S.p}>
+            A <strong>SpaceWarpGroup</strong> bends the entire coordinate field — every object in the scene is distorted simultaneously. Unlike transforms inside a SceneGroup (which affect only one object), a space warp acts on the raw march position before the SDF runs on every step.
+          </p>
+          <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '14px 18px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#aa88cc', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>How SpaceWarpGroup compiles</div>
+            <CodeBlock>{`vec3 warpSpace_<id>(vec3 p) {
+    // your transform nodes become inline GLSL here
+    return twisted_p;
+}
+
+// Inside the march loop — applied before the SDF:
+vec3 rp_raw = ro + t * rd;
+vec3 rp     = warpSpace_<id>(rp_raw); // warped position
+float d     = mapScene_<id>(rp);      // SDF sees warped space`}</CodeBlock>
+          </div>
+          <p style={S.p}>
+            Build the subgraph exactly like a SceneGroup: <strong>ScenePos</strong> gives you the input position, then chain any 3D Transform nodes. The final <TypeBadge type="vec3" /> output is the warped position. Connect the purple <TypeBadge type="spacewarp3d" /> wire to the <C>spacewarp</C> input on RayMarch.
+          </p>
+          <Tip>
+            <strong>SinWarp3D</strong> and <strong>SpiralWarp3D</strong> inside a SpaceWarpGroup animate automatically — they read <C>u_time</C> as a global uniform without needing an explicit Time node connection.
+          </Tip>
+          <Warn>
+            Space warps break the SDF Lipschitz condition. Large amplitudes cause the marcher to over-step, producing graininess or holes. If you see artifacts, reduce the warp amplitude or increase <strong>Max Steps</strong> on the RayMarch node.
+          </Warn>
+          <p style={{ ...S.p, fontWeight: 600, color: T.textBold }}>Five example uses:</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+            <TryIt exampleKey="spacewarpTwistColumn" label="Twisted Column" onTry={tryExample} />
+            <TryIt exampleKey="spacewarpInfiniteField" label="Infinite Field" onTry={tryExample} />
+            <TryIt exampleKey="spacewarpRippleTerrain" label="Ripple Terrain" onTry={tryExample} />
+            <TryIt exampleKey="spacewarpFoldMirror" label="Octant Mirror" onTry={tryExample} />
+            <TryIt exampleKey="spacewarpSpiralVortex" label="Spiral Vortex" onTry={tryExample} />
+          </div>
         </div>
 
         {/* Bottom padding */}

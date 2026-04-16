@@ -91,7 +91,8 @@ const TYPE_COLORS: Record<string, string> = {
   vec2: '#0af',
   vec3: '#0fa',
   vec4: '#fa0',
-  scene3d: '#cc88aa',  // pastel pink for 3D scene wires
+  scene3d:     '#cc88aa',  // pastel pink for 3D scene wires
+  spacewarp3d: '#aa88cc',  // pastel purple for space warp wires
 };
 
 const INPUT_STYLE: React.CSSProperties = {
