@@ -3089,12 +3089,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           }
 
           if (paramDef.type === 'vec3color') {
-            // RGB color picker: three 0-1 float sliders rendered as a color swatch + inputs
+            // HTML color picker — converts between [r,g,b] 0-1 and hex
             const vals = Array.isArray(node.params[key]) ? (node.params[key] as number[]) : [0, 0, 0];
-            const r = Math.round((vals[0] ?? 0) * 255);
-            const g = Math.round((vals[1] ?? 0) * 255);
-            const b = Math.round((vals[2] ?? 0) * 255);
-            const hexColor = `rgb(${r},${g},${b})`;
+            const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
+            const hexValue = `#${toHex(vals[0])}${toHex(vals[1])}${toHex(vals[2])}`;
             return (
               <div
                 key={key}
@@ -3102,17 +3100,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseDown={e => e.stopPropagation()}
               >
                 <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '50px' }}>{paramDef.label}</span>
-                <div style={{ width: '16px', height: '16px', borderRadius: '3px', background: hexColor, border: '1px solid #45475a', flexShrink: 0 }} />
-                {[0, 1, 2].map(idx => (
-                  <input
-                    key={idx}
-                    type="number"
-                    style={{ ...INPUT_STYLE, width: '40px' }}
-                    min={0} max={1} step={0.01}
-                    value={vals[idx] ?? 0}
-                    onChange={e => setVec3Component(key, idx, e.target.value)}
-                  />
-                ))}
+                <input
+                  type="color"
+                  value={hexValue}
+                  onChange={e => {
+                    const hex = e.target.value;
+                    const r = parseInt(hex.slice(1, 3), 16) / 255;
+                    const g = parseInt(hex.slice(3, 5), 16) / 255;
+                    const b = parseInt(hex.slice(5, 7), 16) / 255;
+                    updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
+                  }}
+                  style={{ width: '32px', height: '20px', border: '1px solid #45475a', borderRadius: '3px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
+                />
               </div>
             );
           }

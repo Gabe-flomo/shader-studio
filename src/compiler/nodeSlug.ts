@@ -4,7 +4,7 @@ import type { GraphNode } from '../types/nodeGraph';
 const TYPE_ABBREV: Record<string, string> = {
   // Sources
   uv: 'uv', pixelUv: 'puv', time: 'time', mousePos: 'mouse',
-  constant: 'const_', textureInput: 'tex', audioInput: 'audio',
+  constant: 'cst', textureInput: 'tex', audioInput: 'audio',
   previousFrame: 'prev', loopIndex: 'idx',
   // Output
   output: 'out', vec4Output: 'out4',
@@ -98,6 +98,9 @@ export function computeNodeSlug(node: GraphNode, usedSlugs: Set<string>): string
   if (!base) base = TYPE_ABBREV[node.type] ?? 'nd';
   // 3. Must not start with a digit
   if (/^\d/.test(base)) base = `n_${base}`;
+  // 4. Strip trailing underscores — a base ending in '_' would combine with '_N' suffix
+  //    to produce double underscores (e.g. 'const__31') which are reserved in GLSL ES.
+  base = base.replace(/_+$/, '');
 
   // Extract the trailing numeric part from the ID for a short, unique suffix.
   // For node_49 → "49"; for group_1775985976579 → last 4 digits "6579".
