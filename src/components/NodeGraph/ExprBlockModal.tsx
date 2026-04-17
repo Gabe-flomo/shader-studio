@@ -468,7 +468,6 @@ export function ExprBlockModal({ node, onClose }: Props) {
                   <input
                     type="text"
                     value={line.lhs}
-                    onChange={e => updateLine(i, 'lhs', e.target.value)}
                     placeholder="p.xy"
                     spellCheck={false}
                     style={{ ...INPUT_STYLE, width: '80px' }}

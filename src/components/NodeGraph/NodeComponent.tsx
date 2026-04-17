@@ -1169,7 +1169,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 <span style={{ fontSize: '10px', color: '#585b70' }}>&#128274;</span>
                 <span style={{ fontSize: '11px', color: '#a6adc8' }}>{label}</span>
                 <div
-                  ref={el => { if (el) registerSocket(node.id, key, 'output', el); }}
+                  ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
                   onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',
@@ -1205,7 +1205,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 <span style={{ fontSize: '11px', color: '#cdd6f4' }}>{label}</span>
                 <span style={{ fontSize: '10px', color: '#585b70' }}>({type})</span>
                 <div
-                  ref={el => { if (el) registerSocket(node.id, key, 'output', el); }}
+                  ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
                   onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',
@@ -1341,7 +1341,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseLeave={() => setHoveredInput(null)}
               >
                 <div
-                  ref={el => { if (el) registerSocket(node.id, 'pos', 'input', el); }}
+                  ref={el => { if (el) registerSocket(node.id, 'in', 'pos', el); }}
                   onMouseUp={() => onEndConnection(node.id, 'pos')}
                   style={{
                     width: 10, height: 10, borderRadius: '50%',
