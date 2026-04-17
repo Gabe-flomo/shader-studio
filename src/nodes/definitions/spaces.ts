@@ -621,3 +621,144 @@ export const Perspective2DNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Domain Repetition Nodes (IQ article) ─────────────────────────────────────
+
+/**
+ * Mirrored Repeat 2D
+ * Fast, SDF-correct tiling for symmetric shapes. Every other tile is mirrored
+ * so the shape is always reflected across tile boundaries — no discontinuities.
+ * (From Inigo Quilez "Domain Repetition" article.)
+ */
+export const MirroredRepeat2DNode: NodeDefinition = {
+  type: 'mirroredRepeat2D',
+  label: 'Mirrored Repeat',
+  category: 'Spaces',
+  description: 'Tiles UV space with mirroring on every other cell. Produces SDF-correct tiling for symmetric shapes — no boundary discontinuities. Pairs with any SDF or pattern node.',
+  inputs: {
+    input: { type: 'vec2',  label: 'UV' },
+    cellX: { type: 'float', label: 'Cell W' },
+    cellY: { type: 'float', label: 'Cell H' },
+  },
+  outputs: {
+    output: { type: 'vec2', label: 'Cell UV' },
+    cellID: { type: 'vec2', label: 'Cell ID' },
+  },
+  defaultParams: { cellX: 1.0, cellY: 1.0 },
+  paramDefs: {
+    cellX: { label: 'Cell W', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
+    cellY: { label: 'Cell H', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const inVar = inputVars.input || 'vec2(0.0)';
+    const cX    = inputVars.cellX || p(node.params.cellX, 1.0);
+    const cY    = inputVars.cellY || p(node.params.cellY, 1.0);
+    return {
+      code: [
+        `    vec2 ${id}_s      = vec2(${cX}, ${cY});\n`,
+        `    vec2 ${id}_cellID = round(${inVar} / ${id}_s);\n`,
+        `    vec2 ${id}_r      = ${inVar} - ${id}_s * ${id}_cellID;\n`,
+        // step(0.5, mod(abs(id), 2.0)) → 0 for even tile index, 1 for odd
+        `    vec2 ${id}_odd    = step(vec2(0.5), mod(abs(${id}_cellID), vec2(2.0)));\n`,
+        `    vec2 ${id}_output = mix(${id}_r, -${id}_r, ${id}_odd);\n`,
+      ].join(''),
+      outputVars: { output: `${id}_output`, cellID: `${id}_cellID` },
+    };
+  },
+};
+
+/**
+ * Limited Repeat 2D
+ * Finite grid of N×M tiles. Uses the clamped-ID technique from IQ's article —
+ * at the grid boundary the last valid shape is "pressed up against" the edge,
+ * giving correct SDF distances for symmetric shapes.
+ */
+export const LimitedRepeat2DNode: NodeDefinition = {
+  type: 'limitedRepeat2D',
+  label: 'Limited Repeat',
+  category: 'Spaces',
+  description: 'Tiles UV space a finite number of times (N×M grid). Correct for symmetric shapes — at the edges the boundary tile is extended rather than clipped. Great for windows, keys, columns.',
+  inputs: {
+    input:  { type: 'vec2',  label: 'UV'      },
+    cellX:  { type: 'float', label: 'Cell W'  },
+    cellY:  { type: 'float', label: 'Cell H'  },
+    countX: { type: 'float', label: 'Count X' },
+    countY: { type: 'float', label: 'Count Y' },
+  },
+  outputs: {
+    output: { type: 'vec2', label: 'Cell UV' },
+    cellID: { type: 'vec2', label: 'Cell ID' },
+  },
+  defaultParams: { cellX: 0.5, cellY: 0.5, countX: 5.0, countY: 3.0 },
+  paramDefs: {
+    cellX:  { label: 'Cell W',  type: 'float', min: 0.05, max: 10.0, step: 0.05 },
+    cellY:  { label: 'Cell H',  type: 'float', min: 0.05, max: 10.0, step: 0.05 },
+    countX: { label: 'Count X', type: 'float', min: 1.0,  max: 40.0, step: 1.0  },
+    countY: { label: 'Count Y', type: 'float', min: 1.0,  max: 40.0, step: 1.0  },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const inVar = inputVars.input  || 'vec2(0.0)';
+    const cX    = inputVars.cellX  || p(node.params.cellX,  0.5);
+    const cY    = inputVars.cellY  || p(node.params.cellY,  0.5);
+    const nX    = inputVars.countX || p(node.params.countX, 5.0);
+    const nY    = inputVars.countY || p(node.params.countY, 3.0);
+    return {
+      code: [
+        `    vec2 ${id}_s    = vec2(${cX}, ${cY});\n`,
+        `    vec2 ${id}_half = (vec2(${nX}, ${nY}) - 1.0) * 0.5;\n`,
+        `    vec2 ${id}_id   = clamp(round(${inVar} / ${id}_s), -${id}_half, ${id}_half);\n`,
+        `    vec2 ${id}_output = ${inVar} - ${id}_s * ${id}_id;\n`,
+      ].join(''),
+      outputVars: { output: `${id}_output`, cellID: `${id}_id` },
+    };
+  },
+};
+
+/**
+ * Angular Repeat 2D
+ * Repeats a shape N times in a ring by mapping every angular sector to the
+ * canonical first sector. Like kaleidoscope but without the mirror flip.
+ * (From IQ "Domain Repetition" — rotational repetition.)
+ */
+export const AngularRepeat2DNode: NodeDefinition = {
+  type: 'angularRepeat2D',
+  label: 'Angular Repeat',
+  category: 'Spaces',
+  description: 'Repeats UV space N times radially around the origin — creates ring/gear/petal arrangements. Feed into any SDF or pattern. sectorID output identifies which copy (0..N-1).',
+  inputs: {
+    input: { type: 'vec2',  label: 'UV'    },
+    count: { type: 'float', label: 'Count' },
+  },
+  outputs: {
+    output:   { type: 'vec2',  label: 'Sector UV' },
+    sectorID: { type: 'float', label: 'Sector ID' },
+  },
+  defaultParams: { count: 6.0 },
+  paramDefs: {
+    count: { label: 'Count', type: 'float', min: 2.0, max: 32.0, step: 1.0 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const inVar = inputVars.input || 'vec2(0.0)';
+    const n     = inputVars.count || p(node.params.count, 6.0);
+    return {
+      code: [
+        // Sector spacing in radians
+        `    float ${id}_sp   = 6.28318530718 / ${n};\n`,
+        // Raw angle in [-π, π]
+        `    float ${id}_an   = atan((${inVar}).y, (${inVar}).x);\n`,
+        // Nearest sector index (may be negative — that's fine)
+        `    float ${id}_id   = round(${id}_an / ${id}_sp);\n`,
+        // Wrap angle into canonical range [-sp/2, sp/2]
+        `    float ${id}_aw   = ${id}_an - ${id}_sp * ${id}_id;\n`,
+        // Reconstruct canonical UV at same radius
+        `    float ${id}_rad  = length(${inVar});\n`,
+        `    vec2  ${id}_output = vec2(cos(${id}_aw) * ${id}_rad, sin(${id}_aw) * ${id}_rad);\n`,
+        `    float ${id}_sectorID = ${id}_id;\n`,
+      ].join(''),
+      outputVars: { output: `${id}_output`, sectorID: `${id}_sectorID` },
+    };
+  },
+};

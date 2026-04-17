@@ -10332,6 +10332,170 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+
+  // ── 2D: Mirrored Tiles ────────────────────────────────────────────────────────
+  mirroredTileRepeat: {
+    label: '2D: Mirrored Tiles',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 80, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'rep_1', type: 'mirroredRepeat2D', position: { x: 290, y: 200 },
+        inputs: {
+          input: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: {
+          output: { type: 'vec2', label: 'Cell UV' },
+          cellID: { type: 'vec2', label: 'Cell ID' },
+        },
+        params: { cellX: 0.38, cellY: 0.38 },
+      },
+      {
+        id: 'circ_2', type: 'circleSDF', position: { x: 510, y: 200 },
+        inputs: {
+          position: { type: 'vec2', label: 'Position', connection: { nodeId: 'rep_1', outputKey: 'output' } },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.13, posX: 0.0, posY: 0.0 },
+      },
+      {
+        id: 'col_3', type: 'sdfColorize', position: { x: 730, y: 200 },
+        inputs: {
+          d: { type: 'float', label: 'SDF', connection: { nodeId: 'circ_2', outputKey: 'distance' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { edge: 0.008 },
+      },
+      {
+        id: 'out_4', type: 'output', position: { x: 950, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'col_3', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 2D: Angular Repeat (flower / gear) ────────────────────────────────────────
+  angularFlowerRepeat: {
+    label: '2D: Angular Repeat',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 80, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 80, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Slowly rotate UV so the flower spins (time drives angle directly — ~1 rad/sec)
+      {
+        id: 'rot_2', type: 'rotate2d', position: { x: 280, y: 280 },
+        inputs: {
+          input: { type: 'vec2',  label: 'Input', connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          angle: { type: 'float', label: 'Angle', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Output' } },
+        params: {},
+      },
+      {
+        id: 'ang_3', type: 'angularRepeat2D', position: { x: 490, y: 200 },
+        inputs: {
+          input: { type: 'vec2', label: 'UV', connection: { nodeId: 'rot_2', outputKey: 'output' } },
+        },
+        outputs: {
+          output:   { type: 'vec2',  label: 'Sector UV' },
+          sectorID: { type: 'float', label: 'Sector ID' },
+        },
+        params: { count: 7.0 },
+      },
+      // Circle offset from origin in sector space → appears 7× around ring
+      {
+        id: 'circ_4', type: 'circleSDF', position: { x: 710, y: 200 },
+        inputs: {
+          position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ang_3', outputKey: 'output' } },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.13, posX: 0.42, posY: 0.0 },
+      },
+      {
+        id: 'col_5', type: 'sdfColorize', position: { x: 930, y: 200 },
+        inputs: {
+          d: { type: 'float', label: 'SDF', connection: { nodeId: 'circ_4', outputKey: 'distance' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { edge: 0.008 },
+      },
+      {
+        id: 'out_6', type: 'output', position: { x: 1150, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'col_5', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Menger Sponge ─────────────────────────────────────────────────────────
+  mengerSponge3D: {
+    label: '3D: Menger Sponge',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 310, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Menger Scene',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 180 },
+                inputs: {},
+                outputs: { pos: { type: 'vec3', label: 'Position' } },
+                params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 340 },
+                inputs: {},
+                outputs: { time: { type: 'float', label: 'Time' } },
+                params: {},
+              },
+              // Slowly rotate the sponge on two axes
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 260, y: 240 },
+                inputs: {
+                  pos:  { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  time: { type: 'float', label: 'Time',     connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { rx: 0.2, ry: 0.4, rz: 0.0, speed: 0.25 },
+              },
+              {
+                id: 'menger_sg', type: 'mengerSponge', position: { x: 460, y: 240 },
+                inputs: {
+                  pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.85, iterations: 3 },
+              },
+            ],
+            outputNodeId: 'menger_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 120, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.5, bgR: 0.03, bgG: 0.03, bgB: 0.06, albedoR: 0.55, albedoG: 0.6, albedoB: 0.65 },
+      },
+      {
+        id: 'out_4', type: 'output', position: { x: 860, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

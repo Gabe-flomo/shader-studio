@@ -47,6 +47,10 @@ const TYPE_ABBREV: Record<string, string> = {
   coneSDF3D: 'cone', octahedronSDF3D: 'oct',
   translate3D: 'tr', rotate3D: 'rot', fold3D: 'fold', repeat3D: 'rep',
   scale3D: 'scl', sinWarp3D: 'swrp3', spiralWarp3D: 'spr', rotateAxis3D: 'rota',
+  // Domain Repetition (IQ article)
+  mirroredRepeat2D: 'mrep2', limitedRepeat2D: 'lrep2', angularRepeat2D: 'arep2',
+  mirroredRepeat3D: 'mrep3',
+  sdCross3D: 'xcross', mengerSponge: 'menger',
   // Groups / loops
   group: 'grp', loopStart: 'lstart', loopEnd: 'lend',
   marchLoopInputs: 'mli', marchLoopOutput: 'mlo',

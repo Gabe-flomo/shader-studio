@@ -1196,3 +1196,139 @@ export const SpiralWarp3DNode: NodeDefinition = {
   },
 };
 
+// ─── Domain Repetition / Fractal SDF Nodes (IQ articles) ─────────────────────
+
+/**
+ * Mirrored Repeat 3D
+ * Infinite repetition with mirror-flip on every other cell. Produces valid SDF
+ * distances for symmetric primitives — no discontinuities at tile boundaries.
+ * (From Inigo Quilez "Domain Repetition" article.)
+ */
+export const MirroredRepeat3DNode: NodeDefinition = {
+  type: 'mirroredRepeat3D',
+  label: 'Mirrored Repeat 3D',
+  category: '3D Transforms',
+  description: 'Infinite 3D domain repetition with mirror flip on every other cell. SDF-correct for symmetric shapes. Outputs warped position + integer cell ID. Use instead of Repeat 3D when shapes vary from tile to tile.',
+  inputs: {
+    pos:   { type: 'vec3',  label: 'Position' },
+    cellX: { type: 'float', label: 'Cell X' },
+    cellY: { type: 'float', label: 'Cell Y' },
+    cellZ: { type: 'float', label: 'Cell Z' },
+  },
+  outputs: {
+    pos:    { type: 'vec3', label: 'Mirrored Pos' },
+    cellID: { type: 'vec3', label: 'Cell ID' },
+  },
+  defaultParams: { cellX: 2.0, cellY: 2.0, cellZ: 2.0 },
+  paramDefs: {
+    cellX: { label: 'Cell X', type: 'float', min: 0.1, max: 10.0, step: 0.1 },
+    cellY: { label: 'Cell Y', type: 'float', min: 0.1, max: 10.0, step: 0.1 },
+    cellZ: { label: 'Cell Z', type: 'float', min: 0.1, max: 10.0, step: 0.1 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const pv  = inputVars.pos   || 'vec3(0.0)';
+    const cx  = inputVars.cellX || p(node.params.cellX, 2.0);
+    const cy  = inputVars.cellY || p(node.params.cellY, 2.0);
+    const cz  = inputVars.cellZ || p(node.params.cellZ, 2.0);
+    return {
+      code: [
+        `    vec3 ${id}_s      = vec3(${cx}, ${cy}, ${cz});\n`,
+        `    vec3 ${id}_cellID = round(${pv} / ${id}_s);\n`,
+        `    vec3 ${id}_r      = ${pv} - ${id}_s * ${id}_cellID;\n`,
+        // step(0.5, mod(abs(id), 2.0)) → 0 for even cell, 1 for odd → flip sign
+        `    vec3 ${id}_odd    = step(vec3(0.5), mod(abs(${id}_cellID), vec3(2.0)));\n`,
+        `    vec3 ${id}_pos    = mix(${id}_r, -${id}_r, ${id}_odd);\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos`, cellID: `${id}_cellID` },
+    };
+  },
+};
+
+/**
+ * SD Cross 3D
+ * Union of three infinite square bars intersecting at the origin — the
+ * building block of the Menger Sponge and a useful standalone primitive.
+ * (From Inigo Quilez "Menger Sponge" article.)
+ */
+export const SdCrossNode: NodeDefinition = {
+  type: 'sdCross3D',
+  label: 'SD Cross 3D',
+  category: '3D Primitives',
+  description: 'Union of three infinite square bars along each axis — the cross shape used to build Menger Sponge. size = bar half-thickness.',
+  inputs: {
+    pos:  { type: 'vec3',  label: 'Position' },
+    size: { type: 'float', label: 'Size' },
+  },
+  outputs: { dist: { type: 'float', label: 'Distance' } },
+  defaultParams: { size: 0.3 },
+  paramDefs: {
+    size: { label: 'Bar Half-size', type: 'float', min: 0.01, max: 2.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const pv   = inputVars.pos  || 'vec3(0.0)';
+    const sz   = inputVars.size || p(node.params.size, 0.3);
+    return {
+      code: [
+        `    vec3  ${id}_q    = abs(${pv});\n`,
+        `    float ${id}_da   = max(${id}_q.x, ${id}_q.y);\n`,
+        `    float ${id}_db   = max(${id}_q.y, ${id}_q.z);\n`,
+        `    float ${id}_dc   = max(${id}_q.z, ${id}_q.x);\n`,
+        `    float ${id}_dist = min(${id}_da, min(${id}_db, ${id}_dc)) - ${sz};\n`,
+      ].join(''),
+      outputVars: { dist: `${id}_dist` },
+    };
+  },
+};
+
+/**
+ * Menger Sponge SDF
+ * Classic fractal formed by iteratively subtracting a cross-shaped hole from
+ * a cube. Each iteration triples the frequency of detail. 1–4 iterations.
+ * (From Inigo Quilez "Menger Sponge" article.)
+ */
+export const MengerSpongeNode: NodeDefinition = {
+  type: 'mengerSponge',
+  label: 'Menger Sponge',
+  category: '3D Primitives',
+  description: 'Iterative fractal SDF: a cube with cross-shaped holes drilled at every scale. iterations=1 is a simple drilled cube; 3–4 gives full fractal detail. size scales the unit cube.',
+  inputs: {
+    pos:  { type: 'vec3',  label: 'Position' },
+    size: { type: 'float', label: 'Size' },
+  },
+  outputs: { dist: { type: 'float', label: 'Distance' } },
+  defaultParams: { size: 1.0, iterations: 3 },
+  paramDefs: {
+    size:       { label: 'Size',       type: 'float',  min: 0.1, max: 5.0, step: 0.05 },
+    iterations: { label: 'Iterations', type: 'select', options: [1,2,3,4].map(n => ({ value: String(n), label: String(n) })) },
+  },
+  glslFunction: SDF3D_PRIMS_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const pv    = inputVars.pos  || 'vec3(0.0)';
+    const sz    = inputVars.size || p(node.params.size, 1.0);
+    const iters = Math.max(1, Math.min(4, Number(node.params.iterations) || 3));
+    const lines: string[] = [
+      // Normalize to unit cube, evaluate box SDF, then iterate
+      `    vec3  ${id}_p = ${pv} / ${sz};\n`,
+      `    float ${id}_d = sdf3d_box(${id}_p, vec3(1.0));\n`,
+      `    float ${id}_s = 1.0;\n`,
+    ];
+    for (let m = 0; m < iters; m++) {
+      lines.push(`    { // menger iter ${m + 1}\n`);
+      lines.push(`    vec3  ${id}_a${m} = mod(${id}_p * ${id}_s, 2.0) - 1.0;\n`);
+      lines.push(`    ${id}_s *= 3.0;\n`);
+      lines.push(`    vec3  ${id}_r${m} = abs(1.0 - 3.0 * abs(${id}_a${m}));\n`);
+      lines.push(`    float ${id}_da${m} = max(${id}_r${m}.x, ${id}_r${m}.y);\n`);
+      lines.push(`    float ${id}_db${m} = max(${id}_r${m}.y, ${id}_r${m}.z);\n`);
+      lines.push(`    float ${id}_dc${m} = max(${id}_r${m}.z, ${id}_r${m}.x);\n`);
+      lines.push(`    float ${id}_c${m}  = (min(${id}_da${m}, min(${id}_db${m}, ${id}_dc${m})) - 1.0) / ${id}_s;\n`);
+      lines.push(`    ${id}_d = max(${id}_d, ${id}_c${m}); }\n`);
+    }
+    // Scale distance back to world space
+    lines.push(`    float ${id}_dist = ${id}_d * ${sz};\n`);
+    return { code: lines.join(''), outputVars: { dist: `${id}_dist` } };
+  },
+};
+
