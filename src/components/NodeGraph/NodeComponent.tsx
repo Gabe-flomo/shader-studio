@@ -301,6 +301,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const selectedNodeIds    = useNodeGraphStore(s => s.selectedNodeIds);
   const isMultiSelected    = selectedNodeIds.includes(node.id);
   const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
+  const addMarchLoopInput      = useNodeGraphStore(s => s.addMarchLoopInput);
+  const removeMarchLoopInput   = useNodeGraphStore(s => s.removeMarchLoopInput);
+  const toggleMarchLoopOutputPort = useNodeGraphStore(s => s.toggleMarchLoopOutputPort);
+  const mlGroupHiddenOutputs   = useNodeGraphStore(s => (s.nodes.find(n => n.id === s.activeGroupId)?.params?.hiddenOutputs as string[] | undefined) ?? []);
   const renameGroupPort    = useNodeGraphStore(s => s.renameGroupPort);
   const saveGroupPreset    = useNodeGraphStore(s => s.saveGroupPreset);
   const duplicateGroup     = useNodeGraphStore(s => s.duplicateGroup);
@@ -324,14 +328,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   useEffect(() => {
     if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
     let cancelled = false;
-    // When inside a group, preview against the subgraph nodes, not top-level
+    // When inside a group, build a merged node list so the BFS in
+    // compileNodePreviewShader can resolve anchor nodes (UV, time, etc.)
+    // that live at the top level even though the target node is in the subgraph.
     const state = useNodeGraphStore.getState();
     const activeGroupId = state.activeGroupId;
     let currentNodes = state.nodes;
     if (activeGroupId) {
       const groupNode = state.nodes.find(n => n.id === activeGroupId);
       const sg = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-      if (sg) currentNodes = sg.nodes;
+      if (sg) {
+        // Subgraph nodes take priority (same ID wins for sg); top-level nodes fill in
+        // any anchor node dependencies (UV, time, etc.) not defined inside the group.
+        const sgIds = new Set(sg.nodes.map((n: { id: string }) => n.id));
+        currentNodes = [...sg.nodes, ...state.nodes.filter(n => !sgIds.has(n.id))];
+      }
     }
     const fs = compileNodePreviewShader(node.id, currentNodes);
     if (!fs) return;
@@ -1032,6 +1043,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     );
   }
 
+  // ── March Loop anchor node state ────────────────────────────────────────────
+  const [addingMarchInput, setAddingMarchInput] = useState<{name: string; type: DataType} | null>(null);
+
   // ── Group node special card ──────────────────────────────────────────────────
   const [editingPortKey, setEditingPortKey] = useState<string | null>(null);
   const [editingPortLabel, setEditingPortLabel] = useState('');
@@ -1048,6 +1062,339 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [editingSliderValue, setEditingSliderValue] = useState('');
   const [showParamPicker, setShowParamPicker] = useState(false);
   const [showInitModal, setShowInitModal] = useState(false);
+
+  // ── March Loop Group anchor nodes — special card rendering ──────────────────
+  const MARCH_STANDARD_OUTPUTS = [
+    { key: 'color',     type: 'vec3' as DataType,  label: 'Color' },
+    { key: 'normal',    type: 'vec3' as DataType,  label: 'Normal' },
+    { key: 'dist',      type: 'float' as DataType, label: 'Dist' },
+    { key: 'iter',      type: 'float' as DataType, label: 'Iter' },
+    { key: 'iterCount', type: 'float' as DataType, label: 'Iter Count' },
+    { key: 'hit',       type: 'float' as DataType, label: 'Hit' },
+    { key: 'depth',     type: 'float' as DataType, label: 'Depth' },
+    { key: 'pos',       type: 'vec3' as DataType,  label: 'Hit Pos' },
+  ] as const;
+
+  const SOCKET_COLORS: Record<string, string> = {
+    vec3: '#a6e3a1',
+    float: '#f38ba8',
+    vec2: '#89b4fa',
+    vec4: '#fab387',
+  };
+
+  const handleAnchorDragMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 2) return;
+    e.stopPropagation();
+    e.preventDefault();
+    dragOffset.current = {
+      x: e.clientX / zoom - node.position.x,
+      y: e.clientY / zoom - node.position.y,
+    };
+    document.body.style.userSelect = 'none';
+    const handleMove = (ev: MouseEvent) => {
+      if (!dragOffset.current) return;
+      updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
+    };
+    const handleUp = () => {
+      dragOffset.current = null;
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  };
+
+  if (node.type === 'marchLoopInputs') {
+    const extraInputs = (node.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>;
+    const fixedOutputs = [
+      { key: 'ro',        type: 'vec3',  label: 'Ray Origin' },
+      { key: 'rd',        type: 'vec3',  label: 'Ray Dir' },
+      { key: 'marchPos',  type: 'vec3',  label: 'March Pos' },
+      { key: 'marchDist', type: 'float', label: 'March Dist' },
+    ] as const;
+
+    return (
+      <div
+        data-node-id={node.id}
+        style={{
+          position: 'absolute',
+          left: node.position.x,
+          top: node.position.y,
+          background: '#1e1e2e',
+          border: isSelected ? '1px solid #88aacc' : '1px solid #45475a',
+          borderRadius: '8px',
+          minWidth: '180px',
+          color: '#cdd6f4',
+          fontSize: '12px',
+          userSelect: 'none',
+          zIndex,
+          opacity: dimmed ? 0.2 : 1,
+        }}
+        onMouseDown={() => { setZIndex(++zCounter); }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            background: '#313244',
+            borderRadius: '7px 7px 0 0',
+            padding: '6px 10px',
+            fontWeight: 700,
+            fontSize: '11px',
+            color: '#88aacc',
+            cursor: 'grab',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+          onMouseDown={handleAnchorDragMouseDown}
+          onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
+        >
+          <span style={{ fontSize: '10px' }}>&#9668;</span>
+          Group Inputs
+        </div>
+
+        {/* Fixed outputs */}
+        <div style={{ padding: '6px 0' }}>
+          {fixedOutputs.map(({ key, type, label }) => {
+            const color = SOCKET_COLORS[type] ?? '#a6adc8';
+            return (
+              <div
+                key={key}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
+                onMouseEnter={() => setHoveredOutput(key)}
+                onMouseLeave={() => setHoveredOutput(null)}
+              >
+                <span style={{ fontSize: '10px', color: '#585b70' }}>&#128274;</span>
+                <span style={{ fontSize: '11px', color: '#a6adc8' }}>{label}</span>
+                <div
+                  ref={el => { if (el) registerSocket(node.id, key, 'output', el); }}
+                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                  style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: hoveredOutput === key ? '#ffffff' : color,
+                    border: `2px solid ${color}`,
+                    cursor: 'crosshair',
+                    flexShrink: 0,
+                    transition: 'background 0.1s',
+                  }}
+                />
+              </div>
+            );
+          })}
+
+          {/* User-added extra outputs */}
+          {extraInputs.map(({ key, type, label }) => {
+            const color = SOCKET_COLORS[type] ?? '#a6adc8';
+            return (
+              <div
+                key={key}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
+                onMouseEnter={() => setHoveredOutput(key)}
+                onMouseLeave={() => setHoveredOutput(null)}
+              >
+                <button
+                  onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)}
+                  style={{
+                    background: 'none', border: 'none', color: '#585b70', cursor: 'pointer',
+                    padding: '0 2px', fontSize: '11px', lineHeight: 1,
+                  }}
+                  title={`Remove ${label}`}
+                >&#10005;</button>
+                <span style={{ fontSize: '11px', color: '#cdd6f4' }}>{label}</span>
+                <span style={{ fontSize: '10px', color: '#585b70' }}>({type})</span>
+                <div
+                  ref={el => { if (el) registerSocket(node.id, key, 'output', el); }}
+                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                  style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: hoveredOutput === key ? '#ffffff' : color,
+                    border: `2px solid ${color}`,
+                    cursor: 'crosshair',
+                    flexShrink: 0,
+                    transition: 'background 0.1s',
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add Input form */}
+        <div style={{ borderTop: '1px solid #31324488', padding: '6px 8px' }}>
+          {addingMarchInput ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <input
+                autoFocus
+                placeholder="name (e.g. speed)"
+                value={addingMarchInput.name}
+                onChange={e => setAddingMarchInput(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setAddingMarchInput(null);
+                  if (e.key === 'Enter' && addingMarchInput.name.trim() && activeGroupId) {
+                    addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
+                    setAddingMarchInput(null);
+                  }
+                }}
+                style={{ ...INPUT_STYLE, width: '100%', boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                {(['float', 'vec2', 'vec3', 'vec4'] as DataType[]).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
+                    style={{
+                      background: addingMarchInput.type === t ? '#88aacc' : '#31324488',
+                      border: `1px solid ${addingMarchInput.type === t ? '#88aacc' : '#585b70'}`,
+                      borderRadius: 3, color: addingMarchInput.type === t ? '#1e1e2e' : '#a6adc8',
+                      fontSize: '10px', padding: '2px 5px', cursor: 'pointer',
+                    }}
+                  >{t}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => {
+                    if (addingMarchInput.name.trim() && activeGroupId) {
+                      addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
+                      setAddingMarchInput(null);
+                    }
+                  }}
+                  style={{ flex: 1, background: '#88aacc22', border: '1px solid #88aacc', borderRadius: 3, color: '#88aacc', fontSize: '10px', padding: '3px 0', cursor: 'pointer' }}
+                >Add</button>
+                <button
+                  onClick={() => setAddingMarchInput(null)}
+                  style={{ flex: 1, background: 'none', border: '1px solid #45475a', borderRadius: 3, color: '#585b70', fontSize: '10px', padding: '3px 0', cursor: 'pointer' }}
+                >Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingMarchInput({ name: '', type: 'float' })}
+              style={{
+                width: '100%', background: 'none', border: '1px dashed #45475a',
+                borderRadius: 3, color: '#585b70', fontSize: '10px', padding: '3px 0',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              }}
+            >
+              <span>&#43;</span> Add Input
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (node.type === 'marchLoopOutput') {
+    return (
+      <div
+        data-node-id={node.id}
+        style={{
+          position: 'absolute',
+          left: node.position.x,
+          top: node.position.y,
+          background: '#1e1e2e',
+          border: isSelected ? '1px solid #88aacc' : '1px solid #45475a',
+          borderRadius: '8px',
+          minWidth: '200px',
+          color: '#cdd6f4',
+          fontSize: '12px',
+          userSelect: 'none',
+          zIndex,
+          opacity: dimmed ? 0.2 : 1,
+        }}
+        onMouseDown={() => { setZIndex(++zCounter); }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            background: '#313244',
+            borderRadius: '7px 7px 0 0',
+            padding: '6px 10px',
+            fontWeight: 700,
+            fontSize: '11px',
+            color: '#88aacc',
+            cursor: 'grab',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+          onMouseDown={handleAnchorDragMouseDown}
+          onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
+        >
+          Group Output
+          <span style={{ fontSize: '10px' }}>&#9658;</span>
+        </div>
+
+        {/* pos input socket */}
+        <div style={{ padding: '6px 0' }}>
+          {(() => {
+            const posInp = node.inputs.pos;
+            const color = '#a6e3a1';
+            const isConnected = !!posInp?.connection;
+            return (
+              <div
+                style={{ display: 'flex', alignItems: 'center', padding: '2px 10px 2px 8px', gap: 6, position: 'relative' }}
+                onMouseEnter={() => setHoveredInput('pos')}
+                onMouseLeave={() => setHoveredInput(null)}
+              >
+                <div
+                  ref={el => { if (el) registerSocket(node.id, 'pos', 'input', el); }}
+                  onMouseUp={() => onEndConnection(node.id, 'pos')}
+                  style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: isConnected ? color : (hoveredInput === 'pos' ? '#ffffff' : 'transparent'),
+                    border: `2px solid ${color}`,
+                    cursor: 'crosshair',
+                    flexShrink: 0,
+                    transition: 'background 0.1s',
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: '#a6adc8' }}>Position</span>
+                <span style={{ fontSize: '10px', color: '#585b70' }}>&#128274;</span>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Standard outputs toggle section */}
+        {activeGroupId && (
+          <div style={{ borderTop: '1px solid #31324488', padding: '6px 8px' }}>
+            <div style={{ fontSize: '10px', color: '#585b70', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Outputs
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+              {MARCH_STANDARD_OUTPUTS.map(({ key, type, label }) => {
+                const isHidden = mlGroupHiddenOutputs.includes(key);
+                const color = SOCKET_COLORS[type] ?? '#a6adc8';
+                return (
+                  <button
+                    key={key}
+                    title={isHidden ? `Show ${label} output` : `Hide ${label} output`}
+                    onClick={() => toggleMarchLoopOutputPort(activeGroupId, key)}
+                    style={{
+                      background: isHidden ? 'none' : `${color}22`,
+                      border: `1px solid ${isHidden ? '#45475a' : color}`,
+                      borderRadius: 3,
+                      color: isHidden ? '#585b70' : color,
+                      fontSize: '10px',
+                      padding: '2px 5px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (node.type === 'group' || node.type === 'sceneGroup' || node.type === 'spaceWarpGroup' || node.type === 'marchLoopGroup') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
@@ -1328,8 +1675,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
           {/* Outputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
-            {/* MarchLoopGroup: render definition-based outputs */}
-            {isMarchLoopGroup && Object.entries(node.outputs).map(([key, output]) => (
+            {/* MarchLoopGroup: render definition-based outputs, skipping hidden ones */}
+            {isMarchLoopGroup && Object.entries(node.outputs).filter(([key]) => {
+              const hidden = (node.params.hiddenOutputs as string[] | undefined) ?? [];
+              return !hidden.includes(key);
+            }).map(([key, output]) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '10px', color: '#a6adc8' }}>{output.label}</span>
                 <div

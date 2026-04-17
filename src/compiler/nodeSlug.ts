@@ -49,6 +49,7 @@ const TYPE_ABBREV: Record<string, string> = {
   scale3D: 'scl', sinWarp3D: 'swrp3', spiralWarp3D: 'spr', rotateAxis3D: 'rota',
   // Groups / loops
   group: 'grp', loopStart: 'lstart', loopEnd: 'lend',
+  marchLoopInputs: 'mli', marchLoopOutput: 'mlo',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

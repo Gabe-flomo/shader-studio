@@ -308,6 +308,12 @@ interface NodeGraphState {
   addGroupOutput: (groupId: string, type?: import('../types/nodeGraph').DataType, label?: string) => void;
   /** Remove an output port from a group and disconnect any external connections to it */
   removeGroupOutput: (groupId: string, portKey: string) => void;
+  /** Add a user-defined extra input to a marchLoopGroup (surfaces as input socket + marchLoopInputs output) */
+  addMarchLoopInput: (groupNodeId: string, key: string, type: import('../types/nodeGraph').DataType, label: string) => void;
+  /** Remove a user-defined extra input from a marchLoopGroup */
+  removeMarchLoopInput: (groupNodeId: string, key: string) => void;
+  /** Toggle visibility of a standard output port on the exterior marchLoopGroup node */
+  toggleMarchLoopOutputPort: (groupNodeId: string, outputKey: string) => void;
   /** Add a new dynamic input port to a group (from inside the group view) */
   addGroupInput: (groupId: string, type: import('../types/nodeGraph').DataType, label: string) => void;
   /** Reroute an existing group input port to a different inner node socket */
@@ -1149,36 +1155,32 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     if (groupNode?.type === 'marchLoopGroup' && !groupNode.params?.subgraph) {
       const ts = Date.now();
-      const marchPosNode: import('../types/nodeGraph').GraphNode = {
-        id: `marchpos_${ts}`,
-        type: 'marchPos',
-        position: { x: 80, y: 120 },
+      const marchLoopInputsNode: import('../types/nodeGraph').GraphNode = {
+        id: `mlInputs_${ts}`,
+        type: 'marchLoopInputs',
+        position: { x: 80, y: 180 },
         inputs: {},
-        outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
-        params: { _groupOriginal: true },
+        outputs: {
+          ro:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Origin' },
+          rd:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Dir' },
+          marchPos:  { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'March Pos' },
+          marchDist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'March Dist' },
+        },
+        params: { _groupOriginal: true, extraInputs: [] },
       };
-      const marchDistNode: import('../types/nodeGraph').GraphNode = {
-        id: `marchdist_${ts}`,
-        type: 'marchDist',
-        position: { x: 80, y: 220 },
-        inputs: {},
-        outputs: { dist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'Dist' }, t: { type: 'float' as import('../types/nodeGraph').DataType, label: 't' } },
-        params: { _groupOriginal: true },
-      };
-      // Warp output node — visual terminator for the warp chain.
-      const marchOutputNode: import('../types/nodeGraph').GraphNode = {
-        id: `marchout_${ts}`,
-        type: 'marchOutput',
-        position: { x: 380, y: 160 },
+      const marchLoopOutputNode: import('../types/nodeGraph').GraphNode = {
+        id: `mlOutput_${ts}`,
+        type: 'marchLoopOutput',
+        position: { x: 480, y: 180 },
         inputs: {
           pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position',
-            connection: { nodeId: `marchpos_${ts}`, outputKey: 'pos' } },
+            connection: { nodeId: `mlInputs_${ts}`, outputKey: 'marchPos' } },
         },
-        outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
-        params: { _groupOriginal: true },
+        outputs: {},
+        params: { _groupOriginal: true, hiddenOutputs: [] },
       };
       const defaultSubgraph: import('../types/nodeGraph').SubgraphData = {
-        nodes: [marchPosNode, marchDistNode, marchOutputNode],
+        nodes: [marchLoopInputsNode, marchLoopOutputNode],
         inputPorts: [],
         outputPorts: [],
       };
@@ -1238,41 +1240,85 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
 
       if (groupNode.type === 'marchLoopGroup') {
-        if (!sgNodes.some(n => n.type === 'marchPos')) {
-          const minX = sgNodes.length ? Math.min(...sgNodes.map(n => n.position.x)) : 80;
-          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 160;
-          sgNodes = [...sgNodes, {
-            id: `marchpos_${ts_m}`, type: 'marchPos',
-            position: { x: minX - 200, y: avgY - 40 },
-            inputs: {}, outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
-            params: { _groupOriginal: true },
-          }];
-          changed = true;
-        }
-        if (!sgNodes.some(n => n.type === 'marchDist')) {
-          const minX = sgNodes.length ? Math.min(...sgNodes.map(n => n.position.x)) : 80;
-          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 160;
-          sgNodes = [...sgNodes, {
-            id: `marchdist_${ts_m + 1}`, type: 'marchDist',
-            position: { x: minX - 200, y: avgY + 80 },
-            inputs: {}, outputs: {
-              dist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'Dist' },
-              t: { type: 'float' as import('../types/nodeGraph').DataType, label: 't' },
+        // Check if already using new-style anchors
+        if (!sgNodes.some(n => n.type === 'marchLoopInputs')) {
+          // Migrate legacy marchPos + marchDist → single marchLoopInputs
+          const oldMarchPos  = sgNodes.find(n => n.type === 'marchPos');
+          const oldMarchDist = sgNodes.find(n => n.type === 'marchDist');
+          const oldMarchOut  = sgNodes.find(n => n.type === 'marchOutput');
+
+          const newInputsId = `mlInputs_${ts_m}`;
+          const posY = oldMarchPos ? oldMarchPos.position.y : oldMarchDist ? oldMarchDist.position.y : 180;
+          const distY = oldMarchDist ? oldMarchDist.position.y : posY + 80;
+          const midY = (posY + distY) / 2;
+          const leftX = oldMarchPos ? Math.min(oldMarchPos.position.x, oldMarchDist?.position.x ?? oldMarchPos.position.x) : 80;
+
+          const newInputsNode: import('../types/nodeGraph').GraphNode = {
+            id: newInputsId,
+            type: 'marchLoopInputs',
+            position: { x: leftX, y: midY },
+            inputs: {},
+            outputs: {
+              ro:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Origin' },
+              rd:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Dir' },
+              marchPos:  { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'March Pos' },
+              marchDist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'March Dist' },
             },
-            params: { _groupOriginal: true },
-          }];
+            params: { _groupOriginal: true, extraInputs: [] },
+          };
+
+          // Remove old separate nodes
+          sgNodes = sgNodes.filter(n => n.type !== 'marchPos' && n.type !== 'marchDist');
+
+          // Reroute connections from old anchor nodes → new marchLoopInputs outputs
+          sgNodes = sgNodes.map(n => {
+            const newInputsMap = Object.fromEntries(
+              Object.entries(n.inputs).map(([k, inp]) => {
+                if (!inp.connection) return [k, inp];
+                if (oldMarchPos && inp.connection.nodeId === oldMarchPos.id)
+                  return [k, { ...inp, connection: { nodeId: newInputsId, outputKey: 'marchPos' } }];
+                if (oldMarchDist && (inp.connection.nodeId === oldMarchDist.id))
+                  return [k, { ...inp, connection: { nodeId: newInputsId, outputKey: 'marchDist' } }];
+                return [k, inp];
+              })
+            );
+            return { ...n, inputs: newInputsMap };
+          });
+
+          sgNodes = [newInputsNode, ...sgNodes];
+
+          // Migrate or inject marchLoopOutput
+          if (oldMarchOut) {
+            sgNodes = sgNodes.map(n =>
+              n.id === oldMarchOut.id
+                ? { ...n, type: 'marchLoopOutput', params: { ...n.params, hiddenOutputs: [] } }
+                : n
+            );
+          } else {
+            const maxX2 = sgNodes.length ? Math.max(...sgNodes.map(n => n.position.x)) : 480;
+            const avgY2 = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 180;
+            sgNodes = [...sgNodes, {
+              id: `mlOutput_${ts_m + 1}`,
+              type: 'marchLoopOutput',
+              position: { x: maxX2 + 200, y: avgY2 },
+              inputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+              outputs: {},
+              params: { _groupOriginal: true, hiddenOutputs: [] },
+            } as import('../types/nodeGraph').GraphNode];
+          }
           changed = true;
-        }
-        if (!sgNodes.some(n => n.type === 'marchOutput')) {
-          const maxX = sgNodes.length ? Math.max(...sgNodes.map(n => n.position.x)) : 380;
-          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 160;
+        } else if (!sgNodes.some(n => n.type === 'marchLoopOutput')) {
+          // New-style inputs but missing output — inject it
+          const maxX3 = sgNodes.length ? Math.max(...sgNodes.map(n => n.position.x)) : 480;
+          const avgY3 = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 180;
           sgNodes = [...sgNodes, {
-            id: `marchout_${ts_m + 2}`, type: 'marchOutput',
-            position: { x: maxX + 200, y: avgY },
+            id: `mlOutput_${ts_m}`,
+            type: 'marchLoopOutput',
+            position: { x: maxX3 + 200, y: avgY3 },
             inputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
-            outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
-            params: { _groupOriginal: true },
-          }];
+            outputs: {},
+            params: { _groupOriginal: true, hiddenOutputs: [] },
+          } as import('../types/nodeGraph').GraphNode];
           changed = true;
         }
       }
@@ -2647,6 +2693,67 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  addMarchLoopInput: (groupNodeId, key, type, label) => {
+    pushHistory(get().nodes);
+    set(state => {
+      const nodes = state.nodes.map(n => {
+        if (n.id !== groupNodeId) return n;
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        // Update marchLoopInputs node's outputs + params.extraInputs
+        const newSgNodes = sg.nodes.map(sn => {
+          if (sn.type !== 'marchLoopInputs') return sn;
+          const extraInputs = [
+            ...((sn.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>),
+            { key, type, label },
+          ];
+          return { ...sn, outputs: { ...sn.outputs, [key]: { type, label } }, params: { ...sn.params, extraInputs } };
+        });
+        return {
+          ...n,
+          inputs: { ...n.inputs, [key]: { type, label } },
+          params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes } },
+        };
+      });
+      return { nodes };
+    });
+    get().compile();
+  },
+
+  removeMarchLoopInput: (groupNodeId, key) => {
+    pushHistory(get().nodes);
+    set(state => {
+      const nodes = state.nodes.map(n => {
+        if (n.id !== groupNodeId) return n;
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const newSgNodes = sg.nodes.map(sn => {
+          if (sn.type !== 'marchLoopInputs') return sn;
+          const extraInputs = ((sn.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>).filter(e => e.key !== key);
+          const { [key]: _removed, ...restOutputs } = sn.outputs;
+          return { ...sn, outputs: restOutputs, params: { ...sn.params, extraInputs } };
+        });
+        const { [key]: _removedInput, ...restInputs } = n.inputs;
+        return { ...n, inputs: restInputs, params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes } } };
+      });
+      return { nodes };
+    });
+    get().compile();
+  },
+
+  toggleMarchLoopOutputPort: (groupNodeId, outputKey) => {
+    set(state => {
+      const nodes = state.nodes.map(n => {
+        if (n.id !== groupNodeId) return n;
+        const hidden = (n.params.hiddenOutputs as string[] | undefined) ?? [];
+        const newHidden = hidden.includes(outputKey) ? hidden.filter(k => k !== outputKey) : [...hidden, outputKey];
+        return { ...n, params: { ...n.params, hiddenOutputs: newHidden } };
+      });
+      return { nodes };
+    });
+    get().compile();
+  },
+
   addGroupInput: (groupId, type, label) => {
     pushHistory(get().nodes);
     set(state => {
@@ -3077,7 +3184,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     });
 
     syncCounterFromNodes(nodes);
-    set({ nodes, previewNodeId: null, activeGroupId: null });
+    set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
   },
 
@@ -3167,7 +3274,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (Array.isArray(rawNodes)) {
         const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(n, getNodeDefinition));
         syncCounterFromNodes(nodes);
-        set({ nodes, previewNodeId: null });
+        set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
         get().compile();
       }
     } catch {}
