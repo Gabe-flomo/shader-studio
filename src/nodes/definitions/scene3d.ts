@@ -162,6 +162,7 @@ export const ForwardCameraNode: NodeDefinition = {
 
 export const MarchPosNode: NodeDefinition = {
   type: 'marchPos', label: 'March Pos', category: '3D Scene',
+  deprecated: true,
   description: 'Inside a March Loop Group: outputs the current ray march position (vec3). Connect to SDF primitives and warp nodes.',
   inputs: {},
   outputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -183,6 +184,7 @@ export const MarchPosNode: NodeDefinition = {
 
 export const MarchDistNode: NodeDefinition = {
   type: 'marchDist', label: 'March Dist', category: '3D Scene',
+  deprecated: true,
   description: 'Inside a March Loop Group: outputs the current accumulated ray march distance (float). Wire into Twist3D or SpiralWarp3D angle input for depth-dependent effects.',
   inputs: {},
   outputs: { dist: { type: 'float', label: 'March Dist' } },
@@ -230,6 +232,7 @@ export const SceneOutputNode: NodeDefinition = {
 
 export const MarchWarpOutputNode: NodeDefinition = {
   type: 'marchOutput', label: 'Warp Output', category: '3D Scene',
+  deprecated: true,
   description: 'Inside a March Loop Group subgraph: marks the final warped position. Connect the last vec3 from your warp chain here.',
   inputs:  { pos: { type: 'vec3', label: 'Position' } },
   outputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -241,6 +244,47 @@ export const MarchWarpOutputNode: NodeDefinition = {
     return {
       code: `    vec3 ${id}_pos = ${pos};\n`,
       outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
+// ─── MarchLoopInputsNode ─────────────────────────────────────────────────────
+export const MarchLoopInputsNode: NodeDefinition = {
+  type: 'marchLoopInputs', label: 'Group Inputs', category: '3D Scene',
+  description: 'Inside a March Loop Group: exposes ray origin/dir, march position/distance, and user-added inputs as output sockets.',
+  anchored: true,
+  inputs: {},
+  outputs: {
+    ro:        { type: 'vec3',  label: 'Ray Origin' },
+    rd:        { type: 'vec3',  label: 'Ray Dir' },
+    marchPos:  { type: 'vec3',  label: 'March Pos' },
+    marchDist: { type: 'float', label: 'March Dist' },
+  },
+  defaultParams: { extraInputs: [] },
+  paramDefs: {},
+  generateGLSL: (node: GraphNode) => ({
+    code: `    // marchLoopInputs ${node.id} — pre-registered by MLG compiler\n`,
+    outputVars: {
+      ro: `${node.id}_ro`, rd: `${node.id}_rd`,
+      marchPos: `${node.id}_mp`, marchDist: `${node.id}_bt`,
+    },
+  }),
+};
+
+// ─── MarchLoopOutputNode ─────────────────────────────────────────────────────
+export const MarchLoopOutputNode: NodeDefinition = {
+  type: 'marchLoopOutput', label: 'Group Output', category: '3D Scene',
+  description: 'Inside a March Loop Group: marks the warped position output. Toggle output port visibility with the eye icons.',
+  anchored: true,
+  inputs:  { pos: { type: 'vec3', label: 'Position' } },
+  outputs: {},
+  defaultParams: { hiddenOutputs: [] },
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const pos = inputVars.pos || 'vec3(0.0)';
+    return {
+      code: `    vec3 ${node.id}_pos = ${pos};\n`,
+      outputVars: { pos: `${node.id}_pos` },
     };
   },
 };

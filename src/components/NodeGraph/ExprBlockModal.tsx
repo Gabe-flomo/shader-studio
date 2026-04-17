@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
@@ -19,6 +19,45 @@ interface WarpLine {
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 const OPS = ['=', '+=', '-=', '*=', '/='];
+
+// ─── GLSL function palette ────────────────────────────────────────────────────
+
+interface GlslEntry { label: string; insert: string; group: string; }
+
+const GLSL_PALETTE: GlslEntry[] = [
+  { group: 'Trig',      label: 'sin(f)',            insert: 'sin()'                },
+  { group: 'Trig',      label: 'cos(f)',            insert: 'cos()'                },
+  { group: 'Trig',      label: 'atan(f,f)',          insert: 'atan(, )'             },
+  { group: 'Exp/Log',   label: 'exp(f)',             insert: 'exp()'                },
+  { group: 'Exp/Log',   label: 'sqrt(f)',            insert: 'sqrt()'               },
+  { group: 'Exp/Log',   label: 'pow(f,f)',           insert: 'pow(, )'              },
+  { group: 'Rounding',  label: 'floor(f)',           insert: 'floor()'              },
+  { group: 'Rounding',  label: 'ceil(f)',            insert: 'ceil()'               },
+  { group: 'Rounding',  label: 'fract(f)',           insert: 'fract()'              },
+  { group: 'Math',      label: 'abs(f)',             insert: 'abs()'                },
+  { group: 'Math',      label: 'mod(f,f)',           insert: 'mod(, )'              },
+  { group: 'Math',      label: 'min(f,f)',           insert: 'min(, )'              },
+  { group: 'Math',      label: 'max(f,f)',           insert: 'max(, )'              },
+  { group: 'Math',      label: 'clamp(f,f,f)',       insert: 'clamp(, , )'          },
+  { group: 'Math',      label: 'mix(f,f,f)',         insert: 'mix(, , )'            },
+  { group: 'Math',      label: 'smoothstep(f,f,f)',  insert: 'smoothstep(, , )'     },
+  { group: 'Vector',    label: 'length(v)',          insert: 'length()'             },
+  { group: 'Vector',    label: 'normalize(v)',       insert: 'normalize()'          },
+  { group: 'Vector',    label: 'dot(v,v)',           insert: 'dot(, )'              },
+  { group: 'Vector',    label: 'vec2(f,f)',          insert: 'vec2(, )'             },
+  { group: 'Vector',    label: 'vec3(f,f,f)',        insert: 'vec3(, , )'           },
+  { group: 'Custom',    label: 'palette(f,v3×4)',    insert: 'palette(, vec3(0.5), vec3(0.5), vec3(1.0), vec3(0.0,0.33,0.67))' },
+  { group: 'Custom',    label: 'rotate(v2,f)',       insert: 'rotate(, )'           },
+  { group: 'SDF',       label: 'sdBox(v2,v2)',       insert: 'sdBox(, )'            },
+  { group: 'SDF',       label: 'sdSegment(v2,v2,v2)',insert: 'sdSegment(, , )'      },
+  { group: 'SDF',       label: 'sdEllipse(v2,v2)',   insert: 'sdEllipse(, )'        },
+  { group: 'SDF',       label: 'opRepeat(v2,f)',     insert: 'opRepeat(, )'         },
+  { group: 'Constants', label: 'PI',                insert: 'PI'                   },
+  { group: 'Constants', label: 'TAU',               insert: 'TAU'                  },
+  { group: 'Constants', label: 'u_time',            insert: 'u_time'               },
+];
+
+const GLSL_GROUPS = Array.from(new Set(GLSL_PALETTE.map(e => e.group)));
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -71,6 +110,27 @@ export function ExprBlockModal({ node, onClose }: Props) {
   const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'vec3';
 
   const [savedFlash, setSavedFlash] = useState(false);
+
+  // Track the last-focused expression input so GLSL function buttons can insert there
+  const lastFocusedRef    = useRef<HTMLInputElement | null>(null);
+  const lastFocusedSetter = useRef<((val: string) => void) | null>(null);
+  const lastFocusedValue  = useRef<string>('');
+
+  // Available variables collapse state
+  const [varsExpanded, setVarsExpanded]   = useState(false);
+  const varsChipsRef                       = useRef<HTMLDivElement>(null);
+  const [hiddenVarsCount, setHiddenVarsCount] = useState(0);
+
+  // Measure which chips wrap to a second line
+  useLayoutEffect(() => {
+    const container = varsChipsRef.current;
+    if (!container) return;
+    const chips = Array.from(container.children) as HTMLElement[];
+    if (chips.length === 0) { setHiddenVarsCount(0); return; }
+    const firstTop = chips[0].offsetTop;
+    const hidden = chips.filter(c => c.offsetTop > firstTop).length;
+    setHiddenVarsCount(hidden);
+  }, [customInputs, varsExpanded]);
 
   const flash = () => {
     setSavedFlash(true);
@@ -187,6 +247,60 @@ export function ExprBlockModal({ node, onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── GLSL function insert at focused expression input ───────────────────────
+
+  const insertAtFocused = (text: string) => {
+    const el = lastFocusedRef.current;
+    const setter = lastFocusedSetter.current;
+    if (!el || !setter) return;
+
+    const current = lastFocusedValue.current;
+    const start = el.selectionStart ?? current.length;
+    const end   = el.selectionEnd   ?? current.length;
+
+    const hasParen = text.includes('(');
+    let next: string;
+    let cursor: number;
+
+    if (hasParen) {
+      const parenIdx = text.indexOf('(');
+      const selected = current.slice(start, end);
+      if (selected) {
+        // Wrap selection as first argument
+        const wrapped = text.slice(0, parenIdx + 1) + selected + text.slice(parenIdx + 1);
+        next   = current.slice(0, start) + wrapped + current.slice(end);
+        cursor = start + wrapped.length;
+      } else {
+        next   = current.slice(0, start) + text + current.slice(end);
+        // Place cursor inside first ()
+        const emptyParen = text.indexOf('()');
+        cursor = start + (emptyParen >= 0 ? emptyParen + 1 : text.length);
+      }
+    } else {
+      next   = current.slice(0, start) + text + current.slice(end);
+      cursor = start + text.length;
+    }
+
+    setter(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  /** Register a text input so it becomes the insertion target for GLSL buttons. */
+  const makeExprInputProps = (currentValue: string, setter: (v: string) => void) => ({
+    onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
+      lastFocusedRef.current    = e.currentTarget;
+      lastFocusedSetter.current = setter;
+      lastFocusedValue.current  = currentValue;
+    },
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      lastFocusedValue.current = e.target.value;
+      setter(e.target.value);
+    },
+  });
+
   return createPortal(
     <div
       style={{
@@ -202,7 +316,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
           background: '#1e1e2e',
           border: '1px solid #45475a',
           borderRadius: '10px',
-          width: 'min(780px, calc(100vw - 32px))',
+          width: 'min(820px, calc(100vw - 32px))',
           maxHeight: '88vh',
           overflowY: 'auto',
           padding: '16px 20px',
@@ -358,6 +472,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                     placeholder="p.xy"
                     spellCheck={false}
                     style={{ ...INPUT_STYLE, width: '80px' }}
+                    {...makeExprInputProps(line.lhs, v => updateLine(i, 'lhs', v))}
                   />
                   {/* Operator */}
                   <select
@@ -371,10 +486,10 @@ export function ExprBlockModal({ node, onClose }: Props) {
                   <input
                     type="text"
                     value={line.rhs}
-                    onChange={e => updateLine(i, 'rhs', e.target.value)}
                     placeholder="expression…"
                     spellCheck={false}
                     style={{ ...INPUT_STYLE, flex: 1, color: '#a6e3a1' }}
+                    {...makeExprInputProps(line.rhs, v => updateLine(i, 'rhs', v))}
                   />
                   {/* Remove */}
                   <button
@@ -409,29 +524,130 @@ export function ExprBlockModal({ node, onClose }: Props) {
               <input
                 type="text"
                 value={result}
-                onChange={e => updateResult(e.target.value)}
                 placeholder="p"
                 spellCheck={false}
                 style={{ ...INPUT_STYLE, flex: 1, color: '#89b4fa', fontSize: '12px' }}
+                {...makeExprInputProps(result, updateResult)}
               />
             </div>
 
-            {/* Available variables hint */}
+            {/* Available variables — collapses when chips wrap to a second line */}
             {customInputs.length > 0 && (
               <div style={{ marginTop: '12px', padding: '8px', background: '#181825', borderRadius: '6px', border: '1px solid #313244' }}>
                 <p style={{ ...SECTION_LABEL, margin: '0 0 4px' }}>Available Variables</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                <div
+                  ref={varsChipsRef}
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '4px',
+                    overflow: 'hidden',
+                    // Single-line clip: ~22px covers one row of chips; expand shows all
+                    maxHeight: varsExpanded ? 'none' : '22px',
+                  }}
+                >
                   {customInputs.map(inp => (
-                    <code key={inp.name} style={{
-                      fontSize: '10px', color: inp.type === 'vec3' ? '#a6e3a1' : inp.type === 'float' ? '#89b4fa' : '#f9e2af',
-                      background: '#11111b', padding: '1px 5px', borderRadius: '3px',
-                    }}>
+                    <code
+                      key={inp.name}
+                      onClick={() => insertAtFocused(inp.name)}
+                      title={`Insert "${inp.name}" into focused expression`}
+                      style={{
+                        fontSize: '10px',
+                        color: inp.type === 'vec3' ? '#a6e3a1' : inp.type === 'float' ? '#89b4fa' : '#f9e2af',
+                        background: '#11111b',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        flexShrink: 0,
+                      }}
+                    >
                       {inp.type} {inp.name}
                     </code>
                   ))}
                 </div>
+                {/* Expand / collapse toggle */}
+                {hiddenVarsCount > 0 && !varsExpanded && (
+                  <button
+                    onClick={() => setVarsExpanded(true)}
+                    style={{
+                      ...BTN,
+                      marginTop: '4px',
+                      padding: '1px 7px',
+                      fontSize: '10px',
+                      background: 'none',
+                      border: 'none',
+                      color: '#585b70',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + show {hiddenVarsCount} more
+                  </button>
+                )}
+                {varsExpanded && customInputs.length > 1 && (
+                  <button
+                    onClick={() => setVarsExpanded(false)}
+                    style={{
+                      ...BTN,
+                      marginTop: '4px',
+                      padding: '1px 7px',
+                      fontSize: '10px',
+                      background: 'none',
+                      border: 'none',
+                      color: '#585b70',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    − show less
+                  </button>
+                )}
+                <p style={{ fontSize: '9px', color: '#45475a', marginTop: '4px', marginBottom: 0 }}>
+                  Click any chip to insert into the focused expression field
+                </p>
               </div>
             )}
+
+            {/* ── GLSL Function Reference ──────────────────────────────────── */}
+            <div style={{ marginTop: '14px', padding: '10px', background: '#181825', borderRadius: '6px', border: '1px solid #313244' }}>
+              <p style={{ ...SECTION_LABEL, margin: '0 0 6px' }}>GLSL Reference</p>
+              <p style={{ fontSize: '9px', color: '#45475a', marginBottom: '8px' }}>
+                Click to insert into the focused expression or return field
+              </p>
+              {GLSL_GROUPS.map(group => (
+                <div key={group} style={{ marginBottom: '6px' }}>
+                  <div style={{ fontSize: '9px', color: '#45475a', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                    {group}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                    {GLSL_PALETTE.filter(e => e.group === group).map(entry => (
+                      <button
+                        key={entry.label}
+                        onClick={() => insertAtFocused(entry.insert)}
+                        title={`Insert: ${entry.insert}`}
+                        style={{
+                          ...BTN,
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          background: '#11111b',
+                          borderColor: '#313244',
+                          color: '#6c7086',
+                        }}
+                        onMouseEnter={e => {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4';
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#45475a';
+                        }}
+                        onMouseLeave={e => {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#6c7086';
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#313244';
+                        }}
+                      >
+                        {entry.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

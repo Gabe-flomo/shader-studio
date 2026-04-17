@@ -1085,6 +1085,13 @@ export function generateFragmentShader(
       const albg = fmtP(node.params.albedoG,  0.7);
       const albb = fmtP(node.params.albedoB,  0.9);
 
+      // Determine if subgraph uses new-style anchor (marchLoopInputs) vs legacy separate nodes
+      const mlInputsNodeRaw = subgraph?.nodes.find(n => n.type === 'marchLoopInputs') ?? null;
+      const mlHasNewStyle = !!mlInputsNodeRaw;
+      const mlExtraInputs: Array<{key: string; type: string}> = mlHasNewStyle
+        ? ((mlInputsNodeRaw!.params.extraInputs ?? []) as Array<{key: string; type: string}>)
+        : [];
+
       // ── Compile subgraph as a warp body function ────────────────────────────
       // The function signature is:
       //   vec3 marchBody_<slug>(vec3 <slug>_mp, float <slug>_bt)
@@ -1118,6 +1125,20 @@ export function generateFragmentShader(
           if (sn.type === 'marchDist') {
             const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
             nodeOutputs.set(mlPrefix + slug, { dist: `${nodeSlug}_bt`, t: `${nodeSlug}_bt` });
+          }
+          if (sn.type === 'marchLoopInputs') {
+            const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
+            const extraVarMap: Record<string, string> = {};
+            for (const ex of mlExtraInputs) {
+              extraVarMap[ex.key] = `${nodeSlug}_ex_${ex.key}`;
+            }
+            nodeOutputs.set(mlPrefix + slug, {
+              ro:        `${nodeSlug}_ro`,
+              rd:        `${nodeSlug}_rd`,
+              marchPos:  `${nodeSlug}_mp`,
+              marchDist: `${nodeSlug}_bt`,
+              ...extraVarMap,
+            });
           }
         }
 
@@ -1364,7 +1385,14 @@ export function generateFragmentShader(
 
         // Emit the named GLSL body function into the preamble
         const fnBody = bodyLines.join('');
-        const fnDef = `vec3 ${warpFnName}(vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt) {\n${fnBody}    return ${mlLastVec3Var};\n}`;
+        let mlFnSig: string;
+        if (mlHasNewStyle) {
+          const extraParamDecls = mlExtraInputs.map(ex => `${ex.type} ${nodeSlug}_ex_${ex.key}`).join(', ');
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt, vec3 ${nodeSlug}_ro, vec3 ${nodeSlug}_rd${extraParamDecls ? `, ${extraParamDecls}` : ''}`;
+        } else {
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt`;
+        }
+        const fnDef = `vec3 ${warpFnName}(${mlFnSig}) {\n${fnBody}    return ${mlLastVec3Var};\n}`;
         functions.add(fnDef);
         warpBodyFn = warpFnName;
       }
@@ -1373,8 +1401,20 @@ export function generateFragmentShader(
       const mlSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
 
       // ── Emit the march loop into main ──────────────────────────────────────
-      const warpPos = (expr: string, t: string): string =>
-        warpBodyFn ? `${warpBodyFn}(${expr}, ${t})` : expr;
+      const mlExtraArgsList = mlExtraInputs.map(ex => {
+        const v = inputVars[ex.key];
+        if (v) return v;
+        if (ex.type === 'vec2') return 'vec2(0.0)';
+        if (ex.type === 'vec3') return 'vec3(0.0)';
+        if (ex.type === 'vec4') return 'vec4(0.0)';
+        return '0.0';
+      });
+      const mlExtraArgsStr = mlExtraArgsList.length > 0 ? ', ' + mlExtraArgsList.join(', ') : '';
+      const warpPos = (expr: string, t: string): string => {
+        if (!warpBodyFn) return expr;
+        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr})`;
+        return `${warpBodyFn}(${expr}, ${t})`;
+      };
 
       const marchCode = [
         `    float ${nodeSlug}_t   = 0.001;\n`,
