@@ -117,10 +117,7 @@ float dot2(vec2 v) { return dot(v, v); }
 // ── Basic ──
 float sdCircle2(vec2 p, float r) { return length(p) - r; }
 
-float sdBox(in vec2 p, in vec2 b) {
-  vec2 d = abs(p) - b;
-  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-}
+// sdBox is a built-in (seeded by shaderAssembler) — declared here would duplicate it
 float sdRoundedBox(vec2 p, vec2 b, float r) {
   vec2 q = abs(p) - b + r;
   return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
@@ -268,42 +265,8 @@ float sdStarN(in vec2 p, in float r, in float nf, in float m) {
 }
 
 // ── Segments / curves ──
-float sdSegment(in vec2 p, in vec2 a, in vec2 b) {
-  vec2 pa = p - a, ba = b - a;
-  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-  return length(pa - ba * h);
-}
-float sdEllipse(in vec2 p, in vec2 ab) {
-  p = abs(p);
-  if (p.x > p.y) { p = p.yx; ab = ab.yx; }
-  float l  = ab.y * ab.y - ab.x * ab.x;
-  float m  = ab.x * p.x / l;   float m2 = m * m;
-  float n  = ab.y * p.y / l;   float n2 = n * n;
-  float c  = (m2 + n2 - 1.0) / 3.0;
-  float c3 = c * c * c;
-  float q  = c3 + m2 * n2 * 2.0;
-  float d  = c3 + m2 * n2;
-  float g  = m + m * n2;
-  float co;
-  if (d < 0.0) {
-    float h2 = acos(q / c3) / 3.0;
-    float s  = cos(h2);
-    float t  = sin(h2) * sqrt(3.0);
-    float rx = sqrt(-c * (s + t + 2.0) + m2);
-    float ry = sqrt(-c * (s - t + 2.0) + m2);
-    co = (ry + sign(l) * rx + abs(g) / (rx * ry) - m) / 2.0;
-  } else {
-    float hh = 2.0 * m * n * sqrt(d);
-    float s  = sign(q + hh) * pow(abs(q + hh), 1.0 / 3.0);
-    float u  = sign(q - hh) * pow(abs(q - hh), 1.0 / 3.0);
-    float rx = -s - u - c * 4.0 + 2.0 * m2;
-    float ry = (s - u) * sqrt(3.0);
-    float rm = sqrt(rx * rx + ry * ry);
-    co = (ry / sqrt(rm - rx) + 2.0 * g / rm - m) / 2.0;
-  }
-  vec2 rr = ab * vec2(co, sqrt(1.0 - co * co));
-  return length(rr - p) * sign(p.y - rr.y);
-}
+// sdSegment and sdEllipse are built-ins (seeded by shaderAssembler) — declaring
+// them here would cause "function already has a body" in the linked shader.
 float sdParabola(in vec2 pos, in float k) {
   pos.x = abs(pos.x);
   float ik = 1.0 / k;

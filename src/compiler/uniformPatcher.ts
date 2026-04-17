@@ -56,13 +56,16 @@ export function patchNodeParamsForUniforms(
     return { patchedNode: node, uniforms };
   }
 
+  // Sanitize node IDs: underscores in IDs create double-underscore sequences
+  // like u_p_const__31_value which are reserved identifiers in GLSL ES.
+  const safeId = node.id.replace(/_/g, 'x');
   const patchedParams = { ...node.params };
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
     if (paramDef.type !== 'float') continue;  // only scalar floats
     if (paramDef.step === 1) continue;         // integer param — keep baked
     const val = node.params[key];
     if (typeof val !== 'number') continue;
-    const uniformName = `u_p_${node.id}_${key}`;
+    const uniformName = `u_p_${safeId}_${key}`;
     patchedParams[key] = uniformName;
     uniforms[uniformName] = val;
   }

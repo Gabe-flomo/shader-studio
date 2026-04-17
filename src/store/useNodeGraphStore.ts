@@ -11,6 +11,67 @@ import { EXAMPLE_GRAPHS } from './exampleGraphs';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
 
+// ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
+// ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
+// contains 'expr' nodes is upgraded transparently on load.
+
+function _upgradeExprNode(node: GraphNode): GraphNode {
+  if (node.type !== 'expr') return node;
+
+  const dynamicInputs: Array<{ name: string; type: string; slider: null }> = [];
+  const newInputs: Record<string, InputSocket> = {};
+
+  for (let i = 0; i < 4; i++) {
+    const rawName = (node.params[`in${i}Name`] as string) ?? `in${i}`;
+    const name = rawName.trim();
+    const defaultName = `in${i}`;
+    const oldSocket = (node.inputs as Record<string, InputSocket>)[`in${i}`];
+    const hasConnection = !!oldSocket?.connection;
+
+    // Skip default-named slots with no connection — they're dead weight
+    if (name === defaultName && !hasConnection) continue;
+
+    const socketType = (oldSocket?.type as string) || 'float';
+    newInputs[name] = {
+      type: socketType as DataType,
+      label: `${name} (${socketType})`,
+      ...(hasConnection ? { connection: oldSocket!.connection } : {}),
+    };
+    dynamicInputs.push({ name, type: socketType, slider: null });
+  }
+
+  const exprStr = (node.params.expr as string) || '0.0';
+  return {
+    ...node,
+    type: 'exprNode',
+    inputs: newInputs,
+    outputs: { result: { type: 'vec3' as DataType, label: 'Result (vec3)' } },
+    params: {
+      inputs: dynamicInputs,
+      outputType: (node.params.outputType as string) || 'float',
+      lines: [],
+      result: exprStr,
+      expr: exprStr,
+    },
+  };
+}
+
+/** Recursively upgrades all 'expr' nodes in a flat node list, including those
+ *  nested in subgraph params (groups, SceneGroups, MarchLoopGroups, etc.). */
+function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
+  return nodes.map(node => {
+    let n = _upgradeExprNode(node);
+    // Recurse into subgraph if present
+    if (n.params?.subgraph) {
+      const sg = n.params.subgraph as { nodes?: GraphNode[] };
+      if (Array.isArray(sg?.nodes)) {
+        n = { ...n, params: { ...n.params, subgraph: { ...sg, nodes: upgradeExprNodes(sg.nodes) } } };
+      }
+    }
+    return n;
+  });
+}
+
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX = 'shader-studio:cfp:';
 const EP_PREFIX  = 'shader-studio:ep:';
@@ -1129,6 +1190,103 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         ),
       }));
       return;
+    }
+
+    // ── Migrate existing scene-style subgraphs: inject missing anchor nodes + stamp _groupOriginal ──
+    if (
+      (groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup') &&
+      groupNode.params?.subgraph
+    ) {
+      type SG = { nodes: import('../types/nodeGraph').GraphNode[]; outputNodeId?: string; outputKey?: string; inputPorts?: unknown[]; outputPorts?: unknown[] };
+      const sg = groupNode.params.subgraph as SG;
+      let sgNodes = sg.nodes;
+      let changed = false;
+      const ts_m = Date.now();
+
+      // Stamp _groupOriginal on any unstamped nodes
+      if (sgNodes.some(n => !n.params?._groupOriginal)) {
+        sgNodes = sgNodes.map(n =>
+          n.params?._groupOriginal ? n : { ...n, params: { ...n.params, _groupOriginal: true } }
+        );
+        changed = true;
+      }
+
+      if (groupNode.type === 'sceneGroup') {
+        if (!sgNodes.some(n => n.type === 'scenePos')) {
+          const minX = sgNodes.length ? Math.min(...sgNodes.map(n => n.position.x)) : 80;
+          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 200;
+          sgNodes = [...sgNodes, {
+            id: `scenepos_${ts_m}`, type: 'scenePos',
+            position: { x: minX - 200, y: avgY },
+            inputs: {}, outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+            params: { _groupOriginal: true },
+          }];
+          changed = true;
+        }
+        if (!sgNodes.some(n => n.type === 'sceneOutput')) {
+          const maxX = sgNodes.length ? Math.max(...sgNodes.map(n => n.position.x)) : 480;
+          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 200;
+          sgNodes = [...sgNodes, {
+            id: `sceneout_${ts_m + 1}`, type: 'sceneOutput',
+            position: { x: maxX + 200, y: avgY },
+            inputs: { dist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'Distance' } },
+            outputs: { dist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'Distance' } },
+            params: { _groupOriginal: true },
+          }];
+          changed = true;
+        }
+      }
+
+      if (groupNode.type === 'marchLoopGroup') {
+        if (!sgNodes.some(n => n.type === 'marchPos')) {
+          const minX = sgNodes.length ? Math.min(...sgNodes.map(n => n.position.x)) : 80;
+          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 160;
+          sgNodes = [...sgNodes, {
+            id: `marchpos_${ts_m}`, type: 'marchPos',
+            position: { x: minX - 200, y: avgY - 40 },
+            inputs: {}, outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+            params: { _groupOriginal: true },
+          }];
+          changed = true;
+        }
+        if (!sgNodes.some(n => n.type === 'marchDist')) {
+          const minX = sgNodes.length ? Math.min(...sgNodes.map(n => n.position.x)) : 80;
+          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 160;
+          sgNodes = [...sgNodes, {
+            id: `marchdist_${ts_m + 1}`, type: 'marchDist',
+            position: { x: minX - 200, y: avgY + 80 },
+            inputs: {}, outputs: {
+              dist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'Dist' },
+              t: { type: 'float' as import('../types/nodeGraph').DataType, label: 't' },
+            },
+            params: { _groupOriginal: true },
+          }];
+          changed = true;
+        }
+        if (!sgNodes.some(n => n.type === 'marchOutput')) {
+          const maxX = sgNodes.length ? Math.max(...sgNodes.map(n => n.position.x)) : 380;
+          const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 160;
+          sgNodes = [...sgNodes, {
+            id: `marchout_${ts_m + 2}`, type: 'marchOutput',
+            position: { x: maxX + 200, y: avgY },
+            inputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+            outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
+            params: { _groupOriginal: true },
+          }];
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        set(state => ({
+          activeGroupPath: [...state.activeGroupPath, id],
+          activeGroupId: id,
+          nodes: state.nodes.map(n =>
+            n.id === id ? { ...n, params: { ...n.params, subgraph: { ...sg, nodes: sgNodes } } } : n
+          ),
+        }));
+        return;
+      }
     }
 
     set(state => ({ activeGroupPath: [...state.activeGroupPath, id], activeGroupId: id }));
@@ -2299,9 +2457,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         // Group inner-node overrides are stored as `innerNodeId::paramKey` on the group node.
         // The assembler prefixes the inner node as `groupNodeId_g_innerNodeId`, so the
         // compiled uniform name is `u_p_groupNodeId_g_innerNodeId_paramKey`.
+        // Sanitize IDs: underscores create __ sequences which are reserved in GLSL ES.
+        const safeNodeId = nodeId.replace(/_/g, 'x');
         const uniformName = key.includes('::')
-          ? `u_p_${nodeId}_g_${key.replace('::', '_')}`
-          : `u_p_${nodeId}_${key}`;
+          ? `u_p_${safeNodeId}_g_${key.replace('::', '_').replace(/_/g, 'x')}`
+          : `u_p_${safeNodeId}_${key}`;
         if (!(uniformName in currentUniforms)) { allAreUniforms = false; break; }
         uniformUpdates[uniformName] = val;
       }
@@ -2899,7 +3059,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Backfill any input sockets that exist in the live NodeDefinition but are
     // missing from the serialized graph (handles schema evolution across iterations).
-    const nodes = rawNodes.map(node => {
+    const nodes = upgradeExprNodes(rawNodes).map(node => {
       const def = getNodeDefinition(node.type);
       if (!def) return node;
       const mergedInputs: Record<string, InputSocket> = { ...node.inputs };
@@ -2979,7 +3139,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           }
           return n;
         });
-        const nodes = sanitized.map(n => migrateNodeParams(n, getNodeDefinition));
+        const nodes = upgradeExprNodes(sanitized).map(n => migrateNodeParams(n, getNodeDefinition));
         syncCounterFromNodes(nodes);
         // Reset group navigation so a saved graph that was captured inside a
         // subgraph doesn't leave the editor stranded in a non-existent group.
@@ -3005,7 +3165,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     try {
       const { nodes: rawNodes } = JSON.parse(json) as { nodes: GraphNode[] };
       if (Array.isArray(rawNodes)) {
-        const nodes = rawNodes.map(n => migrateNodeParams(n, getNodeDefinition));
+        const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(n, getNodeDefinition));
         syncCounterFromNodes(nodes);
         set({ nodes, previewNodeId: null });
         get().compile();

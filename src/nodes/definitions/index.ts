@@ -38,7 +38,7 @@ export {
 export {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
-  ExprNode, ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
+  ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode,
@@ -134,7 +134,7 @@ import {
 import {
   MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
-  ExprNode, ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
+  ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode,
@@ -256,7 +256,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   rotatingLinesLoop: RotatingLinesLoopNode,
   accumulateLoop: AccumulateLoopNode,
   forLoop: ForLoopNode,
-  expr: ExprNode,
   exprNode: ExprBlockNode,
   customFn: CustomFnNode,
   gravitationalLens: GravitationalLensNode,

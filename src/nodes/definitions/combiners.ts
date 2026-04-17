@@ -18,11 +18,7 @@ export const SmoothMinNode: NodeDefinition = {
   paramDefs: {
     smoothness: { label: 'Smoothness', type: 'float', min: 0.01, max: 2, step: 0.01 },
   },
-  glslFunction: `
-float smin(float a, float b, float k) {
-    float h = max(k - abs(a - b), 0.0) / k;
-    return min(a, b) - h * h * h * k * (1.0 / 6.0);
-}`,
+  // smin is always available as a built-in (seeded into the functions Set by the assembler)
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_result`;
     const aVar = inputVars.a || '0.0';

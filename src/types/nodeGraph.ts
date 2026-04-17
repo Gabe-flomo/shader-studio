@@ -105,6 +105,18 @@ export interface NodeDefinition {
   paramDefs?: Record<string, ParamDef>;
 
   /**
+   * When true the node is auto-added to its parent container (SceneGroup, etc.)
+   * and cannot be deleted by the user.  Visually indicated with a lock icon.
+   */
+  anchored?: boolean;
+
+  /**
+   * When true the node is hidden from the creation palette and marked with a
+   * visual badge in existing graphs.  Compilation support is preserved.
+   */
+  deprecated?: boolean;
+
+  /**
    * Schema version for this node definition.  Increment whenever the shape of
    * `defaultParams` / `paramDefs` changes in a way that could break saved graphs
    * (e.g. a param is renamed, removed, or its semantics change).
