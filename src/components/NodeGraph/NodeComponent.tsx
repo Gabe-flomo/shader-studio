@@ -2046,7 +2046,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         >
           <span style={{ fontSize: '9px', opacity: 0.5, lineHeight: 1 }}>{collapsed ? '▶' : '▼'}</span>
           {node.type === 'customFn' && typeof node.params.label === 'string' ? node.params.label || def.label : def.label}
-          {node.params._groupOriginal && def.anchored && (
+          {!!node.params._groupOriginal && def.anchored && (
             <span title="Anchored — cannot be deleted" style={{ fontSize: '9px', opacity: 0.45, lineHeight: 1 }}>🔒</span>
           )}
           {def.deprecated && (
