@@ -781,40 +781,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setRawGlslShader: (shader) => set({ rawGlslShader: shader }),
   setActiveGroupId: (id) => {
     if (!id) {
-      // ── On exit: stamp any unstamped nodes as originals ──────────────────────
-      // This protects the "first session" structure — anything built before the
-      // first exit is locked; only nodes added in later sessions can be deleted.
-      const exitingGroupId = get().activeGroupId;
-      if (exitingGroupId) {
-        set(state => {
-          const gn = state.nodes.find(n => n.id === exitingGroupId);
-          const sg = gn?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-          if (!sg) return { activeGroupId: null, activeGroupPath: [] };
-          const alreadyAllStamped = sg.nodes.every(n => n.params?._groupOriginal);
-          if (alreadyAllStamped) return { activeGroupId: null, activeGroupPath: [] };
-          return {
-            activeGroupId: null,
-            activeGroupPath: [],
-            nodes: state.nodes.map(n => {
-              if (n.id !== exitingGroupId) return n;
-              return {
-                ...n,
-                params: {
-                  ...n.params,
-                  subgraph: {
-                    ...sg,
-                    nodes: sg.nodes.map(sn =>
-                      sn.params?._groupOriginal ? sn : { ...sn, params: { ...sn.params, _groupOriginal: true } }
-                    ),
-                  },
-                },
-              };
-            }),
-          };
-        });
-      } else {
-        set({ activeGroupId: null, activeGroupPath: [] });
-      }
+      // ── On exit: just clear the active group ─────────────────────────────────
+      // Only anchor nodes (scenePos, sceneOutput, marchPos, etc.) carry the
+      // _groupOriginal flag — they are stamped at creation time. Do NOT stamp
+      // user-added nodes here; that would prevent them from ever being deleted.
+      set({ activeGroupId: null, activeGroupPath: [] });
       return;
     }
 
@@ -942,11 +913,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
       // For scene-style groups: skip LoopIndex migration entirely, but inject missing anchor nodes.
       if (groupNode?.type === 'sceneGroup' || groupNode?.type === 'spaceWarpGroup' || groupNode?.type === 'marchLoopGroup') {
-        // Stamp existing nodes as originals if not already done
+        // Stamp only anchor node types as originals if not already done (legacy migration).
+        // Never stamp user-added nodes — they must remain deletable.
+        const SCENE_ANCHOR_TYPES = new Set(['scenePos', 'sceneOutput', 'marchPos', 'marchDist', 'marchOutput']);
         const alreadyMigratedSg = sg.nodes.some(n => n.params?._groupOriginal);
         let sgNodes = alreadyMigratedSg
           ? sg.nodes
-          : sg.nodes.map(n => ({ ...n, params: { ...n.params, _groupOriginal: true } }));
+          : sg.nodes.map(n => SCENE_ANCHOR_TYPES.has(n.type)
+              ? { ...n, params: { ...n.params, _groupOriginal: true } }
+              : n);
 
         const ts_anc = Date.now();
 
@@ -1038,10 +1013,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
       if (alreadyMigrated && hasLoopIndex) return { activeGroupId: id, activeGroupPath: [id] };
 
-      // Stamp all existing nodes as original
+      // Stamp only loopIndex nodes as originals (legacy migration).
+      // Never stamp user-added nodes — they must remain deletable.
       const stampedNodes = alreadyMigrated
         ? sg.nodes
-        : sg.nodes.map(n => ({ ...n, params: { ...n.params, _groupOriginal: true } }));
+        : sg.nodes.map(n => n.type === 'loopIndex'
+            ? { ...n, params: { ...n.params, _groupOriginal: true } }
+            : n);
 
       // Inject a LoopIndex node if missing
       let finalNodes = stampedNodes;

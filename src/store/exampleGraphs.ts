@@ -10496,6 +10496,212 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── 2D: Angular Repeat — Gear ─────────────────────────────────────────────────
+  // Like angularFlowerRepeat but uses a box SDF to make a gear/star shape
+  angularGearRepeat: {
+    label: '2D: Angular Gear',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 80, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 80, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ang_2', type: 'angularRepeat2D', position: { x: 310, y: 200 },
+        inputs: {
+          input: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: {
+          output:   { type: 'vec2',  label: 'Sector UV' },
+          sectorID: { type: 'float', label: 'Sector ID' },
+        },
+        params: { count: 10.0 },
+      },
+      // Offset box SDF in sector space → 10 "teeth" around the ring
+      {
+        id: 'box_3', type: 'boxSDF', position: { x: 530, y: 200 },
+        inputs: {
+          position: { type: 'vec2', label: 'Position', connection: { nodeId: 'ang_2', outputKey: 'output' } },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { width: 0.08, height: 0.15, posX: 0.38, posY: 0.0 },
+      },
+      {
+        id: 'col_4', type: 'sdfColorize', position: { x: 760, y: 200 },
+        inputs: {
+          d: { type: 'float', label: 'SDF', connection: { nodeId: 'box_3', outputKey: 'distance' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { edge: 0.006 },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 980, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'col_4', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 2D: Limited Repeat Grid ───────────────────────────────────────────────────
+  // Finite grid of circles — demonstrates limited/finite domain repetition
+  limitedRepeatGrid: {
+    label: '2D: Limited Grid',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 80, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'rep_1', type: 'limitedRepeat2D', position: { x: 290, y: 200 },
+        inputs: {
+          input: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+        },
+        outputs: {
+          output: { type: 'vec2', label: 'Cell UV' },
+          cellID: { type: 'vec2', label: 'Cell ID' },
+        },
+        params: { cellX: 0.26, cellY: 0.26, countX: 7.0, countY: 5.0 },
+      },
+      {
+        id: 'circ_2', type: 'circleSDF', position: { x: 510, y: 200 },
+        inputs: {
+          position: { type: 'vec2', label: 'Position', connection: { nodeId: 'rep_1', outputKey: 'output' } },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.09, posX: 0.0, posY: 0.0 },
+      },
+      {
+        id: 'col_3', type: 'sdfColorize', position: { x: 730, y: 200 },
+        inputs: {
+          d: { type: 'float', label: 'SDF', connection: { nodeId: 'circ_2', outputKey: 'distance' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { edge: 0.008 },
+      },
+      {
+        id: 'out_4', type: 'output', position: { x: 950, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'col_3', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: SD Cross Scene ────────────────────────────────────────────────────────
+  // SD Cross as a standalone shape — the building block of the Menger Sponge
+  sdCrossScene3D: {
+    label: '3D: SD Cross',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 310, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Cross Scene',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',   type: 'scenePos', position: { x: 60, y: 180 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'time_sg', type: 'time',     position: { x: 60, y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time'     } }, params: {} },
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 260, y: 240 },
+                inputs: {
+                  pos:  { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  time: { type: 'float', label: 'Time',     connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { rx: 0.3, ry: 0.5, rz: 0.1, speed: 0.4 },
+              },
+              {
+                id: 'cross_sg', type: 'sdCross3D', position: { x: 460, y: 240 },
+                inputs: {
+                  pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.28 },
+              },
+            ],
+            outputNodeId: 'cross_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.0, fov: 1.5, maxSteps: 80, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, bgR: 0.03, bgG: 0.03, bgB: 0.06, albedoR: 0.3, albedoG: 0.7, albedoB: 0.9 },
+      },
+      {
+        id: 'out_4', type: 'output', position: { x: 860, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Infinite Pillars ──────────────────────────────────────────────────────
+  // mirroredRepeat3D repeating a cylinder infinitely in the XZ plane
+  infinitePillars3D: {
+    label: '3D: Infinite Pillars',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 310, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Pillars Scene',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 180 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'rep_sg', type: 'mirroredRepeat3D', position: { x: 260, y: 180 },
+                inputs: {
+                  pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } },
+                },
+                outputs: {
+                  pos:    { type: 'vec3', label: 'Mirrored Pos' },
+                  cellID: { type: 'vec3', label: 'Cell ID' },
+                },
+                // Large cellY so columns don't repeat vertically
+                params: { cellX: 2.0, cellY: 50.0, cellZ: 2.0 },
+              },
+              {
+                id: 'cyl_sg', type: 'cylinderSDF3D', position: { x: 470, y: 180 },
+                inputs: {
+                  pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep_sg', outputKey: 'pos' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { r: 0.22, height: 3.0 },
+              },
+            ],
+            outputNodeId: 'cyl_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 2.5, fov: 1.4, maxSteps: 100, maxDist: 25.0, lightX: 1.5, lightY: 4.0, lightZ: 2.0, bgR: 0.05, bgG: 0.04, bgB: 0.08, albedoR: 0.7, albedoG: 0.65, albedoB: 0.5 },
+      },
+      {
+        id: 'out_4', type: 'output', position: { x: 860, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
