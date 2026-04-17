@@ -5,6 +5,57 @@ import type { LoopPairChain } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
 
+// ── Built-in SDF helper constants ─────────────────────────────────────────────
+// These are always added to the functions Set so they are available to any node
+// or custom function without needing to re-declare them.  The Set deduplicates
+// so even if a node (e.g. SmoothMinNode) previously declared smin via glslFunction
+// the exact same string ensures no duplicate body errors in the GLSL output.
+
+export const GLSL_SMIN = `float smin(float a, float b, float k) { float h=max(k-abs(a-b),0.)/k; return min(a,b)-h*h*h*k*(1./6.); }`;
+export const GLSL_SD_BOX = `float sdBox(vec2 p, vec2 b) {
+    vec2 d = abs(p) - b;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}`;
+export const GLSL_SD_SEGMENT = `float sdSegment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}`;
+export const GLSL_SD_ELLIPSE = `float sdEllipse(vec2 p, vec2 ab) {
+    p = abs(p);
+    if (p.x > p.y) { p = p.yx; ab = ab.yx; }
+    float l = ab.y*ab.y - ab.x*ab.x;
+    float m = ab.x*p.x/l; float m2 = m*m;
+    float n = ab.y*p.y/l; float n2 = n*n;
+    float c = (m2+n2-1.0)/3.0; float c3 = c*c*c;
+    float q = c3 + m2*n2*2.0; float d2 = c3 + m2*n2; float g = m + m*n2;
+    float co;
+    if (d2 < 0.0) {
+        float h2 = acos(q/c3)/3.0;
+        float s2 = cos(h2); float t2 = sin(h2)*sqrt(3.0);
+        float rx2 = sqrt(-c*(s2+t2+2.0)+m2); float ry2 = sqrt(-c*(s2-t2+2.0)+m2);
+        co = (ry2+sign(l)*rx2+abs(g)/(rx2*ry2)-m)/2.0;
+    } else {
+        float h2 = 2.0*m*n*sqrt(d2);
+        float s2 = sign(q+h2)*pow(abs(q+h2), 1.0/3.0);
+        float t2 = sign(q-h2)*pow(abs(q-h2), 1.0/3.0);
+        float rx2 = -(s2+t2)-c*4.0+2.0*m2; float ry2 = (s2-t2)*sqrt(3.0);
+        float rm2 = sqrt(rx2*rx2+ry2*ry2);
+        co = (ry2/sqrt(rm2-rx2)+2.0*g/rm2-m)/2.0;
+    }
+    vec2 r2 = ab*vec2(co, sqrt(1.0-co*co));
+    return length(r2-p)*sign(p.y-r2.y);
+}`;
+export const GLSL_OP_REPEAT = `vec2 opRepeat(vec2 p, float s) {
+    return mod(p + s*0.5, s) - s*0.5;
+}`;
+export const GLSL_OP_REPEAT_POLAR = `vec2 opRepeatPolar(vec2 p, float n) {
+    float angle = TAU / n;
+    float a = atan(p.y, p.x) + angle * 0.5;
+    a = mod(a, angle) - angle * 0.5;
+    return vec2(cos(a), sin(a)) * length(p);
+}`;
+
 // ── Runtime output-type helper ────────────────────────────────────────────────
 
 /**
@@ -13,7 +64,7 @@ import { computeNodeSlug } from './nodeSlug';
  * at runtime; their definition hardcodes `float` as a placeholder.
  */
 function getNodeOutputType(node: GraphNode, defType: DataType): DataType {
-  if (node.type === 'expr' || node.type === 'customFn') {
+  if (node.type === 'expr' || node.type === 'exprNode' || node.type === 'customFn') {
     const pt = node.params.outputType as string | undefined;
     if (pt === 'float' || pt === 'vec2' || pt === 'vec3' || pt === 'vec4') return pt as DataType;
   }
@@ -157,6 +208,13 @@ export function generateFragmentShader(
   const nodeMap    = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
   const functions  = new Set<string>();
+  // Seed with SDF built-ins so they're always available and deduplicated
+  functions.add(GLSL_SMIN);
+  functions.add(GLSL_SD_BOX);
+  functions.add(GLSL_SD_SEGMENT);
+  functions.add(GLSL_SD_ELLIPSE);
+  functions.add(GLSL_OP_REPEAT);
+  functions.add(GLSL_OP_REPEAT_POLAR);
   const mainCode: string[] = [];
   const paramUniforms: Record<string, number> = {};
   const textureUniforms: Record<string, string> = {};  // uniformName → nodeId
@@ -1607,7 +1665,7 @@ uniform vec2 u_mouse;
 ${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}${audioUniformDecls ? audioUniformDecls + '\n' : ''}
 varying vec2 vUv;
 
-// ── Built-in helpers (always available to all nodes / custom functions) ──────
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
 vec2 noiseHash2(vec2 p) {
     p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
     return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
@@ -1628,56 +1686,6 @@ vec2 rotate(vec2 v, float angle) {
 }
 // 2D rotation matrix — returns mat2; use as: p.xy = p.xy * rot2D(angle)
 mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
-// Smooth minimum — blends two SDF values; k=0.1 tight, k=0.5 wide blob
-float smin(float a, float b, float k) { float h=max(k-abs(a-b),0.)/k; return min(a,b)-h*h*h*k*(1./6.); }
-// Signed distance — axis-aligned box
-float sdBox(vec2 p, vec2 b) {
-    vec2 d = abs(p) - b;
-    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-}
-// Signed distance — line segment
-float sdSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
-// Signed distance — ellipse
-float sdEllipse(vec2 p, vec2 ab) {
-    p = abs(p);
-    if (p.x > p.y) { p = p.yx; ab = ab.yx; }
-    float l = ab.y*ab.y - ab.x*ab.x;
-    float m = ab.x*p.x/l; float m2 = m*m;
-    float n = ab.y*p.y/l; float n2 = n*n;
-    float c = (m2+n2-1.0)/3.0; float c3 = c*c*c;
-    float q = c3 + m2*n2*2.0; float d2 = c3 + m2*n2; float g = m + m*n2;
-    float co;
-    if (d2 < 0.0) {
-        float h2 = acos(q/c3)/3.0;
-        float s2 = cos(h2); float t2 = sin(h2)*sqrt(3.0);
-        float rx2 = sqrt(-c*(s2+t2+2.0)+m2); float ry2 = sqrt(-c*(s2-t2+2.0)+m2);
-        co = (ry2+sign(l)*rx2+abs(g)/(rx2*ry2)-m)/2.0;
-    } else {
-        float h2 = 2.0*m*n*sqrt(d2);
-        float s2 = sign(q+h2)*pow(abs(q+h2), 1.0/3.0);
-        float t2 = sign(q-h2)*pow(abs(q-h2), 1.0/3.0);
-        float rx2 = -(s2+t2)-c*4.0+2.0*m2; float ry2 = (s2-t2)*sqrt(3.0);
-        float rm2 = sqrt(rx2*rx2+ry2*ry2);
-        co = (ry2/sqrt(rm2-rx2)+2.0*g/rm2-m)/2.0;
-    }
-    vec2 r2 = ab*vec2(co, sqrt(1.0-co*co));
-    return length(r2-p)*sign(p.y-r2.y);
-}
-// Domain repetition — tile space with period s
-vec2 opRepeat(vec2 p, float s) {
-    return mod(p + s*0.5, s) - s*0.5;
-}
-// Polar domain repetition — n-fold symmetry
-vec2 opRepeatPolar(vec2 p, float n) {
-    float angle = TAU / n;
-    float a = atan(p.y, p.x) + angle * 0.5;
-    a = mod(a, angle) - angle * 0.5;
-    return vec2(cos(a), sin(a)) * length(p);
-}
 // ─────────────────────────────────────────────────────────────────────────
 
 ${functionCode}

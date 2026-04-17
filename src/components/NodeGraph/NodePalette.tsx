@@ -11,6 +11,8 @@ import type { GroupPreset } from '../../types/groupPreset';
 // ── Nodes hidden from the palette (still functional in existing graphs) ───────
 const HIDDEN_NODES = new Set([
   'forLoop',           // legacy — use iterated groups instead
+  'loopStart',         // deprecated — use MarchLoopGroup instead
+  'loopEnd',           // deprecated — use MarchLoopGroup instead
   'loopRippleStep',
   'loopRotateStep',
   'loopDomainFold',

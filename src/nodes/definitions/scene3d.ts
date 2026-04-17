@@ -29,6 +29,7 @@ import { p } from './helpers';
 export const ScenePosNode: NodeDefinition = {
   type: 'scenePos', label: 'Scene Pos', category: '3D Scene',
   description: 'Inside a Scene Group: outputs the current ray march position (vec3 p). Connect to SDF primitive inputs.',
+  anchored: true,
   inputs: {},
   outputs: { pos: { type: 'vec3', label: 'Position' } },
   defaultParams: {},
@@ -207,6 +208,7 @@ export const MarchDistNode: NodeDefinition = {
 export const SceneOutputNode: NodeDefinition = {
   type: 'sceneOutput', label: 'Scene Output', category: '3D Scene',
   description: 'Inside a Scene Group: marks the final SDF output. Connect the last SDF distance here — this becomes the return value of the scene function.',
+  anchored: true,
   inputs:  { dist: { type: 'float', label: 'Distance' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: {},

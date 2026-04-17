@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
@@ -178,6 +178,15 @@ export function ExprBlockModal({ node, onClose }: Props) {
     flash();
   };
 
+  // Auto-import existing sockets into params.inputs when the modal first opens
+  // and params.inputs is empty (e.g. legacy nodes or newly wired nodes).
+  useEffect(() => {
+    if (customInputs.length === 0 && Object.keys(node.inputs).length > 0) {
+      migrateFromNodeInputs();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return createPortal(
     <div
       style={{
@@ -233,15 +242,6 @@ export function ExprBlockModal({ node, onClose }: Props) {
             <p style={{ fontSize: '10px', color: '#45475a', marginBottom: '8px', lineHeight: 1.4 }}>
               Each input becomes a local variable in the warp. Float inputs can have sliders.
             </p>
-
-            {customInputs.length === 0 && Object.keys(node.inputs).length > 0 && (
-              <button
-                onClick={migrateFromNodeInputs}
-                style={{ ...BTN, marginBottom: '8px', color: '#f9e2af', borderColor: '#f9e2af55', background: '#f9e2af11' }}
-              >
-                ↑ Import from existing sockets
-              </button>
-            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {customInputs.map((inp, idx) => (

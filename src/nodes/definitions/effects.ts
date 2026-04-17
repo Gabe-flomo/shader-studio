@@ -643,49 +643,6 @@ export const ForLoopNode: NodeDefinition = {
   },
 };
 
-export const ExprNode: NodeDefinition = {
-  type: 'expr',
-  label: 'Expr',
-  category: 'Sources',
-  description: 'Write a single-line GLSL expression. Name each input slot, wire nodes into them, then use the names in your formula. Output type sets the declared GLSL type.',
-  inputs: {
-    in0: { type: 'float', label: 'in0' },
-    in1: { type: 'float', label: 'in1' },
-    in2: { type: 'float', label: 'in2' },
-    in3: { type: 'float', label: 'in3' },
-  },
-  outputs: {
-    result: { type: 'float', label: 'Result' },
-  },
-  defaultParams: { expr: 'in0', outputType: 'float', in0Name: 'in0', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' },
-  paramDefs: {
-    expr:       { label: 'Expression', type: 'string' },
-    outputType: { label: 'Output Type', type: 'select', options: [
-      { value: 'float', label: 'float' },
-      { value: 'vec2',  label: 'vec2'  },
-      { value: 'vec3',  label: 'vec3'  },
-    ]},
-    in0Name: { label: 'in0 name', type: 'string' },
-    in1Name: { label: 'in1 name', type: 'string' },
-    in2Name: { label: 'in2 name', type: 'string' },
-    in3Name: { label: 'in3 name', type: 'string' },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outType = (node.params.outputType as string) || 'float';
-    const outVar  = `${node.id}_result`;
-    let expr = (node.params.expr as string) || '0.0';
-    for (let i = 0; i < 4; i++) {
-      const rawName = (node.params[`in${i}Name`] as string) ?? `in${i}`;
-      const name = rawName.trim();
-      if (!name) continue;
-      const glslVar = inputVars[`in${i}`] || (outType === 'vec2' ? 'vec2(0.0)' : outType === 'vec3' ? 'vec3(0.0)' : '0.0');
-      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      expr = expr.replace(new RegExp(`\\b${escaped}\\b`, 'g'), glslVar);
-    }
-    return { code: `    ${outType} ${outVar} = ${expr};\n`, outputVars: { result: outVar } };
-  },
-};
-
 // ─── Expr Block Node ─────────────────────────────────────────────────────────
 // A GLSL statement block where each input key becomes a local variable name.
 // Write sequential warp expressions: "p.xy = p.xy * rot2D(t * 0.2); p.y += sin(t * 1.5) * 0.3; p"
@@ -709,14 +666,19 @@ export const ExprBlockNode: NodeDefinition = {
     result: { type: 'vec3', label: 'Result (vec3)' },
   },
   defaultParams: {
-    // Dynamic inputs — each entry becomes a socket + local variable
-    inputs: [] as Array<{ name: string; type: string; slider: { min: number; max: number } | null }>,
+    // Dynamic inputs — each entry becomes a socket + local variable.
+    // New nodes start with one float, one vec2, one vec3 slot (deletable via the modal).
+    inputs: [
+      { name: 'a', type: 'float', slider: null },
+      { name: 'b', type: 'vec2',  slider: null },
+      { name: 'c', type: 'vec3',  slider: null },
+    ] as Array<{ name: string; type: string; slider: { min: number; max: number } | null }>,
     outputType: 'vec3',
     // Per-line warp statements
     lines: [] as Array<{ lhs: string; op: string; rhs: string }>,
-    result: 'p',
+    result: 'a',
     // Legacy field kept for backward compatibility with old saved graphs
-    expr: 'p',
+    expr: 'a',
   },
   // No paramDefs needed — inputs + lines are handled by ExprBlockModal and inline UI
   paramDefs: {},

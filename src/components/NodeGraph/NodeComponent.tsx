@@ -2046,6 +2046,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         >
           <span style={{ fontSize: '9px', opacity: 0.5, lineHeight: 1 }}>{collapsed ? '▶' : '▼'}</span>
           {node.type === 'customFn' && typeof node.params.label === 'string' ? node.params.label || def.label : def.label}
+          {node.params._groupOriginal && def.anchored && (
+            <span title="Anchored — cannot be deleted" style={{ fontSize: '9px', opacity: 0.45, lineHeight: 1 }}>🔒</span>
+          )}
+          {def.deprecated && (
+            <span style={{ fontSize: '7px', color: '#f9e2af', letterSpacing: '0.06em', opacity: 0.8, fontWeight: 400, border: '1px solid #f9e2af55', borderRadius: '2px', padding: '0 2px' }}>DEPRECATED</span>
+          )}
           {isBypassed && (
             <span style={{ fontSize: '8px', color: '#f9e2af', letterSpacing: '0.06em', opacity: 0.9, fontWeight: 400 }}>BYPASS</span>
           )}
@@ -2111,8 +2117,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ⟴
             </button>
           )}
-          {/* Expr modal expand button — shown on Expr and FloatWarp nodes */}
-          {(node.type === 'expr' || node.type === 'floatWarp') && (
+          {/* Expr modal expand button — shown on FloatWarp nodes */}
+          {node.type === 'floatWarp' && (
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setShowExprModal(v => !v)}
@@ -2434,13 +2440,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             if (cfInp?.slider != null && !isConnected) return null;
           }
 
-          // For Expr node: show name-edit field inline with each input slot
-          const isExprSlot = node.type === 'expr' && /^in\d$/.test(key);
-          const slotIdx = isExprSlot ? parseInt(key.slice(2)) : -1;
-          const slotNameKey = isExprSlot ? `in${slotIdx}Name` : '';
-          const slotName = isExprSlot
-            ? (typeof node.params[slotNameKey] === 'string' ? (node.params[slotNameKey] as string) : key)
-            : input.label;
+          const slotName = input.label;
 
           // Drag-highlight: compatible = glow, incompatible = dim
           // External sockets block new connections entirely
@@ -2542,31 +2542,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   pointerEvents: 'none',
                 }} />
               )}
-              {isExprSlot ? (
-                // Expr node: editable name field (read-only when external)
-                <input
-                  type="text"
-                  value={slotName}
-                  onChange={e => { if (!isExternal) updateNodeParams(node.id, { [slotNameKey]: e.target.value }); }}
-                  readOnly={isExternal}
-                  onMouseDown={e => e.stopPropagation()}
-                  spellCheck={false}
-                  placeholder={key}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    borderBottom: `1px solid ${isExternal ? '#313244' : '#313244'}`,
-                    color: isExternal ? '#585b70' : '#cdd6f4',
-                    fontSize: '11px',
-                    fontFamily: 'monospace',
-                    outline: 'none',
-                    width: '80px',
-                    padding: '0 2px',
-                    opacity: socketOpacity,
-                    cursor: isExternal ? 'default' : undefined,
-                  }}
-                />
-              ) : (
+              {(
                 <span
                   style={{
                     color: isExternal ? '#585b70' : '#a6adc8',
@@ -2716,32 +2692,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           }
           // 'string' type → text input or textarea (code font for 'expr'/'body' keys)
           if (paramDef.type === 'string') {
-            // For Expr node: skip inXName fields here — they're rendered inline with sockets above
-            if (node.type === 'expr' && /^in\dName$/.test(key)) return null;
-            // For Expr node: skip 'expr' field here — it's in the modal; show a compact hint instead
-            if (node.type === 'expr' && key === 'expr') {
-              const val = typeof node.params[key] === 'string' ? (node.params[key] as string) : '';
-              return (
-                <div
-                  key={key}
-                  style={{ padding: '3px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}
-                  onMouseDown={e => e.stopPropagation()}
-                >
-                  <span style={{ color: '#6c7086', fontSize: '11px' }}>{paramDef.label}</span>
-                  <div
-                    style={{
-                      background: '#11111b', border: '1px solid #313244',
-                      color: '#a6e3a1', padding: '3px 6px', borderRadius: '3px',
-                      fontSize: '10px', fontFamily: 'monospace',
-                      maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}
-                    title={val}
-                  >
-                    {val || '(empty)'}
-                  </div>
-                </div>
-              );
-            }
 
             const val    = typeof node.params[key] === 'string' ? (node.params[key] as string) : '';
             const isBody = key === 'body';
@@ -3331,7 +3281,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       </div>
 
       {/* ── Expr modal ── */}
-      {showExprModal && (node.type === 'expr' || node.type === 'floatWarp') && (
+      {showExprModal && node.type === 'floatWarp' && (
         <ExprModal node={node} onClose={() => setShowExprModal(false)} />
       )}
 

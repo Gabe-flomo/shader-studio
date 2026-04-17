@@ -77,16 +77,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       { id: 'len_2', type: 'length', position: { x: 280, y: 240 },
         inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
         outputs: { output: { type: 'float', label: 'Output' } }, params: { scale: 1.0 } },
-      // Expr: entire glow pipeline in one line
-      { id: 'expr_3', type: 'expr', position: { x: 540, y: 320 },
+      // ExprBlock: entire glow pipeline in one line
+      { id: 'expr_3', type: 'exprNode', position: { x: 540, y: 320 },
         inputs: {
-          in0: { type: 'float', label: 'in0', connection: { nodeId: 'len_2',  outputKey: 'output' } },
-          in1: { type: 'float', label: 'in1', connection: { nodeId: 'time_1', outputKey: 'time'   } },
-          in2: { type: 'float', label: 'in2' },
-          in3: { type: 'float', label: 'in3' },
+          d: { type: 'float', label: 'd (float)', connection: { nodeId: 'len_2',  outputKey: 'output' } },
+          t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time'   } },
         },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: { expr: '0.01 / abs(sin(d * 8.0 + t) / 8.0)', outputType: 'float', in0Name: 'd', in1Name: 't', in2Name: 'in2', in3Name: 'in3' } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 'd', type: 'float', slider: null }, { name: 't', type: 'float', slider: null }], outputType: 'float', lines: [], result: '0.01 / abs(sin(d * 8.0 + t) / 8.0)', expr: '0.01 / abs(sin(d * 8.0 + t) / 8.0)' } },
       // Palette color
       { id: 'paletteT_4', type: 'add', position: { x: 280, y: 500 },
         inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'len_2', outputKey: 'output' } }, b: { type: 'float', label: 'B', connection: { nodeId: 'time_1', outputKey: 'time' } } },
@@ -112,14 +110,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // Expr: orbit offset vec2 in one line
-      { id: 'expr_2', type: 'expr', position: { x: 300, y: 320 },
-        inputs: {
-          in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } },
-          in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' },
-        },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(sin(t), cos(t)) * 0.5', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
+      // ExprBlock: orbit offset vec2 in one line
+      { id: 'expr_2', type: 'exprNode', position: { x: 300, y: 320 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(sin(t), cos(t)) * 0.5', expr: 'vec2(sin(t), cos(t)) * 0.5' } },
       { id: 'circle_3', type: 'circleSDF', position: { x: 580, y: 220 },
         inputs: {
           position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'uv_0',   outputKey: 'uv'     } },
@@ -444,19 +439,19 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'time_1', type: 'time', position: { x: 40, y: 500 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      // Orbit offsets via Expr nodes
-      { id: 'orbit1_2', type: 'expr', position: { x: 280, y: 100 },
-        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(sin(t * 0.8), cos(t * 0.8)) * 0.4', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
-      { id: 'orbit2_3', type: 'expr', position: { x: 280, y: 260 },
-        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(cos(t * 1.1 + 2.09), sin(t * 1.1 + 2.09)) * 0.35', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
-      { id: 'orbit3_4', type: 'expr', position: { x: 280, y: 420 },
-        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(sin(t * 1.3 + 4.19), cos(t * 1.3 + 4.19)) * 0.3', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
+      // Orbit offsets via ExprBlock nodes
+      { id: 'orbit1_2', type: 'exprNode', position: { x: 280, y: 100 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(sin(t * 0.8), cos(t * 0.8)) * 0.4', expr: 'vec2(sin(t * 0.8), cos(t * 0.8)) * 0.4' } },
+      { id: 'orbit2_3', type: 'exprNode', position: { x: 280, y: 260 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(cos(t * 1.1 + 2.09), sin(t * 1.1 + 2.09)) * 0.35', expr: 'vec2(cos(t * 1.1 + 2.09), sin(t * 1.1 + 2.09)) * 0.35' } },
+      { id: 'orbit3_4', type: 'exprNode', position: { x: 280, y: 420 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(sin(t * 1.3 + 4.19), cos(t * 1.3 + 4.19)) * 0.3', expr: 'vec2(sin(t * 1.3 + 4.19), cos(t * 1.3 + 4.19)) * 0.3' } },
       // Ring SDFs for each orbit
       { id: 'ring1_5', type: 'ringSDF', position: { x: 560, y: 100 },
         inputs: {
@@ -565,10 +560,10 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'time_1', type: 'time', position: { x: 40, y: 420 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
-      { id: 'cExpr_2', type: 'expr', position: { x: 280, y: 400 },
-        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(cos(t * 0.3) * 0.7, sin(t * 0.4) * 0.4)', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
+      { id: 'cExpr_2', type: 'exprNode', position: { x: 280, y: 400 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(cos(t * 0.3) * 0.7, sin(t * 0.4) * 0.4)', expr: 'vec2(cos(t * 0.3) * 0.7, sin(t * 0.4) * 0.4)' } },
       {
         id: 'julia_3', type: 'mandelbrot', position: { x: 560, y: 140 },
         inputs: {
@@ -1457,18 +1452,18 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       { id: 'time_1', type: 'time', position: { x: 40, y: 600 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
 
       // Orbit positions: time → expr → vec2 orbit offsets
-      { id: 'orb1_2', type: 'expr', position: { x: 260, y: 100 },
-        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(cos(t*0.7), sin(t*0.7)) * 0.42', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
-      { id: 'orb2_3', type: 'expr', position: { x: 260, y: 280 },
-        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(cos(t*1.1+2.09), sin(t*1.1+2.09)) * 0.38', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
-      { id: 'orb3_4', type: 'expr', position: { x: 260, y: 460 },
-        inputs: { in0: { type: 'float', label: 'in0', connection: { nodeId: 'time_1', outputKey: 'time' } }, in1: { type: 'float', label: 'in1' }, in2: { type: 'float', label: 'in2' }, in3: { type: 'float', label: 'in3' } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { expr: 'vec2(cos(t*1.4+4.19), sin(t*1.4+4.19)) * 0.34', outputType: 'vec2', in0Name: 't', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3' } },
+      { id: 'orb1_2', type: 'exprNode', position: { x: 260, y: 100 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(cos(t*0.7), sin(t*0.7)) * 0.42', expr: 'vec2(cos(t*0.7), sin(t*0.7)) * 0.42' } },
+      { id: 'orb2_3', type: 'exprNode', position: { x: 260, y: 280 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(cos(t*1.1+2.09), sin(t*1.1+2.09)) * 0.38', expr: 'vec2(cos(t*1.1+2.09), sin(t*1.1+2.09)) * 0.38' } },
+      { id: 'orb3_4', type: 'exprNode', position: { x: 260, y: 460 },
+        inputs: { t: { type: 'float', label: 't (float)', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
+        params: { inputs: [{ name: 't', type: 'float', slider: null }], outputType: 'vec2', lines: [], result: 'vec2(cos(t*1.4+4.19), sin(t*1.4+4.19)) * 0.34', expr: 'vec2(cos(t*1.4+4.19), sin(t*1.4+4.19)) * 0.34' } },
 
       // Pulsing radius: sin(time) remapped to 0.06–0.14
       { id: 'sinR_5', type: 'sin', position: { x: 260, y: 640 },
@@ -2910,16 +2905,17 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               },
               // Glow: pow(0.01 / abs(sin(d*8+t)/8), 1.2)
               {
-                id: 'glow', type: 'expr', position: { x: 720, y: 280 },
+                id: 'glow', type: 'exprNode', position: { x: 720, y: 280 },
                 inputs:  {
-                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'd_val', outputKey: 'result' } },
-                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time' } },
+                  d:    { type: 'float', label: 'd (float)',    connection: { nodeId: 'd_val', outputKey: 'result' } },
+                  time: { type: 'float', label: 'time (float)', connection: { nodeId: 'time_n', outputKey: 'time' } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'd', type: 'float', slider: null }, { name: 'time', type: 'float', slider: null }],
+                  outputType: 'float', lines: [],
+                  result: 'pow(0.01 / abs(sin(d * 8.0 + time) / 8.0), 1.2)',
                   expr: 'pow(0.01 / abs(sin(d * 8.0 + time) / 8.0), 1.2)',
-                  outputType: 'float',
-                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
                 },
               },
               // col * d  — assignOp += accumulates color across all 4 iterations
@@ -3034,16 +3030,17 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               },
               // Glow with different frequency (6 instead of 8)
               {
-                id: 'glow', type: 'expr', position: { x: 520, y: 180 },
+                id: 'glow', type: 'exprNode', position: { x: 520, y: 180 },
                 inputs:  {
-                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
-                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                  d:    { type: 'float', label: 'd (float)',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
+                  time: { type: 'float', label: 'time (float)', connection: { nodeId: 'time_n', outputKey: 'time'   } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'd', type: 'float', slider: null }, { name: 'time', type: 'float', slider: null }],
+                  outputType: 'float', lines: [],
+                  result: 'pow(0.01 / abs(sin(d * 6.0 + time) / 6.0), 1.0)',
                   expr: 'pow(0.01 / abs(sin(d * 6.0 + time) / 6.0), 1.0)',
-                  outputType: 'float',
-                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
                 },
               },
               {
@@ -3185,16 +3182,17 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               },
               // Glow with tighter frequency for spiral feel
               {
-                id: 'glow', type: 'expr', position: { x: 920, y: 260 },
+                id: 'glow', type: 'exprNode', position: { x: 920, y: 260 },
                 inputs:  {
-                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'd_val',  outputKey: 'result' } },
-                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                  d:    { type: 'float', label: 'd (float)',    connection: { nodeId: 'd_val',  outputKey: 'result' } },
+                  time: { type: 'float', label: 'time (float)', connection: { nodeId: 'time_n', outputKey: 'time'   } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'd', type: 'float', slider: null }, { name: 'time', type: 'float', slider: null }],
+                  outputType: 'float', lines: [],
+                  result: 'pow(0.008 / abs(sin(d * 10.0 + time) / 10.0), 1.3)',
                   expr: 'pow(0.008 / abs(sin(d * 10.0 + time) / 10.0), 1.3)',
-                  outputType: 'float',
-                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
                 },
               },
               // Accumulate: col * glow added each iteration
@@ -3290,13 +3288,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               },
               // amp = pow(0.5, i) — halve amplitude each octave
               {
-                id: 'amp', type: 'expr', position: { x: 320, y: 380 },
-                inputs:  { in0: { type: 'float', label: 'i', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                id: 'amp', type: 'exprNode', position: { x: 320, y: 380 },
+                inputs:  { i: { type: 'float', label: 'i (float)', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'i', type: 'float', slider: null }],
+                  outputType: 'float', lines: [],
+                  result: 'pow(0.5, i)',
                   expr: 'pow(0.5, i)',
-                  outputType: 'float',
-                  in0Name: 'i', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3',
                 },
               },
               // Weighted octave contribution: noise * amplitude — accumulated via +=
@@ -3437,13 +3436,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
             nodes: [
               // Carry: abs(uv * 1.6) - 0.9  (Mandelbox-style fold)
               {
-                id: 'fold_n', type: 'expr', position: { x: 120, y: 180 },
-                inputs:  { in0: { type: 'vec2', label: 'uv' } },
-                outputs: { result: { type: 'vec2', label: 'Result' } },
+                id: 'fold_n', type: 'exprNode', position: { x: 120, y: 180 },
+                inputs:  { uv: { type: 'vec2', label: 'uv (vec2)' } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'uv', type: 'vec2', slider: null }],
+                  outputType: 'vec2', lines: [],
+                  result: 'abs(uv * 1.6) - 0.9',
                   expr: 'abs(uv * 1.6) - 0.9',
-                  outputType: 'vec2',
-                  in0Name: 'uv', in1Name: 'in1', in2Name: 'in2', in3Name: 'in3',
                 },
                 carryMode: true,
               },
@@ -3504,16 +3504,17 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               },
               // Glow from length of folded UV
               {
-                id: 'glow', type: 'expr', position: { x: 520, y: 200 },
+                id: 'glow', type: 'exprNode', position: { x: 520, y: 200 },
                 inputs:  {
-                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
-                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                  d:    { type: 'float', label: 'd (float)',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
+                  time: { type: 'float', label: 'time (float)', connection: { nodeId: 'time_n', outputKey: 'time'   } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'd', type: 'float', slider: null }, { name: 'time', type: 'float', slider: null }],
+                  outputType: 'float', lines: [],
+                  result: 'pow(0.012 / abs(sin(d * 7.0 + time) / 7.0), 1.1)',
                   expr: 'pow(0.012 / abs(sin(d * 7.0 + time) / 7.0), 1.1)',
-                  outputType: 'float',
-                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
                 },
               },
               // Accumulate color across all fold iterations
@@ -3652,16 +3653,17 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
                 params:  { preset: '3' },
               },
               {
-                id: 'glow', type: 'expr', position: { x: 720, y: 280 },
+                id: 'glow', type: 'exprNode', position: { x: 720, y: 280 },
                 inputs:  {
-                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'd_val',  outputKey: 'result' } },
-                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                  d:    { type: 'float', label: 'd (float)',    connection: { nodeId: 'd_val',  outputKey: 'result' } },
+                  time: { type: 'float', label: 'time (float)', connection: { nodeId: 'time_n', outputKey: 'time'   } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'd', type: 'float', slider: null }, { name: 'time', type: 'float', slider: null }],
+                  outputType: 'float', lines: [],
+                  result: 'pow(0.01 / abs(sin(d * 8.0 + time) / 8.0), 1.2)',
                   expr: 'pow(0.01 / abs(sin(d * 8.0 + time) / 8.0), 1.2)',
-                  outputType: 'float',
-                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
                 },
               },
               // col += palette * glow — additive color accumulation
@@ -3781,16 +3783,17 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               },
               // Soft bounded glow — clamp keeps it in [0, 1] so *=  stays controlled
               {
-                id: 'glow', type: 'expr', position: { x: 720, y: 280 },
+                id: 'glow', type: 'exprNode', position: { x: 720, y: 280 },
                 inputs:  {
-                  in0: { type: 'float', label: 'd',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
-                  in1: { type: 'float', label: 'time', connection: { nodeId: 'time_n', outputKey: 'time'   } },
+                  d:    { type: 'float', label: 'd (float)',    connection: { nodeId: 'len_c',  outputKey: 'output' } },
+                  time: { type: 'float', label: 'time (float)', connection: { nodeId: 'time_n', outputKey: 'time'   } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
+                  inputs: [{ name: 'd', type: 'float', slider: null }, { name: 'time', type: 'float', slider: null }],
+                  outputType: 'float', lines: [],
+                  result: 'clamp(0.04 / (abs(sin(d * 6.0 + time) / 6.0) + 0.02), 0.0, 1.0)',
                   expr: 'clamp(0.04 / (abs(sin(d * 6.0 + time) / 6.0) + 0.02), 0.0, 1.0)',
-                  outputType: 'float',
-                  in0Name: 'd', in1Name: 'time', in2Name: 'in2', in3Name: 'in3',
                 },
               },
               // col *= palette * soft_glow — product accumulation (neutral: vec3(1.0))
