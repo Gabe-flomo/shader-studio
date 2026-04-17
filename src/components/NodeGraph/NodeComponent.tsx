@@ -304,7 +304,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const addMarchLoopInput      = useNodeGraphStore(s => s.addMarchLoopInput);
   const removeMarchLoopInput   = useNodeGraphStore(s => s.removeMarchLoopInput);
   const toggleMarchLoopOutputPort = useNodeGraphStore(s => s.toggleMarchLoopOutputPort);
-  const mlGroupHiddenOutputs   = useNodeGraphStore(s => (s.nodes.find(n => n.id === s.activeGroupId)?.params?.hiddenOutputs as string[] | undefined) ?? []);
+  // NOTE: do NOT inline `?? []` inside the selector — that creates a new array
+  // reference on every call, making Object.is always fail and causing infinite re-renders.
+  const _mlGroupHiddenOutputsRaw = useNodeGraphStore(s =>
+    s.nodes.find(n => n.id === s.activeGroupId)?.params?.hiddenOutputs as string[] | undefined
+  );
+  const mlGroupHiddenOutputs = _mlGroupHiddenOutputsRaw ?? [];
   const renameGroupPort    = useNodeGraphStore(s => s.renameGroupPort);
   const saveGroupPreset    = useNodeGraphStore(s => s.saveGroupPreset);
   const duplicateGroup     = useNodeGraphStore(s => s.duplicateGroup);
