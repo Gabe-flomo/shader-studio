@@ -121,6 +121,7 @@ import {
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
   Perspective2DNode,
+  MirroredRepeat2DNode, LimitedRepeat2DNode, AngularRepeat2DNode,
 } from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
@@ -159,6 +160,7 @@ import {
   SDFSmoothUnionNode, SDFSmoothSubtractNode, SDFSmoothIntersectNode,
   SDFRoundNode, SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
+  MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -217,6 +219,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   grid: GridNode,
   shear: ShearNode,
   perspective2d: Perspective2DNode,
+  mirroredRepeat2D: MirroredRepeat2DNode,
+  limitedRepeat2D: LimitedRepeat2DNode,
+  angularRepeat2D: AngularRepeat2DNode,
   // 2D Primitives
   circleSDF: CircleSDFNode,
   boxSDF: BoxSDFNode,
@@ -359,6 +364,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   limitedRepeat3D: LimitedRepeat3DNode,
   polarRepeat3D: PolarRepeat3DNode,
   displace3D: Displace3DNode,
+  mirroredRepeat3D: MirroredRepeat3DNode,
+  sdCross3D: SdCrossNode,
+  mengerSponge: MengerSpongeNode,
   // 3D Scene (composable)
   scenePos: ScenePosNode,
   sceneOutput: SceneOutputNode,
