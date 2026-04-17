@@ -121,7 +121,10 @@ export function ExprBlockModal({ node, onClose }: Props) {
   const varsChipsRef                       = useRef<HTMLDivElement>(null);
   const [hiddenVarsCount, setHiddenVarsCount] = useState(0);
 
-  // Measure which chips wrap to a second line
+  // Measure which chips wrap to a second line.
+  // Use .length + varsExpanded as deps — NOT the full array ref, because
+  // customInputs is `?? []` which creates a new reference each render and
+  // would cause the effect to re-run on every render, potentially looping.
   useLayoutEffect(() => {
     const container = varsChipsRef.current;
     if (!container) return;
@@ -130,7 +133,8 @@ export function ExprBlockModal({ node, onClose }: Props) {
     const firstTop = chips[0].offsetTop;
     const hidden = chips.filter(c => c.offsetTop > firstTop).length;
     setHiddenVarsCount(hidden);
-  }, [customInputs, varsExpanded]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customInputs.length, varsExpanded]);
 
   const flash = () => {
     setSavedFlash(true);
