@@ -92,7 +92,7 @@ interface Props {
 }
 
 export function FunctionBuilder({ onNavigateToStudio }: Props) {
-  const { functions, activeId, xRange, yRange } = useFunctionBuilder();
+  const { functions, activeId, xRange, yRange, savedFunctionDefs } = useFunctionBuilder();
   const [shaderSource, setShaderSource] = useState('');
   const [glslErrors, setGlslErrors]     = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,7 +101,7 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const { source } = buildShader(functions, activeId, xRange, yRange);
+      const { source } = buildShader(functions, activeId, xRange, yRange, savedFunctionDefs);
       setShaderSource(source);
     }, DEBOUNCE_MS);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };

@@ -26,16 +26,16 @@ export function normalizeBodyExpr(body: string): string {
 export function emitFunction(fn: FnDef): string {
   const expr = normalizeBodyExpr(fn.body);
   if (fn.returnType === 'float') {
-    return `float ${fn.name}(float _x, float _t) {
+    return `float ${fn.name}(float _x) {
   float x = _x;
-  float t = _t;
+  float t = u_time;
   vec2 uv = vec2(_x, 0.0);
   return ${expr};
 }`;
   }
-  return `${fn.returnType} ${fn.name}(vec2 _uv, float _t) {
+  return `${fn.returnType} ${fn.name}(vec2 _uv) {
   float x = _uv.x;
-  float t = _t;
+  float t = u_time;
   vec2 uv = _uv;
   return ${expr};
 }`;
@@ -45,7 +45,7 @@ function floatVizMain(floatFns: FnDef[]): string {
   const curves = floatFns.map((fn, i) => {
     const [r, g, b] = CURVE_COLORS[i % CURVE_COLORS.length];
     return `  {
-    float fy = ${fn.name}(xVal, u_time);
+    float fy = ${fn.name}(xVal);
     float d = abs(yVal - fy) / (abs(dFdy(yVal)) + 0.0001);
     float line = 1.0 - smoothstep(0.8, 2.0, d);
     col = mix(col, vec3(${r.toFixed(3)}, ${g.toFixed(3)}, ${b.toFixed(3)}), line);
@@ -101,13 +101,17 @@ export function buildShader(
   activeId: string,
   _xRange: [number, number],
   _yRange: [number, number],
+  libraryFns: FnDef[] = [],
 ): CompileResult {
   if (functions.length === 0) return { source: '', errors: ['No functions defined'] };
 
   const activeFn = functions.find(f => f.id === activeId) ?? functions[functions.length - 1];
   const errors: string[] = [];
 
-  const userFns = functions.map(emitFunction).join('\n\n');
+  // Library fns that aren't overridden by session fns come first
+  const sessionNames = new Set(functions.map(f => f.name));
+  const libFnsToInclude = libraryFns.filter(f => !sessionNames.has(f.name));
+  const userFns = [...libFnsToInclude.map(emitFunction), ...functions.map(emitFunction)].join('\n\n');
 
   let mainGlsl: string;
   if (activeFn.returnType === 'float') {

@@ -230,8 +230,8 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                 {savedFunctionDefs.map((fn: FnDef) => {
                   const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
-                  const call = `${fn.name}(${primaryArg}, t)`;
-                  const sig  = fn.returnType === 'float' ? `(float x, float t)` : `(vec2 uv, float t)`;
+                  const call = `${fn.name}(${primaryArg})`;
+                  const sig  = fn.returnType === 'float' ? `(float x)` : fn.returnType === 'vec3' ? `(vec3 uv)` : `(vec2 uv)`;
                   return (
                     <div key={fn.id} style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
                       <button
@@ -373,11 +373,10 @@ export function FunctionList({ glslErrors }: Props) {
   };
 
   const handleLibraryFnInsert = (fn: FnDef) => {
-    // Load the function body into the session first so it compiles
-    useFunctionBuilder.getState().addFunctionFromDef(fn);
-    // Then insert the call expression at cursor (or end of active fn body)
+    // Library fns are compiled into the preview automatically — just insert the call.
+    // Float functions take only x; vec2/vec3 take only uv. t is accessed via u_time inside.
     const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
-    insert(`${fn.name}(${primaryArg}, t)`);
+    insert(`${fn.name}(${primaryArg})`);
   };
 
   const fnErrors = (id: string) => {

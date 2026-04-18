@@ -105,8 +105,12 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     if (!activeFn) return;
 
     const expr = normalizeBodyExpr(activeFn.body);
-    // Only t is auto-injected in ExprBlock scope; x, uv, etc. become sockets
-    const implicit = new Set(['t']);
+    // t is auto-injected; function names (session + library) are not sockets
+    const allFnNames = [
+      ...functions.map(f => f.name),
+      ...savedFunctionDefs.map(f => f.name),
+    ];
+    const implicit = new Set(['t', ...allFnNames]);
     const freeVars = detectFreeVars(expr, implicit);
     const inputs = freeVars.map(name => ({ name, type: 'float', slider: null }));
 
