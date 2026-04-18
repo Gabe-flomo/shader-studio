@@ -8,11 +8,12 @@ interface Props {
   index: number;
   isActive: boolean;
   errors: string[];
+  onTextareaFocus: (el: HTMLTextAreaElement) => void;
 }
 
 const RETURN_TYPES = ['float', 'vec2', 'vec3'] as const;
 
-export function FunctionEditor({ fn, index, isActive, errors }: Props) {
+export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }: Props) {
   const { updateFunction, removeFunction, setActiveId } = useFunctionBuilder();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -54,7 +55,6 @@ export function FunctionEditor({ fn, index, isActive, errors }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px', borderBottom: '1px solid #313244' }}>
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
 
-        {/* Name input */}
         <input
           value={fn.name}
           onChange={e => updateFunction(fn.id, { name: e.target.value })}
@@ -66,7 +66,6 @@ export function FunctionEditor({ fn, index, isActive, errors }: Props) {
           }}
         />
 
-        {/* Return type */}
         <select
           value={fn.returnType}
           onChange={e => updateFunction(fn.id, { returnType: e.target.value as FnDef['returnType'] })}
@@ -80,17 +79,14 @@ export function FunctionEditor({ fn, index, isActive, errors }: Props) {
           {RETURN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
 
-        {/* Signature hint */}
         <span style={{ fontSize: '10px', color: '#45475a', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {sig}
         </span>
 
-        {/* Error badge */}
         {hasError && (
           <span title={errors[0]} style={{ fontSize: '10px', color: '#f38ba8', flexShrink: 0 }}>⚠</span>
         )}
 
-        {/* Remove button */}
         <button
           onClick={e => { e.stopPropagation(); removeFunction(fn.id); }}
           style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1 }}
@@ -104,6 +100,7 @@ export function FunctionEditor({ fn, index, isActive, errors }: Props) {
         value={fn.body}
         onChange={e => updateFunction(fn.id, { body: e.target.value })}
         onKeyDown={handleKeyDown}
+        onFocus={e => onTextareaFocus(e.currentTarget)}
         onClick={e => e.stopPropagation()}
         spellCheck={false}
         rows={Math.max(2, fn.body.split('\n').length)}
@@ -123,7 +120,6 @@ export function FunctionEditor({ fn, index, isActive, errors }: Props) {
         }}
       />
 
-      {/* Error line */}
       {hasError && (
         <div style={{ padding: '3px 10px 5px', fontSize: '10px', color: '#f38ba8', fontFamily: 'monospace', borderTop: '1px solid #2a1a1a' }}>
           {errors[0]}
