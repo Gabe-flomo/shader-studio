@@ -536,6 +536,8 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const secParticlesRef = useRef<HTMLDivElement>(null);
   const secBlurRef = useRef<HTMLDivElement>(null);
   const secAppRef = useRef<HTMLDivElement>(null);
+  const secExprRef = useRef<HTMLDivElement>(null);
+  const secFnBuilderRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
 
   function tryExample(key: string) {
@@ -629,6 +631,9 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
         <TocLink label="3D / Raymarch" targetRef={sec15Ref} />
         <TocLink label="3D Composable" targetRef={sec3dRef} />
         <TocLink label="Import / Export" targetRef={sec16Ref} />
+
+        <TocLink label="Expr Blocks" targetRef={secExprRef} />
+        <TocLink label="Function Builder" targetRef={secFnBuilderRef} />
 
         <span style={S.tocSection}>Reference</span>
         <TocLink label="Examples" targetRef={sec17Ref} />
@@ -2973,6 +2978,215 @@ float d     = mapScene_<id>(rp);           // SDF sees warped space`}</CodeBlock
             <TryIt exampleKey="mlgSpiralFold"  label="Spiral + Fold"     onTry={tryExample} />
             <TryIt exampleKey="mlgDeepTunnel"  label="Deep Tunnel"       onTry={tryExample} />
           </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION — EXPRESSION BLOCKS
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={secExprRef as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Expression Blocks</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            An <strong>ExprBlock</strong> is a general-purpose GLSL node you define entirely from the modal. You give it named input sockets, an optional sequence of intermediate calculations (warp lines), and a return expression. The system compiles it into a GLSL function that plugs into the rest of your graph like any other node.
+          </p>
+          <p style={S.p}>
+            Think of it as a custom function node with a structured editor: instead of writing a raw GLSL body, you work with named fields that make the data flow explicit.
+          </p>
+
+          <p style={S.subTitle}>Anatomy of an ExprBlock</p>
+          <p style={S.p}>
+            Every ExprBlock has three regions:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Inputs</strong> — named sockets of type <C>float</C>, <C>vec2</C>, or <C>vec3</C>. Each becomes a variable available throughout the block. Wire upstream nodes into these sockets to pass data in.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Warp lines</strong> — optional intermediate assignments. Each line has a left-hand side (a typed variable declaration, e.g. <C>float d</C> or <C>vec3 col</C>), an operator (<C>=</C>), and a right-hand side GLSL expression. Use these for multi-step calculations.</li>
+            <li style={S.li}><strong style={{ color: T.textBold }}>Result</strong> — the expression whose value becomes the node's output. References any input name or warp-line variable.</li>
+          </ul>
+
+          <p style={S.p}>Here's what the compiled GLSL looks like for a simple ExprBlock:</p>
+          <CodeBlock>{`// Inputs: uv (vec2), speed (float)
+// Warp lines:
+//   vec2 p  = uv * 3.0
+//   float d = length(p) - sin(t * speed)
+// Result: d
+
+// Compiles to:
+float t = u_time;
+vec2 p  = uv * 3.0;
+float d = length(p) - sin(t * speed);
+// output = d`}</CodeBlock>
+
+          <p style={S.subTitle}>Input sockets</p>
+          <p style={S.p}>
+            Click <strong>+ Add Input</strong> in the modal to create a new socket. You can name it anything — that name becomes the GLSL variable. The type (<C>float</C> / <C>vec2</C> / <C>vec3</C>) controls what wire color can connect to it and how GLSL treats it.
+          </p>
+          <p style={S.p}>
+            Optional <strong>sliders</strong> give an input a fallback value when nothing is wired in. A slider range (min / max) appears on the node itself and in the parameter panel. Without a slider, an unconnected socket defaults to zero.
+          </p>
+          <Tip>
+            Keep input names short and meaningful — they appear on the node port labels and in the warp-line editor's auto-complete. <C>uv</C>, <C>t</C>, <C>d</C>, <C>col</C> are common choices.
+          </Tip>
+
+          <p style={S.subTitle}>Warp lines: multi-step math</p>
+          <p style={S.p}>
+            Warp lines are executed top to bottom, exactly like variable declarations in a GLSL function body. Each line can reference any input and any previously declared warp-line variable.
+          </p>
+          <CodeBlock>{`// Three warp lines building up a polar ripple:
+vec2  polar = vec2(length(uv), atan(uv.y, uv.x))
+float wave  = sin(polar.x * freq - t * speed)
+float mask  = smoothstep(0.0, 0.02, abs(wave) - 0.5)
+// result: mask`}</CodeBlock>
+          <p style={S.p}>
+            The LHS type annotation (<C>vec2</C>, <C>float</C>, <C>vec3</C>) matters — it tells GLSL what kind of value is being stored. If the RHS produces a <C>vec2</C> but you declare the LHS as <C>float</C>, the shader will fail to compile. The error overlay on the canvas shows the exact GLSL error message.
+          </p>
+
+          <p style={S.subTitle}>The <C>t</C> variable</p>
+          <p style={S.p}>
+            Every ExprBlock automatically receives <C>float t = u_time</C> as a built-in. You don't need to add a Time input socket — just write <C>t</C> in any expression and it will animate.
+          </p>
+
+          <p style={S.subTitle}>GLSL Functions field</p>
+          <p style={S.p}>
+            The <strong>GLSL Functions</strong> area (below the warp lines in the modal) lets you inject complete helper functions that run before the block's body. Write full GLSL function definitions here — they're compiled once, globally, and can be called from any warp line or the result field.
+          </p>
+          <CodeBlock>{`// In the GLSL Functions field:
+float sineRipple(vec2 p, float freq, float t) {
+    return sin(length(p) * freq - t);
+}
+
+// Then in a warp line:
+float r = sineRipple(uv, 8.0, t)`}</CodeBlock>
+          <Tip>
+            This is the same slot the <strong>Function Builder</strong> writes into when you save a session to an ExprBlock. If you open an ExprBlock that was created from the builder, you'll see all the named functions here.
+          </Tip>
+
+          <p style={S.subTitle}>Output type</p>
+          <p style={S.p}>
+            The dropdown at the top of the modal sets what type the result expression must produce. It controls the wire color leaving the node and how downstream nodes interpret the value. Changing the output type doesn't modify your expressions — it's your responsibility to ensure the result matches.
+          </p>
+
+          <p style={S.subTitle}>Edit in Function Builder</p>
+          <p style={S.p}>
+            Any ExprBlock that was created from (or is linked to) the <strong>Function Builder</strong> shows an <strong>Edit in Builder ↗</strong> button in the modal. Clicking it loads the original named functions back into the builder, opens the live preview graph, and links the builder back to that node. When you're done editing, hitting <strong>Update ExprBlock</strong> writes the changes back — sockets, GLSL functions, and result expression all update in place, with any connected wires preserved.
+          </p>
+          <Warn>
+            If you manually edit the warp lines of an ExprBlock that was created by the Function Builder and then click <strong>Edit in Builder</strong>, the manual edits will be overwritten by the stored function definitions. The builder is the source of truth for these nodes.
+          </Warn>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            SECTION — FUNCTION BUILDER
+        ══════════════════════════════════════════════════════════════════════ */}
+        <div ref={secFnBuilderRef as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
+          <h2 style={S.sectionTitle}>Function Builder</h2>
+          <div style={S.divider} />
+
+          <p style={S.p}>
+            The <strong>Function Builder</strong> is a dedicated environment for writing and iterating on named GLSL functions. You write function bodies in a syntax-highlighted editor, and the preview canvas plots or renders the result live — a 2D graph for <C>float</C> functions, a full-color preview for <C>vec3</C> functions. When the function is ready, one click saves it as an <strong>ExprBlock</strong> node in your graph.
+          </p>
+          <p style={S.p}>
+            It's the closest thing in Shader Studio to writing raw GLSL — but with immediate visual feedback and a clean round-trip path back to the node graph.
+          </p>
+
+          <p style={S.subTitle}>Return types and what they preview</p>
+          <p style={S.p}>
+            Each function has a return type. The type determines what the preview canvas shows:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><TypeBadge type="float" /> — plotted as a 2D graph. The horizontal axis is <C>x</C>, the vertical axis is the function value. A white curve traces <C>f(x, t)</C> over the current view range. Zoom and pan with scroll and drag.</li>
+            <li style={S.li}><TypeBadge type="vec2" /> — rendered as a color field where the x and y components map to red and green respectively.</li>
+            <li style={S.li}><TypeBadge type="vec3" /> — rendered as a full-color fragment shader. The entire canvas becomes your output, giving you the same feedback as the main studio canvas.</li>
+          </ul>
+
+          <p style={S.subTitle}>Available variables</p>
+          <p style={S.p}>
+            Inside every function body, two variables are always in scope:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}><C>x</C> — a <C>float</C>. For float functions, this is the horizontal position being evaluated. For vec2/vec3 functions it's still available but less meaningful.</li>
+            <li style={S.li}><C>t</C> — <C>u_time</C> in seconds. Anything that references <C>t</C> will animate.</li>
+          </ul>
+          <p style={S.p}>
+            For <C>vec2</C> and <C>vec3</C> return types, <C>uv</C> is also in scope — the centered, aspect-corrected screen coordinate, exactly as it arrives from the UV node.
+          </p>
+          <CodeBlock>{`// float function — graphs y = f(x)
+sin(x * 3.0) * 0.5 + cos(t)
+
+// vec3 function — renders as a color field
+vec3(uv.x * 0.5 + 0.5, uv.y * 0.5 + 0.5, 0.5 + 0.5 * sin(t))
+
+// float calling another function defined in the same session
+f1(x, t) * 2.0 - 1.0`}</CodeBlock>
+
+          <p style={S.subTitle}>Multiple functions in one session</p>
+          <p style={S.p}>
+            A session can hold any number of named functions simultaneously. Use the <strong>+ Add Function</strong> button (or the <strong>+</strong> button in the header) to create additional functions. All functions are compiled together — earlier functions can call later ones and vice versa, as long as there are no circular dependencies.
+          </p>
+          <p style={S.p}>
+            The <strong>Visualize</strong> dropdown in the toolbar lets you choose which function the preview canvas displays. Only one function is shown at a time, but all of them are compiled into the ExprBlock when you save.
+          </p>
+          <Tip>
+            Name helper functions <C>f2</C>, <C>f3</C>, etc. and your main function <C>f1</C>. Keep the main function selected in the Visualize dropdown so you're always watching the final output.
+          </Tip>
+
+          <p style={S.subTitle}>Tabs and saved sessions</p>
+          <p style={S.p}>
+            The tab bar at the top of the function list lets you maintain multiple independent sets of functions. Tabs are ephemeral — they live as long as the page is open. For long-term storage, use <strong>Save Group</strong> in the toolbar to write the current tabs to <C>localStorage</C> under a name. Load them back at any time from the <strong>Sessions</strong> dropdown.
+          </p>
+          <p style={S.p}>
+            Each tab also remembers its own zoom / pan state for the preview canvas. Switching tabs restores the exact view you left.
+          </p>
+
+          <p style={S.subTitle}>The function library</p>
+          <p style={S.p}>
+            The <strong>↓ lib</strong> button on any function card saves that function to a persistent library stored in <C>localStorage</C>. Library functions appear as pills in the <strong>Helpers</strong> panel at the bottom of the function list. Clicking a pill does two things simultaneously:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}>Loads the full function body into the current session (so it compiles without "undefined function" errors).</li>
+            <li style={S.li}>Inserts the call expression — e.g. <C>f1(x, t)</C> — at the cursor position in whichever function body you're editing.</li>
+          </ul>
+          <p style={S.p}>
+            This makes it easy to compose complex shaders from reusable building blocks without rewriting the same noise or SDF helpers every time.
+          </p>
+
+          <p style={S.subTitle}>Saving to the node graph</p>
+          <p style={S.p}>
+            The <strong>Save to ExprBlock</strong> button in the toolbar creates a new ExprBlock node in the Studio with:
+          </p>
+          <ul style={S.ul}>
+            <li style={S.li}>One input socket — <C>x</C> (float) for float functions, <C>uv</C> (vec2) for vec2/vec3 functions.</li>
+            <li style={S.li}>All compiled function definitions injected into the GLSL Functions field.</li>
+            <li style={S.li}>A result expression that calls the active function: <C>f1(x, t)</C>.</li>
+            <li style={S.li}>The original function definitions stored in a <C>fnBuilderFns</C> metadata field so the round-trip edit path works.</li>
+          </ul>
+          <p style={S.p}>
+            If you navigated to the builder by clicking <strong>Edit in Builder</strong> on an existing ExprBlock, the button label becomes <strong>Update ExprBlock</strong>. Clicking it writes all changes back to that specific node and returns you to the Studio.
+          </p>
+
+          <p style={S.subTitle}>Compile errors</p>
+          <p style={S.p}>
+            GLSL errors appear as a centered overlay on the preview canvas — the raw WebGL error message with the <C>ERROR: 0:N:</C> prefix stripped. The canvas goes dark while errors are present. Fix the expression and the preview resumes automatically; there's no explicit recompile step.
+          </p>
+          <Warn>
+            The Function Builder uses WebGL 1 (GLSL ES 1.00) to match the main canvas. Some GLSL ES 3.00 features are unavailable: no integer overloads for <C>min</C>/<C>max</C>, no <C>uint</C>, no <C>in</C>/<C>out</C> on loop variables. If you get unexpected type errors, check that all numeric literals are floats (<C>1.0</C> not <C>1</C>).
+          </Warn>
+
+          <p style={S.subTitle}>Workflow: function → graph</p>
+          <p style={S.p}>
+            A typical workflow looks like this:
+          </p>
+          <ol style={{ ...S.ul, listStyleType: 'decimal' }}>
+            <li style={S.li}>Open <strong>Function Builder</strong> from the top nav.</li>
+            <li style={S.li}>Write a float function, e.g. <C>abs(sin(x * 4.0 + t)) * 0.5</C>. Watch it graph in real time.</li>
+            <li style={S.li}>Add a second function that calls the first and applies color logic, change its return type to <C>vec3</C>.</li>
+            <li style={S.li}>Switch the Visualize dropdown to the vec3 function. Confirm the color output looks right.</li>
+            <li style={S.li}>Click <strong>Save to ExprBlock</strong>. The Studio opens with a new ExprBlock node pre-wired and ready to connect.</li>
+            <li style={S.li}>Wire a <strong>UV</strong> node into the ExprBlock's <C>uv</C> input and connect the output to <strong>Output</strong>. Done.</li>
+          </ol>
+          <Tip>
+            You can also open the Function Builder <em>from</em> an ExprBlock — click <strong>Edit in Builder ↗</strong> in the modal. The builder loads the node's existing functions, you refine them, and <strong>Update ExprBlock</strong> writes the changes back without breaking any connections.
+          </Tip>
         </div>
 
         {/* Bottom padding */}
