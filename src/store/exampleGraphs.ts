@@ -11294,7 +11294,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               { id: 'mbox_sg', type: 'mandelboxDE', position: { x: 280, y: 200 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
                 outputs: { orbit: { type: 'float', label: 'Orbit Trap' }, distance: { type: 'float', label: 'Distance' } },
-                params: { iterations: 12, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
+                params: { iterations: 10, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
             ],
             outputNodeId: 'mbox_sg',
             outputKey: 'distance',
@@ -11317,7 +11317,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
         },
         params: {
-          maxSteps: 160, maxDist: 20.0, stepScale: 0.7,
+          maxSteps: 96, maxDist: 20.0, stepScale: 0.7,
           bgR: 0.0, bgG: 0.0, bgB: 0.02,
           albedoR: 0.5, albedoG: 0.5, albedoB: 0.5,
           subgraph: {
@@ -11530,7 +11530,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, orbit: { type: 'vec3', label: 'Orbit Trap' } },
-        params: { power: 8, bailout: 2.0, max_iter: 12, max_steps: 80, max_dist: 5.0, cam_dist: 2.5, cam_height: 0.5, cam_speed: 0.2, cam_fov: 1.5, ambient: 0.05, light_x: 2.0, light_y: 4.0, light_z: 2.0, palette_preset: '3', bg_color: [0.03, 0.02, 0.08] },
+        params: { power: 8, bailout: 2.0, max_iter: 10, max_steps: 64, max_dist: 5.0, cam_dist: 2.5, cam_height: 0.5, cam_speed: 0.2, cam_fov: 1.5, ambient: 0.05, light_x: 2.0, light_y: 4.0, light_z: 2.0, palette_preset: '3', bg_color: [0.03, 0.02, 0.08] },
       },
       {
         id: 'mul_3', type: 'multiplyVec3', position: { x: 560, y: 380 },
@@ -11625,11 +11625,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           rayDir:    { type: 'vec3',  label: 'Ray Dir',    connection: { nodeId: 'cam_2',  outputKey: 'rd'     } },
           normal:    { type: 'vec3',  label: 'Normal',     connection: { nodeId: 'mlg_4',  outputKey: 'normal' } },
           hit:       { type: 'float', label: 'Hit',        connection: { nodeId: 'mlg_4',  outputKey: 'hit'    } },
-          bgColor:   { type: 'vec3',  label: 'Background', connection: { nodeId: 'mlg_4',  outputKey: 'color'  } },
+          bgColor:   { type: 'vec3',  label: 'Background' },
           tintColor: { type: 'vec3',  label: 'Tint' },
         },
         outputs: { color: { type: 'vec3', label: 'Glass Color' } },
-        params: { ior: 1.45, fresnelPow: 3.0, dispersion: 0.03, tintR: 0.85, tintG: 0.95, tintB: 1.0 },
+        params: { ior: 1.5, fresnelPow: 4.0, dispersion: 0.04, tintR: 0.75, tintG: 0.92, tintB: 1.0 },
       },
       {
         id: 'out_6', type: 'output', position: { x: 1300, y: 240 },
@@ -11668,7 +11668,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               { id: 'mbox_sg', type: 'mandelboxDE', position: { x: 280, y: 200 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
                 outputs: { orbit: { type: 'float', label: 'Orbit Trap' }, distance: { type: 'float', label: 'Distance' } },
-                params: { iterations: 14, scale: -2.0, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
+                params: { iterations: 10, scale: -2.0, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
             ],
             outputNodeId: 'mbox_sg',
             outputKey: 'distance',
@@ -11691,7 +11691,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
         },
         params: {
-          maxSteps: 160, maxDist: 20.0, stepScale: 0.65,
+          maxSteps: 96, maxDist: 20.0, stepScale: 0.65,
           bgR: 0.08, bgG: 0.1, bgB: 0.18,
           albedoR: 0.55, albedoG: 0.5, albedoB: 0.45,
           subgraph: {
@@ -11984,7 +11984,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               { id: 'mbox_sg', type: 'mandelboxDE', position: { x: 280, y: 200 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
                 outputs: { orbit: { type: 'float', label: 'Orbit Trap' }, distance: { type: 'float', label: 'Distance' } },
-                params: { iterations: 12, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
+                params: { iterations: 10, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
             ],
             outputNodeId: 'mbox_sg',
             outputKey: 'distance',
@@ -12007,7 +12007,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
         },
         params: {
-          maxSteps: 160, maxDist: 20.0, stepScale: 0.7,
+          maxSteps: 96, maxDist: 20.0, stepScale: 0.7,
           bgR: 0.0, bgG: 0.0, bgB: 0.02,
           albedoR: 0.1, albedoG: 0.1, albedoB: 0.15,
           subgraph: {

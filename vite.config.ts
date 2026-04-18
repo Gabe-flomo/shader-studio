@@ -24,6 +24,8 @@ export default defineConfig({
   base: isTauri ? '/' : '/shader-studio/',
   server: {
     watch: {
+      usePolling: true,
+      interval: 500,
       awaitWriteFinish: {
         stabilityThreshold: 500,
         pollInterval: 100,

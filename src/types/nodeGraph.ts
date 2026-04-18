@@ -69,6 +69,7 @@ export interface ParamDef {
   min?: number;
   max?: number;
   step?: number;
+  hint?: string;
   // Options for 'select' type — array of { value, label } pairs
   options?: { value: string; label: string }[];
   // Conditionally show this param only when another param matches a value

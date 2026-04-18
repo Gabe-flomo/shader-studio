@@ -73,9 +73,11 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
 }
 
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
-const CFP_PREFIX = 'shader-studio:cfp:';
-const EP_PREFIX  = 'shader-studio:ep:';
-const CFP_DIR_KEY = 'shader-studio:settings:customFnDir';
+const CFP_PREFIX  = 'shader-studio:cfp:';
+const EP_PREFIX   = 'shader-studio:ep:';
+const CFP_DIR_KEY  = 'shader-studio:settings:customFnDir';
+const EXPR_DIR_KEY = 'shader-studio:settings:exprDir';
+const GRAPH_DIR_KEY = 'shader-studio:settings:graphDir';
 
 /** Get the user-configured presets folder path (or '' if not set). */
 export function getCustomFnDir(): string {
@@ -86,6 +88,31 @@ export function getCustomFnDir(): string {
 export function setCustomFnDir(path: string): void {
   if (path) localStorage.setItem(CFP_DIR_KEY, path);
   else localStorage.removeItem(CFP_DIR_KEY);
+}
+
+export function getExprDir(): string {
+  return localStorage.getItem(EXPR_DIR_KEY) ?? '';
+}
+export function setExprDir(path: string): void {
+  if (path) localStorage.setItem(EXPR_DIR_KEY, path);
+  else localStorage.removeItem(EXPR_DIR_KEY);
+}
+
+export function getGraphDir(): string {
+  return localStorage.getItem(GRAPH_DIR_KEY) ?? '';
+}
+export function setGraphDir(path: string): void {
+  if (path) localStorage.setItem(GRAPH_DIR_KEY, path);
+  else localStorage.removeItem(GRAPH_DIR_KEY);
+}
+
+const GP_DIR_KEY = 'shader-studio:settings:groupPresetDir';
+export function getGroupPresetDir(): string {
+  return localStorage.getItem(GP_DIR_KEY) ?? '';
+}
+export function setGroupPresetDir(path: string): void {
+  if (path) localStorage.setItem(GP_DIR_KEY, path);
+  else localStorage.removeItem(GP_DIR_KEY);
 }
 
 /** Convert a label to a filesystem-safe slug. */
@@ -144,6 +171,11 @@ export function saveExprPreset(data: Omit<ExprPreset, 'id' | 'savedAt'>): void {
   };
   localStorage.setItem(`${EP_PREFIX}${preset.id}`, JSON.stringify(preset));
   window.dispatchEvent(new CustomEvent('exprpreset-changed'));
+  const dir = getExprDir();
+  if (dir) {
+    const slug = labelToSlug(preset.label ?? 'expr');
+    writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
+  }
 }
 
 export function loadExprPresets(): ExprPreset[] {
@@ -218,6 +250,7 @@ interface NodeGraphState {
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
   pixelSample: [number, number, number, number] | null;  // mouse pixel RGBA 0-255
+  hoveredParamHint: string | null;  // param hint shown in status bar on hover
   currentTime: number;            // current u_time uniform value (seconds)
 
   // Node probe — click a node to see its live output values in the status bar
@@ -390,6 +423,7 @@ interface NodeGraphState {
   autoLayout: () => void;
   setGlslErrors: (errors: string[]) => void;
   setPixelSample: (sample: [number, number, number, number] | null) => void;
+  setHoveredParamHint: (hint: string | null) => void;
   setCurrentTime: (t: number) => void;
   toggleBypass: (nodeId: string) => void;
 
@@ -753,6 +787,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   paramUniforms: {},
   glslErrors: [],
   pixelSample: null,
+  hoveredParamHint: null,
   currentTime: 0,
   selectedNodeId: null,
   selectedNodeIds: [],
@@ -1839,6 +1874,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
     localStorage.setItem(`${GP_PREFIX}${preset.id}`, JSON.stringify(preset));
     set({ groupPresets: loadGroupPresets() });
+    const dir = getGroupPresetDir();
+    if (dir) {
+      const slug = labelToSlug(preset.label);
+      writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
+    }
   },
 
   deleteGroupPreset: (presetId) => {
@@ -3144,7 +3184,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Backfill any input sockets that exist in the live NodeDefinition but are
     // missing from the serialized graph (handles schema evolution across iterations).
-    const nodes = upgradeExprNodes(rawNodes).map(node => {
+    const nodes = upgradeExprNodes(rawNodes).map(rawNode => {
+      const node = rawNode.params ? rawNode : { ...rawNode, params: {} };
       const def = getNodeDefinition(node.type);
       if (!def) return node;
       const mergedInputs: Record<string, InputSocket> = { ...node.inputs };
@@ -3173,6 +3214,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   setGlslErrors: (errors) => set({ glslErrors: errors }),
   setPixelSample: (sample) => set({ pixelSample: sample }),
+  setHoveredParamHint: (hint) => set({ hoveredParamHint: hint }),
   setCurrentTime: (t) => set({ currentTime: t }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
   setNodeProbeValues: (values) => set({ nodeProbeValues: values }),
@@ -3197,7 +3239,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: (name) => {
     const { nodes } = get();
-    localStorage.setItem(`shader-studio:${name}`, JSON.stringify({ nodes, savedAt: Date.now() }));
+    const payload = JSON.stringify({ nodes, savedAt: Date.now() });
+    localStorage.setItem(`shader-studio:${name}`, payload);
+    const dir = getGraphDir();
+    if (dir) {
+      const slug = labelToSlug(name || 'graph');
+      writeTextFileAtPath(`${dir}/${slug}.json`, JSON.stringify({ nodes }, null, 2));
+    }
   },
 
   getSavedGraphNames: () =>

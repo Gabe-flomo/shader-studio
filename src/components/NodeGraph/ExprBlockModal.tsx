@@ -100,6 +100,8 @@ interface Props {
   onClose: () => void;
 }
 
+type Snapshot = { lines: WarpLine[]; result: string };
+
 export function ExprBlockModal({ node, onClose }: Props) {
   const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
 
@@ -110,11 +112,45 @@ export function ExprBlockModal({ node, onClose }: Props) {
   const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'vec3';
 
   const [savedFlash, setSavedFlash] = useState(false);
+  const [autoWrap, setAutoWrap]     = useState(false);
+
+  // ── Undo / Redo ──────────────────────────────────────────────────────────────
+  const history      = useRef<Snapshot[]>([{ lines, result }]);
+  const historyIndex = useRef(0);
+  const [historyPos, setHistoryPos] = useState(0);
+
+  const pushHistory = (snap: Snapshot) => {
+    const trimmed = history.current.slice(0, historyIndex.current + 1);
+    trimmed.push(snap);
+    history.current      = trimmed;
+    historyIndex.current = trimmed.length - 1;
+    setHistoryPos(historyIndex.current);
+  };
+
+  const undo = () => {
+    if (historyIndex.current <= 0) return;
+    historyIndex.current -= 1;
+    setHistoryPos(historyIndex.current);
+    const snap = history.current[historyIndex.current];
+    updateNodeParams(node.id, { lines: snap.lines, result: snap.result });
+  };
+
+  const redo = () => {
+    if (historyIndex.current >= history.current.length - 1) return;
+    historyIndex.current += 1;
+    setHistoryPos(historyIndex.current);
+    const snap = history.current[historyIndex.current];
+    updateNodeParams(node.id, { lines: snap.lines, result: snap.result });
+  };
+
+  const canUndo = historyPos > 0;
+  const canRedo = historyPos < history.current.length - 1;
 
   // Track the last-focused expression input so GLSL function buttons can insert there
   const lastFocusedRef    = useRef<HTMLInputElement | null>(null);
   const lastFocusedSetter = useRef<((val: string) => void) | null>(null);
   const lastFocusedValue  = useRef<string>('');
+  const lastFocusedSnapFn = useRef<((newVal: string) => Snapshot) | null>(null);
 
   // Available variables collapse state
   const [varsExpanded, setVarsExpanded]   = useState(false);
@@ -254,31 +290,33 @@ export function ExprBlockModal({ node, onClose }: Props) {
   // ── GLSL function insert at focused expression input ───────────────────────
 
   const insertAtFocused = (text: string) => {
-    const el = lastFocusedRef.current;
+    const el     = lastFocusedRef.current;
     const setter = lastFocusedSetter.current;
     if (!el || !setter) return;
 
-    const current = lastFocusedValue.current;
-    const start = el.selectionStart ?? current.length;
-    const end   = el.selectionEnd   ?? current.length;
-
+    const current  = lastFocusedValue.current;
+    const start    = el.selectionStart ?? current.length;
+    const end      = el.selectionEnd   ?? current.length;
     const hasParen = text.includes('(');
     let next: string;
     let cursor: number;
 
-    if (hasParen) {
+    if (autoWrap && hasParen) {
+      const parenIdx = text.indexOf('(');
+      const wrapped  = text.slice(0, parenIdx + 1) + current + text.slice(parenIdx + 1);
+      next   = wrapped;
+      cursor = wrapped.length;
+    } else if (hasParen) {
       const parenIdx = text.indexOf('(');
       const selected = current.slice(start, end);
       if (selected) {
-        // Wrap selection as first argument
         const wrapped = text.slice(0, parenIdx + 1) + selected + text.slice(parenIdx + 1);
         next   = current.slice(0, start) + wrapped + current.slice(end);
         cursor = start + wrapped.length;
       } else {
-        next   = current.slice(0, start) + text + current.slice(end);
-        // Place cursor inside first ()
+        next       = current.slice(0, start) + text + current.slice(end);
         const emptyParen = text.indexOf('()');
-        cursor = start + (emptyParen >= 0 ? emptyParen + 1 : text.length);
+        cursor     = start + (emptyParen >= 0 ? emptyParen + 1 : text.length);
       }
     } else {
       next   = current.slice(0, start) + text + current.slice(end);
@@ -286,23 +324,49 @@ export function ExprBlockModal({ node, onClose }: Props) {
     }
 
     setter(next);
+    lastFocusedValue.current = next;
+    if (lastFocusedSnapFn.current) pushHistory(lastFocusedSnapFn.current(next));
+
     requestAnimationFrame(() => {
       el.focus();
       el.setSelectionRange(cursor, cursor);
     });
   };
 
+  /** Push a history snapshot when the user finishes typing in any field. */
+  const handleAnyBlur = () => {
+    const currentLines  = (node.params.lines  as WarpLine[] | undefined) ?? [];
+    const currentResult = (node.params.result as string     | undefined) ?? 'p';
+    const last = history.current[historyIndex.current];
+    if (JSON.stringify(last.lines) !== JSON.stringify(currentLines) || last.result !== currentResult) {
+      pushHistory({ lines: currentLines, result: currentResult });
+    }
+  };
+
+  const handleAnyKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+    else if (mod && e.key === 'y') { e.preventDefault(); redo(); }
+  };
+
   /** Register a text input so it becomes the insertion target for GLSL buttons. */
-  const makeExprInputProps = (currentValue: string, setter: (v: string) => void) => ({
+  const makeExprInputProps = (
+    currentValue: string,
+    setter: (v: string) => void,
+    snapFn: (newVal: string) => Snapshot,
+  ) => ({
     onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
       lastFocusedRef.current    = e.currentTarget;
       lastFocusedSetter.current = setter;
       lastFocusedValue.current  = currentValue;
+      lastFocusedSnapFn.current = snapFn;
     },
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
       lastFocusedValue.current = e.target.value;
       setter(e.target.value);
     },
+    onBlur:    handleAnyBlur,
+    onKeyDown: handleAnyKeyDown,
   });
 
   return createPortal(
@@ -475,7 +539,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                     placeholder="p.xy"
                     spellCheck={false}
                     style={{ ...INPUT_STYLE, width: '80px' }}
-                    {...makeExprInputProps(line.lhs, v => updateLine(i, 'lhs', v))}
+                    {...makeExprInputProps(line.lhs, v => updateLine(i, 'lhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l), result }))}
                   />
                   {/* Operator */}
                   <select
@@ -492,7 +556,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                     placeholder="expression…"
                     spellCheck={false}
                     style={{ ...INPUT_STYLE, flex: 1, color: '#a6e3a1' }}
-                    {...makeExprInputProps(line.rhs, v => updateLine(i, 'rhs', v))}
+                    {...makeExprInputProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
                   />
                   {/* Remove */}
                   <button
@@ -530,7 +594,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                 placeholder="p"
                 spellCheck={false}
                 style={{ ...INPUT_STYLE, flex: 1, color: '#89b4fa', fontSize: '12px' }}
-                {...makeExprInputProps(result, updateResult)}
+                {...makeExprInputProps(result, updateResult, v => ({ lines, result: v }))}
               />
             </div>
 
@@ -612,7 +676,18 @@ export function ExprBlockModal({ node, onClose }: Props) {
 
             {/* ── GLSL Function Reference ──────────────────────────────────── */}
             <div style={{ marginTop: '14px', padding: '10px', background: '#181825', borderRadius: '6px', border: '1px solid #313244' }}>
-              <p style={{ ...SECTION_LABEL, margin: '0 0 6px' }}>GLSL Reference</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
+                <p style={{ ...SECTION_LABEL, margin: 0, flex: 1 }}>GLSL Reference</p>
+                <button onClick={undo} disabled={!canUndo} title="Undo (Cmd/Ctrl+Z)"
+                  style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canUndo ? 1 : 0.35, cursor: canUndo ? 'pointer' : 'default' }}>↩</button>
+                <button onClick={redo} disabled={!canRedo} title="Redo (Cmd/Ctrl+Shift+Z)"
+                  style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canRedo ? 1 : 0.35, cursor: canRedo ? 'pointer' : 'default' }}>↪</button>
+                <button
+                  onClick={() => setAutoWrap(v => !v)}
+                  title={autoWrap ? 'Auto-wrap ON — clicks wrap entire field value as first arg' : 'Auto-wrap OFF — clicks wrap selected text only'}
+                  style={{ ...BTN, padding: '2px 8px', fontSize: '10px', background: autoWrap ? '#45475a' : '#313244', color: autoWrap ? '#cba6f7' : '#585b70', border: `1px solid ${autoWrap ? '#cba6f7' : '#45475a'}`, transition: 'all 0.15s' }}
+                >⊂ auto-wrap {autoWrap ? 'ON' : 'OFF'}</button>
+              </div>
               <p style={{ fontSize: '9px', color: '#45475a', marginBottom: '8px' }}>
                 Click to insert into the focused expression or return field
               </p>

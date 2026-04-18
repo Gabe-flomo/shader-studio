@@ -1240,7 +1240,7 @@ export const SdfAoNode: NodeDefinition = {
   outputs: { ao: { type: 'float', label: 'AO' } },
   defaultParams: { stepDist: 0.05 },
   paramDefs: {
-    stepDist: { label: 'Step Dist', type: 'float', min: 0.005, max: 0.2, step: 0.005 },
+    stepDist: { label: 'Step Dist', type: 'float', min: 0.005, max: 0.2, step: 0.005, hint: 'Distance between AO sample steps along the surface normal. Smaller = finer contact shadows; larger = broader occlusion.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -1287,8 +1287,8 @@ export const SoftShadowNode: NodeDefinition = {
   outputs: { shadow: { type: 'float', label: 'Shadow' } },
   defaultParams: { k: 16.0, tmax: 20.0 },
   paramDefs: {
-    k:    { label: 'Hardness (k)', type: 'float', min: 1.0,  max: 64.0, step: 1.0 },
-    tmax: { label: 'Max Dist',    type: 'float', min: 1.0,  max: 50.0, step: 1.0 },
+    k:    { label: 'Hardness (k)', type: 'float', min: 1.0,  max: 64.0, step: 1.0, hint: 'Shadow sharpness. Low (4–8) = soft penumbra; high (32–64) = near-hard shadows.' },
+    tmax: { label: 'Max Dist',    type: 'float', min: 1.0,  max: 50.0, step: 1.0, hint: 'How far the shadow ray travels. Should cover the distance from surface to light source.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -1360,18 +1360,18 @@ export const MultiLightNode: NodeDefinition = {
     bounceR: 0.1,  bounceG: 0.1,  bounceB: 0.08,
   },
   paramDefs: {
-    sunDirX: { label: 'Sun X', type: 'float', min: -1.0, max: 1.0, step: 0.01 },
-    sunDirY: { label: 'Sun Y', type: 'float', min: -1.0, max: 1.0, step: 0.01 },
-    sunDirZ: { label: 'Sun Z', type: 'float', min: -1.0, max: 1.0, step: 0.01 },
-    sunR:    { label: 'Sun R', type: 'float', min: 0.0,  max: 2.0, step: 0.01 },
-    sunG:    { label: 'Sun G', type: 'float', min: 0.0,  max: 2.0, step: 0.01 },
-    sunB:    { label: 'Sun B', type: 'float', min: 0.0,  max: 2.0, step: 0.01 },
-    skyR:    { label: 'Sky R', type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
-    skyG:    { label: 'Sky G', type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
-    skyB:    { label: 'Sky B', type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
-    bounceR: { label: 'Bounce R', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
-    bounceG: { label: 'Bounce G', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
-    bounceB: { label: 'Bounce B', type: 'float', min: 0.0, max: 0.5, step: 0.005 },
+    sunDirX: { label: 'Sun X', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction X component. Normalized internally — only the ratio matters.' },
+    sunDirY: { label: 'Sun Y', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction Y component. Positive = sun above horizon; negative = below.' },
+    sunDirZ: { label: 'Sun Z', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction Z component. Controls left/right sun angle.' },
+    sunR:    { label: 'Sun R', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light red. Values > 1 are HDR — boost for warm golden hour.' },
+    sunG:    { label: 'Sun G', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light green.' },
+    sunB:    { label: 'Sun B', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light blue. Lower than R/G for warm sunlight.' },
+    skyR:    { label: 'Sky R', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light red. Faces the top hemisphere.' },
+    skyG:    { label: 'Sky G', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light green.' },
+    skyB:    { label: 'Sky B', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light blue. Higher than R for a blue sky fill.' },
+    bounceR: { label: 'Bounce R', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light red — simulates indirect light from the ground or walls.' },
+    bounceG: { label: 'Bounce G', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light green.' },
+    bounceB: { label: 'Bounce B', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light blue.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -1414,7 +1414,7 @@ export const Fresnel3DNode: NodeDefinition = {
   glslFunction: FRESNEL_GLSL,
   defaultParams: { power: 3.0 },
   paramDefs: {
-    power: { label: 'Power', type: 'float', min: 0.5, max: 10.0, step: 0.1 },
+    power: { label: 'Power', type: 'float', min: 0.5, max: 10.0, step: 0.1, hint: 'Fresnel falloff exponent. Higher = rim effect tighter to the silhouette edge; lower = broader glow.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
@@ -1446,11 +1446,11 @@ export const FakeSSSNode: NodeDefinition = {
   outputs: { sss: { type: 'vec3', label: 'SSS' } },
   defaultParams: { strength: 1.0, stepSize: 0.05, sssR: 0.8, sssG: 0.3, sssB: 0.1 },
   paramDefs: {
-    strength: { label: 'Strength',  type: 'float', min: 0.0, max: 5.0, step: 0.05 },
-    stepSize: { label: 'Step Size', type: 'float', min: 0.005, max: 0.2, step: 0.005 },
-    sssR:     { label: 'Color R',   type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    sssG:     { label: 'Color G',   type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    sssB:     { label: 'Color B',   type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    strength: { label: 'Strength',  type: 'float', min: 0.0, max: 5.0, step: 0.05, hint: 'Overall brightness of the subsurface scatter contribution. High values give a strong glowing-from-within effect.' },
+    stepSize: { label: 'Step Size', type: 'float', min: 0.005, max: 0.2, step: 0.005, hint: 'Distance between thickness samples inside the object. Smaller = more accurate thin-region detection.' },
+    sssR:     { label: 'Color R',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Subsurface scatter tint red. Warm reds for wax/skin; cool greens for jade.' },
+    sssG:     { label: 'Color G',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Subsurface scatter tint green.' },
+    sssB:     { label: 'Color B',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Subsurface scatter tint blue.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -1505,10 +1505,10 @@ export const VolumetricFogNode: NodeDefinition = {
   glslFunction: FOG_APPLY_GLSL,
   defaultParams: { density: 0.5, fogR: 0.7, fogG: 0.8, fogB: 0.9 },
   paramDefs: {
-    density: { label: 'Density', type: 'float', min: 0.0, max: 5.0,  step: 0.05 },
-    fogR:    { label: 'Fog R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
-    fogG:    { label: 'Fog G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
-    fogB:    { label: 'Fog B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+    density: { label: 'Density', type: 'float', min: 0.0, max: 5.0,  step: 0.05, hint: 'Fog thickness. Uses exponential falloff — 0 = clear, 1 = moderate, 3+ = very thick.' },
+    fogR:    { label: 'Fog R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Fog color red. Match the sky or ambient light color for realism.' },
+    fogG:    { label: 'Fog G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Fog color green.' },
+    fogB:    { label: 'Fog B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Fog color blue.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -1575,11 +1575,11 @@ export const MandelboxDENode: NodeDefinition = {
   glslFunctions: [BOX_FOLD_GLSL, MANDELBOX_DE_GLSL],
   defaultParams: { iterations: 15, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 },
   paramDefs: {
-    iterations: { label: 'Iterations', type: 'float', min: 2,    max: 20,   step: 1    },
-    scale:      { label: 'Scale',      type: 'float', min: -3.0, max: -0.5, step: 0.05 },
-    foldLimit:  { label: 'Fold Limit', type: 'float', min: 0.1,  max: 3.0,  step: 0.05 },
-    minR:       { label: 'Min Radius', type: 'float', min: 0.1,  max: 1.0,  step: 0.05 },
-    fixedR:     { label: 'Fixed R',    type: 'float', min: 0.5,  max: 2.0,  step: 0.05 },
+    iterations: { label: 'Iterations', type: 'float', min: 2,    max: 20,   step: 1,    hint: 'Number of fold+scale iterations. More = finer fractal detail but more GPU cost.' },
+    scale:      { label: 'Scale',      type: 'float', min: -3.0, max: -0.5, step: 0.05, hint: 'Mandelbox scale factor. -2 = classic angular look; -1.5 = softer, more spherical.' },
+    foldLimit:  { label: 'Fold Limit', type: 'float', min: 0.1,  max: 3.0,  step: 0.05, hint: 'Box fold clamp radius. Controls the size of the cubic repetition cell.' },
+    minR:       { label: 'Min Radius', type: 'float', min: 0.1,  max: 1.0,  step: 0.05, hint: 'Inner sphere radius for the sphere fold. Smaller = more inner complexity.' },
+    fixedR:     { label: 'Fixed R',    type: 'float', min: 0.5,  max: 2.0,  step: 0.05, hint: 'Outer sphere radius for the sphere fold. Controls the overall fractal extent.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id         = node.id;
@@ -1641,11 +1641,11 @@ export const KIFSTetrahedronDENode: NodeDefinition = {
   glslFunction: KIFS_TETRA_DE_GLSL,
   defaultParams: { iterations: 12, scale: 2.0, offsetX: 1.0, offsetY: 1.0, offsetZ: 1.0 },
   paramDefs: {
-    iterations: { label: 'Iterations', type: 'float', min: 2,   max: 20,  step: 1    },
-    scale:      { label: 'Scale',      type: 'float', min: 1.5, max: 4.0, step: 0.05 },
-    offsetX:    { label: 'Offset X',   type: 'float', min: 0.1, max: 3.0, step: 0.05 },
-    offsetY:    { label: 'Offset Y',   type: 'float', min: 0.1, max: 3.0, step: 0.05 },
-    offsetZ:    { label: 'Offset Z',   type: 'float', min: 0.1, max: 3.0, step: 0.05 },
+    iterations: { label: 'Iterations', type: 'float', min: 2,   max: 20,  step: 1,    hint: 'Number of KIFS fold iterations. More = finer recursive detail; 8–12 is a good balance.' },
+    scale:      { label: 'Scale',      type: 'float', min: 1.5, max: 4.0, step: 0.05, hint: 'Scaling factor per fold. Higher = more stretched/spiky tetrahedra.' },
+    offsetX:    { label: 'Offset X',   type: 'float', min: 0.1, max: 3.0, step: 0.05, hint: 'Translation offset X applied each fold iteration. Shifts the fractal asymmetrically.' },
+    offsetY:    { label: 'Offset Y',   type: 'float', min: 0.1, max: 3.0, step: 0.05, hint: 'Translation offset Y applied each fold iteration.' },
+    offsetZ:    { label: 'Offset Z',   type: 'float', min: 0.1, max: 3.0, step: 0.05, hint: 'Translation offset Z applied each fold iteration.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id         = node.id;
@@ -1708,13 +1708,46 @@ vec3 glassShade(
   if (hit < 0.5) return bgColor;
   vec3 n = normalize(normal);
   vec3 v = normalize(rayDir);
-  float frs = pow(clamp(1.0 - abs(dot(-v, n)), 0.0, 1.0), fresnelPow);
-  vec3 refractR = refract(v, n, 1.0 / (ior - dispersion));
-  vec3 refractG = refract(v, n, 1.0 / ior);
-  vec3 refractB = refract(v, n, 1.0 / (ior + dispersion));
-  vec3 glassCol = mix(tintColor, bgColor, 0.8);
-  vec3 chromaShift = vec3(length(refractR - refractG), 0.0, length(refractB - refractG)) * 0.5;
-  return mix(glassCol + chromaShift, vec3(1.0), frs * 0.5);
+  // Ensure we use the outward-facing normal
+  if (dot(v, n) > 0.0) n = -n;
+
+  // Schlick Fresnel
+  float cosI = clamp(-dot(v, n), 0.0, 1.0);
+  float f0 = (ior - 1.0) / (ior + 1.0);
+  f0 *= f0;
+  float frs = f0 + (1.0 - f0) * pow(1.0 - cosI, fresnelPow);
+
+  // Refracted rays with chromatic dispersion
+  vec3 rfG = refract(v, n, 1.0 / ior);
+  bool tir = length(rfG) < 0.001;
+  if (tir) rfG = reflect(v, n);
+  vec3 rfR = tir ? rfG : refract(v, n, 1.0 / max(ior - dispersion, 1.001));
+  vec3 rfB = tir ? rfG : refract(v, n, 1.0 / (ior + dispersion));
+  if (length(rfR) < 0.001) rfR = rfG;
+  if (length(rfB) < 0.001) rfB = rfG;
+
+  // Fake environment: use refracted ray Y to create a sky/floor gradient
+  // brightening the bgColor toward zenith gives a convincing distortion
+  float skyR = clamp(0.5 + rfR.y, 0.0, 1.0);
+  float skyG = clamp(0.5 + rfG.y, 0.0, 1.0);
+  float skyB = clamp(0.5 + rfB.y, 0.0, 1.0);
+  vec3 interior = vec3(
+    bgColor.r * mix(0.2, 2.2, skyR),
+    bgColor.g * mix(0.2, 2.2, skyG),
+    bgColor.b * mix(0.2, 2.2, skyB)
+  ) * tintColor;
+
+  // Reflection environment (for Fresnel blend)
+  vec3 refl = reflect(v, n);
+  float reflSky = clamp(0.5 + refl.y, 0.0, 1.0);
+  vec3 reflColor = bgColor * mix(0.3, 2.5, reflSky);
+
+  // Sharp specular highlight
+  vec3 lDir = normalize(vec3(0.6, 1.0, 0.4));
+  float spec = pow(max(dot(refl, lDir), 0.0), 96.0);
+
+  // Compose: refracted interior + Fresnel reflection rim + specular
+  return mix(interior, reflColor, frs) + vec3(spec * 0.85);
 }`;
 
 export const GlassNode: NodeDefinition = {
@@ -1733,19 +1766,19 @@ export const GlassNode: NodeDefinition = {
   glslFunction: GLASS_GLSL,
   defaultParams: { ior: 1.5, fresnelPow: 3.0, dispersion: 0.02, tintR: 0.8, tintG: 0.95, tintB: 1.0 },
   paramDefs: {
-    ior:        { label: 'IOR',        type: 'float', min: 1.0,  max: 3.0, step: 0.05 },
-    fresnelPow: { label: 'Fresnel',    type: 'float', min: 1.0,  max: 10.0,step: 0.5  },
-    dispersion: { label: 'Dispersion', type: 'float', min: 0.0,  max: 0.1, step: 0.005},
-    tintR:      { label: 'Tint R',     type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
-    tintG:      { label: 'Tint G',     type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
-    tintB:      { label: 'Tint B',     type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
+    ior:        { label: 'IOR',        type: 'float', min: 1.0,  max: 3.0, step: 0.05, hint: 'Index of refraction. Air=1.0, water=1.33, glass=1.5, diamond=2.4.' },
+    fresnelPow: { label: 'Fresnel',    type: 'float', min: 1.0,  max: 10.0,step: 0.5,  hint: 'Fresnel rim exponent. Higher = tighter bright rim at silhouette edges.' },
+    dispersion: { label: 'Dispersion', type: 'float', min: 0.0,  max: 0.1, step: 0.005,hint: 'Chromatic aberration amount — splits RGB refraction angles like a prism.' },
+    tintR:      { label: 'Tint R',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Glass body tint red. 1.0 = neutral; lower adds color absorption like colored glass.' },
+    tintG:      { label: 'Tint G',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Glass body tint green.' },
+    tintB:      { label: 'Tint B',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Blue channel of the glass tint color. Combine with R and G to give the glass a colored tint.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
     const rayDir    = inputVars.rayDir    || 'vec3(0.0, 0.0, -1.0)';
     const normal    = inputVars.normal    || 'vec3(0.0, 1.0, 0.0)';
     const hit       = inputVars.hit       || '0.0';
-    const bgColor   = inputVars.bgColor   || 'vec3(0.05, 0.05, 0.1)';
+    const bgColor   = inputVars.bgColor   || 'vec3(0.06, 0.10, 0.22)';
     const tintColor = inputVars.tintColor || `vec3(${p(node.params.tintR, 0.8)}, ${p(node.params.tintG, 0.95)}, ${p(node.params.tintB, 1.0)})`;
     const ior        = p(node.params.ior,        1.5);
     const fresnelPow = p(node.params.fresnelPow, 3.0);

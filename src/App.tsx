@@ -95,7 +95,7 @@ function AudioMasterVolumeWidget() {
 
 function App() {
   const {
-    loadExampleGraph, compilationErrors, glslErrors, pixelSample, fragmentShader,
+    loadExampleGraph, compilationErrors, glslErrors, pixelSample, hoveredParamHint, fragmentShader,
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
     addNode, setNodeHighlightFilter, _fitViewCallback, undo,
     nodeProbeValues, selectedNodeId, nodes: graphNodes,
@@ -455,8 +455,8 @@ function App() {
           </div>
         )}
 
-        {/* Pixel color info (top-right, non-intrusive) */}
-        {pixelSample && (
+        {/* Pixel color info / param hint (top-right, non-intrusive) */}
+        {(hoveredParamHint || pixelSample) && (
           <div style={{
             position: 'absolute', top: 52, right: 10, zIndex: 22,
             background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
@@ -464,11 +464,21 @@ function App() {
             display: 'flex', alignItems: 'center', gap: '6px',
             fontSize: '10px', fontFamily: 'monospace', color: '#585b70',
             border: '1px solid #313244',
+            maxWidth: '320px',
           }}>
-            <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
-            <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
-            <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
-            <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
+            {hoveredParamHint ? (
+              <>
+                <span style={{ color: '#cba6f7', fontSize: '11px', flexShrink: 0 }}>?</span>
+                <span style={{ color: '#cdd6f4', whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
+              </>
+            ) : pixelSample ? (
+              <>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
+                <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
+                <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
+                <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
+              </>
+            ) : null}
           </div>
         )}
 
