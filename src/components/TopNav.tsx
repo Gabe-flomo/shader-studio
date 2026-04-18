@@ -80,6 +80,22 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         title="Node Graph Studio"
       />
 
+      {/* Function Builder tab */}
+      <TabButton
+        active={page === 'fn'}
+        onClick={() => onPageChange('fn')}
+        label={mobile ? 'ƒ' : 'ƒ( ) Builder'}
+        title="Function Builder — write and plot named GLSL functions"
+      />
+
+      {/* GLSL editor tab */}
+      <TabButton
+        active={page === 'glsl'}
+        onClick={() => onPageChange('glsl')}
+        label={mobile ? '</>' : '</> GLSL'}
+        title="Raw GLSL Editor"
+      />
+
       {/* Learn tab */}
       <TabButton
         active={page === 'learn'}
@@ -94,22 +110,6 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         onClick={() => onPageChange('shortcuts')}
         label={mobile ? '⌨' : '⌨ Keys'}
         title="Keyboard Shortcuts"
-      />
-
-      {/* GLSL editor tab */}
-      <TabButton
-        active={page === 'glsl'}
-        onClick={() => onPageChange('glsl')}
-        label={mobile ? '</>' : '</> GLSL'}
-        title="Raw GLSL Editor"
-      />
-
-      {/* Function Builder tab */}
-      <TabButton
-        active={page === 'fn'}
-        onClick={() => onPageChange('fn')}
-        label={mobile ? 'ƒ' : 'ƒ( ) Builder'}
-        title="Function Builder — write and plot named GLSL functions"
       />
     </div>
   );

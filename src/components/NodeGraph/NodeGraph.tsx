@@ -1009,28 +1009,61 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                   </button>
                 )}
                 {isSceneGroup && clickedNode && (
-                  <button style={ctxBtnStyle} onClick={() => {
-                    enterGroup(clickedNode.id);
-                    setContextMenu(null);
-                  }}>
-                    Enter Scene Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
-                  </button>
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      enterGroup(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Enter Scene Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                    </button>
+                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                      if (window.confirm('Delete Scene Group and all its nodes?')) {
+                        removeNode(clickedNode.id);
+                        setContextMenu(null);
+                      }
+                    }}>
+                      Delete Scene Group
+                    </button>
+                  </>
                 )}
                 {isSpaceWarpGroup && clickedNode && (
-                  <button style={ctxBtnStyle} onClick={() => {
-                    enterGroup(clickedNode.id);
-                    setContextMenu(null);
-                  }}>
-                    Enter Space Warp Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
-                  </button>
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      enterGroup(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Enter Space Warp Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                    </button>
+                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                      if (window.confirm('Delete Space Warp Group and all its nodes?')) {
+                        removeNode(clickedNode.id);
+                        setContextMenu(null);
+                      }
+                    }}>
+                      Delete Space Warp Group
+                    </button>
+                  </>
                 )}
                 {isMarchLoopGroup && clickedNode && (
-                  <button style={ctxBtnStyle} onClick={() => {
-                    enterGroup(clickedNode.id);
-                    setContextMenu(null);
-                  }}>
-                    Enter March Loop Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
-                  </button>
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      enterGroup(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Enter March Loop Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                    </button>
+                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                      if (window.confirm('Delete March Loop Group and all its nodes?')) {
+                        removeNode(clickedNode.id);
+                        setContextMenu(null);
+                      }
+                    }}>
+                      Delete March Loop Group
+                    </button>
+                  </>
                 )}
                 {isGroup && clickedNode && (
                   <>
