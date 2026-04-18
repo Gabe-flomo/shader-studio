@@ -49,20 +49,24 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
     >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px', borderBottom: '1px solid #313244' }}>
+        {/* Left: dot + name (fills remaining space, name capped at 20 chars) */}
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-
         <input
           value={fn.name}
+          maxLength={20}
           onChange={e => updateFunction(fn.id, { name: e.target.value })}
           onClick={e => e.stopPropagation()}
-          size={Math.max(2, fn.name.length)}
           style={{
             background: 'none', border: 'none', color: '#cdd6f4',
             fontFamily: 'monospace', fontSize: '13px', fontWeight: 700,
-            width: 'auto', outline: 'none', padding: 0,
+            flex: 1, minWidth: 0, outline: 'none', padding: 0,
           }}
         />
 
+        {/* Right: type dropdown + error + lib + remove — always visible */}
+        {hasError && (
+          <span title={errors[0]} style={{ fontSize: '10px', color: '#f38ba8', flexShrink: 0 }}>⚠</span>
+        )}
         <select
           value={fn.returnType}
           onChange={e => {
@@ -77,18 +81,11 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           style={{
             background: '#313244', border: '1px solid #45475a', color: '#a6adc8',
             borderRadius: '4px', fontSize: '11px', fontFamily: 'monospace',
-            padding: '1px 4px', cursor: 'pointer', outline: 'none',
+            padding: '1px 4px', cursor: 'pointer', outline: 'none', flexShrink: 0,
           }}
         >
           {RETURN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-
-        <div style={{ flex: 1 }} />
-
-        {hasError && (
-          <span title={errors[0]} style={{ fontSize: '10px', color: '#f38ba8', flexShrink: 0 }}>⚠</span>
-        )}
-
         <button
           onClick={e => { e.stopPropagation(); saveFunctionDef(fn); }}
           title="Save to function library"
@@ -107,10 +104,9 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#a6e3a122'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a188'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a144'; }}
         >↓ lib</button>
-
         <button
           onClick={e => { e.stopPropagation(); removeFunction(fn.id); }}
-          style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1 }}
+          style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
           title="Remove function"
         >✕</button>
       </div>

@@ -77,14 +77,14 @@ ${curves}
 
 function vec3VizMain(activeName: string): string {
   return `void main() {
-  vec3 col = ${activeName}(vUv, u_time);
+  vec3 col = ${activeName}(vUv);
   gl_FragColor = vec4(col, 1.0);
 }`;
 }
 
 function vec2VizMain(activeName: string): string {
   return `void main() {
-  vec2 warped = ${activeName}(vUv, u_time);
+  vec2 warped = ${activeName}(vUv);
   float checker = mod(floor(warped.x * 8.0) + floor(warped.y * 8.0), 2.0);
   vec3 col = mix(vec3(0.12), vec3(0.88), checker);
   gl_FragColor = vec4(col, 1.0);
