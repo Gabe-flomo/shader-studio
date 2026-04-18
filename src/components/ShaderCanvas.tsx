@@ -112,7 +112,6 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     // Enable parallel shader compilation — keeps previous frame rendering while new shader compiles
     const gl = renderer.getContext();
     gl.getExtension('KHR_parallel_shader_compile');
-    gl.getExtension('OES_standard_derivatives');
     const flushGlErrors = captureGlslErrors(gl);
 
     const scene = new THREE.Scene();

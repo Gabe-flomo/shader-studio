@@ -1716,8 +1716,7 @@ export function generateFragmentShader(
     .map(name => `uniform float ${name};`)
     .join('\n');
 
-  const fragmentShader = `#extension GL_OES_standard_derivatives : enable
-precision highp float;
+  const fragmentShader = `precision highp float;
 #define PI 3.1415926538
 #define TAU 6.2831853072
 
