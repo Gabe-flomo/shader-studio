@@ -28,6 +28,8 @@ const HIDDEN_NODES = new Set([
   'scenePos',      // auto-added to SceneGroup subgraph, not user-selectable
   'sceneOutput',   // auto-added to SceneGroup subgraph, not user-selectable
   'spaceWarpGroup', // no examples remain; hidden but kept for backward compat
+  'marchLoopInputs', // auto-added to group subgraph; not user-selectable
+  'marchLoopOutput', // auto-added to group subgraph; not user-selectable
 ]);
 
 // ── Math node ordering & sub-groups ──────────────────────────────────────────
@@ -78,9 +80,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // Preferred display order for categories — alphabetical, with Output pinned last
 const CATEGORY_ORDER = [
-  '2D Primitives', '3D Primitives', '3D Scene', '3D Transforms',
-  'Color', 'Combiners', 'Conditionals', 'Effects', 'Loops', 'Math', 'Noise',
-  'Presets', 'Science', 'Sources', 'Spaces', 'Transforms',
+  '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
+  '3D Primitives', '3D Scene', '3D Transforms',
+  'Animation', 'Color', 'Combiners', 'Conditionals', 'Effects', 'Loops', 'Math', 'Noise',
+  'Presets', 'Science', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
 
