@@ -273,7 +273,7 @@ export function generateFragmentShader(
     // Collect GLSL helper functions (deduplicated)
     if (def.glslFunction) functions.add(def.glslFunction);
     def.glslFunctions?.forEach(f => functions.add(f));
-    if (node.type === 'customFn' && typeof node.params.glslFunctions === 'string') {
+    if ((node.type === 'customFn' || node.type === 'exprNode') && typeof node.params.glslFunctions === 'string') {
       const h = (node.params.glslFunctions as string).trim();
       if (h) functions.add(h);
     }

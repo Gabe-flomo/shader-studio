@@ -692,16 +692,15 @@ export const ExprBlockNode: NodeDefinition = {
     // ── Determine input declarations ─────────────────────────────────────────
     const dynamicInputs = node.params.inputs as Array<{ name: string; type: string; slider: unknown }> | undefined;
 
-    if (dynamicInputs && dynamicInputs.length > 0) {
-      // New format: declare one local per dynamic input
+    if (Array.isArray(dynamicInputs)) {
+      // New format: handles empty array (inputs:[]) and populated arrays
       for (const inp of dynamicInputs) {
         const fallback = inp.type === 'vec3' ? 'vec3(0.0)' : inp.type === 'vec2' ? 'vec2(0.0)' : '0.0';
         const val = inputVars[inp.name] || fallback;
         decls.push(`        ${inp.type} ${inp.name} = ${val};\n`);
       }
-      // Always make `t` available as u_time unless user already declared it
-      const hasT = dynamicInputs.some(inp => inp.name === 't');
-      if (!hasT) {
+      // Always inject t = u_time unless user explicitly has a t input socket
+      if (!dynamicInputs.some(inp => inp.name === 't')) {
         decls.push(`        float t = u_time;\n`);
       }
     } else {

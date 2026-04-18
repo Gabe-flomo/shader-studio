@@ -23,7 +23,7 @@ export function normalizeBodyExpr(body: string): string {
   return s;
 }
 
-function emitFunction(fn: FnDef): string {
+export function emitFunction(fn: FnDef): string {
   const expr = normalizeBodyExpr(fn.body);
   if (fn.returnType === 'float') {
     return `float ${fn.name}(float _x, float _t) {

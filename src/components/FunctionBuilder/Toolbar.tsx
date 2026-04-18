@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
-import { normalizeBodyExpr } from './glslCompiler';
+import { normalizeBodyExpr, emitFunction } from './glslCompiler';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
 interface Props {
@@ -77,10 +77,14 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     if (!activeFn) return;
 
     const expr = normalizeBodyExpr(activeFn.body);
-    // t is always auto-injected; x and uv are implicit function params
-    const implicit = new Set(['t', activeFn.returnType === 'float' ? 'x' : 'uv']);
+    // Only t is auto-injected in ExprBlock scope; x, uv, etc. become sockets
+    const implicit = new Set(['t']);
     const freeVars = detectFreeVars(expr, implicit);
     const inputs = freeVars.map(name => ({ name, type: 'float', slider: null }));
+
+    // Emit all user function definitions so they're available as GLSL helpers
+    // in the main shader (assembler collects `glslFunctions` from exprNode params)
+    const glslFunctions = functions.map(emitFunction).join('\n\n');
 
     const params = {
       outputType: activeFn.returnType,
@@ -88,6 +92,7 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
       lines: [] as Array<{ lhs: string; op: string; rhs: string }>,
       result: expr,
       expr,
+      glslFunctions,
     };
 
     if (linkedBlockId) {
