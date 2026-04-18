@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
-import { emitFunction } from './glslCompiler';
+import { normalizeBodyExpr, emitFunction } from './glslCompiler';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
 interface Props {
@@ -39,6 +39,31 @@ function RangeInput({ label, value, onChange }: { label: string; value: number; 
   );
 }
 
+
+const GLSL_BUILTINS = new Set([
+  'sin','cos','tan','asin','acos','atan','sinh','cosh','tanh',
+  'sqrt','pow','exp','exp2','log','log2','abs','sign','floor',
+  'ceil','fract','mod','min','max','clamp','mix','smoothstep','step',
+  'length','dot','cross','normalize','reflect','refract','round','trunc',
+  'radians','degrees','inversesqrt','distance','faceforward',
+  'vec2','vec3','vec4','float','int','bool','uint',
+  'mat2','mat3','mat4','ivec2','ivec3','ivec4','bvec2','bvec3','bvec4',
+  'PI','TAU','u_time','u_resolution','u_xMin','u_xMax','u_yMin','u_yMax',
+  'vUv','smin','sdBox','sdSegment','opRepeat','opRepeatPolar',
+  'true','false','void','return','if','else','for','while','break','continue',
+]);
+
+function detectFreeVars(expr: string, implicit: Set<string>): string[] {
+  const seen = new Set<string>();
+  const free: string[] = [];
+  const matches = expr.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) ?? [];
+  for (const id of matches) {
+    if (seen.has(id) || GLSL_BUILTINS.has(id) || implicit.has(id)) continue;
+    seen.add(id);
+    free.push(id);
+  }
+  return free;
+}
 
 export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
   const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId, savedGroups, saveGroup, loadGroup, deleteGroup, savedFunctionDefs } = useFunctionBuilder();
@@ -100,8 +125,9 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     const inputs = freeVars.map(name => ({ name, type: inferType(name), slider: null }));
 
     // ── Call expression: directly invoke the named function ──────────────────────
-    // t is auto-injected by ExprBlock as float t = u_time
-    const callExpr = `${activeFn.name}(${primaryInput}, t)`;
+    // functions use u_time internally — no t param needed
+    const primaryInput = activeFn.returnType === 'float' ? 'x' : 'uv';
+    const callExpr = `${activeFn.name}(${primaryInput})`;
 
     // ── GLSL function definitions — library fns first, session overrides by name ─
     const sessionNames = new Set(functions.map(f => f.name));
