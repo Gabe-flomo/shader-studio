@@ -2,6 +2,90 @@ import { useState, useRef } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
 import { FunctionEditor } from './FunctionEditor';
 
+// ── Tab bar ───────────────────────────────────────────────────────────────────
+
+function TabBar() {
+  const { tabs, activeTabId, addTab, closeTab, switchTab, renameTab } = useFunctionBuilder();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState('');
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      overflowX: 'auto',
+      flexShrink: 0,
+      borderBottom: '1px solid #313244',
+      background: '#181825',
+      scrollbarWidth: 'none',
+    }}>
+      {tabs.map(tab => {
+        const active = tab.id === activeTabId;
+        return (
+          <div
+            key={tab.id}
+            onClick={() => switchTab(tab.id)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              borderRight: '1px solid #313244',
+              background: active ? '#1e1e2e' : 'transparent',
+              borderBottom: active ? '2px solid #89b4fa' : '2px solid transparent',
+              cursor: 'pointer',
+              flexShrink: 0,
+              minWidth: 0,
+            }}
+          >
+            {editingId === tab.id ? (
+              <input
+                autoFocus
+                value={editVal}
+                onChange={e => setEditVal(e.target.value)}
+                onBlur={() => { renameTab(tab.id, editVal || tab.label); setEditingId(null); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { renameTab(tab.id, editVal || tab.label); setEditingId(null); }
+                  if (e.key === 'Escape') setEditingId(null);
+                  e.stopPropagation();
+                }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: 'none', border: 'none', outline: 'none',
+                  color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace',
+                  width: '64px', padding: 0,
+                }}
+              />
+            ) : (
+              <span
+                onDoubleClick={e => { e.stopPropagation(); setEditingId(tab.id); setEditVal(tab.label); }}
+                style={{ fontSize: '11px', color: active ? '#cdd6f4' : '#585b70', fontFamily: 'monospace', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
+                {tab.label}
+              </span>
+            )}
+            {tabs.length > 1 && (
+              <button
+                onClick={e => { e.stopPropagation(); closeTab(tab.id); }}
+                style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '10px', padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+              >×</button>
+            )}
+          </div>
+        );
+      })}
+      <button
+        onClick={addTab}
+        title="New tab"
+        style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '14px', padding: '4px 8px', lineHeight: 1, flexShrink: 0 }}
+        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+      >+</button>
+    </div>
+  );
+}
+
 interface Props {
   glslErrors: string[];
 }
@@ -239,6 +323,7 @@ export function FunctionList({ glslErrors }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <TabBar />
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
         {functions.map((fn, i) => (
           <FunctionEditor

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
 import { normalizeBodyExpr, emitFunction } from './glslCompiler';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -66,12 +66,40 @@ function detectFreeVars(expr: string, implicit: Set<string>): string[] {
 }
 
 export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
-  const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId } = useFunctionBuilder();
+  const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId, savedGroups, saveGroup, loadGroup, deleteGroup } = useFunctionBuilder();
   const addNode = useNodeGraphStore(s => s.addNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const nodes = useNodeGraphStore(s => s.nodes);
 
   const activeFn = functions.find(f => f.id === activeId) ?? functions[0];
+
+  // ── Session save / load state ───────────────────────────────────────────────
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [showSessions, setShowSessions] = useState(false);
+  const sessionsRef = useRef<HTMLDivElement>(null);
+  const saveInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showSaveInput) saveInputRef.current?.focus();
+  }, [showSaveInput]);
+
+  // Close sessions panel on outside click
+  useEffect(() => {
+    if (!showSessions) return;
+    const handler = (e: MouseEvent) => {
+      if (!sessionsRef.current?.contains(e.target as Node)) setShowSessions(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showSessions]);
+
+  const handleSaveGroup = () => {
+    if (!saveName.trim()) return;
+    saveGroup(saveName.trim());
+    setSaveName('');
+    setShowSaveInput(false);
+  };
 
   const handleSave = () => {
     if (!activeFn) return;
@@ -162,6 +190,87 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
         </>
       )}
 
+      {/* ── Session controls ─────────────────────────────────── */}
+      <div style={{ position: 'relative' }} ref={sessionsRef}>
+        {/* Save input */}
+        {showSaveInput ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <input
+              ref={saveInputRef}
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveGroup(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveName(''); } }}
+              placeholder="Group name…"
+              style={{
+                background: '#181825', border: '1px solid #45475a', borderRadius: '4px',
+                color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace',
+                padding: '3px 7px', outline: 'none', width: '110px',
+              }}
+            />
+            <button onClick={handleSaveGroup} style={smallBtn('#a6e3a1')}>Save</button>
+            <button onClick={() => { setShowSaveInput(false); setSaveName(''); }} style={smallBtn('#585b70')}>✕</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              onClick={() => { setShowSaveInput(true); setShowSessions(false); }}
+              title="Save current tabs as a named group"
+              style={smallBtn('#a6e3a1')}
+            >
+              ↑ Save Group
+            </button>
+            <button
+              onClick={() => setShowSessions(v => !v)}
+              title="Open a saved group"
+              style={smallBtn(showSessions ? '#cba6f7' : '#585b70')}
+            >
+              Sessions {savedGroups.length > 0 ? `(${savedGroups.length})` : ''}
+            </button>
+          </div>
+        )}
+
+        {/* Sessions dropdown */}
+        {showSessions && (
+          <div style={{
+            position: 'absolute', bottom: '100%', right: 0, marginBottom: '4px',
+            background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+            minWidth: '200px', maxHeight: '220px', overflowY: 'auto',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
+          }}>
+            {savedGroups.length === 0 ? (
+              <div style={{ padding: '10px 12px', fontSize: '11px', color: '#45475a', fontFamily: 'monospace' }}>
+                No saved groups yet
+              </div>
+            ) : savedGroups.map(g => (
+              <div
+                key={g.id}
+                style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #313244', gap: '6px' }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '11px', color: '#cdd6f4', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {g.name}
+                  </div>
+                  <div style={{ fontSize: '9px', color: '#45475a' }}>
+                    {g.tabs.length} tab{g.tabs.length !== 1 ? 's' : ''} · {new Date(g.savedAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { loadGroup(g); setShowSessions(false); }}
+                  style={smallBtn('#89b4fa')}
+                >Load</button>
+                <button
+                  onClick={() => deleteGroup(g.id)}
+                  style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ width: '1px', height: '16px', background: '#313244', flexShrink: 0 }} />
       <div style={{ flex: 1 }} />
 
       {hasErrors && (
@@ -186,4 +295,19 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
       </button>
     </div>
   );
+}
+
+function smallBtn(color: string): React.CSSProperties {
+  return {
+    background: 'none',
+    border: `1px solid ${color}44`,
+    color,
+    borderRadius: '4px',
+    padding: '2px 8px',
+    fontSize: '10px',
+    fontFamily: 'monospace',
+    cursor: 'pointer',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+  };
 }
