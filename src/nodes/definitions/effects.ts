@@ -1687,3 +1687,54 @@ export const MotionBlurNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Chroma Shift ─────────────────────────────────────────────────────────────
+// Color-space chromatic aberration: takes an already-rendered vec3 color and
+// spreads the R and B channels apart from G based on radial UV distance.
+// No resampling — works directly on a color value.
+
+export const ChromaShiftNode: NodeDefinition = {
+  type: 'chromaShift',
+  label: 'Chroma Shift',
+  category: 'Effects',
+  description: 'Color-space chromatic aberration. Spreads R and B channels apart from G proportional to radial UV distance. Plug any vec3 color straight in — no UV resampling needed.',
+  inputs: {
+    color:    { type: 'vec3',  label: 'Color'    },
+    uv:       { type: 'vec2',  label: 'UV'       },
+    strength: { type: 'float', label: 'Strength' },
+  },
+  outputs: {
+    result: { type: 'vec3', label: 'Result' },
+  },
+  defaultParams: { strength: 0.5, mode: 'radial' },
+  paramDefs: {
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: 'radial', label: 'Radial (UV edge)' },
+      { value: 'flat',   label: 'Flat (uniform)'   },
+    ]},
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const col   = inputVars.color    || 'vec3(0.0)';
+    const uvVar = inputVars.uv       || 'g_uv';
+    const str   = inputVars.strength ?? p(node.params.strength, 0.5);
+    const mode  = (node.params.mode as string) ?? 'radial';
+
+    const edgeExpr = mode === 'radial'
+      ? `length(${uvVar}) * ${str}`
+      : str;
+
+    return {
+      code: [
+        `    vec3  ${id}_col    = ${col};\n`,
+        `    float ${id}_edge   = ${edgeExpr};\n`,
+        // R and B diverge from G proportionally to edge factor
+        `    float ${id}_r      = ${id}_col.r + (${id}_col.r - ${id}_col.g) * ${id}_edge;\n`,
+        `    float ${id}_b      = ${id}_col.b + (${id}_col.b - ${id}_col.g) * ${id}_edge;\n`,
+        `    vec3  ${id}_result = clamp(vec3(${id}_r, ${id}_col.g, ${id}_b), 0.0, 1.0);\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
