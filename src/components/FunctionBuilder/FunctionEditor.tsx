@@ -33,10 +33,6 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
     }
   };
 
-  const sig = fn.returnType === 'float'
-    ? `${fn.name}(float x, float t)`
-    : `${fn.name}(vec2 uv, float t)`;
-
   return (
     <div
       onClick={() => setActiveId(fn.id)}

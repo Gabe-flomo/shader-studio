@@ -92,7 +92,7 @@ interface Props {
 }
 
 export function FunctionBuilder({ onNavigateToStudio }: Props) {
-  const { functions, activeId, xRange, yRange, setXRange, setYRange } = useFunctionBuilder();
+  const { functions, activeId, xRange, yRange } = useFunctionBuilder();
   const [shaderSource, setShaderSource] = useState('');
   const [glslErrors, setGlslErrors]     = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
