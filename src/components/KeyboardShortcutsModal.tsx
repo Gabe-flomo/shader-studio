@@ -9,15 +9,34 @@ import {
   normaliseCombo,
   comboFromEvent,
 } from '../hooks/useShortcuts';
+import {
+  getCustomFnDir, setCustomFnDir,
+  getExprDir, setExprDir,
+  getGraphDir, setGraphDir,
+  getGroupPresetDir, setGroupPresetDir,
+} from '../store/useNodeGraphStore';
+import { pickDirectory } from '../utils/fileIO';
+
+const isTauri = (): boolean =>
+  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 interface Props {
   onClose: () => void;
 }
 
+type Tab = 'shortcuts' | 'preferences';
+
 export function KeyboardShortcutsModal({ onClose }: Props) {
+  const [tab, setTab] = useState<Tab>('shortcuts');
   const [map, setMap]       = useState<ShortcutMap>(loadShortcutMap);
   const [binding, setBinding] = useState<string | null>(null); // actionId being rebound
   const [conflict, setConflict] = useState<string | null>(null); // actionId that has a conflict
+
+  // Save-path preferences
+  const [graphDir, setGraphDirState]        = useState(() => getGraphDir());
+  const [fnDir, setFnDirState]             = useState(() => getCustomFnDir());
+  const [exprDir, setExprDirState]         = useState(() => getExprDir());
+  const [groupPresetDir, setGroupPresetDirState] = useState(() => getGroupPresetDir());
 
   // Close on Escape (but not if we're in binding mode)
   useEffect(() => {
@@ -68,6 +87,14 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
     setMap(fresh);
   }, []);
 
+  const makeBrowse = (setter: (v: string) => void, persist: (v: string) => void) => async () => {
+    const picked = await pickDirectory();
+    if (picked !== null) { setter(picked); persist(picked); }
+  };
+
+  const makeTextChange = (setter: (v: string) => void, persist: (v: string) => void) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => { setter(e.target.value); persist(e.target.value); };
+
   // Group actions
   const groups = DEFAULT_ACTIONS.reduce<Record<string, typeof DEFAULT_ACTIONS>>((acc, a) => {
     (acc[a.group] ??= []).push(a);
@@ -98,13 +125,8 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
     <div style={backdrop} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={modal}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#cdd6f4' }}>⌨ Keyboard Shortcuts</div>
-            <div style={{ fontSize: '11px', color: '#585b70', marginTop: '3px' }}>
-              Click a binding to rebind it. Press the new key combo to save.
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: '#cdd6f4' }}>Settings</div>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}
@@ -113,8 +135,115 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
           </button>
         </div>
 
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '1px solid #313244', paddingBottom: '0' }}>
+          {(['shortcuts', 'preferences'] as Tab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: tab === t ? '2px solid #89b4fa' : '2px solid transparent',
+                color: tab === t ? '#cdd6f4' : '#585b70',
+                padding: '6px 14px',
+                fontSize: '13px',
+                fontWeight: tab === t ? 600 : 400,
+                cursor: 'pointer',
+                marginBottom: '-1px',
+                textTransform: 'capitalize',
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* Preferences tab */}
+        {tab === 'preferences' && (
+          <div>
+            <div style={{ fontSize: '11px', color: '#585b70', marginBottom: '16px' }}>
+              {isTauri()
+                ? 'Paste or type an absolute path — saves write there automatically alongside localStorage.'
+                : 'Disk saves require the desktop app. Configure paths here and they\'ll be active when you run the Tauri build.'}
+            </div>
+
+            {([
+              { label: 'Graphs',        value: graphDir,       onChange: makeTextChange(setGraphDirState, setGraphDir),             onBrowse: makeBrowse(setGraphDirState, setGraphDir) },
+              { label: 'Functions',     value: fnDir,          onChange: makeTextChange(setFnDirState, setCustomFnDir),             onBrowse: makeBrowse(setFnDirState, setCustomFnDir) },
+              { label: 'Expressions',   value: exprDir,        onChange: makeTextChange(setExprDirState, setExprDir),               onBrowse: makeBrowse(setExprDirState, setExprDir) },
+              { label: 'Group Presets', value: groupPresetDir, onChange: makeTextChange(setGroupPresetDirState, setGroupPresetDir), onBrowse: makeBrowse(setGroupPresetDirState, setGroupPresetDir) },
+            ] as Array<{ label: string; value: string; onChange: React.ChangeEventHandler<HTMLInputElement>; onBrowse: () => void }>).map(({ label, value, onChange, onBrowse }) => (
+              <div key={label} style={{ marginBottom: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#a6adc8', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {label}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    type="text"
+                    value={value}
+                    onChange={onChange}
+                    placeholder="/absolute/path/to/folder"
+                    style={{
+                      flex: 1,
+                      background: '#181825',
+                      border: '1px solid #45475a',
+                      borderRadius: '6px',
+                      color: '#cdd6f4',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                      padding: '5px 10px',
+                      outline: 'none',
+                    }}
+                  />
+                  {isTauri() && (
+                    <button
+                      onClick={onBrowse}
+                      style={{
+                        background: '#313244',
+                        border: '1px solid #45475a',
+                        color: '#cdd6f4',
+                        borderRadius: '6px',
+                        padding: '5px 12px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      Browse…
+                    </button>
+                  )}
+                  {value && (
+                    <button
+                      onClick={() => {
+                        if (label === 'Graphs') { setGraphDirState(''); setGraphDir(''); }
+                        else if (label === 'Functions') { setFnDirState(''); setCustomFnDir(''); }
+                        else if (label === 'Expressions') { setExprDirState(''); setExprDir(''); }
+                        else { setGroupPresetDirState(''); setGroupPresetDir(''); }
+                      }}
+                      style={{
+                        background: 'none',
+                        border: '1px solid #45475a',
+                        color: '#585b70',
+                        borderRadius: '6px',
+                        padding: '5px 8px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                      title="Clear path"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Shortcut groups */}
-        {Object.entries(groups).map(([group, actions]) => (
+        {tab === 'shortcuts' && Object.entries(groups).map(([group, actions]) => (
           <div key={group} style={{ marginBottom: '20px' }}>
             <div style={{
               fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
@@ -179,15 +308,17 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
 
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #313244' }}>
-          <button
-            onClick={handleReset}
-            style={{
-              background: 'none', border: '1px solid #45475a', color: '#a6adc8',
-              borderRadius: '6px', padding: '5px 14px', fontSize: '12px', cursor: 'pointer',
-            }}
-          >
-            Reset to defaults
-          </button>
+          {tab === 'shortcuts' && (
+            <button
+              onClick={handleReset}
+              style={{
+                background: 'none', border: '1px solid #45475a', color: '#a6adc8',
+                borderRadius: '6px', padding: '5px 14px', fontSize: '12px', cursor: 'pointer',
+              }}
+            >
+              Reset to defaults
+            </button>
+          )}
           <button
             onClick={onClose}
             style={{

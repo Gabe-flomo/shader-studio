@@ -61,6 +61,12 @@ export { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode
 // 3D / Volumetric
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
 
+// 3D Lighting
+export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode } from './threed';
+
+// 3D Fractals (additional)
+export { MandelboxDENode, KIFSTetrahedronDENode } from './threed';
+
 // Patterns
 export { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 
@@ -146,7 +152,10 @@ import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, No
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
 import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
-import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
+import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
+  SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
+  MandelboxDENode, KIFSTetrahedronDENode,
+} from './threed';
 import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import {
   SphereSDF3DNode, BoxSDF3DNode, TorusSDF3DNode, CapsuleSDF3DNode,
@@ -314,6 +323,15 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   combineRGB: CombineRGBNode,
   orbitalVolume3d: OrbitalVolume3DNode,
   mandelbulb: MandelbulbNode,
+  // 3D Lighting
+  sdfAo: SdfAoNode,
+  softShadow: SoftShadowNode,
+  multiLight: MultiLightNode,
+  fresnel3d: Fresnel3DNode,
+  fakeSSS: FakeSSSNode,
+  volumetricFog: VolumetricFogNode,
+  materialSelect: MaterialSelectNode,
+  glass3d: GlassNode,
   // Patterns
   truchet: TruchetNode,
   metaballs: MetaballsNode,
@@ -367,6 +385,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mirroredRepeat3D: MirroredRepeat3DNode,
   sdCross3D: SdCrossNode,
   mengerSponge: MengerSpongeNode,
+  // 3D Fractals (DE nodes)
+  mandelboxDE: MandelboxDENode,
+  kifsTetra: KIFSTetrahedronDENode,
   // 3D Scene (composable)
   scenePos: ScenePosNode,
   sceneOutput: SceneOutputNode,

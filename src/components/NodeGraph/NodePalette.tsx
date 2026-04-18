@@ -107,6 +107,8 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Effects & Spaces', color: '#f2cdcd', keys: ['retroTunnel','barrelChroma','crtScreen','mirrorTunnel','glitchEffect'] as ExKey[] },
   { label: 'Particles',        color: '#cba6f7', keys: ['particleFountain','particleFlowDrift','particleSpiralVortex','particleOrbitCloud','particleRain','particleExplosion','particleMouseAttract'] as ExKey[] },
   { label: 'Combined',         color: '#f9e2af', keys: ['fractalGlowBlur','sdfNeonChroma','ray3DVignette','warpedRaymarch','noiseParticles','tiltShiftFractal','swirlRay3D','voronoiBokeh','kaleido3DBox','sobelNeonGlow','motionFractalBlur'] as ExKey[] },
+  { label: '3D Lighting',      color: '#f9c468', keys: ['aoSphere','softShadowTorus','multiLightScene','fresnelGlowSphere','fakeSSSWax','foggyScene','glassSphereScene','mandelboxLit','kifsTetraSSS','fullLightRig','mandelboxFresnelGlow'] as ExKey[] },
+  { label: '3D Fractals',      color: '#cba6f7', keys: ['mandelboxMLG','kifsTetraMLG','mengerMLG','mandelbulbOrbitColor'] as ExKey[] },
 ];
 
 

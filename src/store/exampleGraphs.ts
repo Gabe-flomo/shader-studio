@@ -10702,6 +10702,1363 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADVANCED LIGHTING & FRACTAL EXAMPLES — Phases 1–4
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── 3D Lighting: SDF Ambient Occlusion ────────────────────────────────────
+  // SdfAo steps along the normal and compares expected vs actual SDF distance.
+  // Wire: scene_3 + mlg_4.pos/normal/hit → ao_5 → scale MLG color by AO.
+  aoSphere: {
+    label: '3D Lighting: AO Sphere',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.5, rotSpeed: 0.2, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos',    position: { x: 80,  y: 180 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 180 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.7 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+          bgR: 0.05, bgG: 0.07, bgB: 0.12,
+          albedoR: 0.9, albedoG: 0.5, albedoB: 0.2,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ao_5', type: 'sdfAo', position: { x: 1060, y: 200 },
+        inputs: {
+          scene:  { type: 'scene3d', label: 'Scene',   connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:    { type: 'vec3',    label: 'Hit Pos', connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal: { type: 'vec3',    label: 'Normal',  connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:    { type: 'float',   label: 'Hit',     connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+        },
+        outputs: { ao: { type: 'float', label: 'AO' } }, params: { stepDist: 0.05 },
+      },
+      {
+        id: 'mul_6', type: 'multiplyVec3', position: { x: 1280, y: 200 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ao_5',  outputKey: 'ao'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1500, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_6', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Lighting: Soft Shadow ───────────────────────────────────────────────
+  // Secondary shadow ray cast from hit point toward light; k controls penumbra.
+  // k=8 → soft film shadows; k=32 → crisp theater spotlight.
+  softShadowTorus: {
+    label: '3D Lighting: Soft Shadow Torus',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.8, rotSpeed: 0.15, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Torus',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos',   position: { x: 80,  y: 180 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'torusSDF3D', position: { x: 280, y: 180 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { majorR: 0.6, minorR: 0.2 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 100, maxDist: 20.0, stepScale: 1.0,
+          bgR: 0.04, bgG: 0.05, bgB: 0.1,
+          albedoR: 0.7, albedoG: 0.8, albedoB: 0.95,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'shad_5', type: 'softShadow', position: { x: 1060, y: 200 },
+        inputs: {
+          scene:  { type: 'scene3d', label: 'Scene',   connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:    { type: 'vec3',    label: 'Hit Pos', connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal: { type: 'vec3',    label: 'Normal',  connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:    { type: 'float',   label: 'Hit',     connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+          lightDir: { type: 'vec3', label: 'Light Dir' },
+        },
+        outputs: { shadow: { type: 'float', label: 'Shadow' } }, params: { k: 12.0, tmax: 20.0 },
+      },
+      {
+        id: 'mul_6', type: 'multiplyVec3', position: { x: 1280, y: 200 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'mlg_4',   outputKey: 'color'  } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'shad_5',  outputKey: 'shadow' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1500, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_6', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Lighting: Multi-Light (IQ Outdoor Rig) ─────────────────────────────
+  // Sun diffuse + sky dome + bounce light. AO and soft shadow feed the rig.
+  // Note: MultiLight already applies gamma (pow 0.4545). Do NOT add ToneMap.
+  multiLightScene: {
+    label: '3D Lighting: Multi-Light Rig',
+    counter: 10,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.5, rotSpeed: 0.15, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos',    position: { x: 80,  y: 180 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 180 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.65 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+          bgR: 0.1, bgG: 0.15, bgB: 0.3,
+          albedoR: 0.6, albedoG: 0.55, albedoB: 0.5,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ao_5', type: 'sdfAo', position: { x: 1060, y: 140 },
+        inputs: {
+          scene:  { type: 'scene3d', label: 'Scene',   connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:    { type: 'vec3',    label: 'Hit Pos', connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal: { type: 'vec3',    label: 'Normal',  connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:    { type: 'float',   label: 'Hit',     connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+        },
+        outputs: { ao: { type: 'float', label: 'AO' } }, params: { stepDist: 0.04 },
+      },
+      {
+        id: 'shad_6', type: 'softShadow', position: { x: 1060, y: 320 },
+        inputs: {
+          scene:    { type: 'scene3d', label: 'Scene',     connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:      { type: 'vec3',    label: 'Hit Pos',   connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal:   { type: 'vec3',    label: 'Normal',    connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:      { type: 'float',   label: 'Hit',       connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+          lightDir: { type: 'vec3',    label: 'Light Dir' },
+        },
+        outputs: { shadow: { type: 'float', label: 'Shadow' } }, params: { k: 16.0, tmax: 20.0 },
+      },
+      {
+        id: 'ml_7', type: 'multiLight', position: { x: 1300, y: 220 },
+        inputs: {
+          baseColor: { type: 'vec3',  label: 'Base Color', connection: { nodeId: 'mlg_4',   outputKey: 'color'  } },
+          normal:    { type: 'vec3',  label: 'Normal',     connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:       { type: 'float', label: 'Hit',        connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+          ao:        { type: 'float', label: 'AO',         connection: { nodeId: 'ao_5',    outputKey: 'ao'     } },
+          shadow:    { type: 'float', label: 'Shadow',     connection: { nodeId: 'shad_6',  outputKey: 'shadow' } },
+          sunDir:    { type: 'vec3',  label: 'Sun Dir' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Lit Color' } },
+        params: { sunDirX: 0.6, sunDirY: 0.7, sunDirZ: 0.4, sunR: 1.0, sunG: 0.9, sunB: 0.7, skyR: 0.25, skyG: 0.4, skyB: 0.7, bounceR: 0.1, bounceG: 0.08, bounceB: 0.05 },
+      },
+      {
+        id: 'out_8', type: 'output', position: { x: 1540, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ml_7', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Lighting: Fresnel Rim Glow ─────────────────────────────────────────
+  // Fresnel factor approaches 1 at grazing/silhouette angles.
+  // Wire cam rd as viewDir; scale a blue rim color by fresnel and add to base.
+  fresnelGlowSphere: {
+    label: '3D Lighting: Fresnel Rim Glow',
+    counter: 11,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.4, rotSpeed: 0.2, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos',    position: { x: 80,  y: 180 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 180 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.65 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+          bgR: 0.02, bgG: 0.02, bgB: 0.08,
+          albedoR: 0.15, albedoG: 0.15, albedoB: 0.25,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'fr_5', type: 'fresnel3d', position: { x: 1060, y: 200 },
+        inputs: {
+          normal:  { type: 'vec3', label: 'Normal',   connection: { nodeId: 'mlg_4', outputKey: 'normal' } },
+          viewDir: { type: 'vec3', label: 'View Dir', connection: { nodeId: 'cam_2', outputKey: 'rd'     } },
+        },
+        outputs: { fresnel: { type: 'float', label: 'Fresnel' } }, params: { power: 3.0 },
+      },
+      {
+        id: 'rimC_6', type: 'makeVec3', position: { x: 1060, y: 360 },
+        inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
+        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
+        params: { r: 0.2, g: 0.5, b: 1.0 },
+      },
+      {
+        id: 'scl_7', type: 'multiplyVec3', position: { x: 1280, y: 280 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'rimC_6', outputKey: 'rgb'     } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'fr_5',   outputKey: 'fresnel' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 },
+      },
+      {
+        id: 'add_8', type: 'addVec3', position: { x: 1480, y: 240 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4',  outputKey: 'color'  } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'scl_7',  outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+      },
+      {
+        id: 'out_9', type: 'output', position: { x: 1700, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_8', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Lighting: Fake SSS (Subsurface Scattering) ─────────────────────────
+  // Beer's law thickness estimation. Wax/jade/soap look. Connect same SceneGroup.
+  // Try setting albedo to pale green or off-white for a jade or soap effect.
+  fakeSSSWax: {
+    label: '3D Lighting: Fake SSS (Wax)',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.5, rotSpeed: 0.2, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos',    position: { x: 80,  y: 180 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 180 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.75 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+          bgR: 0.06, bgG: 0.04, bgB: 0.08,
+          albedoR: 0.85, albedoG: 0.78, albedoB: 0.7,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'sss_5', type: 'fakeSSS', position: { x: 1060, y: 200 },
+        inputs: {
+          scene:    { type: 'scene3d', label: 'Scene',     connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:      { type: 'vec3',    label: 'Hit Pos',   connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal:   { type: 'vec3',    label: 'Normal',    connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:      { type: 'float',   label: 'Hit',       connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+          lightDir: { type: 'vec3',    label: 'Light Dir' },
+          sssColor: { type: 'vec3',    label: 'SSS Color' },
+        },
+        outputs: { sss: { type: 'vec3', label: 'SSS' } },
+        params: { strength: 1.5, stepSize: 0.06, sssR: 0.9, sssG: 0.35, sssB: 0.15 },
+      },
+      {
+        id: 'add_6', type: 'addVec3', position: { x: 1280, y: 240 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'sss_5', outputKey: 'sss'   } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1500, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_6', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Lighting: Volumetric Fog ────────────────────────────────────────────
+  // Exponential depth fog. Wire depth + hit from MarchLoopGroup.
+  // Increase density (try 1.0–3.0) for thick atmosphere; reduce for haze.
+  foggyScene: {
+    label: '3D Lighting: Volumetric Fog',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 4.0, camAngle: 0.4, rotSpeed: 0.1, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos',    position: { x: 80,  y: 180 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 180 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.6 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+          bgR: 0.6, bgG: 0.65, bgB: 0.7,
+          albedoR: 0.8, albedoG: 0.4, albedoB: 0.2,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'fog_5', type: 'volumetricFog', position: { x: 1060, y: 220 },
+        inputs: {
+          color:    { type: 'vec3',  label: 'Color',     connection: { nodeId: 'mlg_4', outputKey: 'color' } },
+          depth:    { type: 'float', label: 'Depth',     connection: { nodeId: 'mlg_4', outputKey: 'depth' } },
+          hit:      { type: 'float', label: 'Hit',       connection: { nodeId: 'mlg_4', outputKey: 'hit'   } },
+          fogColor: { type: 'vec3',  label: 'Fog Color' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Fogged' } },
+        params: { density: 0.8, fogR: 0.65, fogG: 0.7, fogB: 0.75 },
+      },
+      {
+        id: 'out_6', type: 'output', position: { x: 1300, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fog_5', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Fractals: Mandelbox (MLG) ──────────────────────────────────────────
+  // Mandelbox distance estimator. scale ∈ [-3, -0.5] controls shape.
+  // iterCount → palette gives rich fractal edge coloring.
+  mandelboxMLG: {
+    label: '3D Fractals: Mandelbox',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 4.0, camAngle: 0.5, rotSpeed: 0.1, fov: 1.4 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Mandelbox',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',   type: 'scenePos',    position: { x: 80,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mbox_sg', type: 'mandelboxDE', position: { x: 280, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { orbit: { type: 'float', label: 'Orbit Trap' }, distance: { type: 'float', label: 'Distance' } },
+                params: { iterations: 10, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
+            ],
+            outputNodeId: 'mbox_sg',
+            outputKey: 'distance',
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 96, maxDist: 20.0, stepScale: 0.7,
+          bgR: 0.0, bgG: 0.0, bgB: 0.02,
+          albedoR: 0.5, albedoG: 0.5, albedoB: 0.5,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mul_5', type: 'multiply', position: { x: 1060, y: 240 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'iterCount' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.025 },
+      },
+      {
+        id: 'pal_6', type: 'palette', position: { x: 1260, y: 220 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'mul_5', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5, 0.4, 0.3], amplitude: [0.5, 0.4, 0.3], freq: [1.0, 1.0, 1.0], phase: [0.0, 0.2, 0.5] },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1480, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Fractals: KIFS Tetrahedron (MLG) ───────────────────────────────────
+  // Kaleidoscopic IFS tetrahedron. Fold-and-scale repeated in 3D.
+  // iterCount → palette reveals crystal-like edge structure.
+  kifsTetraMLG: {
+    label: '3D Fractals: KIFS Tetrahedron',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.6, rotSpeed: 0.15, fov: 1.4 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'KIFS Tetrahedron',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',   type: 'scenePos',   position: { x: 80,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'kifs_sg', type: 'kifsTetra',  position: { x: 280, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { distance: { type: 'float', label: 'Distance' } },
+                params: { iterations: 10, scale: 2.0, offsetX: 1.0, offsetY: 1.0, offsetZ: 1.0 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 150, maxDist: 20.0, stepScale: 0.75,
+          bgR: 0.0, bgG: 0.01, bgB: 0.03,
+          albedoR: 0.5, albedoG: 0.5, albedoB: 0.5,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mul_5', type: 'multiply', position: { x: 1060, y: 240 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'iterCount' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.02 },
+      },
+      {
+        id: 'pal_6', type: 'palette', position: { x: 1260, y: 220 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'mul_5', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5, 0.5, 0.5], amplitude: [0.4, 0.3, 0.5], freq: [1.0, 1.0, 1.0], phase: [0.5, 0.2, 0.0] },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1480, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Fractals: Menger Sponge (MLG) ──────────────────────────────────────
+  // Like mengerSponge3D but using MarchLoopGroup for full output control.
+  // MLG outputs: normal, pos, hit are available for post-processing.
+  mengerMLG: {
+    label: '3D Fractals: Menger Sponge (MLG)',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.5, rotSpeed: 0.2, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Menger Sponge',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos', position: { x: 60, y: 180 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'time_sg', type: 'time',    position: { x: 60, y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              { id: 'rot_sg', type: 'rotate3D', position: { x: 260, y: 240 },
+                inputs: {
+                  pos:  { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  time: { type: 'float', label: 'Time',     connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { rx: 0.25, ry: 0.3, rz: 0.0, speed: 0.2 } },
+              { id: 'menger_sg', type: 'mengerSponge', position: { x: 460, y: 240 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { size: 0.85, iterations: 3 } },
+            ],
+            outputNodeId: 'menger_sg', outputKey: 'dist',
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 150, maxDist: 20.0, stepScale: 0.75,
+          bgR: 0.03, bgG: 0.03, bgB: 0.07,
+          albedoR: 0.55, albedoG: 0.6, albedoB: 0.65,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 1060, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Fractals: Mandelbulb Orbit Color ───────────────────────────────────
+  // Mandelbulb preset node. orbit output is vec3 (multi-component trap).
+  // Scale it up and add to the diffuse color for iridescent orbit-trap shading.
+  mandelbulbOrbitColor: {
+    label: '3D Fractals: Mandelbulb Orbit Trap',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'mb_2', type: 'mandelbulb', position: { x: 280, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, orbit: { type: 'vec3', label: 'Orbit Trap' } },
+        params: { power: 8, bailout: 2.0, max_iter: 10, max_steps: 64, max_dist: 5.0, cam_dist: 2.5, cam_height: 0.5, cam_speed: 0.2, cam_fov: 1.5, ambient: 0.05, light_x: 2.0, light_y: 4.0, light_z: 2.0, palette_preset: '3', bg_color: [0.03, 0.02, 0.08] },
+      },
+      {
+        id: 'mul_3', type: 'multiplyVec3', position: { x: 560, y: 380 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'mb_2', outputKey: 'orbit' } },
+          scale: { type: 'float', label: 'Scale' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.5 },
+      },
+      {
+        id: 'add_4', type: 'addVec3', position: { x: 780, y: 300 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'mb_2', outputKey: 'color'  } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'mul_3', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+      },
+      {
+        id: 'out_5', type: 'output', position: { x: 1000, y: 320 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_4', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Lighting: Glass Sphere ──────────────────────────────────────────────
+  // Single-refraction glass with chromatic dispersion and Fresnel.
+  // Wire cam.rd as rayDir; bgColor defaults to dark sky if unconnected.
+  glassSphereScene: {
+    label: '3D Lighting: Glass Sphere',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.4, rotSpeed: 0.2, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Glass Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',  type: 'scenePos',    position: { x: 80,  y: 180 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 180 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.7 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+          bgR: 0.04, bgG: 0.06, bgB: 0.12,
+          albedoR: 0.5, albedoG: 0.5, albedoB: 0.5,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'glass_5', type: 'glass3d', position: { x: 1060, y: 220 },
+        inputs: {
+          rayDir:    { type: 'vec3',  label: 'Ray Dir',    connection: { nodeId: 'cam_2',  outputKey: 'rd'     } },
+          normal:    { type: 'vec3',  label: 'Normal',     connection: { nodeId: 'mlg_4',  outputKey: 'normal' } },
+          hit:       { type: 'float', label: 'Hit',        connection: { nodeId: 'mlg_4',  outputKey: 'hit'    } },
+          bgColor:   { type: 'vec3',  label: 'Background' },
+          tintColor: { type: 'vec3',  label: 'Tint' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Glass Color' } },
+        params: { ior: 1.5, fresnelPow: 4.0, dispersion: 0.04, tintR: 0.75, tintG: 0.92, tintB: 1.0 },
+      },
+      {
+        id: 'out_6', type: 'output', position: { x: 1300, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glass_5', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Fractals: Mandelbox + AO + Multi-Light ─────────────────────────────
+  // Mandelbox lit with the full IQ outdoor rig minus fog.
+  // AO feeds the multi-light sky contribution; shadow left at default 1.0.
+  mandelboxLit: {
+    label: '3D Fractals: Mandelbox + Multi-Light',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 4.5, camAngle: 0.5, rotSpeed: 0.08, fov: 1.4 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Mandelbox',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',   type: 'scenePos',    position: { x: 80,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mbox_sg', type: 'mandelboxDE', position: { x: 280, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { orbit: { type: 'float', label: 'Orbit Trap' }, distance: { type: 'float', label: 'Distance' } },
+                params: { iterations: 10, scale: -2.0, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
+            ],
+            outputNodeId: 'mbox_sg',
+            outputKey: 'distance',
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 96, maxDist: 20.0, stepScale: 0.65,
+          bgR: 0.08, bgG: 0.1, bgB: 0.18,
+          albedoR: 0.55, albedoG: 0.5, albedoB: 0.45,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ao_5', type: 'sdfAo', position: { x: 1060, y: 180 },
+        inputs: {
+          scene:  { type: 'scene3d', label: 'Scene',   connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:    { type: 'vec3',    label: 'Hit Pos', connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal: { type: 'vec3',    label: 'Normal',  connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:    { type: 'float',   label: 'Hit',     connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+        },
+        outputs: { ao: { type: 'float', label: 'AO' } }, params: { stepDist: 0.06 },
+      },
+      {
+        id: 'ml_6', type: 'multiLight', position: { x: 1280, y: 220 },
+        inputs: {
+          baseColor: { type: 'vec3',  label: 'Base Color', connection: { nodeId: 'mlg_4',  outputKey: 'color'  } },
+          normal:    { type: 'vec3',  label: 'Normal',     connection: { nodeId: 'mlg_4',  outputKey: 'normal' } },
+          hit:       { type: 'float', label: 'Hit',        connection: { nodeId: 'mlg_4',  outputKey: 'hit'    } },
+          ao:        { type: 'float', label: 'AO',         connection: { nodeId: 'ao_5',   outputKey: 'ao'     } },
+          shadow:    { type: 'float', label: 'Shadow' },
+          sunDir:    { type: 'vec3',  label: 'Sun Dir' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Lit Color' } },
+        params: { sunDirX: 0.5, sunDirY: 0.8, sunDirZ: 0.3, sunR: 1.1, sunG: 0.95, sunB: 0.75, skyR: 0.2, skyG: 0.35, skyB: 0.6, bounceR: 0.08, bounceG: 0.07, bounceB: 0.05 },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1520, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ml_6', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Fractals: KIFS Tetrahedron + Fake SSS ──────────────────────────────
+  // Crystal-like fractal with subsurface glow for an alien coral / gem effect.
+  // SSS light transmits through thin edges; adjust strength + color to taste.
+  kifsTetraSSS: {
+    label: '3D Fractals: KIFS Tetra + SSS',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.5, rotSpeed: 0.15, fov: 1.4 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'KIFS Tetrahedron',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',   type: 'scenePos',  position: { x: 80,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'kifs_sg', type: 'kifsTetra', position: { x: 280, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { distance: { type: 'float', label: 'Distance' } },
+                params: { iterations: 12, scale: 2.0, offsetX: 1.0, offsetY: 1.0, offsetZ: 1.0 } },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 150, maxDist: 20.0, stepScale: 0.75,
+          bgR: 0.0, bgG: 0.02, bgB: 0.05,
+          albedoR: 0.3, albedoG: 0.65, albedoB: 0.55,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'sss_5', type: 'fakeSSS', position: { x: 1060, y: 200 },
+        inputs: {
+          scene:    { type: 'scene3d', label: 'Scene',     connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:      { type: 'vec3',    label: 'Hit Pos',   connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal:   { type: 'vec3',    label: 'Normal',    connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:      { type: 'float',   label: 'Hit',       connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+          lightDir: { type: 'vec3',    label: 'Light Dir' },
+          sssColor: { type: 'vec3',    label: 'SSS Color' },
+        },
+        outputs: { sss: { type: 'vec3', label: 'SSS' } },
+        params: { strength: 2.0, stepSize: 0.04, sssR: 0.2, sssG: 0.9, sssB: 0.6 },
+      },
+      {
+        id: 'add_6', type: 'addVec3', position: { x: 1280, y: 240 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'sss_5', outputKey: 'sss'   } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+      },
+      {
+        id: 'out_7', type: 'output', position: { x: 1500, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_6', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Full Lighting Rig: AO + Shadow + Multi-Light + Fog ────────────────────
+  // Complete PBR-ish pipeline: SDF AO → soft shadow → multi-light → depth fog.
+  // Sphere + infinite ground plane using sdfUnion.
+  fullLightRig: {
+    label: '3D Full Rig: AO + Shadow + MultiLight + Fog',
+    counter: 11,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.4, rotSpeed: 0.15, fov: 1.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 460 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere + Ground',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',    type: 'scenePos',    position: { x: 60,  y: 180 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sph_sg',   type: 'sphereSDF3D', position: { x: 260, y: 140 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.6 } },
+              { id: 'gnd_sg',   type: 'planeSDF3D',  position: { x: 260, y: 300 },
+                inputs: { p:   { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { height: -0.8 } },
+              { id: 'union_sg', type: 'sdfUnion',    position: { x: 460, y: 220 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'sph_sg', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'gnd_sg', outputKey: 'dist' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
+            ],
+            outputNodeId: 'union_sg', outputKey: 'dist',
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 800, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 100, maxDist: 30.0, stepScale: 1.0,
+          bgR: 0.5, bgG: 0.6, bgB: 0.75,
+          albedoR: 0.7, albedoG: 0.6, albedoB: 0.5,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'ao_5', type: 'sdfAo', position: { x: 1080, y: 100 },
+        inputs: {
+          scene:  { type: 'scene3d', label: 'Scene',   connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:    { type: 'vec3',    label: 'Hit Pos', connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal: { type: 'vec3',    label: 'Normal',  connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:    { type: 'float',   label: 'Hit',     connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+        },
+        outputs: { ao: { type: 'float', label: 'AO' } }, params: { stepDist: 0.05 },
+      },
+      {
+        id: 'shad_6', type: 'softShadow', position: { x: 1080, y: 280 },
+        inputs: {
+          scene:    { type: 'scene3d', label: 'Scene',     connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
+          pos:      { type: 'vec3',    label: 'Hit Pos',   connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
+          normal:   { type: 'vec3',    label: 'Normal',    connection: { nodeId: 'mlg_4',   outputKey: 'normal' } },
+          hit:      { type: 'float',   label: 'Hit',       connection: { nodeId: 'mlg_4',   outputKey: 'hit'    } },
+          lightDir: { type: 'vec3',    label: 'Light Dir' },
+        },
+        outputs: { shadow: { type: 'float', label: 'Shadow' } }, params: { k: 16.0, tmax: 25.0 },
+      },
+      {
+        id: 'ml_7', type: 'multiLight', position: { x: 1320, y: 180 },
+        inputs: {
+          baseColor: { type: 'vec3',  label: 'Base Color', connection: { nodeId: 'mlg_4',  outputKey: 'color'  } },
+          normal:    { type: 'vec3',  label: 'Normal',     connection: { nodeId: 'mlg_4',  outputKey: 'normal' } },
+          hit:       { type: 'float', label: 'Hit',        connection: { nodeId: 'mlg_4',  outputKey: 'hit'    } },
+          ao:        { type: 'float', label: 'AO',         connection: { nodeId: 'ao_5',   outputKey: 'ao'     } },
+          shadow:    { type: 'float', label: 'Shadow',     connection: { nodeId: 'shad_6', outputKey: 'shadow' } },
+          sunDir:    { type: 'vec3',  label: 'Sun Dir' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Lit Color' } },
+        params: { sunDirX: 0.6, sunDirY: 0.7, sunDirZ: 0.4, sunR: 1.0, sunG: 0.9, sunB: 0.7, skyR: 0.3, skyG: 0.45, skyB: 0.7, bounceR: 0.1, bounceG: 0.09, bounceB: 0.06 },
+      },
+      {
+        id: 'fog_8', type: 'volumetricFog', position: { x: 1560, y: 200 },
+        inputs: {
+          color:    { type: 'vec3',  label: 'Color',     connection: { nodeId: 'ml_7',  outputKey: 'color' } },
+          depth:    { type: 'float', label: 'Depth',     connection: { nodeId: 'mlg_4', outputKey: 'depth' } },
+          hit:      { type: 'float', label: 'Hit',       connection: { nodeId: 'mlg_4', outputKey: 'hit'   } },
+          fogColor: { type: 'vec3',  label: 'Fog Color' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Fogged' } },
+        params: { density: 0.4, fogR: 0.55, fogG: 0.65, fogB: 0.8 },
+      },
+      {
+        id: 'out_9', type: 'output', position: { x: 1800, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fog_8', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D Fractals: Mandelbox + Fresnel Edge Glow ─────────────────────────────
+  // Mandelbox silhouettes lit with blue Fresnel rim light.
+  // Dark albedo makes the glow pop against black space.
+  mandelboxFresnelGlow: {
+    label: '3D Fractals: Mandelbox + Fresnel Glow',
+    counter: 11,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 260, y: 280 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 4.0, camAngle: 0.5, rotSpeed: 0.1, fov: 1.4 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 520, y: 440 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Mandelbox',
+          subgraph: {
+            nodes: [
+              { id: 'sp_sg',   type: 'scenePos',    position: { x: 80,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mbox_sg', type: 'mandelboxDE', position: { x: 280, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { orbit: { type: 'float', label: 'Orbit Trap' }, distance: { type: 'float', label: 'Distance' } },
+                params: { iterations: 10, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 } },
+            ],
+            outputNodeId: 'mbox_sg',
+            outputKey: 'distance',
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 780, y: 220 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 96, maxDist: 20.0, stepScale: 0.7,
+          bgR: 0.0, bgG: 0.0, bgB: 0.02,
+          albedoR: 0.1, albedoG: 0.1, albedoB: 0.15,
+          subgraph: {
+            nodes: [
+              { id: 'mp_sg', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mo_sg', type: 'marchOutput', position: { x: 280, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_sg', outputKey: 'pos' } } },
+                outputs: {}, params: {} },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'fr_5', type: 'fresnel3d', position: { x: 1060, y: 200 },
+        inputs: {
+          normal:  { type: 'vec3', label: 'Normal',   connection: { nodeId: 'mlg_4', outputKey: 'normal' } },
+          viewDir: { type: 'vec3', label: 'View Dir', connection: { nodeId: 'cam_2', outputKey: 'rd'     } },
+        },
+        outputs: { fresnel: { type: 'float', label: 'Fresnel' } }, params: { power: 2.5 },
+      },
+      {
+        id: 'rimC_6', type: 'makeVec3', position: { x: 1060, y: 380 },
+        inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
+        outputs: { rgb: { type: 'vec3', label: 'RGB' } },
+        params: { r: 0.15, g: 0.4, b: 1.0 },
+      },
+      {
+        id: 'scl_7', type: 'multiplyVec3', position: { x: 1280, y: 290 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'rimC_6', outputKey: 'rgb'     } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'fr_5',   outputKey: 'fresnel' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 },
+      },
+      {
+        id: 'add_8', type: 'addVec3', position: { x: 1480, y: 240 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4',  outputKey: 'color'  } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'scl_7',  outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+      },
+      {
+        id: 'out_9', type: 'output', position: { x: 1700, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_8', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

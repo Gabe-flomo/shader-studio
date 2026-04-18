@@ -445,23 +445,21 @@ export const RaymarchNode: NodeDefinition = {
 // ─── Mandelbulb Node ─────────────────────────────────────────────────────────
 
 const MANDELBULB_DE_GLSL = `
-float mandelbulbDE(vec3 pos, float power, float maxIter) {
+float mandelbulbDE(vec3 pos, float maxIter, float power, float bailout) {
     vec3 z = pos;
     float dr = 1.0;
     float r = 0.0;
-    float trap = 1e10;
     for (float mbi = 0.0; mbi < 24.0; mbi++) {
         if (mbi >= maxIter) break;
         r = length(z);
-        if (r > 2.0) break;
+        if (r > bailout) break;
         float theta = acos(clamp(z.z / r, -1.0, 1.0));
-        float phi = atan(z.y, z.x);
+        float phi   = atan(z.y, z.x);
         dr = pow(r, power - 1.0) * power * dr + 1.0;
         float zr = pow(r, power);
         theta *= power;
-        phi *= power;
+        phi   *= power;
         z = zr * vec3(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)) + pos;
-        trap = min(trap, length(z));
     }
     return 0.5 * log(r) * r / dr;
 }`;
@@ -473,8 +471,8 @@ export const MandelbulbNode: NodeDefinition = {
   label: 'Mandelbulb 3D',
   category: 'Presets',
   description: [
-    '3D Mandelbulb fractal via distance estimation and raymarching. ',
-    'Adjustable power (2–16). Orbit trap output for coloring. ',
+    '3D Mandelbulb fractal (IQ formulation) via distance estimation and raymarching. ',
+    'orbit output is vec3 — wire to MakeVec3/palette for coloring. ',
     'Camera orbits automatically when Time is wired in.',
   ].join(''),
   inputs: {
@@ -487,11 +485,12 @@ export const MandelbulbNode: NodeDefinition = {
   outputs: {
     color: { type: 'vec3',  label: 'Color'      },
     depth: { type: 'float', label: 'Depth'      },
-    orbit: { type: 'float', label: 'Orbit Trap' },
+    orbit: { type: 'vec3',  label: 'Orbit Trap' },
   },
   glslFunction: MANDELBULB_GLSL + '\n' + PALETTE_GLSL_FN,
   defaultParams: {
     power:          8,
+    bailout:        2.0,
     max_iter:       12,
     max_steps:      80,
     max_dist:       5.0,
@@ -508,6 +507,7 @@ export const MandelbulbNode: NodeDefinition = {
   },
   paramDefs: {
     power:          { label: 'Power',         type: 'float', min: 2,    max: 16,   step: 0.5  },
+    bailout:        { label: 'Bailout',       type: 'float', min: 1.5,  max: 8.0,  step: 0.1  },
     max_iter:       { label: 'DE Iterations', type: 'float', min: 4,    max: 24,   step: 1    },
     max_steps:      { label: 'Max Steps',     type: 'float', min: 20,   max: 200,  step: 5    },
     max_dist:       { label: 'Max Distance',  type: 'float', min: 2,    max: 20,   step: 0.1  },
@@ -532,15 +532,16 @@ export const MandelbulbNode: NodeDefinition = {
     const camHeight = inputVars.cam_height ?? p(node.params.cam_height, 0.5);
     const camSpeed  = inputVars.cam_speed  ?? p(node.params.cam_speed, 0.2);
 
-    const power     = p(node.params.power, 8);
-    const maxIter   = p(node.params.max_iter, 12);
-    const maxSteps  = Math.max(20, Math.round(typeof node.params.max_steps === 'number' ? node.params.max_steps : 80));
-    const maxDist   = p(node.params.max_dist, 5.0);
-    const camFov    = p(node.params.cam_fov, 1.5);
-    const ambient   = p(node.params.ambient, 0.05);
-    const lightX    = p(node.params.light_x, 2.0);
-    const lightY    = p(node.params.light_y, 4.0);
-    const lightZ    = p(node.params.light_z, 2.0);
+    const power    = p(node.params.power,   8);
+    const bailout  = p(node.params.bailout, 2.0);
+    const maxIter  = p(node.params.max_iter, 12);
+    const maxSteps = Math.max(20, Math.round(typeof node.params.max_steps === 'number' ? node.params.max_steps : 80));
+    const maxDist  = p(node.params.max_dist, 5.0);
+    const camFov   = p(node.params.cam_fov, 1.5);
+    const ambient  = p(node.params.ambient, 0.05);
+    const lightX   = p(node.params.light_x, 2.0);
+    const lightY   = p(node.params.light_y, 4.0);
+    const lightZ   = p(node.params.light_z, 2.0);
     const bgColorArr = Array.isArray(node.params.bg_color) ? node.params.bg_color as number[] : [0.05, 0.05, 0.1];
 
     const presIdx   = parseInt((node.params.palette_preset as string) ?? '1', 10);
@@ -552,68 +553,60 @@ export const MandelbulbNode: NodeDefinition = {
 
     const code = [
       `    // ── Mandelbulb 3D ──\n`,
-      // Camera orbit
       `    float ${id}_angle = ${timeVar} * ${camSpeed};\n`,
       `    vec3  ${id}_ro    = vec3(cos(${id}_angle) * ${camDist}, ${camHeight}, sin(${id}_angle) * ${camDist});\n`,
       `    vec3  ${id}_ta    = vec3(0.0, 0.0, 0.0);\n`,
       `    mat3  ${id}_cam   = setCamera(${id}_ro, ${id}_ta, 0.0);\n`,
       `    vec3  ${id}_rd    = normalize(${id}_cam * vec3(${uvVar}.x, ${uvVar}.y, ${camFov}));\n`,
-      // Raymarch loop with smaller step multiplier for stability
       `    float ${id}_t  = 0.001;\n`,
       `    bool  ${id}_hit = false;\n`,
       `    for (int ${id}_si = 0; ${id}_si < ${maxSteps}; ${id}_si++) {\n`,
       `        vec3  ${id}_p  = ${id}_ro + ${id}_rd * ${id}_t;\n`,
-      `        float ${id}_de = mandelbulbDE(${id}_p, ${power}, ${maxIter});\n`,
+      `        float ${id}_de = mandelbulbDE(${id}_p, ${maxIter}, ${power}, ${bailout});\n`,
       `        if (${id}_de < ${surfEps}) { ${id}_hit = true; break; }\n`,
       `        if (${id}_t > ${maxDist}) break;\n`,
       `        ${id}_t += ${id}_de * ${stepMul};\n`,
       `    }\n`,
-      // Hit point and normal via tetrahedron method
       `    vec3 ${id}_hp = ${id}_ro + ${id}_rd * ${id}_t;\n`,
       `    vec3 ${id}_nm = vec3(0.0);\n`,
       `    if (${id}_hit) {\n`,
       `        vec2 ${id}_e = vec2(0.001, -0.001);\n`,
-      `        float ${id}_h0 = mandelbulbDE(${id}_hp + vec3(${id}_e.x, ${id}_e.y, ${id}_e.y), ${power}, ${maxIter});\n`,
-      `        float ${id}_h1 = mandelbulbDE(${id}_hp + vec3(${id}_e.y, ${id}_e.y, ${id}_e.x), ${power}, ${maxIter});\n`,
-      `        float ${id}_h2 = mandelbulbDE(${id}_hp + vec3(${id}_e.y, ${id}_e.x, ${id}_e.y), ${power}, ${maxIter});\n`,
-      `        float ${id}_h3 = mandelbulbDE(${id}_hp + vec3(${id}_e.x, ${id}_e.x, ${id}_e.x), ${power}, ${maxIter});\n`,
+      `        float ${id}_h0 = mandelbulbDE(${id}_hp + vec3(${id}_e.x, ${id}_e.y, ${id}_e.y), ${maxIter}, ${power}, ${bailout});\n`,
+      `        float ${id}_h1 = mandelbulbDE(${id}_hp + vec3(${id}_e.y, ${id}_e.y, ${id}_e.x), ${maxIter}, ${power}, ${bailout});\n`,
+      `        float ${id}_h2 = mandelbulbDE(${id}_hp + vec3(${id}_e.y, ${id}_e.x, ${id}_e.y), ${maxIter}, ${power}, ${bailout});\n`,
+      `        float ${id}_h3 = mandelbulbDE(${id}_hp + vec3(${id}_e.x, ${id}_e.x, ${id}_e.x), ${maxIter}, ${power}, ${bailout});\n`,
       `        ${id}_nm = normalize(vec3(${id}_e.x,${id}_e.y,${id}_e.y)*${id}_h0 + vec3(${id}_e.y,${id}_e.y,${id}_e.x)*${id}_h1 + vec3(${id}_e.y,${id}_e.x,${id}_e.y)*${id}_h2 + vec3(${id}_e.x,${id}_e.x,${id}_e.x)*${id}_h3);\n`,
       `    }\n`,
-      // Lighting
       `    vec3  ${id}_lp   = vec3(${lightX}, ${lightY}, ${lightZ});\n`,
       `    vec3  ${id}_ldir = normalize(${id}_lp - ${id}_hp);\n`,
       `    float ${id}_diff = max(dot(${id}_nm, ${id}_ldir), 0.0);\n`,
       `    vec3  ${id}_hv   = normalize(${id}_ldir - ${id}_rd);\n`,
       `    float ${id}_spec = pow(max(dot(${id}_nm, ${id}_hv), 0.0), 32.0);\n`,
-      // Orbit trap for coloring (compute after hit)
-      `    float ${id}_orbitVal = 0.0;\n`,
+      // Orbit trap — 3 measurements for vec3 output
+      `    vec3 ${id}_orbitMin = vec3(1e9);\n`,
       `    if (${id}_hit) {\n`,
-      `        float ${id}_orDr = 1.0;\n`,
-      `        vec3  ${id}_oz   = ${id}_hp;\n`,
-      `        float ${id}_oTrap = 1e10;\n`,
-      `        for (float ${id}_oi = 0.0; ${id}_oi < ${maxIter}; ${id}_oi++) {\n`,
-      `            float ${id}_or2 = dot(${id}_oz, ${id}_oz);\n`,
-      `            if (${id}_or2 > 4.0) break;\n`,
-      `            float ${id}_oR = sqrt(${id}_or2);\n`,
-      `            float ${id}_oTheta = acos(clamp(${id}_oz.z / ${id}_oR, -1.0, 1.0));\n`,
-      `            float ${id}_oPhi = atan(${id}_oz.y, ${id}_oz.x);\n`,
-      `            ${id}_orDr = pow(${id}_oR, ${power} - 1.0) * ${power} * ${id}_orDr + 1.0;\n`,
-      `            float ${id}_oZr = pow(${id}_oR, ${power});\n`,
-      `            ${id}_oTheta *= ${power};\n`,
-      `            ${id}_oPhi *= ${power};\n`,
+      `        vec3 ${id}_oz = ${id}_hp;\n`,
+      `        for (float ${id}_oi = 0.0; ${id}_oi < 24.0; ${id}_oi++) {\n`,
+      `            if (${id}_oi >= ${maxIter}) break;\n`,
+      `            float ${id}_or = length(${id}_oz);\n`,
+      `            if (${id}_or > ${bailout}) break;\n`,
+      `            ${id}_orbitMin.x = min(${id}_orbitMin.x, ${id}_or);\n`,
+      `            ${id}_orbitMin.y = min(${id}_orbitMin.y, abs(${id}_oz.y));\n`,
+      `            ${id}_orbitMin.z = min(${id}_orbitMin.z, length(${id}_oz.xy - vec2(0.45, 0.0)));\n`,
+      `            float ${id}_oTheta = acos(clamp(${id}_oz.z / max(${id}_or, 0.0001), -1.0, 1.0));\n`,
+      `            float ${id}_oPhi   = atan(${id}_oz.y, ${id}_oz.x);\n`,
+      `            float ${id}_oZr    = pow(${id}_or, ${power});\n`,
+      `            ${id}_oTheta *= ${power}; ${id}_oPhi *= ${power};\n`,
       `            ${id}_oz = ${id}_oZr * vec3(sin(${id}_oTheta)*cos(${id}_oPhi), sin(${id}_oTheta)*sin(${id}_oPhi), cos(${id}_oTheta)) + ${id}_hp;\n`,
-      `            ${id}_oTrap = min(${id}_oTrap, length(${id}_oz));\n`,
       `        }\n`,
-      `        ${id}_orbitVal = clamp(${id}_oTrap * 0.5, 0.0, 1.0);\n`,
+      `        ${id}_orbitMin = clamp(${id}_orbitMin * 0.5, 0.0, 1.0);\n`,
       `    }\n`,
-      // Color from palette based on orbit trap
-      `    float ${id}_colt  = ${id}_orbitVal;\n`,
+      `    float ${id}_colt   = ${id}_orbitMin.x;\n`,
       `    vec3  ${id}_objcol = palette(${id}_colt, ${pA}, ${pB}, ${pC}, ${pD});\n`,
       `    vec3  ${id}_litcol = ${id}_objcol * (${ambient} + (1.0 - ${ambient}) * ${id}_diff) + vec3(${id}_spec * 0.2);\n`,
       `    vec3  ${id}_bgcol  = ${vec3Str(bgColorArr)};\n`,
       `    vec3  ${id}_color  = ${id}_hit ? ${id}_litcol : ${id}_bgcol;\n`,
       `    float ${id}_depth  = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
-      `    float ${id}_orbit  = ${id}_orbitVal;\n`,
     ];
 
     return {
@@ -621,7 +614,7 @@ export const MandelbulbNode: NodeDefinition = {
       outputVars: {
         color: `${id}_color`,
         depth: `${id}_depth`,
-        orbit: `${id}_orbit`,
+        orbit: `${id}_orbitMin`,
       },
     };
   },
@@ -638,8 +631,7 @@ export const VolumeCloudsNode: NodeDefinition = {
   category: 'Presets',
   description: [
     'Volumetric cloud slab via raymarching + turbulence density field. ',
-    'Inspired by XorDev\'s sunset shader. ',
-    'Outputs sky color with integrated cloud color, cloud density (mask), and sun disk.',
+    'Beer\'s law absorption (absorptionR/G/B=0 → no change) and HG phase (phaseG=0 → isotropic = original behavior).',
   ].join(''),
   inputs: {
     uv:       { type: 'vec2',  label: 'UV'            },
@@ -673,6 +665,10 @@ export const VolumeCloudsNode: NodeDefinition = {
     sky_ground:     [0.3, 0.15, 0.05],
     cloud_col:      [1.0, 0.95, 0.85],
     sun_col:        [1.0, 0.85, 0.4],
+    absorptionR:    0.0,
+    absorptionG:    0.0,
+    absorptionB:    0.0,
+    phaseG:         0.0,
   },
   paramDefs: {
     steps:        { label: 'March Steps',  type: 'float', min: 8,    max: 80,  step: 2     },
@@ -691,6 +687,10 @@ export const VolumeCloudsNode: NodeDefinition = {
     sky_ground:   { label: 'Sky Ground',   type: 'vec3',  min: 0,    max: 1,   step: 0.01  },
     cloud_col:    { label: 'Cloud Color',  type: 'vec3',  min: 0,    max: 1,   step: 0.01  },
     sun_col:      { label: 'Sun Color',    type: 'vec3',  min: 0,    max: 1,   step: 0.01  },
+    absorptionR:  { label: 'Absorb R',    type: 'float', min: 0.0,  max: 5.0, step: 0.05  },
+    absorptionG:  { label: 'Absorb G',    type: 'float', min: 0.0,  max: 5.0, step: 0.05  },
+    absorptionB:  { label: 'Absorb B',    type: 'float', min: 0.0,  max: 5.0, step: 0.05  },
+    phaseG:       { label: 'Phase G',     type: 'float', min: -1.0, max: 1.0, step: 0.01  },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -716,6 +716,10 @@ export const VolumeCloudsNode: NodeDefinition = {
     const skyGround = Array.isArray(node.params.sky_ground)  ? node.params.sky_ground  as number[] : [0.3, 0.15, 0.05];
     const cloudCol  = Array.isArray(node.params.cloud_col)   ? node.params.cloud_col   as number[] : [1.0, 0.95, 0.85];
     const sunCol    = Array.isArray(node.params.sun_col)     ? node.params.sun_col     as number[] : [1.0, 0.85, 0.4];
+    const absR      = p(node.params.absorptionR, 0.0);
+    const absG      = p(node.params.absorptionG, 0.0);
+    const absB      = p(node.params.absorptionB, 0.0);
+    const phaseG    = p(node.params.phaseG,      0.0);
 
     const code = [
       `    // ── Volume Clouds ──\n`,
@@ -736,9 +740,12 @@ export const VolumeCloudsNode: NodeDefinition = {
       `    float ${id}_sunDot  = dot(${id}_rd, ${id}_sunDir);\n`,
       `    float ${id}_sun     = smoothstep(${sunSize} + 0.005, ${sunSize}, acos(clamp(${id}_sunDot, -1.0, 1.0)));\n`,
       `    ${id}_sky += ${vec3Str(sunCol)} * ${id}_sun * 3.0;\n`,
+      // HG phase (normalized: g=0 → 1.0 for any angle, preserving original behavior)
+      `    float ${id}_pg  = ${phaseG};\n`,
+      `    float ${id}_pg2 = ${id}_pg * ${id}_pg;\n`,
+      `    float ${id}_phase = (1.0 - ${id}_pg2) / pow(max(1.0 + ${id}_pg2 - 2.0 * ${id}_pg * ${id}_sunDot, 0.001), 1.5);\n`,
 
       // Volumetric cloud marching
-      // Only march rays that point upward enough to intersect cloud slab
       `    float ${id}_cloudAccum = 0.0;\n`,
       `    vec3  ${id}_cloudCol   = vec3(0.0);\n`,
       `    if (${id}_rd.y > 0.01) {\n`,
@@ -751,10 +758,9 @@ export const VolumeCloudsNode: NodeDefinition = {
       `            vec3  ${id}_cp = ${id}_rd * ${id}_mt + ${id}_windOff;\n`,
       `            float ${id}_dens = cloudDensity(${id}_cp, ${coverage}, ${puffiness}, ${cloudScale}) * ${densityIn};\n`,
       `            if (${id}_dens > 0.001) {\n`,
-      // In-scatter: sun direction scatter
       `                float ${id}_lightDens = cloudDensity(${id}_cp + ${id}_sunDir * 0.5, ${coverage}, ${puffiness}, ${cloudScale});\n`,
       `                float ${id}_shadow = exp(-${id}_lightDens * 2.0);\n`,
-      `                vec3  ${id}_lit = ${vec3Str(cloudCol)} * (${id}_shadow + ${scatter}) + ${vec3Str(sunCol)} * pow(max(${id}_sunDot, 0.0), 4.0) * ${id}_shadow;\n`,
+      `                vec3  ${id}_lit = (${vec3Str(cloudCol)} * (${id}_shadow + ${scatter}) + ${vec3Str(sunCol)} * pow(max(${id}_sunDot, 0.0), 4.0) * ${id}_shadow) * ${id}_phase;\n`,
       `                float ${id}_alpha = min(${id}_dens * ${id}_dt * 8.0, 1.0 - ${id}_cloudAccum);\n`,
       `                ${id}_cloudCol   += ${id}_lit * ${id}_alpha;\n`,
       `                ${id}_cloudAccum += ${id}_alpha;\n`,
@@ -762,6 +768,9 @@ export const VolumeCloudsNode: NodeDefinition = {
       `            }\n`,
       `        }\n`,
       `    }\n`,
+      // Beer's law absorption (default absR/G/B=0 → exp(0)=1, no change)
+      `    vec3  ${id}_beer = exp(-vec3(${absR}, ${absG}, ${absB}) * ${id}_cloudAccum * 2.0);\n`,
+      `    ${id}_cloudCol *= ${id}_beer;\n`,
 
       // Composite sky + clouds
       `    vec3 ${id}_color      = mix(${id}_sky, ${id}_cloudCol / max(${id}_cloudAccum, 0.001), ${id}_cloudAccum);\n`,
@@ -1209,6 +1218,574 @@ export const OrbitalVolume3DNode: NodeDefinition = {
         alpha: `${id}_alpha`,
         depth: `${id}_tdep`,
       },
+    };
+  },
+};
+
+// ─── 3D Lighting Nodes ────────────────────────────────────────────────────────
+
+// ── SDF Ambient Occlusion ─────────────────────────────────────────────────────
+
+export const SdfAoNode: NodeDefinition = {
+  type: 'sdfAo',
+  label: 'SDF Ambient Occlusion',
+  category: '3D Lighting',
+  description: 'SDF-based AO. Steps along the normal, compares expected vs actual SDF distance. Connect same SceneGroup as MarchLoopGroup.',
+  inputs: {
+    scene:  { type: 'scene3d', label: 'Scene'   },
+    pos:    { type: 'vec3',    label: 'Hit Pos'  },
+    normal: { type: 'vec3',    label: 'Normal'   },
+    hit:    { type: 'float',   label: 'Hit'      },
+  },
+  outputs: { ao: { type: 'float', label: 'AO' } },
+  defaultParams: { stepDist: 0.05 },
+  paramDefs: {
+    stepDist: { label: 'Step Dist', type: 'float', min: 0.005, max: 0.2, step: 0.005, hint: 'Distance between AO sample steps along the surface normal. Smaller = finer contact shadows; larger = broader occlusion.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const sceneFn  = inputVars.scene  || 'MISSING_SCENE';
+    const pos      = inputVars.pos    || 'vec3(0.0)';
+    const normal   = inputVars.normal || 'vec3(0.0, 1.0, 0.0)';
+    const hit      = inputVars.hit    || '0.0';
+    const stepDist = p(node.params.stepDist, 0.05);
+    return {
+      code: `
+    float ${id}_ao = 1.0;
+    if (${hit} > 0.5) {
+      float ${id}_aoAcc = 0.0;
+      float ${id}_w = 1.0;
+      for (int ${id}_i = 1; ${id}_i <= 5; ${id}_i++) {
+        float ${id}_fi  = float(${id}_i);
+        float ${id}_exp = ${id}_fi * ${stepDist};
+        float ${id}_act = ${sceneFn}(${pos} + ${normal} * ${id}_exp);
+        ${id}_aoAcc += ${id}_w * max(0.0, ${id}_exp - ${id}_act);
+        ${id}_w     *= 0.5;
+      }
+      ${id}_ao = clamp(1.0 - ${id}_aoAcc * 2.5, 0.0, 1.0);
+    }
+`,
+      outputVars: { ao: `${id}_ao` },
+    };
+  },
+};
+
+// ── Soft Shadow ───────────────────────────────────────────────────────────────
+
+export const SoftShadowNode: NodeDefinition = {
+  type: 'softShadow',
+  label: 'Soft Shadow',
+  category: '3D Lighting',
+  description: 'Soft penumbra shadows via secondary ray. k=8 soft, k=32 hard. Connect same SceneGroup as MarchLoopGroup.',
+  inputs: {
+    scene:    { type: 'scene3d', label: 'Scene'     },
+    pos:      { type: 'vec3',    label: 'Hit Pos'   },
+    normal:   { type: 'vec3',    label: 'Normal'    },
+    hit:      { type: 'float',   label: 'Hit'       },
+    lightDir: { type: 'vec3',    label: 'Light Dir' },
+  },
+  outputs: { shadow: { type: 'float', label: 'Shadow' } },
+  defaultParams: { k: 16.0, tmax: 20.0 },
+  paramDefs: {
+    k:    { label: 'Hardness (k)', type: 'float', min: 1.0,  max: 64.0, step: 1.0, hint: 'Shadow sharpness. Low (4–8) = soft penumbra; high (32–64) = near-hard shadows.' },
+    tmax: { label: 'Max Dist',    type: 'float', min: 1.0,  max: 50.0, step: 1.0, hint: 'How far the shadow ray travels. Should cover the distance from surface to light source.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const sceneFn  = inputVars.scene    || 'MISSING_SCENE';
+    const pos      = inputVars.pos      || 'vec3(0.0)';
+    const normal   = inputVars.normal   || 'vec3(0.0, 1.0, 0.0)';
+    const hit      = inputVars.hit      || '0.0';
+    const lightDir = inputVars.lightDir || 'vec3(0.577, 0.577, 0.577)';
+    const k        = p(node.params.k,    16.0);
+    const tmax     = p(node.params.tmax, 20.0);
+    return {
+      code: `
+    float ${id}_shadow = 1.0;
+    if (${hit} > 0.5) {
+      vec3  ${id}_ro = ${pos} + ${normal} * 0.002;
+      vec3  ${id}_rd = normalize(${lightDir});
+      float ${id}_t  = 0.02;
+      for (int ${id}_i = 0; ${id}_i < 64; ${id}_i++) {
+        float ${id}_h = ${sceneFn}(${id}_ro + ${id}_rd * ${id}_t);
+        if (${id}_h < 0.001) { ${id}_shadow = 0.0; break; }
+        ${id}_shadow = min(${id}_shadow, ${k} * ${id}_h / ${id}_t);
+        ${id}_t += clamp(${id}_h, 0.01, 0.2);
+        if (${id}_t > ${tmax}) break;
+      }
+      ${id}_shadow = clamp(${id}_shadow, 0.0, 1.0);
+    }
+`,
+      outputVars: { shadow: `${id}_shadow` },
+    };
+  },
+};
+
+// ── Multi-Light (IQ Outdoor Rig) ──────────────────────────────────────────────
+
+const MULTILIGHT_GLSL = `
+vec3 multiLight(
+  vec3 baseColor, vec3 normal, float ao, float shadow,
+  vec3 sunDir, vec3 sunColor, vec3 skyColor, vec3 bounceColor
+) {
+  vec3 sun = normalize(sunDir);
+  float sunDiff    = clamp(dot(normal, sun), 0.0, 1.0);
+  float skyDiff    = clamp(0.5 + 0.5 * normal.y, 0.0, 1.0);
+  float bounceDiff = clamp(0.5 - 0.5 * dot(normal, sun), 0.0, 1.0);
+  vec3 light = sunDiff    * sunColor    * shadow
+             + skyDiff    * skyColor    * ao
+             + bounceDiff * bounceColor * ao;
+  return pow(max(baseColor * light, vec3(0.0)), vec3(0.4545));
+}`;
+
+export const MultiLightNode: NodeDefinition = {
+  type: 'multiLight',
+  label: 'Multi-Light',
+  category: '3D Lighting',
+  description: 'IQ outdoor lighting rig: sun diffuse + sky dome + bounce light. Applies gamma (pow 0.4545). Do NOT chain with ToneMap — use one or the other.',
+  inputs: {
+    baseColor: { type: 'vec3',  label: 'Base Color' },
+    normal:    { type: 'vec3',  label: 'Normal'     },
+    hit:       { type: 'float', label: 'Hit'        },
+    ao:        { type: 'float', label: 'AO'         },
+    shadow:    { type: 'float', label: 'Shadow'     },
+    sunDir:    { type: 'vec3',  label: 'Sun Dir'    },
+  },
+  outputs: { color: { type: 'vec3', label: 'Lit Color' } },
+  glslFunction: MULTILIGHT_GLSL,
+  defaultParams: {
+    sunDirX: 0.6,  sunDirY: 0.7,  sunDirZ: 0.4,
+    sunR:    1.0,  sunG:    0.9,  sunB:    0.7,
+    skyR:    0.3,  skyG:    0.5,  skyB:    0.7,
+    bounceR: 0.1,  bounceG: 0.1,  bounceB: 0.08,
+  },
+  paramDefs: {
+    sunDirX: { label: 'Sun X', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction X component. Normalized internally — only the ratio matters.' },
+    sunDirY: { label: 'Sun Y', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction Y component. Positive = sun above horizon; negative = below.' },
+    sunDirZ: { label: 'Sun Z', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction Z component. Controls left/right sun angle.' },
+    sunR:    { label: 'Sun R', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light red. Values > 1 are HDR — boost for warm golden hour.' },
+    sunG:    { label: 'Sun G', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light green.' },
+    sunB:    { label: 'Sun B', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light blue. Lower than R/G for warm sunlight.' },
+    skyR:    { label: 'Sky R', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light red. Faces the top hemisphere.' },
+    skyG:    { label: 'Sky G', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light green.' },
+    skyB:    { label: 'Sky B', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light blue. Higher than R for a blue sky fill.' },
+    bounceR: { label: 'Bounce R', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light red — simulates indirect light from the ground or walls.' },
+    bounceG: { label: 'Bounce G', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light green.' },
+    bounceB: { label: 'Bounce B', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light blue.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id        = node.id;
+    const baseColor = inputVars.baseColor || 'vec3(0.5)';
+    const normal    = inputVars.normal    || 'vec3(0.0, 1.0, 0.0)';
+    const hit       = inputVars.hit       || '0.0';
+    const ao        = inputVars.ao        || '1.0';
+    const shadow    = inputVars.shadow    || '1.0';
+    const sunDirX   = p(node.params.sunDirX, 0.6);
+    const sunDirY   = p(node.params.sunDirY, 0.7);
+    const sunDirZ   = p(node.params.sunDirZ, 0.4);
+    const sunDir    = inputVars.sunDir    || `vec3(${sunDirX}, ${sunDirY}, ${sunDirZ})`;
+    const sunColor  = `vec3(${p(node.params.sunR, 1.0)}, ${p(node.params.sunG, 0.9)}, ${p(node.params.sunB, 0.7)})`;
+    const skyColor  = `vec3(${p(node.params.skyR, 0.3)}, ${p(node.params.skyG, 0.5)}, ${p(node.params.skyB, 0.7)})`;
+    const bounceColor = `vec3(${p(node.params.bounceR, 0.1)}, ${p(node.params.bounceG, 0.1)}, ${p(node.params.bounceB, 0.08)})`;
+    return {
+      code: `    vec3 ${id}_color = ${hit} > 0.5 ? multiLight(${baseColor}, ${normal}, ${ao}, ${shadow}, ${sunDir}, ${sunColor}, ${skyColor}, ${bounceColor}) : vec3(0.0);\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ── Fresnel ───────────────────────────────────────────────────────────────────
+
+const FRESNEL_GLSL = `
+float fresnelFactor(vec3 n, vec3 v, float power) {
+  return pow(clamp(1.0 - abs(dot(normalize(n), normalize(v))), 0.0, 1.0), power);
+}`;
+
+export const Fresnel3DNode: NodeDefinition = {
+  type: 'fresnel3d',
+  label: 'Fresnel 3D',
+  category: '3D Lighting',
+  description: '0 at faces toward camera, 1 at grazing/silhouette edges. Drive glass mixing, rim lighting, glow.',
+  inputs: {
+    normal:  { type: 'vec3', label: 'Normal'   },
+    viewDir: { type: 'vec3', label: 'View Dir' },
+  },
+  outputs: { fresnel: { type: 'float', label: 'Fresnel' } },
+  glslFunction: FRESNEL_GLSL,
+  defaultParams: { power: 3.0 },
+  paramDefs: {
+    power: { label: 'Power', type: 'float', min: 0.5, max: 10.0, step: 0.1, hint: 'Fresnel falloff exponent. Higher = rim effect tighter to the silhouette edge; lower = broader glow.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const normal  = inputVars.normal  || 'vec3(0.0, 1.0, 0.0)';
+    const viewDir = inputVars.viewDir || 'vec3(0.0, 0.0, -1.0)';
+    const power   = p(node.params.power, 3.0);
+    return {
+      code: `    float ${id}_fresnel = fresnelFactor(${normal}, ${viewDir}, ${power});\n`,
+      outputVars: { fresnel: `${id}_fresnel` },
+    };
+  },
+};
+
+// ── Fake Subsurface Scattering ────────────────────────────────────────────────
+
+export const FakeSSSNode: NodeDefinition = {
+  type: 'fakeSSS',
+  label: 'Fake SSS',
+  category: '3D Lighting',
+  description: 'Fake subsurface scattering via Beer\'s law thickness estimation. Makes wax, jade, soap look compelling. Connect same SceneGroup as MarchLoopGroup.',
+  inputs: {
+    scene:    { type: 'scene3d', label: 'Scene'     },
+    pos:      { type: 'vec3',    label: 'Hit Pos'   },
+    normal:   { type: 'vec3',    label: 'Normal'    },
+    hit:      { type: 'float',   label: 'Hit'       },
+    lightDir: { type: 'vec3',    label: 'Light Dir' },
+    sssColor: { type: 'vec3',    label: 'SSS Color' },
+  },
+  outputs: { sss: { type: 'vec3', label: 'SSS' } },
+  defaultParams: { strength: 1.0, stepSize: 0.05, sssR: 0.8, sssG: 0.3, sssB: 0.1 },
+  paramDefs: {
+    strength: { label: 'Strength',  type: 'float', min: 0.0, max: 5.0, step: 0.05, hint: 'Overall brightness of the subsurface scatter contribution. High values give a strong glowing-from-within effect.' },
+    stepSize: { label: 'Step Size', type: 'float', min: 0.005, max: 0.2, step: 0.005, hint: 'Distance between thickness samples inside the object. Smaller = more accurate thin-region detection.' },
+    sssR:     { label: 'Color R',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Subsurface scatter tint red. Warm reds for wax/skin; cool greens for jade.' },
+    sssG:     { label: 'Color G',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Subsurface scatter tint green.' },
+    sssB:     { label: 'Color B',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Subsurface scatter tint blue.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const sceneFn  = inputVars.scene    || 'MISSING_SCENE';
+    const pos      = inputVars.pos      || 'vec3(0.0)';
+    const normal   = inputVars.normal   || 'vec3(0.0, 1.0, 0.0)';
+    const hit      = inputVars.hit      || '0.0';
+    const lightDir = inputVars.lightDir || 'vec3(0.577, 0.577, 0.577)';
+    const sssColor = inputVars.sssColor || `vec3(${p(node.params.sssR, 0.8)}, ${p(node.params.sssG, 0.3)}, ${p(node.params.sssB, 0.1)})`;
+    const strength = p(node.params.strength, 1.0);
+    const stepSize = p(node.params.stepSize, 0.05);
+    return {
+      code: `
+    vec3 ${id}_sss = vec3(0.0);
+    if (${hit} > 0.5) {
+      float ${id}_thick = 0.0;
+      for (int ${id}_i = 1; ${id}_i <= 8; ${id}_i++) {
+        float ${id}_d = ${sceneFn}(${pos} - ${normal} * float(${id}_i) * ${stepSize});
+        ${id}_thick += max(0.0, -${id}_d);
+      }
+      ${id}_thick = clamp(${id}_thick * 2.0, 0.0, 1.0);
+      float ${id}_scatter  = exp(-${id}_thick * 4.0);
+      float ${id}_lDot = clamp(dot(-${normal}, normalize(${lightDir})) + 0.5, 0.0, 1.0);
+      ${id}_sss = ${sssColor} * ${id}_scatter * ${id}_lDot * ${strength};
+    }
+`,
+      outputVars: { sss: `${id}_sss` },
+    };
+  },
+};
+
+// ── Volumetric Fog ────────────────────────────────────────────────────────────
+
+const FOG_APPLY_GLSL = `
+vec3 applyFog(vec3 col, float depth, vec3 fogColor, float density, float hit) {
+  float fog = 1.0 - exp(-depth * density);
+  return mix(col, fogColor, fog * hit);
+}`;
+
+export const VolumetricFogNode: NodeDefinition = {
+  type: 'volumetricFog',
+  label: 'Volumetric Fog',
+  category: '3D Lighting',
+  description: 'Exponential depth fog. Wire depth from MarchLoopGroup. fog output blends scene color with fog color.',
+  inputs: {
+    color:    { type: 'vec3',  label: 'Color'     },
+    depth:    { type: 'float', label: 'Depth'     },
+    hit:      { type: 'float', label: 'Hit'       },
+    fogColor: { type: 'vec3',  label: 'Fog Color' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Fogged' } },
+  glslFunction: FOG_APPLY_GLSL,
+  defaultParams: { density: 0.5, fogR: 0.7, fogG: 0.8, fogB: 0.9 },
+  paramDefs: {
+    density: { label: 'Density', type: 'float', min: 0.0, max: 5.0,  step: 0.05, hint: 'Fog thickness. Uses exponential falloff — 0 = clear, 1 = moderate, 3+ = very thick.' },
+    fogR:    { label: 'Fog R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Fog color red. Match the sky or ambient light color for realism.' },
+    fogG:    { label: 'Fog G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Fog color green.' },
+    fogB:    { label: 'Fog B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Fog color blue.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const color    = inputVars.color    || 'vec3(0.0)';
+    const depth    = inputVars.depth    || '0.0';
+    const hit      = inputVars.hit      || '0.0';
+    const fogColor = inputVars.fogColor || `vec3(${p(node.params.fogR, 0.7)}, ${p(node.params.fogG, 0.8)}, ${p(node.params.fogB, 0.9)})`;
+    const density  = p(node.params.density, 0.5);
+    return {
+      code: `    vec3 ${id}_color = applyFog(${color}, ${depth}, ${fogColor}, ${density}, ${hit});\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ─── 3D Fractal DE Nodes ──────────────────────────────────────────────────────
+
+// ── Shared fold helpers ────────────────────────────────────────────────────────
+
+const BOX_FOLD_GLSL = `
+vec3 boxFold(vec3 z, float fl) {
+  return clamp(z, -fl, fl) * 2.0 - z;
+}`;
+
+// ── Mandelbox DE ──────────────────────────────────────────────────────────────
+
+const MANDELBOX_DE_GLSL = `
+float mandelboxDE(vec3 pos, float maxIter, float scale, float foldLimit, float minR, float fixedR) {
+  vec3 z = pos;
+  float dr = abs(scale);
+  for (float mbi = 0.0; mbi < 20.0; mbi++) {
+    if (mbi >= maxIter) break;
+    z = boxFold(z, foldLimit);
+    float r2  = dot(z, z);
+    float mr2 = minR * minR;
+    float fr2 = fixedR * fixedR;
+    if (r2 < mr2) {
+      float inv = fr2 / mr2;
+      z  *= inv;
+      dr *= inv;
+    } else if (r2 < fr2) {
+      float inv = fr2 / r2;
+      z  *= inv;
+      dr *= inv;
+    }
+    z  = z * scale + pos;
+    dr = dr * abs(scale) + 1.0;
+  }
+  return (length(z) - abs(scale - 1.0)) / abs(dr);
+}`;
+
+export const MandelboxDENode: NodeDefinition = {
+  type: 'mandelboxDE',
+  label: 'Mandelbox DE',
+  category: '3D Fractals',
+  description: 'Mandelbox distance estimator. scale=-1.5 to -3.0 for most interesting forms. Fudge factor 0.5 baked in. Connect inside SceneGroup → MarchLoopGroup (Max Steps 128–200).',
+  inputs: {
+    pos: { type: 'vec3', label: 'Position' },
+  },
+  outputs: {
+    orbit:    { type: 'float', label: 'Orbit Trap' },
+    distance: { type: 'float', label: 'Distance' },
+  },
+  glslFunctions: [BOX_FOLD_GLSL, MANDELBOX_DE_GLSL],
+  defaultParams: { iterations: 15, scale: -1.5, foldLimit: 1.0, minR: 0.5, fixedR: 1.0 },
+  paramDefs: {
+    iterations: { label: 'Iterations', type: 'float', min: 2,    max: 20,   step: 1,    hint: 'Number of fold+scale iterations. More = finer fractal detail but more GPU cost.' },
+    scale:      { label: 'Scale',      type: 'float', min: -3.0, max: -0.5, step: 0.05, hint: 'Mandelbox scale factor. -2 = classic angular look; -1.5 = softer, more spherical.' },
+    foldLimit:  { label: 'Fold Limit', type: 'float', min: 0.1,  max: 3.0,  step: 0.05, hint: 'Box fold clamp radius. Controls the size of the cubic repetition cell.' },
+    minR:       { label: 'Min Radius', type: 'float', min: 0.1,  max: 1.0,  step: 0.05, hint: 'Inner sphere radius for the sphere fold. Smaller = more inner complexity.' },
+    fixedR:     { label: 'Fixed R',    type: 'float', min: 0.5,  max: 2.0,  step: 0.05, hint: 'Outer sphere radius for the sphere fold. Controls the overall fractal extent.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id         = node.id;
+    const pos        = inputVars.pos || 'vec3(0.0)';
+    const iterations = p(node.params.iterations, 15);
+    const scale      = p(node.params.scale,      -1.5);
+    const foldLimit  = p(node.params.foldLimit,   1.0);
+    const minR       = p(node.params.minR,        0.5);
+    const fixedR     = p(node.params.fixedR,      1.0);
+    return {
+      code: [
+        // Orbit trap via min length during first pass
+        `    vec3  ${id}_oz    = ${pos};\n`,
+        `    float ${id}_oTrap = 1e9;\n`,
+        `    for (float ${id}_oi = 0.0; ${id}_oi < 20.0; ${id}_oi++) {\n`,
+        `      if (${id}_oi >= ${iterations}) break;\n`,
+        `      ${id}_oz = boxFold(${id}_oz, ${foldLimit});\n`,
+        `      float ${id}_or2  = dot(${id}_oz, ${id}_oz);\n`,
+        `      float ${id}_omr2 = ${minR} * ${minR};\n`,
+        `      float ${id}_ofr2 = ${fixedR} * ${fixedR};\n`,
+        `      if (${id}_or2 < ${id}_omr2) { ${id}_oz *= ${id}_ofr2 / ${id}_omr2; }\n`,
+        `      else if (${id}_or2 < ${id}_ofr2) { ${id}_oz *= ${id}_ofr2 / ${id}_or2; }\n`,
+        `      ${id}_oz = ${id}_oz * ${scale} + ${pos};\n`,
+        `      ${id}_oTrap = min(${id}_oTrap, length(${id}_oz));\n`,
+        `    }\n`,
+        `    float ${id}_orbit    = clamp(${id}_oTrap * 0.5, 0.0, 1.0);\n`,
+        `    float ${id}_distance = mandelboxDE(${pos}, ${iterations}, ${scale}, ${foldLimit}, ${minR}, ${fixedR}) * 0.5;\n`,
+      ].join(''),
+      outputVars: { orbit: `${id}_orbit`, distance: `${id}_distance` },
+    };
+  },
+};
+
+// ── KIFS Tetrahedron DE ───────────────────────────────────────────────────────
+
+const KIFS_TETRA_DE_GLSL = `
+float kifsTetraDE(vec3 z, float maxIter, float sc, vec3 offset) {
+  for (float ki = 0.0; ki < 20.0; ki++) {
+    if (ki >= maxIter) break;
+    if (z.x + z.y < 0.0) z.xy = -z.yx;
+    if (z.x + z.z < 0.0) z.xz = -z.zx;
+    if (z.y + z.z < 0.0) z.yz = -z.zy;
+    z = z * sc - offset * (sc - 1.0);
+  }
+  return length(z) * pow(abs(sc), -maxIter);
+}`;
+
+export const KIFSTetrahedronDENode: NodeDefinition = {
+  type: 'kifsTetra',
+  label: 'KIFS Tetrahedron DE',
+  category: '3D Fractals',
+  description: 'Kaleidoscopic IFS tetrahedron fractal. Fudge factor 0.5 baked in. Connect inside SceneGroup → MarchLoopGroup (Max Steps 128–200).',
+  inputs: {
+    pos: { type: 'vec3', label: 'Position' },
+  },
+  outputs: {
+    distance: { type: 'float', label: 'Distance' },
+  },
+  glslFunction: KIFS_TETRA_DE_GLSL,
+  defaultParams: { iterations: 12, scale: 2.0, offsetX: 1.0, offsetY: 1.0, offsetZ: 1.0 },
+  paramDefs: {
+    iterations: { label: 'Iterations', type: 'float', min: 2,   max: 20,  step: 1,    hint: 'Number of KIFS fold iterations. More = finer recursive detail; 8–12 is a good balance.' },
+    scale:      { label: 'Scale',      type: 'float', min: 1.5, max: 4.0, step: 0.05, hint: 'Scaling factor per fold. Higher = more stretched/spiky tetrahedra.' },
+    offsetX:    { label: 'Offset X',   type: 'float', min: 0.1, max: 3.0, step: 0.05, hint: 'Translation offset X applied each fold iteration. Shifts the fractal asymmetrically.' },
+    offsetY:    { label: 'Offset Y',   type: 'float', min: 0.1, max: 3.0, step: 0.05, hint: 'Translation offset Y applied each fold iteration.' },
+    offsetZ:    { label: 'Offset Z',   type: 'float', min: 0.1, max: 3.0, step: 0.05, hint: 'Translation offset Z applied each fold iteration.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id         = node.id;
+    const pos        = inputVars.pos || 'vec3(0.0)';
+    const iterations = p(node.params.iterations, 12);
+    const scale      = p(node.params.scale, 2.0);
+    const offsetX    = p(node.params.offsetX, 1.0);
+    const offsetY    = p(node.params.offsetY, 1.0);
+    const offsetZ    = p(node.params.offsetZ, 1.0);
+    return {
+      code: `    float ${id}_distance = kifsTetraDE(${pos}, ${iterations}, ${scale}, vec3(${offsetX}, ${offsetY}, ${offsetZ})) * 0.5;\n`,
+      outputVars: { distance: `${id}_distance` },
+    };
+  },
+};
+
+// ─── Material Select Node ─────────────────────────────────────────────────────
+
+export const MaterialSelectNode: NodeDefinition = {
+  type: 'materialSelect',
+  label: 'Material Select',
+  category: '3D Lighting',
+  description: 'Blends two colors based on which SDF distance is smaller. Connect two SDF outputs evaluated at the same hit point.',
+  inputs: {
+    distA:  { type: 'float', label: 'Dist A'  },
+    distB:  { type: 'float', label: 'Dist B'  },
+    colorA: { type: 'vec3',  label: 'Color A' },
+    colorB: { type: 'vec3',  label: 'Color B' },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Mixed Color' },
+    blend: { type: 'float', label: 'Blend'       },
+  },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id     = node.id;
+    const distA  = inputVars.distA  || '0.0';
+    const distB  = inputVars.distB  || '0.0';
+    const colorA = inputVars.colorA || 'vec3(1.0, 0.0, 0.0)';
+    const colorB = inputVars.colorB || 'vec3(0.0, 0.0, 1.0)';
+    return {
+      code: [
+        `    float ${id}_blend = smoothstep(-0.01, 0.01, ${distA} - ${distB});\n`,
+        `    vec3  ${id}_color = mix(${colorA}, ${colorB}, ${id}_blend);\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color`, blend: `${id}_blend` },
+    };
+  },
+};
+
+// ─── Glass Node ───────────────────────────────────────────────────────────────
+
+const GLASS_GLSL = `
+vec3 glassShade(
+  vec3 rayDir, vec3 normal, float hit,
+  vec3 bgColor, vec3 tintColor,
+  float ior, float fresnelPow, float dispersion
+) {
+  if (hit < 0.5) return bgColor;
+  vec3 n = normalize(normal);
+  vec3 v = normalize(rayDir);
+  // Ensure we use the outward-facing normal
+  if (dot(v, n) > 0.0) n = -n;
+
+  // Schlick Fresnel
+  float cosI = clamp(-dot(v, n), 0.0, 1.0);
+  float f0 = (ior - 1.0) / (ior + 1.0);
+  f0 *= f0;
+  float frs = f0 + (1.0 - f0) * pow(1.0 - cosI, fresnelPow);
+
+  // Refracted rays with chromatic dispersion
+  vec3 rfG = refract(v, n, 1.0 / ior);
+  bool tir = length(rfG) < 0.001;
+  if (tir) rfG = reflect(v, n);
+  vec3 rfR = tir ? rfG : refract(v, n, 1.0 / max(ior - dispersion, 1.001));
+  vec3 rfB = tir ? rfG : refract(v, n, 1.0 / (ior + dispersion));
+  if (length(rfR) < 0.001) rfR = rfG;
+  if (length(rfB) < 0.001) rfB = rfG;
+
+  // Fake environment: use refracted ray Y to create a sky/floor gradient
+  // brightening the bgColor toward zenith gives a convincing distortion
+  float skyR = clamp(0.5 + rfR.y, 0.0, 1.0);
+  float skyG = clamp(0.5 + rfG.y, 0.0, 1.0);
+  float skyB = clamp(0.5 + rfB.y, 0.0, 1.0);
+  vec3 interior = vec3(
+    bgColor.r * mix(0.2, 2.2, skyR),
+    bgColor.g * mix(0.2, 2.2, skyG),
+    bgColor.b * mix(0.2, 2.2, skyB)
+  ) * tintColor;
+
+  // Reflection environment (for Fresnel blend)
+  vec3 refl = reflect(v, n);
+  float reflSky = clamp(0.5 + refl.y, 0.0, 1.0);
+  vec3 reflColor = bgColor * mix(0.3, 2.5, reflSky);
+
+  // Sharp specular highlight
+  vec3 lDir = normalize(vec3(0.6, 1.0, 0.4));
+  float spec = pow(max(dot(refl, lDir), 0.0), 96.0);
+
+  // Compose: refracted interior + Fresnel reflection rim + specular
+  return mix(interior, reflColor, frs) + vec3(spec * 0.85);
+}`;
+
+export const GlassNode: NodeDefinition = {
+  type: 'glass3d',
+  label: 'Glass 3D',
+  category: '3D Lighting',
+  description: 'Single-refraction glass approximation with chromatic dispersion and Fresnel. Wire rayDir from MarchCamera.rd, normal + hit from MarchLoopGroup.',
+  inputs: {
+    rayDir:    { type: 'vec3',  label: 'Ray Dir'    },
+    normal:    { type: 'vec3',  label: 'Normal'     },
+    hit:       { type: 'float', label: 'Hit'        },
+    bgColor:   { type: 'vec3',  label: 'Background' },
+    tintColor: { type: 'vec3',  label: 'Tint'       },
+  },
+  outputs: { color: { type: 'vec3', label: 'Glass Color' } },
+  glslFunction: GLASS_GLSL,
+  defaultParams: { ior: 1.5, fresnelPow: 3.0, dispersion: 0.02, tintR: 0.8, tintG: 0.95, tintB: 1.0 },
+  paramDefs: {
+    ior:        { label: 'IOR',        type: 'float', min: 1.0,  max: 3.0, step: 0.05, hint: 'Index of refraction. Air=1.0, water=1.33, glass=1.5, diamond=2.4.' },
+    fresnelPow: { label: 'Fresnel',    type: 'float', min: 1.0,  max: 10.0,step: 0.5,  hint: 'Fresnel rim exponent. Higher = tighter bright rim at silhouette edges.' },
+    dispersion: { label: 'Dispersion', type: 'float', min: 0.0,  max: 0.1, step: 0.005,hint: 'Chromatic aberration amount — splits RGB refraction angles like a prism.' },
+    tintR:      { label: 'Tint R',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Glass body tint red. 1.0 = neutral; lower adds color absorption like colored glass.' },
+    tintG:      { label: 'Tint G',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Glass body tint green.' },
+    tintB:      { label: 'Tint B',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Blue channel of the glass tint color. Combine with R and G to give the glass a colored tint.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id        = node.id;
+    const rayDir    = inputVars.rayDir    || 'vec3(0.0, 0.0, -1.0)';
+    const normal    = inputVars.normal    || 'vec3(0.0, 1.0, 0.0)';
+    const hit       = inputVars.hit       || '0.0';
+    const bgColor   = inputVars.bgColor   || 'vec3(0.06, 0.10, 0.22)';
+    const tintColor = inputVars.tintColor || `vec3(${p(node.params.tintR, 0.8)}, ${p(node.params.tintG, 0.95)}, ${p(node.params.tintB, 1.0)})`;
+    const ior        = p(node.params.ior,        1.5);
+    const fresnelPow = p(node.params.fresnelPow, 3.0);
+    const dispersion = p(node.params.dispersion, 0.02);
+    return {
+      code: `    vec3 ${id}_color = glassShade(${rayDir}, ${normal}, ${hit}, ${bgColor}, ${tintColor}, ${ior}, ${fresnelPow}, ${dispersion});\n`,
+      outputVars: { color: `${id}_color` },
     };
   },
 };

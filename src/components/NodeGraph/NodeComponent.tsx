@@ -289,8 +289,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
-  const setNodeAssignOp    = useNodeGraphStore(s => s.setNodeAssignOp);
-  const setNodeAssignInit  = useNodeGraphStore(s => s.setNodeAssignInit);
+  const setNodeAssignOp      = useNodeGraphStore(s => s.setNodeAssignOp);
+  const setNodeAssignInit    = useNodeGraphStore(s => s.setNodeAssignInit);
+  const setHoveredParamHint  = useNodeGraphStore(s => s.setHoveredParamHint);
   const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
@@ -430,7 +431,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const m = (node.params.mode as string) ?? 'band';
     audioEngine.updateFreqParams(node.id, bs, range, m);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id, node.params._bands, node.params.freq_range, node.params.mode]);
+  }, [node.id, node.params?._bands, node.params?.freq_range, node.params?.mode]);
 
   // ── Audio Input: cleanup when node is removed ─────────────────────────────────
   React.useEffect(() => {
@@ -2258,11 +2259,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   // Generate code snippet for this node (pass empty inputVars for template display)
   const generatedCode = showCode ? def.generateGLSL(node, {}).code : '';
-  const hasOverride = typeof node.params.__codeOverride === 'string' && (node.params.__codeOverride as string).trim().length > 0;
+  const hasOverride = typeof node.params?.__codeOverride === 'string' && (node.params.__codeOverride as string).trim().length > 0;
   const codeSnippet = hasOverride ? (node.params.__codeOverride as string) : generatedCode;
   // The value shown in the editable textarea
   const codeEditValue = codeEditMode
-    ? (typeof node.params.__codeOverride === 'string' ? node.params.__codeOverride as string : generatedCode)
+    ? (typeof node.params?.__codeOverride === 'string' ? node.params.__codeOverride as string : generatedCode)
     : codeSnippet;
 
   // ─── Build tooltip for an input socket ─────────────────────────────────────
@@ -3235,8 +3236,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 key={key}
                 style={{ padding: '3px 10px 3px 16px', position: 'relative' }}
                 onMouseDown={e => e.stopPropagation()}
-                onMouseEnter={() => setHoveredSliderKey(key)}
-                onMouseLeave={() => setHoveredSliderKey(prev => prev === key ? null : prev)}
+                onMouseEnter={() => { setHoveredSliderKey(key); setHoveredParamHint(paramDef.hint ?? null); }}
+                onMouseLeave={() => { setHoveredSliderKey(prev => prev === key ? null : prev); setHoveredParamHint(null); }}
               >
                 {/* socket dot */}
                 {activeGroupId && (
