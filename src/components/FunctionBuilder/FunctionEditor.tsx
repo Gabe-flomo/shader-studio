@@ -55,10 +55,11 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           value={fn.name}
           onChange={e => updateFunction(fn.id, { name: e.target.value })}
           onClick={e => e.stopPropagation()}
+          size={Math.max(2, fn.name.length)}
           style={{
             background: 'none', border: 'none', color: '#cdd6f4',
             fontFamily: 'monospace', fontSize: '13px', fontWeight: 700,
-            width: '60px', outline: 'none', padding: 0,
+            width: 'auto', outline: 'none', padding: 0,
           }}
         />
 
