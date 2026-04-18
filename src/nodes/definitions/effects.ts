@@ -1690,46 +1690,85 @@ export const MotionBlurNode: NodeDefinition = {
 
 // ─── Chroma Shift ─────────────────────────────────────────────────────────────
 // Color-space chromatic aberration: takes an already-rendered vec3 color and
-// spreads the R and B channels apart from G based on radial UV distance.
-// No resampling — works directly on a color value.
+// spreads the R and B channels apart from G. Same modes as Chroma Aberration Auto
+// but works directly on a color value — no UV resampling required.
 
 export const ChromaShiftNode: NodeDefinition = {
   type: 'chromaShift',
   label: 'Chroma Shift',
   category: 'Effects',
-  description: 'Color-space chromatic aberration. Spreads R and B channels apart from G proportional to radial UV distance. Plug any vec3 color straight in — no UV resampling needed.',
+  description: 'Color-space chromatic aberration. Spreads R and B channels apart from G using the same radial/linear/twist/barrel modes as the UV-based CA node — but works directly on a color, no resampling needed.',
   inputs: {
     color:    { type: 'vec3',  label: 'Color'    },
     uv:       { type: 'vec2',  label: 'UV'       },
+    time:     { type: 'float', label: 'Time'     },
     strength: { type: 'float', label: 'Strength' },
   },
   outputs: {
     result: { type: 'vec3', label: 'Result' },
   },
-  defaultParams: { strength: 0.5, mode: 'radial' },
+  defaultParams: {
+    mode:       'radial',
+    strength:   0.5,
+    contrast:   1.5,
+    angle_deg:  0.0,
+    animate:    'false',
+    anim_speed: 0.4,
+  },
   paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
     mode: { label: 'Mode', type: 'select', options: [
-      { value: 'radial', label: 'Radial (UV edge)' },
-      { value: 'flat',   label: 'Flat (uniform)'   },
+      { value: 'radial',  label: 'Radial'  },
+      { value: 'linear',  label: 'Linear'  },
+      { value: 'twist',   label: 'Twist'   },
+      { value: 'barrel',  label: 'Barrel'  },
     ]},
+    strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 2.0,  step: 0.01 },
+    contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05 },
+    angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1    },
+    animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
+    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id    = node.id;
-    const col   = inputVars.color    || 'vec3(0.0)';
-    const uvVar = inputVars.uv       || 'g_uv';
-    const str   = inputVars.strength ?? p(node.params.strength, 0.5);
-    const mode  = (node.params.mode as string) ?? 'radial';
+    const id      = node.id;
+    const col     = inputVars.color    || 'vec3(0.0)';
+    const uvVar   = inputVars.uv       || 'g_uv';
+    const timeVar = inputVars.time     || '0.0';
+    const strIn   = inputVars.strength ?? p(node.params.strength, 0.5);
+    const cont    = p(node.params.contrast,   1.5);
+    const mode    = (node.params.mode as string) ?? 'radial';
+    const animate = (node.params.animate as string) ?? 'false';
+    const aspd    = p(node.params.anim_speed, 0.4);
+    const ang     = p(node.params.angle_deg,  0.0);
 
-    const edgeExpr = mode === 'radial'
-      ? `length(${uvVar}) * ${str}`
-      : str;
+    // Same animated strength expression as UV-based CA
+    const strExpr = animate === 'true'
+      ? `(${strIn} * (0.8 + 0.2 * sin(${timeVar} * ${aspd})))`
+      : strIn;
+
+    // Same offset vector as UV-based CA — we use its magnitude as the edge factor
+    let baseOff: string;
+    switch (mode) {
+      case 'linear':
+        baseOff = `(vec2(cos(${ang} * 3.14159 / 180.0), sin(${ang} * 3.14159 / 180.0)) * ${strExpr})`;
+        break;
+      case 'twist':
+        baseOff = `(vec2(${uvVar}.y - 0.5, 0.5 - ${uvVar}.x) * ${strExpr})`;
+        break;
+      case 'barrel':
+        baseOff = `(${uvVar} * dot(${uvVar}, ${uvVar}) * ${strExpr})`;
+        break;
+      default: // radial
+        baseOff = `(normalize(${uvVar} + vec2(0.00001)) * ${strExpr} * length(${uvVar}))`;
+    }
+
+    // Convert the 2D offset to a scalar edge factor (same contrast scaling as UV version)
+    const edgeExpr = `(length(${baseOff}) * ${cont} * 0.25)`;
 
     return {
       code: [
         `    vec3  ${id}_col    = ${col};\n`,
         `    float ${id}_edge   = ${edgeExpr};\n`,
-        // R and B diverge from G proportionally to edge factor
+        // R diverges from G upward, B diverges from G downward (same as UV version direction)
         `    float ${id}_r      = ${id}_col.r + (${id}_col.r - ${id}_col.g) * ${id}_edge;\n`,
         `    float ${id}_b      = ${id}_col.b + (${id}_col.b - ${id}_col.g) * ${id}_edge;\n`,
         `    vec3  ${id}_result = clamp(vec3(${id}_r, ${id}_col.g, ${id}_b), 0.0, 1.0);\n`,
