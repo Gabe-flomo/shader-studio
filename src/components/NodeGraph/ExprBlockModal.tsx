@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
+import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
+import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -403,6 +405,19 @@ export function ExprBlockModal({ node, onClose }: Props) {
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {savedFlash && (
               <span style={{ fontSize: '11px', color: '#a6e3a1', fontFamily: 'monospace' }}>✓ saved</span>
+            )}
+            {/* Open in Function Builder — only shown when saved from there */}
+            {Array.isArray(node.params.fnBuilderFns) && (node.params.fnBuilderFns as FnDef[]).length > 0 && (
+              <button
+                onClick={() => {
+                  useFunctionBuilder.getState().openNodeInBuilder(node.id, node.params.fnBuilderFns as FnDef[]);
+                  onClose();
+                }}
+                title="Re-open this expression in the Function Builder for editing"
+                style={{ ...BTN, color: '#89b4fa', borderColor: '#89b4fa55', background: '#89b4fa11' }}
+              >
+                ƒ( ) Edit in Builder
+              </button>
             )}
             <button
               onClick={handleSavePreset}

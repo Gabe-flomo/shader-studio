@@ -1,6 +1,6 @@
 import { useBreakpoint, isMobile } from '../hooks/useBreakpoint';
 
-type Page = 'studio' | 'learn' | 'shortcuts' | 'glsl';
+export type Page = 'studio' | 'learn' | 'shortcuts' | 'glsl' | 'fn';
 
 interface TopNavProps {
   page: Page;
@@ -102,6 +102,14 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         onClick={() => onPageChange('glsl')}
         label={mobile ? '</>' : '</> GLSL'}
         title="Raw GLSL Editor"
+      />
+
+      {/* Function Builder tab */}
+      <TabButton
+        active={page === 'fn'}
+        onClick={() => onPageChange('fn')}
+        label={mobile ? 'ƒ' : 'ƒ( ) Builder'}
+        title="Function Builder — write and plot named GLSL functions"
       />
     </div>
   );

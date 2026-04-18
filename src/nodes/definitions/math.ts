@@ -662,3 +662,115 @@ export const WeightedAverageNode: NodeDefinition = {
     };
   },
 };
+
+export const CompareNode: NodeDefinition = {
+  type: 'compare',
+  label: 'Compare',
+  category: 'Conditionals',
+  description: 'Compares two floats and outputs a 0/1 mask (soft edges via smoothing).',
+  inputs: {
+    a: { label: 'A', type: 'float' },
+    b: { label: 'B', type: 'float' },
+  },
+  outputs: { mask: { label: 'Mask', type: 'float' } },
+  defaultParams: { operator: '>', smoothing: 0.0 },
+  paramDefs: {
+    operator: {
+      label: 'Operator',
+      type: 'select',
+      options: [
+        { value: '>', label: '>' },
+        { value: '<', label: '<' },
+        { value: '>=', label: '>=' },
+        { value: '<=', label: '<=' },
+        { value: '≈', label: '≈ (approx)' },
+      ],
+    },
+    smoothing: { label: 'Smoothing', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+  },
+  generateGLSL(node, inputs) {
+    const id   = node.id.replace(/-/g, '_');
+    const aV   = inputs.a   ?? '0.0';
+    const bV   = inputs.b   ?? '0.0';
+    const op   = (node.params.operator as string) ?? '>';
+    const soft = (node.params.smoothing as number) ?? 0.0;
+
+    let expr: string;
+    if (soft > 0) {
+      const h = p(soft, 0.0);
+      if (op === '>') {
+        expr = `smoothstep(${bV} - ${h}, ${bV} + ${h}, ${aV})`;
+      } else if (op === '<') {
+        expr = `1.0 - smoothstep(${bV} - ${h}, ${bV} + ${h}, ${aV})`;
+      } else if (op === '>=') {
+        expr = `smoothstep(${bV} - ${h}, ${bV}, ${aV})`;
+      } else if (op === '<=') {
+        expr = `1.0 - smoothstep(${bV}, ${bV} + ${h}, ${aV})`;
+      } else {
+        // ≈
+        expr = `1.0 - smoothstep(0.0, ${h}, abs(${aV} - ${bV}))`;
+      }
+    } else {
+      if (op === '>') {
+        expr = `step(${bV}, ${aV}) * (1.0 - step(${aV}, ${bV}))`;
+      } else if (op === '<') {
+        expr = `step(${aV}, ${bV}) * (1.0 - step(${bV}, ${aV}))`;
+      } else if (op === '>=') {
+        expr = `step(${bV}, ${aV})`;
+      } else if (op === '<=') {
+        expr = `step(${aV}, ${bV})`;
+      } else {
+        // ≈ hard: exact equality
+        expr = `1.0 - step(0.001, abs(${aV} - ${bV}))`;
+      }
+    }
+
+    return {
+      code: `    float ${id}_mask = ${expr};\n`,
+      outputVars: { mask: `${id}_mask` },
+    };
+  },
+};
+
+export const SelectNode: NodeDefinition = {
+  type: 'select',
+  label: 'Select',
+  category: 'Conditionals',
+  description: 'Selects between two values using a mask (0 → ifFalse, 1 → ifTrue).',
+  inputs: {
+    mask:    { label: 'Mask',     type: 'float' },
+    ifTrue:  { label: 'If True',  type: 'vec3' },
+    ifFalse: { label: 'If False', type: 'vec3' },
+  },
+  outputs: { result: { label: 'Result', type: 'vec3' } },
+  defaultParams: { outputType: 'float' },
+  paramDefs: {
+    outputType: {
+      label: 'Output Type',
+      type: 'select',
+      options: [
+        { value: 'float', label: 'float' },
+        { value: 'vec2',  label: 'vec2' },
+        { value: 'vec3',  label: 'vec3' },
+      ],
+    },
+  },
+  generateGLSL(node, inputs) {
+    const id      = node.id.replace(/-/g, '_');
+    const mask    = inputs.mask    ?? '0.0';
+    const ifTrue  = inputs.ifTrue  ?? '0.0';
+    const ifFalse = inputs.ifFalse ?? '0.0';
+    const outType = (node.params.outputType as string) ?? 'float';
+
+    const zeroFor = (t: string) =>
+      t === 'float' ? '0.0' : t === 'vec2' ? 'vec2(0.0)' : 'vec3(0.0)';
+
+    const trueVal  = ifTrue  !== '0.0' ? ifTrue  : zeroFor(outType);
+    const falseVal = ifFalse !== '0.0' ? ifFalse : zeroFor(outType);
+
+    return {
+      code: `    ${outType} ${id}_result = mix(${falseVal}, ${trueVal}, clamp(${mask}, 0.0, 1.0));\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};

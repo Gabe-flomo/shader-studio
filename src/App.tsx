@@ -9,6 +9,9 @@ import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ShortcutsPage } from './components/ShortcutsPage';
 import { GLSLPage } from './components/GLSLPage';
+import { FunctionBuilder } from './components/FunctionBuilder';
+import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
+import type { Page } from './components/TopNav';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useNodeGraphStore } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
@@ -127,7 +130,20 @@ function App() {
   const [previewWidth, setPreviewWidth] = useState(() => getDefaultPreviewWidth(bp));
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
-  const [page, setPage]                 = useState<'studio' | 'learn' | 'shortcuts' | 'glsl'>('studio');
+  const [page, setPage]                 = useState<Page>('studio');
+
+  // Navigate to Function Builder when an ExprBlock requests it
+  useEffect(() => {
+    return useFunctionBuilder.subscribe(
+      s => s.requestNavToBuilder,
+      (requested) => {
+        if (requested) {
+          setPage('fn');
+          useFunctionBuilder.getState().clearNavRequest();
+        }
+      },
+    );
+  }, []);
   const [previewFloated, setPreviewFloated] = useState(false);
   const [floatPos, setFloatPos]   = useState({ x: 40, y: 60 });
   const [floatSize, setFloatSize] = useState({ w: 480, h: 360 });
@@ -682,8 +698,13 @@ function App() {
 
       {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
       {page === 'shortcuts' && <ShortcutsPage />}
+      {page === 'fn' && (
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <FunctionBuilder onNavigateToStudio={() => setPage('studio')} />
+        </div>
+      )}
 
-      <div style={{ display: (page === 'studio' || page === 'glsl') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined }}>
+      <div style={{ display: (page === 'studio' || page === 'glsl') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
         {/* Left: Node Palette — hidden on GLSL page */}
         {page === 'studio' && (

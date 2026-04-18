@@ -78,7 +78,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // Preferred display order for categories — alphabetical, with Output pinned last
 const CATEGORY_ORDER = [
-  'Color', 'Combiners', 'Effects', 'Loops', 'Math', 'Noise',
+  'Color', 'Combiners', 'Conditionals', 'Effects', 'Loops', 'Math', 'Noise',
   'Presets', 'Science', 'Spaces', 'Sources', 'Transforms', '2D Primitives',
   '3D Primitives', '3D Transforms', '3D Scene',
   'Output',
@@ -88,6 +88,7 @@ const CATEGORY_ORDER = [
 type ExKey = keyof typeof EXAMPLE_GRAPHS;
 
 const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
+  { label: 'Conditionals',    color: '#a6e3a1', keys: ['conditionalCircle','conditionalGlowRing','conditionalAnimThreshold','conditionalBrightnessGate','conditionalApproxMatch'] as ExKey[] },
   { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'] as ExKey[] },
   { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupAdditiveRings','groupProductRings','groupCarryRotate','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
   { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','domainWarpFractal','newtonFractalClassic','lyapunovMarkus','apollonianGasket'] as ExKey[] },
