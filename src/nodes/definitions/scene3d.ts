@@ -402,6 +402,8 @@ function emitSharedMarchCode(
     `    vec3  ${id}_hp_raw  = ${id}_ro + ${id}_t * ${id}_rd;\n`,
     `    vec3  ${id}_hp  = ${warp(`${id}_hp_raw`)};\n`,
     `    float ${id}_e   = 0.001;\n`,
+    // Normal estimation: perturb the RAW (Euclidean) position, apply warp, then call SDF.
+    // This computes the gradient of (sceneFn ∘ warpFn) w.r.t. world-space position.
     `    vec3  ${id}_n   = normalize(vec3(\n`,
     `        ${sceneFn}(${warp(`${id}_hp_raw+vec3(${id}_e,0.0,0.0)`)}) - ${sceneFn}(${warp(`${id}_hp_raw-vec3(${id}_e,0.0,0.0)`)}),\n`,
     `        ${sceneFn}(${warp(`${id}_hp_raw+vec3(0.0,${id}_e,0.0)`)}) - ${sceneFn}(${warp(`${id}_hp_raw-vec3(0.0,${id}_e,0.0)`)}),\n`,
@@ -432,7 +434,7 @@ const COMMON_MARCH_PARAM_DEFS = {
 
 export const RayMarchNode: NodeDefinition = {
   type: 'rayMarch', label: 'Ray March', category: '3D Scene',
-  description: 'Camera + sphere-march. Outputs raw hit data (dist, depth, normal, iter, hit) — no color. Connect to palette/math nodes for custom coloring.',
+  description: 'Camera + sphere-march. Outputs raw hit data (dist, depth, normal, iter, hit) — no color. Connect to palette/math nodes for custom coloring. Wire a SpaceWarpGroup to spacewarp to bend the entire scene coordinate field inside the march loop.',
   inputs: {
     scene:     { type: 'scene3d',     label: 'Scene' },
     spacewarp: { type: 'spacewarp3d', label: 'Space Warp' },
@@ -475,7 +477,7 @@ export const RayMarchNode: NodeDefinition = {
     const rotSpeed = inputVars.rotSpeed || p(node.params.rotSpeed, 0.0);
     const fov      = inputVars.fov      || p(node.params.fov,      1.5);
     const maxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 64));
-    const maxDist  = inputVars.maxDist  || p(node.params.maxDist,  20.0);
+    const maxDist  = inputVars.maxDist   || p(node.params.maxDist,  20.0);
 
     const code = emitSharedMarchCode(id, uv, time, sceneFn, camDist, camAngle, rotSpeed, fov, maxSteps, maxDist, warpFn);
 
