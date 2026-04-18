@@ -115,6 +115,7 @@ export {
   CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
+  CompareNode, SelectNode,
 } from './math';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
@@ -191,6 +192,7 @@ import {
   CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
+  CompareNode, SelectNode,
 } from './math';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -469,6 +471,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sign: SignNode,
   step: StepNode,
   weightedAverage: WeightedAverageNode,
+  compare: CompareNode,
+  select: SelectNode,
   // Animation
   sineLFO: SineLFONode,
   squareLFO: SquareLFONode,

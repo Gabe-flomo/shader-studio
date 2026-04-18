@@ -56,6 +56,27 @@ export const GLSL_OP_REPEAT_POLAR = `vec2 opRepeatPolar(vec2 p, float n) {
     return vec2(cos(a), sin(a)) * length(p);
 }`;
 
+// Always-available noise and rotation helpers — included in every shader preamble.
+// Exported so the Function Builder can import the same block.
+export const BUILTIN_HELPERS_GLSL = `vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    return vec2(v.x * cos(angle) - v.y * sin(angle),
+                v.x * sin(angle) + v.y * cos(angle));
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }`;
+
 // ── Runtime output-type helper ────────────────────────────────────────────────
 
 /**
@@ -1706,26 +1727,7 @@ ${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? text
 varying vec2 vUv;
 
 // ── Always-available helpers (noise, rotation) ───────────────────────────────
-vec2 noiseHash2(vec2 p) {
-    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
-}
-float noiseHash1(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-float valueNoise(vec2 p) {
-    vec2 i = floor(p); vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
-               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
-}
-// Rotate a 2D vector by angle (radians)
-vec2 rotate(vec2 v, float angle) {
-    return vec2(v.x * cos(angle) - v.y * sin(angle),
-                v.x * sin(angle) + v.y * cos(angle));
-}
-// 2D rotation matrix — returns mat2; use as: p.xy = p.xy * rot2D(angle)
-mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+${BUILTIN_HELPERS_GLSL}
 // ─────────────────────────────────────────────────────────────────────────
 
 ${functionCode}
