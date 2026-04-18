@@ -1761,17 +1761,19 @@ export const ChromaShiftNode: NodeDefinition = {
         baseOff = `(normalize(${uvVar} + vec2(0.00001)) * ${strExpr} * length(${uvVar}))`;
     }
 
-    // Convert the 2D offset to a scalar edge factor (same contrast scaling as UV version)
-    const edgeExpr = `(length(${baseOff}) * ${cont} * 0.25)`;
-
     return {
       code: [
-        `    vec3  ${id}_col    = ${col};\n`,
-        `    float ${id}_edge   = ${edgeExpr};\n`,
-        // R diverges from G upward, B diverges from G downward (same as UV version direction)
-        `    float ${id}_r      = ${id}_col.r + (${id}_col.r - ${id}_col.g) * ${id}_edge;\n`,
-        `    float ${id}_b      = ${id}_col.b + (${id}_col.b - ${id}_col.g) * ${id}_edge;\n`,
-        `    vec3  ${id}_result = clamp(vec3(${id}_r, ${id}_col.g, ${id}_b), 0.0, 1.0);\n`,
+        `    vec3  ${id}_col  = ${col};\n`,
+        // Luminance of the input — works on any color including pure white/black
+        `    float ${id}_luma = dot(${id}_col, vec3(0.299, 0.587, 0.114));\n`,
+        // Screen-space gradient of luma — large at shape edges, zero in flat regions
+        `    vec2  ${id}_grad = vec2(dFdx(${id}_luma), dFdy(${id}_luma));\n`,
+        // Aberration offset vector (direction + magnitude) from chosen mode
+        `    vec2  ${id}_off  = ${baseOff};\n`,
+        // Fringe = gradient projected onto offset direction × magnitude × contrast
+        // Positive at one side of an edge, negative at the other → R-B split
+        `    float ${id}_fringe = dot(${id}_grad, normalize(${id}_off + vec2(0.00001))) * length(${id}_off) * ${cont};\n`,
+        `    vec3  ${id}_result = clamp(${id}_col + vec3(${id}_fringe, 0.0, -${id}_fringe), 0.0, 1.0);\n`,
       ].join(''),
       outputVars: { result: `${id}_result` },
     };
