@@ -105,7 +105,7 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
       setShaderSource(source);
     }, DEBOUNCE_MS);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [functions, activeId, xRange, yRange]);
+  }, [functions, activeId, xRange, yRange, savedFunctionDefs]);
 
   const handlePreviewError = useCallback((errors: string[]) => {
     setGlslErrors(prev => {

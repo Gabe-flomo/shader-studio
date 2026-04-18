@@ -112,7 +112,16 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     ];
     const implicit = new Set(['t', ...allFnNames]);
     const freeVars = detectFreeVars(expr, implicit);
-    const inputs = freeVars.map(name => ({ name, type: 'float', slider: null }));
+
+    // Infer GLSL type for well-known variable names; default to float
+    const VEC2_NAMES = new Set(['uv', 'st', 'pos', 'coord', 'p2']);
+    const VEC3_NAMES = new Set(['col', 'color', 'p3', 'rgb', 'normal']);
+    const inferType = (name: string): 'float' | 'vec2' | 'vec3' => {
+      if (VEC2_NAMES.has(name)) return 'vec2';
+      if (VEC3_NAMES.has(name)) return 'vec3';
+      return 'float';
+    };
+    const inputs = freeVars.map(name => ({ name, type: inferType(name), slider: null }));
 
     // Emit all user function definitions. Saved library fns come first (session overrides by name).
     const sessionNames = new Set(functions.map(f => f.name));
