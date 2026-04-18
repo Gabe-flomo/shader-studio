@@ -1529,6 +1529,23 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
               >✕</button>
             )}
+            {/* Delete button — only for special group types (sceneGroup, marchLoopGroup) */}
+            {(isSceneGroup || isMarchLoopGroup) && (
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => {
+                  e.stopPropagation();
+                  const label = isSceneGroup ? 'Scene Group' : 'March Loop Group';
+                  if (window.confirm(`Delete ${label} and all its nodes?`)) {
+                    removeNode(node.id);
+                  }
+                }}
+                title={`Delete ${isSceneGroup ? 'Scene Group' : 'March Loop Group'}`}
+                style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+              >✕</button>
+            )}
           </div>
         </div>
 

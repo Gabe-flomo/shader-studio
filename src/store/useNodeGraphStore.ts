@@ -286,6 +286,8 @@ interface NodeGraphState {
   // Fit-view callback — registered by NodeGraph so App/shortcuts can trigger it
   _fitViewCallback: (() => void) | null;
   registerFitView: (cb: () => void) => void;
+  _viewportCenterGetter: (() => { x: number; y: number }) | null;
+  registerViewportCenterGetter: (cb: () => { x: number; y: number }) => void;
 
   // Swap mode — user shift-clicked a node; next palette click replaces it
   swapTargetNodeId: string | null;
@@ -797,6 +799,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   previewNodeId: null,
   nodeHighlightFilter: null,
   _fitViewCallback: null,
+  _viewportCenterGetter: null,
   swapTargetNodeId: null,
   searchPaletteOpen: false,
   activeGroupId: null,
@@ -1455,6 +1458,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ audioMasterVolume: Math.max(0, Math.min(1, v)) });
   },
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
+  registerViewportCenterGetter: (cb) => set({ _viewportCenterGetter: cb }),
   setSwapTargetNodeId: (id) => set({ swapTargetNodeId: id }),
   setSearchPaletteOpen: (open) => set({ searchPaletteOpen: open }),
 
@@ -2074,10 +2078,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         get().spawnGraph(
           position,
           [
-            { type: 'sceneGroup',  relPos: { x: 0,   y: 0 } },
-            { type: 'rayMarch',    relPos: { x: 380, y: 0 } },
+            { type: 'marchCamera',    relPos: { x: -560, y: 0 } },
+            { type: 'sceneGroup',     relPos: { x: -200, y: 0 } },
+            { type: 'marchLoopGroup', relPos: { x: 200,  y: 0 } },
           ],
-          [{ from: 0, fromKey: 'scene', to: 1, toKey: 'scene' }],
+          [
+            { from: 0, fromKey: 'ro',    to: 2, toKey: 'ro'    },
+            { from: 0, fromKey: 'rd',    to: 2, toKey: 'rd'    },
+            { from: 1, fromKey: 'scene', to: 2, toKey: 'scene' },
+          ],
         );
         return undefined;
       }

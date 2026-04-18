@@ -160,7 +160,7 @@ function rmPalVec(v: number[]): string {
 export const RaymarchNode: NodeDefinition = {
   type: 'raymarch3d',
   label: 'Raymarch 3D',
-  category: 'Presets',
+  category: 'Fractals',
   description: [
     '3D raymarcher with configurable scene, camera, and lighting. ',
     'Scene: sphere, box, torus, or repeat+blend. ',
@@ -469,7 +469,7 @@ const MANDELBULB_GLSL = SDF3D_GLSL + CAMERA3D_GLSL + NOISE3D_GLSL + MANDELBULB_D
 export const MandelbulbNode: NodeDefinition = {
   type: 'mandelbulb',
   label: 'Mandelbulb 3D',
-  category: 'Presets',
+  category: 'Fractals',
   description: [
     '3D Mandelbulb fractal (IQ formulation) via distance estimation and raymarching. ',
     'orbit output is vec3 — wire to MakeVec3/palette for coloring. ',
@@ -628,7 +628,7 @@ const VOLUME_CLOUDS_GLSL = CLOUD_GLSL + CAMERA3D_GLSL;
 export const VolumeCloudsNode: NodeDefinition = {
   type: 'volumeClouds',
   label: 'Volume Clouds',
-  category: 'Presets',
+  category: 'Fractals',
   description: [
     'Volumetric cloud slab via raymarching + turbulence density field. ',
     'Beer\'s law absorption (absorptionR/G/B=0 → no change) and HG phase (phaseG=0 → isotropic = original behavior).',

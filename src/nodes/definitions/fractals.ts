@@ -96,7 +96,7 @@ const MANDELBROT_GLSL = FRACTAL_GLSL_HELPERS + '\n' + DS_GLSL_HELPERS + '\n' + P
 export const MandelbrotNode: NodeDefinition = {
   type: 'mandelbrot',
   label: 'Mandelbrot / Julia',
-  category: 'Presets',
+  category: 'Fractals',
   description: [
     'Generalized Mandelbrot (z^k + c) or Julia set. ',
     'Smooth coloring via IQ log/log formula. ',
@@ -508,7 +508,7 @@ const IFS_GLSL = IFS_HELPERS + '\n' + FERN_TRANSFORMS + '\n'
 export const IFSNode: NodeDefinition = {
   type: 'ifs',
   label: 'IFS Fractal',
-  category: 'Presets',
+  category: 'Fractals',
   description: [
     'Iterated Function System fractal via chaos game simulation. ',
     'Presets: Sierpinski triangle, Barnsley Fern, Koch, Dragon curve. ',
@@ -646,7 +646,7 @@ const NEWTON_GLSL = FRACTAL_GLSL_HELPERS + '\n' + NEWTON_EXTRAS + '\n' + PALETTE
 export const NewtonFractalNode: NodeDefinition = {
   type: 'newtonFractal',
   label: 'Newton Fractal',
-  category: 'Presets',
+  category: 'Fractals',
   description: 'Newton\'s method root-finding on complex polynomials. Color = which root + convergence speed.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'     },
@@ -791,7 +791,7 @@ export const NewtonFractalNode: NodeDefinition = {
 export const LyapunovNode: NodeDefinition = {
   type: 'lyapunov',
   label: 'Lyapunov Fractal',
-  category: 'Presets',
+  category: 'Fractals',
   description: 'Lyapunov exponent of the logistic map with alternating r-values. Blue=stable, gold=chaotic.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
@@ -901,7 +901,7 @@ const APOLLONIAN_GLSL = FRACTAL_GLSL_HELPERS + '\n' + PALETTE_GLSL_FN;
 export const ApollonianNode: NodeDefinition = {
   type: 'apollonian',
   label: 'Apollonian Gasket',
-  category: 'Presets',
+  category: 'Fractals',
   description: 'Circle-inversion fractal (Apollonian gasket / Kleinian group limit set). Outputs SDF and color.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },

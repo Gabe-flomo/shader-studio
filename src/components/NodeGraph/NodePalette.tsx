@@ -30,6 +30,14 @@ const HIDDEN_NODES = new Set([
   'spaceWarpGroup', // no examples remain; hidden but kept for backward compat
   'marchLoopInputs', // auto-added to group subgraph; not user-selectable
   'marchLoopOutput', // auto-added to group subgraph; not user-selectable
+  // Non-fractal nodes previously in Presets — hidden for cleaner palette
+  'rotatingLinesLoop',
+  'accumulateLoop',
+  'flowField',
+  'circlePack',
+  'raymarch3d',
+  'volumeClouds',
+  'rayMarch',      // superseded by sceneGroup+marchLoopGroup+marchCamera rig
 ]);
 
 // ── Math node ordering & sub-groups ──────────────────────────────────────────
@@ -71,7 +79,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Combiners:       '#cba6f7',  // purple
   Spaces:          '#f2cdcd',  // rose — UV space warp nodes
   Science:         '#94e2d5',  // teal
-  Presets:         '#f9e2af',  // warm gold — these are the complex self-contained nodes
+  Fractals:        '#cba6f7',  // purple — fractal preset nodes
   Output:          '#94e2d5',  // teal
   '3D Primitives': '#f5c2e7',  // pink
   '3D Transforms': '#f5c2e7',  // pink
@@ -82,8 +90,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 const CATEGORY_ORDER = [
   '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
   '3D Primitives', '3D Scene', '3D Transforms',
-  'Animation', 'Color', 'Combiners', 'Conditionals', 'Effects', 'Loops', 'Math', 'Noise',
-  'Presets', 'Science', 'Sources', 'Spaces', 'Transforms', 'Utility',
+  'Animation', 'Color', 'Combiners', 'Conditionals', 'Effects', 'Fractals', 'Loops', 'Math', 'Noise',
+  'Science', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
 
@@ -143,6 +151,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     ...rawCategories.filter(c => !CATEGORY_ORDER.includes(c)).sort(),
   ];
 
+  const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
   const loadExampleGraph = useNodeGraphStore(s => s.loadExampleGraph);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
@@ -268,8 +277,9 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
       onNodeAdded?.();
       return;
     }
-    const x = 200 + Math.random() * 120;
-    const y = 120 + Math.random() * 200;
+    const center = getViewportCenter?.() ?? { x: 300, y: 200 };
+    const x = center.x + (Math.random() - 0.5) * 60;
+    const y = center.y + (Math.random() - 0.5) * 60;
     addNode(type, { x, y });
     onNodeAdded?.();
   };

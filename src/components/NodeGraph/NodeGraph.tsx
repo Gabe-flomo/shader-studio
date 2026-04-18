@@ -51,6 +51,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const previewNodeId         = useNodeGraphStore(s => s.previewNodeId);
   const nodeHighlightFilter   = useNodeGraphStore(s => s.nodeHighlightFilter);
   const registerFitView       = useNodeGraphStore(s => s.registerFitView);
+  const registerViewportCenterGetter = useNodeGraphStore(s => s.registerViewportCenterGetter);
   const addNode               = useNodeGraphStore(s => s.addNode);
   const setSearchPaletteOpen  = useNodeGraphStore(s => s.setSearchPaletteOpen);
 
@@ -692,6 +693,19 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   // Register fitView with the store so shortcuts / App.tsx can call it
   useEffect(() => { registerFitView(handleFitView); }, [registerFitView, handleFitView]);
+
+  useEffect(() => {
+    registerViewportCenterGetter(() => {
+      const el = canvasRef.current;
+      if (!el) return { x: 300, y: 200 };
+      const rect = el.getBoundingClientRect();
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const z = zoomRef.current;
+      const p = panRef.current ?? { x: 0, y: 0 };
+      return { x: (cx - p.x) / z, y: (cy - p.y) / z };
+    });
+  }, [registerViewportCenterGetter]);
 
   // ── Highlight filter — compute which node IDs match the current filter ───────
   const highlightedIds: Set<string> | null = React.useMemo(() => {
