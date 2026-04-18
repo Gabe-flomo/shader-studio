@@ -312,25 +312,49 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
             onError={handlePreviewError}
           />
 
-          {/* Axis labels — only in float (2D plot) mode */}
-          {isFloat && <AxisLabels xRange={xRange} yRange={yRange} />}
+          {/* Axis labels — only in float (2D plot) mode, hidden when errors */}
+          {isFloat && !hasErrors && <AxisLabels xRange={xRange} yRange={yRange} />}
 
-          {/* Error overlay */}
+          {/* Error overlay — centred, covers canvas, cleans up raw GLSL messages */}
           {hasErrors && (
             <div style={{
               position: 'absolute',
-              bottom: 0, left: 0, right: 0,
-              background: 'rgba(30, 5, 5, 0.92)',
-              borderTop: '1px solid #5a1a1a',
-              padding: '6px 10px',
-              maxHeight: '120px',
-              overflowY: 'auto',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              background: 'rgba(11,11,19,0.88)',
+              backdropFilter: 'blur(2px)',
+              padding: '24px',
+              pointerEvents: 'none',
             }}>
-              {glslErrors.slice(0, 6).map((e, i) => (
-                <div key={i} style={{ fontSize: '10px', color: '#f38ba8', fontFamily: 'monospace', lineHeight: 1.6 }}>
-                  {e}
-                </div>
-              ))}
+              <span style={{
+                fontSize: '11px', fontWeight: 700, color: '#f38ba8',
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                marginBottom: '4px',
+              }}>
+                ⚠ compile error
+              </span>
+              {glslErrors.slice(0, 5).map((raw, i) => {
+                // Strip "ERROR: 0:N: " prefix from WebGL log lines
+                const msg = raw.replace(/^ERROR:\s*\d+:\d+:\s*/i, '').trim();
+                if (!msg) return null;
+                return (
+                  <div key={i} style={{
+                    fontSize: '11px',
+                    color: '#f38ba8cc',
+                    fontFamily: 'monospace',
+                    lineHeight: 1.6,
+                    textAlign: 'center',
+                    maxWidth: '380px',
+                    wordBreak: 'break-word',
+                  }}>
+                    {msg}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

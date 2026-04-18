@@ -163,9 +163,11 @@ interface HelpersPanelProps {
   autoWrap: boolean;
   onToggleAutoWrap: () => void;
   onInsert: (text: string) => void;
+  /** Called when a library chip is clicked — ensures fn body is in the session, then inserts call. */
+  onInsertLibraryFn: (fn: FnDef) => void;
 }
 
-function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert }: HelpersPanelProps) {
+function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertLibraryFn }: HelpersPanelProps) {
   const [open, setOpen] = useState(false);
   const { savedFunctionDefs, deleteSavedFunctionDef } = useFunctionBuilder();
 
@@ -228,13 +230,12 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert }: Helpers
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                 {savedFunctionDefs.map((fn: FnDef) => {
-                  const call = fn.returnType === 'float' ? `${fn.name}(x, 0.0)` : `${fn.name}(uv, 0.0)`;
                   const sig  = fn.returnType === 'float' ? `(float x, float t)` : `(vec2 uv, float t)`;
                   return (
                     <div key={fn.id} style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
                       <button
-                        onMouseDown={e => { e.preventDefault(); onInsert(call); }}
-                        title={`${fn.returnType} ${fn.name}${sig}\nInserts: ${call}`}
+                        onMouseDown={e => { e.preventDefault(); onInsertLibraryFn(fn); }}
+                        title={`${fn.returnType} ${fn.name}${sig}`}
                         style={{
                           background: '#11111b',
                           border: '1px solid #a6e3a144',
@@ -370,10 +371,26 @@ export function FunctionList({ glslErrors }: Props) {
     });
   };
 
+  /** Insert a library fn: loads its body into the session (if absent), then inserts the call. */
+  const handleLibraryFnInsert = (fn: FnDef) => {
+    useFunctionBuilder.getState().addFunctionFromDef(fn);
+    const call = fn.returnType === 'float' ? `${fn.name}(x, 0.0)` : `${fn.name}(uv, 0.0)`;
+    insert(call);
+  };
+
   const fnErrors = (id: string) => {
     const fn = functions.find(f => f.id === id);
     if (!fn) return [];
-    return glslErrors.filter(e => e.toLowerCase().includes(fn.name + '('));
+    const name = fn.name.toLowerCase();
+    return glslErrors.filter(e => {
+      const el = e.toLowerCase();
+      // Match "fnName(" call sites, "'fnName'" quoted in error messages,
+      // or "fnName " at a word boundary (type/var errors)
+      return el.includes(`${name}(`) ||
+             el.includes(`'${name}'`) ||
+             el.includes(`"${name}"`) ||
+             new RegExp(`\\b${name}\\b`).test(el);
+    });
   };
 
   const activeFn = functions.find(f => f.id === activeId);
@@ -400,6 +417,7 @@ export function FunctionList({ glslErrors }: Props) {
         autoWrap={autoWrap}
         onToggleAutoWrap={() => setAutoWrap(v => !v)}
         onInsert={insert}
+        onInsertLibraryFn={handleLibraryFnInsert}
       />
 
       <div style={{ flexShrink: 0, padding: '6px 8px', borderTop: '1px solid #313244' }}>

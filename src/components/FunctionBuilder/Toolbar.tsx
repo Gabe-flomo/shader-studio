@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
-import { normalizeBodyExpr, emitFunction } from './glslCompiler';
+import { emitFunction } from './glslCompiler';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
 interface Props {
@@ -39,36 +39,12 @@ function RangeInput({ label, value, onChange }: { label: string; value: number; 
   );
 }
 
-const GLSL_BUILTINS = new Set([
-  'sin','cos','tan','asin','acos','atan','sinh','cosh','tanh',
-  'sqrt','pow','exp','exp2','log','log2','abs','sign','floor',
-  'ceil','fract','mod','min','max','clamp','mix','smoothstep','step',
-  'length','dot','cross','normalize','reflect','refract','round','trunc',
-  'radians','degrees','inversesqrt','distance','faceforward',
-  'vec2','vec3','vec4','float','int','bool','uint',
-  'mat2','mat3','mat4','ivec2','ivec3','ivec4','bvec2','bvec3','bvec4',
-  'PI','TAU','u_time','u_resolution','u_xMin','u_xMax','u_yMin','u_yMax',
-  'vUv','smin','sdBox','sdSegment','opRepeat','opRepeatPolar',
-  // common GLSL identifiers that aren't user vars
-  'true','false','void','return','if','else','for','while','break','continue',
-]);
-
-function detectFreeVars(expr: string, implicit: Set<string>): string[] {
-  const seen = new Set<string>();
-  const free: string[] = [];
-  const matches = expr.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) ?? [];
-  for (const id of matches) {
-    if (seen.has(id) || GLSL_BUILTINS.has(id) || implicit.has(id)) continue;
-    seen.add(id);
-    free.push(id);
-  }
-  return free;
-}
 
 export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
   const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId, savedGroups, saveGroup, loadGroup, deleteGroup, savedFunctionDefs } = useFunctionBuilder();
   const addNode = useNodeGraphStore(s => s.addNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const nodes = useNodeGraphStore(s => s.nodes);
 
   const activeFn = functions.find(f => f.id === activeId) ?? functions[0];
@@ -104,13 +80,16 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
   const handleSave = () => {
     if (!activeFn) return;
 
-    const expr = normalizeBodyExpr(activeFn.body);
-    // Only t is auto-injected in ExprBlock scope; x, uv, etc. become sockets
-    const implicit = new Set(['t']);
-    const freeVars = detectFreeVars(expr, implicit);
-    const inputs = freeVars.map(name => ({ name, type: 'float', slider: null }));
+    // ── Input socket: x (float) for float fns, uv (vec2) for vec2/vec3 ──────────
+    const primaryInput = activeFn.returnType === 'float' ? 'x' : 'uv';
+    const inputType    = activeFn.returnType === 'float' ? 'float' : 'vec2';
+    const inputs = [{ name: primaryInput, type: inputType, slider: null }];
 
-    // Emit all user function definitions. Saved library fns come first (session overrides by name).
+    // ── Call expression: directly invoke the named function ──────────────────────
+    // t is auto-injected by ExprBlock as float t = u_time
+    const callExpr = `${activeFn.name}(${primaryInput}, t)`;
+
+    // ── GLSL function definitions — library fns first, session overrides by name ─
     const sessionNames = new Set(functions.map(f => f.name));
     const libFns = savedFunctionDefs.filter(f => !sessionNames.has(f.name));
     const glslFunctions = [...libFns.map(emitFunction), ...functions.map(emitFunction)].join('\n\n');
@@ -118,9 +97,9 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     const params = {
       outputType: activeFn.returnType,
       inputs,
-      lines: [] as Array<{ lhs: string; op: string; rhs: string }>,
-      result: expr,
-      expr,
+      lines: [],               // no intermediate warp lines — call goes straight to result
+      result: callExpr,
+      expr: callExpr,
       glslFunctions,
       // Raw fn defs — used to re-open this ExprBlock in the Function Builder
       fnBuilderFns: functions.map(({ name, returnType, body }) => ({ name, returnType, body })),
@@ -131,6 +110,7 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
       const node = nodes.find(n => n.id === linkedBlockId);
       if (node) {
         updateNodeParams(linkedBlockId, params);
+        updateNodeSockets(linkedBlockId, inputs, activeFn.returnType);
         onNavigateToStudio?.();
         return;
       }

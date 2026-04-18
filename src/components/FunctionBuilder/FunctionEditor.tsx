@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import type { FnDef } from './useFunctionBuilder';
 import { useFunctionBuilder, TYPE_DEFAULTS } from './useFunctionBuilder';
 import { CURVE_COLORS } from './glslCompiler';
+import { GlslTextarea } from './GlslTextarea';
 
 interface Props {
   fn: FnDef;
@@ -15,7 +16,6 @@ const RETURN_TYPES = ['float', 'vec2', 'vec3'] as const;
 
 export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }: Props) {
   const { updateFunction, removeFunction, setActiveId, saveFunctionDef } = useFunctionBuilder();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [r, g, b] = CURVE_COLORS[index % CURVE_COLORS.length];
   const dotColor = `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
@@ -58,9 +58,13 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           style={{
             background: 'none', border: 'none', color: '#cdd6f4',
             fontFamily: 'monospace', fontSize: '13px', fontWeight: 700,
-            width: '60px', outline: 'none', padding: 0,
+            flex: 1, minWidth: 0, outline: 'none', padding: 0,
           }}
         />
+
+        {hasError && (
+          <span title={errors[0]} style={{ fontSize: '10px', color: '#f38ba8', flexShrink: 0 }}>⚠</span>
+        )}
 
         <select
           value={fn.returnType}
@@ -81,12 +85,6 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
         >
           {RETURN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-
-        <div style={{ flex: 1 }} />
-
-        {hasError && (
-          <span title={errors[0]} style={{ fontSize: '10px', color: '#f38ba8', flexShrink: 0 }}>⚠</span>
-        )}
 
         <button
           onClick={e => { e.stopPropagation(); saveFunctionDef(fn); }}
@@ -114,31 +112,16 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
         >✕</button>
       </div>
 
-      {/* Body textarea */}
-      <textarea
-        ref={textareaRef}
-        value={fn.body}
-        onChange={e => updateFunction(fn.id, { body: e.target.value })}
-        onKeyDown={handleKeyDown}
-        onFocus={e => onTextareaFocus(e.currentTarget)}
-        onClick={e => e.stopPropagation()}
-        spellCheck={false}
-        rows={Math.max(2, fn.body.split('\n').length)}
-        style={{
-          width: '100%',
-          background: 'none',
-          border: 'none',
-          color: hasError ? '#f38ba8' : '#cdd6f4',
-          fontFamily: 'monospace',
-          fontSize: '12px',
-          lineHeight: 1.6,
-          padding: '6px 10px',
-          resize: 'none',
-          outline: 'none',
-          boxSizing: 'border-box',
-          minHeight: '48px',
-        }}
-      />
+      {/* Body editor — syntax-highlighted textarea */}
+      <div onClick={e => e.stopPropagation()}>
+        <GlslTextarea
+          value={fn.body}
+          onChange={body => updateFunction(fn.id, { body })}
+          onKeyDown={handleKeyDown}
+          onFocus={onTextareaFocus}
+          hasError={hasError}
+        />
+      </div>
 
       {hasError && (
         <div style={{ padding: '3px 10px 5px', fontSize: '10px', color: '#f38ba8', fontFamily: 'monospace', borderTop: '1px solid #2a1a1a' }}>
