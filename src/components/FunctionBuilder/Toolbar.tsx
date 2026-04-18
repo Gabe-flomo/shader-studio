@@ -93,6 +93,9 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
       result: expr,
       expr,
       glslFunctions,
+      // Raw fn defs — used to re-open this ExprBlock in the Function Builder
+      fnBuilderFns: functions.map(({ name, returnType, body }) => ({ name, returnType, body })),
+      fnBuilderActiveId: activeFn.id,
     };
 
     if (linkedBlockId) {

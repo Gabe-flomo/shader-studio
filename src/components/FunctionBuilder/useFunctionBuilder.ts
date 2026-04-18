@@ -13,6 +13,7 @@ interface FunctionBuilderState {
   xRange: [number, number];
   yRange: [number, number];
   linkedBlockId: string | null;
+  requestNavToBuilder: boolean;
 
   addFunction: () => void;
   removeFunction: (id: string) => void;
@@ -22,6 +23,8 @@ interface FunctionBuilderState {
   setYRange: (range: [number, number]) => void;
   setLinkedBlockId: (id: string | null) => void;
   loadFromBodies: (fns: FnDef[]) => void;
+  openNodeInBuilder: (nodeId: string, fns: FnDef[]) => void;
+  clearNavRequest: () => void;
 }
 
 let counter = 1;
@@ -48,6 +51,7 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
   xRange: [-2, 2],
   yRange: [-2, 2],
   linkedBlockId: null,
+  requestNavToBuilder: false,
 
   addFunction: () => set(s => {
     const fn: FnDef = {
@@ -82,4 +86,13 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
     const active = fns[fns.length - 1]?.id ?? '';
     set({ functions: fns, activeId: active, linkedBlockId: get().linkedBlockId });
   },
+
+  openNodeInBuilder: (nodeId, fns) => {
+    // Re-hydrate each fn with a stable id so they work as React keys
+    const rehydrated = fns.map(f => ({ ...f, id: nextId() }));
+    const activeId = rehydrated[rehydrated.length - 1]?.id ?? '';
+    set({ functions: rehydrated, activeId, linkedBlockId: nodeId, requestNavToBuilder: true });
+  },
+
+  clearNavRequest: () => set({ requestNavToBuilder: false }),
 }));
