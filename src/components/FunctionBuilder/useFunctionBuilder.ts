@@ -39,7 +39,7 @@ const DEFAULT_FN: FnDef = {
   id: nextId(),
   name: 'f1',
   returnType: 'float',
-  body: 'return sin(x + t);',
+  body: 'sin(x + t)',
 };
 
 export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
@@ -54,7 +54,7 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
       id: nextId(),
       name: nextName(s.functions),
       returnType: 'float',
-      body: 'return x;',
+      body: 'x',
     };
     return { functions: [...s.functions, fn], activeId: fn.id };
   }),
@@ -62,7 +62,7 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
   removeFunction: (id) => set(s => {
     const next = s.functions.filter(f => f.id !== id);
     if (next.length === 0) {
-      const fn: FnDef = { id: nextId(), name: 'f1', returnType: 'float', body: 'return x;' };
+      const fn: FnDef = { id: nextId(), name: 'f1', returnType: 'float', body: 'x' };
       return { functions: [fn], activeId: fn.id };
     }
     const activeId = s.activeId === id ? next[next.length - 1].id : s.activeId;

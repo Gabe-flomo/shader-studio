@@ -7,8 +7,92 @@ import { Toolbar } from './Toolbar';
 
 const DEBOUNCE_MS = 150;
 
-export function FunctionBuilder() {
-  const { functions, activeId, xRange, yRange } = useFunctionBuilder();
+// ── Axis label overlay ────────────────────────────────────────────────────────
+
+function niceInterval(span: number): number {
+  // Power-of-2 interval targeting ~4–8 ticks
+  const raw = span / 6;
+  const exp = Math.round(Math.log2(raw));
+  return Math.pow(2, exp);
+}
+
+function formatTick(v: number): string {
+  if (v === 0) return '0';
+  if (Number.isInteger(v)) return String(v);
+  // Show up to 3 sig figs, strip trailing zeros
+  return parseFloat(v.toPrecision(3)).toString();
+}
+
+function AxisLabels({ xRange, yRange }: { xRange: [number, number]; yRange: [number, number] }) {
+  const divRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = divRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setSize({ w: width, h: height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { w, h } = size;
+  const xSpan = xRange[1] - xRange[0];
+  const ySpan = yRange[1] - yRange[0];
+  const xStep = niceInterval(xSpan);
+  const yStep = niceInterval(ySpan);
+
+  const xTicks: { v: number; px: number }[] = [];
+  const xStart = Math.ceil(xRange[0] / xStep) * xStep;
+  for (let v = xStart; v <= xRange[1] + xStep * 0.001; v += xStep) {
+    const px = ((v - xRange[0]) / xSpan) * w;
+    xTicks.push({ v: parseFloat(v.toPrecision(10)), px });
+  }
+
+  const yTicks: { v: number; py: number }[] = [];
+  const yStart = Math.ceil(yRange[0] / yStep) * yStep;
+  for (let v = yStart; v <= yRange[1] + yStep * 0.001; v += yStep) {
+    const py = (1 - (v - yRange[0]) / ySpan) * h;
+    yTicks.push({ v: parseFloat(v.toPrecision(10)), py });
+  }
+
+  const labelColor = 'rgba(205,214,244,0.32)';
+  const labelStyle: React.CSSProperties = {
+    position: 'absolute',
+    fontSize: '9px',
+    color: labelColor,
+    fontFamily: 'monospace',
+    userSelect: 'none',
+    pointerEvents: 'none',
+    lineHeight: 1,
+  };
+
+  return (
+    <div ref={divRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      {xTicks.map(({ v, px }) => (
+        <div key={v} style={{ ...labelStyle, left: px, bottom: 6, transform: 'translateX(-50%)' }}>
+          {formatTick(v)}
+        </div>
+      ))}
+      {yTicks.map(({ v, py }) => (
+        <div key={v} style={{ ...labelStyle, left: 6, top: py, transform: 'translateY(-50%)' }}>
+          {formatTick(v)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+interface Props {
+  onNavigateToStudio?: () => void;
+}
+
+export function FunctionBuilder({ onNavigateToStudio }: Props) {
+  const { functions, activeId, xRange, yRange, setXRange, setYRange } = useFunctionBuilder();
   const [shaderSource, setShaderSource] = useState('');
   const [glslErrors, setGlslErrors]     = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,7 +115,72 @@ export function FunctionBuilder() {
     });
   }, []);
 
+  // ── Zoom via wheel (non-passive to prevent browser default zoom) ─────────────
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = canvasWrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) / rect.width;
+      const cy = 1 - (e.clientY - rect.top) / rect.height;
+      const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+      const { xRange: xr, yRange: yr } = useFunctionBuilder.getState();
+      const xC = xr[0] + cx * (xr[1] - xr[0]);
+      const yC = yr[0] + cy * (yr[1] - yr[0]);
+      useFunctionBuilder.getState().setXRange([xC + (xr[0] - xC) * factor, xC + (xr[1] - xC) * factor]);
+      useFunctionBuilder.getState().setYRange([yC + (yr[0] - yC) * factor, yC + (yr[1] - yC) * factor]);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // ── Pinch-to-zoom ───────────────────────────────────────────────────────────
+  const lastPinchDist = useRef<number | null>(null);
+  const lastPinchCenter = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastPinchDist.current = Math.sqrt(dx * dx + dy * dy);
+      lastPinchCenter.current = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      };
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 2 || lastPinchDist.current === null) return;
+    e.preventDefault();
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const factor = lastPinchDist.current / dist;
+    lastPinchDist.current = dist;
+
+    const rect = canvasWrapRef.current!.getBoundingClientRect();
+    const c = lastPinchCenter.current!;
+    const cx = (c.x - rect.left) / rect.width;
+    const cy = 1 - (c.y - rect.top) / rect.height;
+    const { xRange: xr, yRange: yr } = useFunctionBuilder.getState();
+    const xC = xr[0] + cx * (xr[1] - xr[0]);
+    const yC = yr[0] + cy * (yr[1] - yr[0]);
+    useFunctionBuilder.getState().setXRange([xC + (xr[0] - xC) * factor, xC + (xr[1] - xC) * factor]);
+    useFunctionBuilder.getState().setYRange([yC + (yr[0] - yC) * factor, yC + (yr[1] - yC) * factor]);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    lastPinchDist.current = null;
+    lastPinchCenter.current = null;
+  }, []);
+
   const hasErrors = glslErrors.length > 0;
+  const activeFn = functions.find(f => f.id === activeId) ?? functions[0];
+  const isFloat = activeFn?.returnType === 'float';
 
   return (
     <div style={{
@@ -93,13 +242,22 @@ export function FunctionBuilder() {
         </div>
 
         {/* Right: preview canvas */}
-        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+        <div
+          ref={canvasWrapRef}
+          style={{ flex: 1, position: 'relative', minWidth: 0 }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           <PreviewCanvas
             shaderSource={shaderSource}
             xRange={xRange}
             yRange={yRange}
             onError={handlePreviewError}
           />
+
+          {/* Axis labels — only in float (2D plot) mode */}
+          {isFloat && <AxisLabels xRange={xRange} yRange={yRange} />}
 
           {/* Error overlay */}
           {hasErrors && (
@@ -123,7 +281,7 @@ export function FunctionBuilder() {
       </div>
 
       {/* Bottom toolbar */}
-      <Toolbar hasErrors={hasErrors} />
+      <Toolbar hasErrors={hasErrors} onNavigateToStudio={onNavigateToStudio} />
     </div>
   );
 }

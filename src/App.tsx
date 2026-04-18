@@ -686,7 +686,7 @@ function App() {
       {page === 'shortcuts' && <ShortcutsPage />}
       {page === 'fn' && (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <FunctionBuilder />
+          <FunctionBuilder onNavigateToStudio={() => setPage('studio')} />
         </div>
       )}
 

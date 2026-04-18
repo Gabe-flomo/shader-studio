@@ -15,20 +15,29 @@ export const CURVE_COLORS: Array<[number, number, number]> = [
 ];
 
 
+/** Strip 'return' prefix and trailing ';' to get bare expression. */
+export function normalizeBodyExpr(body: string): string {
+  let s = body.trim();
+  s = s.replace(/^return\s+/, '');
+  s = s.replace(/;$/, '').trim();
+  return s;
+}
+
 function emitFunction(fn: FnDef): string {
+  const expr = normalizeBodyExpr(fn.body);
   if (fn.returnType === 'float') {
     return `float ${fn.name}(float _x, float _t) {
   float x = _x;
   float t = _t;
   vec2 uv = vec2(_x, 0.0);
-  ${fn.body}
+  return ${expr};
 }`;
   }
   return `${fn.returnType} ${fn.name}(vec2 _uv, float _t) {
   float x = _uv.x;
   float t = _t;
   vec2 uv = _uv;
-  ${fn.body}
+  return ${expr};
 }`;
 }
 

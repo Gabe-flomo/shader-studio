@@ -699,6 +699,11 @@ export const ExprBlockNode: NodeDefinition = {
         const val = inputVars[inp.name] || fallback;
         decls.push(`        ${inp.type} ${inp.name} = ${val};\n`);
       }
+      // Always make `t` available as u_time unless user already declared it
+      const hasT = dynamicInputs.some(inp => inp.name === 't');
+      if (!hasT) {
+        decls.push(`        float t = u_time;\n`);
+      }
     } else {
       // Legacy fallback: fixed set of variables (p, t, time, mx, my, a, b)
       // Works for old saved graphs that have these keys in node.inputs.

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
+import { normalizeBodyExpr } from './glslCompiler';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
 interface Props {
   hasErrors: boolean;
+  onNavigateToStudio?: () => void;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -37,7 +39,33 @@ function RangeInput({ label, value, onChange }: { label: string; value: number; 
   );
 }
 
-export function Toolbar({ hasErrors }: Props) {
+const GLSL_BUILTINS = new Set([
+  'sin','cos','tan','asin','acos','atan','sinh','cosh','tanh',
+  'sqrt','pow','exp','exp2','log','log2','abs','sign','floor',
+  'ceil','fract','mod','min','max','clamp','mix','smoothstep','step',
+  'length','dot','cross','normalize','reflect','refract','round','trunc',
+  'radians','degrees','inversesqrt','distance','faceforward',
+  'vec2','vec3','vec4','float','int','bool','uint',
+  'mat2','mat3','mat4','ivec2','ivec3','ivec4','bvec2','bvec3','bvec4',
+  'PI','TAU','u_time','u_resolution','u_xMin','u_xMax','u_yMin','u_yMax',
+  'vUv','smin','sdBox','sdSegment','opRepeat','opRepeatPolar',
+  // common GLSL identifiers that aren't user vars
+  'true','false','void','return','if','else','for','while','break','continue',
+]);
+
+function detectFreeVars(expr: string, implicit: Set<string>): string[] {
+  const seen = new Set<string>();
+  const free: string[] = [];
+  const matches = expr.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) ?? [];
+  for (const id of matches) {
+    if (seen.has(id) || GLSL_BUILTINS.has(id) || implicit.has(id)) continue;
+    seen.add(id);
+    free.push(id);
+  }
+  return free;
+}
+
+export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
   const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId } = useFunctionBuilder();
   const addNode = useNodeGraphStore(s => s.addNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
@@ -46,21 +74,34 @@ export function Toolbar({ hasErrors }: Props) {
   const activeFn = functions.find(f => f.id === activeId) ?? functions[0];
 
   const handleSave = () => {
+    if (!activeFn) return;
+
+    const expr = normalizeBodyExpr(activeFn.body);
+    // t is always auto-injected; x and uv are implicit function params
+    const implicit = new Set(['t', activeFn.returnType === 'float' ? 'x' : 'uv']);
+    const freeVars = detectFreeVars(expr, implicit);
+    const inputs = freeVars.map(name => ({ name, type: 'float', slider: null }));
+
+    const params = {
+      outputType: activeFn.returnType,
+      inputs,
+      lines: [] as Array<{ lhs: string; op: string; rhs: string }>,
+      result: expr,
+      expr,
+    };
+
     if (linkedBlockId) {
-      // Update existing ExprBlock in place
       const node = nodes.find(n => n.id === linkedBlockId);
       if (node) {
-        updateNodeParams(linkedBlockId, {
-          lines: activeFn?.body ?? '',
-          functions: functions.map(f => ({ name: f.name, returnType: f.returnType, body: f.body })),
-        });
+        updateNodeParams(linkedBlockId, params);
+        onNavigateToStudio?.();
         return;
       }
     }
-    // Create new ExprBlock
-    const pos = { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 };
-    addNode('exprNode', pos);
-    // Note: newly created node will have the default params; user can open it to see
+
+    // Create a new ExprBlock with pre-filled params
+    addNode('exprNode', { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 }, params);
+    onNavigateToStudio?.();
   };
 
   return (
@@ -94,7 +135,7 @@ export function Toolbar({ hasErrors }: Props) {
 
       <div style={{ width: '1px', height: '16px', background: '#313244', flexShrink: 0 }} />
 
-      {/* X range */}
+      {/* X / Y range inputs — float mode only */}
       {activeFn?.returnType === 'float' && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
