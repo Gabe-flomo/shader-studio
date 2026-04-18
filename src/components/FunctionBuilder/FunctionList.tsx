@@ -382,7 +382,16 @@ export function FunctionList({ glslErrors }: Props) {
   const fnErrors = (id: string) => {
     const fn = functions.find(f => f.id === id);
     if (!fn) return [];
-    return glslErrors.filter(e => e.toLowerCase().includes(fn.name + '('));
+    const name = fn.name.toLowerCase();
+    return glslErrors.filter(e => {
+      const el = e.toLowerCase();
+      // Match "fnName(" call sites, "'fnName'" quoted in error messages,
+      // or "fnName " at a word boundary (type/var errors)
+      return el.includes(`${name}(`) ||
+             el.includes(`'${name}'`) ||
+             el.includes(`"${name}"`) ||
+             new RegExp(`\\b${name}\\b`).test(el);
+    });
   };
 
   const activeFn = functions.find(f => f.id === activeId);

@@ -5,6 +5,27 @@ import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore
 import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
 import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
 
+// ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
+// Names are always sequential (f1, f2, …). The return type is inferred from a
+// typed LHS ("float …", "vec3 …") or falls back to the ExprBlock outputType.
+function linesToFnDefs(
+  lines: WarpLine[],
+  defaultType: 'float' | 'vec2' | 'vec3' = 'float',
+): Array<Omit<FnDef, 'id'>> {
+  let fnIndex = 0;
+  return lines
+    .filter(l => l.rhs && l.rhs.trim())
+    .map(line => {
+      fnIndex++;
+      const lhs = line.lhs.trim();
+      const typedMatch = lhs.match(/^(float|vec2|vec3)\s+/);
+      const returnType = typedMatch
+        ? (typedMatch[1] as 'float' | 'vec2' | 'vec3')
+        : defaultType;
+      return { name: `f${fnIndex}`, returnType, body: line.rhs };
+    });
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface InputDef {
@@ -406,19 +427,41 @@ export function ExprBlockModal({ node, onClose }: Props) {
             {savedFlash && (
               <span style={{ fontSize: '11px', color: '#a6e3a1', fontFamily: 'monospace' }}>✓ saved</span>
             )}
-            {/* Open in Function Builder — only shown when saved from there */}
-            {Array.isArray(node.params.fnBuilderFns) && (node.params.fnBuilderFns as FnDef[]).length > 0 && (
-              <button
-                onClick={() => {
-                  useFunctionBuilder.getState().openNodeInBuilder(node.id, node.params.fnBuilderFns as FnDef[]);
-                  onClose();
-                }}
-                title="Re-open this expression in the Function Builder for editing"
-                style={{ ...BTN, color: '#89b4fa', borderColor: '#89b4fa55', background: '#89b4fa11' }}
-              >
-                ƒ( ) Edit in Builder
-              </button>
-            )}
+            {/* Open in Function Builder.
+                Priority: fnBuilderFns (actual function bodies) > lines conversion (fallback).
+                fnBuilderFns are always present when saved via "Save to ExprBlock" from the
+                Function Builder. Lines-as-functions is only used for manually-written ExprBlocks
+                that have never been through the builder (no fnBuilderFns stored). */}
+            {(() => {
+              const hasFnBuilderFns =
+                Array.isArray(node.params.fnBuilderFns) &&
+                (node.params.fnBuilderFns as FnDef[]).length > 0;
+              const safeOutputType = (outputType === 'float' || outputType === 'vec2' || outputType === 'vec3')
+                ? outputType : 'float';
+              const linesFns = !hasFnBuilderFns ? linesToFnDefs(lines, safeOutputType) : [];
+              const hasConvertibleLines = linesFns.length > 0;
+              if (!hasFnBuilderFns && !hasConvertibleLines) return null;
+              return (
+                <button
+                  onClick={() => {
+                    if (hasFnBuilderFns) {
+                      // Restore the actual function bodies that were authored in the builder
+                      useFunctionBuilder.getState().openNodeInBuilder(node.id, node.params.fnBuilderFns as FnDef[]);
+                    } else {
+                      // No builder history — convert warp lines to f1/f2/f3… functions
+                      useFunctionBuilder.getState().openNodeInBuilder(node.id, linesFns as FnDef[]);
+                    }
+                    onClose();
+                  }}
+                  title={hasFnBuilderFns
+                    ? 'Re-open in the Function Builder'
+                    : 'Open warp lines as functions in the Function Builder'}
+                  style={{ ...BTN, color: '#89b4fa', borderColor: '#89b4fa55', background: '#89b4fa11' }}
+                >
+                  ƒ( ) Edit in Builder
+                </button>
+              );
+            })()}
             <button
               onClick={handleSavePreset}
               title="Save as a reusable preset in the palette"

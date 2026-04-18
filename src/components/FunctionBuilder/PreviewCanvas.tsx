@@ -150,8 +150,17 @@ export function PreviewCanvas({ shaderSource, xRange, yRange, onError }: Props) 
 
     if (progRef.current) gl.deleteProgram(progRef.current);
     const src = shaderSource || FALLBACK_FRAG;
-    const prog = buildProgram(gl, src) ?? buildProgram(gl, FALLBACK_FRAG);
+    // On compile error fall back to a solid-dark program so the canvas clears
+    // rather than retaining the last successfully rendered frame.
+    const mainProg = buildProgram(gl, src);
+    const prog = mainProg ?? buildProgram(gl, FALLBACK_FRAG) ?? null;
     progRef.current = prog;
+    // If the main shader failed, immediately clear to dark so we don't show a stale frame.
+    if (!mainProg && prog) {
+      gl.useProgram(prog);
+      gl.clearColor(0.07, 0.07, 0.11, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
   }, [shaderSource, buildProgram]);
 
   return (
