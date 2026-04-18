@@ -38,6 +38,9 @@ const HIDDEN_NODES = new Set([
   'raymarch3d',
   'volumeClouds',
   'rayMarch',      // superseded by sceneGroup+marchLoopGroup+marchCamera rig
+  // Loops section removed — loop nodes hidden
+  'loopCarry',
+  'loop',
 ]);
 
 // ── Math node ordering & sub-groups ──────────────────────────────────────────
@@ -90,7 +93,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 const CATEGORY_ORDER = [
   '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
   '3D Primitives', '3D Scene', '3D Transforms',
-  'Animation', 'Color', 'Combiners', 'Conditionals', 'Effects', 'Fractals', 'Loops', 'Math', 'Noise',
+  'Animation', 'Color', 'Combiners', 'Conditionals', 'Effects', 'Fractals', 'Math', 'Noise',
   'Science', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
