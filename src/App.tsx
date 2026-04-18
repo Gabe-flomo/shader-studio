@@ -134,15 +134,12 @@ function App() {
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {
-    return useFunctionBuilder.subscribe(
-      s => s.requestNavToBuilder,
-      (requested) => {
-        if (requested) {
-          setPage('fn');
-          useFunctionBuilder.getState().clearNavRequest();
-        }
-      },
-    );
+    return useFunctionBuilder.subscribe((s) => {
+      if (s.requestNavToBuilder) {
+        setPage('fn');
+        useFunctionBuilder.getState().clearNavRequest();
+      }
+    });
   }, []);
   const [previewFloated, setPreviewFloated] = useState(false);
   const [floatPos, setFloatPos]   = useState({ x: 40, y: 60 });

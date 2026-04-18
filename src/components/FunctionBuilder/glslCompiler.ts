@@ -99,8 +99,8 @@ export interface CompileResult {
 export function buildShader(
   functions: FnDef[],
   activeId: string,
-  xRange: [number, number],
-  yRange: [number, number],
+  _xRange: [number, number],
+  _yRange: [number, number],
 ): CompileResult {
   if (functions.length === 0) return { source: '', errors: ['No functions defined'] };
 

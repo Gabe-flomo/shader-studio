@@ -134,7 +134,7 @@ interface FunctionBuilderState {
   clearNavRequest: () => void;
 }
 
-export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
+export const useFunctionBuilder = create<FunctionBuilderState>((set) => ({
   functions:   DEFAULT_TAB.functions,
   activeId:    DEFAULT_TAB.activeId,
   xRange:      DEFAULT_TAB.xRange,
