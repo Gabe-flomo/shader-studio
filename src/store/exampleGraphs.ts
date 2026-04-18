@@ -11081,7 +11081,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4',  outputKey: 'color'  } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'scl_7',  outputKey: 'result' } },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {},
       },
       {
         id: 'out_9', type: 'output', position: { x: 1700, y: 260 },
@@ -11173,7 +11173,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'sss_5', outputKey: 'sss'   } },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {},
       },
       {
         id: 'out_7', type: 'output', position: { x: 1500, y: 260 },
@@ -11546,7 +11546,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'mb_2', outputKey: 'color'  } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'mul_3', outputKey: 'result' } },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {},
       },
       {
         id: 'out_5', type: 'output', position: { x: 1000, y: 320 },
@@ -11819,7 +11819,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'sss_5', outputKey: 'sss'   } },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {},
       },
       {
         id: 'out_7', type: 'output', position: { x: 1500, y: 260 },
@@ -12049,7 +12049,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4',  outputKey: 'color'  } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'scl_7',  outputKey: 'result' } },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {},
       },
       {
         id: 'out_9', type: 'output', position: { x: 1700, y: 260 },
