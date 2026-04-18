@@ -165,6 +165,11 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
     (e.currentTarget as HTMLElement).style.cursor = 'default';
   }, []);
 
+  const handleDoubleClick = useCallback(() => {
+    useFunctionBuilder.getState().setXRange([-2, 2]);
+    useFunctionBuilder.getState().setYRange([-2, 2]);
+  }, []);
+
   // ── Pinch-to-zoom + 1-finger pan ────────────────────────────────────────────
   const pinchDist    = useRef<number | null>(null);
   const pinchCenter  = useRef<{ x: number; y: number } | null>(null);
@@ -295,6 +300,7 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onDoubleClick={handleDoubleClick}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
