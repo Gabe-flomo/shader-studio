@@ -126,6 +126,8 @@ interface FunctionBuilderState {
   savedFunctionDefs: FnDef[];
   saveFunctionDef: (fn: FnDef) => void;
   deleteSavedFunctionDef: (id: string) => void;
+  /** Insert a library fn into the current session (no-op if same name already present). */
+  addFunctionFromDef: (fn: Omit<FnDef, 'id'>) => void;
 
   // ── Misc ──
   setLinkedBlockId: (id: string | null) => void;
@@ -286,6 +288,13 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set) => ({
     const updated = s.savedFunctionDefs.filter(f => f.id !== id);
     persistSavedFns(updated);
     return { savedFunctionDefs: updated };
+  }),
+
+  addFunctionFromDef: (fn) => set(s => {
+    if (s.functions.some(f => f.name === fn.name)) return {};
+    const newFn: FnDef = { ...fn, id: nextId() };
+    const functions = [newFn, ...s.functions];
+    return { functions, tabs: s.tabs.map(t => t.id === s.activeTabId ? { ...t, functions } : t) };
   }),
 
   // ── Misc ─────────────────────────────────────────────────────────────────────
