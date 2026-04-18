@@ -88,26 +88,33 @@ const CATEGORY_ORDER = [
 type ExKey = keyof typeof EXAMPLE_GRAPHS;
 
 const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
-  { label: 'Conditionals',    color: '#a6e3a1', keys: ['conditionalCircle','conditionalGlowRing','conditionalAnimThreshold','conditionalBrightnessGate','conditionalApproxMatch'] as ExKey[] },
-  { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','forLoopRings','exprRings','fractalRingsGroup','fractalRingsWired','fractalRingsNewWired','exprOrbit'] as ExKey[] },
+  // Rings: keep fractalRings, fractalRingsGroup, exprRings, exprOrbit
+  // removed: forLoopRings, fractalRingsWired, fractalRingsNewWired
+  { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','exprRings','fractalRingsGroup','exprOrbit'] as ExKey[] },
   { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupAdditiveRings','groupProductRings','groupCarryRotate','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
   { label: 'Fractals',        color: '#cba6f7', keys: ['mandelbrotSet','juliaExplorer','domainWarpFractal','newtonFractalClassic','lyapunovMarkus','apollonianGasket'] as ExKey[] },
   { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','electronOrbitalDemo','orbitalVolume3dDemo'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlWarpDemo','curlWarpDemo','displaceDemo','uvWarpDemo','smoothWarpDemo','polarRings','infiniteMirror','mobiusWarp','swirlVoronoi','hyperbolicCircles'] as ExKey[] },
-  { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','animatedPalette','colorRampDemo','colorRampFBM','colorRampWave','hsvDemo','blackbodyDemo','blackbodyFire','blackbodyStar','blendModesDemo','blendOverlayDemo','blendSoftLight','toneMapDemo','agxToneDemo','desaturateDemo','hueRangeDemo','posterizeDemo','invertDemo','lumaGrainDemo','temporalGrainDemo','angularGradient','shapeShowcase','fbmLandscape'] as ExKey[] },
-  { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','breathingGlow','warpDance','squarePulse','prevFrameTrails'] as ExKey[] },
-  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['helloSphere3D','translate3D','rotate3D','twoShapes3D','softMetaballs3D','fold3D','sinWarp3D','repeat3D','planeSDF3D','torusScene3D','rayMarchOutputs3D','shapesAndGround3D','infiniteFalling3D','spiralWorld3D','kaleido3DBox'] as ExKey[] },
+  // Color & Lighting: removed animatedPalette, colorRampDemo/FBM/Wave, hsvDemo, blackbodyStar,
+  //   agxToneDemo, desaturateDemo, posterizeDemo, lumaGrainDemo, temporalGrainDemo
+  //   + moved spectralLens here from Lighting & Compositing
+  { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','blackbodyDemo','blackbodyFire','blendModesDemo','blendOverlayDemo','blendSoftLight','toneMapDemo','invertDemo','hueRangeDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens'] as ExKey[] },
+  // Animation: removed breathingGlow, squarePulse, prevFrameTrails
+  { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','warpDance'] as ExKey[] },
+  // SDF & 3D: keep only Spiral World (removed old raymarch examples)
+  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['spiralWorld3D'] as ExKey[] },
   { label: '3D SDF',          color: '#89dceb', keys: ['sdfBooleanShowcase','sdfOnionShell','sdfPrimitivesShowcase','sdfPolarRepeat','sdfSmoothMetaballs','sdfRoundedBox','sdfBoxFrame','sdfCappedCone','sdfHexPrism','sdfBend3D','sdfIntersectDemo','mengerSponge3D','sdCrossScene3D','infinitePillars3D'] as ExKey[] },
   { label: 'March Loop',      color: '#88aacc', keys: ['mlgIQTunnel','mlgBaseline','mlgSpiralTunnel','mlgRepeatGrid','mlgWiggleTunnel','mlgAbsFold','mlgTwistSpace','mlgSpiralDepth','mlgFoldMirror','mlgRepeatSpace','mlgTwistFold','mlgSpiralFold','mlgDeepTunnel'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo','angularFlowerRepeat','angularGearRepeat'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid'] as ExKey[] },
   { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },
   { label: 'Blur & Lens',     color: '#89b4fa', keys: ['gaussianBlurDemo','motionBlurTrails','tiltShiftScene','lensBokeh'] as ExKey[] },
-  { label: 'Math & Complex',  color: '#b4befe', keys: ['complexPowFlower','luminanceTint','weightedNoiseOctaves','weightedSdfBlend'] as ExKey[] },
-  { label: 'Lighting & Compositing', color: '#89dceb', keys: ['neonFloorGrid','spectralLens','alphaLayerDemo','threePointLights','movingLight','softCloudLayers'] as ExKey[] },
+  // Math & Complex: removed entirely
+  // Lighting & Compositing: removed (spectralLens moved to Color & Lighting)
   { label: 'Effects & Spaces', color: '#f2cdcd', keys: ['retroTunnel','barrelChroma','crtScreen','mirrorTunnel','glitchEffect'] as ExKey[] },
-  { label: 'Particles',        color: '#cba6f7', keys: ['particleFountain','particleFlowDrift','particleSpiralVortex','particleOrbitCloud','particleRain','particleExplosion','particleMouseAttract'] as ExKey[] },
-  { label: 'Combined',         color: '#f9e2af', keys: ['fractalGlowBlur','sdfNeonChroma','ray3DVignette','warpedRaymarch','noiseParticles','tiltShiftFractal','swirlRay3D','voronoiBokeh','kaleido3DBox','sobelNeonGlow','motionFractalBlur'] as ExKey[] },
+  // Particles: keep fountain, explosion, mouse attract
+  { label: 'Particles',        color: '#cba6f7', keys: ['particleFountain','particleExplosion','particleMouseAttract'] as ExKey[] },
+  // Combined: removed entirely
   { label: '3D Lighting',      color: '#f9c468', keys: ['aoSphere','softShadowTorus','multiLightScene','fresnelGlowSphere','fakeSSSWax','foggyScene','glassSphereScene','mandelboxLit','kifsTetraSSS','fullLightRig','mandelboxFresnelGlow'] as ExKey[] },
   { label: '3D Fractals',      color: '#cba6f7', keys: ['mandelboxMLG','kifsTetraMLG','mengerMLG','mandelbulbOrbitColor'] as ExKey[] },
 ];
