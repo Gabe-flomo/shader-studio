@@ -68,7 +68,7 @@ export const SdEllipseNode: NodeDefinition = {
 };
 
 export const OpRepeatNode: NodeDefinition = {
-  type: 'opRepeat', label: 'opRepeat', category: '2D Primitives',
+  type: 'opRepeat', label: 'opRepeat', category: 'Spaces',
   description: 'Infinite domain repetition — tiles p every s units',
   inputs: {
     p: { type: 'vec2', label: 'P' },
@@ -89,7 +89,7 @@ export const OpRepeatNode: NodeDefinition = {
 };
 
 export const OpRepeatPolarNode: NodeDefinition = {
-  type: 'opRepeatPolar', label: 'opRepeatPolar', category: '2D Primitives',
+  type: 'opRepeatPolar', label: 'opRepeatPolar', category: 'Spaces',
   description: 'Polar domain repetition — n-fold rotational symmetry',
   inputs: {
     p: { type: 'vec2', label: 'P' },
