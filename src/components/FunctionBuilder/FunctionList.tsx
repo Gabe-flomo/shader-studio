@@ -163,9 +163,10 @@ interface HelpersPanelProps {
   autoWrap: boolean;
   onToggleAutoWrap: () => void;
   onInsert: (text: string) => void;
+  onInsertLibraryFn: (fn: FnDef) => void;
 }
 
-function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert }: HelpersPanelProps) {
+function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertLibraryFn }: HelpersPanelProps) {
   const [open, setOpen] = useState(false);
   const { savedFunctionDefs, deleteSavedFunctionDef } = useFunctionBuilder();
 
@@ -228,12 +229,13 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert }: Helpers
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                 {savedFunctionDefs.map((fn: FnDef) => {
-                  const call = fn.returnType === 'float' ? `${fn.name}(x, 0.0)` : `${fn.name}(uv, 0.0)`;
+                  const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
+                  const call = `${fn.name}(${primaryArg}, t)`;
                   const sig  = fn.returnType === 'float' ? `(float x, float t)` : `(vec2 uv, float t)`;
                   return (
                     <div key={fn.id} style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
                       <button
-                        onMouseDown={e => { e.preventDefault(); onInsert(call); }}
+                        onMouseDown={e => { e.preventDefault(); onInsertLibraryFn(fn); }}
                         title={`${fn.returnType} ${fn.name}${sig}\nInserts: ${call}`}
                         style={{
                           background: '#11111b',
@@ -327,16 +329,16 @@ export function FunctionList({ glslErrors }: Props) {
   };
 
   const insert = (text: string) => {
-    const ta = lastTA.current;
-    if (!ta) return;
-
-    // Find which function owns this textarea
-    const fn = functions.find(f => ta.value === f.body) ?? functions.find(f => f.id === activeId);
+    // Fall back to the active function's body end if no textarea was ever focused
+    const ta  = lastTA.current;
+    const fn  = ta
+      ? (functions.find(f => ta.value === f.body) ?? functions.find(f => f.id === activeId))
+      : functions.find(f => f.id === activeId);
     if (!fn) return;
 
     const current = fn.body;
-    const start   = ta.selectionStart ?? current.length;
-    const end     = ta.selectionEnd   ?? current.length;
+    const start   = ta?.selectionStart ?? current.length;
+    const end     = ta?.selectionEnd   ?? current.length;
     const hasParen = text.includes('(');
     let next: string;
     let cursor: number;
@@ -365,9 +367,17 @@ export function FunctionList({ glslErrors }: Props) {
 
     updateFunction(fn.id, { body: next });
     requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(cursor, cursor);
+      ta?.focus();
+      ta?.setSelectionRange(cursor, cursor);
     });
+  };
+
+  const handleLibraryFnInsert = (fn: FnDef) => {
+    // Load the function body into the session first so it compiles
+    useFunctionBuilder.getState().addFunctionFromDef(fn);
+    // Then insert the call expression at cursor (or end of active fn body)
+    const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
+    insert(`${fn.name}(${primaryArg}, t)`);
   };
 
   const fnErrors = (id: string) => {
@@ -400,6 +410,7 @@ export function FunctionList({ glslErrors }: Props) {
         autoWrap={autoWrap}
         onToggleAutoWrap={() => setAutoWrap(v => !v)}
         onInsert={insert}
+        onInsertLibraryFn={handleLibraryFnInsert}
       />
 
       <div style={{ flexShrink: 0, padding: '6px 8px', borderTop: '1px solid #313244' }}>
