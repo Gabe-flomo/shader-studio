@@ -1210,6 +1210,23 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return;
     }
 
+    // ── Initialise a fresh regular group subgraph if needed ─────────────────────
+    if (groupNode?.type === 'group' && !groupNode.params?.subgraph) {
+      const defaultSubgraph: import('../types/nodeGraph').SubgraphData = {
+        nodes: [],
+        inputPorts: [],
+        outputPorts: [],
+      };
+      set(state => ({
+        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupId: id,
+        nodes: state.nodes.map(n =>
+          n.id === id ? { ...n, params: { ...n.params, subgraph: defaultSubgraph } } : n
+        ),
+      }));
+      return;
+    }
+
     // ── Migrate existing scene-style subgraphs: inject missing anchor nodes + stamp _groupOriginal ──
     if (
       (groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup') &&

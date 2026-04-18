@@ -157,7 +157,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   // Position the Group Output terminal to the right of all subgraph nodes
   const groupOutputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId || displayNodes.length === 0) return null;
+    if (!activeGroupId) return null;
+    if (displayNodes.length === 0) return { x: 500, y: 160 }; // default for empty group
     const maxX = Math.max(...displayNodes.map(n => n.position.x)) + NODE_WIDTH + 80;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
@@ -166,7 +167,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   // Position the Group Input terminal to the left of all subgraph nodes
   const groupInputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId || displayNodes.length === 0) return null;
+    if (!activeGroupId) return null;
+    if (displayNodes.length === 0) return { x: 80, y: 160 }; // default for empty group
     const minX = Math.min(...displayNodes.map(n => n.position.x)) - 220;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
