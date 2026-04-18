@@ -452,6 +452,7 @@ export const RayMarchNode: NodeDefinition = {
     iter:      { type: 'float', label: 'Iter' },
     iterCount: { type: 'float', label: 'Iter Count' },
     hit:       { type: 'float', label: 'Hit' },
+    pos:       { type: 'vec3',  label: 'Hit Pos' },
   },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5, maxSteps: 64, maxDist: 20.0,
@@ -496,6 +497,7 @@ export const RayMarchNode: NodeDefinition = {
         iter:      `${id}_iter`,
         iterCount: `${id}_iterCount`,
         hit:       `${id}_hit`,
+        pos:       `${id}_hp`,
       },
     };
   },

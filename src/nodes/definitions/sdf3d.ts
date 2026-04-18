@@ -1291,8 +1291,8 @@ export const SdCrossNode: NodeDefinition = {
 export const MengerSpongeNode: NodeDefinition = {
   type: 'mengerSponge',
   label: 'Menger Sponge',
-  category: '3D Primitives',
-  description: 'Iterative fractal SDF: a cube with cross-shaped holes drilled at every scale. iterations=1 is a simple drilled cube; 3–4 gives full fractal detail. size scales the unit cube.',
+  category: '3D Fractals',
+  description: 'Iterative fractal SDF. iterations=3 is real-time; 5+ is too slow. Connect inside SceneGroup → MarchLoopGroup. Increase MarchLoopGroup Max Steps to 128–200.',
   inputs: {
     pos:  { type: 'vec3',  label: 'Position' },
     size: { type: 'float', label: 'Size' },
