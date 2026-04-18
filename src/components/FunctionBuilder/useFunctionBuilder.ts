@@ -26,6 +26,7 @@ export interface SavedGroup {
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'fn_builder_groups_v1';
+const SAVED_FNS_KEY = 'fn_builder_saved_fns_v1';
 
 function loadGroups(): SavedGroup[] {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]'); }
@@ -34,6 +35,15 @@ function loadGroups(): SavedGroup[] {
 
 function persistGroups(groups: SavedGroup[]) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(groups)); } catch { /* quota */ }
+}
+
+function loadSavedFns(): FnDef[] {
+  try { return JSON.parse(localStorage.getItem(SAVED_FNS_KEY) ?? '[]'); }
+  catch { return []; }
+}
+
+function persistSavedFns(fns: FnDef[]) {
+  try { localStorage.setItem(SAVED_FNS_KEY, JSON.stringify(fns)); } catch { /* quota */ }
 }
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
@@ -49,8 +59,14 @@ function nextName(existing: FnDef[]) {
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
+export const TYPE_DEFAULTS: Record<string, string> = {
+  float: 'sin(x + t)',
+  vec2:  'uv',
+  vec3:  'vec3(uv.x, uv.y, 0.5 + 0.5 * sin(t))',
+};
+
 function makeDefaultFn(): FnDef {
-  return { id: nextId(), name: 'f1', returnType: 'float', body: 'sin(x + t)' };
+  return { id: nextId(), name: 'f1', returnType: 'float', body: TYPE_DEFAULTS.float };
 }
 
 function makeTab(label: string, fn?: FnDef): FnTab {
@@ -106,6 +122,11 @@ interface FunctionBuilderState {
   loadGroup: (group: SavedGroup) => void;
   deleteGroup: (id: string) => void;
 
+  // ── Function library ──
+  savedFunctionDefs: FnDef[];
+  saveFunctionDef: (fn: FnDef) => void;
+  deleteSavedFunctionDef: (id: string) => void;
+
   // ── Misc ──
   setLinkedBlockId: (id: string | null) => void;
   loadFromBodies: (fns: FnDef[]) => void;
@@ -123,6 +144,7 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
   linkedBlockId: null,
   requestNavToBuilder: false,
   savedGroups: loadGroups(),
+  savedFunctionDefs: loadSavedFns(),
 
   // ── Function mutations ───────────────────────────────────────────────────────
 
@@ -248,6 +270,22 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set, get) => ({
     const updated = s.savedGroups.filter(g => g.id !== id);
     persistGroups(updated);
     return { savedGroups: updated };
+  }),
+
+  // ── Function library ─────────────────────────────────────────────────────────
+
+  saveFunctionDef: (fn) => set(s => {
+    const def: FnDef = { ...fn, id: nextId('sav') };
+    // Replace if same name exists, otherwise prepend
+    const updated = [def, ...s.savedFunctionDefs.filter(f => f.name !== fn.name)];
+    persistSavedFns(updated);
+    return { savedFunctionDefs: updated };
+  }),
+
+  deleteSavedFunctionDef: (id) => set(s => {
+    const updated = s.savedFunctionDefs.filter(f => f.id !== id);
+    persistSavedFns(updated);
+    return { savedFunctionDefs: updated };
   }),
 
   // ── Misc ─────────────────────────────────────────────────────────────────────

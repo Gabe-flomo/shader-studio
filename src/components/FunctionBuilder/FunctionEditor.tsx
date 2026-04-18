@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import type { FnDef } from './useFunctionBuilder';
-import { useFunctionBuilder } from './useFunctionBuilder';
+import { useFunctionBuilder, TYPE_DEFAULTS } from './useFunctionBuilder';
 import { CURVE_COLORS } from './glslCompiler';
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 const RETURN_TYPES = ['float', 'vec2', 'vec3'] as const;
 
 export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }: Props) {
-  const { updateFunction, removeFunction, setActiveId } = useFunctionBuilder();
+  const { updateFunction, removeFunction, setActiveId, saveFunctionDef } = useFunctionBuilder();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [r, g, b] = CURVE_COLORS[index % CURVE_COLORS.length];
@@ -68,7 +68,14 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
 
         <select
           value={fn.returnType}
-          onChange={e => updateFunction(fn.id, { returnType: e.target.value as FnDef['returnType'] })}
+          onChange={e => {
+            const newType = e.target.value as FnDef['returnType'];
+            const patch: Partial<FnDef> = { returnType: newType };
+            if (Object.values(TYPE_DEFAULTS).includes(fn.body.trim())) {
+              patch.body = TYPE_DEFAULTS[newType];
+            }
+            updateFunction(fn.id, patch);
+          }}
           onClick={e => e.stopPropagation()}
           style={{
             background: '#313244', border: '1px solid #45475a', color: '#a6adc8',
@@ -79,13 +86,30 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           {RETURN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
 
-        <span style={{ fontSize: '10px', color: '#45475a', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {sig}
-        </span>
+        <div style={{ flex: 1 }} />
 
         {hasError && (
           <span title={errors[0]} style={{ fontSize: '10px', color: '#f38ba8', flexShrink: 0 }}>⚠</span>
         )}
+
+        <button
+          onClick={e => { e.stopPropagation(); saveFunctionDef(fn); }}
+          title="Save to function library"
+          style={{
+            background: 'none',
+            border: '1px solid #a6e3a144',
+            color: '#a6e3a1',
+            borderRadius: '10px',
+            padding: '1px 7px',
+            fontSize: '10px',
+            fontFamily: 'monospace',
+            cursor: 'pointer',
+            flexShrink: 0,
+            lineHeight: 1.4,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#a6e3a122'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a188'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a144'; }}
+        >↓ lib</button>
 
         <button
           onClick={e => { e.stopPropagation(); removeFunction(fn.id); }}

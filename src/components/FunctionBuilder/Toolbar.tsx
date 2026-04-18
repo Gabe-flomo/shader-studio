@@ -66,7 +66,7 @@ function detectFreeVars(expr: string, implicit: Set<string>): string[] {
 }
 
 export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
-  const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId, savedGroups, saveGroup, loadGroup, deleteGroup } = useFunctionBuilder();
+  const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId, savedGroups, saveGroup, loadGroup, deleteGroup, savedFunctionDefs } = useFunctionBuilder();
   const addNode = useNodeGraphStore(s => s.addNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const nodes = useNodeGraphStore(s => s.nodes);
@@ -110,9 +110,10 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     const freeVars = detectFreeVars(expr, implicit);
     const inputs = freeVars.map(name => ({ name, type: 'float', slider: null }));
 
-    // Emit all user function definitions so they're available as GLSL helpers
-    // in the main shader (assembler collects `glslFunctions` from exprNode params)
-    const glslFunctions = functions.map(emitFunction).join('\n\n');
+    // Emit all user function definitions. Saved library fns come first (session overrides by name).
+    const sessionNames = new Set(functions.map(f => f.name));
+    const libFns = savedFunctionDefs.filter(f => !sessionNames.has(f.name));
+    const glslFunctions = [...libFns.map(emitFunction), ...functions.map(emitFunction)].join('\n\n');
 
     const params = {
       outputType: activeFn.returnType,

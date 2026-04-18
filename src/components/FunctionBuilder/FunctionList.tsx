@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
+import type { FnDef } from './useFunctionBuilder';
 import { FunctionEditor } from './FunctionEditor';
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ interface HelpersPanelProps {
 
 function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert }: HelpersPanelProps) {
   const [open, setOpen] = useState(false);
+  const { savedFunctionDefs, deleteSavedFunctionDef } = useFunctionBuilder();
 
   const chipStyle = (active = false): React.CSSProperties => ({
     background: '#11111b',
@@ -218,6 +220,62 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert }: Helpers
           <p style={{ fontSize: '9px', color: '#45475a', margin: '0 0 6px', lineHeight: 1.4 }}>
             Click to insert at cursor · {isFloat ? 'float mode — vec/SDF hidden' : 'vec mode — all shown'}
           </p>
+
+          {savedFunctionDefs.length > 0 && (
+            <div style={{ marginBottom: '6px' }}>
+              <div style={{ fontSize: '9px', color: '#a6e3a1', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: '3px' }}>
+                Custom
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                {savedFunctionDefs.map((fn: FnDef) => {
+                  const call = fn.returnType === 'float' ? `${fn.name}(x, 0.0)` : `${fn.name}(uv, 0.0)`;
+                  const sig  = fn.returnType === 'float' ? `(float x, float t)` : `(vec2 uv, float t)`;
+                  return (
+                    <div key={fn.id} style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
+                      <button
+                        onMouseDown={e => { e.preventDefault(); onInsert(call); }}
+                        title={`${fn.returnType} ${fn.name}${sig}\nInserts: ${call}`}
+                        style={{
+                          background: '#11111b',
+                          border: '1px solid #a6e3a144',
+                          color: '#a6e3a1',
+                          borderRadius: '3px 0 0 3px',
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          fontFamily: 'monospace',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap' as const,
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a1aa'; (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a144'; (e.currentTarget as HTMLButtonElement).style.color = '#a6e3a1'; }}
+                      >
+                        {fn.name}
+                        <span style={{ color: '#585b70', marginLeft: '2px' }}>{fn.returnType}</span>
+                      </button>
+                      <button
+                        onMouseDown={e => { e.preventDefault(); deleteSavedFunctionDef(fn.id); }}
+                        title="Remove from library"
+                        style={{
+                          background: '#11111b',
+                          border: '1px solid #a6e3a144',
+                          borderLeft: 'none',
+                          color: '#45475a',
+                          borderRadius: '0 3px 3px 0',
+                          padding: '2px 4px',
+                          fontSize: '9px',
+                          cursor: 'pointer',
+                          lineHeight: 1,
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f38ba8'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#45475a'; }}
+                      >×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {PALETTE_GROUPS.map(group => {
             const entries = PALETTE.filter(e => e.group === group && (isFloat ? e.floatOk : true));
             if (entries.length === 0) return null;
