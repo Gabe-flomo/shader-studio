@@ -101,9 +101,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','blackbodyDemo','blackbodyFire','blendModesDemo','blendOverlayDemo','blendSoftLight','toneMapDemo','invertDemo','hueRangeDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens'] as ExKey[] },
   // Animation: removed breathingGlow, squarePulse, prevFrameTrails
   { label: 'Animation',       color: '#b4befe', keys: ['animationShowcase','sineLFODemo','warpDance'] as ExKey[] },
-  // SDF & 3D: keep only Spiral World (removed old raymarch examples)
-  { label: 'SDF & 3D',        color: '#f5c2e7', keys: ['spiralWorld3D'] as ExKey[] },
-  { label: '3D SDF',          color: '#89dceb', keys: ['sdfBooleanShowcase','sdfOnionShell','sdfPrimitivesShowcase','sdfPolarRepeat','sdfSmoothMetaballs','sdfRoundedBox','sdfBoxFrame','sdfCappedCone','sdfHexPrism','sdfBend3D','sdfIntersectDemo','mengerSponge3D','sdCrossScene3D','infinitePillars3D'] as ExKey[] },
+  { label: '3D SDF',          color: '#89dceb', keys: ['sdfBooleanShowcase','sdfOnionShell','sdfPrimitivesShowcase','sdfPolarRepeat','sdfSmoothMetaballs','sdfRoundedBox','sdfBoxFrame','sdfCappedCone','sdfHexPrism','sdfBend3D','sdfIntersectDemo','mengerSponge3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D'] as ExKey[] },
   { label: 'March Loop',      color: '#88aacc', keys: ['mlgIQTunnel','mlgBaseline','mlgSpiralTunnel','mlgRepeatGrid','mlgWiggleTunnel','mlgAbsFold','mlgTwistSpace','mlgSpiralDepth','mlgFoldMirror','mlgRepeatSpace','mlgTwistFold','mlgSpiralFold','mlgDeepTunnel'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['truchetTiles','truchetAnimated','metaballsDemo','lissajousDemo','angularFlowerRepeat','angularGearRepeat'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid'] as ExKey[] },
