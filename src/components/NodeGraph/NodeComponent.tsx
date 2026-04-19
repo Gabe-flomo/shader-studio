@@ -2130,6 +2130,43 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           );
         })}
 
+        {/* MarchLoopGroup outer params — maxSteps, maxDist, stepScale, bg, albedo */}
+        {isMarchLoopGroup && (() => {
+          const outerDef = getNodeDefinition(node.type);
+          const outerParamDefs = outerDef?.paramDefs ?? {};
+          const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float');
+          if (outerEntries.length === 0) return null;
+          return (
+            <div style={{ borderTop: '1px solid #313244' }} onMouseDown={e => e.stopPropagation()}>
+              <div style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em' }}>MARCH SETTINGS</div>
+              {outerEntries.map(([paramKey, paramDef]) => {
+                const rawVal = node.params[paramKey];
+                const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
+                const step = paramDef.step ?? 1;
+                const effMin = paramDef.min ?? 0;
+                const effMax = paramDef.max ?? 256;
+                return (
+                  <div key={paramKey} style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '9px', color: '#6c7086', minWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paramDef.label}</span>
+                    <input
+                      type="range"
+                      min={effMin}
+                      max={effMax}
+                      step={step}
+                      value={currentVal}
+                      onChange={e => updateNodeParams(node.id, { [paramKey]: parseFloat(e.target.value) }, { immediate: true })}
+                      style={{ flex: 1, accentColor: '#88aacc', cursor: 'pointer', margin: 0 }}
+                    />
+                    <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : step < 4 ? 1 : 0)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {/* "Customize params" button — shown for any group with float params */}
         {subgraph && (() => {
           const SKIP_PARAM_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant', 'loopIndex', 'loopCarry', 'group']);
