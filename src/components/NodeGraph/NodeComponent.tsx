@@ -68,6 +68,8 @@ interface Props {
   externalParamKeys?: Set<string>;
   /** Option-click on a socket: open filtered node search palette */
   onAltClickSocket?: (nodeId: string, key: string, dir: 'in' | 'out', type: string, e: React.MouseEvent) => void;
+  /** True while the user is actively dragging a connection wire — input sockets should complete the connection rather than disconnect */
+  isConnectionDragging?: boolean;
 }
 
 // Maps slider position (0–1000) to Hz using a dampened log scale (power=0.6)
@@ -267,7 +269,7 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
@@ -1013,7 +1015,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ref={el => { registerSocket(node.id, 'in', 'value', el); }}
               onMouseUp={e => {
                 e.stopPropagation();
-                if (node.inputs.value?.connection) {
+                if (node.inputs.value?.connection && !isConnectionDragging) {
                   disconnectInput(node.id, 'value');
                 } else {
                   onEndConnection(node.id, 'value');
@@ -1623,7 +1625,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   ref={el => { registerSocket(node.id, 'in', key, el); }}
                   onMouseUp={e => {
                     e.stopPropagation();
-                    if (node.inputs[key]?.connection) {
+                    if (node.inputs[key]?.connection && !isConnectionDragging) {
                       disconnectInput(node.id, key);
                     } else {
                       onEndConnection(node.id, key);
@@ -1650,7 +1652,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   ref={el => { registerSocket(node.id, 'in', port.key, el); }}
                   onMouseUp={e => {
                     e.stopPropagation();
-                    if (node.inputs[port.key]?.connection) {
+                    if (node.inputs[port.key]?.connection && !isConnectionDragging) {
                       disconnectInput(node.id, port.key);
                     } else {
                       onEndConnection(node.id, port.key);
@@ -2876,7 +2878,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   e.stopPropagation();
                   if (isExternal) return;
                   if (e.altKey && !isConnected) return; // handled by onMouseDown
-                  if (isConnected) {
+                  // When a connection wire is being dragged, always complete the connection
+                  // (never disconnect an existing socket mid-drag)
+                  if (isConnected && !isConnectionDragging) {
                     disconnectInput(node.id, key);
                   } else {
                     onEndConnection(node.id, key);

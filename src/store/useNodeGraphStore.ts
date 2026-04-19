@@ -1984,8 +1984,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   swapNode: (nodeId, newType) => {
-    const { nodes } = get();
-    const oldNode = nodes.find(n => n.id === nodeId);
+    const { nodes, activeGroupPath } = get();
+
+    // Resolve the node list to operate on — subgraph when inside a group, top-level otherwise
+    const workingNodes = activeGroupPath.length > 0
+      ? (getActiveNodes(nodes, activeGroupPath) ?? nodes)
+      : nodes;
+
+    const oldNode = workingNodes.find(n => n.id === nodeId);
     if (!oldNode) return;
     const def = getNodeDefinition(newType);
     if (!def) return;
@@ -2006,7 +2012,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       // Priority 1: exact key match with compatible source type
       const oldSock = oldNode.inputs[key];
       if (oldSock?.connection) {
-        const srcNode = nodes.find(n => n.id === oldSock.connection!.nodeId);
+        const srcNode = workingNodes.find(n => n.id === oldSock.connection!.nodeId);
         const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
         const srcType = srcDef?.outputs[oldSock.connection!.outputKey]?.type;
         if (srcType && typesCompatible(srcType, socket.type)) {
@@ -2018,7 +2024,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (!newSocket.connection) {
         for (const oldS of Object.values(oldNode.inputs)) {
           if (!oldS.connection) continue;
-          const srcNode = nodes.find(n => n.id === oldS.connection!.nodeId);
+          const srcNode = workingNodes.find(n => n.id === oldS.connection!.nodeId);
           const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
           const srcType = srcDef?.outputs[oldS.connection!.outputKey]?.type;
           if (srcType && typesCompatible(srcType, socket.type)) {
@@ -2041,7 +2047,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
 
     set(state => {
-      const updated = state.nodes
+      const path = state.activeGroupPath;
+      const srcNodes = path.length > 0 ? (getActiveNodes(state.nodes, path) ?? state.nodes) : state.nodes;
+
+      const updated = srcNodes
         .filter(n => n.id !== nodeId)
         .map(n => {
           // Reroute downstream connections that pointed to oldNode's outputs
@@ -2068,7 +2077,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           }
           return changed ? { ...n, inputs: updatedInputs } : n;
         });
-      return { nodes: [...updated, newNodeObj], swapTargetNodeId: null };
+
+      const newList = [...updated, newNodeObj];
+
+      if (path.length > 0) {
+        const newTop = setActiveNodes(state.nodes, path, newList);
+        return { nodes: newTop ?? state.nodes, swapTargetNodeId: null };
+      }
+      return { nodes: newList, swapTargetNodeId: null };
     });
 
     get().compile();

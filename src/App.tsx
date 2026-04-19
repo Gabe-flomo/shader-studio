@@ -384,7 +384,7 @@ function App() {
         {compact ? '⌨' : '⌨ Keys'}
       </button>
       <button
-        onClick={() => { if (window.confirm('Clear all nodes?')) loadExampleGraph('blank'); }}
+        onClick={() => loadExampleGraph('blank')}
         style={{ ...btnStyle(), color: '#f38ba8' }}
         title="Clear all nodes"
       >

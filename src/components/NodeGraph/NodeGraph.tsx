@@ -1329,6 +1329,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             externalInputKeys={externalPortMap?.get(node.id)}
             externalParamKeys={externalParamMap?.get(node.id)}
             onAltClickSocket={handleAltClickSocket}
+            isConnectionDragging={dragConnection !== null}
           />
         ))}
 
