@@ -373,8 +373,15 @@ export function FunctionList({ glslErrors }: Props) {
   };
 
   const handleLibraryFnInsert = (fn: FnDef) => {
-    // Library fns are compiled into the preview automatically — just insert the call.
-    // Float functions take only x; vec2/vec3 take only uv. t is accessed via u_time inside.
+    // Guard: inserting a library function that has the same name as the active
+    // session function would make the function call itself — skip to avoid recursion.
+    const activeFn = functions.find(f => f.id === activeId);
+    if (activeFn?.name === fn.name) return;
+
+    // Load the library function into the session so it compiles (no-op if name already present).
+    const { addFunctionFromDef } = useFunctionBuilder.getState();
+    addFunctionFromDef(fn);
+
     const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
     insert(`${fn.name}(${primaryArg})`);
   };
