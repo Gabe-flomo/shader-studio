@@ -522,7 +522,6 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
   const sec5Ref = useRef<HTMLDivElement>(null);
   const sec6Ref = useRef<HTMLDivElement>(null);
   const sec7Ref = useRef<HTMLDivElement>(null);
-  const sec8Ref = useRef<HTMLDivElement>(null);
   const sec9Ref = useRef<HTMLDivElement>(null);
   const sec10Ref = useRef<HTMLDivElement>(null);
   const sec11Ref = useRef<HTMLDivElement>(null);
