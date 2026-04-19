@@ -127,7 +127,15 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     // ── Call expression: directly invoke the named function ──────────────────────
     // functions use u_time internally — no t param needed
     const primaryInput = activeFn.returnType === 'float' ? 'x' : 'uv';
+    const primaryType  = activeFn.returnType === 'float' ? 'float' : 'vec2';
     const callExpr = `${activeFn.name}(${primaryInput})`;
+
+    // Ensure the primary input (x for float, uv for vec2/vec3) is always declared
+    // in the ExprBlock's scope — callExpr depends on it even if the body doesn't
+    // reference it by name (e.g. a constant function like `0.5 + sin(t)`).
+    if (!inputs.some(i => i.name === primaryInput)) {
+      inputs.push({ name: primaryInput, type: primaryType as 'float' | 'vec2' | 'vec3', slider: null });
+    }
 
     // ── GLSL function definitions — library fns first, session overrides by name ─
     const sessionNames = new Set(functions.map(f => f.name));
