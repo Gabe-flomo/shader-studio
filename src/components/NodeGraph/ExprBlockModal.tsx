@@ -4,6 +4,7 @@ import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
 import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
 import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
+import { emitFunction } from '../FunctionBuilder/glslCompiler';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -127,6 +128,7 @@ type Snapshot = { lines: WarpLine[]; result: string };
 
 export function ExprBlockModal({ node, onClose }: Props) {
   const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
+  const { savedFunctionDefs } = useFunctionBuilder();
 
   // Read current params
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];
@@ -354,6 +356,18 @@ export function ExprBlockModal({ node, onClose }: Props) {
       el.focus();
       el.setSelectionRange(cursor, cursor);
     });
+  };
+
+  // Insert a saved library function call and inject its definition into glslFunctions
+  const insertLibraryFn = (fn: FnDef) => {
+    const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
+    insertAtFocused(`${fn.name}(${primaryArg})`);
+    const emitted = emitFunction(fn);
+    const existing = (node.params.glslFunctions as string | undefined) ?? '';
+    const sig = `${fn.returnType} ${fn.name}(`;
+    if (!existing.includes(sig)) {
+      updateNodeParams(node.id, { glslFunctions: existing ? `${existing}\n\n${emitted}` : emitted });
+    }
   };
 
   /** Push a history snapshot when the user finishes typing in any field. */
@@ -749,6 +763,47 @@ export function ExprBlockModal({ node, onClose }: Props) {
               <p style={{ fontSize: '9px', color: '#45475a', marginBottom: '8px' }}>
                 Click to insert into the focused expression or return field
               </p>
+              {savedFunctionDefs.length > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  <div style={{ fontSize: '9px', color: '#a6e3a1', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                    Saved Functions
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                    {savedFunctionDefs.map(fn => {
+                      const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
+                      const existing = (node.params.glslFunctions as string | undefined) ?? '';
+                      const loaded = existing.includes(`${fn.returnType} ${fn.name}(`);
+                      return (
+                        <button
+                          key={fn.id}
+                          onClick={() => insertLibraryFn(fn)}
+                          title={`Insert: ${fn.name}(${primaryArg}) — ${loaded ? 'already loaded' : 'will inject definition'}`}
+                          style={{
+                            ...BTN,
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            background: loaded ? '#1e3a2a' : '#11111b',
+                            borderColor: loaded ? '#a6e3a155' : '#a6e3a133',
+                            color: loaded ? '#a6e3a1' : '#6c9e6c',
+                          }}
+                          onMouseEnter={e => {
+                            (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4';
+                            (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a1aa';
+                          }}
+                          onMouseLeave={e => {
+                            (e.currentTarget as HTMLButtonElement).style.color = loaded ? '#a6e3a1' : '#6c9e6c';
+                            (e.currentTarget as HTMLButtonElement).style.borderColor = loaded ? '#a6e3a155' : '#a6e3a133';
+                          }}
+                        >
+                          {fn.name}
+                          <span style={{ color: '#45475a', marginLeft: '3px', fontSize: '9px' }}>{fn.returnType}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {GLSL_GROUPS.map(group => (
                 <div key={group} style={{ marginBottom: '6px' }}>
                   <div style={{ fontSize: '9px', color: '#45475a', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
