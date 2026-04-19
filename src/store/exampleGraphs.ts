@@ -12261,6 +12261,564 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+
+  // ── 3D: Sphere Inversion ───────────────────────────────────────────────────────
+  sphereInversion3D: {
+    label: '3D: Sphere Inversion',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere Inversion',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 330 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+              },
+              // Rotate slowly so inversion weirdness is visible
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'y', angle: 0.0 },
+              },
+              // Sphere inversion maps exterior to interior
+              {
+                id: 'inv_sg', type: 'sphereInvert3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Inverted Pos' } },
+                params: { radius: 1.0 },
+              },
+              // Torus in the inverted space — looks like nested rings
+              {
+                id: 'sdf_sg', type: 'torusSDF3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'inv_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { majorR: 0.6, minorR: 0.18 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 100, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, bgR: 0.02, bgG: 0.02, bgB: 0.08, albedoR: 0.6, albedoG: 0.8, albedoB: 1.0 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Kaleidoscope Box ───────────────────────────────────────────────────────
+  kaleidoscopeBox3D: {
+    label: '3D: Kaleidoscope Box',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Kaleidoscope',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 330 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+              },
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'y', angle: 0.0 },
+              },
+              // Octahedral kaleidoscope folding — 3 iterations for fractal depth
+              {
+                id: 'kali_sg', type: 'kaleidoscope3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { symmetry: 'oct', iterations: '3' },
+              },
+              {
+                id: 'sdf_sg', type: 'boxSDF3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { sizeX: 0.3, sizeY: 0.3, sizeZ: 0.3 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.0, fov: 1.5, maxSteps: 100, maxDist: 20.0, lightX: 1.5, lightY: 2.5, lightZ: 2.0, bgR: 0.03, bgG: 0.02, bgB: 0.06, albedoR: 1.0, albedoG: 0.6, albedoB: 0.3 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Icosahedral Kaleidoscope ──────────────────────────────────────────────
+  icoKaleidoscope3D: {
+    label: '3D: Icosahedral Kaleido',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Icosahedral',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 330 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+              },
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'x', angle: 0.0 },
+              },
+              // Icosahedral symmetry — golden-ratio mirror planes, 4 iterations
+              {
+                id: 'kali_sg', type: 'kaleidoscope3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { symmetry: 'icos', iterations: '4' },
+              },
+              // Sphere in the kaleidoscoped space
+              {
+                id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.25 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.0, fov: 1.5, maxSteps: 120, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 1.0, bgR: 0.02, bgG: 0.04, bgB: 0.06, albedoR: 0.4, albedoG: 1.0, albedoB: 0.7 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Möbius Warp ───────────────────────────────────────────────────────────
+  mobiusWarp3D: {
+    label: '3D: Möbius Warp',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Möbius Warp',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 330 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+              },
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'y', angle: 0.0 },
+              },
+              // Möbius / Blaschke conformal warp on the xz plane
+              {
+                id: 'mob_sg', type: 'mobiusWarp3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Möbius Pos' } },
+                params: { cx: 0.45, cy: 0.0, scale: 1.0, plane: 'xz' },
+              },
+              {
+                id: 'sdf_sg', type: 'torusSDF3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mob_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { majorR: 0.5, minorR: 0.18 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 100, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 2.0, bgR: 0.03, bgG: 0.02, bgB: 0.06, albedoR: 0.9, albedoG: 0.5, albedoB: 0.8 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Log-Polar Zoom World ────────────────────────────────────────────────
+  logPolarZoom3D: {
+    label: '3D: Log-Polar Zoom',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Log-Polar Zoom',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 330 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+              },
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'y', angle: 0.0 },
+              },
+              // Log-polar tiling creates zoom-self-similar copies
+              {
+                id: 'lp_sg', type: 'logPolarWarp3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Log-Polar Pos' } },
+                params: { scale: 1.5, tile: 1.2, spiral: 0.3 },
+              },
+              {
+                id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'lp_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.35 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.0, fov: 1.5, maxSteps: 120, maxDist: 20.0, lightX: 1.5, lightY: 2.0, lightZ: 2.5, bgR: 0.02, bgG: 0.03, bgB: 0.06, albedoR: 0.3, albedoG: 0.7, albedoB: 1.0 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Helix Warp ──────────────────────────────────────────────────────────
+  helixWarp3D: {
+    label: '3D: Helix Warp',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Helix Warp',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              // Helix domain warp — wraps the angle by Y height, creating a twisted corridor
+              {
+                id: 'hx_sg', type: 'helixWarp3D', position: { x: 260, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Helix Pos' } },
+                params: { rate: 1.2, pitch: 1.4 },
+              },
+              // Box in the helix-warped space — looks like a twisting rectangular tunnel
+              {
+                id: 'sdf_sg', type: 'boxSDF3D', position: { x: 460, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hx_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { sizeX: 0.2, sizeY: 0.6, sizeZ: 0.2 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 100, maxDist: 20.0, lightX: 2.0, lightY: 2.5, lightZ: 3.0, bgR: 0.03, bgG: 0.03, bgB: 0.05, albedoR: 0.8, albedoG: 0.6, albedoB: 1.0 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Shear + Kaleidoscope ───────────────────────────────────────────────
+  shearKaleidoscope3D: {
+    label: '3D: Shear + Kaleido',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Shear + Kaleido',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 330 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+              },
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'z', angle: 0.0 },
+              },
+              // Shear the space first — creates an asymmetric skew before folding
+              {
+                id: 'sh_sg', type: 'shear3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Sheared Pos' } },
+                params: { sxy: 0.4, sxz: 0.2, syz: 0.0 },
+              },
+              // Then fold with tetrahedral symmetry
+              {
+                id: 'kali_sg', type: 'kaleidoscope3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sh_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { symmetry: 'tet', iterations: '3' },
+              },
+              {
+                id: 'sdf_sg', type: 'torusSDF3D', position: { x: 840, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { majorR: 0.45, minorR: 0.15 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.2, fov: 1.5, maxSteps: 120, maxDist: 20.0, lightX: 2.0, lightY: 3.0, lightZ: 1.5, bgR: 0.02, bgG: 0.03, bgB: 0.06, albedoR: 1.0, albedoG: 0.8, albedoB: 0.3 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── 3D: Möbius + Inversion Stack ─────────────────────────────────────────────
+  mobiusInversionStack3D: {
+    label: '3D: Möbius + Inversion',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene_2', type: 'sceneGroup', position: { x: 300, y: 230 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Möbius + Inversion',
+          subgraph: {
+            nodes: [
+              {
+                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
+              },
+              {
+                id: 'time_sg', type: 'time', position: { x: 60, y: 330 },
+                inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
+              },
+              {
+                id: 'rot_sg', type: 'rotate3D', position: { x: 240, y: 200 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_sg',   outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'time_sg', outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } },
+                params: { axis: 'y', angle: 0.0 },
+              },
+              // Möbius warp on xy plane first
+              {
+                id: 'mob_sg', type: 'mobiusWarp3D', position: { x: 440, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rot_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Möbius Pos' } },
+                params: { cx: 0.35, cy: 0.1, scale: 1.0, plane: 'xy' },
+              },
+              // Then sphere invert — two conformal maps compounded
+              {
+                id: 'inv_sg', type: 'sphereInvert3D', position: { x: 640, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mob_sg', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Inverted Pos' } },
+                params: { radius: 0.9 },
+              },
+              {
+                id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 840, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'inv_sg', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.4 },
+              },
+            ],
+            outputNodeId: 'sdf_sg',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ray_3', type: 'rayMarch', position: { x: 580, y: 180 },
+        inputs: {
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene_2', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time:  { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' } },
+        params: { camDist: 3.5, fov: 1.5, maxSteps: 120, maxDist: 20.0, lightX: 2.5, lightY: 3.0, lightZ: 1.0, bgR: 0.03, bgG: 0.02, bgB: 0.07, albedoR: 0.7, albedoG: 0.4, albedoB: 1.0 },
+      },
+      {
+        id: 'output_4', type: 'output', position: { x: 840, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ray_3', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
