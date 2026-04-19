@@ -735,7 +735,8 @@ export const ExprBlockNode: NodeDefinition = {
     const lines = node.params.lines as Array<{ lhs: string; op: string; rhs: string }> | undefined;
     const resultExpr = (node.params.result as string | undefined)?.trim() || '';
 
-    if (lines && lines.length > 0) {
+    if (Array.isArray(lines)) {
+      // New format: lines array is present (may be empty — just a result expression)
       for (const line of lines) {
         if (line.lhs && line.rhs) {
           stmts.push(`        ${line.lhs} ${line.op || '='} ${line.rhs};\n`);
@@ -744,6 +745,7 @@ export const ExprBlockNode: NodeDefinition = {
       stmts.push(`        ${outVar} = ${resultExpr || outDefault};\n`);
     } else {
       // ── Legacy semicolon-separated expr format (backward compat) ─────────
+      // Only reached when lines is undefined (old saved graphs without the lines field)
       const rawExpr = ((node.params.expr as string) || outDefault).trim();
       const parts = rawExpr.split(';').map(s => s.trim()).filter(s => s.length > 0);
       if (parts.length <= 1) {

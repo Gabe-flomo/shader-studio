@@ -105,14 +105,14 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
   const handleSave = () => {
     if (!activeFn) return;
 
-    const expr = normalizeBodyExpr(activeFn.body);
-    // t is auto-injected; function names (session + library) are not sockets
+    const bodyExpr = normalizeBodyExpr(activeFn.body);
+    // Only function names are implicit — t is a real free variable the user can wire
     const allFnNames = [
       ...functions.map(f => f.name),
       ...savedFunctionDefs.map(f => f.name),
     ];
-    const implicit = new Set(['t', ...allFnNames]);
-    const freeVars = detectFreeVars(expr, implicit);
+    const implicit = new Set([...allFnNames]);
+    const freeVars = detectFreeVars(bodyExpr, implicit);
 
     // Infer GLSL type for well-known variable names; default to float
     const VEC2_NAMES = new Set(['uv', 'st', 'pos', 'coord', 'p2']);
@@ -124,30 +124,21 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     };
     const inputs = freeVars.map(name => ({ name, type: inferType(name), slider: null }));
 
-    // ── Call expression: directly invoke the named function ──────────────────────
-    // functions use u_time internally — no t param needed
-    const primaryInput = activeFn.returnType === 'float' ? 'x' : 'uv';
-    const primaryType  = activeFn.returnType === 'float' ? 'float' : 'vec2';
-    const callExpr = `${activeFn.name}(${primaryInput})`;
-
-    // Ensure the primary input (x for float, uv for vec2/vec3) is always declared
-    // in the ExprBlock's scope — callExpr depends on it even if the body doesn't
-    // reference it by name (e.g. a constant function like `0.5 + sin(t)`).
-    if (!inputs.some(i => i.name === primaryInput)) {
-      inputs.push({ name: primaryInput, type: primaryType as 'float' | 'vec2' | 'vec3', slider: null });
-    }
-
-    // ── GLSL function definitions — library fns first, session overrides by name ─
+    // ── Inline the body directly — no wrapping function call ─────────────────
+    // The ExprBlock declares each input as a local variable, so `sin(x + t)` just works.
+    // Helper functions used by the body (other session fns, lib fns) go in glslFunctions.
+    // The active function itself is NOT emitted — its body IS the expression.
     const sessionNames = new Set(functions.map(f => f.name));
     const libFns = savedFunctionDefs.filter(f => !sessionNames.has(f.name));
-    const glslFunctions = [...libFns.map(emitFunction), ...functions.map(emitFunction)].join('\n\n');
+    const otherSessionFns = functions.filter(f => f.id !== activeFn.id);
+    const glslFunctions = [...libFns.map(emitFunction), ...otherSessionFns.map(emitFunction)].join('\n\n');
 
     const params = {
       outputType: activeFn.returnType,
       inputs,
-      lines: [],               // no intermediate warp lines — call goes straight to result
-      result: callExpr,
-      expr: callExpr,
+      lines: [],
+      result: bodyExpr,
+      expr: bodyExpr,
       glslFunctions,
       // Raw fn defs — used to re-open this ExprBlock in the Function Builder
       fnBuilderFns: functions.map(({ name, returnType, body }) => ({ name, returnType, body })),
@@ -164,8 +155,10 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
       }
     }
 
-    // Create a new ExprBlock with pre-filled params
-    addNode('exprNode', { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 }, params);
+    // Create a new ExprBlock with pre-filled params, then pin linkedBlockId so
+    // subsequent saves update this node instead of spawning duplicates.
+    const newNodeId = addNode('exprNode', { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 }, params);
+    if (newNodeId) useFunctionBuilder.getState().setLinkedBlockId(newNodeId);
     onNavigateToStudio?.();
   };
 
