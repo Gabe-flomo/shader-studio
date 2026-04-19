@@ -618,7 +618,6 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
         <TocLink label="Sources" targetRef={sec5Ref} />
         <TocLink label="Transforms" targetRef={sec6Ref} />
         <TocLink label="Groups" targetRef={sec7Ref} />
-        <TocLink label="Loops" targetRef={sec8Ref} />
         <TocLink label="Noise" targetRef={sec9Ref} />
         <TocLink label="Color" targetRef={sec10Ref} />
         <TocLink label="Math" targetRef={sec11Ref} />
@@ -711,6 +710,10 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
             Shader Studio lets you build fragment shaders visually, without writing GLSL directly. You wire together nodes — each node is a math operation — and the system compiles your graph into a real GLSL program that runs on your GPU. Every change you make recompiles and rerenders in real time.
           </p>
           <Tip>You don't need to write any GLSL. But the more you understand the math underneath each node, the more interesting things you can build. This guide explains both layers.</Tip>
+
+          <p style={S.p}>
+            If you've never written a shader before, the mental shift to learn is: there's no loop. You write one function. The GPU calls it for every pixel simultaneously.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -801,6 +804,10 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
           </table>
           </div>
           <Tip>Hold <C>1</C>, <C>2</C>, or <C>3</C> to highlight nodes by type — useful for finding specific nodes in a complex graph.</Tip>
+
+          <p style={S.p}>
+            A few practical things to know when you're getting oriented: if the preview canvas is blank, the most likely cause is that your Output node has nothing wired into it — check that at least one wire is connected to the Output's color input. If you see a red overlay on the canvas, that's a GLSL compile error; open the Code Panel (<C>Cmd+\</C>) and look at the bottom for the exact error line. If the graph has drifted off screen, press <C>F</C> to fit everything back into view.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -853,7 +860,7 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
           <h2 style={S.sectionTitle}>Data Types</h2>
           <div style={S.divider} />
 
-          <p style={S.p}>Every wire in Shader Studio carries a typed value. Port colors reflect the type — you can only connect matching types.</p>
+          <p style={S.p}>Every wire in Shader Studio carries a typed value. Port colors reflect the type — you can only connect matching types. When you try to wire mismatched types, the connection will simply refuse to snap. That's not a bug — it's the type system telling you something needs converting first.</p>
 
           <DataTable rows={[
             ['float', 'Single number', '0.5, sin(time), length(uv)'],
@@ -862,6 +869,10 @@ export function LearnPage({ onNavigateToStudio }: LearnPageProps) {
             ['vec4', 'Four channels (r, g, b, a)', 'Texture sample, RGBA color'],
             ['bool', 'True or false', 'step() result, comparisons'],
           ]} />
+
+          <p style={S.p}>
+            <strong style={{ color: T.textBold }}>The most common situation:</strong> you have a <C>float</C> (like noise or an SDF distance) and need a <C>vec3</C> color to wire into Output. Use <C>FloatToVec3</C> to broadcast it to all three channels, or pipe it through an <C>IQ Palette</C> node to turn it into a real color.
+          </p>
 
           <h3 style={S.subTitle}>Swizzling</h3>
           <p style={S.p}>
@@ -876,6 +887,10 @@ color.xxxx    // → vec4(0.8, 0.8, 0.8, 0.8) — repeat x four times
 color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
 
           <p style={S.p}>The <C>Swizzle</C> node in Shader Studio does exactly this — pick which components to extract or rearrange.</p>
+
+          <p style={S.p}>
+            You'll use swizzling constantly. The most common cases: extracting <C>.xy</C> from a vec3 color to get a vec2 for UV math, broadcasting a single channel with <C>.xxx</C> to make a grayscale vec3.
+          </p>
 
           <h3 style={S.subTitle}>Port Colors</h3>
           <ul style={S.ul}>
@@ -926,6 +941,10 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
             <li style={S.li}><strong style={{ color: T.textBold }}>Onion</strong> — <C>abs(d) - r</C> — hollow shell of thickness r</li>
           </ul>
 
+          <p style={S.p}>
+            Think of SDF booleans like cookie cutters on clay. Union merges two shapes as if they were one piece. Subtract cuts one shape out of another. SmoothUnion is the most visually interesting — it melts shapes together with a soft blend at the boundary, controlled by the k parameter. Higher k = more melting.
+          </p>
+
           <h3 style={S.subTitle}>Repetition</h3>
           <ul style={S.ul}>
             <li style={S.li}><C>opRepeat</C> — infinite tiling via <C>mod</C> — use before any SDF to create a grid</li>
@@ -943,14 +962,14 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
           <div style={S.divider} />
 
           <ul style={S.ul}>
-            <li style={S.li}><C>UV</C> <TypeBadge type="vec2" /> — normalized 0→1 screen coordinate, centered and aspect-corrected. Every shader starts here.</li>
-            <li style={S.li}><C>PixelUV</C> <TypeBadge type="vec2" /> — raw screen pixel coordinate in pixels, <C>(0,0)</C> at bottom-left.</li>
-            <li style={S.li}><C>Time</C> <TypeBadge type="float" /> — elapsed seconds. Wire into anything to animate it — oscillate with Sin/Cos, ramp with Fract, or use directly as a phase offset.</li>
-            <li style={S.li}><C>Mouse</C> <TypeBadge type="vec2" /> — normalized cursor position in the same space as UV. Subtract from UV and feed into an SDF to make shapes follow the cursor.</li>
+            <li style={S.li}><C>UV</C> <TypeBadge type="vec2" /> — normalized screen coordinate that is centered at (0,0) and aspect-corrected, so circles look round rather than elliptical. Every shader starts here — it's the position input that flows into every SDF and transform in your graph.</li>
+            <li style={S.li}><C>PixelUV</C> <TypeBadge type="vec2" /> — raw screen pixel coordinate in pixels, <C>(0,0)</C> at bottom-left. Useful when you need exact pixel-level math, but most shaders use UV instead.</li>
+            <li style={S.li}><C>Time</C> <TypeBadge type="float" /> — elapsed seconds that just counts up forever as the shader runs. To oscillate it back and forth, pipe it through a Sin or Cos node; to loop it on a fixed period, use Fract.</li>
+            <li style={S.li}><C>Mouse</C> <TypeBadge type="vec2" /> — normalized cursor position in the exact same coordinate space as UV, so (0,0) is center of screen. Subtract <C>Mouse</C> from <C>UV</C> to get a direction vector pointing from the cursor to each pixel — feed that into an SDF to make shapes track the cursor.</li>
             <li style={S.li}><C>Constant</C> — any type, fixed value. Use for colors, scales, offsets, or any static parameter you want to tweak without wiring.</li>
-            <li style={S.li}><C>PrevFrame</C> <TypeBadge type="vec4" /> — last frame's rendered output. Enables feedback loops for motion blur, trails, paint accumulation, and cellular automata.</li>
+            <li style={S.li}><C>PrevFrame</C> <TypeBadge type="vec4" /> — the full rendered output from the previous frame, fed back as an input. This creates a feedback loop: the output of frame N becomes an input to frame N+1, enabling trails, motion blur, paint accumulation, and cellular automata.</li>
             <li style={S.li}><C>TextureInput</C> <TypeBadge type="vec4" /> — sample from an uploaded image. Use UV as the sample coordinate to reference photos or patterns in your shader.</li>
-            <li style={S.li}><C>AudioInput</C> <TypeBadge type="float" /> — microphone amplitude 0→1. Wire through a smoothstep to drive SDF scale, palette phase, or any parameter for audio-reactive visuals.</li>
+            <li style={S.li}><C>AudioInput</C> <TypeBadge type="float" /> — microphone amplitude 0→1, updated every frame. You need to grant microphone permission the first time you use it; after that the browser remembers.</li>
           </ul>
         </div>
 
@@ -985,6 +1004,11 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
             ]}
             caption="UV → Fract (tile) → Rotate2D → sdCircle — a rotating grid of circles"
           />
+
+          <p style={S.p}>
+            The key mental shift with transforms: you never move a shape. You move the coordinate space the shape lives in. Moving UV to the right by 0.2 is the same as moving every shape to the left by 0.2. This is why transforms go before SDFs in the chain.
+          </p>
+          <Tip>Stack Fract + Rotate2D before an SDF for a rotating tiled grid. The Fract tiles first, then the rotation applies inside each tile.</Tip>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -996,6 +1020,10 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
 
           <Warn>Groups are not just folders — SDF Boolean Groups and Scene Groups change how outputs are computed, not just how nodes are displayed.</Warn>
 
+          <p style={S.p}>
+            Groups become important once your graph gets complex. The most commonly used are Regular Group (just tidying up) and SDF Boolean Group (when you have multiple SDFs that should behave as one shape).
+          </p>
+
           <ul style={S.ul}>
             <li style={S.li}><strong style={{ color: T.textBold }}>Regular Group</strong> — visual organization only. Select nodes, press <C>Cmd+G</C>. Collapses into a single node for cleanliness; functionally identical to having the nodes inline.</li>
             <li style={S.li}><strong style={{ color: T.textBold }}>SDF Boolean Group</strong> — computes <C>min</C>/<C>max</C> across all SDF children automatically. Use this when you have multiple SDF nodes that you want unioned/subtracted into one combined field. Required for multi-shape 2D scenes.</li>
@@ -1003,36 +1031,8 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
             <li style={S.li}><strong style={{ color: T.textBold }}>SpaceWarpGroup</strong> — encapsulates a 3D coordinate transform. Takes <C>ScenePos</C>, applies 3D transforms, outputs a warped <C>vec3</C> that can feed into another Scene Group to warp its sampling space.</li>
             <li style={S.li}><strong style={{ color: T.textBold }}>March Loop Group</strong> — wraps a raymarch loop for accumulation effects like volumetric fog or glow along the ray.</li>
           </ul>
-        </div>
 
-        {/* ══════════════════════════════════════════════════════════════════════
-            SECTION 8 — THE WIRED LOOP SYSTEM
-        ══════════════════════════════════════════════════════════════════════ */}
-        <div ref={sec8Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
-          <h2 style={S.sectionTitle}>The Wired Loop System</h2>
-          <div style={S.divider} />
-
-          <p style={S.p}>
-            <C>LoopStart</C> and <C>LoopEnd</C> create a GPU loop evaluated per-pixel. Place nodes between them; the "carry" value passes from iteration to iteration. The carry type determines what accumulates.
-          </p>
-
-          <h3 style={S.subTitle}>Carry Types</h3>
-          <ul style={S.ul}>
-            <li style={S.li}><TypeBadge type="vec2" /> carry — UV transform accumulation (e.g. camera orbit, domain warping)</li>
-            <li style={S.li}><TypeBadge type="vec3" /> carry — color accumulation (e.g. summing light contributions per iteration)</li>
-            <li style={S.li}><TypeBadge type="float" /> carry — scalar accumulation (e.g. distance marching step total)</li>
-          </ul>
-
-          <h3 style={S.subTitle}>Example: 8-Iteration Color Accumulation</h3>
-          <p style={S.p}>Each iteration adds a glow contribution from a rotated copy of the SDF, accumulating into a final color:</p>
-          <CodeBlock>{`// LoopStart: carry = vec3(0.0) (black), 8 iterations
-//   → compute angle offset from loop index
-//   → rotate UV by that angle
-//   → evaluate sdCircle at rotated UV
-//   → add glow to carry: carry += palette(dist) * 0.02 / abs(dist)
-// LoopEnd: outputs accumulated vec3 color`}</CodeBlock>
-
-          <Warn>Loop count is a compile-time GLSL constant — it cannot be driven by a data wire at runtime. Changing it recompiles the shader.</Warn>
+          <Warn>If your SDF boolean operations aren't working as expected, check that the SDF nodes are inside an SDF Boolean Group. Putting them in a Regular Group won't combine their distance fields.</Warn>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -1044,22 +1044,22 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
 
           <h3 style={S.subTitle}>FBM — Fractal Brownian Motion</h3>
           <p style={S.p}>
-            Summed octaves of Perlin noise at increasing frequencies. Each octave adds finer detail. Parameters: <C>octaves</C> (4–6 typical), <C>lacunarity</C> (frequency multiplier per octave, usually 2.0), <C>gain</C> (amplitude falloff per octave, usually 0.5). Output: <TypeBadge type="float" />.
+            Summed octaves of Perlin noise at increasing frequencies. Each octave adds finer detail. Parameters: <C>octaves</C> (4–6 typical), <C>lacunarity</C> (frequency multiplier per octave, usually 2.0), <C>gain</C> (amplitude falloff per octave, usually 0.5). Output: <TypeBadge type="float" />. Start with 4 octaves. If you want fine detail add more, but be aware each octave doubles the computation cost.
           </p>
 
           <h3 style={S.subTitle}>Voronoi</h3>
           <p style={S.p}>
-            Cell-based distance noise. Outputs <TypeBadge type="vec2" /> — <C>.x</C> is the distance to the nearest cell center (f1), <C>.y</C> is the distance to the nearest cell edge (f2 - f1). The edge value <C>.y</C> makes great vein and crack patterns — use it instead of <C>.x</C> when you want sharp veins.
+            Cell-based distance noise. Outputs <TypeBadge type="vec2" /> — <C>.x</C> is the distance to the nearest cell center (f1), <C>.y</C> is the distance to the nearest cell edge (f2 - f1). The edge value <C>.y</C> makes great vein and crack patterns — use it instead of <C>.x</C> when you want sharp veins. The most underused output is <C>.y</C> (edge distance) — try <C>smoothstep(0.0, 0.05, voronoi.y)</C> to get clean cell borders.
           </p>
 
           <h3 style={S.subTitle}>Domain Warp</h3>
           <p style={S.p}>
-            Feeds FBM derivatives back as UV offsets, applied iteratively. Apply 2–3 levels for organic lava/storm/marble flow. Each warp pass sends the coordinate through noise and displaces it by the result, creating recursive turbulence.
+            Feeds FBM derivatives back as UV offsets, applied iteratively. Apply 2–3 levels for organic lava/storm/marble flow. Each warp pass sends the coordinate through noise and displaces it by the result, creating recursive turbulence. To wire it: connect UV into DomainWarp's position input, connect Time into its time input, then feed DomainWarp's warped vec2 output into an FBM or SDF in place of bare UV.
           </p>
 
           <h3 style={S.subTitle}>Flow Field</h3>
           <p style={S.p}>
-            Curl-noise velocity field — divergence-free, so it creates rotational flow without sinks or sources. Wire into a UV offset over time for particle-streak and fluid-ribbon effects.
+            Curl-noise velocity field — divergence-free, so it creates rotational flow without sinks or sources. Wire into a UV offset over time for particle-streak and fluid-ribbon effects. Good for anything that should look like it's moving through a fluid — smoke, ink in water, aurora.
           </p>
 
           <Tip>Wire Time at different speeds into each noise layer for parallax — slower base, faster detail. The visual separation reads as depth.</Tip>
@@ -1083,6 +1083,11 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
 // d = phase offset (which colors appear at t=0)`}</CodeBlock>
           <p style={S.p}>Start with <C>a = b = vec3(0.5)</C> for a full-range cycle. Adjust <C>c</C> per-channel to shift red/green/blue independently.</p>
 
+          <p style={S.p}>
+            A good starting point for any palette: set <C>a=b=vec3(0.5)</C> for a full-range cycle, <C>c=vec3(1.0)</C> for one full cycle per unit of t, <C>d=vec3(0.0, 0.33, 0.67)</C> for evenly spaced phase shifts across RGB. This gives a rainbow that cycles smoothly.
+          </p>
+          <Tip>If your output looks too dark or washed out, the first thing to check is whether your t input is in the 0→1 range. Values outside that range still work but cycle through the palette multiple times.</Tip>
+
           <h3 style={S.subTitle}>Other Color Nodes</h3>
           <ul style={S.ul}>
             <li style={S.li}><C>HSV ↔ RGB</C> — convert between color spaces. Wire Time into Hue for a cycling rainbow.</li>
@@ -1103,6 +1108,10 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
         <div ref={sec11Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
           <h2 style={S.sectionTitle}>Math Nodes</h2>
           <div style={S.divider} />
+
+          <p style={S.p}>
+            You'll use math nodes constantly — they're the glue between sources, noise, and color. The most-reached-for nodes in practice: Multiply (scale anything), Mix (blend between two things), Smoothstep (create soft edges and masks), and Abs (fold negative values to positive, useful for symmetric patterns).
+          </p>
 
           <h3 style={S.subTitle}>Arithmetic</h3>
           <p style={S.p}>
@@ -1136,6 +1145,9 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
           <p style={S.p}>
             <C>Length</C> — magnitude of a vector. <C>Dot</C> — dot product. <C>Normalize</C> — unit vector. <C>MakeVec2</C> — combine two floats. <C>ExtractX</C> / <C>ExtractY</C> — split a vec2. <C>MakeVec3</C> / <C>FloatToVec3</C> — build vec3. <C>AddVec2</C> / <C>MultiplyVec2</C>, <C>AddVec3</C> / <C>MultiplyVec3</C> — typed vector arithmetic. <C>Tanh</C> — hyperbolic tangent (smooth clamping).
           </p>
+          <p style={S.p}>
+            A common pattern: <C>length(uv)</C> gives you the distance from center as a float — feed it into noise, sin, or a palette to get radially symmetric patterns.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -1144,6 +1156,10 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
         <div ref={sec12Ref as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
           <h2 style={S.sectionTitle}>Animation</h2>
           <div style={S.divider} />
+
+          <p style={S.p}>
+            Animation in Shader Studio is almost always driven by the Time source node. The LFO nodes wrap Time in a waveform so you don't have to do the math manually.
+          </p>
 
           <h3 style={S.subTitle}>LFO Nodes</h3>
           <p style={S.p}>
@@ -1184,6 +1200,9 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
           <p style={S.p}>
             Locks animation to a musical tempo. Outputs a beat phase from 0→1 that resets each beat. Use beat divisions to sync to different note values: multiply by 1 for quarter notes, 0.5 for half notes, 4 for sixteenth notes.
           </p>
+          <p style={S.p}>
+            The simplest animation pattern: UV + sin(time) * amplitude. This shifts the entire UV space back and forth, making everything appear to sway. Change the multiplier on UV inside the sin to add spatial frequency — different parts of the canvas sway at different phases.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -1193,9 +1212,13 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
           <h2 style={S.sectionTitle}>Effects</h2>
           <div style={S.divider} />
 
+          <p style={S.p}>
+            Effect nodes are applied after your main shader output — they post-process the color before it reaches the screen. Chain them in order: lighting → tonemapping → lens effects → grain.
+          </p>
+
           <h3 style={S.subTitle}>MakeLight</h3>
           <p style={S.p}>
-            Point light in 2D. Inputs: <C>position</C> (vec2), <C>color</C> (vec3), <C>intensity</C> (float), <C>falloff</C> (float). Computes a glow at the boundary of any SDF — wire the distance field into it. Wire multiple MakeLight outputs additively (Add node) to build multi-light scenes.
+            Point light in 2D. Inputs: <C>position</C> (vec2), <C>color</C> (vec3), <C>intensity</C> (float), <C>falloff</C> (float). Computes a glow at the boundary of any SDF — wire the distance field into it. MakeLight outputs a color contribution that you wire additively — connect multiple MakeLight outputs into a chain of Add nodes before your Output to build multi-light scenes.
           </p>
 
           <h3 style={S.subTitle}>ToneMap</h3>
@@ -1207,10 +1230,12 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
           <p style={S.p}>Film grain overlay. Intensity parameter controls strength. Adds noise that reads as film texture rather than digital artifacts.</p>
 
           <h3 style={S.subTitle}>ChromaticAberration</h3>
-          <p style={S.p}>Offsets the R, G, and B channels by slightly different amounts with a radial falloff from center. Creates lens-fringe rainbow banding at high contrast edges.</p>
+          <p style={S.p}>Offsets the R, G, and B channels by slightly different amounts with a radial falloff from center. Creates lens-fringe rainbow banding at high contrast edges. The effect is strongest at the edges of the canvas and zero at center — start with a small offset (0.005–0.02), it gets intense quickly.</p>
 
           <h3 style={S.subTitle}>GravitationalLens</h3>
           <p style={S.p}>UV distortion imitating gravitational lensing — pixels curve around a center point as if space itself were bent. Wire the lensed UV into any downstream node's coordinate input.</p>
+
+          <Tip>Grain + ChromaticAberration together create a convincing analog/VHS look. Add a very subtle RadialBlur for the full effect.</Tip>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -1220,40 +1245,52 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
           <h2 style={S.sectionTitle}>Blur &amp; Lens Effects</h2>
           <div style={S.divider} />
 
+          <p style={S.p}>
+            Blur nodes take the current rendered output as input and sample it multiple times with offsets. They're expensive — GaussianBlur at high radius can drop frame rate significantly. Use BoxBlur for real-time interactive work, GaussianBlur for export/recording.
+          </p>
+
           <ul style={S.ul}>
-            <li style={S.li}><C>BoxBlur</C> — fast, uniform, cheap. Good for real-time blurring where quality is secondary.</li>
-            <li style={S.li}><C>GaussianBlur</C> — high quality, separable, two passes internally. Best quality for photography-style soft focus.</li>
-            <li style={S.li}><C>RadialBlur</C> — streaks from a center point. Good for speed, explosion, or zoom-lens effects.</li>
-            <li style={S.li}><C>MotionBlur</C> — directional blur along a vec2. Simulate camera shake or fast panning.</li>
-            <li style={S.li}><C>DepthOfField</C> — requires a depth map input. Blurs based on distance from a focal plane. Use a distance field or noise as the depth source.</li>
-            <li style={S.li}><C>BokehBlur</C> — hexagonal aperture shape. Most realistic but most expensive. Best for cinematic shots with obvious bokeh discs.</li>
+            <li style={S.li}><C>BoxBlur</C> — fast, uniform, cheap. Good for real-time blurring where quality is secondary — pairs well with PrevFrame feedback to create smooth motion trails.</li>
+            <li style={S.li}><C>GaussianBlur</C> — high quality, separable, two passes internally. Best quality for photography-style soft focus — lower the radius first if frame rate drops.</li>
+            <li style={S.li}><C>RadialBlur</C> — streaks from a center point. Good for speed, explosion, or zoom-lens effects — try animating the center with Mouse for interactive zoom streaks.</li>
+            <li style={S.li}><C>MotionBlur</C> — directional blur along a vec2. Simulate camera shake or fast panning — wire an LFO into the direction vec2 for shaky-cam motion.</li>
+            <li style={S.li}><C>DepthOfField</C> — requires a depth map input. Blurs based on distance from a focal plane — use a distance field or noise as the depth source for a pseudo-3D look.</li>
+            <li style={S.li}><C>BokehBlur</C> — hexagonal aperture shape. Most realistic but most expensive — use sparingly, best for cinematic stills or slow-moving scenes where the bokeh disc shape is noticeable.</li>
           </ul>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
-            SECTION — PARTICLE-LIKE EFFECTS (via Wired Loops)
+            SECTION — PARTICLE-LIKE EFFECTS
         ══════════════════════════════════════════════════════════════════════ */}
         <div ref={secParticlesRef as React.RefObject<HTMLDivElement>} style={{ scrollMarginTop: '20px' }}>
           <h2 style={S.sectionTitle}>Particle-Like Effects</h2>
           <div style={S.divider} />
 
           <p style={S.p}>
-            Shader Studio has no native particle system — but you can simulate particles using a Wired Loop plus noise. The key insight: each loop iteration represents one "particle." Use the loop index plus noise to compute a unique position per particle, then accumulate glow from each one into the carry color.
+            Shader Studio doesn't have a native particle system, but you can fake convincing particle motion using noise and flow fields. The key insight: instead of tracking individual particles over time, you reverse the question — for each pixel, ask <em>"is there a particle near me right now?"</em>
           </p>
 
-          <p style={S.p}>8-particle accumulation loop pattern:</p>
-          <CodeBlock>{`// LoopStart: carry = vec3(0.0), 8 iterations
-//   idx = float(loopIndex)
-//   angle = idx * 6.28318 / 8.0 + time * 0.5
-//   pos = vec2(cos(angle), sin(angle)) * 0.3 + noise(idx + time) * 0.05
-//   d = length(uv - pos) - 0.015
-//   glow = 0.001 / max(abs(d), 0.0001)
-//   carry += palette(idx / 8.0) * glow
-// LoopEnd → Output`}</CodeBlock>
-
+          <h3 style={S.subTitle}>Flow Field Streams</h3>
           <p style={S.p}>
-            For fluid streaks without loops, wire a <C>Flow Field</C> node's velocity <TypeBadge type="vec2" /> output into a UV displacement over time. The divergence-free curl noise creates convincing particle-like streams.
+            The easiest approach. Drop a <C>Flow Field</C> node, wire its <TypeBadge type="vec2" /> output into a <C>Displace</C> node's offset, and feed Time into the flow field. The curl-noise velocity field pushes UV around frame to frame — anything you render at that displaced UV appears to streak and flow. Add a <C>PrevFrame</C> blend (mix current with 0.95 of last frame) for persistence trails.
           </p>
+
+          <h3 style={S.subTitle}>Voronoi "Cells as Particles"</h3>
+          <p style={S.p}>
+            Drop a <C>Voronoi</C> node. Each cell has a center — that center is your "particle." The <C>.x</C> output is the distance to the nearest cell center, so <C>0.005 / max(voronoi.x, 0.0001)</C> gives a glow at every cell center simultaneously. Animate the Voronoi scale or offset with Time to make the particles drift.
+          </p>
+          <CodeBlock>{`// Voronoi particle glow pattern:
+// voronoi.x = distance to nearest cell center
+float glow = 0.003 / max(voronoi.x, 0.0001);
+// color each particle by cell ID:
+vec3 col = palette(voronoi.y) * glow;`}</CodeBlock>
+
+          <h3 style={S.subTitle}>FBM-Displaced Dot Grid</h3>
+          <p style={S.p}>
+            Tile UV with <C>Fract</C> to make a grid. Inside each tile, compute the distance to a point that's offset by FBM noise — each tile's "particle" is in a different random position. Render a glowing dot at that position. Feed Time into the FBM to animate.
+          </p>
+
+          <Tip>Combine Flow Field streaks with a PrevFrame blend at 0.92–0.96 persistence. The slight decay prevents total saturation while the motion blur accumulates into streak trails.</Tip>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════════
@@ -1263,14 +1300,18 @@ color.zy      // → vec2(0.1, 0.3)   — z then y`}</CodeBlock>
           <h2 style={S.sectionTitle}>Fractals</h2>
           <div style={S.divider} />
 
+          <p style={S.p}>
+            Fractal nodes are self-contained — drop one, wire UV in, wire the float output into IQ Palette, wire that into Output. You'll have something interesting in under a minute.
+          </p>
+
           <ul style={S.ul}>
-            <li style={S.li}><C>Mandelbrot</C> — classic escape-time fractal. Parameters: iteration count, max iterations, zoom, center. Output: float (iteration ratio 0→1).</li>
-            <li style={S.li}><C>Julia</C> — same iteration as Mandelbrot but with a fixed complex seed <C>c</C> you parameterize. Wire Mouse into <C>c</C> for interactive morphing.</li>
-            <li style={S.li}><C>BurningShip</C> — Mandelbrot variant with <C>abs()</C> applied to real and imaginary parts before squaring. Produces ship-like shapes at the boundary.</li>
-            <li style={S.li}><C>Apollonian</C> — gasket fractal via iterated circle inversions. Fills the plane with mutually tangent circles recursively.</li>
-            <li style={S.li}><C>IFS</C> — Iterated Function System: define up to 4 affine transform matrices, iterate N times. Classic use: Sierpinski triangle, Barnsley fern.</li>
-            <li style={S.li}><C>KochSnowflake</C> — 2D IFS producing the Koch curve. Each iteration replaces segments with a triangle bump.</li>
-            <li style={S.li}><C>MengerSponge</C> — 3D SDF produced by iterated box folds. Use inside a Scene Group for a raymarched Menger sponge.</li>
+            <li style={S.li}><C>Mandelbrot</C> — classic escape-time fractal. Parameters: iteration count, max iterations, zoom, center. Output: float (iteration ratio 0→1). Start by adjusting zoom to find an interesting boundary region — the most detail lives at the edge of the set.</li>
+            <li style={S.li}><C>Julia</C> — same iteration as Mandelbrot but with a fixed complex seed <C>c</C> you parameterize. Wire Mouse into <C>c</C> for interactive morphing — slowly moving the cursor reveals wildly different fractal structures.</li>
+            <li style={S.li}><C>BurningShip</C> — Mandelbrot variant with <C>abs()</C> applied to real and imaginary parts before squaring. Visually distinctive for its flame-like, asymmetric boundaries — zoom into the bottom of the set to see the eponymous ship shape.</li>
+            <li style={S.li}><C>Apollonian</C> — gasket fractal via iterated circle inversions. Fills the plane with mutually tangent circles recursively — increase iterations for finer detail, but 5–6 is usually enough before the circles become sub-pixel.</li>
+            <li style={S.li}><C>IFS</C> — Iterated Function System: define up to 4 affine transform matrices, iterate N times. Classic use: Sierpinski triangle, Barnsley fern — the first parameter to tweak is the probability weighting for each transform.</li>
+            <li style={S.li}><C>KochSnowflake</C> — 2D IFS producing the Koch curve. Each iteration replaces segments with a triangle bump — at 4–5 iterations the snowflake shape is fully recognizable and good for combining with SDF booleans.</li>
+            <li style={S.li}><C>MengerSponge</C> — 3D SDF produced by iterated box folds. Use inside a Scene Group for a raymarched Menger sponge — crank up iteration count for more holes, but each iteration multiplies raymarch cost significantly.</li>
           </ul>
 
           <Tip>Feed the iteration output (float 0→1) into IQ Palette for classic fractal coloring — different palette phases reveal different structure in the boundary regions.</Tip>
