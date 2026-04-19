@@ -12262,9 +12262,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   },
 
 
-  // ── 3D: Sphere Inversion ───────────────────────────────────────────────────────
+  // ── MLG: Sphere Inversion Space Warp ─────────────────────────────────────────
+  // Sphere inversion applied to the march ray at every step — the entire world
+  // gets mapped inside-out. Objects near the inversion radius appear infinitely far;
+  // objects far away collapse toward the center.
   sphereInversion3D: {
-    label: '3D: Sphere Inversion',
+    label: 'MLG: Sphere Inversion',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12283,27 +12286,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Sphere Inversion',
+          label: 'Torus',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Sphere inversion maps exterior to interior
-              {
-                id: 'inv_sg', type: 'sphereInvert3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'torusSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Inverted Pos' } },
-                params: { radius: 1.0 },
-              },
-              // Torus in the inverted space — looks like nested rings
-              {
-                id: 'sdf_sg', type: 'torusSDF3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'inv_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { majorR: 0.6, minorR: 0.18 },
-              },
+                params: { majorR: 0.6, minorR: 0.18 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12329,10 +12320,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 0.6, albedoG: 0.8, albedoB: 1.0,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'inv_b', type: 'sphereInvert3D', position: { x: 300, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Inverted Pos' } },
+                params: { radius: 1.2 } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 520, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'inv_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
@@ -12347,9 +12342,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: Kaleidoscope Box ───────────────────────────────────────────────────────
+  // ── MLG: Octahedral Kaleidoscope Space Warp ───────────────────────────────────
+  // Kaleidoscope folding on the march ray — every step the ray position is mirror-
+  // folded into one octant. Creates infinite reflective fractal symmetry across
+  // the whole scene, not just one object.
   kaleidoscopeBox3D: {
-    label: '3D: Kaleidoscope Box',
+    label: 'MLG: Kaleidoscope (Oct)',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12368,26 +12366,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Kaleidoscope',
+          label: 'Box',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Octahedral kaleidoscope folding — 3 iterations for fractal depth
-              {
-                id: 'kali_sg', type: 'kaleidoscope3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'boxSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
-                params: { symmetry: 'oct', iterations: '3' },
-              },
-              {
-                id: 'sdf_sg', type: 'boxSDF3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { sizeX: 0.3, sizeY: 0.3, sizeZ: 0.3 },
-              },
+                params: { sizeX: 0.3, sizeY: 0.3, sizeZ: 0.3 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12413,10 +12400,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 1.0, albedoG: 0.6, albedoB: 0.3,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'kali_b', type: 'kaleidoscope3D', position: { x: 300, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { symmetry: 'oct', iterations: '3' } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 520, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
@@ -12431,9 +12422,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: Icosahedral Kaleidoscope ──────────────────────────────────────────────
+  // ── MLG: Icosahedral Kaleidoscope Space Warp ──────────────────────────────────
+  // Golden-ratio mirror planes folded into the march ray. 4 iterations creates
+  // deep fractal icosahedral symmetry — 60-fold, filling all of space.
   icoKaleidoscope3D: {
-    label: '3D: Icosahedral Kaleido',
+    label: 'MLG: Kaleidoscope (Icos)',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12452,27 +12445,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Icosahedral',
+          label: 'Sphere',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Icosahedral symmetry — golden-ratio mirror planes, 4 iterations
-              {
-                id: 'kali_sg', type: 'kaleidoscope3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
-                params: { symmetry: 'icos', iterations: '4' },
-              },
-              // Sphere in the kaleidoscoped space
-              {
-                id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.25 },
-              },
+                params: { radius: 0.3 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12498,10 +12479,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 0.4, albedoG: 1.0, albedoB: 0.7,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'kali_b', type: 'kaleidoscope3D', position: { x: 300, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { symmetry: 'icos', iterations: '4' } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 520, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
@@ -12516,9 +12501,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: Möbius Warp ───────────────────────────────────────────────────────────
+  // ── MLG: Möbius Conformal Space Warp ─────────────────────────────────────────
+  // Blaschke factor applied to the xz plane of the ray at every march step.
+  // The conformal map warps the entire scene — geometry close to the focal point
+  // (cx,cy) gets compressed while the opposite side stretches.
   mobiusWarp3D: {
-    label: '3D: Möbius Warp',
+    label: 'MLG: Möbius Space Warp',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12537,26 +12525,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Möbius Warp',
+          label: 'Torus',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Möbius / Blaschke conformal warp on the xz plane
-              {
-                id: 'mob_sg', type: 'mobiusWarp3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'torusSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Möbius Pos' } },
-                params: { cx: 0.45, cy: 0.0, scale: 1.0, plane: 'xz' },
-              },
-              {
-                id: 'sdf_sg', type: 'torusSDF3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mob_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { majorR: 0.5, minorR: 0.18 },
-              },
+                params: { majorR: 0.55, minorR: 0.2 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12582,10 +12559,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 0.9, albedoG: 0.5, albedoB: 0.8,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mob_b', type: 'mobiusWarp3D', position: { x: 300, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Möbius Pos' } },
+                params: { cx: 0.45, cy: 0.0, scale: 1.0, plane: 'xz' } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 520, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mob_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
@@ -12600,9 +12581,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: Log-Polar Zoom World ────────────────────────────────────────────────
+  // ── MLG: Log-Polar Zoom Space Warp ────────────────────────────────────────────
+  // Log-radial tiling on the march ray. Each step the ray's distance from the
+  // origin is tiled in log space — the same geometry repeats at every power-of-e
+  // zoom level, creating an infinite zoom self-similar world.
   logPolarZoom3D: {
-    label: '3D: Log-Polar Zoom',
+    label: 'MLG: Log-Polar Zoom',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12621,26 +12605,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Log-Polar Zoom',
+          label: 'Sphere',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Log-polar tiling creates zoom-self-similar copies
-              {
-                id: 'lp_sg', type: 'logPolarWarp3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Log-Polar Pos' } },
-                params: { scale: 1.5, tile: 1.2, spiral: 0.3 },
-              },
-              {
-                id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'lp_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.35 },
-              },
+                params: { radius: 0.35 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12666,10 +12639,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 0.3, albedoG: 0.7, albedoB: 1.0,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'lp_b', type: 'logPolarWarp3D', position: { x: 300, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Log-Polar Pos' } },
+                params: { scale: 1.5, tile: 1.2, spiral: 0.3 } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 520, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'lp_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
@@ -12684,9 +12661,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: Helix Warp ──────────────────────────────────────────────────────────
+  // ── MLG: Helix Space Warp ─────────────────────────────────────────────────────
+  // Helix domain warp on the march ray. The ray's xz angle is offset by its y
+  // height, twisting all of space into a helical corridor. Any geometry you put
+  // in the scene gets wound around the helix axis.
   helixWarp3D: {
-    label: '3D: Helix Warp',
+    label: 'MLG: Helix Space Warp',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12705,27 +12685,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Helix Warp',
+          label: 'Box',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Helix domain warp — wraps the angle by Y height, creating a twisted corridor
-              {
-                id: 'hx_sg', type: 'helixWarp3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'boxSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Helix Pos' } },
-                params: { rate: 1.2, pitch: 1.4 },
-              },
-              // Box in the helix-warped space — looks like a twisting rectangular tunnel
-              {
-                id: 'sdf_sg', type: 'boxSDF3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hx_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { sizeX: 0.2, sizeY: 0.6, sizeZ: 0.2 },
-              },
+                params: { sizeX: 0.25, sizeY: 0.5, sizeZ: 0.25 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12751,10 +12719,14 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 0.8, albedoG: 0.6, albedoB: 1.0,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'hx_b', type: 'helixWarp3D', position: { x: 300, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Helix Pos' } },
+                params: { rate: 1.2, pitch: 1.4 } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 520, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'hx_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
@@ -12769,9 +12741,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: Shear + Kaleidoscope ───────────────────────────────────────────────
+  // ── MLG: Shear + Kaleidoscope Space Warp ─────────────────────────────────────
+  // Shear applied first (skewing the coordinate frame asymmetrically), then
+  // tetrahedral kaleidoscope folds. Combining them in the march body warps all
+  // of space with a non-symmetric fractal structure.
   shearKaleidoscope3D: {
-    label: '3D: Shear + Kaleido',
+    label: 'MLG: Shear + Kaleido',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12790,33 +12765,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Shear + Kaleido',
+          label: 'Torus',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Shear the space first — creates an asymmetric skew before folding
-              {
-                id: 'sh_sg', type: 'shear3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'torusSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Sheared Pos' } },
-                params: { sxy: 0.4, sxz: 0.2, syz: 0.0 },
-              },
-              // Then fold with tetrahedral symmetry
-              {
-                id: 'kali_sg', type: 'kaleidoscope3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sh_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
-                params: { symmetry: 'tet', iterations: '3' },
-              },
-              {
-                id: 'sdf_sg', type: 'torusSDF3D', position: { x: 660, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { majorR: 0.45, minorR: 0.15 },
-              },
+                params: { majorR: 0.45, minorR: 0.15 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12842,10 +12799,18 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 1.0, albedoG: 0.8, albedoB: 0.3,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sh_b', type: 'shear3D', position: { x: 280, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Sheared Pos' } },
+                params: { sxy: 0.4, sxz: 0.2, syz: 0.0 } },
+              { id: 'kali_b', type: 'kaleidoscope3D', position: { x: 480, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sh_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+                params: { symmetry: 'tet', iterations: '3' } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 680, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'kali_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
@@ -12860,9 +12825,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── 3D: Möbius + Inversion Stack ─────────────────────────────────────────────
+  // ── MLG: Möbius + Inversion Space Warp ───────────────────────────────────────
+  // Two conformal maps composed in the march body: Möbius (Blaschke) on the xy
+  // plane followed by sphere inversion. The compound map creates a highly non-
+  // trivial distortion of all space — expect interesting limit-set geometry.
   mobiusInversionStack3D: {
-    label: '3D: Möbius + Inversion',
+    label: 'MLG: Möbius + Inversion',
     counter: 7,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
@@ -12881,33 +12849,15 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
-          label: 'Möbius + Inversion',
+          label: 'Sphere',
           subgraph: {
             nodes: [
-              {
-                id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 200 },
-                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {},
-              },
-              // Möbius warp on xy plane first
-              {
-                id: 'mob_sg', type: 'mobiusWarp3D', position: { x: 260, y: 200 },
+              { id: 'sp_sg', type: 'scenePos', position: { x: 60, y: 150 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 280, y: 150 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Möbius Pos' } },
-                params: { cx: 0.35, cy: 0.1, scale: 1.0, plane: 'xy' },
-              },
-              // Then sphere invert — two conformal maps compounded
-              {
-                id: 'inv_sg', type: 'sphereInvert3D', position: { x: 460, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mob_sg', outputKey: 'pos' } } },
-                outputs: { pos: { type: 'vec3', label: 'Inverted Pos' } },
-                params: { radius: 0.9 },
-              },
-              {
-                id: 'sdf_sg', type: 'sphereSDF3D', position: { x: 660, y: 200 },
-                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'inv_sg', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.4 },
-              },
+                params: { radius: 0.4 } },
             ],
             inputPorts: [], outputPorts: [],
           },
@@ -12933,10 +12883,18 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           albedoR: 0.7, albedoG: 0.4, albedoB: 1.0,
           subgraph: {
             nodes: [
-              { id: 'mp_b', type: 'marchPos',    position: { x: 80,  y: 160 }, inputs: {}, outputs: { pos:  { type: 'vec3',  label: 'Position'   } }, params: {} },
-              { id: 'md_b', type: 'marchDist',   position: { x: 80,  y: 300 }, inputs: {}, outputs: { dist: { type: 'float', label: 'March Dist' }, t: { type: 'float', label: 't' } }, params: {} },
-              { id: 'mo_b', type: 'marchOutput', position: { x: 340, y: 160 },
+              { id: 'mp_b', type: 'marchPos',  position: { x: 80,  y: 160 },
+                inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'mob_b', type: 'mobiusWarp3D', position: { x: 280, y: 160 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mp_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Möbius Pos' } },
+                params: { cx: 0.35, cy: 0.1, scale: 1.0, plane: 'xy' } },
+              { id: 'inv_b', type: 'sphereInvert3D', position: { x: 480, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mob_b', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Inverted Pos' } },
+                params: { radius: 0.9 } },
+              { id: 'mo_b', type: 'marchOutput', position: { x: 680, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'inv_b', outputKey: 'pos' } } },
                 outputs: {}, params: {} },
             ],
             inputPorts: [], outputPorts: [],
