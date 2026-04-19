@@ -1797,14 +1797,14 @@ float diff = max(dot(n, normalize(vec3(1.0,1.0,0.5))), 0.0);`}</CodeBlock>
           </ul>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '16px' }}>
-            <TryIt label="UV Gradient" />
-            <TryIt label="Animated Circle" />
-            <TryIt label="IQ Palette Demo" />
-            <TryIt label="Mandala" />
-            <TryIt label="FBM Lava" />
-            <TryIt label="Raymarched Torus" />
-            <TryIt label="Feedback Zoom Tunnel" />
-            <TryIt label="Julia Set Explorer" />
+            <TryIt exampleKey="uv-gradient" label="UV Gradient" onTry={tryExample} />
+            <TryIt exampleKey="animated-circle" label="Animated Circle" onTry={tryExample} />
+            <TryIt exampleKey="iq-palette-demo" label="IQ Palette Demo" onTry={tryExample} />
+            <TryIt exampleKey="mandala" label="Mandala" onTry={tryExample} />
+            <TryIt exampleKey="fbm-lava" label="FBM Lava" onTry={tryExample} />
+            <TryIt exampleKey="3d-torus" label="Raymarched Torus" onTry={tryExample} />
+            <TryIt exampleKey="feedback-tunnel" label="Feedback Zoom Tunnel" onTry={tryExample} />
+            <TryIt exampleKey="julia-set" label="Julia Set Explorer" onTry={tryExample} />
           </div>
         </div>
 
