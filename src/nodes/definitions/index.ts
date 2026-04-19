@@ -84,6 +84,9 @@ export {
   SDFSmoothUnionNode, SDFSmoothSubtractNode, SDFSmoothIntersectNode,
   SDFRoundNode, SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
+  MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
+  SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
+  MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
 } from './sdf3d';
 
 // 3D Scene (composable)
@@ -173,6 +176,8 @@ import {
   SDFRoundNode, SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
   MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
+  SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
+  MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -390,6 +395,12 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mirroredRepeat3D: MirroredRepeat3DNode,
   sdCross3D: SdCrossNode,
   mengerSponge: MengerSpongeNode,
+  sphereInvert3D: SphereInvert3DNode,
+  shear3D: Shear3DNode,
+  kaleidoscope3D: Kaleidoscope3DNode,
+  mobiusWarp3D: MobiusWarp3DNode,
+  logPolarWarp3D: LogPolarWarp3DNode,
+  helixWarp3D: HelixWarp3DNode,
   // 3D Fractals (DE nodes)
   mandelboxDE: MandelboxDENode,
   kifsTetra: KIFSTetrahedronDENode,

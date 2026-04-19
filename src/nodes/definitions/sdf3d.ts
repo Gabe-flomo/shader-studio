@@ -1332,3 +1332,253 @@ export const MengerSpongeNode: NodeDefinition = {
   },
 };
 
+
+// ─── Sphere Invert 3D ─────────────────────────────────────────────────────────
+export const SphereInvert3DNode: NodeDefinition = {
+  type: 'sphereInvert3D',
+  label: 'Sphere Invert 3D',
+  category: '3D Transforms',
+  description: 'Invert 3D space through a sphere (p → p·r²/|p|²). Inside maps to outside; basis for Kleinian-group and Apollonian fractal structures.',
+  inputs: {
+    pos:    { type: 'vec3',  label: 'Position' },
+    radius: { type: 'float', label: 'Radius' },
+  },
+  outputs: { pos: { type: 'vec3', label: 'Inverted Pos' } },
+  defaultParams: { radius: 1.0 },
+  paramDefs: {
+    radius: { label: 'Radius', type: 'float', min: 0.01, max: 5.0, step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const pv = inputVars.pos    ?? 'vec3(0.0)';
+    const r  = inputVars.radius ?? p(node.params.radius, 1.0);
+    return {
+      code: [
+        `    vec3  ${id}_p   = ${pv};\n`,
+        `    float ${id}_d2  = dot(${id}_p, ${id}_p);\n`,
+        `    vec3  ${id}_pos = ${id}_d2 > 0.0001 ? ${id}_p * ((${r}) * (${r})) / ${id}_d2 : ${id}_p;\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
+// ─── Shear 3D ─────────────────────────────────────────────────────────────────
+export const Shear3DNode: NodeDefinition = {
+  type: 'shear3D',
+  label: 'Shear 3D',
+  category: '3D Transforms',
+  description: 'Shear 3D space: slide axes by a fraction of another axis. sxy shifts X by Y·k, sxz shifts X by Z·k, syz shifts Y by Z·k.',
+  inputs: {
+    pos: { type: 'vec3',  label: 'Position' },
+    sxy: { type: 'float', label: 'X by Y' },
+    sxz: { type: 'float', label: 'X by Z' },
+    syz: { type: 'float', label: 'Y by Z' },
+  },
+  outputs: { pos: { type: 'vec3', label: 'Sheared Pos' } },
+  defaultParams: { sxy: 0.5, sxz: 0.0, syz: 0.0 },
+  paramDefs: {
+    sxy: { label: 'X by Y', type: 'float', min: -3.0, max: 3.0, step: 0.05 },
+    sxz: { label: 'X by Z', type: 'float', min: -3.0, max: 3.0, step: 0.05 },
+    syz: { label: 'Y by Z', type: 'float', min: -3.0, max: 3.0, step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const pv  = inputVars.pos ?? 'vec3(0.0)';
+    const sxy = inputVars.sxy ?? p(node.params.sxy, 0.5);
+    const sxz = inputVars.sxz ?? p(node.params.sxz, 0.0);
+    const syz = inputVars.syz ?? p(node.params.syz, 0.0);
+    return {
+      code: [
+        `    vec3 ${id}_pos = ${pv};\n`,
+        `    ${id}_pos.x += (${sxy}) * ${id}_pos.y + (${sxz}) * ${id}_pos.z;\n`,
+        `    ${id}_pos.y += (${syz}) * ${id}_pos.z;\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
+// ─── Kaleidoscope 3D ──────────────────────────────────────────────────────────
+export const Kaleidoscope3DNode: NodeDefinition = {
+  type: 'kaleidoscope3D',
+  label: 'Kaleidoscope 3D',
+  category: '3D Transforms',
+  description: 'Mirror-fold symmetry: Octahedral (abs+sort), Tetrahedral (3 diagonal planes), or Icosahedral (golden-ratio planes). More iterations = more fractal complexity.',
+  inputs: {
+    pos: { type: 'vec3', label: 'Position' },
+  },
+  outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
+  defaultParams: { symmetry: 'oct', iterations: '3' },
+  paramDefs: {
+    symmetry: { label: 'Symmetry', type: 'select', options: [
+      { value: 'oct',  label: 'Octahedral' },
+      { value: 'tet',  label: 'Tetrahedral' },
+      { value: 'icos', label: 'Icosahedral' },
+    ]},
+    iterations: { label: 'Iterations', type: 'select', options: [1,2,3,4,5].map(n => ({ value: String(n), label: String(n) })) },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const pv    = inputVars.pos ?? 'vec3(0.0)';
+    const sym   = (node.params.symmetry  as string) ?? 'oct';
+    const iters = Math.max(1, Math.min(5, Number(node.params.iterations) || 3));
+    const lines: string[] = [`    vec3 ${id}_pos = ${pv};\n`];
+
+    if (sym === 'oct') {
+      for (let i = 0; i < iters; i++) {
+        lines.push(`    ${id}_pos = abs(${id}_pos);\n`);
+        lines.push(`    if (${id}_pos.x < ${id}_pos.y) ${id}_pos.xy = ${id}_pos.yx;\n`);
+        lines.push(`    if (${id}_pos.x < ${id}_pos.z) ${id}_pos.xz = ${id}_pos.zx;\n`);
+        lines.push(`    if (${id}_pos.y < ${id}_pos.z) ${id}_pos.yz = ${id}_pos.zy;\n`);
+      }
+    } else if (sym === 'tet') {
+      for (let i = 0; i < iters; i++) {
+        lines.push(`    if (${id}_pos.x + ${id}_pos.y < 0.0) { float ${id}_ta${i} = -${id}_pos.y; ${id}_pos.y = -${id}_pos.x; ${id}_pos.x = ${id}_ta${i}; }\n`);
+        lines.push(`    if (${id}_pos.x + ${id}_pos.z < 0.0) { float ${id}_tb${i} = -${id}_pos.z; ${id}_pos.z = -${id}_pos.x; ${id}_pos.x = ${id}_tb${i}; }\n`);
+        lines.push(`    if (${id}_pos.y + ${id}_pos.z < 0.0) { float ${id}_tc${i} = -${id}_pos.z; ${id}_pos.z = -${id}_pos.y; ${id}_pos.y = ${id}_tc${i}; }\n`);
+      }
+    } else {
+      const PHI = 1.6180339887;
+      lines.push(`    vec3 ${id}_n1 = normalize(vec3(0.0, 1.0, ${PHI.toFixed(7)}));\n`);
+      lines.push(`    vec3 ${id}_n2 = normalize(vec3(1.0, ${PHI.toFixed(7)}, 0.0));\n`);
+      lines.push(`    vec3 ${id}_n3 = normalize(vec3(${PHI.toFixed(7)}, 0.0, 1.0));\n`);
+      for (let i = 0; i < iters; i++) {
+        lines.push(`    ${id}_pos = abs(${id}_pos);\n`);
+        lines.push(`    ${id}_pos -= 2.0 * min(dot(${id}_pos, ${id}_n1), 0.0) * ${id}_n1;\n`);
+        lines.push(`    ${id}_pos -= 2.0 * min(dot(${id}_pos, ${id}_n2), 0.0) * ${id}_n2;\n`);
+        lines.push(`    ${id}_pos -= 2.0 * min(dot(${id}_pos, ${id}_n3), 0.0) * ${id}_n3;\n`);
+      }
+    }
+    return { code: lines.join(''), outputVars: { pos: `${id}_pos` } };
+  },
+};
+
+// ─── Möbius Warp 3D ───────────────────────────────────────────────────────────
+export const MobiusWarp3DNode: NodeDefinition = {
+  type: 'mobiusWarp3D',
+  label: 'Möbius Warp 3D',
+  category: '3D Transforms',
+  description: 'Conformal Möbius (Blaschke) transform on the chosen plane. Warps space toward/away from focal point (cx,cy). Keep |(cx,cy)| < 1 for stability.',
+  inputs: {
+    pos:   { type: 'vec3',  label: 'Position' },
+    cx:    { type: 'float', label: 'Center X' },
+    cy:    { type: 'float', label: 'Center Y' },
+    scale: { type: 'float', label: 'Scale' },
+  },
+  outputs: { pos: { type: 'vec3', label: 'Möbius Pos' } },
+  defaultParams: { cx: 0.3, cy: 0.0, scale: 1.0, plane: 'xz' },
+  paramDefs: {
+    plane: { label: 'Plane', type: 'select', options: [
+      { value: 'xz', label: 'XZ (horizontal)' },
+      { value: 'xy', label: 'XY (front)' },
+      { value: 'yz', label: 'YZ (side)' },
+    ]},
+    cx:    { label: 'Center X', type: 'float', min: -0.99, max: 0.99, step: 0.01 },
+    cy:    { label: 'Center Y', type: 'float', min: -0.99, max: 0.99, step: 0.01 },
+    scale: { label: 'Scale',    type: 'float', min: 0.1,  max: 5.0,  step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const pv   = inputVars.pos   ?? 'vec3(0.0)';
+    const cx   = inputVars.cx    ?? p(node.params.cx, 0.3);
+    const cy   = inputVars.cy    ?? p(node.params.cy, 0.0);
+    const sc   = inputVars.scale ?? p(node.params.scale, 1.0);
+    const pl   = (node.params.plane as string) ?? 'xz';
+    const axes = pl === 'xy' ? 'xy' : pl === 'yz' ? 'yz' : 'xz';
+    return {
+      code: [
+        `    vec3  ${id}_pos = ${pv};\n`,
+        `    vec2  ${id}_z   = ${id}_pos.${axes};\n`,
+        `    vec2  ${id}_c   = vec2(${cx}, ${cy});\n`,
+        `    vec2  ${id}_num = ${id}_z - ${id}_c;\n`,
+        `    vec2  ${id}_den = vec2(1.0 - ${id}_c.x*${id}_z.x - ${id}_c.y*${id}_z.y,\n`,
+        `                           ${id}_c.y*${id}_z.x - ${id}_c.x*${id}_z.y);\n`,
+        `    float ${id}_d2  = dot(${id}_den, ${id}_den);\n`,
+        `    if (${id}_d2 > 1e-6) {\n`,
+        `        ${id}_pos.${axes} = vec2(${id}_num.x*${id}_den.x + ${id}_num.y*${id}_den.y,\n`,
+        `                                  ${id}_num.y*${id}_den.x - ${id}_num.x*${id}_den.y)\n`,
+        `                           / ${id}_d2 * (${sc});\n`,
+        `    }\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
+// ─── Log-Polar Warp 3D ────────────────────────────────────────────────────────
+export const LogPolarWarp3DNode: NodeDefinition = {
+  type: 'logPolarWarp3D',
+  label: 'Log-Polar Warp 3D',
+  category: '3D Transforms',
+  description: 'Log-radial domain warp on XZ: tiles log(r) to create zoom self-similarity. Spiral > 0 adds angle shear for nautilus / galaxy spiral repetition.',
+  inputs: {
+    pos:    { type: 'vec3',  label: 'Position' },
+    scale:  { type: 'float', label: 'Log Scale' },
+    tile:   { type: 'float', label: 'Tile Size' },
+    spiral: { type: 'float', label: 'Spiral' },
+  },
+  outputs: { pos: { type: 'vec3', label: 'Log-Polar Pos' } },
+  defaultParams: { scale: 1.0, tile: 1.5, spiral: 0.0 },
+  paramDefs: {
+    scale:  { label: 'Log Scale', type: 'float', min: 0.1,  max: 5.0, step: 0.05 },
+    tile:   { label: 'Tile Size', type: 'float', min: 0.05, max: 4.0, step: 0.05 },
+    spiral: { label: 'Spiral',    type: 'float', min: -3.0, max: 3.0, step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const pv = inputVars.pos    ?? 'vec3(0.0)';
+    const sc = inputVars.scale  ?? p(node.params.scale,  1.0);
+    const tl = inputVars.tile   ?? p(node.params.tile,   1.5);
+    const sp = inputVars.spiral ?? p(node.params.spiral, 0.0);
+    return {
+      code: [
+        `    vec3  ${id}_pos   = ${pv};\n`,
+        `    float ${id}_r     = length(${id}_pos.xz);\n`,
+        `    float ${id}_theta = atan(${id}_pos.z, ${id}_pos.x);\n`,
+        `    float ${id}_logR  = log(max(${id}_r, 0.0001)) * (${sc});\n`,
+        `    ${id}_logR = mod(${id}_logR + (${tl})*0.5, ${tl}) - (${tl})*0.5;\n`,
+        `    float ${id}_newR  = exp(${id}_logR / max(${sc}, 0.001));\n`,
+        `    float ${id}_phi   = ${id}_theta + ${id}_logR * (${sp});\n`,
+        `    ${id}_pos.xz = vec2(cos(${id}_phi), sin(${id}_phi)) * ${id}_newR;\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
+// ─── Helix Warp 3D ────────────────────────────────────────────────────────────
+export const HelixWarp3DNode: NodeDefinition = {
+  type: 'helixWarp3D',
+  label: 'Helix Warp 3D',
+  category: '3D Transforms',
+  description: 'Helix domain symmetry: geometry repeats along a helical path (DNA / spring / coil). Rate = turns per unit Y. Pitch = Y repeat distance.',
+  inputs: {
+    pos:   { type: 'vec3',  label: 'Position' },
+    rate:  { type: 'float', label: 'Rate (turns/unit)' },
+    pitch: { type: 'float', label: 'Pitch (Y period)' },
+  },
+  outputs: { pos: { type: 'vec3', label: 'Helix Pos' } },
+  defaultParams: { rate: 1.0, pitch: 1.0 },
+  paramDefs: {
+    rate:  { label: 'Rate (turns/unit)', type: 'float', min: -5.0, max: 5.0, step: 0.05 },
+    pitch: { label: 'Pitch (Y period)',  type: 'float', min: 0.05, max: 5.0, step: 0.05 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const pv    = inputVars.pos   ?? 'vec3(0.0)';
+    const rate  = inputVars.rate  ?? p(node.params.rate,  1.0);
+    const pitch = inputVars.pitch ?? p(node.params.pitch, 1.0);
+    return {
+      code: [
+        `    vec3  ${id}_pos = ${pv};\n`,
+        `    float ${id}_r   = length(${id}_pos.xz);\n`,
+        `    float ${id}_phi = atan(${id}_pos.z, ${id}_pos.x) - ${id}_pos.y * (${rate}) * 6.28318530;\n`,
+        `    ${id}_phi = mod(${id}_phi + 3.14159265, 6.28318530) - 3.14159265;\n`,
+        `    ${id}_pos.xz = vec2(cos(${id}_phi), sin(${id}_phi)) * ${id}_r;\n`,
+        `    ${id}_pos.y  = mod(${id}_pos.y + (${pitch})*0.5, ${pitch}) - (${pitch})*0.5;\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
