@@ -1238,10 +1238,20 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       let changed = false;
       const ts_m = Date.now();
 
-      // Stamp _groupOriginal on any unstamped nodes
-      if (sgNodes.some(n => !n.params?._groupOriginal)) {
+      // Stamp _groupOriginal on anchor nodes only (legacy migration for graphs saved
+      // before the _groupOriginal feature). Only run when NO nodes are stamped yet —
+      // once any node has the flag, migration has already completed and user-added nodes
+      // (which correctly lack the flag) must NOT be touched, or they become undeletable.
+      const ANCHOR_TYPES_MIGRATION = new Set([
+        'scenePos', 'sceneOutput', 'marchPos', 'marchDist', 'marchOutput',
+        'marchLoopInputs', 'marchLoopOutput', 'loopIndex',
+      ]);
+      const alreadyMigrated = sgNodes.some(n => n.params?._groupOriginal);
+      if (!alreadyMigrated) {
         sgNodes = sgNodes.map(n =>
-          n.params?._groupOriginal ? n : { ...n, params: { ...n.params, _groupOriginal: true } }
+          ANCHOR_TYPES_MIGRATION.has(n.type)
+            ? { ...n, params: { ...n.params, _groupOriginal: true } }
+            : n
         );
         changed = true;
       }
