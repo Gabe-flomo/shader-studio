@@ -692,6 +692,9 @@ export const ExprBlockNode: NodeDefinition = {
     // ── Determine input declarations ─────────────────────────────────────────
     const dynamicInputs = node.params.inputs as Array<{ name: string; type: string; slider: unknown }> | undefined;
 
+    // Type-appropriate zero for the output type — used as fallback value
+    const outDefault = outType === 'float' ? '0.0' : outType === 'vec2' ? 'vec2(0.0)' : 'vec3(0.0)';
+
     if (Array.isArray(dynamicInputs)) {
       // New format: handles empty array (inputs:[]) and populated arrays
       for (const inp of dynamicInputs) {
@@ -702,6 +705,11 @@ export const ExprBlockNode: NodeDefinition = {
       // Always inject t = u_time unless user explicitly has a t input socket
       if (!dynamicInputs.some(inp => inp.name === 't')) {
         decls.push(`        float t = u_time;\n`);
+      }
+      // Always inject p as a writable scratch variable (backward compat with old graphs
+      // that use semicolon-separated statements like "p = sin(x + t); p").
+      if (!dynamicInputs.some(inp => inp.name === 'p')) {
+        decls.push(`        ${outType} p = ${outDefault};\n`);
       }
     } else {
       // Legacy fallback: fixed set of variables (p, t, time, mx, my, a, b)
@@ -733,13 +741,13 @@ export const ExprBlockNode: NodeDefinition = {
           stmts.push(`        ${line.lhs} ${line.op || '='} ${line.rhs};\n`);
         }
       }
-      stmts.push(`        ${outVar} = ${resultExpr || 'p'};\n`);
+      stmts.push(`        ${outVar} = ${resultExpr || outDefault};\n`);
     } else {
       // ── Legacy semicolon-separated expr format (backward compat) ─────────
-      const rawExpr = ((node.params.expr as string) || 'p').trim();
+      const rawExpr = ((node.params.expr as string) || outDefault).trim();
       const parts = rawExpr.split(';').map(s => s.trim()).filter(s => s.length > 0);
       if (parts.length <= 1) {
-        stmts.push(`        ${outVar} = ${parts[0] ?? 'p'};\n`);
+        stmts.push(`        ${outVar} = ${parts[0] ?? outDefault};\n`);
       } else {
         for (let i = 0; i < parts.length - 1; i++) {
           stmts.push(`        ${parts[i]};\n`);
