@@ -2136,10 +2136,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const outerParamDefs = outerDef?.paramDefs ?? {};
           const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float');
           if (outerEntries.length === 0) return null;
+          const hidden = node.params.__marchSettingsHidden === true;
           return (
             <div style={{ borderTop: '1px solid #313244' }} onMouseDown={e => e.stopPropagation()}>
-              <div style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em' }}>MARCH SETTINGS</div>
-              {outerEntries.map(([paramKey, paramDef]) => {
+              <div
+                style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => updateNodeParams(node.id, { __marchSettingsHidden: !hidden }, { immediate: true })}
+              >
+                <span>MARCH SETTINGS</span>
+                <span style={{ fontSize: '8px', opacity: 0.6 }}>{hidden ? '▶' : '▼'}</span>
+              </div>
+              {!hidden && outerEntries.map(([paramKey, paramDef]) => {
                 const rawVal = node.params[paramKey];
                 const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
                 const step = paramDef.step ?? 1;
