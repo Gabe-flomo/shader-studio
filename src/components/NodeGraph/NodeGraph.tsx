@@ -1034,10 +1034,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     </button>
                     <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
                     <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
-                      if (window.confirm('Delete Scene Group and all its nodes?')) {
-                        removeNode(clickedNode.id);
-                        setContextMenu(null);
-                      }
+                      removeNode(clickedNode.id);
+                      setContextMenu(null);
                     }}>
                       Delete Scene Group
                     </button>
@@ -1053,10 +1051,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     </button>
                     <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
                     <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
-                      if (window.confirm('Delete Space Warp Group and all its nodes?')) {
-                        removeNode(clickedNode.id);
-                        setContextMenu(null);
-                      }
+                      removeNode(clickedNode.id);
+                      setContextMenu(null);
                     }}>
                       Delete Space Warp Group
                     </button>
@@ -1072,10 +1068,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     </button>
                     <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
                     <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
-                      if (window.confirm('Delete March Loop Group and all its nodes?')) {
-                        removeNode(clickedNode.id);
-                        setContextMenu(null);
-                      }
+                      removeNode(clickedNode.id);
+                      setContextMenu(null);
                     }}>
                       Delete March Loop Group
                     </button>
