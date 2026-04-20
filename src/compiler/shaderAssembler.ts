@@ -393,7 +393,7 @@ export function generateFragmentShader(
        * portInputOverrides keys must use SLUG-based IDs (i.e. `slug:inputKey`).
        * carryModeNaturalVars keys are ORIGINAL node IDs (pre-slug, used to look up subgraph.nodes).
        */
-      const compileSubgraphPass = (iterPrefix: string, portInputOverrides: Map<string, string>, carryModeNaturalVars: Map<string, string> = new Map()) => {
+      const compileSubgraphPass = (iterPrefix: string, portInputOverrides: Map<string, string>, carryModeNaturalVars: Map<string, string> = new Map(), exprBlockCarryVars: Map<string, Map<string, string>> = new Map()) => {
         const prefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
           const subSlug = subSlugMap.get(subNode.id)!;
           // Apply group-level param overrides: group.params stores `innerNodeId::paramKey` → value
@@ -628,6 +628,14 @@ export function generateFragmentShader(
               };
             }
           }
+          // Inject carry var names for ExprBlock nodes with carry inputs
+          const exprCarries = exprBlockCarryVars.get(originalId);
+          if (exprCarries) {
+            for (const [inputName, carryVarName] of exprCarries) {
+              subInputVars[`__carry_${inputName}`] = carryVarName;
+            }
+          }
+
           const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(effectiveSubNode, subDef);
           Object.assign(paramUniforms, subUniforms);
           const subResult = subDef.generateGLSL(patchedSub, subInputVars);
@@ -863,10 +871,63 @@ export function generateFragmentShader(
           nodeOutputs.set(prefix + snSlugLc, { value: carryVarName });
         }
 
+        // 2d. Pre-loop carry declarations for ExprBlock nodes with carry inputs.
+        //     For each carry input: forward-declare outside the loop, resolve init from
+        //     `${name}_init` connection (or `${name}` connection, or type zero fallback).
+        //     The carry var name is injected into subInputVars via exprBlockCarryVars.
+        const exprBlockCarryVars = new Map<string, Map<string, string>>();
+        for (const sn of subgraph.nodes) {
+          if (sn.type !== 'exprNode') continue;
+          const dynInputs = sn.params.inputs as Array<{ name: string; type: string; carry?: boolean }> | undefined;
+          if (!Array.isArray(dynInputs)) continue;
+          const carryInputs = dynInputs.filter(inp => inp.carry);
+          if (carryInputs.length === 0) continue;
+
+          const snSlug = subSlugMap.get(sn.id) ?? sn.id;
+          const nodeCarryVars = new Map<string, string>();
+
+          for (const inp of carryInputs) {
+            const carryVarName = `${nodeSlug}_ec_${snSlug}_${inp.name}`;
+            nodeCarryVars.set(inp.name, carryVarName);
+
+            // Priority: _init connection > regular connection > portInputOverrides > type zero
+            let initVar = defaultGlslVal(inp.type);
+
+            const initConn = sn.inputs[`${inp.name}_init`]?.connection;
+            if (initConn) {
+              const initSlug = subSlugMap.get(initConn.nodeId) ?? initConn.nodeId;
+              const srcOut = nodeOutputs.get(prefix + initSlug)?.[initConn.outputKey]
+                          ?? nodeOutputs.get(initConn.nodeId)?.[initConn.outputKey];
+              if (srcOut) initVar = srcOut;
+            }
+            if (initVar === defaultGlslVal(inp.type)) {
+              const conn = sn.inputs[inp.name]?.connection;
+              if (conn) {
+                const connSlug = subSlugMap.get(conn.nodeId) ?? conn.nodeId;
+                const srcOut = nodeOutputs.get(prefix + connSlug)?.[conn.outputKey]
+                            ?? nodeOutputs.get(conn.nodeId)?.[conn.outputKey];
+                if (srcOut) initVar = srcOut;
+              }
+            }
+            const poKeyInit = `${snSlug}:${inp.name}_init`;
+            if (portInputOverrides.has(poKeyInit)) initVar = portInputOverrides.get(poKeyInit)!;
+            else {
+              const poKey = `${snSlug}:${inp.name}`;
+              if (initVar === defaultGlslVal(inp.type) && portInputOverrides.has(poKey)) {
+                initVar = portInputOverrides.get(poKey)!;
+              }
+            }
+
+            mainCode.push(`    ${inp.type} ${carryVarName} = ${initVar};\n`);
+          }
+
+          exprBlockCarryVars.set(sn.id, nodeCarryVars);
+        }
+
         // 3. Compile subgraph body.
         //    carryModeNaturalVars tells the pass to strip the type from carry-mode node output
         //    declarations, producing `d = f(d);` instead of `T d = f(d);` inside the loop.
-        compileSubgraphPass(prefix, portInputOverrides, carryModeNaturalVars);
+        compileSubgraphPass(prefix, portInputOverrides, carryModeNaturalVars, exprBlockCarryVars);
 
         // 3b. Update LoopCarry vars from their `next` inputs (end of iteration)
         for (const sn of loopCarryNodes) {
