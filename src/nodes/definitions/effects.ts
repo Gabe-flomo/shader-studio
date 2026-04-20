@@ -690,7 +690,7 @@ export const ExprBlockNode: NodeDefinition = {
     const decls: string[] = [];
 
     // ── Determine input declarations ─────────────────────────────────────────
-    const dynamicInputs = node.params.inputs as Array<{ name: string; type: string; slider: unknown }> | undefined;
+    const dynamicInputs = node.params.inputs as Array<{ name: string; type: string; slider: unknown; carry?: boolean }> | undefined;
 
     // Type-appropriate zero for the output type — used as fallback value
     const outDefault = outType === 'float' ? '0.0' : outType === 'vec2' ? 'vec2(0.0)' : 'vec3(0.0)';
@@ -699,8 +699,14 @@ export const ExprBlockNode: NodeDefinition = {
       // New format: handles empty array (inputs:[]) and populated arrays
       for (const inp of dynamicInputs) {
         const fallback = inp.type === 'vec3' ? 'vec3(0.0)' : inp.type === 'vec2' ? 'vec2(0.0)' : '0.0';
-        const val = inputVars[inp.name] || fallback;
-        decls.push(`        ${inp.type} ${inp.name} = ${val};\n`);
+        const carryVar = inputVars[`__carry_${inp.name}`];
+        if (carryVar) {
+          // Carry input: read from outer carry variable (forward-declared before the loop)
+          decls.push(`        ${inp.type} ${inp.name} = ${carryVar};\n`);
+        } else {
+          const val = inputVars[inp.name] || fallback;
+          decls.push(`        ${inp.type} ${inp.name} = ${val};\n`);
+        }
       }
       // Always inject t = u_time unless user explicitly has a t input socket
       if (!dynamicInputs.some(inp => inp.name === 't')) {
@@ -758,11 +764,21 @@ export const ExprBlockNode: NodeDefinition = {
       }
     }
 
+    // Carry write-backs: after user lines, persist local var back to outer carry var
+    const carryWritebacks: string[] = [];
+    if (Array.isArray(dynamicInputs)) {
+      for (const inp of dynamicInputs) {
+        const carryVar = inputVars[`__carry_${inp.name}`];
+        if (carryVar) carryWritebacks.push(`        ${carryVar} = ${inp.name};\n`);
+      }
+    }
+
     const code = [
       `    ${outType} ${outVar};\n`,
       `    {\n`,
       ...decls,
       ...stmts,
+      ...carryWritebacks,
       `    }\n`,
     ].join('');
 

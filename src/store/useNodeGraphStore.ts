@@ -3041,6 +3041,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           defaultValue: hasSlider ? paramVal : undefined,
           connection: (!hasSlider && existing?.type === inp.type) ? existing.connection : undefined,
         };
+        // If carry is enabled, add an _init override socket
+        if ((inp as { carry?: boolean }).carry) {
+          const existingInit = n.inputs[`${inp.name}_init`];
+          newInputs[`${inp.name}_init`] = {
+            type: inp.type,
+            label: `${inp.name} (init)`,
+            connection: existingInit?.connection,
+          };
+        }
       }
       return { ...n, inputs: newInputs, outputs: { result: { type: outputType, label: 'Result' } } };
     };

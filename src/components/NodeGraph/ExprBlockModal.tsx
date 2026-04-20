@@ -32,6 +32,7 @@ interface InputDef {
   name: string;
   type: DataType;
   slider: { min: number; max: number } | null;
+  carry?: boolean;
 }
 
 interface WarpLine {
@@ -225,6 +226,12 @@ export function ExprBlockModal({ node, onClose }: Props) {
     const next = customInputs.map((inp, i) =>
       i === idx ? { ...inp, type, slider: type !== 'float' ? null : inp.slider } : inp
     );
+    updateNodeParams(node.id, { inputs: next });
+    updateNodeSockets(node.id, next, outputType);
+  };
+
+  const toggleCarry = (idx: number) => {
+    const next = customInputs.map((c, i) => i === idx ? { ...c, carry: !c.carry } : c);
     updateNodeParams(node.id, { inputs: next });
     updateNodeSockets(node.id, next, outputType);
   };
@@ -558,6 +565,24 @@ export function ExprBlockModal({ node, onClose }: Props) {
                       )}
                     </div>
                   )}
+
+                  {/* Carry toggle — available for all types */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: inp.carry ? '#cba6f7' : '#585b70' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!inp.carry}
+                        onChange={() => toggleCarry(idx)}
+                        style={{ accentColor: '#cba6f7', cursor: 'pointer' }}
+                      />
+                      carry
+                    </label>
+                    {inp.carry && (
+                      <span style={{ fontSize: '9px', color: '#6c7086', fontStyle: 'italic' }}>
+                        + {inp.name}_init slot
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
 
