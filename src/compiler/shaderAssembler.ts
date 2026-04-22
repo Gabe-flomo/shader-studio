@@ -1282,6 +1282,8 @@ export function generateFragmentShader(
       let warpBodyFn = '';  // empty = identity (no body function emitted)
       // sceneFnName: set from SceneGroup inside body, or fall back to inputVars.scene
       let sceneFnName = '';
+      // Extra params needed by marchBody_* for main()-scope vars referenced inside
+      let mlBodyExtraParams: Array<{name: string; type: string}> = [];
 
       if (subgraph && subgraph.nodes.length > 0) {
         const warpFnName = `marchBody_${nodeSlug}`;
@@ -1331,6 +1333,27 @@ export function generateFragmentShader(
             mlPortOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
           }
         }
+
+        // Collect main()-scope var refs that will be embedded in the body function.
+        // These must be passed as extra parameters so the preamble function can access them.
+        const mlBodyExternalVarMap = new Map<string, string>(); // varName → GLSL type
+        for (const v of mlPortOverrides.values()) {
+          if (isGlslVarRef(v) && !v.startsWith('u_')) {
+            if (!mlBodyExternalVarMap.has(v)) mlBodyExternalVarMap.set(v, 'float');
+          }
+        }
+        for (const subNode of subgraph.nodes) {
+          const snDefScan = getNodeDefinition(subNode.type);
+          if (snDefScan?.paramDefs) {
+            for (const paramKey of Object.keys(snDefScan.paramDefs)) {
+              const psKey = `ps_${subNode.id}_${paramKey}`;
+              const extVar = inputVars[psKey];
+              if (extVar && isGlslVarRef(extVar) && !extVar.startsWith('u_') && !mlBodyExternalVarMap.has(extVar))
+                mlBodyExternalVarMap.set(extVar, 'float');
+            }
+          }
+        }
+        mlBodyExtraParams = Array.from(mlBodyExternalVarMap.entries()).map(([name, type]) => ({ name, type }));
 
         // Prefix all subgraph node IDs + connections using slug-based ids
         const mlPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
@@ -1733,11 +1756,13 @@ export function generateFragmentShader(
         // Emit the named GLSL body function into the preamble
         const fnBody = bodyLines.join('');
         let mlFnSig: string;
+        const mlBodyExtraDecls = mlBodyExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
         if (mlHasNewStyle) {
           const extraParamDecls = mlExtraInputs.map(ex => `${ex.type} ${nodeSlug}_ex_${ex.key}`).join(', ');
-          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt, vec3 ${nodeSlug}_ro, vec3 ${nodeSlug}_rd${extraParamDecls ? `, ${extraParamDecls}` : ''}`;
+          const allExtra = [extraParamDecls, mlBodyExtraDecls].filter(Boolean).join(', ');
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt, vec3 ${nodeSlug}_ro, vec3 ${nodeSlug}_rd${allExtra ? `, ${allExtra}` : ''}`;
         } else {
-          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt`;
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt${mlBodyExtraDecls ? `, ${mlBodyExtraDecls}` : ''}`;
         }
         const fnDef = `vec3 ${warpFnName}(${mlFnSig}) {\n${fnBody}    return ${mlLastVec3Var};\n}`;
         functions.add(fnDef);
@@ -1757,10 +1782,11 @@ export function generateFragmentShader(
         return '0.0';
       });
       const mlExtraArgsStr = mlExtraArgsList.length > 0 ? ', ' + mlExtraArgsList.join(', ') : '';
+      const mlBodyExtraArgsStr = mlBodyExtraParams.length > 0 ? ', ' + mlBodyExtraParams.map(v => v.name).join(', ') : '';
       const warpPos = (expr: string, t: string): string => {
         if (!warpBodyFn) return expr;
-        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr})`;
-        return `${warpBodyFn}(${expr}, ${t})`;
+        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr})`;
+        return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr})`;
       };
       // Build extra args for scene function calls (passes external vars from main() scope)
       const mlSceneExtraParams = sceneFnExtraParams.get(mlSceneFn) ?? [];

@@ -32,6 +32,22 @@ void main() {
   gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }`.trim();
 
+// Dithering blit: samples a float RT and adds triangular dither noise before 8-bit quantization
+const BLIT_FRAG = `
+precision mediump float;
+uniform sampler2D tInput;
+uniform float u_seed;
+varying vec2 vUv;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+void main() {
+  vec4 c = texture2D(tInput, vUv);
+  vec2 px = gl_FragCoord.xy + u_seed * 137.0;
+  float r1 = hash(px);
+  float r2 = hash(px + vec2(0.5, 0.0));
+  float d = (r1 + r2 - 1.0) / 255.0;
+  gl_FragColor = vec4(clamp(c.rgb + d, 0.0, 1.0), c.a);
+}`.trim();
+
 // Intercept WebGL shader compile errors from Three.js
 function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): () => string[] {
   const errors: string[] = [];
@@ -114,6 +130,27 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     gl.getExtension('KHR_parallel_shader_compile');
     const flushGlErrors = captureGlslErrors(gl);
 
+    // Half-float RT support check — eliminates 8-bit quantization banding in dark areas
+    const supportsHalfFloat = renderer.capabilities.isWebGL2 ||
+      (!!gl.getExtension('OES_texture_half_float') && !!gl.getExtension('EXT_color_buffer_half_float'));
+    const RT_TYPE = supportsHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
+
+    // Blit scene: renders a float RT to screen with triangular dithering
+    const blitScene = new THREE.Scene();
+    const blitGeo   = new THREE.PlaneGeometry(2, 2);
+    const blitMat   = new THREE.ShaderMaterial({
+      vertexShader:   FALLBACK_VERTEX,
+      fragmentShader: BLIT_FRAG,
+      uniforms: { tInput: { value: null }, u_seed: { value: 0 } },
+      depthTest: false, depthWrite: false,
+    });
+    blitScene.add(new THREE.Mesh(blitGeo, blitMat));
+
+    // Float intermediate RT — shader renders here, blit with dithering goes to screen
+    const floatRt = new THREE.WebGLRenderTarget(1, 1, {
+      type: RT_TYPE, format: THREE.RGBAFormat, depthBuffer: false,
+    });
+
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
     camera.position.z = 1;
@@ -144,21 +181,23 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     // but the setup effect runs before that).
     if (onRegisterOfflineRender) {
       let exportRT: THREE.WebGLRenderTarget | null = null;
+      let exportReadbackRT: THREE.WebGLRenderTarget | null = null;
       let exportW = 0;
       let exportH = 0;
 
-      // Create (or re-create) the RT at the current renderer size.
-      // Called once when the ExportModal opens (via the width/height getters),
-      // locking in the export dimensions for the duration of the encode.
+      // Create (or re-create) the RTs at the current renderer size.
+      // exportRT is half-float for quality; exportReadbackRT is 8-bit for Uint8 readback.
       const ensureRT = () => {
         const w = renderer.domElement.width  || 1;
         const h = renderer.domElement.height || 1;
         if (!exportRT || exportW !== w || exportH !== h) {
           exportRT?.dispose();
+          exportReadbackRT?.dispose();
           exportRT = new THREE.WebGLRenderTarget(w, h, {
-            type: THREE.UnsignedByteType,
-            format: THREE.RGBAFormat,
-            depthBuffer: false,
+            type: RT_TYPE, format: THREE.RGBAFormat, depthBuffer: false,
+          });
+          exportReadbackRT = new THREE.WebGLRenderTarget(w, h, {
+            type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false,
           });
           exportW = w;
           exportH = h;
@@ -166,20 +205,22 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       };
 
       const handle: OfflineRenderHandle = {
-        // width/height getters read the current renderer size and ensure the RT
-        // is sized to match — called by ExportModal to snapshot dimensions before encoding.
         get width()  { ensureRT(); return exportW; },
         get height() { ensureRT(); return exportH; },
         renderAtTime: (time: number) => {
-          // RT is already sized correctly (handle.width/height was read first)
           material.uniforms.u_time.value = time;
           renderer.setRenderTarget(exportRT);
           renderer.render(scene, camera);
+          // Blit with dithering into 8-bit readback RT
+          blitMat.uniforms.tInput.value = exportRT!.texture;
+          blitMat.uniforms.u_seed.value = time * 100.0;
+          renderer.setRenderTarget(exportReadbackRT);
+          renderer.render(blitScene, camera);
           renderer.setRenderTarget(null);
         },
         readPixels: (out: Uint8Array, width: number, height: number) => {
-          if (!exportRT) return;
-          renderer.readRenderTargetPixels(exportRT, 0, 0, width, height, out);
+          if (!exportReadbackRT) return;
+          renderer.readRenderTargetPixels(exportReadbackRT, 0, 0, width, height, out);
           // Flip Y: Three.js RenderTarget is bottom-up; FFmpeg rawvideo expects top-down
           const rowBytes = width * 4;
           const tmp = new Uint8Array(rowBytes);
@@ -195,9 +236,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
 
       onRegisterOfflineRender(handle);
 
-      // Clean up RT when renderer is torn down
+      // Clean up RTs when renderer is torn down
       const origDispose = renderer.dispose.bind(renderer);
-      renderer.dispose = () => { exportRT?.dispose(); origDispose(); };
+      renderer.dispose = () => { exportRT?.dispose(); exportReadbackRT?.dispose(); origDispose(); };
     }
 
     // Render target for pixel readback — sized with the canvas, resized in ResizeObserver
@@ -250,6 +291,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       renderer.setSize(width, height);
       material.uniforms.u_resolution.value.set(width, height);
       rt.setSize(width, height);
+      floatRt.setSize(width, height);
       // Resize ping-pong RTs and reset state
       if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
@@ -263,7 +305,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       const w = renderer.domElement.width  || 1;
       const h = renderer.domElement.height || 1;
       if (!pingPongA.current) {
-        const opts = { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false };
+        const opts = { type: RT_TYPE, format: THREE.RGBAFormat, depthBuffer: false };
         pingPongA.current = new THREE.WebGLRenderTarget(w, h, opts);
         pingPongB.current = new THREE.WebGLRenderTarget(w, h, opts);
         // Clear both to black
@@ -324,7 +366,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       }
 
       if (isStatefulRef.current) {
-        // Ping-pong: read from one RT, write to the other, then blit to screen
+        // Ping-pong: render to write RT, blit to screen with dithering
         ensurePingPong();
         const rtA = pingPongA.current!;
         const rtB = pingPongB.current!;
@@ -335,11 +377,18 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
         }
         renderer.setRenderTarget(writeRT);
         renderer.render(scene, camera);
+        blitMat.uniforms.tInput.value = writeRT.texture;
+        blitMat.uniforms.u_seed.value = frameCount * 1.618;
         renderer.setRenderTarget(null);
-        renderer.render(scene, camera);  // blit to screen
+        renderer.render(blitScene, camera);
         pingPongIdx.current = pingPongIdx.current === 0 ? 1 : 0;
       } else {
+        renderer.setRenderTarget(floatRt);
         renderer.render(scene, camera);
+        blitMat.uniforms.tInput.value = floatRt.texture;
+        blitMat.uniforms.u_seed.value = frameCount * 1.618;
+        renderer.setRenderTarget(null);
+        renderer.render(blitScene, camera);
       }
 
       // Check for GLSL errors after first few renders
@@ -590,6 +639,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('reset-time', handleResetTime);
       rt.dispose();
+      floatRt.dispose();
+      blitGeo.dispose();
+      blitMat.dispose();
       probeRT.dispose();
       probeGeo.dispose();
       probeDummy.dispose();
