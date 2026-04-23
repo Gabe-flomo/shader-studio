@@ -1614,6 +1614,38 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
     }
 
+    // Auto-create a float output port when no explicit outer connections were found.
+    // Inside scene groups the SDF result flows implicitly, so nothing triggers the
+    // scan above — we need to expose the terminal float output ourselves.
+    if (outputPorts.length === 0) {
+      const internallyConsumed = new Set<string>();
+      for (const sn of selectedNodes) {
+        for (const inp of Object.values(sn.inputs)) {
+          if (inp.connection && selectedSet.has(inp.connection.nodeId)) {
+            internallyConsumed.add(`${inp.connection.nodeId}:${inp.connection.outputKey}`);
+          }
+        }
+      }
+      let sinkNodeId = '';
+      let sinkOutKey = '';
+      for (const sn of selectedNodes) {
+        if (sn.type === 'loopIndex') continue;
+        const snDef = getNodeDefinition(sn.type);
+        if (!snDef) continue;
+        for (const [outKey, outSock] of Object.entries(snDef.outputs)) {
+          if (outSock.type !== 'float') continue;
+          if (!internallyConsumed.has(`${sn.id}:${outKey}`)) {
+            sinkNodeId = sn.id;
+            sinkOutKey = outKey;
+          }
+        }
+      }
+      if (sinkNodeId) {
+        const portKey = `out${portIdx++}`;
+        outputPorts.push({ key: portKey, type: 'float', label: sinkOutKey, fromNodeId: sinkNodeId, fromOutputKey: sinkOutKey });
+      }
+    }
+
     // Build group output sockets
     const groupOutputSockets: Record<string, import('../types/nodeGraph').OutputSocket> = {};
     for (const p of outputPorts) {

@@ -1139,13 +1139,36 @@ export function generateFragmentShader(
             if (!srcVar) srcVar = sgPortOverrides.get(`${sn.id.slice(sgPrefix.length)}:${port.key}`);
             if (srcVar) grpPortOverrides.set(`${grpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
           }
-          const grpPrefixed: GraphNode[] = grpSubgraph.nodes.map(gn => ({
-            ...gn,
-            id: grpPrefix + grpSlugMap.get(gn.id)!,
-            inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
-              ? { ...inp, connection: { nodeId: grpPrefix + (grpSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId), outputKey: inp.connection.outputKey } }
-              : inp])),
-          }));
+          const grpPrefixed: GraphNode[] = grpSubgraph.nodes.map(gn => {
+            // Apply slider overrides stored as 'innerNodeId::paramKey' on the group node's params
+            const overridePrefix = `${gn.id}::`;
+            const paramOverrides: Record<string, unknown> = {};
+            for (const [key, val] of Object.entries(sn.params)) {
+              if (typeof key === 'string' && key.startsWith(overridePrefix)) {
+                paramOverrides[key.slice(overridePrefix.length)] = val;
+              }
+            }
+            // Apply ps_ socket connections as GLSL var overrides (automation)
+            const gnDefForOverrides = getNodeDefinition(gn.type);
+            if (gnDefForOverrides?.paramDefs) {
+              for (const paramKey of Object.keys(gnDefForOverrides.paramDefs)) {
+                const psKey = `ps_${gn.id}_${paramKey}`;
+                const psInp = sn.inputs[psKey];
+                if (psInp?.connection) {
+                  const srcVar = nodeOutputs.get(psInp.connection.nodeId)?.[psInp.connection.outputKey];
+                  if (srcVar) paramOverrides[paramKey] = srcVar;
+                }
+              }
+            }
+            return {
+              ...gn,
+              id: grpPrefix + grpSlugMap.get(gn.id)!,
+              params: Object.keys(paramOverrides).length > 0 ? { ...gn.params, ...paramOverrides } : gn.params,
+              inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
+                ? { ...inp, connection: { nodeId: grpPrefix + (grpSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId), outputKey: inp.connection.outputKey } }
+                : inp])),
+            };
+          });
           for (const gn of topologicalSort(grpPrefixed)) {
             if (nodeOutputs.has(gn.id)) continue;
             const gDef = getNodeDefinition(gn.type);
@@ -1159,7 +1182,9 @@ export function generateFragmentShader(
               if (grpPortOverrides.has(portKey)) gnInputVars[k] = grpPortOverrides.get(portKey)!;
               else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
               if (!gnInputVars[k]) {
-                if (inp.defaultValue !== undefined) {
+                // Skip defaultValue for param-backed sockets — generateGLSL reads node.params directly
+                const isParamBacked = !!gDef.paramDefs?.[k];
+                if (!isParamBacked && inp.defaultValue !== undefined) {
                   if (typeof inp.defaultValue === 'number') gnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
                   else if (Array.isArray(inp.defaultValue)) gnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
                 } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
@@ -1202,9 +1227,9 @@ export function generateFragmentShader(
             const srcOut = nodeOutputs.get(inp.connection.nodeId);
             if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
           }
-          // Fallbacks
+          // Fallbacks — skip defaultValue for param-backed sockets (generateGLSL reads node.params)
           if (!snInputVars[k]) {
-            if (inp.defaultValue !== undefined) {
+            if (!snDef.paramDefs?.[k] && inp.defaultValue !== undefined) {
               if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
               else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
             }
