@@ -117,16 +117,18 @@ export const MarchCameraNode: NodeDefinition = {
     const targetZ      = inputVars.targetZ      || p(node.params.targetZ,      0.0);
 
     const code = [
-      `    float ${id}_ang  = ${camAngle} + ${time} * ${rotSpeed};\n`,
-      `    float ${id}_elev = ${camElevation};\n`,
-      `    float ${id}_ce   = cos(${id}_elev);\n`,
-      `    vec3  ${id}_ta   = vec3(${targetX}, ${targetY}, ${targetZ});\n`,
-      `    vec3  ${id}_ro   = ${id}_ta + vec3(sin(${id}_ang)*${id}_ce*${camDist}, sin(${id}_elev)*${camDist}, cos(${id}_ang)*${id}_ce*${camDist});\n`,
-      `    vec3  ${id}_fwd  = normalize(${id}_ta - ${id}_ro);\n`,
-      `    vec3  ${id}_wup  = (abs(${id}_fwd.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);\n`,
-      `    vec3  ${id}_rgt  = normalize(cross(${id}_wup, ${id}_fwd));\n`,
-      `    vec3  ${id}_up2  = cross(${id}_fwd, ${id}_rgt);\n`,
-      `    vec3  ${id}_rd   = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+      `    float ${id}_ang   = ${camAngle} + ${time} * ${rotSpeed};\n`,
+      `    float ${id}_elev  = ${camElevation};\n`,
+      `    vec3  ${id}_ta    = vec3(${targetX}, ${targetY}, ${targetZ});\n`,
+      // Camera position using horizontal direction + vertical lift
+      `    vec3  ${id}_horiz = vec3(sin(${id}_ang), 0.0, cos(${id}_ang));\n`,
+      `    vec3  ${id}_ro    = ${id}_ta + ${camDist} * (cos(${id}_elev)*${id}_horiz + sin(${id}_elev)*vec3(0.0,1.0,0.0));\n`,
+      `    vec3  ${id}_fwd   = normalize(${id}_ta - ${id}_ro);\n`,
+      // Up = tangent to the elevation orbit — rotates smoothly with elevation, no pole flip
+      `    vec3  ${id}_cup   = normalize(-sin(${id}_elev)*${id}_horiz + cos(${id}_elev)*vec3(0.0,1.0,0.0));\n`,
+      `    vec3  ${id}_rgt   = normalize(cross(${id}_cup, ${id}_fwd));\n`,
+      `    vec3  ${id}_up2   = cross(${id}_fwd, ${id}_rgt);\n`,
+      `    vec3  ${id}_rd    = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
     ].join('');
 
     return {
