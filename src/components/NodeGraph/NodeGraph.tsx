@@ -88,6 +88,20 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     return getActiveNodes(nodes, activeGroupPath) ?? [];
   }, [nodes, activeGroupPath]);
 
+  // Resolve the active group node regardless of nesting depth.
+  // When a regular group is nested inside a scene group, it lives in the scene
+  // group's subgraph and won't be found in the top-level `nodes` array.
+  const activeGroupNode = React.useMemo(() => {
+    if (!activeGroupId) return null;
+    const topLevel = nodes.find(n => n.id === activeGroupId);
+    if (topLevel) return topLevel;
+    if (activeGroupPath.length >= 2) {
+      const parentNodes = getActiveNodes(nodes, activeGroupPath.slice(0, -1));
+      return parentNodes?.find(n => n.id === activeGroupId) ?? null;
+    }
+    return null;
+  }, [nodes, activeGroupId, activeGroupPath]);
+
   // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
   const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
@@ -100,9 +114,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   // When inside a group, build a map of nodeId → Set<inputKey> for sockets
   // that are driven by external (group-level) input ports. These are locked/immutable.
   const externalPortMap = React.useMemo(() => {
-    if (!activeGroupId) return null;
-    const groupNode = nodes.find(n => n.id === activeGroupId);
-    const subgraph = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+    if (!activeGroupNode) return null;
+    const subgraph = activeGroupNode.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
     if (!subgraph) return null;
     const map = new Map<string, Set<string>>();
     for (const port of (subgraph.inputPorts ?? [])) {
@@ -111,21 +124,19 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       set.add(port.toInputKey);
     }
     return map;
-  }, [nodes, activeGroupId]);
+  }, [activeGroupNode]);
 
   // Map of innerNodeId → Set<paramKey> for params driven by external ps_ connections
   const externalParamMap = React.useMemo(() => {
-    if (!activeGroupId) return null;
-    const groupNode = nodes.find(n => n.id === activeGroupId);
-    if (!groupNode) return null;
+    if (!activeGroupNode) return null;
     const map = new Map<string, Set<string>>();
-    for (const [key, socket] of Object.entries(groupNode.inputs)) {
+    for (const [key, socket] of Object.entries(activeGroupNode.inputs)) {
       if (!key.startsWith('ps_') || !socket.connection) continue;
       // key format: ps_${innerNodeId}_${paramKey}
       const withoutPrefix = key.slice('ps_'.length);
       // Find the split point: innerNodeId ends where paramKey starts
       // innerNodeIds can contain underscores, so we need to match by known inner node IDs
-      const sg = groupNode.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+      const sg = activeGroupNode.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
       if (sg) {
         for (const sn of sg.nodes) {
           if (withoutPrefix.startsWith(sn.id + '_')) {
@@ -138,22 +149,20 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       }
     }
     return map;
-  }, [nodes, activeGroupId]);
+  }, [activeGroupNode]);
 
   // Subgraph data for the active group (used by the Group Output terminal)
   const activeSubgraph = React.useMemo(() => {
-    if (!activeGroupId) return null;
-    const gn = nodes.find(n => n.id === activeGroupId);
-    return (gn?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined) ?? null;
-  }, [nodes, activeGroupId]);
+    if (!activeGroupNode) return null;
+    return (activeGroupNode.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined) ?? null;
+  }, [activeGroupNode]);
 
   // True when drilled into a scene-style group (sceneGroup, spaceWarpGroup, marchLoopGroup)
   // These don't show the Group Input/Output port terminals — they manage their own body.
   const isInsideSceneGroup = React.useMemo(() => {
-    if (!activeGroupId) return false;
-    const gn = nodes.find(n => n.id === activeGroupId);
-    return gn?.type === 'sceneGroup' || gn?.type === 'spaceWarpGroup' || gn?.type === 'marchLoopGroup';
-  }, [nodes, activeGroupId]);
+    if (!activeGroupNode) return false;
+    return activeGroupNode.type === 'sceneGroup' || activeGroupNode.type === 'spaceWarpGroup' || activeGroupNode.type === 'marchLoopGroup';
+  }, [activeGroupNode]);
 
   // Position the Group Output terminal to the right of all subgraph nodes
   const groupOutputTerminalPos = React.useMemo(() => {
@@ -931,7 +940,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       {activeGroupPath.length > 0 && (
         <div style={{
           position: 'absolute',
-          top: compactToolbar ? 46 : 10,
+          bottom: 16,
           left: '50%', transform: 'translateX(-50%)',
           background: '#1e1e2e', border: '1px solid #cba6f755',
           color: '#cba6f7', padding: '5px 14px', borderRadius: '8px',
@@ -1007,13 +1016,13 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
           }}
         >
           {(() => {
-            const clickedNode = contextMenu.nodeId ? nodes.find(n => n.id === contextMenu.nodeId) : null;
+            const clickedNode = contextMenu.nodeId ? displayNodes.find(n => n.id === contextMenu.nodeId) : null;
             const isGroup = clickedNode?.type === 'group';
             const isSceneGroup = clickedNode?.type === 'sceneGroup';
             const isSpaceWarpGroup = clickedNode?.type === 'spaceWarpGroup';
             const isMarchLoopGroup = clickedNode?.type === 'marchLoopGroup';
             const ids = useNodeGraphStore.getState().selectedNodeIds;
-            const canGroup = ids.length >= 2 && !activeGroupId;
+            const canGroup = ids.length >= 2 && activeGroupPath.length < 2;
             return (
               <>
                 {canGroup && (

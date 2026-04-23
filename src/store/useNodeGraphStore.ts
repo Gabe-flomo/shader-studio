@@ -603,7 +603,8 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
 let nodeIdCounter = 0;
 
 /** Advance nodeIdCounter past the highest node_N index in a loaded node list
- *  so newly-added nodes never collide with existing IDs. */
+ *  so newly-added nodes never collide with existing IDs. Recursively scans
+ *  all nested subgraphs so IDs inside groups are also accounted for. */
 function syncCounterFromNodes(nodes: GraphNode[]) {
   for (const node of nodes) {
     const m = node.id.match(/^node_(\d+)$/);
@@ -611,6 +612,8 @@ function syncCounterFromNodes(nodes: GraphNode[]) {
       const n = parseInt(m[1], 10) + 1;
       if (n > nodeIdCounter) nodeIdCounter = n;
     }
+    const subgraph = node.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+    if (subgraph?.nodes?.length) syncCounterFromNodes(subgraph.nodes);
   }
 }
 
@@ -640,6 +643,30 @@ export function getActiveNodes(nodes: GraphNode[], path: string[]): GraphNode[] 
   const g1 = sg0.nodes.find(n => n.id === path[1]);
   const sg1 = g1?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
   return sg1?.nodes ?? null;
+}
+
+/**
+ * Apply `updater` to a specific node anywhere in the tree (top-level or nested).
+ * Uses `activeGroupPath` to locate the parent scope when the node is nested.
+ */
+function updateNodeInTree(
+  nodes: GraphNode[],
+  nodeId: string,
+  activeGroupPath: string[],
+  updater: (n: GraphNode) => GraphNode,
+): GraphNode[] {
+  if (nodes.some(n => n.id === nodeId)) {
+    return nodes.map(n => n.id === nodeId ? updater(n) : n);
+  }
+  if (activeGroupPath.length >= 2) {
+    const parentPath = activeGroupPath.slice(0, -1);
+    const parentNodes = getActiveNodes(nodes, parentPath);
+    if (parentNodes?.some(n => n.id === nodeId)) {
+      const updated = parentNodes.map(n => n.id === nodeId ? updater(n) : n);
+      return setActiveNodes(nodes, parentPath, updated) ?? nodes;
+    }
+  }
+  return nodes;
 }
 
 /**
@@ -1122,7 +1149,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // normal entry point from the UI (double-click / context menu). Without this,
     // a brand-new SceneGroup has no subgraph and any attempt to add nodes into it
     // is silently dropped by addNode's `if (!sg) return n` guard.
-    const groupNode = nodes.find(n => n.id === id);
+    //
+    // Search current active level first (for groups nested inside other groups),
+    // then fall back to top-level nodes.
+    const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const groupNode = activeNodes.find(n => n.id === id);
+    // newPath = the path we'll be at after entering
+    const newPath = [...activeGroupPath, id];
     if (groupNode?.type === 'sceneGroup' && !groupNode.params?.subgraph) {
       const ts = Date.now();
       const scenePosNode: import('../types/nodeGraph').GraphNode = {
@@ -1143,11 +1176,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       };
       const emptySceneSubgraph = { nodes: [scenePosNode, sceneOutputNode], outputNodeId: '', outputKey: '' };
       set(state => ({
-        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupPath: newPath,
         activeGroupId: id,
-        nodes: state.nodes.map(n =>
-          n.id === id ? { ...n, params: { ...n.params, subgraph: emptySceneSubgraph } } : n
-        ),
+        nodes: updateNodeInTree(state.nodes, id, newPath, n => ({ ...n, params: { ...n.params, subgraph: emptySceneSubgraph } })),
       }));
       return;
     }
@@ -1161,11 +1192,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         params: { _groupOriginal: true },
       };
       set(state => ({
-        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupPath: newPath,
         activeGroupId: id,
-        nodes: state.nodes.map(n =>
-          n.id === id ? { ...n, params: { ...n.params, subgraph: { nodes: [scenePosNode], outputNodeId: '', outputKey: '' } } } : n
-        ),
+        nodes: updateNodeInTree(state.nodes, id, newPath, n => ({ ...n, params: { ...n.params, subgraph: { nodes: [scenePosNode], outputNodeId: '', outputKey: '' } } })),
       }));
       return;
     }
@@ -1201,11 +1230,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         outputPorts: [],
       };
       set(state => ({
-        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupPath: newPath,
         activeGroupId: id,
-        nodes: state.nodes.map(n =>
-          n.id === id ? { ...n, params: { ...n.params, subgraph: defaultSubgraph } } : n
-        ),
+        nodes: updateNodeInTree(state.nodes, id, newPath, n => ({ ...n, params: { ...n.params, subgraph: defaultSubgraph } })),
       }));
       return;
     }
@@ -1218,11 +1245,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         outputPorts: [],
       };
       set(state => ({
-        activeGroupPath: [...state.activeGroupPath, id],
+        activeGroupPath: newPath,
         activeGroupId: id,
-        nodes: state.nodes.map(n =>
-          n.id === id ? { ...n, params: { ...n.params, subgraph: defaultSubgraph } } : n
-        ),
+        nodes: updateNodeInTree(state.nodes, id, newPath, n => ({ ...n, params: { ...n.params, subgraph: defaultSubgraph } })),
       }));
       return;
     }
@@ -1368,17 +1393,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
       if (changed) {
         set(state => ({
-          activeGroupPath: [...state.activeGroupPath, id],
+          activeGroupPath: newPath,
           activeGroupId: id,
-          nodes: state.nodes.map(n =>
-            n.id === id ? { ...n, params: { ...n.params, subgraph: { ...sg, nodes: sgNodes } } } : n
-          ),
+          nodes: updateNodeInTree(state.nodes, id, newPath, n => ({ ...n, params: { ...n.params, subgraph: { ...sg, nodes: sgNodes } } })),
         }));
         return;
       }
     }
 
-    set(state => ({ activeGroupPath: [...state.activeGroupPath, id], activeGroupId: id }));
+    set(state => ({ activeGroupPath: newPath, activeGroupId: id }));
   },
 
   exitGroup: () => {
@@ -1588,6 +1611,38 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           seenOutputs.add(sig);
         }
         outerReplacements.push({ nodeId: n.id, inputKey: key, newConnection: { nodeId: '__group__', outputKey: portKey } });
+      }
+    }
+
+    // Auto-create a float output port when no explicit outer connections were found.
+    // Inside scene groups the SDF result flows implicitly, so nothing triggers the
+    // scan above — we need to expose the terminal float output ourselves.
+    if (outputPorts.length === 0) {
+      const internallyConsumed = new Set<string>();
+      for (const sn of selectedNodes) {
+        for (const inp of Object.values(sn.inputs)) {
+          if (inp.connection && selectedSet.has(inp.connection.nodeId)) {
+            internallyConsumed.add(`${inp.connection.nodeId}:${inp.connection.outputKey}`);
+          }
+        }
+      }
+      let sinkNodeId = '';
+      let sinkOutKey = '';
+      for (const sn of selectedNodes) {
+        if (sn.type === 'loopIndex') continue;
+        const snDef = getNodeDefinition(sn.type);
+        if (!snDef) continue;
+        for (const [outKey, outSock] of Object.entries(snDef.outputs)) {
+          if (outSock.type !== 'float') continue;
+          if (!internallyConsumed.has(`${sn.id}:${outKey}`)) {
+            sinkNodeId = sn.id;
+            sinkOutKey = outKey;
+          }
+        }
+      }
+      if (sinkNodeId) {
+        const portKey = `out${portIdx++}`;
+        outputPorts.push({ key: portKey, type: 'float', label: sinkOutKey, fromNodeId: sinkNodeId, fromOutputKey: sinkOutKey });
       }
     }
 
@@ -1818,15 +1873,33 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   ungroupNode: (groupId) => {
-    const { nodes } = get();
-    const groupNode = nodes.find(n => n.id === groupId);
+    const { nodes, activeGroupPath } = get();
+
+    // Find the group node — check top-level first, then active subgraph
+    let groupNode = nodes.find(n => n.id === groupId);
+    let workingNodes = nodes;
+    let isNested = false;
+
+    if (!groupNode && activeGroupPath.length > 0) {
+      const subNodes = getActiveNodes(nodes, activeGroupPath);
+      const found = subNodes?.find(n => n.id === groupId);
+      if (found && subNodes) {
+        groupNode = found;
+        workingNodes = subNodes;
+        isNested = true;
+      }
+    }
+
     if (!groupNode || groupNode.type !== 'group') return;
 
     pushHistory(nodes);
 
     const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+
     if (!subgraph) {
-      set({ nodes: nodes.filter(n => n.id !== groupId) });
+      const newWorking = workingNodes.filter(n => n.id !== groupId);
+      const newNodes = isNested ? setActiveNodes(nodes, activeGroupPath, newWorking) : newWorking;
+      if (newNodes) set({ nodes: newNodes });
       get().compile();
       return;
     }
@@ -1841,9 +1914,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return { ...n, params: restParams };
       });
 
-    // Reconnect external nodes: replace connections pointing to groupId with
+    // Reconnect peer nodes: replace connections pointing to groupId with
     // connections to the actual subgraph node from the outputPort mapping.
-    const updatedOuter = nodes
+    const updatedOuter = workingNodes
       .filter(n => n.id !== groupId)
       .map(n => {
         const newInputs = { ...n.inputs };
@@ -1860,7 +1933,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return changed ? { ...n, inputs: newInputs } : n;
       });
 
-    set({ nodes: [...updatedOuter, ...restoredNodes] });
+    const finalNodes = [...updatedOuter, ...restoredNodes];
+    const newNodes = isNested ? setActiveNodes(nodes, activeGroupPath, finalNodes) : finalNodes;
+    if (newNodes) set({ nodes: newNodes });
     get().compile();
   },
 
@@ -2706,15 +2781,20 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   setGroupOutput: (groupId, outputPortKey, fromNodeId, fromOutputKey) => {
     pushHistory(get().nodes);
+    const { activeGroupPath } = get();
     set(state => {
-      const groupNode = state.nodes.find(n => n.id === groupId);
+      // Find the group node at any depth
+      let groupNode = state.nodes.find(n => n.id === groupId);
+      if (!groupNode && activeGroupPath.length >= 2) {
+        const parentNodes = getActiveNodes(state.nodes, activeGroupPath.slice(0, -1));
+        groupNode = parentNodes?.find(n => n.id === groupId);
+      }
       if (!groupNode) return {};
       const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
       if (!sg) return {};
       const port = sg.outputPorts.find(p => p.key === outputPortKey);
       if (!port) return {};
 
-      // Get the type from the source node's output
       const sourceNode = sg.nodes.find(sn => sn.id === fromNodeId);
       const newType = (sourceNode?.outputs[fromOutputKey]?.type ?? port.type) as import('../types/nodeGraph').DataType;
       const typeChanged = newType !== port.type;
@@ -2728,30 +2808,33 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       };
 
       let disconnectedCount = 0;
-      const newNodes = state.nodes.map(n => {
-        if (n.id === groupId) {
-          return {
-            ...n,
-            outputs: newGroupOutputs,
-            params: { ...n.params, subgraph: { ...sg, outputPorts: newOutputPorts } },
-          };
-        }
-        if (!typeChanged) return n;
-        let changed = false;
-        const newInputs = { ...n.inputs };
-        for (const [key, inp] of Object.entries(n.inputs)) {
-          if (inp.connection?.nodeId === groupId && inp.connection?.outputKey === outputPortKey) {
-            if (!typesCompatible(newType, inp.type)) {
-              const newInp = { ...inp };
-              delete newInp.connection;
-              newInputs[key] = newInp;
-              disconnectedCount++;
-              changed = true;
+      const updater = (n: GraphNode) => ({
+        ...n,
+        outputs: newGroupOutputs,
+        params: { ...n.params, subgraph: { ...sg, outputPorts: newOutputPorts } },
+      });
+      let newNodes = updateNodeInTree(state.nodes, groupId, activeGroupPath, updater);
+
+      // Disconnect incompatible outer connections (top-level groups only for now)
+      if (typeChanged && !activeGroupPath.length) {
+        newNodes = newNodes.map(n => {
+          if (n.id === groupId) return n;
+          let changed = false;
+          const newInputs = { ...n.inputs };
+          for (const [key, inp] of Object.entries(n.inputs)) {
+            if (inp.connection?.nodeId === groupId && inp.connection?.outputKey === outputPortKey) {
+              if (!typesCompatible(newType, inp.type)) {
+                const newInp = { ...inp };
+                delete newInp.connection;
+                newInputs[key] = newInp;
+                disconnectedCount++;
+                changed = true;
+              }
             }
           }
-        }
-        return changed ? { ...n, inputs: newInputs } : n;
-      });
+          return changed ? { ...n, inputs: newInputs } : n;
+        });
+      }
 
       return {
         nodes: newNodes,
@@ -2826,40 +2909,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   addGroupInput: (groupId, type, label) => {
     pushHistory(get().nodes);
+    const { activeGroupPath } = get();
     set(state => {
-      const groupNode = state.nodes.find(n => n.id === groupId);
-      if (!groupNode) return {};
-      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-      if (!sg) return {};
-      // Find next available port key
-      const existingKeys = new Set([
-        ...sg.inputPorts.map(p => p.key),
-        ...sg.outputPorts.map(p => p.key),
-      ]);
-      let idx = sg.inputPorts.length + sg.outputPorts.length;
-      while (existingKeys.has(`in${idx}`)) idx++;
-      const portKey = `in${idx}`;
-      const newPort: import('../types/nodeGraph').GroupInputPort = {
-        key: portKey,
-        type,
-        label,
-        toNodeId: '',
-        toInputKey: '',
-      };
       return {
-        nodes: state.nodes.map(n => {
-          if (n.id !== groupId) return n;
-          return {
-            ...n,
-            inputs: {
-              ...n.inputs,
-              [portKey]: { type, label },
-            },
-            params: {
-              ...n.params,
-              subgraph: { ...sg, inputPorts: [...sg.inputPorts, newPort] },
-            },
-          };
+        nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+          let idx = sg.inputPorts.length + sg.outputPorts.length;
+          while (existingKeys.has(`in${idx}`)) idx++;
+          const portKey = `in${idx}`;
+          const newPort: import('../types/nodeGraph').GroupInputPort = { key: portKey, type, label, toNodeId: '', toInputKey: '' };
+          return { ...n, inputs: { ...n.inputs, [portKey]: { type, label } }, params: { ...n.params, subgraph: { ...sg, inputPorts: [...sg.inputPorts, newPort] } } };
         }),
       };
     });
@@ -2867,26 +2928,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   rerouteGroupInput: (groupId, portKey, toNodeId, toInputKey) => {
+    const { activeGroupPath } = get();
     set(state => {
-      const groupNode = state.nodes.find(n => n.id === groupId);
-      if (!groupNode) return {};
-      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-      if (!sg) return {};
       return {
-        nodes: state.nodes.map(n => {
-          if (n.id !== groupId) return n;
-          return {
-            ...n,
-            params: {
-              ...n.params,
-              subgraph: {
-                ...sg,
-                inputPorts: sg.inputPorts.map(p =>
-                  p.key === portKey ? { ...p, toNodeId, toInputKey } : p
-                ),
-              },
-            },
-          };
+        nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return { ...n, params: { ...n.params, subgraph: { ...sg, inputPorts: sg.inputPorts.map(p => p.key === portKey ? { ...p, toNodeId, toInputKey } : p) } } };
         }),
       };
     });
@@ -2895,34 +2943,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   addGroupOutput: (groupId, type = 'float', label) => {
     pushHistory(get().nodes);
+    const { activeGroupPath } = get();
     set(state => {
-      const groupNode = state.nodes.find(n => n.id === groupId);
-      if (!groupNode) return {};
-      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-      if (!sg) return {};
-      const existingKeys = new Set([
-        ...sg.inputPorts.map(p => p.key),
-        ...sg.outputPorts.map(p => p.key),
-      ]);
-      let idx = sg.outputPorts.length;
-      let portKey = `out${idx}`;
-      while (existingKeys.has(portKey)) portKey = `out${++idx}`;
-      const portLabel = label ?? `Output ${sg.outputPorts.length + 1}`;
-      const newPort: import('../types/nodeGraph').GroupOutputPort = {
-        key: portKey,
-        type,
-        label: portLabel,
-        fromNodeId: '',
-        fromOutputKey: '',
-      };
       return {
-        nodes: state.nodes.map(n => {
-          if (n.id !== groupId) return n;
-          return {
-            ...n,
-            outputs: { ...n.outputs, [portKey]: { type, label: portLabel } },
-            params: { ...n.params, subgraph: { ...sg, outputPorts: [...sg.outputPorts, newPort] } },
-          };
+        nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+          let idx = sg.outputPorts.length;
+          let pk = `out${idx}`;
+          while (existingKeys.has(pk)) pk = `out${++idx}`;
+          const portLabel = label ?? `Output ${sg.outputPorts.length + 1}`;
+          const newPort: import('../types/nodeGraph').GroupOutputPort = { key: pk, type, label: portLabel, fromNodeId: '', fromOutputKey: '' };
+          return { ...n, outputs: { ...n.outputs, [pk]: { type, label: portLabel } }, params: { ...n.params, subgraph: { ...sg, outputPorts: [...sg.outputPorts, newPort] } } };
         }),
       };
     });
@@ -2931,36 +2964,32 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   removeGroupOutput: (groupId, portKey) => {
     pushHistory(get().nodes);
+    const { activeGroupPath } = get();
     set(state => {
-      const groupNode = state.nodes.find(n => n.id === groupId);
-      if (!groupNode) return {};
-      const sg = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-      if (!sg) return {};
-      const newOutputs = { ...groupNode.outputs };
-      delete newOutputs[portKey];
-      return {
-        nodes: state.nodes.map(n => {
-          if (n.id === groupId) {
-            return {
-              ...n,
-              outputs: newOutputs,
-              params: { ...n.params, subgraph: { ...sg, outputPorts: sg.outputPorts.filter(p => p.key !== portKey) } },
-            };
-          }
-          // Disconnect any external nodes wired to this port
-          let changed = false;
-          const newInputs = { ...n.inputs };
-          for (const [key, inp] of Object.entries(n.inputs)) {
-            if (inp.connection?.nodeId === groupId && inp.connection?.outputKey === portKey) {
-              const newInp = { ...inp };
-              delete newInp.connection;
-              newInputs[key] = newInp;
-              changed = true;
+      const newNodes = updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const newOutputs = { ...n.outputs };
+        delete newOutputs[portKey];
+        return { ...n, outputs: newOutputs, params: { ...n.params, subgraph: { ...sg, outputPorts: sg.outputPorts.filter(p => p.key !== portKey) } } };
+      });
+      // Disconnect external nodes wired to this port (top-level groups only)
+      if (!activeGroupPath.length) {
+        return {
+          nodes: newNodes.map(n => {
+            if (n.id === groupId) return n;
+            let changed = false;
+            const newInputs = { ...n.inputs };
+            for (const [key, inp] of Object.entries(n.inputs)) {
+              if (inp.connection?.nodeId === groupId && inp.connection?.outputKey === portKey) {
+                const newInp = { ...inp }; delete newInp.connection; newInputs[key] = newInp; changed = true;
+              }
             }
-          }
-          return changed ? { ...n, inputs: newInputs } : n;
-        }),
-      };
+            return changed ? { ...n, inputs: newInputs } : n;
+          }),
+        };
+      }
+      return { nodes: newNodes };
     });
     get().compile();
   },

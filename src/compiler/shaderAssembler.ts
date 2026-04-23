@@ -218,6 +218,16 @@ function collectFunctions(
   }
 }
 
+/** Returns true if `v` is a GLSL variable reference rather than a literal value.
+ *  Used to detect when an external variable is embedded in a scene function body
+ *  and needs to become a function parameter instead. */
+function isGlslVarRef(v: string): boolean {
+  if (!v) return false;
+  if (/^-?[0-9]/.test(v)) return false;
+  if (/^(float|vec[234]|mat[234]|int|ivec[234]|bool|bvec[234]|true|false)\b/.test(v)) return false;
+  return true;
+}
+
 // ── Main assembler ────────────────────────────────────────────────────────────
 
 export function generateFragmentShader(
@@ -241,6 +251,9 @@ export function generateFragmentShader(
   const textureUniforms: Record<string, string> = {};  // uniformName → nodeId
   const audioUniforms: Record<string, string> = {};    // uniformName → nodeId
   const nodeOutputs = new Map<string, Record<string, string>>();
+  // Tracks extra parameters needed by each compiled scene function (for external var references).
+  // Keys are GLSL function names; values are ordered param descriptors to add to the signature.
+  const sceneFnExtraParams = new Map<string, Array<{name: string; type: string}>>();
 
   // Pre-scan for textureInput, audioInput, and prevFrame nodes — their uniforms go in the preamble
   let isStateful = false;
@@ -1043,6 +1056,28 @@ export function generateFragmentShader(
         }
       }
 
+      // Collect external variable references that will be embedded in the scene function body.
+      // These come from main()-scope variables wired into ps_ param overrides or input ports.
+      // They must become extra function parameters so the preamble function can access them.
+      const sgExternalVarMap = new Map<string, string>(); // GLSL var name → GLSL type
+      for (const port of (subgraph.inputPorts ?? [])) {
+        const outerVar = inputVars[port.key];
+        if (outerVar && isGlslVarRef(outerVar)) sgExternalVarMap.set(outerVar, port.type);
+      }
+      for (const subNode of subgraph.nodes) {
+        const snDefScan = getNodeDefinition(subNode.type);
+        if (snDefScan?.paramDefs) {
+          for (const paramKey of Object.keys(snDefScan.paramDefs)) {
+            const psKey = `ps_${subNode.id}_${paramKey}`;
+            const externalVar = inputVars[psKey];
+            if (externalVar && isGlslVarRef(externalVar) && !sgExternalVarMap.has(externalVar)) {
+              sgExternalVarMap.set(externalVar, 'float');
+            }
+          }
+        }
+      }
+      const sgExtraParams = Array.from(sgExternalVarMap.entries()).map(([name, type]) => ({ name, type }));
+
       // Prefix all subgraph node IDs + connections using slug-based ids
       const sgPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
         const subSlug = sgSubSlugMap.get(subNode.id)!;
@@ -1088,6 +1123,92 @@ export function generateFragmentShader(
 
       for (const sn of sgSorted) {
         if (nodeOutputs.has(sn.id)) continue;  // scenePos already registered
+
+        // ── Inline regular group nodes inside the scene function ──────────────
+        if (sn.type === 'group') {
+          const grpSubgraph = sn.params.subgraph as SubgraphData | undefined;
+          if (!grpSubgraph || grpSubgraph.nodes.length === 0) { nodeOutputs.set(sn.id, {}); continue; }
+          const grpSlugMap = new Map<string, string>();
+          for (const gn of grpSubgraph.nodes) grpSlugMap.set(gn.id, computeNodeSlug(gn, usedSlugs));
+          const grpPrefix = `${sn.id}_g_`;
+          const grpPortOverrides = new Map<string, string>();
+          for (const port of (grpSubgraph.inputPorts ?? [])) {
+            const portInp = sn.inputs[port.key];
+            let srcVar: string | undefined;
+            if (portInp?.connection) srcVar = nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
+            if (!srcVar) srcVar = sgPortOverrides.get(`${sn.id.slice(sgPrefix.length)}:${port.key}`);
+            if (srcVar) grpPortOverrides.set(`${grpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+          }
+          const grpPrefixed: GraphNode[] = grpSubgraph.nodes.map(gn => {
+            // Apply slider overrides stored as 'innerNodeId::paramKey' on the group node's params
+            const overridePrefix = `${gn.id}::`;
+            const paramOverrides: Record<string, unknown> = {};
+            for (const [key, val] of Object.entries(sn.params)) {
+              if (typeof key === 'string' && key.startsWith(overridePrefix)) {
+                paramOverrides[key.slice(overridePrefix.length)] = val;
+              }
+            }
+            // Apply ps_ socket connections as GLSL var overrides (automation)
+            const gnDefForOverrides = getNodeDefinition(gn.type);
+            if (gnDefForOverrides?.paramDefs) {
+              for (const paramKey of Object.keys(gnDefForOverrides.paramDefs)) {
+                const psKey = `ps_${gn.id}_${paramKey}`;
+                const psInp = sn.inputs[psKey];
+                if (psInp?.connection) {
+                  const srcVar = nodeOutputs.get(psInp.connection.nodeId)?.[psInp.connection.outputKey];
+                  if (srcVar) paramOverrides[paramKey] = srcVar;
+                }
+              }
+            }
+            return {
+              ...gn,
+              id: grpPrefix + grpSlugMap.get(gn.id)!,
+              params: Object.keys(paramOverrides).length > 0 ? { ...gn.params, ...paramOverrides } : gn.params,
+              inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
+                ? { ...inp, connection: { nodeId: grpPrefix + (grpSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId), outputKey: inp.connection.outputKey } }
+                : inp])),
+            };
+          });
+          for (const gn of topologicalSort(grpPrefixed)) {
+            if (nodeOutputs.has(gn.id)) continue;
+            const gDef = getNodeDefinition(gn.type);
+            if (!gDef) continue;
+            if (gDef.glslFunction) functions.add(gDef.glslFunction);
+            gDef.glslFunctions?.forEach(h => functions.add(h));
+            const gnOrigId = gn.id.slice(grpPrefix.length);
+            const gnInputVars: Record<string, string> = {};
+            for (const [k, inp] of Object.entries(gn.inputs)) {
+              const portKey = `${gnOrigId}:${k}`;
+              if (grpPortOverrides.has(portKey)) gnInputVars[k] = grpPortOverrides.get(portKey)!;
+              else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
+              if (!gnInputVars[k]) {
+                // Skip defaultValue for param-backed sockets — generateGLSL reads node.params directly
+                const isParamBacked = !!gDef.paramDefs?.[k];
+                if (!isParamBacked && inp.defaultValue !== undefined) {
+                  if (typeof inp.defaultValue === 'number') gnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                  else if (Array.isArray(inp.defaultValue)) gnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
+              }
+            }
+            const gnResult = gDef.generateGLSL(gn, gnInputVars);
+            sceneFnLines.push(gnResult.code);
+            nodeOutputs.set(gn.id, gnResult.outputVars);
+            for (const [outKey, varName] of Object.entries(gnResult.outputVars)) {
+              if (gDef.outputs[outKey]?.type === 'float') sgLastFloatVar = varName;
+            }
+          }
+          const grpOutVars: Record<string, string> = {};
+          for (const port of (grpSubgraph.outputPorts ?? [])) {
+            const s = nodeOutputs.get(grpPrefix + (grpSlugMap.get(port.fromNodeId) ?? port.fromNodeId));
+            if (s?.[port.fromOutputKey]) {
+              grpOutVars[port.key] = s[port.fromOutputKey];
+              if (port.type === 'float') sgLastFloatVar = s[port.fromOutputKey];
+            }
+          }
+          nodeOutputs.set(sn.id, grpOutVars);
+          continue;
+        }
+
         const snDef = getNodeDefinition(sn.type);
         if (!snDef) continue;
 
@@ -1106,9 +1227,9 @@ export function generateFragmentShader(
             const srcOut = nodeOutputs.get(inp.connection.nodeId);
             if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
           }
-          // Fallbacks
+          // Fallbacks — skip defaultValue for param-backed sockets (generateGLSL reads node.params)
           if (!snInputVars[k]) {
-            if (inp.defaultValue !== undefined) {
+            if (!snDef.paramDefs?.[k] && inp.defaultValue !== undefined) {
               if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
               else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
             }
@@ -1135,10 +1256,12 @@ export function generateFragmentShader(
         }
       }
 
-      // Emit the GLSL function
+      // Emit the GLSL function — with extra params for any external variable references
       const fnBody = sceneFnLines.join('');
-      const fnDef = `float ${fnName}(vec3 p) {\n${fnBody}    return ${sgLastFloatVar};\n}`;
+      const sgExtraDecls = sgExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
+      const fnDef = `float ${fnName}(vec3 p${sgExtraDecls ? ', ' + sgExtraDecls : ''}) {\n${fnBody}    return ${sgLastFloatVar};\n}`;
       functions.add(fnDef);
+      if (sgExtraParams.length > 0) sceneFnExtraParams.set(fnName, sgExtraParams);
 
       nodeOutputs.set(node.id, { scene: fnName });
       continue;
@@ -1184,6 +1307,8 @@ export function generateFragmentShader(
       let warpBodyFn = '';  // empty = identity (no body function emitted)
       // sceneFnName: set from SceneGroup inside body, or fall back to inputVars.scene
       let sceneFnName = '';
+      // Extra params needed by marchBody_* for main()-scope vars referenced inside
+      let mlBodyExtraParams: Array<{name: string; type: string}> = [];
 
       if (subgraph && subgraph.nodes.length > 0) {
         const warpFnName = `marchBody_${nodeSlug}`;
@@ -1233,6 +1358,27 @@ export function generateFragmentShader(
             mlPortOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
           }
         }
+
+        // Collect main()-scope var refs that will be embedded in the body function.
+        // These must be passed as extra parameters so the preamble function can access them.
+        const mlBodyExternalVarMap = new Map<string, string>(); // varName → GLSL type
+        for (const v of mlPortOverrides.values()) {
+          if (isGlslVarRef(v) && !v.startsWith('u_')) {
+            if (!mlBodyExternalVarMap.has(v)) mlBodyExternalVarMap.set(v, 'float');
+          }
+        }
+        for (const subNode of subgraph.nodes) {
+          const snDefScan = getNodeDefinition(subNode.type);
+          if (snDefScan?.paramDefs) {
+            for (const paramKey of Object.keys(snDefScan.paramDefs)) {
+              const psKey = `ps_${subNode.id}_${paramKey}`;
+              const extVar = inputVars[psKey];
+              if (extVar && isGlslVarRef(extVar) && !extVar.startsWith('u_') && !mlBodyExternalVarMap.has(extVar))
+                mlBodyExternalVarMap.set(extVar, 'float');
+            }
+          }
+        }
+        mlBodyExtraParams = Array.from(mlBodyExternalVarMap.entries()).map(([name, type]) => ({ name, type }));
 
         // Prefix all subgraph node IDs + connections using slug-based ids
         const mlPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
@@ -1318,6 +1464,44 @@ export function generateFragmentShader(
                 }
               }
 
+              // Resolve this scene group node's own inputs from the MLG body context
+              const sgOuterInputVarsInline: Record<string, string> = {};
+              for (const [k, inp] of Object.entries(sn.inputs)) {
+                if (inp.connection) {
+                  const srcOut = nodeOutputs.get(inp.connection.nodeId);
+                  if (srcOut?.[inp.connection.outputKey]) sgOuterInputVarsInline[k] = srcOut[inp.connection.outputKey];
+                }
+              }
+
+              // Build port overrides from scene group's inputPorts (wired from MLG body)
+              const sgPortOverridesInline = new Map<string, string>();
+              for (const port of (sgSubgraph.inputPorts ?? [])) {
+                const outerVar = sgOuterInputVarsInline[port.key];
+                if (outerVar) {
+                  const mappedToNodeId = sgInnerSlugMap.get(port.toNodeId) ?? port.toNodeId;
+                  sgPortOverridesInline.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
+                }
+              }
+
+              // Collect external var references (main()-scope vars embedded in the scene fn body)
+              const sgInlineExternalVarMap = new Map<string, string>();
+              for (const [, val] of sgPortOverridesInline) {
+                if (isGlslVarRef(val)) sgInlineExternalVarMap.set(val, 'float');
+              }
+              for (const inn of sgSubgraph.nodes) {
+                const innDefScan = getNodeDefinition(inn.type);
+                if (innDefScan?.paramDefs) {
+                  for (const paramKey of Object.keys(innDefScan.paramDefs)) {
+                    const overrideKey = `${inn.id}::${paramKey}`;
+                    const overrideVal = sn.params[overrideKey];
+                    if (typeof overrideVal === 'string' && isGlslVarRef(overrideVal) && !sgInlineExternalVarMap.has(overrideVal)) {
+                      sgInlineExternalVarMap.set(overrideVal, 'float');
+                    }
+                  }
+                }
+              }
+              const sgInlineExtraParams = Array.from(sgInlineExternalVarMap.entries()).map(([name, type]) => ({ name, type }));
+
               // Build prefixed inner nodes
               const sgInnerPrefixedNodes: GraphNode[] = sgSubgraph.nodes.map(inn => {
                 const innSlug = sgInnerSlugMap.get(inn.id)!;
@@ -1326,6 +1510,21 @@ export function generateFragmentShader(
                 for (const [k, v] of Object.entries(sn.params)) {
                   if (typeof k === 'string' && k.startsWith(overridePrefix2)) {
                     innerParamOverrides[k.slice(overridePrefix2.length)] = v;
+                  }
+                }
+                // ps_ external socket connections from the outer MLG inputVars
+                const innDefPs = getNodeDefinition(inn.type);
+                if (innDefPs?.paramDefs) {
+                  for (const paramKey of Object.keys(innDefPs.paramDefs)) {
+                    const psKey = `ps_${inn.id}_${paramKey}`;
+                    const extVar = inputVars[psKey];
+                    if (extVar) {
+                      innerParamOverrides[paramKey] = extVar;
+                      if (isGlslVarRef(extVar) && !sgInlineExternalVarMap.has(extVar)) {
+                        sgInlineExternalVarMap.set(extVar, 'float');
+                        sgInlineExtraParams.push({ name: extVar, type: 'float' });
+                      }
+                    }
                   }
                 }
                 return {
@@ -1354,15 +1553,71 @@ export function generateFragmentShader(
 
               for (const sgn of sgInnerSorted) {
                 if (nodeOutputs.has(sgn.id)) continue; // scenePos already registered
+
+                // Inline nested group nodes inside the scene function
+                if (sgn.type === 'group') {
+                  const igrpSub = sgn.params.subgraph as SubgraphData | undefined;
+                  if (!igrpSub || igrpSub.nodes.length === 0) { nodeOutputs.set(sgn.id, {}); continue; }
+                  const igrpSlugMap = new Map<string, string>();
+                  for (const gn of igrpSub.nodes) igrpSlugMap.set(gn.id, computeNodeSlug(gn, usedSlugs));
+                  const igrpPrefix = `${sgn.id}_g_`;
+                  const igrpPortOverrides = new Map<string, string>();
+                  for (const port of (igrpSub.inputPorts ?? [])) {
+                    const portInp = sgn.inputs[port.key];
+                    let srcVar: string | undefined;
+                    if (portInp?.connection) srcVar = nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
+                    if (!srcVar) srcVar = sgPortOverridesInline.get(`${sgn.id.slice(sgInnerPrefix.length)}:${port.key}`);
+                    if (srcVar) igrpPortOverrides.set(`${igrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+                  }
+                  const igrpPrefixed: GraphNode[] = igrpSub.nodes.map(gn => ({
+                    ...gn, id: igrpPrefix + igrpSlugMap.get(gn.id)!,
+                    inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
+                      ? { ...inp, connection: { nodeId: igrpPrefix + (igrpSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId), outputKey: inp.connection.outputKey } }
+                      : inp])),
+                  }));
+                  for (const gn of topologicalSort(igrpPrefixed)) {
+                    if (nodeOutputs.has(gn.id)) continue;
+                    const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+                    if (gDef.glslFunction) functions.add(gDef.glslFunction);
+                    gDef.glslFunctions?.forEach(h => functions.add(h));
+                    const gnOrigId2 = gn.id.slice(igrpPrefix.length);
+                    const gnInputVars2: Record<string, string> = {};
+                    for (const [k, inp] of Object.entries(gn.inputs)) {
+                      const pk = `${gnOrigId2}:${k}`;
+                      if (igrpPortOverrides.has(pk)) gnInputVars2[k] = igrpPortOverrides.get(pk)!;
+                      else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars2[k] = s[inp.connection.outputKey]; }
+                      if (!gnInputVars2[k]) {
+                        if (inp.defaultValue !== undefined) {
+                          if (typeof inp.defaultValue === 'number') gnInputVars2[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                          else if (Array.isArray(inp.defaultValue)) gnInputVars2[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                        } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars2[k] = 'u_time';
+                      }
+                    }
+                    const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
+                    sceneFnLines.push(gnResult2.code); nodeOutputs.set(gn.id, gnResult2.outputVars);
+                    for (const [ok, vn] of Object.entries(gnResult2.outputVars)) { if (gDef.outputs[ok]?.type === 'float') sgLastFloatVar = vn; }
+                  }
+                  const igrpOutVars: Record<string, string> = {};
+                  for (const port of (igrpSub.outputPorts ?? [])) {
+                    const s = nodeOutputs.get(igrpPrefix + (igrpSlugMap.get(port.fromNodeId) ?? port.fromNodeId));
+                    if (s?.[port.fromOutputKey]) { igrpOutVars[port.key] = s[port.fromOutputKey]; if (port.type === 'float') sgLastFloatVar = s[port.fromOutputKey]; }
+                  }
+                  nodeOutputs.set(sgn.id, igrpOutVars); continue;
+                }
+
                 const sgnDef = getNodeDefinition(sgn.type);
                 if (!sgnDef) continue;
 
                 if (sgnDef.glslFunction) functions.add(sgnDef.glslFunction);
                 sgnDef.glslFunctions?.forEach(h => functions.add(h));
 
+                const sgnOrigId = sgn.id.slice(sgInnerPrefix.length);
                 const sgnInputVars: Record<string, string> = {};
                 for (const [k, inp] of Object.entries(sgn.inputs)) {
-                  if (inp.connection) {
+                  const portKey2 = `${sgnOrigId}:${k}`;
+                  if (sgPortOverridesInline.has(portKey2)) {
+                    sgnInputVars[k] = sgPortOverridesInline.get(portKey2)!;
+                  } else if (inp.connection) {
                     const srcOut = nodeOutputs.get(inp.connection.nodeId);
                     if (srcOut?.[inp.connection.outputKey]) sgnInputVars[k] = srcOut[inp.connection.outputKey];
                   }
@@ -1398,14 +1653,72 @@ export function generateFragmentShader(
                 }
               }
 
-              // Emit the GLSL scene function into the preamble
+              // Emit the GLSL scene function — with extra params for external var references
               const sgFnBody = sceneFnLines.join('');
-              const sgFnDef = `float ${sceneFnNameLocal}(vec3 p) {\n${sgFnBody}    return ${sgLastFloatVar};\n}`;
+              const sgInlineExtraDecls = sgInlineExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
+              const sgFnDef = `float ${sceneFnNameLocal}(vec3 p${sgInlineExtraDecls ? ', ' + sgInlineExtraDecls : ''}) {\n${sgFnBody}    return ${sgLastFloatVar};\n}`;
               functions.add(sgFnDef);
+              if (sgInlineExtraParams.length > 0) sceneFnExtraParams.set(sceneFnNameLocal, sgInlineExtraParams);
               sceneFnName = sceneFnNameLocal;
               nodeOutputs.set(sn.id, { scene: sceneFnNameLocal });
             }
             continue; // SceneGroup does not contribute to bodyLines
+          }
+
+          // ── Inline regular group nodes inside the MLG warp body ──────────────
+          if (sn.type === 'group') {
+            const mlGrpSubgraph = sn.params.subgraph as SubgraphData | undefined;
+            if (!mlGrpSubgraph || mlGrpSubgraph.nodes.length === 0) { nodeOutputs.set(sn.id, {}); continue; }
+            const mlGrpSlugMap = new Map<string, string>();
+            for (const gn of mlGrpSubgraph.nodes) mlGrpSlugMap.set(gn.id, computeNodeSlug(gn, usedSlugs));
+            const mlGrpPrefix = `${sn.id}_g_`;
+            const mlGrpPortOverrides = new Map<string, string>();
+            for (const port of (mlGrpSubgraph.inputPorts ?? [])) {
+              const portInp = sn.inputs[port.key];
+              let srcVar: string | undefined;
+              if (portInp?.connection) srcVar = nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
+              if (!srcVar) srcVar = mlPortOverrides.get(`${sn.id.slice(mlPrefix.length)}:${port.key}`);
+              if (srcVar) mlGrpPortOverrides.set(`${mlGrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+            }
+            const mlGrpPrefixed: GraphNode[] = mlGrpSubgraph.nodes.map(gn => ({
+              ...gn, id: mlGrpPrefix + mlGrpSlugMap.get(gn.id)!,
+              inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
+                ? { ...inp, connection: { nodeId: mlGrpPrefix + (mlGrpSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId), outputKey: inp.connection.outputKey } }
+                : inp])),
+            }));
+            for (const gn of topologicalSort(mlGrpPrefixed)) {
+              if (nodeOutputs.has(gn.id)) continue;
+              const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+              if (gDef.glslFunction) functions.add(gDef.glslFunction);
+              gDef.glslFunctions?.forEach(h => functions.add(h));
+              const gnOrigId = gn.id.slice(mlGrpPrefix.length);
+              const gnInputVars: Record<string, string> = {};
+              for (const [k, inp] of Object.entries(gn.inputs)) {
+                const pk = `${gnOrigId}:${k}`;
+                if (mlGrpPortOverrides.has(pk)) gnInputVars[k] = mlGrpPortOverrides.get(pk)!;
+                else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
+                if (!gnInputVars[k]) {
+                  if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
+                  else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) gnInputVars[k] = 'g_uv';
+                  else if (inp.defaultValue !== undefined) {
+                    if (typeof inp.defaultValue === 'number') gnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                    else if (Array.isArray(inp.defaultValue)) gnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                  }
+                }
+              }
+              const gnResult = gDef.generateGLSL(gn, gnInputVars);
+              bodyLines.push(gnResult.code); nodeOutputs.set(gn.id, gnResult.outputVars);
+              for (const [ok, vn] of Object.entries(gnResult.outputVars)) { if (gDef.outputs[ok]?.type === 'vec3') mlLastVec3Var = vn; }
+            }
+            const mlGrpOutVars: Record<string, string> = {};
+            for (const port of (mlGrpSubgraph.outputPorts ?? [])) {
+              const s = nodeOutputs.get(mlGrpPrefix + (mlGrpSlugMap.get(port.fromNodeId) ?? port.fromNodeId));
+              if (s?.[port.fromOutputKey]) {
+                mlGrpOutVars[port.key] = s[port.fromOutputKey];
+                if (port.type === 'vec3') mlLastVec3Var = s[port.fromOutputKey];
+              }
+            }
+            nodeOutputs.set(sn.id, mlGrpOutVars); continue;
           }
 
           if (snDef.glslFunction) functions.add(snDef.glslFunction);
@@ -1468,11 +1781,13 @@ export function generateFragmentShader(
         // Emit the named GLSL body function into the preamble
         const fnBody = bodyLines.join('');
         let mlFnSig: string;
+        const mlBodyExtraDecls = mlBodyExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
         if (mlHasNewStyle) {
           const extraParamDecls = mlExtraInputs.map(ex => `${ex.type} ${nodeSlug}_ex_${ex.key}`).join(', ');
-          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt, vec3 ${nodeSlug}_ro, vec3 ${nodeSlug}_rd${extraParamDecls ? `, ${extraParamDecls}` : ''}`;
+          const allExtra = [extraParamDecls, mlBodyExtraDecls].filter(Boolean).join(', ');
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt, vec3 ${nodeSlug}_ro, vec3 ${nodeSlug}_rd${allExtra ? `, ${allExtra}` : ''}`;
         } else {
-          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt`;
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt${mlBodyExtraDecls ? `, ${mlBodyExtraDecls}` : ''}`;
         }
         const fnDef = `vec3 ${warpFnName}(${mlFnSig}) {\n${fnBody}    return ${mlLastVec3Var};\n}`;
         functions.add(fnDef);
@@ -1492,11 +1807,16 @@ export function generateFragmentShader(
         return '0.0';
       });
       const mlExtraArgsStr = mlExtraArgsList.length > 0 ? ', ' + mlExtraArgsList.join(', ') : '';
+      const mlBodyExtraArgsStr = mlBodyExtraParams.length > 0 ? ', ' + mlBodyExtraParams.map(v => v.name).join(', ') : '';
       const warpPos = (expr: string, t: string): string => {
         if (!warpBodyFn) return expr;
-        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr})`;
-        return `${warpBodyFn}(${expr}, ${t})`;
+        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr})`;
+        return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr})`;
       };
+      // Build extra args for scene function calls (passes external vars from main() scope)
+      const mlSceneExtraParams = sceneFnExtraParams.get(mlSceneFn) ?? [];
+      const mlSceneExtraArgsStr = mlSceneExtraParams.length > 0 ? ', ' + mlSceneExtraParams.map(v => v.name).join(', ') : '';
+      const callScene = (posExpr: string): string => `${mlSceneFn}(${posExpr}${mlSceneExtraArgsStr})`;
 
       const marchCode = [
         `    float ${nodeSlug}_t   = 0.001;\n`,
@@ -1505,7 +1825,7 @@ export function generateFragmentShader(
         `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
         `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
         `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
-        `        float ${nodeSlug}_d  = ${mlSceneFn}(${nodeSlug}_rp);\n`,
+        `        float ${nodeSlug}_d  = ${callScene(`${nodeSlug}_rp`)};\n`,
         `        if (${nodeSlug}_d < 0.0005) { ${nodeSlug}_hit = 1.0; ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
         `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale};\n`,
         `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
@@ -1516,9 +1836,9 @@ export function generateFragmentShader(
         `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
         `    float ${nodeSlug}_e   = 0.001;\n`,
         `    vec3  ${nodeSlug}_n   = normalize(vec3(\n`,
-        `        ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw+vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`)}) - ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw-vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`)}),\n`,
-        `        ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw+vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`)}) - ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw-vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`)}),\n`,
-        `        ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw+vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`)}) - ${mlSceneFn}(${warpPos(`${nodeSlug}_hp_raw-vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`)})\n`,
+        `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))},\n`,
+        `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))},\n`,
+        `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))}\n`,
         `    ));\n`,
         `    float ${nodeSlug}_dist   = ${nodeSlug}_t;\n`,
         `    float ${nodeSlug}_depth  = clamp(${nodeSlug}_t / ${mlMaxDist}, 0.0, 1.0);\n`,
