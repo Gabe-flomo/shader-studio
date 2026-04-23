@@ -1401,7 +1401,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
     }
 
-    set(state => ({ activeGroupPath: newPath, activeGroupId: id }));
+    set(() => ({ activeGroupPath: newPath, activeGroupId: id }));
   },
 
   exitGroup: () => {
