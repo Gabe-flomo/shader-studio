@@ -74,44 +74,59 @@ export const MarchCameraNode: NodeDefinition = {
   type: 'marchCamera', label: 'March Camera', category: '3D Scene',
   description: 'Camera setup for ray marching. Outputs ray origin (ro) and ray direction (rd). Connect to a March Loop Group.',
   inputs: {
-    uv:       { type: 'vec2',  label: 'UV' },
-    time:     { type: 'float', label: 'Time' },
-    camDist:  { type: 'float', label: 'Cam Distance' },
-    camAngle: { type: 'float', label: 'Cam Angle' },
-    rotSpeed: { type: 'float', label: 'Rot Speed' },
-    fov:      { type: 'float', label: 'FOV' },
+    uv:           { type: 'vec2',  label: 'UV' },
+    time:         { type: 'float', label: 'Time' },
+    camDist:      { type: 'float', label: 'Cam Distance' },
+    camAngle:     { type: 'float', label: 'Cam Angle' },
+    camElevation: { type: 'float', label: 'Elevation' },
+    rotSpeed:     { type: 'float', label: 'Rot Speed' },
+    fov:          { type: 'float', label: 'FOV' },
+    targetX:      { type: 'float', label: 'Target X' },
+    targetY:      { type: 'float', label: 'Target Y' },
+    targetZ:      { type: 'float', label: 'Target Z' },
   },
   outputs: {
     ro: { type: 'vec3', label: 'Ray Origin' },
     rd: { type: 'vec3', label: 'Ray Dir' },
   },
   defaultParams: {
-    camDist: 3.0, camAngle: 0.6, rotSpeed: 0.0, fov: 1.5,
+    camDist: 3.0, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.0, fov: 1.5,
+    targetX: 0.0, targetY: 0.0, targetZ: 0.0,
   },
   paramDefs: {
-    camDist:  { label: 'Cam Dist',  type: 'float' as const, min: 0.5, max: 20.0, step: 0.05, hint: 'Distance from the camera to the scene origin. Increase to zoom out.' },
-    camAngle: { label: 'Cam Angle', type: 'float' as const, min: 0.0, max: 6.28,  step: 0.02, hint: 'Starting angle (radians) of the camera orbit around the Y axis.' },
-    rotSpeed: { label: 'Rot Speed', type: 'float' as const, min: 0.0, max: 2.0,   step: 0.01, hint: 'How fast the camera orbits per second. Wire a Time node for animation; 0 = static.' },
-    fov:      { label: 'FOV',       type: 'float' as const, min: 0.5, max: 3.14,  step: 0.05, hint: 'Field of view. Higher = wider angle / more perspective distortion.' },
+    camDist:      { label: 'Cam Dist',   type: 'float' as const, min: 0.1,  max: 20.0, step: 0.05, hint: 'Distance from the camera to the target point.' },
+    camAngle:     { label: 'Angle',      type: 'float' as const, min: 0.0,  max: 6.28, step: 0.02, hint: 'Horizontal orbit angle (radians) around Y axis.' },
+    camElevation: { label: 'Elevation',  type: 'float' as const, min: -1.5, max: 1.5,  step: 0.02, hint: 'Vertical angle: 0 = horizon, positive = above, negative = below.' },
+    rotSpeed:     { label: 'Rot Speed',  type: 'float' as const, min: 0.0,  max: 2.0,  step: 0.01, hint: 'Auto-rotation speed. 0 = static.' },
+    fov:          { label: 'FOV',        type: 'float' as const, min: 0.5,  max: 3.14, step: 0.05, hint: 'Field of view. Higher = wider angle.' },
+    targetX:      { label: 'Target X',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'X position of the look-at target. Moves the camera through space.' },
+    targetY:      { label: 'Target Y',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Y position of the look-at target.' },
+    targetZ:      { label: 'Target Z',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Z position of the look-at target.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const uv       = inputVars.uv       || 'g_uv';
-    const time     = inputVars.time     || 'u_time';
-    const camDist  = inputVars.camDist  || p(node.params.camDist,  3.0);
-    const camAngle = inputVars.camAngle || p(node.params.camAngle, 0.6);
-    const rotSpeed = inputVars.rotSpeed || p(node.params.rotSpeed, 0.0);
-    const fov      = inputVars.fov      || p(node.params.fov,      1.5);
+    const id           = node.id;
+    const uv           = inputVars.uv           || 'g_uv';
+    const time         = inputVars.time         || 'u_time';
+    const camDist      = inputVars.camDist      || p(node.params.camDist,      3.0);
+    const camAngle     = inputVars.camAngle     || p(node.params.camAngle,     0.6);
+    const camElevation = inputVars.camElevation || p(node.params.camElevation, 0.3);
+    const rotSpeed     = inputVars.rotSpeed     || p(node.params.rotSpeed,     0.0);
+    const fov          = inputVars.fov          || p(node.params.fov,          1.5);
+    const targetX      = inputVars.targetX      || p(node.params.targetX,      0.0);
+    const targetY      = inputVars.targetY      || p(node.params.targetY,      0.0);
+    const targetZ      = inputVars.targetZ      || p(node.params.targetZ,      0.0);
 
     const code = [
-      `    float ${id}_ang = ${camAngle} + ${time} * ${rotSpeed};\n`,
-      `    float ${id}_ch  = max(${camDist} * 0.3, 0.15);\n`,
-      `    vec3  ${id}_ro  = vec3(sin(${id}_ang)*${camDist}, ${id}_ch, cos(${id}_ang)*${camDist});\n`,
-      `    vec3  ${id}_ta  = vec3(0.0);\n`,
-      `    vec3  ${id}_fwd = normalize(${id}_ta - ${id}_ro);\n`,
-      `    vec3  ${id}_rgt = normalize(cross(vec3(0.0,1.0,0.0), ${id}_fwd));\n`,
-      `    vec3  ${id}_up2 = cross(${id}_fwd, ${id}_rgt);\n`,
-      `    vec3  ${id}_rd  = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+      `    float ${id}_ang  = ${camAngle} + ${time} * ${rotSpeed};\n`,
+      `    float ${id}_elev = ${camElevation};\n`,
+      `    float ${id}_ce   = cos(${id}_elev);\n`,
+      `    vec3  ${id}_ta   = vec3(${targetX}, ${targetY}, ${targetZ});\n`,
+      `    vec3  ${id}_ro   = ${id}_ta + vec3(sin(${id}_ang)*${id}_ce*${camDist}, sin(${id}_elev)*${camDist}, cos(${id}_ang)*${id}_ce*${camDist});\n`,
+      `    vec3  ${id}_fwd  = normalize(${id}_ta - ${id}_ro);\n`,
+      `    vec3  ${id}_wup  = (abs(${id}_fwd.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);\n`,
+      `    vec3  ${id}_rgt  = normalize(cross(${id}_wup, ${id}_fwd));\n`,
+      `    vec3  ${id}_up2  = cross(${id}_fwd, ${id}_rgt);\n`,
+      `    vec3  ${id}_rd   = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
     ].join('');
 
     return {
