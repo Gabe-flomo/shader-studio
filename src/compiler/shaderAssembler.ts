@@ -1236,7 +1236,14 @@ export function generateFragmentShader(
           }
         }
 
-        const snResult = snDef.generateGLSL(sn, snInputVars);
+        let effectiveSn = sn;
+        for (const [k, v] of Object.entries(snInputVars)) {
+          if (k.startsWith('__param_') && v) {
+            const paramKey = k.slice('__param_'.length);
+            effectiveSn = { ...effectiveSn, params: { ...effectiveSn.params, [paramKey]: v } };
+          }
+        }
+        const snResult = snDef.generateGLSL(effectiveSn, snInputVars);
         sceneFnLines.push(snResult.code);
         nodeOutputs.set(sn.id, snResult.outputVars);
 
@@ -1966,7 +1973,14 @@ export function generateFragmentShader(
           }
         }
 
-        const snResult = snDef.generateGLSL(sn, snInputVars);
+        let effectiveSn = sn;
+        for (const [k, v] of Object.entries(snInputVars)) {
+          if (k.startsWith('__param_') && v) {
+            const paramKey = k.slice('__param_'.length);
+            effectiveSn = { ...effectiveSn, params: { ...effectiveSn.params, [paramKey]: v } };
+          }
+        }
+        const snResult = snDef.generateGLSL(effectiveSn, snInputVars);
         warpFnLines.push(snResult.code);
         nodeOutputs.set(sn.id, snResult.outputVars);
 
