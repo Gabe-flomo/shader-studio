@@ -3113,6 +3113,30 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   compile: () => {
+    // Patch any nodes that are missing input sockets added by a definition update
+    const rawNodes = get().nodes;
+    let inputsPatched = false;
+    const patchedNodes = rawNodes.map(node => {
+      const def = getNodeDefinition(node.type);
+      if (!def) return node;
+      let changed = false;
+      const mergedInputs: Record<string, InputSocket> = { ...node.inputs };
+      for (const [key, socket] of Object.entries(def.inputs)) {
+        if (!mergedInputs[key]) {
+          mergedInputs[key] = {
+            ...socket,
+            defaultValue: def.paramDefs?.[key]
+              ? undefined
+              : def.defaultParams?.[key] as number | number[] | undefined,
+          };
+          changed = true;
+        }
+      }
+      if (changed) { inputsPatched = true; return { ...node, inputs: mergedInputs }; }
+      return node;
+    });
+    if (inputsPatched) set({ nodes: patchedNodes });
+
     const { nodes, previewNodeId, activeGroupId } = get();
     let graphNodes: GraphNode[];
     if (previewNodeId) {
