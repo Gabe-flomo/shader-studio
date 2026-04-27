@@ -14020,11 +14020,19 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
                 inputs:  { pos: { type: 'vec3',  label: 'Position', connection: { nodeId: 'mp_gm', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
                 params: {} },
+              // clamp d to 0.05 minimum — prevents 1/d spike when ray grazes surface (d≈0 → white blowout)
+              { id: 'clamp_gm', type: 'maxMath', position: { x: 410, y: 160 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'msd_gm', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', defaultValue: 0.05 },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: {} },
               // divide 1/d — accumulates glow via assignOp +=
-              { id: 'div_gm', type: 'divide',          position: { x: 520, y: 160 },
+              { id: 'div_gm', type: 'divide',          position: { x: 560, y: 160 },
                 inputs: {
                   a: { type: 'float', label: 'A', defaultValue: 1 },
-                  b: { type: 'float', label: 'B', connection: { nodeId: 'msd_gm', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'clamp_gm', outputKey: 'result' } },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
                 params: {},
