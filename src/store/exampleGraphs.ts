@@ -14488,6 +14488,161 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  volAnimatedRepeat: {
+    label: 'Volumetric: Animated Repeat',
+    counter: 30,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 522 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 424 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 380, y: 60 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.15, camAngle: 5.4, rotSpeed: 0.0, fov: 1.25 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 380, y: 448 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Repeated Spheres',
+          subgraph: {
+            nodes: [
+              { id: 'sp_inn',   type: 'scenePos',   position: { x: 40,  y: 180 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'time_inn', type: 'time',        position: { x: 40,  y: 278 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              // Animate translation along Z over time for flowing scroll effect
+              { id: 'multz_inn', type: 'multiply', position: { x: 380, y: 60 },
+                inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'time_inn', outputKey: 'time' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { b: -0.4 } },
+              { id: 'tr_inn', type: 'translate3D', position: { x: 720, y: 60 },
+                inputs: {
+                  pos: { type: 'vec3',  label: 'Position', connection: { nodeId: 'sp_inn',   outputKey: 'pos'    } },
+                  tz:  { type: 'float', label: 'Z',        connection: { nodeId: 'multz_inn', outputKey: 'result' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } },
+                params: { tx: -0.43, ty: -0.28, tz: 0 } },
+              // Dense X repeat, sparse Y/Z — creates layered sheets of spheres
+              { id: 'rep_inn', type: 'repeat3D', position: { x: 1060, y: 60 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr_inn', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
+                params: { cellX: 0.5, cellY: 2.5, cellZ: 1.6 } },
+              // Animated sphere radius: cos(sin(time)) oscillation
+              { id: 'sin_inn', type: 'sin', position: { x: 680, y: 330 },
+                inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'time_inn', outputKey: 'time' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params: { freq: 0.89, amp: 0.4 } },
+              { id: 'cos_inn', type: 'cos', position: { x: 980, y: 330 },
+                inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'sin_inn', outputKey: 'output' } } },
+                outputs: { output: { type: 'float', label: 'Output' } },
+                params: { freq: 1.66, amp: 0.1 } },
+              { id: 'sdf_inn', type: 'sphereSDF3D', position: { x: 1380, y: 60 },
+                inputs: {
+                  pos:    { type: 'vec3',  label: 'Position', connection: { nodeId: 'rep_inn', outputKey: 'pos'    } },
+                  radius: { type: 'float', label: 'Radius',   connection: { nodeId: 'cos_inn', outputKey: 'output' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.1 } },
+            ],
+            outputNodeId: 'sdf_inn', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 720, y: 60 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV' },
+          time:  { type: 'float', label: 'Time' },
+        },
+        outputs: {
+          color: { type: 'vec3',  label: 'Color' }, dist:  { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' },
+          iter:  { type: 'float', label: 'Iter' },  iterCount: { type: 'float', label: 'Iter Count' },
+          hit:   { type: 'float', label: 'Hit' },   pos: { type: 'vec3', label: 'Hit Pos' },
+          acc0:  { type: 'float', label: 'Glow' },
+        },
+        params: {
+          maxSteps: 150, maxDist: 20.0, stepScale: 1.0,
+          volumetric: true, passthrough: 0.12,
+          bgR: 0.0, bgG: 0.0, bgB: 0.0,
+          albedoR: 0.5, albedoG: 0.5, albedoB: 0.5,
+          subgraph: {
+            nodes: [
+              { id: 'mp_b',   type: 'marchPos', position: { x: 60,  y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'time_b', type: 'time',     position: { x: 60,  y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              // sinWarp warps the march path for organic look (same params as original body)
+              { id: 'swarp_b', type: 'sinWarp3D', position: { x: 300, y: 160 },
+                inputs: {
+                  p:    { type: 'vec3',  label: 'Position', connection: { nodeId: 'mp_b',   outputKey: 'pos'  } },
+                  time: { type: 'float', label: 'Time',     connection: { nodeId: 'time_b', outputKey: 'time' } },
+                },
+                outputs: { p: { type: 'vec3', label: 'Warped Position' } },
+                params: { distort_axis: 'z', source_axis: 'z', frequency: 2.21, amplitude: 0.49 } },
+              { id: 'msd_b', type: 'marchSceneDist', position: { x: 560, y: 160 },
+                inputs:  { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'swarp_b', outputKey: 'p' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' }, rawDist: { type: 'float', label: 'Raw Distance (unclipped)' } },
+                params: {} },
+              { id: 'abs_b', type: 'abs', position: { x: 740, y: 160 },
+                inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'msd_b', outputKey: 'rawDist' } } },
+                outputs: { output: { type: 'float', label: 'Output' } }, params: {} },
+              { id: 'clamp_b', type: 'max', position: { x: 900, y: 160 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'abs_b', outputKey: 'output' } },
+                  b: { type: 'float', label: 'B', defaultValue: 0.12 },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
+              { id: 'div_b', type: 'divide', position: { x: 1060, y: 160 },
+                inputs: {
+                  a: { type: 'float', label: 'A', defaultValue: 1 },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'clamp_b', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: {}, assignOp: '+=' as const },
+            ],
+            inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      // glow → [0,1] for palette input
+      { id: 'scale_5', type: 'multiply', position: { x: 1060, y: 60 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'acc0' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.004 } },
+      { id: 'tanh_6', type: 'tanh', position: { x: 1060, y: 180 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'scale_5', outputKey: 'result' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {} },
+      // IQ cosine palette — same params as the original graph
+      { id: 'pal_7', type: 'palette', position: { x: 1400, y: 60 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'tanh_6', outputKey: 'output' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0.3, 0.416, 0.557] } },
+      // Post-processing chain from original: chromaShift → grain → toneMap
+      { id: 'chroma_8', type: 'chromaShift', position: { x: 1760, y: 60 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_7', outputKey: 'color' } },
+                  uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: { mode: 'linear', strength: 0.08, contrast: 2.05, angle_deg: 0, animate: 'false', anim_speed: 0.4 } },
+      { id: 'grain_9', type: 'grain', position: { x: 2100, y: 60 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'chroma_8', outputKey: 'result' } },
+                  uv: { type: 'vec2', label: 'UV' },
+                  seed: { type: 'float', label: 'Seed', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'basic', amount: 0.185, scale: 1, seed: 0 } },
+      { id: 'tone_10', type: 'toneMap', position: { x: 2440, y: 60 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'grain_9', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'tanh' } },
+      { id: 'out_11', type: 'output', position: { x: 2780, y: 60 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_10', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
