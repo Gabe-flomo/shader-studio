@@ -774,3 +774,83 @@ export const SelectNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Swizzle Nodes ────────────────────────────────────────────────────────────
+
+export const Vec2SwizzleNode: NodeDefinition = {
+  type: 'vec2Swizzle',
+  label: 'Vec2 Swizzle',
+  category: 'Math',
+  description:
+    'Reorder vec2 channels. .yx swaps X and Y — useful for axis reflection, ' +
+    '90° rotation prep, or feeding one axis into the other. .xx / .yy broadcast a single channel.',
+  inputs: {
+    input: { type: 'vec2', label: 'Input' },
+  },
+  outputs: {
+    output: { type: 'vec2', label: 'Output' },
+  },
+  defaultParams: { mode: 'yx' },
+  paramDefs: {
+    mode: {
+      label: 'Mode',
+      type: 'select',
+      options: [
+        { value: 'yx', label: '.yx  (swap X / Y)'  },
+        { value: 'xx', label: '.xx  (X broadcast)' },
+        { value: 'yy', label: '.yy  (Y broadcast)' },
+      ],
+    },
+  },
+  generateGLSL: (node, inputVars) => {
+    const id   = node.id;
+    const v    = inputVars.input || 'vec2(0.0)';
+    const mode = String(node.params.mode || 'yx');
+    return {
+      code: `    vec2 ${id}_output = ${v}.${mode};\n`,
+      outputVars: { output: `${id}_output` },
+    };
+  },
+};
+
+export const Vec3SwizzleNode: NodeDefinition = {
+  type: 'vec3Swizzle',
+  label: 'Vec3 Swizzle',
+  category: 'Math',
+  description:
+    'Reorder vec3 channels. .yzx / .zxy are cyclic permutations used for ' +
+    'cross-products (a.yzx * b.zxy - a.zxy * b.yzx), component-min (min(v, min(v.yzx, v.zxy))), ' +
+    'and color-channel cycling inside loops.',
+  inputs: {
+    input: { type: 'vec3', label: 'Input' },
+  },
+  outputs: {
+    output: { type: 'vec3', label: 'Output' },
+  },
+  defaultParams: { mode: 'yzx' },
+  paramDefs: {
+    mode: {
+      label: 'Mode',
+      type: 'select',
+      options: [
+        { value: 'yzx', label: '.yzx  (cycle forward)'  },
+        { value: 'zxy', label: '.zxy  (cycle backward)' },
+        { value: 'xxy', label: '.xxy  (X, X, Y)'        },
+        { value: 'xyy', label: '.xyy  (X, Y, Y)'        },
+        { value: 'xxx', label: '.xxx  (X broadcast)'    },
+        { value: 'yyy', label: '.yyy  (Y broadcast)'    },
+        { value: 'zzz', label: '.zzz  (Z broadcast)'    },
+        { value: 'zyx', label: '.zyx  (reverse)'        },
+      ],
+    },
+  },
+  generateGLSL: (node, inputVars) => {
+    const id   = node.id;
+    const v    = inputVars.input || 'vec3(0.0)';
+    const mode = String(node.params.mode || 'yzx');
+    return {
+      code: `    vec3 ${id}_output = ${v}.${mode};\n`,
+      outputVars: { output: `${id}_output` },
+    };
+  },
+};

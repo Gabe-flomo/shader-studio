@@ -1582,3 +1582,204 @@ export const HelixWarp3DNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Gyroid / TPMS Field Nodes ────────────────────────────────────────────────
+
+export const GyroidFieldNode: NodeDefinition = {
+  type: 'gyroidField',
+  label: 'Gyroid Field',
+  category: '3D Primitives',
+  description:
+    'Gyroid implicit surface. dot(sin(p * freq), cos(p.yzx * freq)). ' +
+    'Not a true SDF — divide density by 0.33 to use as a march step. ' +
+    'Use the surface output (abs(density) - thickness) for shell shapes with RayMarch.',
+  inputs: {
+    pos:       { type: 'vec3',  label: 'Position'  },
+    frequency: { type: 'float', label: 'Frequency' },
+    thickness: { type: 'float', label: 'Thickness' },
+  },
+  outputs: {
+    density: { type: 'float', label: 'Density' },
+    surface: { type: 'float', label: 'Surface' },
+  },
+  defaultParams: { frequency: 1.0, thickness: 0.05 },
+  paramDefs: {
+    frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
+    thickness: { label: 'Thickness', type: 'float', min: 0.001, max: 0.5,  step: 0.005 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const pos  = inputVars.pos       ?? 'vec3(0.0)';
+    const freq = inputVars.frequency ?? p(node.params.frequency, 1.0);
+    const thk  = inputVars.thickness ?? p(node.params.thickness, 0.05);
+    return {
+      code: [
+        `    vec3  ${id}_fp      = ${pos} * ${freq};\n`,
+        `    float ${id}_density = dot(sin(${id}_fp), cos(${id}_fp.yzx));\n`,
+        `    float ${id}_surface = abs(${id}_density) - ${thk};\n`,
+      ].join(''),
+      outputVars: { density: `${id}_density`, surface: `${id}_surface` },
+    };
+  },
+};
+
+export const SchwarzPFieldNode: NodeDefinition = {
+  type: 'schwarzPField',
+  label: 'Schwarz-P Field',
+  category: '3D Primitives',
+  description:
+    "Schwarz-P triply periodic minimal surface. cos(x)+cos(y)+cos(z)=0. " +
+    "Cubic/blocky cell structure vs the gyroid's interlocking tunnels. Same usage as Gyroid Field.",
+  inputs: {
+    pos:       { type: 'vec3',  label: 'Position'  },
+    frequency: { type: 'float', label: 'Frequency' },
+    thickness: { type: 'float', label: 'Thickness' },
+  },
+  outputs: {
+    density: { type: 'float', label: 'Density' },
+    surface: { type: 'float', label: 'Surface' },
+  },
+  defaultParams: { frequency: 1.0, thickness: 0.05 },
+  paramDefs: {
+    frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
+    thickness: { label: 'Thickness', type: 'float', min: 0.001, max: 0.5,  step: 0.005 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const pos  = inputVars.pos       ?? 'vec3(0.0)';
+    const freq = inputVars.frequency ?? p(node.params.frequency, 1.0);
+    const thk  = inputVars.thickness ?? p(node.params.thickness, 0.05);
+    return {
+      code: [
+        `    vec3  ${id}_fp      = ${pos} * ${freq};\n`,
+        `    float ${id}_density = cos(${id}_fp.x) + cos(${id}_fp.y) + cos(${id}_fp.z);\n`,
+        `    float ${id}_surface = abs(${id}_density) - ${thk};\n`,
+      ].join(''),
+      outputVars: { density: `${id}_density`, surface: `${id}_surface` },
+    };
+  },
+};
+
+// ─── Mirror Fold 3D ───────────────────────────────────────────────────────────
+
+export const MirrorFold3DNode: NodeDefinition = {
+  type: 'mirrorFold3D',
+  label: 'Mirror Fold 3D',
+  category: '3D Primitives',
+  description:
+    'Demoscene fold trick: abs(p.axis) - offset per axis. Mirrors space across ' +
+    'each toggled axis, turning one SDF into infinite reflected copies. ' +
+    'Stack inside an iterated group for fractal-like complexity.',
+  inputs: {
+    pos:     { type: 'vec3',  label: 'Position' },
+    offsetX: { type: 'float', label: 'Offset X' },
+    offsetY: { type: 'float', label: 'Offset Y' },
+    offsetZ: { type: 'float', label: 'Offset Z' },
+  },
+  outputs: {
+    pos: { type: 'vec3', label: 'Folded Position' },
+  },
+  defaultParams: { foldX: true, foldY: true, foldZ: false, offsetX: 0.0, offsetY: 0.0, offsetZ: 0.0 },
+  paramDefs: {
+    foldX:   { label: 'Fold X',   type: 'bool' },
+    foldY:   { label: 'Fold Y',   type: 'bool' },
+    foldZ:   { label: 'Fold Z',   type: 'bool' },
+    offsetX: { label: 'Offset X', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+    offsetY: { label: 'Offset Y', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+    offsetZ: { label: 'Offset Z', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const pos = inputVars.pos     ?? 'vec3(0.0)';
+    const ox  = inputVars.offsetX ?? p(node.params.offsetX, 0.0);
+    const oy  = inputVars.offsetY ?? p(node.params.offsetY, 0.0);
+    const oz  = inputVars.offsetZ ?? p(node.params.offsetZ, 0.0);
+    const fx  = node.params.foldX !== false;
+    const fy  = node.params.foldY !== false;
+    const fz  = node.params.foldZ === true;
+    const x   = fx ? `abs(${pos}.x) - ${ox}` : `${pos}.x`;
+    const y   = fy ? `abs(${pos}.y) - ${oy}` : `${pos}.y`;
+    const z   = fz ? `abs(${pos}.z) - ${oz}` : `${pos}.z`;
+    return {
+      code: `    vec3 ${id}_pos = vec3(${x}, ${y}, ${z});\n`,
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
+
+// ─── 3D FBM Domain Warp ────────────────────────────────────────────────────────
+
+// Identical string to threed.ts NOISE3D_GLSL — functions.add() deduplicates by content
+const NOISE3D_GLSL_SDF3D = `
+float hash3(vec3 p) {
+    p = fract(p * vec3(127.1, 311.7, 74.7));
+    p += dot(p, p.yzx + 19.19);
+    return fract((p.x + p.y) * p.z);
+}
+float noise3(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash3(i+vec3(0,0,0)), hash3(i+vec3(1,0,0)), u.x),
+                   mix(hash3(i+vec3(0,1,0)), hash3(i+vec3(1,1,0)), u.x), u.y),
+               mix(mix(hash3(i+vec3(0,0,1)), hash3(i+vec3(1,0,1)), u.x),
+                   mix(hash3(i+vec3(0,1,1)), hash3(i+vec3(1,1,1)), u.x), u.y), u.z);
+}
+float fbm3(vec3 p, int octaves, float lacunarity, float gain) {
+    float v = 0.0; float a = 0.5; float f2 = 1.0;
+    for (int i = 0; i < 8; i++) {
+        if (i >= octaves) break;
+        v += a * noise3(p * f2);
+        a *= gain; f2 *= lacunarity;
+    }
+    return v;
+}`;
+
+export const DomainWarp3DNode: NodeDefinition = {
+  type: 'domainWarp3D',
+  label: '3D Domain Warp',
+  category: '3D Primitives',
+  description:
+    'Warps a 3D position with FBM noise — p + fbm3(p * scale) * strength. ' +
+    'Place between ray position and any SDF or Gyroid Field for organic turbulence.',
+  inputs: {
+    pos:      { type: 'vec3',  label: 'Position' },
+    strength: { type: 'float', label: 'Strength' },
+    scale:    { type: 'float', label: 'Scale'    },
+    time:     { type: 'float', label: 'Time'     },
+  },
+  outputs: {
+    pos: { type: 'vec3', label: 'Warped Position' },
+  },
+  defaultParams: { strength: 0.3, scale: 1.0, octaves: 3, gain: 0.5, lacunarity: 2.0 },
+  paramDefs: {
+    strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+    scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1  },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 6,   step: 1    },
+    gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01 },
+  },
+  glslFunction: NOISE3D_GLSL_SDF3D,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const pos = inputVars.pos      ?? 'vec3(0.0)';
+    const str = inputVars.strength ?? p(node.params.strength, 0.3);
+    const sc  = inputVars.scale    ?? p(node.params.scale,    1.0);
+    const t   = inputVars.time     ?? '0.0';
+    const oct = Math.round(Number(node.params.octaves)   || 3);
+    const gn  = p(node.params.gain,       0.5);
+    const lac = p(node.params.lacunarity, 2.0);
+    return {
+      code: [
+        `    vec3 ${id}_wpos = ${pos} * ${sc} + ${t} * 0.1;\n`,
+        `    vec3 ${id}_off  = vec3(\n`,
+        `        fbm3(${id}_wpos,                       ${oct}, ${lac}, ${gn}),\n`,
+        `        fbm3(${id}_wpos + vec3(5.2, 1.3, 2.8), ${oct}, ${lac}, ${gn}),\n`,
+        `        fbm3(${id}_wpos + vec3(1.7, 9.2, 4.1), ${oct}, ${lac}, ${gn})\n`,
+        `    );\n`,
+        `    vec3 ${id}_pos = ${pos} + ${id}_off * ${str};\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};

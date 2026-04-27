@@ -87,6 +87,8 @@ export {
   MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
   MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
+  GyroidFieldNode, SchwarzPFieldNode,
+  MirrorFold3DNode, DomainWarp3DNode,
 } from './sdf3d';
 
 // 3D Scene (composable)
@@ -120,6 +122,7 @@ export {
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
+  Vec2SwizzleNode, Vec3SwizzleNode,
 } from './math';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
@@ -178,6 +181,8 @@ import {
   MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
   MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
+  GyroidFieldNode, SchwarzPFieldNode,
+  MirrorFold3DNode, DomainWarp3DNode,
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -200,6 +205,7 @@ import {
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
+  Vec2SwizzleNode, Vec3SwizzleNode,
 } from './math';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -401,6 +407,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mobiusWarp3D: MobiusWarp3DNode,
   logPolarWarp3D: LogPolarWarp3DNode,
   helixWarp3D: HelixWarp3DNode,
+  // 3D TPMS / Field Nodes
+  gyroidField:   GyroidFieldNode,
+  schwarzPField: SchwarzPFieldNode,
+  mirrorFold3D:  MirrorFold3DNode,
+  domainWarp3D:  DomainWarp3DNode,
   // 3D Fractals (DE nodes)
   mandelboxDE: MandelboxDENode,
   kifsTetra: KIFSTetrahedronDENode,
@@ -487,6 +498,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   weightedAverage: WeightedAverageNode,
   compare: CompareNode,
   select: SelectNode,
+  vec2Swizzle: Vec2SwizzleNode,
+  vec3Swizzle: Vec3SwizzleNode,
   // Animation
   sineLFO: SineLFONode,
   squareLFO: SquareLFONode,
