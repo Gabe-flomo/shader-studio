@@ -315,7 +315,10 @@ export const MarchSceneDistNode: NodeDefinition = {
   type: 'marchSceneDist', label: 'Scene Distance', category: '3D Scene',
   description: 'Inside a March Loop Group body: samples the scene SDF at the given position. Wire marchPos → here, then use the dist output with assignOp += to accumulate glow across march steps.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
+  outputs: {
+    dist:    { type: 'float', label: 'Distance' },
+    rawDist: { type: 'float', label: 'Raw Distance (unclipped)' },
+  },
   defaultParams: {},
   paramDefs: {},
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -324,7 +327,7 @@ export const MarchSceneDistNode: NodeDefinition = {
     // Fallback for preview — the MLG compiler substitutes the real scene fn call
     return {
       code: `    float ${id}_d = length(${pos}) - 1.0;\n`,
-      outputVars: { dist: `${id}_d` },
+      outputVars: { dist: `${id}_d`, rawDist: `${id}_d` },
     };
   },
 };
@@ -357,19 +360,22 @@ export const MarchLoopGroupNode: NodeDefinition = {
   },
   defaultParams: {
     maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+    volumetric: false, passthrough: 0.1,
     bgR: 0.0, bgG: 0.0, bgB: 0.0,
     albedoR: 0.6, albedoG: 0.7, albedoB: 0.9,
   },
   paramDefs: {
-    maxSteps:  { label: 'Max Steps',  type: 'float' as const, min: 8,   max: 256,   step: 4,    hint: 'Maximum ray march iterations per pixel. Higher = deeper into geometry, more GPU cost.' },
-    maxDist:   { label: 'Max Dist',   type: 'float' as const, min: 5.0, max: 100.0, step: 1.0,  hint: 'How far the ray travels before giving up and returning the background color.' },
-    stepScale: { label: 'Step Scale', type: 'float' as const, min: 0.3, max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower.' },
-    bgR:       { label: 'BG R',       type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01, hint: 'Background color red channel — shown for rays that miss all geometry.' },
-    bgG:       { label: 'BG G',       type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01, hint: 'Background color green channel — shown for rays that miss all geometry.' },
-    bgB:       { label: 'BG B',       type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01, hint: 'Background color blue channel — shown for rays that miss all geometry.' },
-    albedoR:   { label: 'Albedo R',   type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01, hint: 'Default surface color red — used by the built-in diffuse shading.' },
-    albedoG:   { label: 'Albedo G',   type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01, hint: 'Default surface color green — used by the built-in diffuse shading.' },
-    albedoB:   { label: 'Albedo B',   type: 'float' as const, min: 0.0, max: 1.0,   step: 0.01, hint: 'Default surface color blue — used by the built-in diffuse shading.' },
+    maxSteps:    { label: 'Max Steps',   type: 'float' as const,   min: 8,    max: 256,   step: 4,    hint: 'Maximum ray march iterations per pixel. Higher = deeper into geometry, more GPU cost.' },
+    maxDist:     { label: 'Max Dist',    type: 'float' as const,   min: 5.0,  max: 100.0, step: 1.0,  hint: 'How far the ray travels before giving up and returning the background color.' },
+    stepScale:   { label: 'Step Scale',  type: 'float' as const,   min: 0.3,  max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower. Not used in volumetric mode.' },
+    volumetric:  { label: 'Volumetric',  type: 'bool'  as const,                                       hint: 'When on, the ray passes through the scene accumulating color at every step. No hit detection. Use with marchSceneDist + accumulator nodes in the body.' },
+    passthrough: { label: 'Passthrough', type: 'float' as const,   min: 0.001, max: 0.5,  step: 0.005, hint: 'Minimum step size in volumetric mode. Prevents the ray from stalling at zero-distance surfaces. Also caps 1/vol to avoid blowout.' },
+    bgR:         { label: 'BG R',        type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Background color red channel — shown for rays that miss all geometry.' },
+    bgG:         { label: 'BG G',        type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Background color green channel — shown for rays that miss all geometry.' },
+    bgB:         { label: 'BG B',        type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Background color blue channel — shown for rays that miss all geometry.' },
+    albedoR:     { label: 'Albedo R',    type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Default surface color red — used by the built-in diffuse shading (non-volumetric mode).' },
+    albedoG:     { label: 'Albedo G',    type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Default surface color green — used by the built-in diffuse shading (non-volumetric mode).' },
+    albedoB:     { label: 'Albedo B',    type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Default surface color blue — used by the built-in diffuse shading (non-volumetric mode).' },
   },
   // Stub — real code is generated by the compiler when it encounters type === 'marchLoopGroup'
   generateGLSL: () => ({ code: '', outputVars: {} }),

@@ -1288,8 +1288,10 @@ export function generateFragmentShader(
         const n = typeof val === 'number' ? val : fb;
         return Number.isInteger(n) ? `${n}.0` : String(n);
       };
-      const mlMaxDist   = fmtP(node.params.maxDist,  20.0);
-      const mlStepScale = fmtP(node.params.stepScale,  1.0);
+      const mlMaxDist    = fmtP(node.params.maxDist,  20.0);
+      const mlStepScale  = fmtP(node.params.stepScale,  1.0);
+      const mlVolumetric = !!node.params.volumetric;
+      const mlPassthrough = fmtP(node.params.passthrough, 0.1);
       const bgr  = fmtP(node.params.bgR,      0.0);
       const bgg  = fmtP(node.params.bgG,      0.0);
       const bgb  = fmtP(node.params.bgB,      0.0);
@@ -1797,9 +1799,17 @@ export function generateFragmentShader(
               ? ', ' + resolvedExtraParams.map(v => v.name).join(', ')
               : '';
             const posVar = snInputVars.pos || `${nodeSlug}_mp`;
+            const rawVar = `${sn.id}_sd_raw`;
             const outVar = `${sn.id}_sd`;
-            bodyLines.push(`    float ${outVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
-            nodeOutputs.set(sn.id, { dist: outVar });
+            if (mlVolumetric) {
+              // In volumetric mode expose both raw d and max(d, passthrough) clamped vol
+              bodyLines.push(`    float ${rawVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+              bodyLines.push(`    float ${outVar} = max(${rawVar}, ${mlPassthrough});\n`);
+              nodeOutputs.set(sn.id, { dist: outVar, rawDist: rawVar });
+            } else {
+              bodyLines.push(`    float ${outVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+              nodeOutputs.set(sn.id, { dist: outVar });
+            }
             continue;
           }
 
@@ -1883,7 +1893,22 @@ export function generateFragmentShader(
       // Declare inout accumulator vars in main() before the march loop
       const accumDecls = mlBodyAccumulators.map(a => `    ${a.type} ${a.varName} = ${a.initExpr};\n`).join('');
 
-      const marchCode = [
+      const marchLoopLines = mlVolumetric ? [
+        // Volumetric mode: no hit detection, step by max(d, passthrough), runs all steps
+        accumDecls,
+        `    float ${nodeSlug}_t   = 0.001;\n`,
+        `    float ${nodeSlug}_hit = 0.0;\n`,
+        `    int   ${nodeSlug}_si  = 0;\n`,
+        `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
+        `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+        `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
+        `        float ${nodeSlug}_d  = ${callScene(`${nodeSlug}_rp`)};\n`,
+        `        float ${nodeSlug}_vol = max(${nodeSlug}_d, ${mlPassthrough});\n`,
+        `        ${nodeSlug}_t += ${nodeSlug}_vol;\n`,
+        `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+        `    }\n`,
+      ] : [
+        // Standard raymarching: hit detection + stepScale
         accumDecls,
         `    float ${nodeSlug}_t   = 0.001;\n`,
         `    float ${nodeSlug}_hit = 0.0;\n`,
@@ -1896,6 +1921,9 @@ export function generateFragmentShader(
         `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale};\n`,
         `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
         `    }\n`,
+      ];
+      const marchCode = [
+        ...marchLoopLines,
         `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
         `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
         `    vec3  ${nodeSlug}_hp_raw  = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
