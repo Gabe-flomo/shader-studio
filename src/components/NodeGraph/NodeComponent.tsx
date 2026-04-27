@@ -35,6 +35,23 @@ import { audioEngine } from '../../lib/audioEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 
+function adaptiveStep(value: number, baseStep: number): number {
+  const abs = Math.abs(value);
+  if (abs > 0 && abs < baseStep) {
+    return Math.pow(10, Math.floor(Math.log10(abs)) - 1);
+  }
+  return baseStep;
+}
+
+function adaptiveDecimals(step: number): number {
+  if (step < 0.0001) return 6;
+  if (step < 0.001) return 5;
+  if (step < 0.01) return 4;
+  if (step < 0.1) return 3;
+  if (step < 1) return 2;
+  return 1;
+}
+
 interface Props {
   node: GraphNode;
   onStartConnection: (nodeId: string, outputKey: string, event: React.MouseEvent) => void;
@@ -1913,7 +1930,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                             type="range"
                             min={effMin}
                             max={baseMax}
-                            step={step}
+                            step={adaptiveStep(currentVal, step)}
                             value={Math.max(effMin, Math.min(baseMax, currentVal))}
                             onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
                             style={{ flex: 1, accentColor: '#cba6f7', cursor: 'pointer' }}
@@ -1941,7 +1958,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                               style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
                               onDoubleClick={() => { setEditingSliderKey(`sp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
                             >
-                              {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                              {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
                             </span>
                           )}
                         </>
@@ -2089,7 +2106,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                           type="range"
                           min={effMin}
                           max={effMax}
-                          step={step}
+                          step={adaptiveStep(currentVal, step)}
                           value={Math.max(effMin, Math.min(effMax, currentVal))}
                           onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
                           onDoubleClick={() => updateNodeParams(node.id, { [overrideKey]: (effMin + effMax) / 2 })}
@@ -2118,7 +2135,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                             style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
                             onDoubleClick={() => { setEditingSliderKey(`gp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
                           >
-                            {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                            {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
                           </span>
                         )}
                       </>
@@ -2159,13 +2176,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       type="range"
                       min={effMin}
                       max={effMax}
-                      step={step}
+                      step={adaptiveStep(currentVal, step)}
                       value={currentVal}
                       onChange={e => updateNodeParams(node.id, { [paramKey]: parseFloat(e.target.value) }, { immediate: true })}
                       style={{ flex: 1, accentColor: '#88aacc', cursor: 'pointer', margin: 0 }}
                     />
                     <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {currentVal.toFixed(step < 0.1 ? 3 : step < 1 ? 2 : step < 4 ? 1 : 0)}
+                      {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
                     </span>
                   </div>
                 );
@@ -3329,7 +3346,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     style={RANGE_STYLE}
                     min={effMin}
                     max={effMax}
-                    step={step}
+                    step={adaptiveStep(val, step)}
                     value={Math.max(effMin, Math.min(effMax, val))}
                     onChange={e => setFloat(key, e.target.value)}
                     onDoubleClick={() => setFloat(key, String((effMin + effMax) / 2))}
@@ -3363,7 +3380,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       }}
                       onDoubleClick={() => { setEditingSliderKey(key); setEditingSliderValue(String(val)); }}
                     >
-                      {val.toFixed(step < 0.01 ? 4 : step < 0.1 ? 3 : step < 1 ? 2 : 1)}
+                      {val.toFixed(adaptiveDecimals(adaptiveStep(val, step)))}
                     </span>
                   )}
                   {/* Gear button */}
