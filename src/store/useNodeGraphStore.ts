@@ -1144,6 +1144,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const { activeGroupPath, nodes } = get();
     if (activeGroupPath.length >= 2) return; // max depth
 
+    // Sealed groups compile as standalone functions — entering them is not allowed.
+    {
+      const ctxNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+      if (ctxNodes.find(n => n.id === id)?.sealed) return;
+    }
+
     // ── Initialise a fresh SceneGroup subgraph if needed ─────────────────────
     // setActiveGroupId handles this for its own path, but enterGroup is the
     // normal entry point from the UI (double-click / context menu). Without this,
@@ -1966,8 +1972,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   saveGroupPreset: (groupNodeId, label, description) => {
-    const { nodes } = get();
-    const groupNode = nodes.find(n => n.id === groupNodeId && n.type === 'group');
+    const { nodes, activeGroupPath } = get();
+    const searchNodes = activeGroupPath.length > 0
+      ? (getActiveNodes(nodes, activeGroupPath) ?? nodes)
+      : nodes;
+    const groupNode = searchNodes.find(n => n.id === groupNodeId && n.type === 'group');
     if (!groupNode) return;
     const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
     if (!subgraph) return;
@@ -2044,6 +2053,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     const groupId = `node_${nodeIdCounter++}`;
     const pos = position ?? { x: 200 + Math.random() * 100, y: 200 + Math.random() * 100 };
+    const { activeGroupPath } = get();
+
+    // Auto-seal when loading inside an existing regular group to prevent
+    // exceeding the 2-level nesting depth limit.
+    const sealed = activeGroupPath.some((id, idx) => {
+      const ctxNodes = idx === 0
+        ? nodes
+        : (getActiveNodes(nodes, activeGroupPath.slice(0, idx)) ?? []);
+      return ctxNodes.find(n => n.id === id)?.type === 'group';
+    });
+
     const groupNode: GraphNode = {
       id: groupId,
       type: 'group',
@@ -2051,9 +2071,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       inputs: groupInputSockets,
       outputs: groupOutputSockets,
       params: { label: preset.label, subgraph: newSubgraph },
+      ...(sealed ? { sealed: true } : {}),
     };
 
-    set(state => ({ nodes: [...state.nodes, groupNode] }));
+    if (activeGroupPath.length > 0) {
+      set(state => {
+        const currentActive = getActiveNodes(state.nodes, activeGroupPath);
+        if (!currentActive) return state;
+        const newNodes = setActiveNodes(state.nodes, activeGroupPath, [...currentActive, groupNode]);
+        return newNodes ? { nodes: newNodes } : state;
+      });
+    } else {
+      set(state => ({ nodes: [...state.nodes, groupNode] }));
+    }
     get().compile();
     return groupId;
   },

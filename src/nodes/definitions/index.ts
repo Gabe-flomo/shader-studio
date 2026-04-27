@@ -92,7 +92,7 @@ export {
 } from './sdf3d';
 
 // 3D Scene (composable)
-export { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode } from './scene3d';
+export { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode } from './scene3d';
 
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
@@ -184,7 +184,7 @@ import {
   GyroidFieldNode, SchwarzPFieldNode,
   MirrorFold3DNode, DomainWarp3DNode,
 } from './sdf3d';
-import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode } from './scene3d';
+import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
@@ -430,6 +430,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   marchLoopGroup: MarchLoopGroupNode,
   marchLoopInputs: MarchLoopInputsNode,
   marchLoopOutput: MarchLoopOutputNode,
+  marchSceneDist: MarchSceneDistNode,
   // Color
   palette: PaletteNode,
   palettePreset: PalettePresetNode,

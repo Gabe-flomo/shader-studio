@@ -53,7 +53,7 @@ const TYPE_ABBREV: Record<string, string> = {
   sdCross3D: 'xcross', mengerSponge: 'menger',
   // Groups / loops
   group: 'grp', loopStart: 'lstart', loopEnd: 'lend',
-  marchLoopInputs: 'mli', marchLoopOutput: 'mlo',
+  marchLoopInputs: 'mli', marchLoopOutput: 'mlo', marchSceneDist: 'msd',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

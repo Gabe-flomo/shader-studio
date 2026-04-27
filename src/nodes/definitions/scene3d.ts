@@ -306,6 +306,29 @@ export const MarchLoopOutputNode: NodeDefinition = {
   },
 };
 
+// ─── MarchSceneDistNode ──────────────────────────────────────────────────────
+// Inside a marchLoopGroup body, samples the scene SDF at the given position.
+// The compiler replaces generateGLSL with a direct call to the scene function,
+// exposing the per-step SDF distance so it can be accumulated (e.g. glow).
+
+export const MarchSceneDistNode: NodeDefinition = {
+  type: 'marchSceneDist', label: 'Scene Distance', category: '3D Scene',
+  description: 'Inside a March Loop Group body: samples the scene SDF at the given position. Wire marchPos → here, then use the dist output with assignOp += to accumulate glow across march steps.',
+  inputs: { pos: { type: 'vec3', label: 'Position' } },
+  outputs: { dist: { type: 'float', label: 'Distance' } },
+  defaultParams: {},
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const pos = inputVars.pos || 'vec3(0.0)';
+    // Fallback for preview — the MLG compiler substitutes the real scene fn call
+    return {
+      code: `    float ${id}_d = length(${pos}) - 1.0;\n`,
+      outputVars: { dist: `${id}_d` },
+    };
+  },
+};
+
 // ─── MarchLoopGroupNode ────────────────────────────────────────────────────────
 // A container node whose subgraph is compiled as a GLSL body-warp helper
 // `vec3 marchBody_<slug>(vec3 <slug>_mp, float <slug>_bt)` called inside the

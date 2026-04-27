@@ -29,6 +29,8 @@ export interface GraphNode {
   params: Record<string, unknown>;
   /** When true the node is skipped — inputs are passed through to outputs */
   bypassed?: boolean;
+  /** When true the node is a sealed group preset — compiles as a standalone GLSL function; double-click to enter is disabled */
+  sealed?: boolean;
   /**
    * Assignment operator applied to this node's output via an accumulator variable.
    * Works everywhere — main graph, inside a group (with or without iterations):
