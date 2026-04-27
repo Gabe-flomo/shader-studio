@@ -1288,8 +1288,10 @@ export function generateFragmentShader(
         const n = typeof val === 'number' ? val : fb;
         return Number.isInteger(n) ? `${n}.0` : String(n);
       };
-      const mlMaxDist   = fmtP(node.params.maxDist,  20.0);
-      const mlStepScale = fmtP(node.params.stepScale,  1.0);
+      const mlMaxDist    = fmtP(node.params.maxDist,  20.0);
+      const mlStepScale  = fmtP(node.params.stepScale,  1.0);
+      const mlVolumetric = !!node.params.volumetric;
+      const mlPassthrough = fmtP(node.params.passthrough, 0.1);
       const bgr  = fmtP(node.params.bgR,      0.0);
       const bgg  = fmtP(node.params.bgG,      0.0);
       const bgb  = fmtP(node.params.bgB,      0.0);
@@ -1316,6 +1318,8 @@ export function generateFragmentShader(
       let sceneFnName = '';
       // Extra params needed by marchBody_* for main()-scope vars referenced inside
       let mlBodyExtraParams: Array<{name: string; type: string}> = [];
+      // Inout accumulator vars for body nodes with assignOp != '=' (declared outside if block for scope)
+      let mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string }> = [];
 
       if (subgraph && subgraph.nodes.length > 0) {
         const warpFnName = `marchBody_${nodeSlug}`;
@@ -1423,11 +1427,33 @@ export function generateFragmentShader(
           };
         });
 
+        // Pre-scan: accumulator nodes (assignOp != '=') in the body need inout params
+        for (const sn of subgraph.nodes) {
+          const op = sn.assignOp;
+          if (!op || op === '=') continue;
+          const snDefAcc = getNodeDefinition(sn.type);
+          if (!snDefAcc) continue;
+          const snSlugAcc = mlSubSlugMap.get(sn.id) ?? sn.id;
+          const isMultiplyAcc = op === '*=' || op === '/=';
+          for (const [outKey, outSock] of Object.entries(snDefAcc.outputs)) {
+            if (outSock.type !== 'float') continue;
+            const accVar = `${nodeSlug}_mlgacc_${snSlugAcc}_${outKey}`;
+            const neutral = isMultiplyAcc ? '1.0' : '0.0';
+            const initExpr = sn.assignInit?.trim() || neutral;
+            mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr });
+          }
+        }
+
         const mlSorted = topologicalSort(mlPrefixedNodes);
+        // Ensure sceneGroup is processed before marchSceneDist (needs sceneFnName set first)
+        const mlProcessOrder = [
+          ...mlSorted.filter(sn => sn.type === 'sceneGroup'),
+          ...mlSorted.filter(sn => sn.type !== 'sceneGroup'),
+        ];
         // Default return value: identity warp (march pos unchanged)
         let mlLastVec3Var = `${nodeSlug}_mp`;
 
-        for (const sn of mlSorted) {
+        for (const sn of mlProcessOrder) {
           if (nodeOutputs.has(sn.id)) continue;  // marchPos/marchDist already pre-registered
           const snDef = getNodeDefinition(sn.type);
           if (!snDef) continue;
@@ -1765,7 +1791,43 @@ export function generateFragmentShader(
             }
           }
 
+          // ── marchSceneDist: emit a direct call to the scene SDF function ────────
+          if (sn.type === 'marchSceneDist') {
+            const resolvedSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
+            const resolvedExtraParams = sceneFnExtraParams.get(resolvedSceneFn) ?? [];
+            const resolvedExtraStr = resolvedExtraParams.length > 0
+              ? ', ' + resolvedExtraParams.map(v => v.name).join(', ')
+              : '';
+            const posVar = snInputVars.pos || `${nodeSlug}_mp`;
+            const rawVar = `${sn.id}_sd_raw`;
+            const outVar = `${sn.id}_sd`;
+            if (mlVolumetric) {
+              // In volumetric mode expose both raw d and max(d, passthrough) clamped vol
+              bodyLines.push(`    float ${rawVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+              bodyLines.push(`    float ${outVar} = max(${rawVar}, ${mlPassthrough});\n`);
+              nodeOutputs.set(sn.id, { dist: outVar, rawDist: rawVar });
+            } else {
+              bodyLines.push(`    float ${outVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+              nodeOutputs.set(sn.id, { dist: outVar });
+            }
+            continue;
+          }
+
           const snResult = snDef.generateGLSL(snEffective, snInputVars);
+
+          // ── assignOp in body: route output through inout accumulator ──────────
+          if (sn.assignOp && sn.assignOp !== '=') {
+            bodyLines.push(snResult.code);
+            const accOutVars: Record<string, string> = {};
+            for (const [outKey, tempVar] of Object.entries(snResult.outputVars)) {
+              const accVar = `${nodeSlug}_mlgacc_${origId}_${outKey}`;
+              bodyLines.push(`    ${accVar} ${sn.assignOp} ${tempVar};\n`);
+              accOutVars[outKey] = accVar;
+            }
+            nodeOutputs.set(sn.id, accOutVars);
+            continue;
+          }
+
           bodyLines.push(snResult.code);
           nodeOutputs.set(sn.id, snResult.outputVars);
 
@@ -1789,12 +1851,14 @@ export function generateFragmentShader(
         const fnBody = bodyLines.join('');
         let mlFnSig: string;
         const mlBodyExtraDecls = mlBodyExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
+        const mlBodyAccDecls = mlBodyAccumulators.map(a => `inout ${a.type} ${a.varName}`).join(', ');
         if (mlHasNewStyle) {
           const extraParamDecls = mlExtraInputs.map(ex => `${ex.type} ${nodeSlug}_ex_${ex.key}`).join(', ');
-          const allExtra = [extraParamDecls, mlBodyExtraDecls].filter(Boolean).join(', ');
+          const allExtra = [extraParamDecls, mlBodyExtraDecls, mlBodyAccDecls].filter(Boolean).join(', ');
           mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt, vec3 ${nodeSlug}_ro, vec3 ${nodeSlug}_rd${allExtra ? `, ${allExtra}` : ''}`;
         } else {
-          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt${mlBodyExtraDecls ? `, ${mlBodyExtraDecls}` : ''}`;
+          const allBodyExtra = [mlBodyExtraDecls, mlBodyAccDecls].filter(Boolean).join(', ');
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt${allBodyExtra ? `, ${allBodyExtra}` : ''}`;
         }
         const fnDef = `vec3 ${warpFnName}(${mlFnSig}) {\n${fnBody}    return ${mlLastVec3Var};\n}`;
         functions.add(fnDef);
@@ -1815,17 +1879,37 @@ export function generateFragmentShader(
       });
       const mlExtraArgsStr = mlExtraArgsList.length > 0 ? ', ' + mlExtraArgsList.join(', ') : '';
       const mlBodyExtraArgsStr = mlBodyExtraParams.length > 0 ? ', ' + mlBodyExtraParams.map(v => v.name).join(', ') : '';
+      const mlBodyAccArgsStr = mlBodyAccumulators.length > 0 ? ', ' + mlBodyAccumulators.map(a => a.varName).join(', ') : '';
       const warpPos = (expr: string, t: string): string => {
         if (!warpBodyFn) return expr;
-        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr})`;
-        return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr})`;
+        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
+        return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
       };
       // Build extra args for scene function calls (passes external vars from main() scope)
       const mlSceneExtraParams = sceneFnExtraParams.get(mlSceneFn) ?? [];
       const mlSceneExtraArgsStr = mlSceneExtraParams.length > 0 ? ', ' + mlSceneExtraParams.map(v => v.name).join(', ') : '';
       const callScene = (posExpr: string): string => `${mlSceneFn}(${posExpr}${mlSceneExtraArgsStr})`;
 
-      const marchCode = [
+      // Declare inout accumulator vars in main() before the march loop
+      const accumDecls = mlBodyAccumulators.map(a => `    ${a.type} ${a.varName} = ${a.initExpr};\n`).join('');
+
+      const marchLoopLines = mlVolumetric ? [
+        // Volumetric mode: no hit detection, step by max(d, passthrough), runs all steps
+        accumDecls,
+        `    float ${nodeSlug}_t   = 0.001;\n`,
+        `    float ${nodeSlug}_hit = 0.0;\n`,
+        `    int   ${nodeSlug}_si  = 0;\n`,
+        `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
+        `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+        `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
+        `        float ${nodeSlug}_d  = ${callScene(`${nodeSlug}_rp`)};\n`,
+        `        float ${nodeSlug}_vol = max(${nodeSlug}_d, ${mlPassthrough});\n`,
+        `        ${nodeSlug}_t += ${nodeSlug}_vol;\n`,
+        `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+        `    }\n`,
+      ] : [
+        // Standard raymarching: hit detection + stepScale
+        accumDecls,
         `    float ${nodeSlug}_t   = 0.001;\n`,
         `    float ${nodeSlug}_hit = 0.0;\n`,
         `    int   ${nodeSlug}_si  = 0;\n`,
@@ -1837,6 +1921,9 @@ export function generateFragmentShader(
         `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale};\n`,
         `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
         `    }\n`,
+      ];
+      const marchCode = [
+        ...marchLoopLines,
         `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
         `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
         `    vec3  ${nodeSlug}_hp_raw  = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
@@ -1858,6 +1945,8 @@ export function generateFragmentShader(
       ].join('');
 
       mainCode.push(marchCode);
+      const mlgAccOutputs: Record<string, string> = {};
+      mlBodyAccumulators.forEach((acc, i) => { mlgAccOutputs[`acc${i}`] = acc.varName; });
       nodeOutputs.set(node.id, {
         color:     `${nodeSlug}_color`,
         dist:      `${nodeSlug}_dist`,
@@ -1867,6 +1956,7 @@ export function generateFragmentShader(
         iterCount: `${nodeSlug}_iterCount`,
         hit:       `${nodeSlug}_hit`,
         pos:       `${nodeSlug}_hp`,
+        ...mlgAccOutputs,
       });
       continue;
     }
