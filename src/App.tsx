@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import ShaderCanvas, { type OfflineRenderHandle, HIST_BINS } from './components/ShaderCanvas';
+import ShaderCanvas, { type OfflineRenderHandle } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { CodePanel } from './components/CodePanel';
