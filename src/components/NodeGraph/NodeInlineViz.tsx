@@ -1,6 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { PALETTE_PRESETS } from '../../nodes/definitions/color';
+import { scopeValueRegistry } from '../../lib/scopeRegistry';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -1679,14 +1680,17 @@ function evalShaper(type: string, params: Record<string, unknown>): (x: number) 
 }
 
 export function ShaperCurveViz({ node }: { node: GraphNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const paramsKey = JSON.stringify(node.params);
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const nodeRef    = useRef(node);
+  const rafRef     = useRef<number>(0);
+  nodeRef.current  = node;
 
-  useEffect(() => {
+  const drawFrame = useCallback((liveY?: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const n = nodeRef.current;
     const W = canvas.width, H = canvas.height;
 
     drawCurveGrid(ctx, W, H);
@@ -1699,20 +1703,20 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     ctx.setLineDash([]);
 
     // Control point guides for bezier nodes
-    if (node.type === 'quadBezierShaper') {
-      const ax = typeof node.params.a === 'number' ? node.params.a : 0.5;
-      const ay = typeof node.params.b === 'number' ? node.params.b : 0.5;
+    if (n.type === 'quadBezierShaper') {
+      const ax = typeof n.params.a === 'number' ? n.params.a : 0.5;
+      const ay = typeof n.params.b === 'number' ? n.params.b : 0.5;
       ctx.strokeStyle = '#f38ba840';
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.lineTo(W, 0); ctx.stroke();
       ctx.fillStyle = '#f38ba8';
       ctx.beginPath(); ctx.arc(ax*W, H - ay*H, 3, 0, Math.PI*2); ctx.fill();
     }
-    if (node.type === 'cubicBezierShaper') {
-      const ax = typeof node.params.a === 'number' ? node.params.a : 0.25;
-      const ay = typeof node.params.b === 'number' ? node.params.b : 0.1;
-      const bx = typeof node.params.c === 'number' ? node.params.c : 0.25;
-      const by = typeof node.params.d === 'number' ? node.params.d : 1.0;
+    if (n.type === 'cubicBezierShaper') {
+      const ax = typeof n.params.a === 'number' ? n.params.a : 0.25;
+      const ay = typeof n.params.b === 'number' ? n.params.b : 0.1;
+      const bx = typeof n.params.c === 'number' ? n.params.c : 0.25;
+      const by = typeof n.params.d === 'number' ? n.params.d : 1.0;
       ctx.strokeStyle = '#f38ba840';
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.stroke();
@@ -1724,18 +1728,61 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     }
 
     // Curve
-    const fn = evalShaper(node.type, node.params);
+    const fn = evalShaper(n.type, n.params);
     ctx.strokeStyle = '#89b4fa';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
       const y = fn(px / W);
-      const py = H - y * H;
-      px === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      px === 0 ? ctx.moveTo(px, H - y * H) : ctx.lineTo(px, H - y * H);
     }
     ctx.stroke();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.type, paramsKey]);
+
+    // Live position dot — find nearest x on curve to the current y output
+    if (liveY !== undefined) {
+      let bestX = 0, bestDist = Infinity;
+      for (let i = 0; i <= W; i++) {
+        const xi = i / W;
+        const d = Math.abs(fn(xi) - liveY);
+        if (d < bestDist) { bestDist = d; bestX = xi; }
+      }
+      const dotPx = bestX * W;
+      const dotPy = H - liveY * H;
+      // Crosshair lines
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.moveTo(dotPx, 0); ctx.lineTo(dotPx, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, dotPy); ctx.lineTo(W, dotPy); ctx.stroke();
+      ctx.setLineDash([]);
+      // Dot
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#11111b';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(dotPx, dotPy, 4, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    }
+  }, []); // stable — reads nodeRef.current each call
+
+  // Static draw on mount and param/type changes
+  const paramsKey = JSON.stringify(node.params);
+  useEffect(() => { drawFrame(); }, [node.type, paramsKey, drawFrame]);
+
+  // rAF loop: keep dot live while the component is mounted
+  useEffect(() => {
+    const probeKey = `__preview__${node.id}`;
+    const loop = () => {
+      const rawNorm = scopeValueRegistry.get(probeKey);
+      if (rawNorm !== undefined) {
+        // Probe range is [-1, 1]: decode y = rawNorm * 2 - 1, clamp to [0, 1]
+        const liveY = Math.max(0, Math.min(1, rawNorm * 2 - 1));
+        drawFrame(liveY);
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id, drawFrame]);
 
   return (
     <div style={VIZ_CONTAINER}>
