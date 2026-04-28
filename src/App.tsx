@@ -98,6 +98,18 @@ function AudioMasterVolumeWidget() {
 
 function HistogramOverlay({ bins }: { bins: Float32Array }) {
   const maxBin = Math.max(...bins, 0.001);
+  const [hoverInfo, setHoverInfo] = React.useState<{ x: number; binIdx: number } | null>(null);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const binIdx = Math.min(bins.length - 1, Math.floor(t * bins.length));
+    setHoverInfo({ x: t, binIdx });
+  };
+
+  const hoverBrightness = hoverInfo !== null ? hoverInfo.binIdx / (bins.length - 1) : null;
+  const hoverCount = hoverInfo !== null ? bins[hoverInfo.binIdx] : null;
+
   return (
     <div style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, height: '72px',
@@ -105,23 +117,45 @@ function HistogramOverlay({ bins }: { bins: Float32Array }) {
       borderTop: '1px solid #31324466',
       display: 'flex', flexDirection: 'column',
       padding: '5px 8px 3px',
-      pointerEvents: 'none',
       zIndex: 5,
-    }}>
-      <span style={{ fontSize: '8px', color: '#45475a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '3px' }}>Brightness</span>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '1px' }}>
+    }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverInfo(null)}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+        <span style={{ fontSize: '8px', color: '#45475a', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Brightness</span>
+        {hoverInfo !== null && hoverBrightness !== null && hoverCount !== null && (
+          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>
+            {hoverBrightness.toFixed(3)}
+            <span style={{ color: '#585b70', marginLeft: '5px' }}>{(hoverCount * 100).toFixed(1)}%</span>
+          </span>
+        )}
+      </div>
+      <div
+        style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '1px', position: 'relative', cursor: 'crosshair' }}
+      >
         {Array.from(bins).map((v, i) => {
           const t = i / (bins.length - 1);
           const brightness = Math.round(40 + t * 180);
+          const isHovered = hoverInfo?.binIdx === i;
           return (
             <div key={i} style={{
               flex: 1, minHeight: v > 0 ? '1px' : '0',
               height: `${Math.round((v / maxBin) * 100)}%`,
-              background: `rgb(${brightness},${brightness},${brightness})`,
-              opacity: 0.7 + t * 0.3,
+              background: isHovered ? '#ffffff' : `rgb(${brightness},${brightness},${brightness})`,
+              opacity: isHovered ? 1 : 0.7 + t * 0.3,
             }} />
           );
         })}
+        {/* Hover cursor line */}
+        {hoverInfo !== null && (
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: `${hoverInfo.x * 100}%`,
+            width: '1px', background: 'rgba(255,255,255,0.25)',
+            pointerEvents: 'none',
+          }} />
+        )}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#45475a', marginTop: '2px' }}>
         <span>0</span><span>0.5</span><span>1</span>

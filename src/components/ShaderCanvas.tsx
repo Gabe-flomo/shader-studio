@@ -437,8 +437,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
           }
         }
 
-        // Histogram sampling — every 5× SAMPLE_EVERY frames (~3fps at 60fps)
-        if (onHistogramRef.current && frameCount % (SAMPLE_EVERY * 5) === 0) {
+        // Histogram sampling — every SAMPLE_EVERY frames (~10fps at 60fps)
+        if (onHistogramRef.current && frameCount % SAMPLE_EVERY === 0) {
           renderer.setRenderTarget(histRt);
           renderer.render(scene, camera);
           renderer.setRenderTarget(null);

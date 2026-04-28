@@ -25,6 +25,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { ExprBlockModal } from './ExprBlockModal';
+import { BezierEditorModal } from './BezierEditorModal';
 import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
@@ -399,6 +400,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
   const [showExprBlockModal, setShowExprBlockModal] = useState(false);
+  const [showBezierModal, setShowBezierModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
@@ -2553,6 +2555,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ⟴
             </button>
           )}
+          {/* Bezier editor modal button */}
+          {(node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowBezierModal(v => !v)}
+              title="Open Bezier editor"
+              style={{
+                background: showBezierModal ? '#f38ba822' : 'none',
+                border: showBezierModal ? '1px solid #f38ba855' : 'none',
+                color: showBezierModal ? '#f38ba8' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '12px',
+                lineHeight: 1,
+                padding: '1px 4px',
+                borderRadius: '3px',
+              }}
+            >
+              ⬡
+            </button>
+          )}
           {/* Expr modal expand button — shown on FloatWarp nodes */}
           {node.type === 'floatWarp' && (
             <button
@@ -3725,6 +3747,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {/* ── ExprBlock modal ── */}
       {showExprBlockModal && node.type === 'exprNode' && (
         <ExprBlockModal node={node} onClose={() => setShowExprBlockModal(false)} />
+      )}
+
+      {/* ── Bezier editor modal ── */}
+      {showBezierModal && (node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
+        <BezierEditorModal node={node} onClose={() => setShowBezierModal(false)} />
       )}
 
       {/* ── CustomFn modal ── */}
