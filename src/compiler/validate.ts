@@ -69,19 +69,22 @@ export function validateGraph(
         continue;
       }
 
-      const targetInput = def.inputs[inputKey];
-      if (!targetInput) continue; // dynamic socket not in def — skip
+      // Prefer the live socket type on the node instance (may have been updated by
+      // changeNodeVectorType or updateNodeSockets) over the static definition type.
+      const liveInput = node.inputs[inputKey];
+      const targetType = liveInput?.type ?? def.inputs[inputKey]?.type;
+      if (!targetType) continue; // dynamic socket not in def — skip
 
       // Allow float → vec2/vec3 broadcast coercion (GLSL fract/mix/etc work on any numeric type)
       const compatible =
-        sourceOutputType === targetInput.type ||
-        (sourceOutputType === 'float' && targetInput.type === 'vec3') ||
-        (sourceOutputType === 'float' && targetInput.type === 'vec2');
+        sourceOutputType === targetType ||
+        (sourceOutputType === 'float' && targetType === 'vec3') ||
+        (sourceOutputType === 'float' && targetType === 'vec2');
 
       if (!compatible) {
         errors.push(
           `Node ${node.id} [source:${sourceNode.id}]: type mismatch on input "${inputKey}". ` +
-          `Expected ${targetInput.type}, got ${sourceOutputType}`,
+          `Expected ${targetType}, got ${sourceOutputType}`,
         );
       }
     }
