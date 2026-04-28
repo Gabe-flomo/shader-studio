@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
@@ -7,6 +7,7 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
+import type { TransformPreset } from '../../types/transformPreset';
 
 // ── Nodes hidden from the palette (still functional in existing graphs) ───────
 const HIDDEN_NODES = new Set([
@@ -52,13 +53,33 @@ const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
   { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod'] },
   { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
   { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'luminance'] },
-  { label: 'Vec2',       types: ['makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
-  { label: 'Vec3',       types: ['makeVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
+  { label: 'Vec2',       types: ['makeVec2', 'splitVec2', 'transformVec', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
+  { label: 'Vec3',       types: ['makeVec3', 'splitVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
+  { label: 'Vec4',       types: ['splitVec4'] },
   { label: 'Complex',    types: ['complexMul', 'complexPow'] },
   { label: 'Remap',      types: ['remap'] },
 ];
 
 const MATH_ORDER: string[] = MATH_GROUPS.flatMap(g => g.types);
+
+// ── Shaper node ordering & sub-groups ────────────────────────────────────────
+const SHAPER_GROUPS: Array<{ label: string; types: string[] }> = [
+  { label: 'Ease',     types: ['expEase', 'circularEaseIn', 'circularEaseOut'] },
+  { label: 'Seat',     types: ['doubleExpSeat', 'doubleCircleSeat'] },
+  { label: 'Sigmoid',  types: ['doubleExpSigmoid', 'logisticSigmoid', 'doubleCircleSigmoid', 'doubleEllipticSigmoid'] },
+  { label: 'Bezier',   types: ['quadBezierShaper', 'cubicBezierShaper'] },
+];
+
+const SHAPER_ORDER: string[] = SHAPER_GROUPS.flatMap(g => g.types);
+
+function sortShaperNodes(nodes: NodeDefinition[]): NodeDefinition[] {
+  const indexMap = new Map(SHAPER_ORDER.map((id, i) => [id, i]));
+  return [...nodes].sort((a, b) => {
+    const ia = indexMap.get(a.type) ?? 999;
+    const ib = indexMap.get(b.type) ?? 999;
+    return ia - ib;
+  });
+}
 
 function sortMathNodes(nodes: NodeDefinition[]): NodeDefinition[] {
   const indexMap = new Map(MATH_ORDER.map((id, i) => [id, i]));
@@ -81,6 +102,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   '2D Primitives': '#f9e2af',  // yellow — includes SDF nodes
   Combiners:       '#cba6f7',  // purple
   Spaces:          '#f2cdcd',  // rose — UV space warp nodes
+  Shapers:         '#f9e2af',  // yellow — curve/easing nodes
   Science:         '#94e2d5',  // teal
   Fractals:        '#cba6f7',  // purple — fractal preset nodes
   Output:          '#94e2d5',  // teal
@@ -94,7 +116,7 @@ const CATEGORY_ORDER = [
   '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
   '3D Primitives', '3D Scene', '3D Transforms',
   'Animation', 'Color', 'Combiners', 'Conditionals', 'Effects', 'Fractals', 'Math', 'Noise',
-  'Science', 'Sources', 'Spaces', 'Transforms', 'Utility',
+  'Science', 'Shapers', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
 
@@ -119,6 +141,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','electronOrbitalDemo','orbitalVolume3dDemo'] as ExKey[] },
   { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },
   { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','exprRings','fractalRingsGroup','exprOrbit'] as ExKey[] },
+  { label: 'Shapers',         color: '#a6e3a1', keys: ['shaperLogisticGlow','shaperExpEasePulse','shaperSigmoidFBM','shaperCircularDome','shaperBezierRadial','transformVecPolar','transformVecMirrorFold','transformVecRotate90','vecSinWaveField'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlWarpDemo','curlWarpDemo','displaceDemo','uvWarpDemo','smoothWarpDemo','polarRings','infiniteMirror','mobiusWarp','swirlVoronoi','hyperbolicCircles'] as ExKey[] },
 ];
@@ -222,8 +245,31 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   // User-saved ExprBlock presets
   const [exprPresets, setExprPresets] = useState<ExprPreset[]>(() => loadExprPresets());
   const [hoverExprPresetId, setHoverExprPresetId] = useState<string | null>(null);
+  const [renamingExprId, setRenamingExprId] = useState<string | null>(null);
+  const [renameExprValue, setRenameExprValue] = useState('');
 
   const refreshExprPresets = () => setExprPresets(loadExprPresets());
+
+  // User-saved Transform Vec presets
+  const [transformPresets, setTransformPresets] = useState<TransformPreset[]>(() => loadTransformPresets());
+  const [hoverTransformPresetId, setHoverTransformPresetId] = useState<string | null>(null);
+  const [renamingTransformId, setRenamingTransformId] = useState<string | null>(null);
+  const [renameTransformValue, setRenameTransformValue] = useState('');
+
+  const refreshTransformPresets = () => setTransformPresets(loadTransformPresets());
+
+  // Collapsible bottom sections — persisted to localStorage
+  const [sectionsOpen, setSectionsOpen] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('nodepalette_sections') ?? '{}'); } catch { return {}; }
+  });
+  const toggleSection = (key: string) => {
+    setSectionsOpen(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('nodepalette_sections', JSON.stringify(next));
+      return next;
+    });
+  };
+  const isSectionOpen = (key: string, defaultOpen = false) => key in sectionsOpen ? sectionsOpen[key] : defaultOpen;
 
   // Merge localStorage presets with disk presets (dedup by id)
   const refreshPresets = async () => {
@@ -256,6 +302,14 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     refreshExprPresets();
     window.addEventListener('exprpreset-changed', refreshExprPresets);
     return () => window.removeEventListener('exprpreset-changed', refreshExprPresets);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh Transform Vec presets on mount and when changed
+  useEffect(() => {
+    refreshTransformPresets();
+    window.addEventListener('transformpreset-changed', refreshTransformPresets);
+    return () => window.removeEventListener('transformpreset-changed', refreshTransformPresets);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -600,6 +654,8 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
           const rawNodes = getNodesByCategory(category).filter(d => !HIDDEN_NODES.has(d.type));
           const nodes    = category === 'Math'
             ? sortMathNodes(rawNodes)
+            : category === 'Shapers'
+            ? sortShaperNodes(rawNodes)
             : [...rawNodes].sort((a, b) => a.label.localeCompare(b.label));
           if (nodes.length === 0) return null;
           return (
@@ -653,6 +709,23 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
                         </div>
                       );
                     })
+                  ) : category === 'Shapers' ? (
+                    SHAPER_GROUPS.map(group => {
+                      const groupNodes = nodes.filter(d => group.types.includes(d.type));
+                      if (groupNodes.length === 0) return null;
+                      return (
+                        <div key={group.label}>
+                          <div style={{
+                            fontSize: '8px', color: '#45475a', letterSpacing: '0.08em',
+                            textTransform: 'uppercase', padding: '4px 2px 2px',
+                            fontWeight: 600,
+                          }}>
+                            {group.label}
+                          </div>
+                          {groupNodes.map(def => nodeBtn(def.type, def.label, def.description))}
+                        </div>
+                      );
+                    })
                   ) : (
                     nodes.map(def => nodeBtn(def.type, def.label, def.description))
                   )}
@@ -666,13 +739,14 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
       {/* ── Group Presets ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{
-            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: '#f9e2af',
-            paddingLeft: '4px', marginBottom: '4px',
-          }}>
-            Group Presets
-          </div>
+          <button
+            onClick={() => toggleSection('groupPresets')}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('groupPresets') ? '4px' : '0', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '7px', opacity: 0.5, color: '#f9e2af', width: '7px' }}>{isSectionOpen('groupPresets') ? '▼' : '▶'}</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#f9e2af' }}>Group Presets</span>
+          </button>
+          {isSectionOpen('groupPresets') && <div>
           {groupPresets.length === 0 ? (
             <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '4px', fontStyle: 'italic', lineHeight: 1.6 }}>
               Select a group node and click<br />⬇ Save to create a preset.
@@ -729,21 +803,21 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </div>
             ))
           )}
+          </div>}
         </div>
       )}
-
 
       {/* ── Saved Graphs ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <div style={{
-              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#89b4fa',
-              paddingLeft: '4px', flex: 1,
-            }}>
-              Saved Graphs
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: isSectionOpen('savedGraphs') ? '4px' : '0' }}>
+            <button
+              onClick={() => toggleSection('savedGraphs')}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', textAlign: 'left' }}
+            >
+              <span style={{ fontSize: '7px', opacity: 0.5, color: '#89b4fa', width: '7px' }}>{isSectionOpen('savedGraphs') ? '▼' : '▶'}</span>
+              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89b4fa' }}>Saved Graphs</span>
+            </button>
             <button
               onClick={() => { setShowGraphSaveInput(v => !v); setGraphSaveInput(''); }}
               title="Save current graph"
@@ -758,6 +832,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
             </button>
           </div>
 
+          {isSectionOpen('savedGraphs') && <>
           {/* Inline save input */}
           {showGraphSaveInput && (
             <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
@@ -847,23 +922,21 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </div>
             ))
           )}
+          </>}
         </div>
       )}
 
       {/* ── My Functions ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            marginBottom: '4px',
-          }}>
-            <div style={{
-              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#89dceb',
-              paddingLeft: '4px', flex: 1,
-            }}>
-              My Functions
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: isSectionOpen('myFunctions') ? '4px' : '0' }}>
+            <button
+              onClick={() => toggleSection('myFunctions')}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', textAlign: 'left' }}
+            >
+              <span style={{ fontSize: '7px', opacity: 0.5, color: '#89dceb', width: '7px' }}>{isSectionOpen('myFunctions') ? '▼' : '▶'}</span>
+              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89dceb' }}>My Functions</span>
+            </button>
             {/* Folder picker */}
             <button
               onClick={handlePickFolder}
@@ -908,6 +981,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
             </button>
           </div>
 
+          {isSectionOpen('myFunctions') && <>
           {/* Folder path display */}
           {presetsDir && (
             <div style={{
@@ -984,20 +1058,22 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </div>
             ))
           )}
+          </>}
         </div>
       )}
 
       {/* ── Expr Block Presets ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{
-            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: '#a6e3a1',
-            paddingLeft: '4px', marginBottom: '4px',
-          }}>
-            Expr Block Presets
-          </div>
+          <button
+            onClick={() => toggleSection('exprPresets')}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('exprPresets') ? '4px' : '0', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '7px', opacity: 0.5, color: '#a6e3a1', width: '7px' }}>{isSectionOpen('exprPresets') ? '▼' : '▶'}</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#a6e3a1' }}>Expr Block Presets</span>
+          </button>
 
+          {isSectionOpen('exprPresets') && <>
           {exprPresets.length === 0 ? (
             <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
               Open an Expr Block node and click "↑ Save Preset"
@@ -1010,56 +1086,183 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
                 onMouseEnter={() => setHoverExprPresetId(preset.id)}
                 onMouseLeave={() => setHoverExprPresetId(null)}
               >
-                <button
-                  onClick={() => {
-                    const x = 200 + Math.random() * 120;
-                    const y = 120 + Math.random() * 200;
-                    addNode('exprNode', { x, y }, {
-                      label:      preset.label,
-                      inputs:     preset.inputs,
-                      outputType: preset.outputType,
-                      lines:      preset.lines,
-                      result:     preset.result,
-                    });
-                    onNodeAdded?.();
-                  }}
-                  title={`Add "${preset.label}" as an Expr Block node`}
-                  style={{
-                    display: 'block', width: '100%',
-                    padding: '5px 28px 5px 10px',
-                    background: '#0e1e12',
-                    border: '1px solid #a6e3a133',
-                    color: '#a6e3a1', cursor: 'pointer',
-                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#132419')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0e1e12')}
-                >
-                  ⟴ {preset.label}
-                </button>
-                {hoverExprPresetId === preset.id && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      deleteExprPreset(preset.id);
+                {renamingExprId === preset.id ? (
+                  <input
+                    autoFocus
+                    value={renameExprValue}
+                    onChange={e => setRenameExprValue(e.target.value)}
+                    onBlur={() => {
+                      renameExprPreset(preset.id, renameExprValue);
+                      setRenamingExprId(null);
                       refreshExprPresets();
                     }}
-                    title="Remove this preset"
-                    style={{
-                      position: 'absolute', right: '4px', top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none', border: 'none',
-                      color: '#585b70', cursor: 'pointer',
-                      fontSize: '13px', padding: '0 4px', lineHeight: 1,
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { renameExprPreset(preset.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }
+                      if (e.key === 'Escape') setRenamingExprId(null);
+                      e.stopPropagation();
                     }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                  >×</button>
+                    style={{
+                      display: 'block', width: '100%', boxSizing: 'border-box',
+                      padding: '5px 10px', background: '#11111b',
+                      border: '1px solid #a6e3a1', color: '#a6e3a1',
+                      borderRadius: '5px', fontSize: '12px', outline: 'none',
+                    }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => {
+                      const x = 200 + Math.random() * 120;
+                      const y = 120 + Math.random() * 200;
+                      addNode('exprNode', { x, y }, {
+                        label:      preset.label,
+                        inputs:     preset.inputs,
+                        outputType: preset.outputType,
+                        lines:      preset.lines,
+                        result:     preset.result,
+                      });
+                      onNodeAdded?.();
+                    }}
+                    title={`Add "${preset.label}" as an Expr Block node`}
+                    style={{
+                      display: 'block', width: '100%',
+                      padding: '5px 52px 5px 10px',
+                      background: '#0e1e12',
+                      border: '1px solid #a6e3a133',
+                      color: '#a6e3a1', cursor: 'pointer',
+                      textAlign: 'left', borderRadius: '5px', fontSize: '12px',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#132419')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0e1e12')}
+                  >
+                    ⟴ {preset.label}
+                  </button>
+                )}
+                {hoverExprPresetId === preset.id && renamingExprId !== preset.id && (
+                  <>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        setRenameExprValue(preset.label);
+                        setRenamingExprId(preset.id);
+                      }}
+                      title="Rename preset"
+                      style={{
+                        position: 'absolute', right: '24px', top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none', border: 'none',
+                        color: '#585b70', cursor: 'pointer',
+                        fontSize: '11px', padding: '0 3px', lineHeight: 1,
+                      }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >✎</button>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        deleteExprPreset(preset.id);
+                        refreshExprPresets();
+                      }}
+                      title="Remove this preset"
+                      style={{
+                        position: 'absolute', right: '4px', top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none', border: 'none',
+                        color: '#585b70', cursor: 'pointer',
+                        fontSize: '13px', padding: '0 4px', lineHeight: 1,
+                      }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >×</button>
+                  </>
                 )}
               </div>
             ))
           )}
+          </>}
+        </div>
+      )}
+
+      {/* ── Transform Vec Presets ── */}
+      {!isSearching && (
+        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
+          <button
+            onClick={() => toggleSection('transformPresets')}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('transformPresets') ? '4px' : '0', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '7px', opacity: 0.5, color: '#89b4fa', width: '7px' }}>{isSectionOpen('transformPresets') ? '▼' : '▶'}</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89b4fa' }}>Transform Vec Presets</span>
+          </button>
+
+          {isSectionOpen('transformPresets') && <>
+          {transformPresets.length === 0 ? (
+            <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
+              Open a Transform Vec node and click "↑ Save Preset"
+            </div>
+          ) : (
+            transformPresets.map((preset: TransformPreset) => (
+              <div
+                key={preset.id}
+                style={{ position: 'relative', marginBottom: '2px' }}
+                onMouseEnter={() => setHoverTransformPresetId(preset.id)}
+                onMouseLeave={() => setHoverTransformPresetId(null)}
+              >
+                {renamingTransformId === preset.id ? (
+                  <input
+                    autoFocus
+                    value={renameTransformValue}
+                    onChange={e => setRenameTransformValue(e.target.value)}
+                    onBlur={() => { renameTransformPreset(preset.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { renameTransformPreset(preset.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }
+                      if (e.key === 'Escape') setRenamingTransformId(null);
+                      e.stopPropagation();
+                    }}
+                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '5px 10px', background: '#11111b', border: '1px solid #89b4fa', color: '#89b4fa', borderRadius: '5px', fontSize: '12px', outline: 'none' }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => {
+                      const x = 200 + Math.random() * 120;
+                      const y = 120 + Math.random() * 200;
+                      addNode('transformVec', { x, y }, {
+                        outputType: preset.outputType,
+                        exprX: preset.exprX, exprY: preset.exprY,
+                        exprZ: preset.exprZ, exprW: preset.exprW,
+                      });
+                      onNodeAdded?.();
+                    }}
+                    title={`Add "${preset.label}" as a Transform Vec node`}
+                    style={{ display: 'block', width: '100%', padding: '5px 52px 5px 10px', background: '#111827', border: '1px solid #89b4fa33', color: '#89b4fa', cursor: 'pointer', textAlign: 'left', borderRadius: '5px', fontSize: '12px', transition: 'background 0.1s' }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#111827')}
+                  >
+                    ⊞ {preset.label}
+                    <span style={{ fontSize: '9px', color: '#45475a', marginLeft: '6px' }}>{preset.outputType}</span>
+                  </button>
+                )}
+                {hoverTransformPresetId === preset.id && renamingTransformId !== preset.id && (
+                  <>
+                    <button
+                      onClick={e => { e.stopPropagation(); setRenameTransformValue(preset.label); setRenamingTransformId(preset.id); }}
+                      title="Rename preset"
+                      style={{ position: 'absolute', right: '24px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '0 3px', lineHeight: 1 }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >✎</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteTransformPreset(preset.id); refreshTransformPresets(); }}
+                      title="Remove this preset"
+                      style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '0 4px', lineHeight: 1 }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >×</button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+          </>}
         </div>
       )}
 

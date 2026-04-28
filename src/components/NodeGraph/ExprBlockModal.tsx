@@ -135,8 +135,10 @@ export function ExprBlockModal({ node, onClose }: Props) {
   const result: string           = (node.params.result as string | undefined) ?? 'p';
   const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'vec3';
 
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [autoWrap, setAutoWrap]     = useState(false);
+  const [savedFlash, setSavedFlash]     = useState(false);
+  const [autoWrap, setAutoWrap]         = useState(false);
+  const [showSaveInput, setShowSaveInput]   = useState(false);
+  const [savePresetName, setSavePresetName] = useState('');
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
   const history      = useRef<Snapshot[]>([{ lines, result }]);
@@ -284,14 +286,16 @@ export function ExprBlockModal({ node, onClose }: Props) {
     updateNodeParams(node.id, { result: val });
   };
 
-  const handleSavePreset = () => {
+  const handleSavePreset = (name: string) => {
     saveExprPreset({
-      label:      typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expr Block',
+      label:      name.trim() || (typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expr Block'),
       inputs:     customInputs,
       outputType,
       lines,
       result,
     });
+    setShowSaveInput(false);
+    setSavePresetName('');
     flash();
   };
 
@@ -469,13 +473,41 @@ export function ExprBlockModal({ node, onClose }: Props) {
                 </button>
               );
             })()}
-            <button
-              onClick={handleSavePreset}
-              title="Save as a reusable preset in the palette"
-              style={{ ...BTN, color: '#a6e3a1', borderColor: '#a6e3a155', background: '#a6e3a111' }}
-            >
-              ↑ Save Preset
-            </button>
+            {showSaveInput ? (
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder={typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expr Block'}
+                  value={savePresetName}
+                  onChange={e => setSavePresetName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleSavePreset(savePresetName);
+                    if (e.key === 'Escape') { setShowSaveInput(false); setSavePresetName(''); }
+                  }}
+                  style={{ flex: 1, minWidth: 0, padding: '3px 6px', fontSize: '11px', background: '#1e1e2e', color: '#cdd6f4', border: '1px solid #a6e3a1', borderRadius: '4px', outline: 'none' }}
+                />
+                <button
+                  onClick={() => handleSavePreset(savePresetName)}
+                  style={{ ...BTN, color: '#a6e3a1', borderColor: '#a6e3a155', background: '#a6e3a111', padding: '3px 8px' }}
+                >↑</button>
+                <button
+                  onClick={() => { setShowSaveInput(false); setSavePresetName(''); }}
+                  style={{ ...BTN, color: '#6c7086', borderColor: '#6c708655', padding: '3px 6px' }}
+                >✕</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setSavePresetName('');
+                  setShowSaveInput(true);
+                }}
+                title="Save as a reusable preset in the palette"
+                style={{ ...BTN, color: '#a6e3a1', borderColor: '#a6e3a155', background: '#a6e3a111' }}
+              >
+                ↑ Save Preset
+              </button>
+            )}
             <button onClick={onClose} style={{ ...BTN, color: '#f38ba8', borderColor: '#f38ba855' }}>✕ Close</button>
           </div>
         </div>

@@ -1,6 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { PALETTE_PRESETS } from '../../nodes/definitions/color';
+import { scopeValueRegistry } from '../../lib/scopeRegistry';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -1603,6 +1604,227 @@ export function ParticleEmitterViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Shaper Curve Viz ─────────────────────────────────────────────────────────
+
+function evalShaper(type: string, params: Record<string, unknown>): (x: number) => number {
+  const n = (k: string, def: number) => (typeof params[k] === 'number' ? params[k] as number : def);
+  let fn: (x: number) => number;
+  switch (type) {
+    case 'expEase': {
+      const a = Math.max(1e-5, Math.min(0.99999, n('a', 0.5)));
+      fn = x => a < 0.5 ? Math.pow(Math.max(0, x), 2 * a) : Math.pow(Math.max(0, x), 1 / (1 - 2 * (a - 0.5)));
+      break;
+    }
+    case 'doubleExpSeat': {
+      const a = Math.max(1e-5, Math.min(0.99999, n('a', 0.5)));
+      fn = x => x <= 0.5 ? Math.pow(2 * x, 1 - a) / 2 : 1 - Math.pow(2 * (1 - x), 1 - a) / 2;
+      break;
+    }
+    case 'doubleExpSigmoid': {
+      const a = 1 - Math.max(1e-5, Math.min(0.99999, n('a', 0.5)));
+      fn = x => x <= 0.5 ? Math.pow(2 * x, 1 / a) / 2 : 1 - Math.pow(2 * (1 - x), 1 / a) / 2;
+      break;
+    }
+    case 'logisticSigmoid': {
+      const ac = Math.max(1e-4, Math.min(0.9999, n('a', 0.7)));
+      const k = 1 / (1 - ac) - 1;
+      const B = 1 / (1 + Math.exp(k)), C = 1 / (1 + Math.exp(-k));
+      fn = x => Math.max(0, Math.min(1, (1 / (1 + Math.exp(-(x - 0.5) * k * 2)) - B) / (C - B)));
+      break;
+    }
+    case 'circularEaseIn':
+      fn = x => 1 - Math.sqrt(Math.max(0, 1 - x * x));
+      break;
+    case 'circularEaseOut':
+      fn = x => Math.sqrt(Math.max(0, 1 - (1 - x) * (1 - x)));
+      break;
+    case 'doubleCircleSeat': {
+      const a = Math.max(0, Math.min(1, n('a', 0.5)));
+      fn = x => x <= a
+        ? Math.sqrt(Math.max(0, a * a - (x - a) * (x - a)))
+        : 1 - Math.sqrt(Math.max(0, (1-a)*(1-a) - (x - a)*(x - a)));
+      break;
+    }
+    case 'doubleCircleSigmoid': {
+      const a = Math.max(0, Math.min(1, n('a', 0.5)));
+      fn = x => x <= a
+        ? a - Math.sqrt(Math.max(0, a * a - x * x))
+        : a + Math.sqrt(Math.max(0, (1-a)*(1-a) - (x-1)*(x-1)));
+      break;
+    }
+    case 'doubleEllipticSigmoid': {
+      const a = Math.max(1e-5, Math.min(0.99999, n('a', 0.5)));
+      const b = Math.max(0, Math.min(1, n('b', 0.5)));
+      fn = x => x <= a
+        ? b * (1 - Math.sqrt(Math.max(0, a*a - x*x)) / a)
+        : b + (1 - b) / (1 - a) * Math.sqrt(Math.max(0, (1-a)*(1-a) - (x-1)*(x-1)));
+      break;
+    }
+    case 'quadBezierShaper': {
+      const a = Math.max(0, Math.min(1, n('a', 0.5)));
+      const b = Math.max(0, Math.min(1, n('b', 0.5)));
+      fn = x => {
+        let ac = a; if (Math.abs(ac - 0.5) < 1e-5) ac += 1e-5;
+        const om2a = 1 - 2 * ac;
+        const t = (Math.sqrt(Math.max(0, ac*ac + om2a*x)) - ac) / om2a;
+        return Math.max(0, Math.min(1, (1 - 2*b)*t*t + 2*b*t));
+      };
+      break;
+    }
+    case 'cubicBezierShaper': {
+      const x1 = n('a', 0.25), y1 = n('b', 0.1), x2 = n('c', 0.25), y2 = n('d', 1.0);
+      const A=1-3*x2+3*x1, B=3*x2-6*x1, C=3*x1;
+      const E=1-3*y2+3*y1, F=3*y2-6*y1, G=3*y1;
+      fn = x => {
+        let t = x;
+        for (let i = 0; i < 6; i++) {
+          const cx = A*t*t*t + B*t*t + C*t;
+          const sl = 1 / Math.max(1e-6, 3*A*t*t + 2*B*t + C);
+          t -= (cx - x) * sl;
+          t = Math.max(0, Math.min(1, t));
+        }
+        return Math.max(0, Math.min(1, E*t*t*t + F*t*t + G*t));
+      };
+      break;
+    }
+    default: fn = x => x;
+  }
+  // Bipolar odd extension: f_bip(x) = sign(x) * f(|x|)
+  if (params.bipolar === true) {
+    const inner = fn;
+    return (x: number) => (x < 0 ? -1 : 1) * inner(Math.abs(x));
+  }
+  return fn;
+}
+
+export function ShaperCurveViz({ node }: { node: GraphNode }) {
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
+  const nodeRef         = useRef(node);
+  const rafRef          = useRef<number>(0);
+  const showCrosshairRef = useRef(true);  // click canvas to toggle
+  nodeRef.current  = node;
+
+  const drawFrame = useCallback((liveY?: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const n = nodeRef.current;
+    const W = canvas.width, H = canvas.height;
+
+    drawCurveGrid(ctx, W, H);
+
+    // Identity diagonal
+    ctx.strokeStyle = '#2a2a3a';
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Control point guides for bezier nodes
+    if (n.type === 'quadBezierShaper') {
+      const ax = typeof n.params.a === 'number' ? n.params.a : 0.5;
+      const ay = typeof n.params.b === 'number' ? n.params.b : 0.5;
+      ctx.strokeStyle = '#f38ba840';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.lineTo(W, 0); ctx.stroke();
+      ctx.fillStyle = '#f38ba8';
+      ctx.beginPath(); ctx.arc(ax*W, H - ay*H, 3, 0, Math.PI*2); ctx.fill();
+    }
+    if (n.type === 'cubicBezierShaper') {
+      const ax = typeof n.params.a === 'number' ? n.params.a : 0.25;
+      const ay = typeof n.params.b === 'number' ? n.params.b : 0.1;
+      const bx = typeof n.params.c === 'number' ? n.params.c : 0.25;
+      const by = typeof n.params.d === 'number' ? n.params.d : 1.0;
+      ctx.strokeStyle = '#f38ba840';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(W, 0); ctx.lineTo(bx*W, H - by*H); ctx.stroke();
+      ctx.fillStyle = '#f38ba8';
+      [[ax, ay], [bx, by]].forEach(([px, py]) => {
+        ctx.beginPath(); ctx.arc(px*W, H - py*H, 3, 0, Math.PI*2); ctx.fill();
+      });
+    }
+
+    // Curve
+    const fn = evalShaper(n.type, n.params);
+    const isBipolar = n.params.bipolar === true;
+    // Map pixel x → domain value and domain y → canvas y
+    const xFromPx = (px: number) => isBipolar ? (px / W) * 2 - 1 : px / W;
+    const yToPy   = (y: number)  => isBipolar ? H / 2 - y * (H / 2) : H - y * H;
+    ctx.strokeStyle = '#89b4fa';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let px = 0; px <= W; px++) {
+      const y = fn(xFromPx(px));
+      px === 0 ? ctx.moveTo(px, yToPy(y)) : ctx.lineTo(px, yToPy(y));
+    }
+    ctx.stroke();
+
+    // Live position dot — find nearest x on curve to the current y output
+    if (liveY !== undefined) {
+      let bestX = 0, bestDist = Infinity;
+      for (let i = 0; i <= W; i++) {
+        const xi = xFromPx(i);
+        const d = Math.abs(fn(xi) - liveY);
+        if (d < bestDist) { bestDist = d; bestX = xi; }
+      }
+      // Map bestX back to canvas pixel: inverse of xFromPx
+      const dotPx = isBipolar ? (bestX + 1) / 2 * W : bestX * W;
+      const dotPy = yToPy(liveY);
+      // Crosshair lines (toggleable)
+      if (showCrosshairRef.current) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath(); ctx.moveTo(dotPx, 0); ctx.lineTo(dotPx, H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, dotPy); ctx.lineTo(W, dotPy); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      // Dot
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#11111b';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(dotPx, dotPy, 4, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    }
+  }, []); // stable — reads nodeRef.current each call
+
+  // Static draw on mount and param/type changes
+  const paramsKey = JSON.stringify(node.params);
+  useEffect(() => { drawFrame(); }, [node.type, paramsKey, drawFrame]);
+
+  // rAF loop: keep dot live while the component is mounted
+  useEffect(() => {
+    const probeKey = `__preview__${node.id}`;
+    const loop = () => {
+      const rawNorm = scopeValueRegistry.get(probeKey);
+      if (rawNorm !== undefined) {
+        // Probe range is [-1, 1]: decode y = rawNorm * 2 - 1
+        // Don't clamp — bipolar shapers output [-1, 1]
+        const liveY = rawNorm * 2 - 1;
+        drawFrame(liveY);
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id, drawFrame]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={80}
+        title="Click to toggle crosshair"
+        onClick={() => { showCrosshairRef.current = !showCrosshairRef.current; }}
+        style={{ display: 'block', width: '100%', height: '80px', cursor: 'pointer' }}
+      />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -1632,6 +1854,17 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'addVec3':
     case 'addColor':       return <AddColorsViz           node={node} />;
     case 'particleEmitter': return <ParticleEmitterViz   node={node} />;
+    case 'expEase':
+    case 'doubleExpSeat':
+    case 'doubleExpSigmoid':
+    case 'logisticSigmoid':
+    case 'circularEaseIn':
+    case 'circularEaseOut':
+    case 'doubleCircleSeat':
+    case 'doubleCircleSigmoid':
+    case 'doubleEllipticSigmoid':
+    case 'quadBezierShaper':
+    case 'cubicBezierShaper':  return <ShaperCurveViz    node={node} />;
     default:               return null;
   }
 }
@@ -1645,4 +1878,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'smoothstep', 'clamp', 'mix', 'mixVec3', 'mapRange',
   'multiplyVec3', 'addVec3', 'addColor',
   'particleEmitter',
+  'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
+  'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
+  'doubleEllipticSigmoid', 'quadBezierShaper', 'cubicBezierShaper',
 ]);

@@ -1,5 +1,11 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, zeroFor } from './helpers';
+
+// ── Vector-type helper ────────────────────────────────────────────────────────
+// Returns 'float'|'vec2'|'vec3' from params, defaulting to 'float'.
+function ot(node: GraphNode): string {
+  return (typeof node.params.outputType === 'string' ? node.params.outputType : 'float');
+}
 
 export const AddNode: NodeDefinition = {
   type: 'add', label: 'Add', category: 'Math', description: 'Add two float values (a + b)',
@@ -56,10 +62,10 @@ export const SinNode: NodeDefinition = {
   defaultParams: { freq: 1.0, amp: 1.0 },
   paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
+    const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
     const amp  = inputVars.amp  || p(node.params.amp, 1.0);
-    return { code: `    float ${o} = ${amp} * sin(${inputVars.input || '0.0'} * ${freq});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = ${amp} * sin(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
   },
 };
 
@@ -70,10 +76,10 @@ export const CosNode: NodeDefinition = {
   defaultParams: { freq: 1.0, amp: 1.0 },
   paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
+    const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
     const amp  = inputVars.amp  || p(node.params.amp, 1.0);
-    return { code: `    float ${o} = ${amp} * cos(${inputVars.input || '0.0'} * ${freq});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = ${amp} * cos(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
   },
 };
 
@@ -84,9 +90,9 @@ export const ExpNode: NodeDefinition = {
   defaultParams: { scale: 1.0 },
   paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
+    const t = ot(node), o = `${node.id}_output`;
     const s = inputVars.scale || p(node.params.scale, 1.0);
-    return { code: `    float ${o} = exp(${inputVars.input || '0.0'} * ${s});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = exp(${inputVars.input || zeroFor(t)} * ${s});\n`, outputVars: { output: o } };
   },
 };
 
@@ -97,9 +103,12 @@ export const PowNode: NodeDefinition = {
   defaultParams: { exponent: 1.2 },
   paramDefs: { exponent: { label: 'Exponent', type: 'float', min: 0, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
+    const t = ot(node), o = `${node.id}_result`;
     const e = inputVars.exponent || p(node.params.exponent, 1.2);
-    return { code: `    float ${o} = pow(max(${inputVars.base || '1.0'}, 0.0), ${e});\n`, outputVars: { result: o } };
+    // pow() requires both args to be the same genType — broadcast scalar exponent when vectorized
+    const ecast = t !== 'float' ? `${t}(${e})` : e;
+    const base  = inputVars.base || (t === 'float' ? '1.0' : `${t}(1.0)`);
+    return { code: `    ${t} ${o} = pow(max(${base}, 0.0), ${ecast});\n`, outputVars: { result: o } };
   },
 };
 
@@ -107,8 +116,8 @@ export const NegateNode: NodeDefinition = {
   type: 'negate', label: 'Negate', category: 'Math', description: 'Negate a float (-x).',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = -(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = -(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
@@ -258,8 +267,8 @@ export const FloorNode: NodeDefinition = {
   type: 'floor', label: 'Floor', category: 'Math', description: 'Round down to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = floor(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = floor(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
@@ -267,8 +276,8 @@ export const SqrtNode: NodeDefinition = {
   type: 'sqrt', label: 'Sqrt', category: 'Math', description: 'Square root.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = sqrt(max(${inputVars.input || '0.0'}, 0.0));\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = sqrt(max(${inputVars.input || zeroFor(t)}, 0.0));\n`, outputVars: { output: o } };
   },
 };
 
@@ -276,8 +285,8 @@ export const RoundNode: NodeDefinition = {
   type: 'round', label: 'Round', category: 'Math', description: 'Round to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = floor(${inputVars.input || '0.0'} + 0.5);\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = floor(${inputVars.input || zeroFor(t)} + 0.5);\n`, outputVars: { output: o } };
   },
 };
 
@@ -323,6 +332,48 @@ export const ExtractYNode: NodeDefinition = {
   },
 };
 
+export const SplitVec2Node: NodeDefinition = {
+  type: 'splitVec2', label: 'Split Vec2', category: 'Math', description: 'Extract X and Y float components from a vec2.',
+  inputs:  { v: { type: 'vec2', label: 'Vec2' } },
+  outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.v || 'vec2(0.0)';
+    return {
+      code: `    float ${id}_x = (${v}).x;\n    float ${id}_y = (${v}).y;\n`,
+      outputVars: { x: `${id}_x`, y: `${id}_y` },
+    };
+  },
+};
+
+export const SplitVec3Node: NodeDefinition = {
+  type: 'splitVec3', label: 'Split Vec3', category: 'Math', description: 'Extract X, Y, and Z float components from a vec3.',
+  inputs:  { v: { type: 'vec3', label: 'Vec3' } },
+  outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.v || 'vec3(0.0)';
+    return {
+      code: `    float ${id}_x = (${v}).x;\n    float ${id}_y = (${v}).y;\n    float ${id}_z = (${v}).z;\n`,
+      outputVars: { x: `${id}_x`, y: `${id}_y`, z: `${id}_z` },
+    };
+  },
+};
+
+export const SplitVec4Node: NodeDefinition = {
+  type: 'splitVec4', label: 'Split Vec4', category: 'Math', description: 'Extract X, Y, Z, and W float components from a vec4.',
+  inputs:  { v: { type: 'vec4', label: 'Vec4' } },
+  outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' }, w: { type: 'float', label: 'W' } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.v || 'vec4(0.0)';
+    return {
+      code: `    float ${id}_x = (${v}).x;\n    float ${id}_y = (${v}).y;\n    float ${id}_z = (${v}).z;\n    float ${id}_w = (${v}).w;\n`,
+      outputVars: { x: `${id}_x`, y: `${id}_y`, z: `${id}_z`, w: `${id}_w` },
+    };
+  },
+};
+
 export const MakeVec3Node: NodeDefinition = {
   type: 'makeVec3', label: 'Make Vec3', category: 'Math', description: 'Build a vec3 color from three float values.',
   inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
@@ -351,8 +402,8 @@ export const FractRawNode: NodeDefinition = {
   type: 'fractRaw', label: 'Fract (scalar)', category: 'Math', description: 'Raw fract(x) on a float.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = fract(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = fract(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
@@ -577,10 +628,10 @@ export const SignNode: NodeDefinition = {
   defaultParams: {},
   paramDefs: {},
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
-    const v  = inputVars.value || '0.0';
+    const t = ot(node), id = node.id;
+    const v = inputVars.value || zeroFor(t);
     return {
-      code: `    float ${id}_result = sign(${v});\n`,
+      code: `    ${t} ${id}_result = sign(${v});\n`,
       outputVars: { result: `${id}_result` },
     };
   },
@@ -853,4 +904,76 @@ export const Vec3SwizzleNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
+};
+
+// ── Transform Vec node ────────────────────────────────────────────────────────
+
+const TRANSFORM_COMPS = ['x', 'y', 'z', 'w'] as const;
+
+function substituteComps(expr: string, id: string, dims: number): string {
+  const active = TRANSFORM_COMPS.slice(0, dims);
+  return active.reduce(
+    (s, c) => s.replace(new RegExp(`\\b${c}\\b`, 'g'), `${id}_${c}_raw`),
+    expr,
+  );
+}
+
+export const TransformVecNode: NodeDefinition = {
+  type: 'transformVec',
+  label: 'Transform Vec',
+  category: 'Math',
+  description: 'Split a vector into components, apply per-component GLSL expressions, reassemble.',
+  inputs:  { v: { type: 'vec2', label: 'Vec' } },
+  outputs: {
+    x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' },
+    z: { type: 'float', label: 'Z' }, w: { type: 'float', label: 'W' },
+    result: { type: 'vec2', label: 'Result' },
+  },
+  defaultParams: { outputType: 'vec2', exprX: 'x', exprY: 'y', exprZ: 'z', exprW: 'w' },
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const type = (node.params.outputType as string) || 'vec2';
+    const dims = type === 'vec4' ? 4 : type === 'vec3' ? 3 : 2;
+    const id   = node.id;
+    const v    = inputVars.v || `${type}(0.0)`;
+    const active = TRANSFORM_COMPS.slice(0, dims);
+
+    let code = '';
+    // Raw splits
+    for (const c of active) {
+      code += `    float ${id}_${c}_raw = (${v}).${c};\n`;
+    }
+    // Per-component expressions
+    for (const c of active) {
+      const paramKey = `expr${c.toUpperCase()}`;
+      const raw = typeof node.params[paramKey] === 'string' ? (node.params[paramKey] as string) : c;
+      code += `    float ${id}_${c} = ${substituteComps(raw, id, dims)};\n`;
+    }
+    // Unused components default to 0.0 so their output vars are always declared
+    for (const c of TRANSFORM_COMPS.slice(dims)) {
+      code += `    float ${id}_${c} = 0.0;\n`;
+    }
+    // Reassemble
+    code += `    ${type} ${id}_result = ${type}(${active.map(c => `${id}_${c}`).join(', ')});\n`;
+
+    const outputVars: Record<string, string> = { result: `${id}_result` };
+    for (const c of TRANSFORM_COMPS) outputVars[c] = `${id}_${c}`;
+    return { code, outputVars };
+  },
+};
+
+// ── Vectorizable node registry ────────────────────────────────────────────────
+// Nodes that support component-wise operation on vec2/vec3 inputs.
+// primaryInput / primaryOutput are the socket keys that change type.
+export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryOutput: string }> = {
+  sin:      { primaryInput: 'input', primaryOutput: 'output' },
+  cos:      { primaryInput: 'input', primaryOutput: 'output' },
+  exp:      { primaryInput: 'input', primaryOutput: 'output' },
+  pow:      { primaryInput: 'base',  primaryOutput: 'result' },
+  negate:   { primaryInput: 'input', primaryOutput: 'output' },
+  floor:    { primaryInput: 'input', primaryOutput: 'output' },
+  sqrt:     { primaryInput: 'input', primaryOutput: 'output' },
+  round:    { primaryInput: 'input', primaryOutput: 'output' },
+  fractRaw: { primaryInput: 'input', primaryOutput: 'output' },
+  sign:     { primaryInput: 'value', primaryOutput: 'result' },
 };

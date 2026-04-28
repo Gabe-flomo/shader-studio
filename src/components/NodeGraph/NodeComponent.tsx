@@ -25,10 +25,13 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { ExprBlockModal } from './ExprBlockModal';
+import { BezierEditorModal } from './BezierEditorModal';
+import { TransformVecModal } from './TransformVecModal';
 import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz, SdfPreviewViz, SDF_TYPES } from './NodeInlineViz';
+import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
@@ -302,7 +305,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const isPreviewActive = previewNodeId === node.id;
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
-  const updateNodeParams   = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeParams       = useNodeGraphStore(s => s.updateNodeParams);
+  const changeNodeVectorType   = useNodeGraphStore(s => s.changeNodeVectorType);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
@@ -399,6 +403,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showCode, setShowCode] = useState(false);
   const [showExprModal, setShowExprModal] = useState(false);
   const [showExprBlockModal, setShowExprBlockModal] = useState(false);
+  const [showBezierModal, setShowBezierModal] = useState(false);
+  const [showTransformVecModal, setShowTransformVecModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
@@ -2553,6 +2559,40 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ⟴
             </button>
           )}
+          {/* TransformVec expand button */}
+          {node.type === 'transformVec' && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowTransformVecModal(v => !v)}
+              title="Open Transform Vec editor"
+              style={{
+                background: showTransformVecModal ? '#89b4fa22' : 'none',
+                border: showTransformVecModal ? '1px solid #89b4fa55' : 'none',
+                color: showTransformVecModal ? '#89b4fa' : '#585b70',
+                cursor: 'pointer', fontSize: '12px', lineHeight: 1, padding: '1px 4px', borderRadius: '3px',
+              }}
+            >⊞</button>
+          )}
+          {/* Bezier editor modal button */}
+          {(node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowBezierModal(v => !v)}
+              title="Open Bezier editor"
+              style={{
+                background: showBezierModal ? '#f38ba822' : 'none',
+                border: showBezierModal ? '1px solid #f38ba855' : 'none',
+                color: showBezierModal ? '#f38ba8' : '#585b70',
+                cursor: 'pointer',
+                fontSize: '12px',
+                lineHeight: 1,
+                padding: '1px 4px',
+                borderRadius: '3px',
+              }}
+            >
+              ⬡
+            </button>
+          )}
           {/* Expr modal expand button — shown on FloatWarp nodes */}
           {node.type === 'floatWarp' && (
             <button
@@ -3114,6 +3154,88 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   style={{ ...inputStyle, flex: 1, color: '#89b4fa', border: '1px solid #45475a' }}
                 />
               </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Transform Vec inline editor ── */}
+        {!collapsed && node.type === 'transformVec' && (() => {
+          const type  = (node.params.outputType as string) || 'vec2';
+          const dims  = type === 'vec4' ? 4 : type === 'vec3' ? 3 : 2;
+          const comps = (['x', 'y', 'z', 'w'] as const).slice(0, dims);
+          return (
+            <div onMouseDown={e => e.stopPropagation()}>
+              {/* Type pills */}
+              <div style={{ padding: '3px 10px 4px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <span style={{ fontSize: '10px', color: '#45475a', marginRight: '2px' }}>type</span>
+                {(['vec2', 'vec3', 'vec4'] as DataType[]).map(t => {
+                  const active = type === t;
+                  return (
+                    <button key={t}
+                      onClick={() => changeNodeVectorType(node.id, 'v', 'result', t)}
+                      style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
+                        background: active ? '#89b4fa22' : 'none',
+                        border: `1px solid ${active ? '#89b4fa' : '#45475a44'}`,
+                        color: active ? '#89b4fa' : '#585b70',
+                      }}
+                    >{t === 'vec2' ? 'v2' : t === 'vec3' ? 'v3' : 'v4'}</button>
+                  );
+                })}
+              </div>
+              {/* Per-component expression inputs */}
+              {comps.map(c => {
+                const pk  = `expr${c.toUpperCase()}`;
+                const val = typeof node.params[pk] === 'string' ? (node.params[pk] as string) : c;
+                const compColor = ({ x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#fab387' } as Record<string, string>)[c];
+                return (
+                  <div key={c} style={{ padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontSize: '10px', color: compColor, width: '8px', flexShrink: 0, fontFamily: 'monospace' }}>{c}</span>
+                    <input
+                      type="text"
+                      value={val}
+                      spellCheck={false}
+                      onChange={e => updateNodeParams(node.id, { [pk]: e.target.value })}
+                      style={{
+                        flex: 1, background: '#11111b', border: '1px solid #31324488',
+                        color: '#a6e3a1', borderRadius: '3px', padding: '2px 6px',
+                        fontSize: '10px', fontFamily: 'monospace', outline: 'none',
+                      }}
+                    />
+                  </div>
+                );
+              })}
+              <div style={{ height: '4px' }} />
+            </div>
+          );
+        })()}
+
+        {/* ── Vector type selector (vectorizable math nodes) ── */}
+        {!collapsed && node.type in VECTORIZABLE_NODES && (() => {
+          const info = VECTORIZABLE_NODES[node.type];
+          const current = (node.params.outputType as string) || 'float';
+          return (
+            <div
+              style={{ padding: '3px 10px 4px', display: 'flex', gap: '4px', alignItems: 'center' }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <span style={{ fontSize: '10px', color: '#45475a', marginRight: '2px' }}>type</span>
+              {(['float', 'vec2', 'vec3'] as DataType[]).map(t => {
+                const active = current === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => changeNodeVectorType(node.id, info.primaryInput, info.primaryOutput, t)}
+                    style={{
+                      fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
+                      background: active ? '#89b4fa22' : 'none',
+                      border: `1px solid ${active ? '#89b4fa' : '#45475a44'}`,
+                      color: active ? '#89b4fa' : '#585b70',
+                    }}
+                  >
+                    {t === 'float' ? 'f' : t === 'vec2' ? 'v2' : 'v3'}
+                  </button>
+                );
+              })}
             </div>
           );
         })()}
@@ -3725,6 +3847,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {/* ── ExprBlock modal ── */}
       {showExprBlockModal && node.type === 'exprNode' && (
         <ExprBlockModal node={node} onClose={() => setShowExprBlockModal(false)} />
+      )}
+
+      {/* ── Bezier editor modal ── */}
+      {showBezierModal && (node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
+        <BezierEditorModal node={node} onClose={() => setShowBezierModal(false)} />
+      )}
+
+      {/* ── TransformVec modal ── */}
+      {showTransformVecModal && node.type === 'transformVec' && (
+        <TransformVecModal node={node} onClose={() => setShowTransformVecModal(false)} />
       )}
 
       {/* ── CustomFn modal ── */}

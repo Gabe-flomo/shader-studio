@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import ShaderCanvas, { type OfflineRenderHandle } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
@@ -98,6 +98,18 @@ function AudioMasterVolumeWidget() {
 
 function HistogramOverlay({ bins }: { bins: Float32Array }) {
   const maxBin = Math.max(...bins, 0.001);
+  const [hoverInfo, setHoverInfo] = React.useState<{ x: number; binIdx: number } | null>(null);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const binIdx = Math.min(bins.length - 1, Math.floor(t * bins.length));
+    setHoverInfo({ x: t, binIdx });
+  };
+
+  const hoverBrightness = hoverInfo !== null ? hoverInfo.binIdx / (bins.length - 1) : null;
+  const hoverCount = hoverInfo !== null ? bins[hoverInfo.binIdx] : null;
+
   return (
     <div style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, height: '72px',
@@ -105,23 +117,48 @@ function HistogramOverlay({ bins }: { bins: Float32Array }) {
       borderTop: '1px solid #31324466',
       display: 'flex', flexDirection: 'column',
       padding: '5px 8px 3px',
-      pointerEvents: 'none',
       zIndex: 5,
-    }}>
-      <span style={{ fontSize: '8px', color: '#45475a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '3px' }}>Brightness</span>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '1px' }}>
+    }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverInfo(null)}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+        <span style={{ fontSize: '8px', color: '#45475a', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Brightness</span>
+        {hoverInfo !== null && hoverBrightness !== null && hoverCount !== null && (
+          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>
+            {hoverBrightness.toFixed(3)}
+            <span style={{ color: '#585b70', marginLeft: '5px' }}>{(hoverCount * 100).toFixed(1)}%</span>
+          </span>
+        )}
+      </div>
+      <div
+        style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '1px', position: 'relative', cursor: 'crosshair' }}
+      >
         {Array.from(bins).map((v, i) => {
           const t = i / (bins.length - 1);
-          const brightness = Math.round(40 + t * 180);
+          // lerp from blue (#89b4fa) at 0 to white (#cdd6f4) at 1 — always readable
+          const r = Math.round(137 + t * (205 - 137));
+          const g = Math.round(180 + t * (214 - 180));
+          const b = Math.round(250 + t * (250 - 250));
+          const isHovered = hoverInfo?.binIdx === i;
           return (
             <div key={i} style={{
               flex: 1, minHeight: v > 0 ? '1px' : '0',
               height: `${Math.round((v / maxBin) * 100)}%`,
-              background: `rgb(${brightness},${brightness},${brightness})`,
-              opacity: 0.7 + t * 0.3,
+              background: isHovered ? '#ffffff' : `rgb(${r},${g},${b})`,
+              opacity: isHovered ? 1 : 0.55 + t * 0.45,
             }} />
           );
         })}
+        {/* Hover cursor line */}
+        {hoverInfo !== null && (
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: `${hoverInfo.x * 100}%`,
+            width: '1px', background: 'rgba(255,255,255,0.25)',
+            pointerEvents: 'none',
+          }} />
+        )}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#45475a', marginTop: '2px' }}>
         <span>0</span><span>0.5</span><span>1</span>
@@ -726,6 +763,8 @@ function App() {
   // DESKTOP LAYOUT (1024px+) — original 3-panel layout, responsively sized
   // ══════════════════════════════════════════════════════════════════════════
   const paletteW = getPaletteWidth(bp);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const effectivePaletteW = paletteW === 0 ? 0 : paletteCollapsed ? 28 : paletteW;
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
@@ -742,9 +781,25 @@ function App() {
       <div style={{ display: (page === 'studio' || page === 'glsl') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
         {/* Left: Node Palette — hidden on GLSL page */}
-        {page === 'studio' && (
-          <div style={{ width: paletteW, minWidth: paletteW, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
-            <NodePalette />
+        {page === 'studio' && paletteW > 0 && (
+          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', transition: 'width 0.15s ease', background: '#181825', borderRight: '1px solid #313244' }}>
+            {/* Collapse toggle — always visible */}
+            <button
+              onClick={() => setPaletteCollapsed(v => !v)}
+              title={paletteCollapsed ? 'Expand palette' : 'Collapse palette'}
+              style={{
+                position: 'absolute', top: '8px', right: paletteCollapsed ? '4px' : '6px',
+                zIndex: 10, background: 'none', border: '1px solid #313244',
+                color: '#45475a', cursor: 'pointer', borderRadius: '3px',
+                fontSize: '10px', padding: '2px 4px', lineHeight: 1,
+                transition: 'color 0.1s',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+            >
+              {paletteCollapsed ? '▶' : '◀'}
+            </button>
+            {!paletteCollapsed && <NodePalette />}
           </div>
         )}
 

@@ -11,6 +11,10 @@ export const scopeCanvasRegistry = new Map<string, HTMLCanvasElement>();
 // Rolling 200-sample buffer per scope node (stores raw normalised 0-1 probe values)
 export const scopeBufferRegistry = new Map<string, number[]>();
 
+// Latest raw normalised value per key — updated even without a canvas registered.
+// Used by inline vizzes (e.g. ShaperCurveViz) to read live probe values via rAF.
+export const scopeValueRegistry = new Map<string, number>();
+
 /**
  * Called from the animation loop once per frame per scope node.
  * rawNorm is the probe value already normalised to [0, 1] by the probe shader.
@@ -22,6 +26,9 @@ export function drawScopeCanvas(
   min: number,
   max: number,
 ): void {
+  // Always store the live value so inline vizzes can read it without a canvas.
+  scopeValueRegistry.set(nodeId, rawNorm);
+
   const canvas = scopeCanvasRegistry.get(nodeId);
   if (!canvas) return;
 

@@ -3,6 +3,7 @@ import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams } from '../types/nodeGraph';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
+import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
@@ -75,6 +76,7 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX  = 'shader-studio:cfp:';
 const EP_PREFIX   = 'shader-studio:ep:';
+const TP_PREFIX   = 'shader-studio:tp:';
 const CFP_DIR_KEY  = 'shader-studio:settings:customFnDir';
 const EXPR_DIR_KEY = 'shader-studio:settings:exprDir';
 const GRAPH_DIR_KEY = 'shader-studio:settings:graphDir';
@@ -194,6 +196,56 @@ export function loadExprPresets(): ExprPreset[] {
 export function deleteExprPreset(id: string): void {
   localStorage.removeItem(`${EP_PREFIX}${id}`);
   window.dispatchEvent(new CustomEvent('exprpreset-changed'));
+}
+
+export function renameExprPreset(id: string, newLabel: string): void {
+  const key = `${EP_PREFIX}${id}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return;
+  try {
+    const preset = JSON.parse(raw) as ExprPreset;
+    preset.label = newLabel.trim() || preset.label;
+    localStorage.setItem(key, JSON.stringify(preset));
+    window.dispatchEvent(new CustomEvent('exprpreset-changed'));
+  } catch {}
+}
+
+// ── Transform Vec preset helpers ──────────────────────────────────────────────
+
+export function saveTransformPreset(data: Omit<TransformPreset, 'id' | 'savedAt'>): void {
+  const preset: TransformPreset = { id: `tp_${Date.now()}`, ...data, savedAt: Date.now() };
+  localStorage.setItem(`${TP_PREFIX}${preset.id}`, JSON.stringify(preset));
+  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+}
+
+export function loadTransformPresets(): TransformPreset[] {
+  const out: TransformPreset[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k?.startsWith(TP_PREFIX)) continue;
+    try {
+      const p = JSON.parse(localStorage.getItem(k)!) as TransformPreset;
+      if (p?.id) out.push(p);
+    } catch {}
+  }
+  return out.sort((a, b) => a.savedAt - b.savedAt);
+}
+
+export function deleteTransformPreset(id: string): void {
+  localStorage.removeItem(`${TP_PREFIX}${id}`);
+  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+}
+
+export function renameTransformPreset(id: string, newLabel: string): void {
+  const key = `${TP_PREFIX}${id}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return;
+  try {
+    const preset = JSON.parse(raw) as TransformPreset;
+    preset.label = newLabel.trim() || preset.label;
+    localStorage.setItem(key, JSON.stringify(preset));
+    window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+  } catch {}
 }
 
 // ── Group preset helpers ───────────────────────────────────────────────────────
@@ -401,6 +453,10 @@ interface NodeGraphState {
     inputs: Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>,
     outputType: DataType
   ) => void;
+
+  /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
+   *  Updates params.outputType plus the primary input and output socket types. */
+  changeNodeVectorType: (nodeId: string, primaryInputKey: string, primaryOutputKey: string, outputType: DataType) => void;
 
   /**
    * Collapse the given node IDs into a single group node.
@@ -3136,6 +3192,42 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               },
             },
           };
+        }),
+      };
+    });
+    get().compile();
+  },
+
+  changeNodeVectorType: (nodeId, primaryInputKey, primaryOutputKey, outputType) => {
+    pushHistory(get().nodes);
+
+    const updater = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
+      const newInputs = { ...n.inputs };
+      const existingIn = newInputs[primaryInputKey];
+      if (existingIn) {
+        // Drop the connection if the type changed (avoids type-mismatch wires)
+        const keepConn = existingIn.connection != null && existingIn.type === outputType;
+        newInputs[primaryInputKey] = { ...existingIn, type: outputType, connection: keepConn ? existingIn.connection : undefined };
+      }
+      const newOutputs = { ...n.outputs };
+      if (newOutputs[primaryOutputKey]) {
+        newOutputs[primaryOutputKey] = { ...newOutputs[primaryOutputKey], type: outputType };
+      }
+      return { ...n, params: { ...n.params, outputType }, inputs: newInputs, outputs: newOutputs };
+    };
+
+    set(state => {
+      if (state.nodes.some(n => n.id === nodeId)) {
+        return { nodes: state.nodes.map(n => n.id === nodeId ? updater(n) : n) };
+      }
+      const groupId = state.activeGroupId;
+      if (!groupId) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: sg.nodes.map(sn => sn.id === nodeId ? updater(sn) : sn) } } };
         }),
       };
     });
