@@ -61,6 +61,25 @@ const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
 
 const MATH_ORDER: string[] = MATH_GROUPS.flatMap(g => g.types);
 
+// ── Shaper node ordering & sub-groups ────────────────────────────────────────
+const SHAPER_GROUPS: Array<{ label: string; types: string[] }> = [
+  { label: 'Ease',     types: ['expEase', 'circularEaseIn', 'circularEaseOut'] },
+  { label: 'Seat',     types: ['doubleExpSeat', 'doubleCircleSeat'] },
+  { label: 'Sigmoid',  types: ['doubleExpSigmoid', 'logisticSigmoid', 'doubleCircleSigmoid', 'doubleEllipticSigmoid'] },
+  { label: 'Bezier',   types: ['quadBezierShaper', 'cubicBezierShaper'] },
+];
+
+const SHAPER_ORDER: string[] = SHAPER_GROUPS.flatMap(g => g.types);
+
+function sortShaperNodes(nodes: NodeDefinition[]): NodeDefinition[] {
+  const indexMap = new Map(SHAPER_ORDER.map((id, i) => [id, i]));
+  return [...nodes].sort((a, b) => {
+    const ia = indexMap.get(a.type) ?? 999;
+    const ib = indexMap.get(b.type) ?? 999;
+    return ia - ib;
+  });
+}
+
 function sortMathNodes(nodes: NodeDefinition[]): NodeDefinition[] {
   const indexMap = new Map(MATH_ORDER.map((id, i) => [id, i]));
   return [...nodes].sort((a, b) => {
@@ -82,6 +101,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   '2D Primitives': '#f9e2af',  // yellow — includes SDF nodes
   Combiners:       '#cba6f7',  // purple
   Spaces:          '#f2cdcd',  // rose — UV space warp nodes
+  Shapers:         '#f9e2af',  // yellow — curve/easing nodes
   Science:         '#94e2d5',  // teal
   Fractals:        '#cba6f7',  // purple — fractal preset nodes
   Output:          '#94e2d5',  // teal
@@ -95,7 +115,7 @@ const CATEGORY_ORDER = [
   '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
   '3D Primitives', '3D Scene', '3D Transforms',
   'Animation', 'Color', 'Combiners', 'Conditionals', 'Effects', 'Fractals', 'Math', 'Noise',
-  'Science', 'Sources', 'Spaces', 'Transforms', 'Utility',
+  'Science', 'Shapers', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
 
@@ -601,6 +621,8 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
           const rawNodes = getNodesByCategory(category).filter(d => !HIDDEN_NODES.has(d.type));
           const nodes    = category === 'Math'
             ? sortMathNodes(rawNodes)
+            : category === 'Shapers'
+            ? sortShaperNodes(rawNodes)
             : [...rawNodes].sort((a, b) => a.label.localeCompare(b.label));
           if (nodes.length === 0) return null;
           return (
@@ -640,6 +662,23 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
                   {category === 'Math' ? (
                     MATH_GROUPS.map(group => {
                       const groupNodes = nodes.filter(d => group.types.includes(d.type)).sort((a, b) => a.label.localeCompare(b.label));
+                      if (groupNodes.length === 0) return null;
+                      return (
+                        <div key={group.label}>
+                          <div style={{
+                            fontSize: '8px', color: '#45475a', letterSpacing: '0.08em',
+                            textTransform: 'uppercase', padding: '4px 2px 2px',
+                            fontWeight: 600,
+                          }}>
+                            {group.label}
+                          </div>
+                          {groupNodes.map(def => nodeBtn(def.type, def.label, def.description))}
+                        </div>
+                      );
+                    })
+                  ) : category === 'Shapers' ? (
+                    SHAPER_GROUPS.map(group => {
+                      const groupNodes = nodes.filter(d => group.types.includes(d.type));
                       if (groupNodes.length === 0) return null;
                       return (
                         <div key={group.label}>

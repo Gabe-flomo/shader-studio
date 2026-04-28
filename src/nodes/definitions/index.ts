@@ -127,6 +127,14 @@ export {
 } from './math';
 
 
+// Shapers
+export {
+  ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode,
+  CircularEaseInNode, CircularEaseOutNode,
+  DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode,
+  QuadBezierShaperNode, CubicBezierShaperNode,
+} from './shapers';
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
@@ -210,6 +218,12 @@ import {
   Vec2SwizzleNode, Vec3SwizzleNode,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
 } from './math';
+import {
+  ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode,
+  CircularEaseInNode, CircularEaseOutNode,
+  DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode,
+  QuadBezierShaperNode, CubicBezierShaperNode,
+} from './shapers';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
@@ -493,6 +507,18 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   multiplyVec2: MultiplyVec2Node,
   normalizeVec2: NormalizeVec2Node,
   remap: RemapNode,
+  // Shapers
+  expEase: ExpEaseNode,
+  doubleExpSeat: DoubleExpSeatNode,
+  doubleExpSigmoid: DoubleExpSigmoidNode,
+  logisticSigmoid: LogisticSigmoidNode,
+  circularEaseIn: CircularEaseInNode,
+  circularEaseOut: CircularEaseOutNode,
+  doubleCircleSeat: DoubleCircleSeatNode,
+  doubleCircleSigmoid: DoubleCircleSigmoidNode,
+  doubleEllipticSigmoid: DoubleEllipticSigmoidNode,
+  quadBezierShaper: QuadBezierShaperNode,
+  cubicBezierShaper: CubicBezierShaperNode,
   crossProduct: CrossProductNode,
   reflect: ReflectNode,
   complexMul: ComplexMulNode,
