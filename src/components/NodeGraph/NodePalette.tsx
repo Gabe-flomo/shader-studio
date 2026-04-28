@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
@@ -7,6 +7,7 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
+import type { TransformPreset } from '../../types/transformPreset';
 
 // ── Nodes hidden from the palette (still functional in existing graphs) ───────
 const HIDDEN_NODES = new Set([
@@ -249,6 +250,27 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
 
   const refreshExprPresets = () => setExprPresets(loadExprPresets());
 
+  // User-saved Transform Vec presets
+  const [transformPresets, setTransformPresets] = useState<TransformPreset[]>(() => loadTransformPresets());
+  const [hoverTransformPresetId, setHoverTransformPresetId] = useState<string | null>(null);
+  const [renamingTransformId, setRenamingTransformId] = useState<string | null>(null);
+  const [renameTransformValue, setRenameTransformValue] = useState('');
+
+  const refreshTransformPresets = () => setTransformPresets(loadTransformPresets());
+
+  // Collapsible bottom sections — persisted to localStorage
+  const [sectionsOpen, setSectionsOpen] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('nodepalette_sections') ?? '{}'); } catch { return {}; }
+  });
+  const toggleSection = (key: string) => {
+    setSectionsOpen(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('nodepalette_sections', JSON.stringify(next));
+      return next;
+    });
+  };
+  const isSectionOpen = (key: string, defaultOpen = false) => key in sectionsOpen ? sectionsOpen[key] : defaultOpen;
+
   // Merge localStorage presets with disk presets (dedup by id)
   const refreshPresets = async () => {
     const local = loadCustomFns();
@@ -280,6 +302,14 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     refreshExprPresets();
     window.addEventListener('exprpreset-changed', refreshExprPresets);
     return () => window.removeEventListener('exprpreset-changed', refreshExprPresets);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh Transform Vec presets on mount and when changed
+  useEffect(() => {
+    refreshTransformPresets();
+    window.addEventListener('transformpreset-changed', refreshTransformPresets);
+    return () => window.removeEventListener('transformpreset-changed', refreshTransformPresets);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -709,13 +739,14 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
       {/* ── Group Presets ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{
-            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: '#f9e2af',
-            paddingLeft: '4px', marginBottom: '4px',
-          }}>
-            Group Presets
-          </div>
+          <button
+            onClick={() => toggleSection('groupPresets')}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('groupPresets') ? '4px' : '0', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '7px', opacity: 0.5, color: '#f9e2af', width: '7px' }}>{isSectionOpen('groupPresets') ? '▼' : '▶'}</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#f9e2af' }}>Group Presets</span>
+          </button>
+          {isSectionOpen('groupPresets') && <div>
           {groupPresets.length === 0 ? (
             <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '4px', fontStyle: 'italic', lineHeight: 1.6 }}>
               Select a group node and click<br />⬇ Save to create a preset.
@@ -772,21 +803,21 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </div>
             ))
           )}
+          </div>}
         </div>
       )}
-
 
       {/* ── Saved Graphs ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <div style={{
-              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#89b4fa',
-              paddingLeft: '4px', flex: 1,
-            }}>
-              Saved Graphs
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: isSectionOpen('savedGraphs') ? '4px' : '0' }}>
+            <button
+              onClick={() => toggleSection('savedGraphs')}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', textAlign: 'left' }}
+            >
+              <span style={{ fontSize: '7px', opacity: 0.5, color: '#89b4fa', width: '7px' }}>{isSectionOpen('savedGraphs') ? '▼' : '▶'}</span>
+              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89b4fa' }}>Saved Graphs</span>
+            </button>
             <button
               onClick={() => { setShowGraphSaveInput(v => !v); setGraphSaveInput(''); }}
               title="Save current graph"
@@ -801,6 +832,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
             </button>
           </div>
 
+          {isSectionOpen('savedGraphs') && <>
           {/* Inline save input */}
           {showGraphSaveInput && (
             <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
@@ -890,23 +922,21 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </div>
             ))
           )}
+          </>}
         </div>
       )}
 
       {/* ── My Functions ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            marginBottom: '4px',
-          }}>
-            <div style={{
-              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#89dceb',
-              paddingLeft: '4px', flex: 1,
-            }}>
-              My Functions
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: isSectionOpen('myFunctions') ? '4px' : '0' }}>
+            <button
+              onClick={() => toggleSection('myFunctions')}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', textAlign: 'left' }}
+            >
+              <span style={{ fontSize: '7px', opacity: 0.5, color: '#89dceb', width: '7px' }}>{isSectionOpen('myFunctions') ? '▼' : '▶'}</span>
+              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89dceb' }}>My Functions</span>
+            </button>
             {/* Folder picker */}
             <button
               onClick={handlePickFolder}
@@ -951,6 +981,7 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
             </button>
           </div>
 
+          {isSectionOpen('myFunctions') && <>
           {/* Folder path display */}
           {presetsDir && (
             <div style={{
@@ -1027,20 +1058,22 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </div>
             ))
           )}
+          </>}
         </div>
       )}
 
       {/* ── Expr Block Presets ── */}
       {!isSearching && (
         <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{
-            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: '#a6e3a1',
-            paddingLeft: '4px', marginBottom: '4px',
-          }}>
-            Expr Block Presets
-          </div>
+          <button
+            onClick={() => toggleSection('exprPresets')}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('exprPresets') ? '4px' : '0', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '7px', opacity: 0.5, color: '#a6e3a1', width: '7px' }}>{isSectionOpen('exprPresets') ? '▼' : '▶'}</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#a6e3a1' }}>Expr Block Presets</span>
+          </button>
 
+          {isSectionOpen('exprPresets') && <>
           {exprPresets.length === 0 ? (
             <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
               Open an Expr Block node and click "↑ Save Preset"
@@ -1146,6 +1179,90 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
               </div>
             ))
           )}
+          </>}
+        </div>
+      )}
+
+      {/* ── Transform Vec Presets ── */}
+      {!isSearching && (
+        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
+          <button
+            onClick={() => toggleSection('transformPresets')}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('transformPresets') ? '4px' : '0', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '7px', opacity: 0.5, color: '#89b4fa', width: '7px' }}>{isSectionOpen('transformPresets') ? '▼' : '▶'}</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89b4fa' }}>Transform Vec Presets</span>
+          </button>
+
+          {isSectionOpen('transformPresets') && <>
+          {transformPresets.length === 0 ? (
+            <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
+              Open a Transform Vec node and click "↑ Save Preset"
+            </div>
+          ) : (
+            transformPresets.map((preset: TransformPreset) => (
+              <div
+                key={preset.id}
+                style={{ position: 'relative', marginBottom: '2px' }}
+                onMouseEnter={() => setHoverTransformPresetId(preset.id)}
+                onMouseLeave={() => setHoverTransformPresetId(null)}
+              >
+                {renamingTransformId === preset.id ? (
+                  <input
+                    autoFocus
+                    value={renameTransformValue}
+                    onChange={e => setRenameTransformValue(e.target.value)}
+                    onBlur={() => { renameTransformPreset(preset.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { renameTransformPreset(preset.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }
+                      if (e.key === 'Escape') setRenamingTransformId(null);
+                      e.stopPropagation();
+                    }}
+                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '5px 10px', background: '#11111b', border: '1px solid #89b4fa', color: '#89b4fa', borderRadius: '5px', fontSize: '12px', outline: 'none' }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => {
+                      const x = 200 + Math.random() * 120;
+                      const y = 120 + Math.random() * 200;
+                      addNode('transformVec', { x, y }, {
+                        outputType: preset.outputType,
+                        exprX: preset.exprX, exprY: preset.exprY,
+                        exprZ: preset.exprZ, exprW: preset.exprW,
+                      });
+                      onNodeAdded?.();
+                    }}
+                    title={`Add "${preset.label}" as a Transform Vec node`}
+                    style={{ display: 'block', width: '100%', padding: '5px 52px 5px 10px', background: '#111827', border: '1px solid #89b4fa33', color: '#89b4fa', cursor: 'pointer', textAlign: 'left', borderRadius: '5px', fontSize: '12px', transition: 'background 0.1s' }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#111827')}
+                  >
+                    ⊞ {preset.label}
+                    <span style={{ fontSize: '9px', color: '#45475a', marginLeft: '6px' }}>{preset.outputType}</span>
+                  </button>
+                )}
+                {hoverTransformPresetId === preset.id && renamingTransformId !== preset.id && (
+                  <>
+                    <button
+                      onClick={e => { e.stopPropagation(); setRenameTransformValue(preset.label); setRenamingTransformId(preset.id); }}
+                      title="Rename preset"
+                      style={{ position: 'absolute', right: '24px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '0 3px', lineHeight: 1 }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >✎</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteTransformPreset(preset.id); refreshTransformPresets(); }}
+                      title="Remove this preset"
+                      style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '0 4px', lineHeight: 1 }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >×</button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+          </>}
         </div>
       )}
 

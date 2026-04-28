@@ -763,6 +763,8 @@ function App() {
   // DESKTOP LAYOUT (1024px+) — original 3-panel layout, responsively sized
   // ══════════════════════════════════════════════════════════════════════════
   const paletteW = getPaletteWidth(bp);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const effectivePaletteW = paletteW === 0 ? 0 : paletteCollapsed ? 28 : paletteW;
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
@@ -779,9 +781,25 @@ function App() {
       <div style={{ display: (page === 'studio' || page === 'glsl') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
         {/* Left: Node Palette — hidden on GLSL page */}
-        {page === 'studio' && (
-          <div style={{ width: paletteW, minWidth: paletteW, flexShrink: 0, overflow: 'hidden', height: '100%' }}>
-            <NodePalette />
+        {page === 'studio' && paletteW > 0 && (
+          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', transition: 'width 0.15s ease', background: '#181825', borderRight: '1px solid #313244' }}>
+            {/* Collapse toggle — always visible */}
+            <button
+              onClick={() => setPaletteCollapsed(v => !v)}
+              title={paletteCollapsed ? 'Expand palette' : 'Collapse palette'}
+              style={{
+                position: 'absolute', top: '8px', right: paletteCollapsed ? '4px' : '6px',
+                zIndex: 10, background: 'none', border: '1px solid #313244',
+                color: '#45475a', cursor: 'pointer', borderRadius: '3px',
+                fontSize: '10px', padding: '2px 4px', lineHeight: 1,
+                transition: 'color 0.1s',
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+            >
+              {paletteCollapsed ? '▶' : '◀'}
+            </button>
+            {!paletteCollapsed && <NodePalette />}
           </div>
         )}
 

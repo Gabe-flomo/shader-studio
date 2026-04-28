@@ -1,6 +1,7 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { saveTransformPreset } from '../../store/useNodeGraphStore';
 import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
 
@@ -115,6 +116,27 @@ export function TransformVecModal({ node, onClose }: Props) {
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const focusedComp = useRef<string | null>(null);
 
+  // Save-preset UI state
+  const [savingPreset, setSavingPreset] = useState(false);
+  const [presetLabel, setPresetLabel]   = useState('');
+  const [savedFlash, setSavedFlash]     = useState(false);
+
+  const handleSavePreset = () => {
+    const label = presetLabel.trim() || 'Transform Vec';
+    saveTransformPreset({
+      label,
+      outputType: type as 'vec2' | 'vec3' | 'vec4',
+      exprX: (node.params.exprX as string) ?? 'x',
+      exprY: (node.params.exprY as string) ?? 'y',
+      exprZ: (node.params.exprZ as string) ?? 'z',
+      exprW: (node.params.exprW as string) ?? 'w',
+    });
+    setSavingPreset(false);
+    setPresetLabel('');
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1200);
+  };
+
   // ── Collect upstream GLSL variables (same logic as AssignInitModal) ──────────
   const allKnownNodes: GraphNode[] = [...topNodes];
   if (activeGroupId) {
@@ -219,8 +241,37 @@ export function TransformVecModal({ node, onClose }: Props) {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: '14px', color: '#89b4fa' }}>⊞ Transform Vec</span>
-          <button onClick={onClose} style={{ background: 'none', border: '1px solid #f38ba855', color: '#f38ba8', cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            {savedFlash && <span style={{ fontSize: '10px', color: '#a6e3a1' }}>✓ Saved</span>}
+            <button
+              onClick={() => { setSavingPreset(v => !v); setPresetLabel(''); }}
+              style={{ background: savingPreset ? '#a6e3a122' : 'none', border: `1px solid ${savingPreset ? '#a6e3a155' : '#45475a55'}`, color: savingPreset ? '#a6e3a1' : '#6c7086', cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}
+            >↑ Save Preset</button>
+            <button onClick={onClose} style={{ background: 'none', border: '1px solid #f38ba855', color: '#f38ba8', cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
+          </div>
         </div>
+
+        {/* Inline save preset input */}
+        {savingPreset && (
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <input
+              autoFocus
+              value={presetLabel}
+              onChange={e => setPresetLabel(e.target.value)}
+              placeholder="Preset name…"
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSavePreset();
+                if (e.key === 'Escape') { setSavingPreset(false); setPresetLabel(''); }
+                e.stopPropagation();
+              }}
+              style={{ flex: 1, background: '#11111b', border: '1px solid #a6e3a155', color: '#a6e3a1', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', outline: 'none', fontFamily: 'monospace' }}
+            />
+            <button
+              onClick={handleSavePreset}
+              style={{ background: '#a6e3a122', border: '1px solid #a6e3a155', color: '#a6e3a1', cursor: 'pointer', fontSize: '11px', padding: '3px 10px', borderRadius: '4px' }}
+            >Save</button>
+          </div>
+        )}
 
         {/* Type selector */}
         <div>

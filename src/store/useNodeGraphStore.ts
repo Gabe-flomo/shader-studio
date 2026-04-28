@@ -3,6 +3,7 @@ import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams } from '../types/nodeGraph';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
+import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
@@ -75,6 +76,7 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX  = 'shader-studio:cfp:';
 const EP_PREFIX   = 'shader-studio:ep:';
+const TP_PREFIX   = 'shader-studio:tp:';
 const CFP_DIR_KEY  = 'shader-studio:settings:customFnDir';
 const EXPR_DIR_KEY = 'shader-studio:settings:exprDir';
 const GRAPH_DIR_KEY = 'shader-studio:settings:graphDir';
@@ -205,6 +207,44 @@ export function renameExprPreset(id: string, newLabel: string): void {
     preset.label = newLabel.trim() || preset.label;
     localStorage.setItem(key, JSON.stringify(preset));
     window.dispatchEvent(new CustomEvent('exprpreset-changed'));
+  } catch {}
+}
+
+// ── Transform Vec preset helpers ──────────────────────────────────────────────
+
+export function saveTransformPreset(data: Omit<TransformPreset, 'id' | 'savedAt'>): void {
+  const preset: TransformPreset = { id: `tp_${Date.now()}`, ...data, savedAt: Date.now() };
+  localStorage.setItem(`${TP_PREFIX}${preset.id}`, JSON.stringify(preset));
+  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+}
+
+export function loadTransformPresets(): TransformPreset[] {
+  const out: TransformPreset[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k?.startsWith(TP_PREFIX)) continue;
+    try {
+      const p = JSON.parse(localStorage.getItem(k)!) as TransformPreset;
+      if (p?.id) out.push(p);
+    } catch {}
+  }
+  return out.sort((a, b) => a.savedAt - b.savedAt);
+}
+
+export function deleteTransformPreset(id: string): void {
+  localStorage.removeItem(`${TP_PREFIX}${id}`);
+  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+}
+
+export function renameTransformPreset(id: string, newLabel: string): void {
+  const key = `${TP_PREFIX}${id}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return;
+  try {
+    const preset = JSON.parse(raw) as TransformPreset;
+    preset.label = newLabel.trim() || preset.label;
+    localStorage.setItem(key, JSON.stringify(preset));
+    window.dispatchEvent(new CustomEvent('transformpreset-changed'));
   } catch {}
 }
 
