@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { tokenizeLine, C } from './CodePanel';
+
+// ── Boilerplate ───────────────────────────────────────────────────────────────
 
 const BOILERPLATE = `precision mediump float;
 #define PI 3.1415926538
@@ -34,22 +37,105 @@ void main() {
     gl_FragColor = vec4(vec3(0.0), 1.0);
 }`;
 
+// ── Function palette data ─────────────────────────────────────────────────────
+
+interface FnEntry { label: string; insert: string; }
+interface FnGroup { name: string; entries: FnEntry[]; }
+
+const BUILTIN_GROUPS: FnGroup[] = [
+  { name: 'Trig', entries: [
+    { label: 'sin()', insert: 'sin()' },
+    { label: 'cos()', insert: 'cos()' },
+    { label: 'tan()', insert: 'tan()' },
+    { label: 'atan(y,x)', insert: 'atan(, )' },
+    { label: 'asin()', insert: 'asin()' },
+    { label: 'acos()', insert: 'acos()' },
+  ]},
+  { name: 'Math', entries: [
+    { label: 'abs()', insert: 'abs()' },
+    { label: 'sign()', insert: 'sign()' },
+    { label: 'floor()', insert: 'floor()' },
+    { label: 'ceil()', insert: 'ceil()' },
+    { label: 'fract()', insert: 'fract()' },
+    { label: 'mod(f,f)', insert: 'mod(, )' },
+    { label: 'min(f,f)', insert: 'min(, )' },
+    { label: 'max(f,f)', insert: 'max(, )' },
+    { label: 'clamp(f,0,1)', insert: 'clamp(, 0.0, 1.0)' },
+    { label: 'mix(a,b,t)', insert: 'mix(, , )' },
+    { label: 'step(e,x)', insert: 'step(, )' },
+    { label: 'smoothstep()', insert: 'smoothstep(0.0, 1.0, )' },
+    { label: 'sqrt()', insert: 'sqrt()' },
+    { label: 'pow(b,e)', insert: 'pow(, )' },
+    { label: 'exp()', insert: 'exp()' },
+    { label: 'log()', insert: 'log()' },
+  ]},
+  { name: 'Vector', entries: [
+    { label: 'length()', insert: 'length()' },
+    { label: 'distance(a,b)', insert: 'distance(, )' },
+    { label: 'dot(a,b)', insert: 'dot(, )' },
+    { label: 'cross(a,b)', insert: 'cross(, )' },
+    { label: 'normalize()', insert: 'normalize()' },
+    { label: 'reflect(i,n)', insert: 'reflect(, )' },
+    { label: 'refract(i,n,r)', insert: 'refract(, , )' },
+  ]},
+  { name: 'Texture', entries: [
+    { label: 'texture2D(s,uv)', insert: 'texture2D(, )' },
+  ]},
+  { name: 'Deriv', entries: [
+    { label: 'dFdx()', insert: 'dFdx()' },
+    { label: 'dFdy()', insert: 'dFdy()' },
+    { label: 'fwidth()', insert: 'fwidth()' },
+  ]},
+];
+
+const STUDIO_GROUPS: FnGroup[] = [
+  { name: 'Helpers', entries: [
+    { label: 'valueNoise(uv)', insert: 'valueNoise()' },
+    { label: 'noiseHash1(uv)', insert: 'noiseHash1()' },
+    { label: 'noiseHash2(uv)', insert: 'noiseHash2()' },
+  ]},
+  { name: 'Uniforms', entries: [
+    { label: 'u_time', insert: 'u_time' },
+    { label: 'u_resolution', insert: 'u_resolution' },
+    { label: 'u_mouse', insert: 'u_mouse' },
+  ]},
+  { name: 'Constants', entries: [
+    { label: 'PI', insert: 'PI' },
+    { label: 'TAU', insert: 'TAU' },
+  ]},
+];
+
+// ── Bracket pairs ─────────────────────────────────────────────────────────────
+
+const BRACKET_PAIRS: Record<string, [string, string]> = {
+  '(': ['(', ')'],
+  '[': ['[', ']'],
+  '{': ['{', '}'],
+  '"': ['"', '"'],
+  "'": ["'", "'"],
+};
+
+// ── Storage keys ──────────────────────────────────────────────────────────────
+
 const EDITOR_KEY  = 'shader-studio:glsl-editor';
 const SHADERS_KEY = 'shader-studio:glsl-shaders';
 
-interface SavedShader {
-  id: string;
-  name: string;
-  code: string;
-}
-
+interface SavedShader { id: string; name: string; code: string; }
 function loadShaders(): SavedShader[] {
-  try { return JSON.parse(localStorage.getItem(SHADERS_KEY) ?? '[]'); }
-  catch { return []; }
+  try { return JSON.parse(localStorage.getItem(SHADERS_KEY) ?? '[]'); } catch { return []; }
 }
 function persistShaders(list: SavedShader[]) {
   try { localStorage.setItem(SHADERS_KEY, JSON.stringify(list)); } catch {}
 }
+
+// ── Shared font/padding so overlay lines up perfectly ─────────────────────────
+
+const EDITOR_FONT = "'Fira Code', 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace";
+const EDITOR_FONT_SIZE = '12px';
+const EDITOR_LINE_HEIGHT = '1.6';
+const EDITOR_PADDING = '10px 12px';
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function GLSLPage() {
   const setRawGlslShader = useNodeGraphStore(s => s.setRawGlslShader);
@@ -58,38 +144,163 @@ export function GLSLPage() {
 
   const [code, setCode]         = useState<string>(() => localStorage.getItem(EDITOR_KEY) ?? BOILERPLATE);
   const [shaders, setShaders]   = useState<SavedShader[]>(loadShaders);
-  const [showPanel, setShowPanel] = useState(true);
+  const [showPanel, setShowPanel]   = useState(true);
+  const [showFnPanel, setShowFnPanel] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameVal, setRenameVal]   = useState('');
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const lineNumRef   = useRef<HTMLDivElement>(null);
 
-  // Apply code to live preview whenever it changes
+  // ── Undo / redo stack ──────────────────────────────────────────────────────
+  const undoStack = useRef<string[]>([localStorage.getItem(EDITOR_KEY) ?? BOILERPLATE]);
+  const undoIdx   = useRef<number>(0);
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pushHistory = useCallback((value: string) => {
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => {
+      const stack = undoStack.current.slice(0, undoIdx.current + 1);
+      if (stack[stack.length - 1] === value) return;
+      stack.push(value);
+      if (stack.length > 100) stack.shift();
+      undoStack.current = stack;
+      undoIdx.current   = stack.length - 1;
+    }, 400);
+  }, []);
+
+  // ── Sync overlay scroll ────────────────────────────────────────────────────
+  const syncScroll = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    if (highlightRef.current) {
+      highlightRef.current.scrollTop  = ta.scrollTop;
+      highlightRef.current.scrollLeft = ta.scrollLeft;
+    }
+    if (lineNumRef.current) {
+      lineNumRef.current.scrollTop = ta.scrollTop;
+    }
+  }, []);
+
+  // ── Side effects ──────────────────────────────────────────────────────────
   useEffect(() => {
     setRawGlslShader(code);
     localStorage.setItem(EDITOR_KEY, code);
   }, [code, setRawGlslShader]);
 
-  // Clear override on unmount so node graph resumes
   useEffect(() => () => { setRawGlslShader(null); }, [setRawGlslShader]);
 
+  // ── Insert helper (preserves undo via manual stack) ───────────────────────
+  const insertAtCursor = useCallback((text: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const selected = code.slice(start, end);
+    let newCode: string;
+    let cursorPos: number;
+
+    // If text ends with an empty arg slot '()' and there's a selection, wrap it
+    if (selected && text.endsWith('()')) {
+      newCode   = code.slice(0, start) + text.slice(0, -1) + selected + ')' + code.slice(end);
+      cursorPos = start + text.length - 1 + selected.length + 1;
+    } else {
+      newCode   = code.slice(0, start) + text + code.slice(end);
+      // Place cursor at first empty comma slot or after the insertion
+      const innerOffset = text.indexOf('()') !== -1 ? text.indexOf('()') + 1 :
+                          text.indexOf(', )') !== -1 ? text.indexOf(', )') + 2 :
+                          text.length;
+      cursorPos = start + innerOffset;
+    }
+    setCode(newCode);
+    pushHistory(newCode);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = cursorPos;
+    });
+  }, [code, pushHistory]);
+
+  // ── Keyboard handler ──────────────────────────────────────────────────────
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const ta = e.currentTarget;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+
+    // ── Undo ────────────────────────────────────────────────────────────────
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      if (pushTimer.current) { clearTimeout(pushTimer.current); pushTimer.current = null; }
+      if (undoIdx.current > 0) {
+        undoIdx.current--;
+        const restored = undoStack.current[undoIdx.current];
+        setCode(restored);
+        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start; });
+      }
+      return;
+    }
+
+    // ── Redo ────────────────────────────────────────────────────────────────
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      if (undoIdx.current < undoStack.current.length - 1) {
+        undoIdx.current++;
+        const restored = undoStack.current[undoIdx.current];
+        setCode(restored);
+        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start; });
+      }
+      return;
+    }
+
+    // ── Tab → 4 spaces ──────────────────────────────────────────────────────
     if (e.key === 'Tab') {
       e.preventDefault();
-      const ta = e.currentTarget;
-      const start = ta.selectionStart;
-      const end   = ta.selectionEnd;
-      setCode(code.slice(0, start) + '    ' + code.slice(end));
+      const newCode = code.slice(0, start) + '    ' + code.slice(end);
+      setCode(newCode);
+      pushHistory(newCode);
       requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 4; });
+      return;
     }
-  }, [code]);
 
-  // ── Shader save / load ───────────────────────────────────────────────────
+    // ── Enter → auto-indent ─────────────────────────────────────────────────
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const lineStart = code.lastIndexOf('\n', start - 1) + 1;
+      const line      = code.slice(lineStart, start);
+      const indent    = line.match(/^(\s*)/)?.[1] ?? '';
+      // Also bump indent after an opening brace
+      const extra     = line.trimEnd().endsWith('{') ? '    ' : '';
+      const insertion = '\n' + indent + extra;
+      const newCode   = code.slice(0, start) + insertion + code.slice(end);
+      setCode(newCode);
+      pushHistory(newCode);
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + insertion.length; });
+      return;
+    }
 
+    // ── Bracket / quote wrap ────────────────────────────────────────────────
+    if (e.key in BRACKET_PAIRS && start !== end) {
+      e.preventDefault();
+      const [open, close] = BRACKET_PAIRS[e.key];
+      const selected = code.slice(start, end);
+      const newCode  = code.slice(0, start) + open + selected + close + code.slice(end);
+      setCode(newCode);
+      pushHistory(newCode);
+      requestAnimationFrame(() => { ta.selectionStart = start + 1; ta.selectionEnd = end + 1; });
+      return;
+    }
+  }, [code, pushHistory]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setCode(val);
+    pushHistory(val);
+  }, [pushHistory]);
+
+  // ── Shader save / load ────────────────────────────────────────────────────
   const saveShader = () => {
     const name = window.prompt('Shader name:');
     if (!name?.trim()) return;
-    // Update existing entry with same name, or append
     const existing = shaders.find(s => s.name === name.trim());
     const next: SavedShader[] = existing
       ? shaders.map(s => s.id === existing.id ? { ...s, code } : s)
@@ -100,6 +311,11 @@ export function GLSLPage() {
 
   const loadShader = (s: SavedShader) => {
     setCode(s.code);
+    // Push loaded code to undo stack
+    const stack = undoStack.current.slice(0, undoIdx.current + 1);
+    stack.push(s.code);
+    undoStack.current = stack;
+    undoIdx.current   = stack.length - 1;
     textareaRef.current?.focus();
   };
 
@@ -117,13 +333,28 @@ export function GLSLPage() {
     setRenamingId(null);
   };
 
-  const lineCount = code.split('\n').length;
+  const lineCount  = code.split('\n').length;
+  const lines      = code.split('\n');
 
   const btnBase: React.CSSProperties = {
     borderRadius: '4px', padding: '2px 10px',
     fontSize: '10px', cursor: 'pointer', border: '1px solid #45475a',
   };
 
+  // ── Fn chip style helpers ─────────────────────────────────────────────────
+  const chipStyle = (accent: string): React.CSSProperties => ({
+    background: '#11111b',
+    border: `1px solid ${accent}44`,
+    color: accent,
+    borderRadius: '3px',
+    padding: '2px 6px',
+    fontSize: '10px',
+    cursor: 'pointer',
+    fontFamily: EDITOR_FONT,
+    lineHeight: 1.4,
+  });
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', height: '100%', background: '#11111b', fontFamily: 'monospace', overflow: 'hidden' }}>
 
@@ -140,7 +371,6 @@ export function GLSLPage() {
             Fragment Shader
           </span>
           <div style={{ flex: 1 }} />
-
           <button onClick={saveShader} title="Save current shader" style={{ ...btnBase, background: '#1e1e2e', color: '#a6e3a1' }}>
             + Save
           </button>
@@ -158,7 +388,14 @@ export function GLSLPage() {
             Reset
           </button>
           <button
-            onClick={() => setShowPanel(v => !v)}
+            onClick={() => { setShowFnPanel(v => !v); setShowPanel(false); }}
+            title="Toggle GLSL functions reference"
+            style={{ ...btnBase, background: showFnPanel ? '#313244' : 'none', color: showFnPanel ? '#f9e2af' : '#585b70', padding: '2px 8px' }}
+          >
+            ƒ Functions
+          </button>
+          <button
+            onClick={() => { setShowPanel(v => !v); setShowFnPanel(false); }}
             title={showPanel ? 'Hide shaders panel' : 'Show shaders panel'}
             style={{ ...btnBase, background: showPanel ? '#313244' : 'none', color: showPanel ? '#cdd6f4' : '#585b70', padding: '2px 8px' }}
           >
@@ -168,32 +405,73 @@ export function GLSLPage() {
 
         {/* Code area */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* Line numbers */}
-          <div style={{
-            width: '40px', flexShrink: 0,
-            background: '#13131f', borderRight: '1px solid #1e1e2e',
-            overflowY: 'hidden', paddingTop: '10px',
-            color: '#3d4059', fontSize: '12px', lineHeight: '1.6',
-            textAlign: 'right', paddingRight: '6px',
-            userSelect: 'none', pointerEvents: 'none',
-          }}>
+          {/* Line numbers — scroll-synced */}
+          <div
+            ref={lineNumRef}
+            style={{
+              width: '40px', flexShrink: 0,
+              background: '#13131f', borderRight: '1px solid #1e1e2e',
+              overflowY: 'hidden', paddingTop: EDITOR_PADDING.split(' ')[0],
+              color: '#3d4059', fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
+              textAlign: 'right', paddingRight: '6px',
+              userSelect: 'none', pointerEvents: 'none',
+            }}
+          >
             {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i + 1}</div>)}
           </div>
 
-          <textarea
-            ref={textareaRef}
-            value={code}
-            onChange={e => setCode(e.target.value)}
-            onKeyDown={handleKeyDown}
-            spellCheck={false}
-            style={{
-              flex: 1, background: '#13131f', color: '#cdd6f4',
-              border: 'none', outline: 'none', resize: 'none',
-              padding: '10px 12px', fontSize: '12px', lineHeight: '1.6',
-              fontFamily: "'Fira Code', 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace",
-              tabSize: 4,
-            }}
-          />
+          {/* Overlay container */}
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+
+            {/* Syntax-highlighted background */}
+            <div
+              ref={highlightRef}
+              aria-hidden="true"
+              style={{
+                position: 'absolute', inset: 0,
+                padding: EDITOR_PADDING,
+                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
+                fontFamily: EDITOR_FONT,
+                whiteSpace: 'pre',
+                overflowY: 'hidden', overflowX: 'hidden',
+                pointerEvents: 'none',
+                tabSize: 4,
+              }}
+            >
+              {lines.map((line, i) => (
+                <div key={i} style={{ minHeight: `calc(${EDITOR_LINE_HEIGHT} * ${EDITOR_FONT_SIZE})` }}>
+                  {tokenizeLine(line || ' ').map((tok, j) => (
+                    <span key={j} style={{ color: tok.color }}>{tok.text}</span>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Transparent textarea on top */}
+            <textarea
+              ref={textareaRef}
+              value={code}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onScroll={syncScroll}
+              spellCheck={false}
+              autoCapitalize="none"
+              autoCorrect="off"
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'transparent',
+                color: 'transparent',
+                caretColor: '#cdd6f4',
+                border: 'none', outline: 'none', resize: 'none',
+                padding: EDITOR_PADDING,
+                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
+                fontFamily: EDITOR_FONT,
+                tabSize: 4,
+                overflowY: 'auto', overflowX: 'auto',
+                zIndex: 1,
+              }}
+            />
+          </div>
         </div>
 
         {/* Error bar */}
@@ -206,24 +484,79 @@ export function GLSLPage() {
         )}
       </div>
 
+      {/* ── Functions reference panel ─────────────────────────────────── */}
+      {showFnPanel && (
+        <div style={{ width: '240px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#13131f' }}>
+          <div style={{ height: '36px', flexShrink: 0, background: '#1e1e2e', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
+            <span style={{ fontSize: '11px', color: '#f9e2af', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
+              Functions
+            </span>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+            <div style={{ fontSize: '9px', color: '#585b70', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px solid #1e1e2e' }}>
+              GLSL Built-ins
+            </div>
+            {BUILTIN_GROUPS.map(group => (
+              <div key={group.name} style={{ marginBottom: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#45475a', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  {group.name}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                  {group.entries.map(e => (
+                    <button
+                      key={e.label}
+                      onMouseDown={ev => ev.preventDefault()}
+                      onClick={() => insertAtCursor(e.insert)}
+                      style={chipStyle(C.builtin)}
+                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#f9e2af18'; }}
+                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#11111b'; }}
+                      title={`Insert: ${e.insert}`}
+                    >
+                      {e.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div style={{ fontSize: '9px', color: '#585b70', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '10px 0 6px', paddingBottom: '4px', borderBottom: '1px solid #1e1e2e' }}>
+              Studio Helpers
+            </div>
+            {STUDIO_GROUPS.map(group => (
+              <div key={group.name} style={{ marginBottom: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#45475a', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  {group.name}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                  {group.entries.map(e => (
+                    <button
+                      key={e.label}
+                      onMouseDown={ev => ev.preventDefault()}
+                      onClick={() => insertAtCursor(e.insert)}
+                      style={chipStyle(C.keyword)}
+                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#cba6f718'; }}
+                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#11111b'; }}
+                      title={`Insert: ${e.insert}`}
+                    >
+                      {e.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Saved shaders panel ───────────────────────────────────────── */}
       {showPanel && (
-        <div style={{
-          width: '200px', flexShrink: 0,
-          display: 'flex', flexDirection: 'column',
-          background: '#13131f',
-        }}>
-          <div style={{
-            height: '36px', flexShrink: 0,
-            background: '#1e1e2e', borderBottom: '1px solid #313244',
-            display: 'flex', alignItems: 'center', padding: '0 12px',
-          }}>
+        <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#13131f' }}>
+          <div style={{ height: '36px', flexShrink: 0, background: '#1e1e2e', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
             <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
               Shaders
             </span>
             <span style={{ fontSize: '10px', color: '#45475a' }}>{shaders.length}</span>
           </div>
-
           <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
             {shaders.length === 0 ? (
               <div style={{ padding: '12px 8px', fontSize: '11px', color: '#45475a', lineHeight: 1.6 }}>
@@ -234,13 +567,8 @@ export function GLSLPage() {
                 key={s.id}
                 onDoubleClick={() => loadShader(s)}
                 title="Double-click to load"
-                style={{
-                  marginBottom: '4px', borderRadius: '5px',
-                  background: '#1e1e2e', border: '1px solid #313244',
-                  cursor: 'pointer', overflow: 'hidden',
-                }}
+                style={{ marginBottom: '4px', borderRadius: '5px', background: '#1e1e2e', border: '1px solid #313244', cursor: 'pointer', overflow: 'hidden' }}
               >
-                {/* Name row */}
                 <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', gap: '4px' }}>
                   {renamingId === s.id ? (
                     <input
@@ -253,20 +581,13 @@ export function GLSLPage() {
                         if (e.key === 'Escape') setRenamingId(null);
                       }}
                       onClick={e => e.stopPropagation()}
-                      style={{
-                        flex: 1, fontSize: '11px', background: '#11111b',
-                        border: '1px solid #89b4fa', color: '#cdd6f4',
-                        borderRadius: '3px', padding: '1px 4px', outline: 'none',
-                      }}
+                      style={{ flex: 1, fontSize: '11px', background: '#11111b', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '3px', padding: '1px 4px', outline: 'none' }}
                     />
                   ) : (
                     <span
                       onDoubleClick={e => { e.stopPropagation(); setRenamingId(s.id); setRenameVal(s.name); }}
                       title="Double-click to rename"
-                      style={{
-                        flex: 1, fontSize: '11px', color: '#cdd6f4',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}
+                      style={{ flex: 1, fontSize: '11px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                     >
                       {s.name}
                     </span>
@@ -277,14 +598,7 @@ export function GLSLPage() {
                     style={{ fontSize: '10px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
                   >×</button>
                 </div>
-
-                {/* Code preview */}
-                <div style={{
-                  padding: '3px 8px 6px', borderTop: '1px solid #313244',
-                  fontSize: '10px', color: '#45475a',
-                  fontFamily: "'Fira Code', 'Consolas', monospace",
-                  whiteSpace: 'pre', overflow: 'hidden', maxHeight: '46px', lineHeight: 1.5,
-                }}>
+                <div style={{ padding: '3px 8px 6px', borderTop: '1px solid #313244', fontSize: '10px', color: '#45475a', fontFamily: EDITOR_FONT, whiteSpace: 'pre', overflow: 'hidden', maxHeight: '46px', lineHeight: 1.5 }}>
                   {s.code.split('\n').slice(0, 3).join('\n')}
                   {s.code.split('\n').length > 3 ? '\n…' : ''}
                 </div>
