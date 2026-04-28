@@ -906,6 +906,62 @@ export const Vec3SwizzleNode: NodeDefinition = {
   },
 };
 
+// ── Transform Vec node ────────────────────────────────────────────────────────
+
+const TRANSFORM_COMPS = ['x', 'y', 'z', 'w'] as const;
+
+function substituteComps(expr: string, id: string, dims: number): string {
+  const active = TRANSFORM_COMPS.slice(0, dims);
+  return active.reduce(
+    (s, c) => s.replace(new RegExp(`\\b${c}\\b`, 'g'), `${id}_${c}_raw`),
+    expr,
+  );
+}
+
+export const TransformVecNode: NodeDefinition = {
+  type: 'transformVec',
+  label: 'Transform Vec',
+  category: 'Math',
+  description: 'Split a vector into components, apply per-component GLSL expressions, reassemble.',
+  inputs:  { v: { type: 'vec2', label: 'Vec' } },
+  outputs: {
+    x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' },
+    z: { type: 'float', label: 'Z' }, w: { type: 'float', label: 'W' },
+    result: { type: 'vec2', label: 'Result' },
+  },
+  defaultParams: { outputType: 'vec2', exprX: 'x', exprY: 'y', exprZ: 'z', exprW: 'w' },
+  paramDefs: {},
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const type = (node.params.outputType as string) || 'vec2';
+    const dims = type === 'vec4' ? 4 : type === 'vec3' ? 3 : 2;
+    const id   = node.id;
+    const v    = inputVars.v || `${type}(0.0)`;
+    const active = TRANSFORM_COMPS.slice(0, dims);
+
+    let code = '';
+    // Raw splits
+    for (const c of active) {
+      code += `    float ${id}_${c}_raw = (${v}).${c};\n`;
+    }
+    // Per-component expressions
+    for (const c of active) {
+      const paramKey = `expr${c.toUpperCase()}`;
+      const raw = typeof node.params[paramKey] === 'string' ? (node.params[paramKey] as string) : c;
+      code += `    float ${id}_${c} = ${substituteComps(raw, id, dims)};\n`;
+    }
+    // Unused components default to 0.0 so their output vars are always declared
+    for (const c of TRANSFORM_COMPS.slice(dims)) {
+      code += `    float ${id}_${c} = 0.0;\n`;
+    }
+    // Reassemble
+    code += `    ${type} ${id}_result = ${type}(${active.map(c => `${id}_${c}`).join(', ')});\n`;
+
+    const outputVars: Record<string, string> = { result: `${id}_result` };
+    for (const c of TRANSFORM_COMPS) outputVars[c] = `${id}_${c}`;
+    return { code, outputVars };
+  },
+};
+
 // ── Vectorizable node registry ────────────────────────────────────────────────
 // Nodes that support component-wise operation on vec2/vec3 inputs.
 // primaryInput / primaryOutput are the socket keys that change type.

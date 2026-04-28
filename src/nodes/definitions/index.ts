@@ -217,6 +217,7 @@ import {
   CompareNode, SelectNode,
   Vec2SwizzleNode, Vec3SwizzleNode,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
+  TransformVecNode,
 } from './math';
 import {
   ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode,
@@ -499,6 +500,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   splitVec2: SplitVec2Node,
   splitVec3: SplitVec3Node,
   splitVec4: SplitVec4Node,
+  transformVec: TransformVecNode,
   makeVec3: MakeVec3Node,
   floatToVec3: FloatToVec3Node,
   fractRaw: FractRawNode,
