@@ -243,7 +243,7 @@ float ffAngle(vec2 p, float scale, float quant, int mode) {
     float angle = n * 6.28318;
     if (mode == 2 && quant > 0.001) {
         // Snap to nearest multiple of quant radians
-        angle = round(angle / quant) * quant;
+        angle = floor(angle / quant + 0.5) * quant;
     }
     return angle;
 }`;

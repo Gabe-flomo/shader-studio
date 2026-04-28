@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import ShaderCanvas, { type OfflineRenderHandle } from './components/ShaderCanvas';
+import ShaderCanvas, { type OfflineRenderHandle, HIST_BINS } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { CodePanel } from './components/CodePanel';
@@ -96,6 +96,40 @@ function AudioMasterVolumeWidget() {
   );
 }
 
+function HistogramOverlay({ bins }: { bins: Float32Array }) {
+  const maxBin = Math.max(...bins, 0.001);
+  return (
+    <div style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0, height: '72px',
+      background: 'rgba(17,17,27,0.88)', backdropFilter: 'blur(4px)',
+      borderTop: '1px solid #31324466',
+      display: 'flex', flexDirection: 'column',
+      padding: '5px 8px 3px',
+      pointerEvents: 'none',
+      zIndex: 5,
+    }}>
+      <span style={{ fontSize: '8px', color: '#45475a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '3px' }}>Brightness</span>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '1px' }}>
+        {Array.from(bins).map((v, i) => {
+          const t = i / (bins.length - 1);
+          const brightness = Math.round(40 + t * 180);
+          return (
+            <div key={i} style={{
+              flex: 1, minHeight: v > 0 ? '1px' : '0',
+              height: `${Math.round((v / maxBin) * 100)}%`,
+              background: `rgb(${brightness},${brightness},${brightness})`,
+              opacity: 0.7 + t * 0.3,
+            }} />
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#45475a', marginTop: '2px' }}>
+        <span>0</span><span>0.5</span><span>1</span>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const {
     loadExampleGraph, compilationErrors, glslErrors, pixelSample, hoveredParamHint, fragmentShader,
@@ -168,6 +202,10 @@ function App() {
   const offlineRenderRef = useRef<OfflineRenderHandle | null>(null);
   const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
   const handleRegisterOfflineRender = useCallback((handle: OfflineRenderHandle) => { offlineRenderRef.current = handle; }, []);
+
+  const [showHistogram, setShowHistogram] = useState(false);
+  const [histBins, setHistBins]           = useState<Float32Array | null>(null);
+  const handleHistogram = useCallback((bins: Float32Array) => { setHistBins(new Float32Array(bins)); }, []);
 
   // Update preview width when breakpoint changes
   useEffect(() => {
@@ -749,15 +787,25 @@ function App() {
         {!previewFloated && (
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
-              {/* Float toggle button */}
-              <button
-                onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }}
-                title="Float preview"
-                style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, background: '#1e1e2e99', border: '1px solid #45475a', color: '#585b70', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
-              >⊞</button>
+              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
+              {showHistogram && histBins && <HistogramOverlay bins={histBins} />}
+              {/* Overlay controls: histogram toggle + float */}
+              <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: '4px' }}>
+                <button
+                  onClick={() => setShowHistogram(v => !v)}
+                  title="Toggle brightness histogram"
+                  style={{ background: showHistogram ? '#cba6f722' : '#1e1e2e99', border: `1px solid ${showHistogram ? '#cba6f7' : '#45475a'}`, color: showHistogram ? '#cba6f7' : '#585b70', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cba6f7'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? '#cba6f7' : '#585b70'; }}
+                >∿</button>
+                <button
+                  onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }}
+                  title="Float preview"
+                  style={{ background: '#1e1e2e99', border: '1px solid #45475a', color: '#585b70', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+                >⊞</button>
+              </div>
             </div>
             {/* Status bar */}
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>

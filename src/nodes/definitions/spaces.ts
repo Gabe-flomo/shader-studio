@@ -657,7 +657,7 @@ export const MirroredRepeat2DNode: NodeDefinition = {
     return {
       code: [
         `    vec2 ${id}_s      = vec2(${cX}, ${cY});\n`,
-        `    vec2 ${id}_cellID = round(${inVar} / ${id}_s);\n`,
+        `    vec2 ${id}_cellID = floor(${inVar} / ${id}_s + 0.5);\n`,
         `    vec2 ${id}_r      = ${inVar} - ${id}_s * ${id}_cellID;\n`,
         // step(0.5, mod(abs(id), 2.0)) → 0 for even tile index, 1 for odd
         `    vec2 ${id}_odd    = step(vec2(0.5), mod(abs(${id}_cellID), vec2(2.0)));\n`,
@@ -708,7 +708,7 @@ export const LimitedRepeat2DNode: NodeDefinition = {
       code: [
         `    vec2 ${id}_s    = vec2(${cX}, ${cY});\n`,
         `    vec2 ${id}_half = (vec2(${nX}, ${nY}) - 1.0) * 0.5;\n`,
-        `    vec2 ${id}_id   = clamp(round(${inVar} / ${id}_s), -${id}_half, ${id}_half);\n`,
+        `    vec2 ${id}_id   = clamp(floor(${inVar} / ${id}_s + 0.5), -${id}_half, ${id}_half);\n`,
         `    vec2 ${id}_output = ${inVar} - ${id}_s * ${id}_id;\n`,
       ].join(''),
       outputVars: { output: `${id}_output`, cellID: `${id}_id` },
@@ -750,7 +750,7 @@ export const AngularRepeat2DNode: NodeDefinition = {
         // Raw angle in [-π, π]
         `    float ${id}_an   = atan((${inVar}).y, (${inVar}).x);\n`,
         // Nearest sector index (may be negative — that's fine)
-        `    float ${id}_id   = round(${id}_an / ${id}_sp);\n`,
+        `    float ${id}_id   = floor(${id}_an / ${id}_sp + 0.5);\n`,
         // Wrap angle into canonical range [-sp/2, sp/2]
         `    float ${id}_aw   = ${id}_an - ${id}_sp * ${id}_id;\n`,
         // Reconstruct canonical UV at same radius

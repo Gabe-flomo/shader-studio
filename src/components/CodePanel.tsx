@@ -84,9 +84,10 @@ const BUILTINS = new Set([
 ]);
 
 
-interface Token { text: string; color: string; }
+export interface Token { text: string; color: string; }
+export { C, BUILTINS };
 
-function tokenizeLine(line: string): Token[] {
+export function tokenizeLine(line: string): Token[] {
   const tokens: Token[] = [];
   const raw = line;
   let i = 0;

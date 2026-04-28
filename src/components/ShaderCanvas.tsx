@@ -66,6 +66,8 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
   };
 }
 
+const HIST_BINS = 48;
+
 interface Props {
   /** Called with the WebGL canvas element once Three.js is initialized */
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -74,9 +76,12 @@ interface Props {
    * Uses a dedicated WebGLRenderTarget — completely isolated from the live canvas.
    */
   onRegisterOfflineRender?: (handle: OfflineRenderHandle) => void;
+  /** Called every ~30 frames with normalised brightness-histogram bins (length = HIST_BINS) when active */
+  onHistogram?: (bins: Float32Array) => void;
 }
+export { HIST_BINS };
 
-export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }: Props = {}) {
+export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, onHistogram }: Props = {}) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -90,6 +95,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
   const isStatefulRef = useRef(false);
   // Track mouse pixel position in canvas — null when mouse is not over canvas
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
+  // Ref mirror for onHistogram so rAF loop sees latest without re-boot
+  const onHistogramRef = useRef(onHistogram);
+  useEffect(() => { onHistogramRef.current = onHistogram; }, [onHistogram]);
   // Ref mirror for hasTimeNode so the rAF loop always sees the latest value
   const hasTimeNodeRef = useRef(false);
 
@@ -244,6 +252,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
     // Render target for pixel readback — sized with the canvas, resized in ResizeObserver
     const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.UnsignedByteType });
     rtRef.current = rt;
+
+    // Small fixed-size RT for histogram sampling (64×36 ≈ 2304 pixels, never resized)
+    const histRt = new THREE.WebGLRenderTarget(64, 36, { type: THREE.UnsignedByteType });
+    const histBuf = new Uint8Array(64 * 36 * 4);
 
     // ── Node probe: isolated scene + 1×1 RT ──────────────────────────────────
     // Completely separate from `scene` so probe renders never appear on-screen.
@@ -423,6 +435,22 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
             renderer.readRenderTargetPixels(rt, px, py, 1, 1, buf);
             setPixelSample([buf[0], buf[1], buf[2], buf[3]]);
           }
+        }
+
+        // Histogram sampling — every 5× SAMPLE_EVERY frames (~3fps at 60fps)
+        if (onHistogramRef.current && frameCount % (SAMPLE_EVERY * 5) === 0) {
+          renderer.setRenderTarget(histRt);
+          renderer.render(scene, camera);
+          renderer.setRenderTarget(null);
+          renderer.readRenderTargetPixels(histRt, 0, 0, 64, 36, histBuf);
+          const bins = new Float32Array(HIST_BINS);
+          for (let i = 0; i < histBuf.length; i += 4) {
+            const luma = (0.299 * histBuf[i] + 0.587 * histBuf[i + 1] + 0.114 * histBuf[i + 2]) / 255;
+            bins[Math.min(HIST_BINS - 1, (luma * HIST_BINS) | 0)]++;
+          }
+          const total = 64 * 36;
+          for (let i = 0; i < HIST_BINS; i++) bins[i] /= total;
+          onHistogramRef.current(bins);
         }
 
         // ── Node probe: sample selected node's output vars ──────────────────
@@ -640,6 +668,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender }:
       window.removeEventListener('reset-time', handleResetTime);
       rt.dispose();
       floatRt.dispose();
+      histRt.dispose();
       blitGeo.dispose();
       blitMat.dispose();
       probeRT.dispose();
