@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset } from '../../store/useNodeGraphStore';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
@@ -243,6 +243,8 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   // User-saved ExprBlock presets
   const [exprPresets, setExprPresets] = useState<ExprPreset[]>(() => loadExprPresets());
   const [hoverExprPresetId, setHoverExprPresetId] = useState<string | null>(null);
+  const [renamingExprId, setRenamingExprId] = useState<string | null>(null);
+  const [renameExprValue, setRenameExprValue] = useState('');
 
   const refreshExprPresets = () => setExprPresets(loadExprPresets());
 
@@ -1050,52 +1052,95 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
                 onMouseEnter={() => setHoverExprPresetId(preset.id)}
                 onMouseLeave={() => setHoverExprPresetId(null)}
               >
-                <button
-                  onClick={() => {
-                    const x = 200 + Math.random() * 120;
-                    const y = 120 + Math.random() * 200;
-                    addNode('exprNode', { x, y }, {
-                      label:      preset.label,
-                      inputs:     preset.inputs,
-                      outputType: preset.outputType,
-                      lines:      preset.lines,
-                      result:     preset.result,
-                    });
-                    onNodeAdded?.();
-                  }}
-                  title={`Add "${preset.label}" as an Expr Block node`}
-                  style={{
-                    display: 'block', width: '100%',
-                    padding: '5px 28px 5px 10px',
-                    background: '#0e1e12',
-                    border: '1px solid #a6e3a133',
-                    color: '#a6e3a1', cursor: 'pointer',
-                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#132419')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0e1e12')}
-                >
-                  ⟴ {preset.label}
-                </button>
-                {hoverExprPresetId === preset.id && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      deleteExprPreset(preset.id);
+                {renamingExprId === preset.id ? (
+                  <input
+                    autoFocus
+                    value={renameExprValue}
+                    onChange={e => setRenameExprValue(e.target.value)}
+                    onBlur={() => {
+                      renameExprPreset(preset.id, renameExprValue);
+                      setRenamingExprId(null);
                       refreshExprPresets();
                     }}
-                    title="Remove this preset"
-                    style={{
-                      position: 'absolute', right: '4px', top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none', border: 'none',
-                      color: '#585b70', cursor: 'pointer',
-                      fontSize: '13px', padding: '0 4px', lineHeight: 1,
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { renameExprPreset(preset.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }
+                      if (e.key === 'Escape') setRenamingExprId(null);
+                      e.stopPropagation();
                     }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                  >×</button>
+                    style={{
+                      display: 'block', width: '100%', boxSizing: 'border-box',
+                      padding: '5px 10px', background: '#11111b',
+                      border: '1px solid #a6e3a1', color: '#a6e3a1',
+                      borderRadius: '5px', fontSize: '12px', outline: 'none',
+                    }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => {
+                      const x = 200 + Math.random() * 120;
+                      const y = 120 + Math.random() * 200;
+                      addNode('exprNode', { x, y }, {
+                        label:      preset.label,
+                        inputs:     preset.inputs,
+                        outputType: preset.outputType,
+                        lines:      preset.lines,
+                        result:     preset.result,
+                      });
+                      onNodeAdded?.();
+                    }}
+                    title={`Add "${preset.label}" as an Expr Block node`}
+                    style={{
+                      display: 'block', width: '100%',
+                      padding: '5px 52px 5px 10px',
+                      background: '#0e1e12',
+                      border: '1px solid #a6e3a133',
+                      color: '#a6e3a1', cursor: 'pointer',
+                      textAlign: 'left', borderRadius: '5px', fontSize: '12px',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#132419')}
+                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0e1e12')}
+                  >
+                    ⟴ {preset.label}
+                  </button>
+                )}
+                {hoverExprPresetId === preset.id && renamingExprId !== preset.id && (
+                  <>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        setRenameExprValue(preset.label);
+                        setRenamingExprId(preset.id);
+                      }}
+                      title="Rename preset"
+                      style={{
+                        position: 'absolute', right: '24px', top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none', border: 'none',
+                        color: '#585b70', cursor: 'pointer',
+                        fontSize: '11px', padding: '0 3px', lineHeight: 1,
+                      }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >✎</button>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        deleteExprPreset(preset.id);
+                        refreshExprPresets();
+                      }}
+                      title="Remove this preset"
+                      style={{
+                        position: 'absolute', right: '4px', top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none', border: 'none',
+                        color: '#585b70', cursor: 'pointer',
+                        fontSize: '13px', padding: '0 4px', lineHeight: 1,
+                      }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                    >×</button>
+                  </>
                 )}
               </div>
             ))

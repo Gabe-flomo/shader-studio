@@ -196,6 +196,18 @@ export function deleteExprPreset(id: string): void {
   window.dispatchEvent(new CustomEvent('exprpreset-changed'));
 }
 
+export function renameExprPreset(id: string, newLabel: string): void {
+  const key = `${EP_PREFIX}${id}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return;
+  try {
+    const preset = JSON.parse(raw) as ExprPreset;
+    preset.label = newLabel.trim() || preset.label;
+    localStorage.setItem(key, JSON.stringify(preset));
+    window.dispatchEvent(new CustomEvent('exprpreset-changed'));
+  } catch {}
+}
+
 // ── Group preset helpers ───────────────────────────────────────────────────────
 const GP_PREFIX = 'shader-studio:gp:';
 
