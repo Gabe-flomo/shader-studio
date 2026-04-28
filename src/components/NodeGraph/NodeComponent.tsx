@@ -30,6 +30,7 @@ import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz, SdfPreviewViz, SDF_TYPES } from './NodeInlineViz';
+import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
@@ -303,7 +304,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const isPreviewActive = previewNodeId === node.id;
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
-  const updateNodeParams   = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeParams       = useNodeGraphStore(s => s.updateNodeParams);
+  const changeNodeVectorType   = useNodeGraphStore(s => s.changeNodeVectorType);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
@@ -3136,6 +3138,37 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   style={{ ...inputStyle, flex: 1, color: '#89b4fa', border: '1px solid #45475a' }}
                 />
               </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Vector type selector (vectorizable math nodes) ── */}
+        {!collapsed && node.type in VECTORIZABLE_NODES && (() => {
+          const info = VECTORIZABLE_NODES[node.type];
+          const current = (node.params.outputType as string) || 'float';
+          return (
+            <div
+              style={{ padding: '3px 10px 4px', display: 'flex', gap: '4px', alignItems: 'center' }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <span style={{ fontSize: '10px', color: '#45475a', marginRight: '2px' }}>type</span>
+              {(['float', 'vec2', 'vec3'] as DataType[]).map(t => {
+                const active = current === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => changeNodeVectorType(node.id, info.primaryInput, info.primaryOutput, t)}
+                    style={{
+                      fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
+                      background: active ? '#89b4fa22' : 'none',
+                      border: `1px solid ${active ? '#89b4fa' : '#45475a44'}`,
+                      color: active ? '#89b4fa' : '#585b70',
+                    }}
+                  >
+                    {t === 'float' ? 'f' : t === 'vec2' ? 'v2' : 'v3'}
+                  </button>
+                );
+              })}
             </div>
           );
         })()}

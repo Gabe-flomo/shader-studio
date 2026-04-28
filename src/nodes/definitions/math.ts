@@ -1,5 +1,11 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, zeroFor } from './helpers';
+
+// ── Vector-type helper ────────────────────────────────────────────────────────
+// Returns 'float'|'vec2'|'vec3' from params, defaulting to 'float'.
+function ot(node: GraphNode): string {
+  return (typeof node.params.outputType === 'string' ? node.params.outputType : 'float');
+}
 
 export const AddNode: NodeDefinition = {
   type: 'add', label: 'Add', category: 'Math', description: 'Add two float values (a + b)',
@@ -56,10 +62,10 @@ export const SinNode: NodeDefinition = {
   defaultParams: { freq: 1.0, amp: 1.0 },
   paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
+    const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
     const amp  = inputVars.amp  || p(node.params.amp, 1.0);
-    return { code: `    float ${o} = ${amp} * sin(${inputVars.input || '0.0'} * ${freq});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = ${amp} * sin(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
   },
 };
 
@@ -70,10 +76,10 @@ export const CosNode: NodeDefinition = {
   defaultParams: { freq: 1.0, amp: 1.0 },
   paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
+    const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
     const amp  = inputVars.amp  || p(node.params.amp, 1.0);
-    return { code: `    float ${o} = ${amp} * cos(${inputVars.input || '0.0'} * ${freq});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = ${amp} * cos(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
   },
 };
 
@@ -84,9 +90,9 @@ export const ExpNode: NodeDefinition = {
   defaultParams: { scale: 1.0 },
   paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
+    const t = ot(node), o = `${node.id}_output`;
     const s = inputVars.scale || p(node.params.scale, 1.0);
-    return { code: `    float ${o} = exp(${inputVars.input || '0.0'} * ${s});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = exp(${inputVars.input || zeroFor(t)} * ${s});\n`, outputVars: { output: o } };
   },
 };
 
@@ -97,9 +103,12 @@ export const PowNode: NodeDefinition = {
   defaultParams: { exponent: 1.2 },
   paramDefs: { exponent: { label: 'Exponent', type: 'float', min: 0, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
+    const t = ot(node), o = `${node.id}_result`;
     const e = inputVars.exponent || p(node.params.exponent, 1.2);
-    return { code: `    float ${o} = pow(max(${inputVars.base || '1.0'}, 0.0), ${e});\n`, outputVars: { result: o } };
+    // pow() requires both args to be the same genType — broadcast scalar exponent when vectorized
+    const ecast = t !== 'float' ? `${t}(${e})` : e;
+    const base  = inputVars.base || (t === 'float' ? '1.0' : `${t}(1.0)`);
+    return { code: `    ${t} ${o} = pow(max(${base}, 0.0), ${ecast});\n`, outputVars: { result: o } };
   },
 };
 
@@ -107,8 +116,8 @@ export const NegateNode: NodeDefinition = {
   type: 'negate', label: 'Negate', category: 'Math', description: 'Negate a float (-x).',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = -(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = -(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
@@ -258,8 +267,8 @@ export const FloorNode: NodeDefinition = {
   type: 'floor', label: 'Floor', category: 'Math', description: 'Round down to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = floor(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = floor(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
@@ -267,8 +276,8 @@ export const SqrtNode: NodeDefinition = {
   type: 'sqrt', label: 'Sqrt', category: 'Math', description: 'Square root.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = sqrt(max(${inputVars.input || '0.0'}, 0.0));\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = sqrt(max(${inputVars.input || zeroFor(t)}, 0.0));\n`, outputVars: { output: o } };
   },
 };
 
@@ -276,8 +285,8 @@ export const RoundNode: NodeDefinition = {
   type: 'round', label: 'Round', category: 'Math', description: 'Round to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = floor(${inputVars.input || '0.0'} + 0.5);\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = floor(${inputVars.input || zeroFor(t)} + 0.5);\n`, outputVars: { output: o } };
   },
 };
 
@@ -393,8 +402,8 @@ export const FractRawNode: NodeDefinition = {
   type: 'fractRaw', label: 'Fract (scalar)', category: 'Math', description: 'Raw fract(x) on a float.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = fract(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = fract(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
@@ -619,10 +628,10 @@ export const SignNode: NodeDefinition = {
   defaultParams: {},
   paramDefs: {},
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
-    const v  = inputVars.value || '0.0';
+    const t = ot(node), id = node.id;
+    const v = inputVars.value || zeroFor(t);
     return {
-      code: `    float ${id}_result = sign(${v});\n`,
+      code: `    ${t} ${id}_result = sign(${v});\n`,
       outputVars: { result: `${id}_result` },
     };
   },
@@ -895,4 +904,20 @@ export const Vec3SwizzleNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
+};
+
+// ── Vectorizable node registry ────────────────────────────────────────────────
+// Nodes that support component-wise operation on vec2/vec3 inputs.
+// primaryInput / primaryOutput are the socket keys that change type.
+export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryOutput: string }> = {
+  sin:      { primaryInput: 'input', primaryOutput: 'output' },
+  cos:      { primaryInput: 'input', primaryOutput: 'output' },
+  exp:      { primaryInput: 'input', primaryOutput: 'output' },
+  pow:      { primaryInput: 'base',  primaryOutput: 'result' },
+  negate:   { primaryInput: 'input', primaryOutput: 'output' },
+  floor:    { primaryInput: 'input', primaryOutput: 'output' },
+  sqrt:     { primaryInput: 'input', primaryOutput: 'output' },
+  round:    { primaryInput: 'input', primaryOutput: 'output' },
+  fractRaw: { primaryInput: 'input', primaryOutput: 'output' },
+  sign:     { primaryInput: 'value', primaryOutput: 'result' },
 };

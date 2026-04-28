@@ -414,6 +414,10 @@ interface NodeGraphState {
     outputType: DataType
   ) => void;
 
+  /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
+   *  Updates params.outputType plus the primary input and output socket types. */
+  changeNodeVectorType: (nodeId: string, primaryInputKey: string, primaryOutputKey: string, outputType: DataType) => void;
+
   /**
    * Collapse the given node IDs into a single group node.
    * Dangling input connections become group input ports; outputs wired outside
@@ -3148,6 +3152,42 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               },
             },
           };
+        }),
+      };
+    });
+    get().compile();
+  },
+
+  changeNodeVectorType: (nodeId, primaryInputKey, primaryOutputKey, outputType) => {
+    pushHistory(get().nodes);
+
+    const updater = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
+      const newInputs = { ...n.inputs };
+      const existingIn = newInputs[primaryInputKey];
+      if (existingIn) {
+        // Drop the connection if the type changed (avoids type-mismatch wires)
+        const keepConn = existingIn.connection != null && existingIn.type === outputType;
+        newInputs[primaryInputKey] = { ...existingIn, type: outputType, connection: keepConn ? existingIn.connection : undefined };
+      }
+      const newOutputs = { ...n.outputs };
+      if (newOutputs[primaryOutputKey]) {
+        newOutputs[primaryOutputKey] = { ...newOutputs[primaryOutputKey], type: outputType };
+      }
+      return { ...n, params: { ...n.params, outputType }, inputs: newInputs, outputs: newOutputs };
+    };
+
+    set(state => {
+      if (state.nodes.some(n => n.id === nodeId)) {
+        return { nodes: state.nodes.map(n => n.id === nodeId ? updater(n) : n) };
+      }
+      const groupId = state.activeGroupId;
+      if (!groupId) return {};
+      return {
+        nodes: state.nodes.map(n => {
+          if (n.id !== groupId) return n;
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: sg.nodes.map(sn => sn.id === nodeId ? updater(sn) : sn) } } };
         }),
       };
     });
