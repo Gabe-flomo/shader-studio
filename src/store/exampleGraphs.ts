@@ -14643,6 +14643,392 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Shaper: Logistic Sigmoid Glow ────────────────────────────────────────────
+  // Circle SDF distance → logisticSigmoid creates a crisp threshold instead of
+  // soft falloff → multiply palette by sharpened brightness.
+  shaperLogisticGlow: {
+    label: 'Shaper: Logistic Sigmoid Glow',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'circle_2', type: 'circleSDF', position: { x: 280, y: 180 },
+        inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.35, posX: 0.0, posY: 0.0 },
+      },
+      // negate + remap distance so that 0 = edge, 1 = inside
+      { id: 'neg_3', type: 'negate', position: { x: 460, y: 180 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'circle_2', outputKey: 'distance' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {} },
+      { id: 'add_4', type: 'add', position: { x: 620, y: 180 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'neg_3', outputKey: 'output' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.5 } },
+      // logisticSigmoid sharpens the falloff into a crisp ring/fill
+      { id: 'sig_5', type: 'logisticSigmoid', position: { x: 800, y: 180 },
+        inputs: { x: { type: 'float', label: 'x', connection: { nodeId: 'add_4', outputKey: 'result' } } },
+        outputs: { y: { type: 'float', label: 'y' } },
+        params: { a: 0.92, bipolar: false } },
+      { id: 'pal_6', type: 'palettePreset', position: { x: 800, y: 360 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '4', speed: 0.4 } },
+      { id: 'mul_7', type: 'multiplyVec3', position: { x: 1040, y: 260 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color'  } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'sig_5', outputKey: 'y'      } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'out_8', type: 'output', position: { x: 1240, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_7', outputKey: 'result' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Shaper: Exp Ease Pulsing Ring ─────────────────────────────────────────────
+  // Time → sin oscillation → expEase shapes the pulse envelope so it eases in/out
+  // → drives ring radius for a breathing circle.
+  shaperExpEasePulse: {
+    label: 'Shaper: Exp Ease Pulse',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // sin → [−1,1] → shift to [0,1]
+      { id: 'sin_2', type: 'sin', position: { x: 240, y: 400 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { freq: 0.8, amp: 0.5 } },
+      { id: 'shift_3', type: 'add', position: { x: 420, y: 400 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'sin_2', outputKey: 'output' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.5 } },
+      // expEase shapes the pulse — try a=0 for ease-in, a=1 for ease-out
+      { id: 'ease_4', type: 'expEase', position: { x: 600, y: 400 },
+        inputs: { x: { type: 'float', label: 'x', connection: { nodeId: 'shift_3', outputKey: 'result' } } },
+        outputs: { y: { type: 'float', label: 'y' } },
+        params: { a: 0.15, bipolar: false } },
+      // remap [0,1] → radius range [0.1, 0.55]
+      { id: 'scl_5', type: 'multiply', position: { x: 780, y: 400 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'ease_4', outputKey: 'y' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.45 } },
+      { id: 'rad_6', type: 'add', position: { x: 940, y: 400 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'scl_5', outputKey: 'result' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 0.1 } },
+      { id: 'circle_7', type: 'circleSDF', position: { x: 640, y: 180 },
+        inputs: {
+          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'uv_0',  outputKey: 'uv'     } },
+          radius:   { type: 'float', label: 'Radius',   connection: { nodeId: 'rad_6', outputKey: 'result' } },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.3, posX: 0.0, posY: 0.0 } },
+      { id: 'light_8', type: 'makeLight', position: { x: 900, y: 180 },
+        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'circle_7', outputKey: 'distance' } } },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params: { brightness: 8.0 } },
+      { id: 'pal_9', type: 'palettePreset', position: { x: 900, y: 300 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: 'neon', speed: 0.3 } },
+      { id: 'mul_10', type: 'multiplyVec3', position: { x: 1120, y: 220 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_9',   outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'light_8', outputKey: 'glow'  } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: {} },
+      { id: 'tone_11', type: 'toneMap', position: { x: 1300, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mul_10', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' } },
+      { id: 'out_12', type: 'output', position: { x: 1480, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_11', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Shaper: Exp Sigmoid FBM Contrast ─────────────────────────────────────────
+  // FBM noise → doubleExpSigmoid crushes midtones and boosts contrast at a/b
+  // → palette coloring for punchy terrain-style visuals.
+  shaperSigmoidFBM: {
+    label: 'Shaper: Sigmoid FBM Contrast',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'fbm_2', type: 'fbm', position: { x: 280, y: 180 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 5, lacunarity: 2.0, gain: 0.5, scale: 2.5, time_scale: 0.15 } },
+      // doubleExpSigmoid with high sharpness creates bold banded contrast
+      { id: 'sig_3', type: 'doubleExpSigmoid', position: { x: 520, y: 180 },
+        inputs: { x: { type: 'float', label: 'x', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        outputs: { y: { type: 'float', label: 'y' } },
+        params: { a: 0.78, bipolar: false } },
+      { id: 'pal_4', type: 'palette', position: { x: 760, y: 180 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'sig_3', outputKey: 'y' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] } },
+      { id: 'tone_5', type: 'toneMap', position: { x: 1000, y: 180 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_4', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' } },
+      { id: 'out_6', type: 'output', position: { x: 1200, y: 180 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_5', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Shaper: Circular Ease Dome ────────────────────────────────────────────────
+  // UV length → circularEaseOut creates a smooth radial dome falloff (quarter
+  // circle arc) → palette coloring.  Flip to circularEaseIn for an inverse.
+  shaperCircularDome: {
+    label: 'Shaper: Circular Ease Dome',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // length gives radial distance from center, scaled to [0,1]
+      { id: 'len_2', type: 'length', position: { x: 260, y: 200 },
+        inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { scale: 1.0 } },
+      // clamp to [0,1] before the shaper
+      { id: 'clamp_3', type: 'clamp', position: { x: 440, y: 200 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'len_2', outputKey: 'output' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { min: 0.0, max: 1.0 } },
+      // circularEaseOut: smooth quarter-circle dome — 1 at center, 0 at edge
+      { id: 'ease_4', type: 'circularEaseOut', position: { x: 620, y: 200 },
+        inputs: { x: { type: 'float', label: 'x', connection: { nodeId: 'clamp_3', outputKey: 'output' } } },
+        outputs: { y: { type: 'float', label: 'y' } },
+        params: { bipolar: false } },
+      // invert so center is dark, edge is bright
+      { id: 'neg_5', type: 'negate', position: { x: 800, y: 200 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'ease_4', outputKey: 'y' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {} },
+      { id: 'add_6', type: 'add', position: { x: 960, y: 200 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'neg_5', outputKey: 'output' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 1.0 } },
+      { id: 'pal_7', type: 'palette', position: { x: 1140, y: 180 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'add_6', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.263,0.416,0.557] } },
+      { id: 'out_8', type: 'output', position: { x: 1360, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_7', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Shaper: Quad Bezier Radial ─────────────────────────────────────────────────
+  // Radial distance → quadBezierShaper remaps the falloff with a single control
+  // point — drag A/B in the bezier editor to reshape the gradient completely.
+  shaperBezierRadial: {
+    label: 'Shaper: Bezier Radial Gradient',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'len_2', type: 'length', position: { x: 260, y: 200 },
+        inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { scale: 1.0 } },
+      { id: 'clamp_3', type: 'clamp', position: { x: 440, y: 200 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'len_2', outputKey: 'output' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { min: 0.0, max: 1.0 } },
+      // quadBezierShaper — single control point bends the gradient arc
+      { id: 'bez_4', type: 'quadBezierShaper', position: { x: 620, y: 200 },
+        inputs: { x: { type: 'float', label: 'x', connection: { nodeId: 'clamp_3', outputKey: 'output' } } },
+        outputs: { y: { type: 'float', label: 'y' } },
+        params: { a: 0.2, b: 0.85, bipolar: false } },
+      // animate palette with time for lively color cycling
+      { id: 'addT_5', type: 'add', position: { x: 800, y: 360 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'bez_4', outputKey: 'y' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
+      { id: 'pal_6', type: 'palette', position: { x: 1000, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'addT_5', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] } },
+      { id: 'out_7', type: 'output', position: { x: 1200, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Transform Vec: Polar UV Remap ─────────────────────────────────────────────
+  // transformVec converts cartesian UV to polar (radius, angle) using per-component
+  // GLSL expressions.  FBM fed this polar UV produces concentric + angular bands.
+  transformVecPolar: {
+    label: 'Transform Vec: Polar Remap',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Transform UV → (radius, normalised angle)
+      { id: 'tv_2', type: 'transformVec', position: { x: 280, y: 200 },
+        inputs: { v: { type: 'vec2', label: 'Vec', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: {
+          x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' },
+          result: { type: 'vec2', label: 'Result' },
+        },
+        params: { outputType: 'vec2', exprX: 'sqrt(x*x+y*y)', exprY: 'atan(y,x)/6.2832+0.5' } },
+      // scale the polar UV for FBM — high scale gives dense rings
+      { id: 'fbm_3', type: 'fbm', position: { x: 540, y: 180 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'tv_2',   outputKey: 'result' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time'   } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 4, lacunarity: 2.0, gain: 0.55, scale: 3.0, time_scale: 0.1 } },
+      { id: 'pal_4', type: 'palette', position: { x: 800, y: 180 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_3', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] } },
+      { id: 'tone_5', type: 'toneMap', position: { x: 1040, y: 180 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_4', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' } },
+      { id: 'out_6', type: 'output', position: { x: 1240, y: 180 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_5', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Transform Vec: Mirror Fold ────────────────────────────────────────────────
+  // transformVec folds UV into the positive quadrant (abs) and recenters,
+  // creating 4-fold symmetry.  FBM then fills the folded space.
+  transformVecMirrorFold: {
+    label: 'Transform Vec: Mirror Fold',
+    counter: 7,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // fold: abs(x) makes the negative half a mirror of the positive
+      { id: 'tv_2', type: 'transformVec', position: { x: 280, y: 200 },
+        inputs: { v: { type: 'vec2', label: 'Vec', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: {
+          x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' },
+          result: { type: 'vec2', label: 'Result' },
+        },
+        params: { outputType: 'vec2', exprX: 'abs(x)', exprY: 'abs(y)' } },
+      { id: 'fbm_3', type: 'fbm', position: { x: 520, y: 180 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'tv_2',   outputKey: 'result' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time'   } },
+        },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { octaves: 5, lacunarity: 2.2, gain: 0.5, scale: 3.5, time_scale: 0.08 } },
+      // boost contrast with exp sigmoid before coloring
+      { id: 'sig_4', type: 'doubleExpSeat', position: { x: 760, y: 180 },
+        inputs: { x: { type: 'float', label: 'x', connection: { nodeId: 'fbm_3', outputKey: 'value' } } },
+        outputs: { y: { type: 'float', label: 'y' } },
+        params: { a: 0.62, bipolar: false } },
+      { id: 'pal_5', type: 'palette', position: { x: 960, y: 180 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'sig_4', outputKey: 'y' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] } },
+      { id: 'tone_6', type: 'toneMap', position: { x: 1160, y: 180 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_5', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' } },
+      { id: 'out_7', type: 'output', position: { x: 1360, y: 180 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Transform Vec: Component Rotate ──────────────────────────────────────────
+  // transformVec swaps and negates components — equivalent to a 90° UV rotation
+  // — then applies fractal loop.  Shows component arithmetic in exprX/Y.
+  transformVecRotate90: {
+    label: 'Transform Vec: 90° UV Rotate',
+    counter: 5,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // rotate 90°: (x,y) → (-y, x)
+      { id: 'tv_2', type: 'transformVec', position: { x: 280, y: 200 },
+        inputs: { v: { type: 'vec2', label: 'Vec', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: {
+          x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' },
+          result: { type: 'vec2', label: 'Result' },
+        },
+        params: { outputType: 'vec2', exprX: '-y', exprY: 'x' } },
+      { id: 'fractal_3', type: 'fractalLoop', position: { x: 540, y: 100 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'tv_2',   outputKey: 'result' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time'   } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { iterations: 4, fract_scale: 1.5, scale_exp: 1.0, ring_freq: 8.0, glow: 0.01, glow_pow: 1.0, iter_offset: 0.4, time_scale: 0.4, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] } },
+      { id: 'out_4', type: 'output', position: { x: 820, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fractal_3', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Vectorized Sin: 2D Wave Field ─────────────────────────────────────────────
+  // sin applied component-wise to vec2 UV — both axes oscillate independently,
+  // producing a 2D wave grid.  The two component outputs drive FBM then palette.
+  vecSinWaveField: {
+    label: 'Vec Sin: 2D Wave Field',
+    counter: 10,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // scale UV before sin for more oscillations
+      { id: 'scl_2', type: 'multiply', position: { x: 240, y: 200 },
+        inputs: { a: { type: 'float', label: 'A' } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { b: 5.0 } },
+      // vec2 sin — both x and y components shaped simultaneously
+      { id: 'sinx_3', type: 'sin', position: { x: 240, y: 180 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { freq: 5.0, amp: 1.0 } },
+      // length of the vec2 sin result → scalar brightness
+      { id: 'len_4', type: 'length', position: { x: 460, y: 180 },
+        inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'sinx_3', outputKey: 'output' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: { scale: 1.0 } },
+      // add time for animated wave drift
+      { id: 'addT_5', type: 'add', position: { x: 640, y: 180 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'len_4',  outputKey: 'output' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'time_1', outputKey: 'time'   } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
+      { id: 'pal_6', type: 'palette', position: { x: 820, y: 160 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'addT_5', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] } },
+      { id: 'grain_7', type: 'grain', position: { x: 1020, y: 160 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_6',  outputKey: 'color' } },
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'uv_0',   outputKey: 'uv'    } },
+          seed:  { type: 'float', label: 'Seed',  connection: { nodeId: 'time_1', outputKey: 'time'  } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'basic', amount: 0.06, scale: 1, seed: 0 } },
+      { id: 'tone_8', type: 'toneMap', position: { x: 1220, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'grain_7', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' } },
+      { id: 'out_9', type: 'output', position: { x: 1420, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_8', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

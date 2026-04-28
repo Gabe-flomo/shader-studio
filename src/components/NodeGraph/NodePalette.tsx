@@ -140,6 +140,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Physics',         color: '#94e2d5', keys: ['orbitals','chladniDemo','electronOrbitalDemo','orbitalVolume3dDemo'] as ExKey[] },
   { label: 'Post Effects',    color: '#f38ba8', keys: ['vignetteDemo','scanlinesDemo','sobelDemo','sobelGlow'] as ExKey[] },
   { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','exprRings','fractalRingsGroup','exprOrbit'] as ExKey[] },
+  { label: 'Shapers',         color: '#a6e3a1', keys: ['shaperLogisticGlow','shaperExpEasePulse','shaperSigmoidFBM','shaperCircularDome','shaperBezierRadial','transformVecPolar','transformVecMirrorFold','transformVecRotate90','vecSinWaveField'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['swirlWarpDemo','curlWarpDemo','displaceDemo','uvWarpDemo','smoothWarpDemo','polarRings','infiniteMirror','mobiusWarp','swirlVoronoi','hyperbolicCircles'] as ExKey[] },
 ];

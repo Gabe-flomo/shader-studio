@@ -136,14 +136,17 @@ function HistogramOverlay({ bins }: { bins: Float32Array }) {
       >
         {Array.from(bins).map((v, i) => {
           const t = i / (bins.length - 1);
-          const brightness = Math.round(40 + t * 180);
+          // lerp from blue (#89b4fa) at 0 to white (#cdd6f4) at 1 — always readable
+          const r = Math.round(137 + t * (205 - 137));
+          const g = Math.round(180 + t * (214 - 180));
+          const b = Math.round(250 + t * (250 - 250));
           const isHovered = hoverInfo?.binIdx === i;
           return (
             <div key={i} style={{
               flex: 1, minHeight: v > 0 ? '1px' : '0',
               height: `${Math.round((v / maxBin) * 100)}%`,
-              background: isHovered ? '#ffffff' : `rgb(${brightness},${brightness},${brightness})`,
-              opacity: isHovered ? 1 : 0.7 + t * 0.3,
+              background: isHovered ? '#ffffff' : `rgb(${r},${g},${b})`,
+              opacity: isHovered ? 1 : 0.55 + t * 0.45,
             }} />
           );
         })}
