@@ -2166,11 +2166,32 @@ export function generateFragmentShader(
       if (node.assignOp && node.assignOp !== '=') {
         const isMultiply = node.assignOp === '*=' || node.assignOp === '/=';
         const accVars: Record<string, string> = {};
+        // Find the primary vector output type (if any) so scalar sub-components
+        // can have their assignInit extracted correctly (e.g. vec2 → .x / .y).
+        const vectorOutputEntry = Object.entries(def.outputs).find(
+          ([, sock]) => sock.type === 'vec2' || sock.type === 'vec3' || sock.type === 'vec4'
+        );
+        const vectorOutputType = vectorOutputEntry?.[1].type as string | undefined;
+        const vectorDims = vectorOutputType === 'vec4' ? 4 : vectorOutputType === 'vec3' ? 3 : vectorOutputType === 'vec2' ? 2 : 0;
+        const compOrder = ['x', 'y', 'z', 'w'];
         for (const outKey of Object.keys(result.outputVars)) {
           const outSock = def.outputs[outKey];
           const actualType = outSock?.type ?? 'float';
           const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType as DataType);
-          const initExpr = node.assignInit?.trim() || neutral;
+          let initExpr: string;
+          if (node.assignInit?.trim()) {
+            const raw = node.assignInit.trim();
+            if (actualType === 'float' && compOrder.includes(outKey)) {
+              // Float sub-component of a vector node: extract the matching component
+              // from assignInit, or use neutral if the dimension doesn't cover it.
+              const compIdx = compOrder.indexOf(outKey);
+              initExpr = compIdx < vectorDims ? `(${raw}).${outKey}` : neutral;
+            } else {
+              initExpr = raw;
+            }
+          } else {
+            initExpr = neutral;
+          }
           const accVar = `${nodeSlug}_ao_${outKey}`;
           mainCode.push(`    ${actualType} ${accVar} = ${initExpr};\n`);
           accVars[outKey] = accVar;
