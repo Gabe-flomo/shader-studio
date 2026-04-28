@@ -1680,9 +1680,10 @@ function evalShaper(type: string, params: Record<string, unknown>): (x: number) 
 }
 
 export function ShaperCurveViz({ node }: { node: GraphNode }) {
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const nodeRef    = useRef(node);
-  const rafRef     = useRef<number>(0);
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
+  const nodeRef         = useRef(node);
+  const rafRef          = useRef<number>(0);
+  const showCrosshairRef = useRef(true);  // click canvas to toggle
   nodeRef.current  = node;
 
   const drawFrame = useCallback((liveY?: number) => {
@@ -1748,13 +1749,15 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
       }
       const dotPx = bestX * W;
       const dotPy = H - liveY * H;
-      // Crosshair lines
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([2, 2]);
-      ctx.beginPath(); ctx.moveTo(dotPx, 0); ctx.lineTo(dotPx, H); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, dotPy); ctx.lineTo(W, dotPy); ctx.stroke();
-      ctx.setLineDash([]);
+      // Crosshair lines (toggleable)
+      if (showCrosshairRef.current) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath(); ctx.moveTo(dotPx, 0); ctx.lineTo(dotPx, H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, dotPy); ctx.lineTo(W, dotPy); ctx.stroke();
+        ctx.setLineDash([]);
+      }
       // Dot
       ctx.fillStyle = '#ffffff';
       ctx.strokeStyle = '#11111b';
@@ -1786,7 +1789,14 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={VIZ_CONTAINER}>
-      <canvas ref={canvasRef} width={240} height={80} style={{ display: 'block', width: '100%', height: '80px' }} />
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={80}
+        title="Click to toggle crosshair"
+        onClick={() => { showCrosshairRef.current = !showCrosshairRef.current; }}
+        style={{ display: 'block', width: '100%', height: '80px', cursor: 'pointer' }}
+      />
     </div>
   );
 }
