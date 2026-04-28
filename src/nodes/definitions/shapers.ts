@@ -5,6 +5,7 @@
  */
 
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
+import { p } from './helpers';
 
 // ── Shared GLSL helpers ───────────────────────────────────────────────────────
 
@@ -41,10 +42,6 @@ const floatIO = {
   inputs:  { x: { type: 'float' as const, label: 'x' } },
   outputs: { y: { type: 'float' as const, label: 'y' } },
 };
-
-function p(v: unknown, def: number): string {
-  return typeof v === 'number' ? v.toFixed(6) : def.toFixed(6);
-}
 
 // ── Exponential Ease ──────────────────────────────────────────────────────────
 
