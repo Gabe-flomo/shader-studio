@@ -216,7 +216,7 @@ export function TransformVecModal({ node, onClose }: Props) {
       cursor = start + text.length;
     }
 
-    updateNodeParams(node.id, { [pk]: next }, true);
+    updateNodeParams(node.id, { [pk]: next }, { immediate: true });
     requestAnimationFrame(() => {
       el.focus();
       el.setSelectionRange(cursor, cursor);
