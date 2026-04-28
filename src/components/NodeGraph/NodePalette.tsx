@@ -52,8 +52,9 @@ const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
   { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod'] },
   { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
   { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'luminance'] },
-  { label: 'Vec2',       types: ['makeVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
-  { label: 'Vec3',       types: ['makeVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
+  { label: 'Vec2',       types: ['makeVec2', 'splitVec2', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
+  { label: 'Vec3',       types: ['makeVec3', 'splitVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
+  { label: 'Vec4',       types: ['splitVec4'] },
   { label: 'Complex',    types: ['complexMul', 'complexPow'] },
   { label: 'Remap',      types: ['remap'] },
 ];

@@ -123,7 +123,9 @@ export {
   WeightedAverageNode,
   CompareNode, SelectNode,
   Vec2SwizzleNode, Vec3SwizzleNode,
+  SplitVec2Node, SplitVec3Node, SplitVec4Node,
 } from './math';
+
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
@@ -206,6 +208,7 @@ import {
   WeightedAverageNode,
   CompareNode, SelectNode,
   Vec2SwizzleNode, Vec3SwizzleNode,
+  SplitVec2Node, SplitVec3Node, SplitVec4Node,
 } from './math';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -479,6 +482,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   makeVec2: MakeVec2Node,
   extractX: ExtractXNode,
   extractY: ExtractYNode,
+  splitVec2: SplitVec2Node,
+  splitVec3: SplitVec3Node,
+  splitVec4: SplitVec4Node,
   makeVec3: MakeVec3Node,
   floatToVec3: FloatToVec3Node,
   fractRaw: FractRawNode,

@@ -323,6 +323,48 @@ export const ExtractYNode: NodeDefinition = {
   },
 };
 
+export const SplitVec2Node: NodeDefinition = {
+  type: 'splitVec2', label: 'Split Vec2', category: 'Math', description: 'Extract X and Y float components from a vec2.',
+  inputs:  { v: { type: 'vec2', label: 'Vec2' } },
+  outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.v || 'vec2(0.0)';
+    return {
+      code: `    float ${id}_x = (${v}).x;\n    float ${id}_y = (${v}).y;\n`,
+      outputVars: { x: `${id}_x`, y: `${id}_y` },
+    };
+  },
+};
+
+export const SplitVec3Node: NodeDefinition = {
+  type: 'splitVec3', label: 'Split Vec3', category: 'Math', description: 'Extract X, Y, and Z float components from a vec3.',
+  inputs:  { v: { type: 'vec3', label: 'Vec3' } },
+  outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.v || 'vec3(0.0)';
+    return {
+      code: `    float ${id}_x = (${v}).x;\n    float ${id}_y = (${v}).y;\n    float ${id}_z = (${v}).z;\n`,
+      outputVars: { x: `${id}_x`, y: `${id}_y`, z: `${id}_z` },
+    };
+  },
+};
+
+export const SplitVec4Node: NodeDefinition = {
+  type: 'splitVec4', label: 'Split Vec4', category: 'Math', description: 'Extract X, Y, Z, and W float components from a vec4.',
+  inputs:  { v: { type: 'vec4', label: 'Vec4' } },
+  outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' }, w: { type: 'float', label: 'W' } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v  = inputVars.v || 'vec4(0.0)';
+    return {
+      code: `    float ${id}_x = (${v}).x;\n    float ${id}_y = (${v}).y;\n    float ${id}_z = (${v}).z;\n    float ${id}_w = (${v}).w;\n`,
+      outputVars: { x: `${id}_x`, y: `${id}_y`, z: `${id}_z`, w: `${id}_w` },
+    };
+  },
+};
+
 export const MakeVec3Node: NodeDefinition = {
   type: 'makeVec3', label: 'Make Vec3', category: 'Math', description: 'Build a vec3 color from three float values.',
   inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
