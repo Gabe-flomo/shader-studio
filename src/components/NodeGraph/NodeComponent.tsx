@@ -26,6 +26,7 @@ import { ExprModal } from './ExprModal';
 import { CustomFnModal } from './CustomFnModal';
 import { ExprBlockModal } from './ExprBlockModal';
 import { BezierEditorModal } from './BezierEditorModal';
+import { TransformVecModal } from './TransformVecModal';
 import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
@@ -403,6 +404,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showExprModal, setShowExprModal] = useState(false);
   const [showExprBlockModal, setShowExprBlockModal] = useState(false);
   const [showBezierModal, setShowBezierModal] = useState(false);
+  const [showTransformVecModal, setShowTransformVecModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
@@ -2557,6 +2559,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               ⟴
             </button>
           )}
+          {/* TransformVec expand button */}
+          {node.type === 'transformVec' && (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowTransformVecModal(v => !v)}
+              title="Open Transform Vec editor"
+              style={{
+                background: showTransformVecModal ? '#89b4fa22' : 'none',
+                border: showTransformVecModal ? '1px solid #89b4fa55' : 'none',
+                color: showTransformVecModal ? '#89b4fa' : '#585b70',
+                cursor: 'pointer', fontSize: '12px', lineHeight: 1, padding: '1px 4px', borderRadius: '3px',
+              }}
+            >⊞</button>
+          )}
           {/* Bezier editor modal button */}
           {(node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
             <button
@@ -3170,15 +3186,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               {comps.map(c => {
                 const pk  = `expr${c.toUpperCase()}`;
                 const val = typeof node.params[pk] === 'string' ? (node.params[pk] as string) : c;
+                const compColor = ({ x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#fab387' } as Record<string, string>)[c];
                 return (
-                  <div key={c} style={{ padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '10px', color: '#585b70', width: '8px', flexShrink: 0, fontFamily: 'monospace' }}>{c}</span>
+                  <div key={c} style={{ padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontSize: '10px', color: compColor, width: '8px', flexShrink: 0, fontFamily: 'monospace' }}>{c}</span>
                     <input
                       type="text"
                       value={val}
                       spellCheck={false}
                       onChange={e => updateNodeParams(node.id, { [pk]: e.target.value })}
-                      style={{ ...INPUT_STYLE, flex: 1, fontFamily: 'monospace', fontSize: '10px', padding: '2px 5px' }}
+                      style={{
+                        flex: 1, background: '#11111b', border: '1px solid #31324488',
+                        color: '#a6e3a1', borderRadius: '3px', padding: '2px 6px',
+                        fontSize: '10px', fontFamily: 'monospace', outline: 'none',
+                      }}
                     />
                   </div>
                 );
@@ -3831,6 +3852,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {/* ── Bezier editor modal ── */}
       {showBezierModal && (node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
         <BezierEditorModal node={node} onClose={() => setShowBezierModal(false)} />
+      )}
+
+      {/* ── TransformVec modal ── */}
+      {showTransformVecModal && node.type === 'transformVec' && (
+        <TransformVecModal node={node} onClose={() => setShowTransformVecModal(false)} />
       )}
 
       {/* ── CustomFn modal ── */}
