@@ -1206,8 +1206,6 @@ export const OrbitalVolume3DNode: NodeDefinition = {
         }
         ${id}_t += ${stepSize};
     }
-    // Soft tone-map: keep luminance but don't clip to solid white
-    ${id}_color = ${id}_color / (${id}_color + vec3(0.6));
     ${id}_tdep  = ${id}_tdep / (float(${steps}) * ${stepSize});
 `;
 
@@ -1335,14 +1333,14 @@ vec3 multiLight(
   vec3 light = sunDiff    * sunColor    * shadow
              + skyDiff    * skyColor    * ao
              + bounceDiff * bounceColor * ao;
-  return pow(max(baseColor * light, vec3(0.0)), vec3(0.4545));
+  return max(baseColor * light, vec3(0.0));
 }`;
 
 export const MultiLightNode: NodeDefinition = {
   type: 'multiLight',
   label: 'Multi-Light',
   category: '3D Lighting',
-  description: 'IQ outdoor lighting rig: sun diffuse + sky dome + bounce light. Applies gamma (pow 0.4545). Do NOT chain with ToneMap — use one or the other.',
+  description: 'IQ outdoor lighting rig: sun diffuse + sky dome + bounce light. Outputs linear HDR — chain with ToneMap node for display.',
   inputs: {
     baseColor: { type: 'vec3',  label: 'Base Color' },
     normal:    { type: 'vec3',  label: 'Normal'     },

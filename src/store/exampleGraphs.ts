@@ -16361,12 +16361,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { zoom: 9, time_speed: 0.4, outer_steps: '14', fold_iters: '7', hue: 0.59, saturation: 0.4, color_scale: 3000.0 },
+        params: { zoom: 9, time_speed: 0.4, outer_steps: '14', fold_iters: '7', hue: 0.59, saturation: 0.4, color_scale: 2.5 },
       },
       {
         id: 'mul_6', type: 'multiplyVec3', position: { x: 1060, y: 520 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sf_5', outputKey: 'color' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 0.35 },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 0.5 },
       },
       {
         id: 'add_7', type: 'addVec3', position: { x: 1260, y: 320 },
@@ -16379,11 +16379,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'tone_8', type: 'toneMap', position: { x: 1460, y: 320 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_7', outputKey: 'result' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { mode: 'aces' },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' },
       },
       {
         id: 'out_9', type: 'output', position: { x: 1660, y: 320 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_8', outputKey: 'result' } } },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_8', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],
@@ -16489,7 +16489,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   // isolates the boundary shell; palette tints the glow color.
   mandelboxIterEdge: {
     label: '3D Fractals: Mandelbox Iter Edge Glow',
-    counter: 11,
+    counter: 12,
     nodes: [
       { id: 'uv_0',   type: 'uv',   position: { x: 60, y: 200 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
       { id: 'time_1', type: 'time', position: { x: 60, y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
@@ -16561,9 +16561,18 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { offset: [0.4, 0.5, 0.6], amplitude: [0.4, 0.3, 0.5], freq: [1.5, 1.0, 2.0], phase: [0.0, 0.5, 1.0] },
       },
+      // Gate palette by the smoothstep mask so background pixels contribute zero glow
+      {
+        id: 'glowmask_7', type: 'multiplyVec3', position: { x: 1460, y: 340 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'pal_6',  outputKey: 'color'  } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ss_5',   outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 },
+      },
       // AO on the base for dark, deep cavity shading
       {
-        id: 'ao_7', type: 'sdfAo', position: { x: 1060, y: 180 },
+        id: 'ao_8', type: 'sdfAo', position: { x: 1060, y: 180 },
         inputs: {
           scene:  { type: 'scene3d', label: 'Scene',   connection: { nodeId: 'scene_3', outputKey: 'scene'  } },
           pos:    { type: 'vec3',    label: 'Hit Pos', connection: { nodeId: 'mlg_4',   outputKey: 'pos'    } },
@@ -16573,29 +16582,29 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         outputs: { ao: { type: 'float', label: 'AO' } }, params: { stepDist: 0.06 },
       },
       {
-        id: 'base_8', type: 'multiplyVec3', position: { x: 1260, y: 200 },
+        id: 'base_9', type: 'multiplyVec3', position: { x: 1260, y: 200 },
         inputs: {
           color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ao_7',  outputKey: 'ao'    } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'ao_8',  outputKey: 'ao'    } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 },
       },
       {
-        id: 'add_9', type: 'addVec3', position: { x: 1480, y: 260 },
+        id: 'add_10', type: 'addVec3', position: { x: 1680, y: 260 },
         inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'base_8', outputKey: 'result' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'pal_6',  outputKey: 'color'  } },
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'base_9',    outputKey: 'result' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'glowmask_7', outputKey: 'result' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } }, params: {},
       },
       {
-        id: 'tone_10', type: 'toneMap', position: { x: 1680, y: 260 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_9', outputKey: 'result' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { mode: 'aces' },
+        id: 'tone_11', type: 'toneMap', position: { x: 1880, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'add_10', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' },
       },
       {
-        id: 'out_11', type: 'output', position: { x: 1880, y: 260 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_10', outputKey: 'result' } } },
+        id: 'out_12', type: 'output', position: { x: 2080, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_11', outputKey: 'color' } } },
         outputs: {}, params: {},
       },
     ],
