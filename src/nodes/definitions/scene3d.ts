@@ -139,7 +139,7 @@ export const MarchCameraNode: NodeDefinition = {
       `    float ${id}_lth   = 6.28318 * ${id}_h2;\n`,
       // When aperture=0, lr=0, so ro==ro0 and rd==rd0 (exact pinhole fallback, no branch needed)
       `    vec3  ${id}_ro    = ${id}_ro0 + ${id}_lr * (cos(${id}_lth) * ${id}_rgt + sin(${id}_lth) * ${id}_up2);\n`,
-      `    vec3  ${id}_rd    = normalize((${id}_ro0 + ${id}_rd0 * ${focalDist}) - ${id}_ro);\n`,
+      `    vec3  ${id}_rd    = normalize((${id}_ro0 + ${id}_rd0 * max(${focalDist}, 0.05)) - ${id}_ro);\n`,
     ].join('');
 
     return {
@@ -189,7 +189,7 @@ export const ForwardCameraNode: NodeDefinition = {
         `    float ${id}_lr   = ${aperture} * sqrt(${id}_h1);\n`,
         `    float ${id}_lth  = 6.28318 * ${id}_h2;\n`,
         `    vec3  ${id}_ro   = ${id}_ro0 + ${id}_lr * vec3(cos(${id}_lth), sin(${id}_lth), 0.0);\n`,
-        `    vec3  ${id}_rd   = normalize((${id}_ro0 + ${id}_rd0 * ${focal}) - ${id}_ro);\n`,
+        `    vec3  ${id}_rd   = normalize((${id}_ro0 + ${id}_rd0 * max(${focal}, 0.05)) - ${id}_ro);\n`,
       ].join(''),
       outputVars: { ro: `${id}_ro`, rd: `${id}_rd` },
     };
