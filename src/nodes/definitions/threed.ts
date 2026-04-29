@@ -1789,3 +1789,63 @@ export const GlassNode: NodeDefinition = {
     };
   },
 };
+
+// ── Phase Function (Henyey-Greenstein) ───────────────────────────────────────
+
+export const PhaseHGNode: NodeDefinition = {
+  type: 'phaseHG',
+  label: 'Phase (HG)',
+  category: '3D Lighting',
+  description: 'Henyey-Greenstein phase function. Weights in-scattered light by the angle between view and light directions. Wire cosTheta = dot(-rd, lightDir). g=0: isotropic fog. g≈0.8: forward-scattering cloud. g<0: backlit haze.',
+  inputs: { cosTheta: { type: 'float', label: 'cos(θ)' } },
+  outputs: { phase: { type: 'float', label: 'Phase' } },
+  defaultParams: { g: 0.0 },
+  paramDefs: {
+    g: { label: 'Anisotropy (g)', type: 'float', min: -0.99, max: 0.99, step: 0.01,
+         hint: 'Scattering asymmetry. 0 = isotropic fog. +0.8 = forward-scattering cloud. -0.3 = backlit haze.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const cosTheta = inputVars.cosTheta || '0.0';
+    const g        = p(node.params.g, 0.0);
+    return {
+      code: [
+        `    float ${id}_g2    = ${g} * ${g};\n`,
+        `    float ${id}_phase = (0.07957747) * (1.0 - ${id}_g2) / pow(max(1.0 + ${id}_g2 - 2.0 * ${g} * clamp(${cosTheta}, -1.0, 1.0), 0.0001), 1.5);\n`,
+      ].join(''),
+      outputVars: { phase: `${id}_phase` },
+    };
+  },
+};
+
+// ── Fresnel (Schlick, physical IOR split) ────────────────────────────────────
+
+export const FresnelSchlickNode: NodeDefinition = {
+  type: 'fresnelSchlick',
+  label: 'Fresnel (Schlick)',
+  category: '3D Lighting',
+  description: 'Physical Schlick Fresnel approximation. Splits energy between reflection and refraction based on IOR and view angle. reflectW + refractW = 1. Wire cosTheta = dot(normal, -rd).',
+  inputs: { cosTheta: { type: 'float', label: 'cos(θ)' } },
+  outputs: {
+    reflectW: { type: 'float', label: 'Reflect Weight' },
+    refractW: { type: 'float', label: 'Refract Weight' },
+  },
+  defaultParams: { ior: 1.5 },
+  paramDefs: {
+    ior: { label: 'IOR', type: 'float', min: 1.0, max: 3.0, step: 0.01,
+           hint: 'Index of refraction. Air=1.0, Water=1.33, Glass=1.5, Diamond=2.4.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const cosTheta = inputVars.cosTheta || '0.0';
+    const ior      = p(node.params.ior, 1.5);
+    return {
+      code: [
+        `    float ${id}_F0       = pow((${ior} - 1.0) / (${ior} + 1.0), 2.0);\n`,
+        `    float ${id}_reflectW = ${id}_F0 + (1.0 - ${id}_F0) * pow(max(1.0 - ${cosTheta}, 0.0), 5.0);\n`,
+        `    float ${id}_refractW = 1.0 - ${id}_reflectW;\n`,
+      ].join(''),
+      outputVars: { reflectW: `${id}_reflectW`, refractW: `${id}_refractW` },
+    };
+  },
+};

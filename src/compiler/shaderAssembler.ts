@@ -1292,6 +1292,7 @@ export function generateFragmentShader(
       const mlStepScale  = fmtP(node.params.stepScale,  1.0);
       const mlVolumetric = !!node.params.volumetric;
       const mlPassthrough = fmtP(node.params.passthrough, 0.1);
+      const mlJitter     = fmtP(node.params.jitter, 0.0);
       const bgr  = fmtP(node.params.bgR,      0.0);
       const bgg  = fmtP(node.params.bgG,      0.0);
       const bgb  = fmtP(node.params.bgB,      0.0);
@@ -1893,10 +1894,16 @@ export function generateFragmentShader(
       // Declare inout accumulator vars in main() before the march loop
       const accumDecls = mlBodyAccumulators.map(a => `    ${a.type} ${a.varName} = ${a.initExpr};\n`).join('');
 
+      // Jitter: offset the first step by a hash of ray origin to remove banding
+      const jitterDecl = mlJitter !== '0.0'
+        ? `    float ${nodeSlug}_jh = fract(sin(dot(${mlRo}.xy + ${mlRd}.xy, vec2(127.1, 311.7))) * 43758.5453);\n`
+        + `    float ${nodeSlug}_t   = 0.001 + ${mlJitter} * ${nodeSlug}_jh * (${mlMaxDist} / float(${mlMaxSteps}));\n`
+        : `    float ${nodeSlug}_t   = 0.001;\n`;
+
       const marchLoopLines = mlVolumetric ? [
         // Volumetric mode: no hit detection, step by max(d, passthrough), runs all steps
         accumDecls,
-        `    float ${nodeSlug}_t   = 0.001;\n`,
+        jitterDecl,
         `    float ${nodeSlug}_hit = 0.0;\n`,
         `    int   ${nodeSlug}_si  = 0;\n`,
         `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
@@ -1910,7 +1917,7 @@ export function generateFragmentShader(
       ] : [
         // Standard raymarching: hit detection + stepScale
         accumDecls,
-        `    float ${nodeSlug}_t   = 0.001;\n`,
+        jitterDecl,
         `    float ${nodeSlug}_hit = 0.0;\n`,
         `    int   ${nodeSlug}_si  = 0;\n`,
         `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,

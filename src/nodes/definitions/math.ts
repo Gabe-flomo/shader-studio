@@ -530,6 +530,42 @@ export const ReflectNode: NodeDefinition = {
   },
 };
 
+export const RefractDirNode: NodeDefinition = {
+  type: 'refractDir', label: 'Refract Dir', category: 'Math',
+  description: 'Compute refracted ray direction via Snell\'s law (GLSL refract). When total internal reflection occurs, falls back to the reflected direction and sets TIR=1.',
+  inputs: {
+    incident: { type: 'vec3', label: 'Incident' },
+    normal:   { type: 'vec3', label: 'Normal'   },
+  },
+  outputs: {
+    refracted: { type: 'vec3',  label: 'Refracted' },
+    tir:       { type: 'float', label: 'TIR'        },
+  },
+  defaultParams: { ior1: 1.0, ior2: 1.5 },
+  paramDefs: {
+    ior1: { label: 'IOR From', type: 'float' as const, min: 1.0, max: 3.0, step: 0.01, hint: 'IOR of the medium the ray is coming from. Air=1.0.' },
+    ior2: { label: 'IOR To',   type: 'float' as const, min: 1.0, max: 3.0, step: 0.01, hint: 'IOR of the medium being entered. Glass=1.5, Water=1.33, Diamond=2.4.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const incident = inputVars.incident || 'vec3(0.0, -1.0, 0.0)';
+    const normal   = inputVars.normal   || 'vec3(0.0,  1.0, 0.0)';
+    const ior1     = p(node.params.ior1, 1.0);
+    const ior2     = p(node.params.ior2, 1.5);
+    return {
+      code: [
+        `    float ${id}_eta      = ${ior1} / ${ior2};\n`,
+        `    vec3  ${id}_refr_raw = refract(normalize(${incident}), normalize(${normal}), ${id}_eta);\n`,
+        `    float ${id}_tir      = dot(${id}_refr_raw, ${id}_refr_raw) < 0.001 ? 1.0 : 0.0;\n`,
+        `    vec3  ${id}_refracted = ${id}_tir > 0.5\n`,
+        `        ? reflect(normalize(${incident}), normalize(${normal}))\n`,
+        `        : ${id}_refr_raw;\n`,
+      ].join(''),
+      outputVars: { refracted: `${id}_refracted`, tir: `${id}_tir` },
+    };
+  },
+};
+
 export const ComplexMulNode: NodeDefinition = {
   type: 'complexMul', label: 'Complex Mul', category: 'Math', description: 'Multiply two complex numbers (vec2)',
   inputs: { a: { type: 'vec2', label: 'A (re,im)' }, b: { type: 'vec2', label: 'B (re,im)' } },

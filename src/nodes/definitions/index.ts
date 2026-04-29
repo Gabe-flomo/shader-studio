@@ -63,7 +63,7 @@ export { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
 
 // 3D Lighting
-export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode } from './threed';
+export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode, PhaseHGNode, FresnelSchlickNode } from './threed';
 
 // 3D Fractals (additional)
 export { MandelboxDENode, KIFSTetrahedronDENode } from './threed';
@@ -211,7 +211,7 @@ import {
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
   RemapNode,
-  CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
+  CrossProductNode, ReflectNode, RefractDirNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
@@ -366,6 +366,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   volumetricFog: VolumetricFogNode,
   materialSelect: MaterialSelectNode,
   glass3d: GlassNode,
+  phaseHG: PhaseHGNode,
+  fresnelSchlick: FresnelSchlickNode,
   // Patterns
   truchet: TruchetNode,
   metaballs: MetaballsNode,
@@ -523,6 +525,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   cubicBezierShaper: CubicBezierShaperNode,
   crossProduct: CrossProductNode,
   reflect: ReflectNode,
+  refractDir: RefractDirNode,
   complexMul: ComplexMulNode,
   complexPow: ComplexPowNode,
   angleToVec2: AngleToVec2Node,
