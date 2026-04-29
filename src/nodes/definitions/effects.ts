@@ -815,7 +815,9 @@ export const CustomFnNode: NodeDefinition = {
     const isMultiLine = trimmed.includes('\n');
     let code: string;
     if (isMultiLine) {
-      const indented = trimmed.split('\n').map(l => `        ${l}`).join('\n');
+      // Rewrite `return X;` to `${outVar} = X;` so users can write return naturally
+      const rewritten = trimmed.replace(/\breturn\b\s*/g, `${outVar} = `);
+      const indented = rewritten.split('\n').map(l => `        ${l}`).join('\n');
       code = `    ${outType} ${outVar};\n    {\n${indented}\n    }\n`;
     } else {
       code = `    ${outType} ${outVar} = ${trimmed};\n`;
