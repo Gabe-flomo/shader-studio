@@ -2164,7 +2164,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {isMarchLoopGroup && (() => {
           const outerDef = getNodeDefinition(node.type);
           const outerParamDefs = outerDef?.paramDefs ?? {};
-          const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float');
+          const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float' || pd.type === 'bool');
           if (outerEntries.length === 0) return null;
           const hidden = node.params.__marchSettingsHidden === true;
           return (
@@ -2177,6 +2177,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 <span style={{ fontSize: '8px', opacity: 0.6 }}>{hidden ? '▶' : '▼'}</span>
               </div>
               {!hidden && outerEntries.map(([paramKey, paramDef]) => {
+                if (paramDef.type === 'bool') {
+                  const val = node.params[paramKey] === true;
+                  return (
+                    <div key={paramKey} style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '9px', color: '#6c7086', minWidth: '70px' }}>{paramDef.label}</span>
+                      <input
+                        type="checkbox"
+                        checked={val}
+                        onChange={e => updateNodeParams(node.id, { [paramKey]: e.target.checked }, { immediate: true })}
+                        style={{ cursor: 'pointer', accentColor: '#cba6f7' }}
+                      />
+                    </div>
+                  );
+                }
                 const rawVal = node.params[paramKey];
                 const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
                 const step = paramDef.step ?? 1;
