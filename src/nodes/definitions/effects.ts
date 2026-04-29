@@ -1664,6 +1664,64 @@ export const LensBlurNode: NodeDefinition = {
   },
 };
 
+// ─── Depth of Field (post-process) ───────────────────────────────────────────
+// Reads dist from marchLoopGroup (world-unit ray distance). Pixels whose depth
+// deviates from focalDist by more than focalRange get a bokeh disc blur sampled
+// from u_prevFrame. Reuses the lensBlurDisc/Hex/Oct helpers from LensBlurNode.
+
+export const DepthOfFieldNode: NodeDefinition = {
+  type: 'depthOfField',
+  label: 'Depth of Field',
+  category: 'Effects',
+  description: 'Smooth post-process DoF. Wire color + dist from marchLoopGroup. Pixels far from the focal plane get a soft bokeh blur. Disc/Hex/Oct bokeh shapes.',
+  inputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    dist:  { type: 'float', label: 'Dist'  },
+  },
+  outputs: {
+    result: { type: 'vec3',  label: 'Result' },
+    coc:    { type: 'float', label: 'CoC'    },
+  },
+  defaultParams: {
+    focalDist:  3.0,
+    focalRange: 1.0,
+    maxBlur:    8.0,
+    bokehShape: 'disc',
+  },
+  paramDefs: {
+    focalDist:  { label: 'Focal Dist',  type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,  hint: 'World-unit depth that stays sharp. Match your camera camDist for tight focus.' },
+    focalRange: { label: 'Focal Range', type: 'float' as const, min: 0.05, max: 20.0, step: 0.05, hint: 'Depth band around focalDist that stays sharp. Smaller = shallower DoF.' },
+    maxBlur:    { label: 'Max Blur',    type: 'float' as const, min: 0.0,  max: 24.0, step: 0.5,  hint: 'Maximum bokeh disc radius in pixels.' },
+    bokehShape: { label: 'Bokeh Shape', type: 'select' as const, options: [
+      { value: 'disc', label: 'Disc (circular)' },
+      { value: 'hex',  label: 'Hex (6-blade)'   },
+      { value: 'oct',  label: 'Oct (8-blade)'   },
+    ]},
+  },
+  glslFunction: LENS_BLUR_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const col   = inputVars.color || 'vec3(0.0)';
+    const uvVar = inputVars.uv    || 'g_uv';
+    const dist  = inputVars.dist  || '0.0';
+    const fd    = p(node.params.focalDist,  3.0);
+    const fr    = p(node.params.focalRange, 1.0);
+    const mb    = p(node.params.maxBlur,    8.0);
+    const shape = (node.params.bokehShape as string) ?? 'disc';
+    const fn    = shape === 'hex' ? 'lensBlurHex' : shape === 'oct' ? 'lensBlurOct' : 'lensBlurDisc';
+    return {
+      code: [
+        `    vec2  ${id}_uv01   = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+        `    vec2  ${id}_px     = 1.0 / u_resolution;\n`,
+        `    float ${id}_coc    = clamp(abs(${dist} - ${fd}) / max(${fr}, 0.001), 0.0, ${mb});\n`,
+        `    vec3  ${id}_result = ${fn}(u_prevFrame, ${id}_uv01, ${id}_px, ${id}_coc, ${col});\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result`, coc: `${id}_coc` },
+    };
+  },
+};
+
 // ─── Motion Blur ─────────────────────────────────────────────────────────────
 // Temporal accumulation: blends current scene with the previous frame.
 // Creates smooth motion trails for animated shaders. Fast-moving elements
