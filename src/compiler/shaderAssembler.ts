@@ -251,6 +251,7 @@ export function generateFragmentShader(
   const textureUniforms: Record<string, string> = {};  // uniformName → nodeId
   const audioUniforms: Record<string, string> = {};    // uniformName → nodeId
   const nodeOutputs = new Map<string, Record<string, string>>();
+  const mlgDynamicOutputs = new Map<string, Record<string, { type: string; label: string }>>();
   // Tracks extra parameters needed by each compiled scene function (for external var references).
   // Keys are GLSL function names; values are ordered param descriptors to add to the signature.
   const sceneFnExtraParams = new Map<string, Array<{name: string; type: string}>>();
@@ -1320,7 +1321,7 @@ export function generateFragmentShader(
       // Extra params needed by marchBody_* for main()-scope vars referenced inside
       let mlBodyExtraParams: Array<{name: string; type: string}> = [];
       // Inout accumulator vars for body nodes with assignOp != '=' (declared outside if block for scope)
-      let mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string }> = [];
+      let mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string; label: string }> = [];
 
       if (subgraph && subgraph.nodes.length > 0) {
         const warpFnName = `marchBody_${nodeSlug}`;
@@ -1441,7 +1442,7 @@ export function generateFragmentShader(
             const accVar = `${nodeSlug}_mlgacc_${snSlugAcc}_${outKey}`;
             const neutral = isMultiplyAcc ? '1.0' : '0.0';
             const initExpr = sn.assignInit?.trim() || neutral;
-            mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr });
+            mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
           }
         }
 
@@ -1868,6 +1869,7 @@ export function generateFragmentShader(
 
       // Resolve the scene function: body SceneGroup takes priority, then external scene wire
       const mlSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
+      const mlHasScene = mlSceneFn !== 'MISSING_SCENE_FN';
 
       // ── Emit the march loop into main ──────────────────────────────────────
       const mlExtraArgsList = mlExtraInputs.map(ex => {
@@ -1901,7 +1903,8 @@ export function generateFragmentShader(
         : `    float ${nodeSlug}_t   = 0.001;\n`;
 
       const marchLoopLines = mlVolumetric ? [
-        // Volumetric mode: no hit detection, step by max(d, passthrough), runs all steps
+        // Volumetric mode: no hit detection, runs all steps.
+        // If scene connected: step by max(sdf, passthrough). If not: step by passthrough (pure density).
         accumDecls,
         jitterDecl,
         `    float ${nodeSlug}_hit = 0.0;\n`,
@@ -1909,8 +1912,9 @@ export function generateFragmentShader(
         `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
         `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
         `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
-        `        float ${nodeSlug}_d  = ${callScene(`${nodeSlug}_rp`)};\n`,
-        `        float ${nodeSlug}_vol = max(${nodeSlug}_d, ${mlPassthrough});\n`,
+        mlHasScene
+          ? `        float ${nodeSlug}_vol = max(${callScene(`${nodeSlug}_rp`)}, ${mlPassthrough});\n`
+          : `        float ${nodeSlug}_vol = ${mlPassthrough};\n`,
         `        ${nodeSlug}_t += ${nodeSlug}_vol;\n`,
         `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
         `    }\n`,
@@ -1935,12 +1939,17 @@ export function generateFragmentShader(
         `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
         `    vec3  ${nodeSlug}_hp_raw  = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
         `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
-        `    float ${nodeSlug}_e   = 0.001;\n`,
-        `    vec3  ${nodeSlug}_n   = normalize(vec3(\n`,
-        `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))},\n`,
-        `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))},\n`,
-        `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))}\n`,
-        `    ));\n`,
+        // Normal estimation: skip in volumetric mode (no surface) or when no scene is connected
+        ...(mlVolumetric || !mlHasScene ? [
+          `    vec3  ${nodeSlug}_n   = vec3(0.0, 1.0, 0.0);\n`,
+        ] : [
+          `    float ${nodeSlug}_e   = 0.001;\n`,
+          `    vec3  ${nodeSlug}_n   = normalize(vec3(\n`,
+          `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))},\n`,
+          `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))},\n`,
+          `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))}\n`,
+          `    ));\n`,
+        ]),
         `    float ${nodeSlug}_dist   = ${nodeSlug}_t;\n`,
         `    float ${nodeSlug}_depth  = clamp(${nodeSlug}_t / ${mlMaxDist}, 0.0, 1.0);\n`,
         `    vec3  ${nodeSlug}_normal = ${nodeSlug}_n * ${nodeSlug}_hit;\n`,
@@ -1953,7 +1962,12 @@ export function generateFragmentShader(
 
       mainCode.push(marchCode);
       const mlgAccOutputs: Record<string, string> = {};
-      mlBodyAccumulators.forEach((acc, i) => { mlgAccOutputs[`acc${i}`] = acc.varName; });
+      const mlgAccSockets: Record<string, { type: string; label: string }> = {};
+      mlBodyAccumulators.forEach((acc, i) => {
+        mlgAccOutputs[`acc${i}`] = acc.varName;
+        mlgAccSockets[`acc${i}`] = { type: acc.type, label: acc.label };
+      });
+      if (Object.keys(mlgAccSockets).length > 0) mlgDynamicOutputs.set(node.id, mlgAccSockets);
       nodeOutputs.set(node.id, {
         color:     `${nodeSlug}_color`,
         dist:      `${nodeSlug}_dist`,
@@ -2250,5 +2264,5 @@ void main() {
     g_uv.x *= u_resolution.x / u_resolution.y;
 ${mainCode.join('')}}`.trim();
 
-  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, audioUniforms, isStateful, nodeSlugMap };
+  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, audioUniforms, isStateful, nodeSlugMap, mlgDynamicOutputs };
 }

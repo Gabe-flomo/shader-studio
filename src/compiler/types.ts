@@ -33,6 +33,9 @@ export interface CompilationResult {
    * Absent on validation-failure results.
    */
   nodeSlugMap?: Map<string, string>;
+  /** Maps marchLoopGroup nodeId → dynamic acc* output sockets added at compile time.
+   *  Store uses this to patch node.outputs so sockets appear on the card. */
+  mlgDynamicOutputs?: Map<string, Record<string, { type: string; label: string }>>;
 }
 
 export const VERTEX_SHADER = `varying vec2 vUv;
