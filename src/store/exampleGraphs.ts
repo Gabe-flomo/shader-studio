@@ -15987,19 +15987,19 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: { iterations: 5, fract_scale: 1.6, scale_exp: 1.0, ring_freq: 10.0, glow: 0.008, glow_pow: 1.0, iter_offset: 0.35, time_scale: 0.4, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
       },
       {
-        id: 'bl_bc', type: 'brightnessContrast', position: { x: 560, y: 120 },
+        id: 'bl_tone', type: 'toneMap', position: { x: 560, y: 120 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_frac', outputKey: 'color' } } },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { brightness: 0.1, contrast: 1.6 },
+        params: { mode: 'aces', exposure: 1.2 },
       },
       {
         id: 'bl_bloom', type: 'bloom', position: { x: 820, y: 120 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_bc',   outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_tone', outputKey: 'color' } },
           uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'bl_uv',   outputKey: 'uv'    } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' }, glow: { type: 'vec3', label: 'Glow Only' } },
-        params: { threshold: 0.55, knee: 0.15, intensity: 1.8, radius: 8.0, quality: 'standard' },
+        params: { threshold: 0.75, knee: 0.15, intensity: 1.2, radius: 8.0, quality: 'standard' },
       },
       {
         id: 'bl_out', type: 'output', position: { x: 1080, y: 120 },
@@ -16026,20 +16026,20 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         params: { iterations: 3, fract_scale: 2.2, scale_exp: 1.2, ring_freq: 6.0, glow: 0.015, glow_pow: 1.5, iter_offset: 0.6, time_scale: 0.2, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.25,0.5] },
       },
       {
-        id: 'sb_bc', type: 'brightnessContrast', position: { x: 560, y: 120 },
+        id: 'sb_tone', type: 'toneMap', position: { x: 560, y: 120 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sb_frac', outputKey: 'color' } } },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { brightness: 0.0, contrast: 2.0 },
+        params: { mode: 'aces', exposure: 1.2 },
       },
       {
         id: 'sb_bloom', type: 'stochasticBloom', position: { x: 840, y: 120 },
         inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'sb_bc',   outputKey: 'result' } },
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'sb_tone', outputKey: 'color' } },
           uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'sb_uv',   outputKey: 'uv'    } },
           time:  { type: 'float', label: 'Time',  connection: { nodeId: 'sb_time', outputKey: 'time'  } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' }, glow: { type: 'vec3', label: 'Glow Only' } },
-        params: { threshold: 0.45, intensity: 3.0, spread: 24.0, samples: '16', temporal: 'true' },
+        params: { threshold: 0.7, intensity: 2.0, spread: 20.0, samples: '16', temporal: 'true' },
       },
       {
         id: 'sb_out', type: 'output', position: { x: 1100, y: 120 },

@@ -1844,7 +1844,8 @@ export const BloomNode: NodeDefinition = {
     lines.push(
       `    ${id}_glow /= ${id}_wsum;\n`,
       `    ${id}_glow *= ${intensity};\n`,
-      `    vec3 ${id}_result = ${col} + ${id}_glow;\n`,
+      // Clamp: prevents u_prevFrame from exceeding [0,1] which causes exponential feedback
+      `    vec3 ${id}_result = clamp(${col} + ${id}_glow, 0.0, 1.0);\n`,
     );
 
     return { code: lines.join(''), outputVars: { result: `${id}_result`, glow: `${id}_glow` } };
@@ -1923,7 +1924,7 @@ export const StochasticBloomNode: NodeDefinition = {
     lines.push(
       `    ${id}_glow /= ${f(nSamples)};\n`,
       `    ${id}_glow *= ${intensity};\n`,
-      `    vec3 ${id}_result = ${col} + ${id}_glow;\n`,
+      `    vec3 ${id}_result = clamp(${col} + ${id}_glow, 0.0, 1.0);\n`,
     );
 
     return { code: lines.join(''), outputVars: { result: `${id}_result`, glow: `${id}_glow` } };
