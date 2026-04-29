@@ -980,3 +980,118 @@ export const ApollonianNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Spherical Fold Fractal ────────────────────────────────────────────────────
+// Self-contained 3D raymarch. Each ray step runs an inner IFS loop that
+// alternates spherical inversion (e = max(inv_min, inv_scale/|p|²)) with a
+// box-fold (p = fold_const − |‖p‖·e − fold_offset|). The accumulated scale `s`
+// drives HSV brightness; tanh tone-maps the sum. Inspired by @YoheiNishitsuji.
+
+const SFF_GLSL = `
+mat3 sffRot3D(float angle, vec3 axis) {
+  vec3 a = normalize(axis);
+  float s = sin(angle), c = cos(angle), r = 1.0 - c;
+  return mat3(
+    a.x*a.x*r+c,     a.y*a.x*r+a.z*s, a.z*a.x*r-a.y*s,
+    a.x*a.y*r-a.z*s, a.y*a.y*r+c,     a.z*a.y*r+a.x*s,
+    a.x*a.z*r+a.y*s, a.y*a.z*r-a.x*s, a.z*a.z*r+c
+  );
+}
+vec3 sffHSV(float h, float s, float v) {
+  vec3 pp = abs(fract(vec3(h) + vec3(0.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return v * mix(vec3(1.0), clamp(pp - 1.0, 0.0, 1.0), s);
+}
+`;
+
+export const SphericalFoldFractalNode: NodeDefinition = {
+  type: 'sphericalFoldFractal',
+  label: 'Spherical Fold Fractal',
+  category: 'Fractals',
+  description: 'Self-contained 3D raymarch. Each step runs an IFS that alternates spherical inversion with a box-fold; accumulated scale drives HSV brightness. Rotate the camera by animating time_speed.',
+  inputs: {
+    uv:   { type: 'vec2',  label: 'UV'   },
+    time: { type: 'float', label: 'Time' },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+  },
+  glslFunction: SFF_GLSL,
+  defaultParams: {
+    zoom:          9.0,
+    time_speed:    0.5,
+    outer_steps:   '18',
+    fold_iters:    '9',
+    fold_x:        1.5,   fold_y:  4.0,   fold_z:  3.0,
+    offset_x:      1.0,   offset_y: 1.2,  offset_z: 3.0,
+    inv_scale:     9.0,
+    inv_min:       0.95,
+    hue:           0.59,
+    saturation:    0.4,
+    color_scale:   4000.0,
+  },
+  paramDefs: {
+    zoom:        { label: 'Zoom',        type: 'float', min: 1.0,  max: 20.0, step: 0.1  },
+    time_speed:  { label: 'Time Speed',  type: 'float', min: 0.0,  max: 3.0,  step: 0.01 },
+    outer_steps: { label: 'Ray Steps',   type: 'select', options: [
+      { value: '12', label: '12 (fast)' },
+      { value: '18', label: '18 (default)' },
+      { value: '24', label: '24 (detailed)' },
+    ]},
+    fold_iters: { label: 'Fold Iters',   type: 'select', options: [
+      { value: '6',  label: '6 (fast)' },
+      { value: '9',  label: '9 (default)' },
+      { value: '12', label: '12 (deep)' },
+    ]},
+    fold_x:      { label: 'Fold X',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05 },
+    fold_y:      { label: 'Fold Y',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05 },
+    fold_z:      { label: 'Fold Z',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05 },
+    offset_x:    { label: 'Offset X',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
+    offset_y:    { label: 'Offset Y',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
+    offset_z:    { label: 'Offset Z',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
+    inv_scale:   { label: 'Inv Scale',   type: 'float', min: 1.0,  max: 20.0, step: 0.1  },
+    inv_min:     { label: 'Inv Min',     type: 'float', min: 0.5,  max: 1.5,  step: 0.01 },
+    hue:         { label: 'Hue',         type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
+    saturation:  { label: 'Saturation',  type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
+    color_scale: { label: 'Color Scale', type: 'float', min: 100.0, max: 20000.0, step: 100.0 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const uvVar   = inputVars.uv   ?? 'vec2(0.0)';
+    const timeVar = inputVars.time ?? '0.0';
+
+    const zoom       = p(node.params.zoom,        9.0);
+    const tspd       = p(node.params.time_speed,  0.5);
+    const outerSteps = parseInt((node.params.outer_steps as string) ?? '18', 10);
+    const foldIters  = parseInt((node.params.fold_iters  as string) ?? '9',  10);
+    const fc0 = p(node.params.fold_x,   1.5);  const fc1 = p(node.params.fold_y,   4.0);  const fc2 = p(node.params.fold_z,   3.0);
+    const fo0 = p(node.params.offset_x, 1.0);  const fo1 = p(node.params.offset_y, 1.2);  const fo2 = p(node.params.offset_z, 3.0);
+    const invScale = p(node.params.inv_scale,   9.0);
+    const invMin   = p(node.params.inv_min,     0.95);
+    const hue      = p(node.params.hue,         0.59);
+    const sat      = p(node.params.saturation,  0.4);
+    const cscale   = p(node.params.color_scale, 4000.0);
+
+    const code: string[] = [
+      `    // Spherical Fold Fractal\n`,
+      `    float ${id}_ts  = ${timeVar} * ${tspd};\n`,
+      `    mat3  ${id}_rot = sffRot3D(${id}_ts * 0.5, normalize(vec3(-4.0, sin(${id}_ts) + 7.0, 0.0)));\n`,
+      `    vec3  ${id}_o   = vec3(0.0);\n`,
+      `    float ${id}_g   = 0.0;\n`,
+      `    for (float ${id}_ii = 0.0; ${id}_ii < ${f(outerSteps)}; ${id}_ii++) {\n`,
+      `        vec3 ${id}_p = vec3(${uvVar} * (${zoom} + cos(${id}_ts * 0.5) * 3.0), ${id}_g + 0.2);\n`,
+      `        ${id}_p = ${id}_rot * ${id}_p;\n`,
+      `        float ${id}_s = 1.0;\n`,
+      `        for (int ${id}_j = 0; ${id}_j < ${foldIters}; ${id}_j++) {\n`,
+      `            float ${id}_e = max(${invMin}, ${invScale} / dot(${id}_p, ${id}_p));\n`,
+      `            ${id}_s *= ${id}_e;\n`,
+      `            ${id}_p  = vec3(${fc0}, ${fc1}, ${fc2}) - abs(abs(${id}_p) * ${id}_e - vec3(${fo0}, ${fo1}, ${fo2}));\n`,
+      `        }\n`,
+      `        ${id}_g += mod(length(${id}_p.yy), max(${id}_p.y, 0.001)) / ${id}_s * 0.5;\n`,
+      `        ${id}_o += sffHSV(${hue}, ${sat} - ${id}_g, ${id}_s / ${cscale});\n`,
+      `    }\n`,
+      `    vec3 ${id}_color = tanh(${id}_o);\n`,
+    ];
+
+    return { code: code.join(''), outputVars: { color: `${id}_color` } };
+  },
+};

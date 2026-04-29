@@ -91,7 +91,7 @@ export const MarchCameraNode: NodeDefinition = {
   },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.0, fov: 1.5,
-    targetX: 0.0, targetY: 0.0, targetZ: 0.0,
+    targetX: 0.0, targetY: 0.0, targetZ: 0.0, aperture: 0.0, focalDist: 3.0, lensSpeed: 0.0,
   },
   paramDefs: {
     camDist:      { label: 'Cam Dist',   type: 'float' as const, min: 0.1,  max: 20.0, step: 0.05, hint: 'Distance from the camera to the target point.' },
@@ -99,9 +99,12 @@ export const MarchCameraNode: NodeDefinition = {
     camElevation: { label: 'Elevation',  type: 'float' as const, min: -1.5, max: 1.5,  step: 0.02, hint: 'Vertical angle: 0 = horizon, positive = above, negative = below.' },
     rotSpeed:     { label: 'Rot Speed',  type: 'float' as const, min: 0.0,  max: 2.0,  step: 0.01, hint: 'Auto-rotation speed. 0 = static.' },
     fov:          { label: 'FOV',        type: 'float' as const, min: 0.5,  max: 3.14, step: 0.05, hint: 'Field of view. Higher = wider angle.' },
-    targetX:      { label: 'Target X',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'X position of the look-at target. Moves the camera through space.' },
+    targetX:      { label: 'Target X',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'X position of the look-at target.' },
     targetY:      { label: 'Target Y',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Y position of the look-at target.' },
     targetZ:      { label: 'Target Z',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Z position of the look-at target.' },
+    aperture:     { label: 'Aperture',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, hint: 'Lens aperture radius. 0 = pinhole (no blur). Higher = more edge grain.' },
+    focalDist:    { label: 'Focal Dist', type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,   hint: 'Distance from camera at which the scene is perfectly sharp.' },
+    lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id           = node.id;
@@ -115,20 +118,30 @@ export const MarchCameraNode: NodeDefinition = {
     const targetX      = inputVars.targetX      || p(node.params.targetX,      0.0);
     const targetY      = inputVars.targetY      || p(node.params.targetY,      0.0);
     const targetZ      = inputVars.targetZ      || p(node.params.targetZ,      0.0);
+    const aperture     = inputVars.aperture     || p(node.params.aperture,     0.0);
+    const focalDist    = inputVars.focalDist    || p(node.params.focalDist,    3.0);
+    const lensSpeed    = inputVars.lensSpeed    || p(node.params.lensSpeed,    0.0);
 
     const code = [
       `    float ${id}_ang   = ${camAngle} + ${time} * ${rotSpeed};\n`,
       `    float ${id}_elev  = ${camElevation};\n`,
       `    vec3  ${id}_ta    = vec3(${targetX}, ${targetY}, ${targetZ});\n`,
-      // Camera position using horizontal direction + vertical lift
       `    vec3  ${id}_horiz = vec3(sin(${id}_ang), 0.0, cos(${id}_ang));\n`,
-      `    vec3  ${id}_ro    = ${id}_ta + ${camDist} * (cos(${id}_elev)*${id}_horiz + sin(${id}_elev)*vec3(0.0,1.0,0.0));\n`,
-      `    vec3  ${id}_fwd   = normalize(${id}_ta - ${id}_ro);\n`,
-      // Up = tangent to the elevation orbit — rotates smoothly with elevation, no pole flip
+      `    vec3  ${id}_ro0   = ${id}_ta + ${camDist} * (cos(${id}_elev)*${id}_horiz + sin(${id}_elev)*vec3(0.0,1.0,0.0));\n`,
+      `    vec3  ${id}_fwd   = normalize(${id}_ta - ${id}_ro0);\n`,
       `    vec3  ${id}_cup   = normalize(-sin(${id}_elev)*${id}_horiz + cos(${id}_elev)*vec3(0.0,1.0,0.0));\n`,
       `    vec3  ${id}_rgt   = normalize(cross(${id}_cup, ${id}_fwd));\n`,
       `    vec3  ${id}_up2   = cross(${id}_fwd, ${id}_rgt);\n`,
-      `    vec3  ${id}_rd    = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+      // Pinhole ray direction
+      `    vec3  ${id}_rd0   = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+      // Per-pixel hash for lens disk radius; angle drifts over time via lensSpeed
+      `    float ${id}_h1    = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
+      `    float ${id}_h2    = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
+      `    float ${id}_lr    = ${aperture} * sqrt(${id}_h1);\n`,
+      `    float ${id}_lth   = 6.28318 * ${id}_h2 + ${time} * ${lensSpeed};\n`,
+      // When aperture=0, lr=0, so ro==ro0 and rd==rd0 (exact pinhole fallback, no branch needed)
+      `    vec3  ${id}_ro    = ${id}_ro0 + ${id}_lr * (cos(${id}_lth) * ${id}_rgt + sin(${id}_lth) * ${id}_up2);\n`,
+      `    vec3  ${id}_rd    = normalize((${id}_ro0 + ${id}_rd0 * max(${focalDist}, 0.05)) - ${id}_ro);\n`,
     ].join('');
 
     return {
@@ -147,26 +160,40 @@ export const ForwardCameraNode: NodeDefinition = {
   type: 'forwardCamera', label: 'Camera (Forward)', category: '3D Scene',
   description: 'Fixed forward-facing camera. ro sits at (0,0,−camDist) and rd = normalize(vec3(uv, fov)). No orbit — all motion lives inside the MLG body warp.',
   inputs: {
-    uv: { type: 'vec2', label: 'UV' },
+    uv:   { type: 'vec2',  label: 'UV' },
+    time: { type: 'float', label: 'Time' },
   },
   outputs: {
     ro: { type: 'vec3', label: 'Ray Origin' },
     rd: { type: 'vec3', label: 'Ray Dir' },
   },
-  defaultParams: { camDist: 3.0, fov: 1.0 },
+  defaultParams: { camDist: 3.0, fov: 1.0, aperture: 0.0, focalDist: 3.0, lensSpeed: 0.0 },
   paramDefs: {
-    camDist: { label: 'Cam Dist', type: 'float' as const, min: 0.1, max: 20.0, step: 0.1 },
-    fov:     { label: 'FOV',      type: 'float' as const, min: 0.3, max: 3.0,  step: 0.05 },
+    camDist:   { label: 'Cam Dist',   type: 'float' as const, min: 0.1, max: 20.0, step: 0.1 },
+    fov:       { label: 'FOV',        type: 'float' as const, min: 0.3, max: 3.0,  step: 0.05 },
+    aperture:  { label: 'Aperture',   type: 'float' as const, min: 0.0, max: 0.5,  step: 0.005, hint: 'Lens aperture radius. 0 = pinhole (no blur).' },
+    focalDist: { label: 'Focal Dist', type: 'float' as const, min: 0.1, max: 50.0, step: 0.1,   hint: 'Distance from camera at which the scene is perfectly sharp.' },
+    lensSpeed: { label: 'Lens Speed', type: 'float' as const, min: 0.0, max: 5.0,  step: 0.05,  hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id  = node.id;
-    const uv  = inputVars.uv || 'g_uv';
-    const d   = p(node.params.camDist, 3.0);
-    const fov = p(node.params.fov,     1.0);
+    const id        = node.id;
+    const uv        = inputVars.uv   || 'g_uv';
+    const time      = inputVars.time || 'u_time';
+    const d         = p(node.params.camDist,   3.0);
+    const fov       = p(node.params.fov,       1.0);
+    const aperture  = p(node.params.aperture,  0.0);
+    const focal     = p(node.params.focalDist, 3.0);
+    const lensSpeed = p(node.params.lensSpeed, 0.0);
     return {
       code: [
-        `    vec3 ${id}_ro = vec3(0.0, 0.0, -${d});\n`,
-        `    vec3 ${id}_rd = normalize(vec3((${uv}).x, (${uv}).y, ${fov}));\n`,
+        `    vec3  ${id}_ro0  = vec3(0.0, 0.0, -${d});\n`,
+        `    vec3  ${id}_rd0  = normalize(vec3((${uv}).x, (${uv}).y, ${fov}));\n`,
+        `    float ${id}_h1   = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
+        `    float ${id}_h2   = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
+        `    float ${id}_lr   = ${aperture} * sqrt(${id}_h1);\n`,
+        `    float ${id}_lth  = 6.28318 * ${id}_h2 + ${time} * ${lensSpeed};\n`,
+        `    vec3  ${id}_ro   = ${id}_ro0 + ${id}_lr * vec3(cos(${id}_lth), sin(${id}_lth), 0.0);\n`,
+        `    vec3  ${id}_rd   = normalize((${id}_ro0 + ${id}_rd0 * max(${focal}, 0.05)) - ${id}_ro);\n`,
       ].join(''),
       outputVars: { ro: `${id}_ro`, rd: `${id}_rd` },
     };
@@ -360,7 +387,7 @@ export const MarchLoopGroupNode: NodeDefinition = {
   },
   defaultParams: {
     maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
-    volumetric: false, passthrough: 0.1,
+    volumetric: false, passthrough: 0.1, jitter: 0.0,
     bgR: 0.0, bgG: 0.0, bgB: 0.0,
     albedoR: 0.6, albedoG: 0.7, albedoB: 0.9,
   },
@@ -370,6 +397,7 @@ export const MarchLoopGroupNode: NodeDefinition = {
     stepScale:   { label: 'Step Scale',  type: 'float' as const,   min: 0.3,  max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower. Not used in volumetric mode.' },
     volumetric:  { label: 'Volumetric',  type: 'bool'  as const,                                       hint: 'When on, the ray passes through the scene accumulating color at every step. No hit detection. Use with marchSceneDist + accumulator nodes in the body.' },
     passthrough: { label: 'Passthrough', type: 'float' as const,   min: 0.001, max: 0.5,  step: 0.005, hint: 'Minimum step size in volumetric mode. Prevents the ray from stalling at zero-distance surfaces. Also caps 1/vol to avoid blowout.' },
+    jitter:      { label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Randomise the first ray step by up to one step-width. Eliminates banding rings in volumetric mode. 0 = off.' },
     bgR:         { label: 'BG R',        type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Background color red channel — shown for rays that miss all geometry.' },
     bgG:         { label: 'BG G',        type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Background color green channel — shown for rays that miss all geometry.' },
     bgB:         { label: 'BG B',        type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01, hint: 'Background color blue channel — shown for rays that miss all geometry.' },

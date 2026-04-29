@@ -815,7 +815,9 @@ export const CustomFnNode: NodeDefinition = {
     const isMultiLine = trimmed.includes('\n');
     let code: string;
     if (isMultiLine) {
-      const indented = trimmed.split('\n').map(l => `        ${l}`).join('\n');
+      // Rewrite `return X;` to `${outVar} = X;` so users can write return naturally
+      const rewritten = trimmed.replace(/\breturn\b\s*/g, `${outVar} = `);
+      const indented = rewritten.split('\n').map(l => `        ${l}`).join('\n');
       code = `    ${outType} ${outVar};\n    {\n${indented}\n    }\n`;
     } else {
       code = `    ${outType} ${outVar} = ${trimmed};\n`;
@@ -1664,6 +1666,64 @@ export const LensBlurNode: NodeDefinition = {
   },
 };
 
+// ─── Depth of Field (post-process) ───────────────────────────────────────────
+// Reads dist from marchLoopGroup (world-unit ray distance). Pixels whose depth
+// deviates from focalDist by more than focalRange get a bokeh disc blur sampled
+// from u_prevFrame. Reuses the lensBlurDisc/Hex/Oct helpers from LensBlurNode.
+
+export const DepthOfFieldNode: NodeDefinition = {
+  type: 'depthOfField',
+  label: 'Depth of Field',
+  category: 'Effects',
+  description: 'Smooth post-process DoF. Wire color + dist from marchLoopGroup. Pixels far from the focal plane get a soft bokeh blur. Disc/Hex/Oct bokeh shapes.',
+  inputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    dist:  { type: 'float', label: 'Dist'  },
+  },
+  outputs: {
+    result: { type: 'vec3',  label: 'Result' },
+    coc:    { type: 'float', label: 'CoC'    },
+  },
+  defaultParams: {
+    focalDist:  3.0,
+    focalRange: 1.0,
+    maxBlur:    8.0,
+    bokehShape: 'disc',
+  },
+  paramDefs: {
+    focalDist:  { label: 'Focal Dist',  type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,  hint: 'World-unit depth that stays sharp. Match your camera camDist for tight focus.' },
+    focalRange: { label: 'Focal Range', type: 'float' as const, min: 0.05, max: 20.0, step: 0.05, hint: 'Depth band around focalDist that stays sharp. Smaller = shallower DoF.' },
+    maxBlur:    { label: 'Max Blur',    type: 'float' as const, min: 0.0,  max: 24.0, step: 0.5,  hint: 'Maximum bokeh disc radius in pixels.' },
+    bokehShape: { label: 'Bokeh Shape', type: 'select' as const, options: [
+      { value: 'disc', label: 'Disc (circular)' },
+      { value: 'hex',  label: 'Hex (6-blade)'   },
+      { value: 'oct',  label: 'Oct (8-blade)'   },
+    ]},
+  },
+  glslFunction: LENS_BLUR_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const col   = inputVars.color || 'vec3(0.0)';
+    const uvVar = inputVars.uv    || 'g_uv';
+    const dist  = inputVars.dist  || '0.0';
+    const fd    = p(node.params.focalDist,  3.0);
+    const fr    = p(node.params.focalRange, 1.0);
+    const mb    = p(node.params.maxBlur,    8.0);
+    const shape = (node.params.bokehShape as string) ?? 'disc';
+    const fn    = shape === 'hex' ? 'lensBlurHex' : shape === 'oct' ? 'lensBlurOct' : 'lensBlurDisc';
+    return {
+      code: [
+        `    vec2  ${id}_uv01   = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+        `    vec2  ${id}_px     = 1.0 / u_resolution;\n`,
+        `    float ${id}_coc    = clamp(abs(${dist} - ${fd}) / max(${fr}, 0.001), 0.0, ${mb});\n`,
+        `    vec3  ${id}_result = ${fn}(u_prevFrame, ${id}_uv01, ${id}_px, ${id}_coc, ${col});\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result`, coc: `${id}_coc` },
+    };
+  },
+};
+
 // ─── Motion Blur ─────────────────────────────────────────────────────────────
 // Temporal accumulation: blends current scene with the previous frame.
 // Creates smooth motion trails for animated shaders. Fast-moving elements
@@ -1673,7 +1733,7 @@ export const MotionBlurNode: NodeDefinition = {
   type: 'motionBlur',
   label: 'Motion Blur',
   category: 'Effects',
-  description: 'Temporal accumulation motion blur. Blends the current frame with the previous frame to create motion trails. Adjust persistence to control trail length.',
+  description: 'Temporal EMA blur: result = scene_weight * current + history_weight * previous. XorDev defaults (0.1 / 0.9) give smooth trails; raise scene_weight for snappier response.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
     uv:    { type: 'vec2', label: 'UV'   },
@@ -1682,13 +1742,13 @@ export const MotionBlurNode: NodeDefinition = {
     result: { type: 'vec3', label: 'Result' },
   },
   defaultParams: {
-    persistence:   0.65,
-    feedback_gain: 1.0,
+    scene_weight:   0.1,
+    history_weight: 0.9,
     decay_r: 1.0, decay_g: 1.0, decay_b: 1.0,
   },
   paramDefs: {
-    persistence:   { label: 'Persistence',    type: 'float', min: 0.0, max: 0.98, step: 0.01 },
-    feedback_gain: { label: 'Feedback Gain',  type: 'float', min: 0.5, max: 2.0,  step: 0.01 },
+    scene_weight:   { label: 'Scene Weight',   type: 'float', min: 0.01, max: 1.0,  step: 0.01 },
+    history_weight: { label: 'History Weight', type: 'float', min: 0.0,  max: 0.99, step: 0.01 },
     decay_r: { label: 'Decay R', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     decay_g: { label: 'Decay G', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     decay_b: { label: 'Decay B', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
@@ -1697,8 +1757,13 @@ export const MotionBlurNode: NodeDefinition = {
     const id    = node.id;
     const col   = inputVars.color || 'vec3(0.0)';
     const uvVar = inputVars.uv    || 'g_uv';
-    const pers  = p(node.params.persistence,   0.65);
-    const gain  = p(node.params.feedback_gain, 1.0);
+    const sw    = p(node.params.scene_weight,   0.1);
+    const hw    = p(node.params.history_weight, 0.9);
+    // backward compat: if old persistence param exists, derive sw/hw from it
+    const pers  = node.params.persistence  != null ? node.params.persistence  : null;
+    const gain  = node.params.feedback_gain != null ? node.params.feedback_gain : null;
+    const sceneW   = pers != null ? p(1.0 - pers, 0.1) : sw;
+    const histW    = pers != null ? p(pers * (gain != null ? gain : 1.0), 0.9) : hw;
     const dr    = p(node.params.decay_r, 1.0);
     const dg    = p(node.params.decay_g, 1.0);
     const db    = p(node.params.decay_b, 1.0);
@@ -1707,13 +1772,12 @@ export const MotionBlurNode: NodeDefinition = {
       code: [
         `    vec2  ${id}_uv01   = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
         `    vec3  ${id}_prev   = texture2D(u_prevFrame, ${id}_uv01).rgb * vec3(${dr}, ${dg}, ${db});\n`,
-        `    vec3  ${id}_result = clamp(mix(${col}, ${id}_prev, ${pers}) * ${gain}, 0.0, 1.0);\n`,
+        `    vec3  ${id}_result = clamp(${sceneW} * ${col} + ${histW} * ${id}_prev, 0.0, 1.0);\n`,
       ].join(''),
       outputVars: { result: `${id}_result` },
     };
   },
 };
-
 // ─── Chroma Shift ─────────────────────────────────────────────────────────────
 // Color-space chromatic aberration: takes an already-rendered vec3 color and
 // spreads the R and B channels apart from G. Same modes as Chroma Aberration Auto

@@ -41,7 +41,7 @@ export {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode,
+  GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
   ChromaShiftNode,
 } from './effects';
 export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
@@ -51,7 +51,7 @@ export { LoopCarryNode } from './loop';
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 
 // Fractals
-export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
+export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 
 // Physics
 export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
@@ -63,7 +63,7 @@ export { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
 
 // 3D Lighting
-export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode } from './threed';
+export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode, PhaseHGNode, FresnelSchlickNode } from './threed';
 
 // 3D Fractals (additional)
 export { MandelboxDENode, KIFSTetrahedronDENode } from './threed';
@@ -162,18 +162,18 @@ import {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode,
+  GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
   ChromaShiftNode,
 } from './effects';
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
-import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
+import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
 import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
-  MandelboxDENode, KIFSTetrahedronDENode,
+  MandelboxDENode, KIFSTetrahedronDENode, PhaseHGNode, FresnelSchlickNode,
 } from './threed';
 import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import {
@@ -211,7 +211,7 @@ import {
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
   RemapNode,
-  CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
+  CrossProductNode, ReflectNode, RefractDirNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
@@ -316,6 +316,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   tiltShiftBlur: TiltShiftBlurNode,
   lensBlur: LensBlurNode,
   motionBlur: MotionBlurNode,
+  depthOfField: DepthOfFieldNode,
   chromaShift: ChromaShiftNode,
   // Loops (wired pair system)
   loopCarry:             LoopCarryNode,
@@ -340,6 +341,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   newtonFractal: NewtonFractalNode,
   lyapunov: LyapunovNode,
   apollonian: ApollonianNode,
+  sphericalFoldFractal: SphericalFoldFractalNode,
   // Physics
   chladni: ChladniNode,
   chladni3d: Chladni3DNode,
@@ -366,6 +368,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   volumetricFog: VolumetricFogNode,
   materialSelect: MaterialSelectNode,
   glass3d: GlassNode,
+  phaseHG: PhaseHGNode,
+  fresnelSchlick: FresnelSchlickNode,
   // Patterns
   truchet: TruchetNode,
   metaballs: MetaballsNode,
@@ -523,6 +527,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   cubicBezierShaper: CubicBezierShaperNode,
   crossProduct: CrossProductNode,
   reflect: ReflectNode,
+  refractDir: RefractDirNode,
   complexMul: ComplexMulNode,
   complexPow: ComplexPowNode,
   angleToVec2: AngleToVec2Node,
