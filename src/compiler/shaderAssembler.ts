@@ -271,8 +271,7 @@ export function generateFragmentShader(
     if (node.type === 'prevFrame' || node.type === 'radianceCascadesApprox' ||
         node.type === 'gaussianBlur' || node.type === 'radialBlur' ||
         node.type === 'tiltShiftBlur' || node.type === 'lensBlur' ||
-        node.type === 'motionBlur' || node.type === 'depthOfField' ||
-        node.type === 'bloom' || node.type === 'stochasticBloom') {
+        node.type === 'motionBlur' || node.type === 'depthOfField') {
       isStateful = true;
     }
   }
