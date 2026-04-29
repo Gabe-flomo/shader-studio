@@ -148,6 +148,8 @@ export function GLSLPage() {
   const [showFnPanel, setShowFnPanel] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameVal, setRenameVal]   = useState('');
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [saveNameVal, setSaveNameVal]     = useState('');
 
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -298,15 +300,17 @@ export function GLSLPage() {
   }, [pushHistory]);
 
   // ── Shader save / load ────────────────────────────────────────────────────
-  const saveShader = () => {
-    const name = window.prompt('Shader name:');
-    if (!name?.trim()) return;
-    const existing = shaders.find(s => s.name === name.trim());
+  const commitSave = () => {
+    const name = saveNameVal.trim();
+    if (!name) return;
+    const existing = shaders.find(s => s.name === name);
     const next: SavedShader[] = existing
       ? shaders.map(s => s.id === existing.id ? { ...s, code } : s)
-      : [...shaders, { id: `sh_${Date.now()}`, name: name.trim(), code }];
+      : [...shaders, { id: `sh_${Date.now()}`, name, code }];
     setShaders(next);
     persistShaders(next);
+    setShowSaveInput(false);
+    setSaveNameVal('');
   };
 
   const loadShader = (s: SavedShader) => {
@@ -371,9 +375,24 @@ export function GLSLPage() {
             Fragment Shader
           </span>
           <div style={{ flex: 1 }} />
-          <button onClick={saveShader} title="Save current shader" style={{ ...btnBase, background: '#1e1e2e', color: '#a6e3a1' }}>
-            + Save
-          </button>
+          {showSaveInput ? (
+            <>
+              <input
+                autoFocus
+                value={saveNameVal}
+                onChange={e => setSaveNameVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') commitSave(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveNameVal(''); } }}
+                placeholder="Shader name…"
+                style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #45475a', background: '#181825', color: '#cdd6f4', outline: 'none', width: '130px' }}
+              />
+              <button onClick={commitSave} disabled={!saveNameVal.trim()} style={{ ...btnBase, background: saveNameVal.trim() ? '#a6e3a1' : '#313244', color: '#1e1e2e', fontWeight: 700 }}>Save</button>
+              <button onClick={() => { setShowSaveInput(false); setSaveNameVal(''); }} style={{ ...btnBase, background: 'none', color: '#585b70' }}>✕</button>
+            </>
+          ) : (
+            <button onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }} title="Save current shader" style={{ ...btnBase, background: '#1e1e2e', color: '#a6e3a1' }}>
+              + Save
+            </button>
+          )}
           <button
             onClick={() => setCode(nodeGraphShader || BOILERPLATE)}
             title="Copy compiled node graph into editor"
@@ -382,7 +401,7 @@ export function GLSLPage() {
             ← From Graph
           </button>
           <button
-            onClick={() => { if (window.confirm('Reset to boilerplate?')) setCode(BOILERPLATE); }}
+            onClick={() => setCode(BOILERPLATE)}
             style={{ ...btnBase, background: 'none', color: '#585b70' }}
           >
             Reset
