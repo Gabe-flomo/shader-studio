@@ -16194,3 +16194,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   },
 
 };
+
+// The default graph to load on startup
+export const DEFAULT_EXAMPLE = 'fractalRings';

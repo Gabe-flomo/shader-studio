@@ -243,6 +243,7 @@ function App() {
   const [showHistogram, setShowHistogram] = useState(false);
   const [histBins, setHistBins]           = useState<Float32Array | null>(null);
   const handleHistogram = useCallback((bins: Float32Array) => { setHistBins(new Float32Array(bins)); }, []);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
 
   // Update preview width when breakpoint changes
   useEffect(() => {
@@ -763,7 +764,6 @@ function App() {
   // DESKTOP LAYOUT (1024px+) — original 3-panel layout, responsively sized
   // ══════════════════════════════════════════════════════════════════════════
   const paletteW = getPaletteWidth(bp);
-  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const effectivePaletteW = paletteW === 0 ? 0 : paletteCollapsed ? 28 : paletteW;
 
   return (
