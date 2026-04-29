@@ -15399,12 +15399,12 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // Light direction (normalized ~(0.5, 0.8, 0.3))
               { id: 'ldir', type: 'makeVec3', position: { x: 60, y: 80 }, inputs: {}, outputs: { rgb: { type: 'vec3', label: 'RGB' } }, params: { r: 0.51, g: 0.81, b: 0.29 } },
               // Negate rd (vec3) to get -rd = view direction
-              { id: 'neg_rd', type: 'negate', position: { x: 280, y: 80 },
-                inputs: { input: { type: 'vec3', label: 'Input', connection: { nodeId: 'mli', outputKey: 'rd' } } },
-                outputs: { output: { type: 'vec3', label: 'Output' } }, params: {} },
+              { id: 'neg_rd', type: 'multiplyVec3', position: { x: 280, y: 80 },
+                inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mli', outputKey: 'rd' } }, scale: { type: 'float', label: 'Scale' } },
+                outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: -1.0 } },
               // cos(theta) = dot(-rd, lightDir)
               { id: 'cosT', type: 'dot', position: { x: 460, y: 80 },
-                inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'neg_rd', outputKey: 'output' } }, b: { type: 'vec3', label: 'B', connection: { nodeId: 'ldir', outputKey: 'rgb' } } },
+                inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'neg_rd', outputKey: 'result' } }, b: { type: 'vec3', label: 'B', connection: { nodeId: 'ldir', outputKey: 'rgb' } } },
                 outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
               // Phase HG — forward scattering g=0.85 (bright toward light source)
               { id: 'phg', type: 'phaseHG', position: { x: 640, y: 80 },
@@ -15498,11 +15498,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
                 outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
               // Light comes from behind-below — g=-0.4 means back-scattering glows when lit from front
               { id: 'ldir', type: 'makeVec3', position: { x: 60, y: 80 }, inputs: {}, outputs: { rgb: { type: 'vec3', label: 'RGB' } }, params: { r: 0.0, g: 0.6, b: 0.8 } },
-              { id: 'neg_rd', type: 'negate', position: { x: 280, y: 80 },
-                inputs: { input: { type: 'vec3', label: 'Input', connection: { nodeId: 'mli', outputKey: 'rd' } } },
-                outputs: { output: { type: 'vec3', label: 'Output' } }, params: {} },
+              { id: 'neg_rd', type: 'multiplyVec3', position: { x: 280, y: 80 },
+                inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mli', outputKey: 'rd' } }, scale: { type: 'float', label: 'Scale' } },
+                outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: -1.0 } },
               { id: 'cosT', type: 'dot', position: { x: 460, y: 80 },
-                inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'neg_rd', outputKey: 'output' } }, b: { type: 'vec3', label: 'B', connection: { nodeId: 'ldir', outputKey: 'rgb' } } },
+                inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'neg_rd', outputKey: 'result' } }, b: { type: 'vec3', label: 'B', connection: { nodeId: 'ldir', outputKey: 'rgb' } } },
                 outputs: { result: { type: 'float', label: 'Result' } }, params: {} },
               // g=-0.5: back-scattering — bright when light is between volume and eye
               { id: 'phg', type: 'phaseHG', position: { x: 640, y: 80 },

@@ -132,9 +132,9 @@ export const MarchCameraNode: NodeDefinition = {
       `    vec3  ${id}_up2   = cross(${id}_fwd, ${id}_rgt);\n`,
       // Pinhole ray direction
       `    vec3  ${id}_rd0   = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
-      // Thin-lens DoF: hash of uv+time → disk sample → shift ro, redirect rd through focal point
-      `    float ${id}_h1    = fract(sin(dot(${uv} + ${time}, vec2(127.1, 311.7))) * 43758.5453);\n`,
-      `    float ${id}_h2    = fract(sin(dot(${uv} + ${time} * 1.7, vec2(269.5, 183.3))) * 43758.5453);\n`,
+      // Thin-lens DoF: stable per-pixel hash → disk sample → shift ro, redirect rd through focal point
+      `    float ${id}_h1    = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
+      `    float ${id}_h2    = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
       `    float ${id}_lr    = ${aperture} * sqrt(${id}_h1);\n`,
       `    float ${id}_lth   = 6.28318 * ${id}_h2;\n`,
       // When aperture=0, lr=0, so ro==ro0 and rd==rd0 (exact pinhole fallback, no branch needed)
@@ -184,8 +184,8 @@ export const ForwardCameraNode: NodeDefinition = {
       code: [
         `    vec3  ${id}_ro0  = vec3(0.0, 0.0, -${d});\n`,
         `    vec3  ${id}_rd0  = normalize(vec3((${uv}).x, (${uv}).y, ${fov}));\n`,
-        `    float ${id}_h1   = fract(sin(dot(${uv} + ${time}, vec2(127.1, 311.7))) * 43758.5453);\n`,
-        `    float ${id}_h2   = fract(sin(dot(${uv} + ${time} * 1.7, vec2(269.5, 183.3))) * 43758.5453);\n`,
+        `    float ${id}_h1   = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
+        `    float ${id}_h2   = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
         `    float ${id}_lr   = ${aperture} * sqrt(${id}_h1);\n`,
         `    float ${id}_lth  = 6.28318 * ${id}_h2;\n`,
         `    vec3  ${id}_ro   = ${id}_ro0 + ${id}_lr * vec3(cos(${id}_lth), sin(${id}_lth), 0.0);\n`,
