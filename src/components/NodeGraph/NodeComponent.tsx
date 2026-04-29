@@ -1723,11 +1723,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
           {/* Outputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
-            {/* MarchLoopGroup: render definition-based outputs, skipping hidden ones */}
-            {isMarchLoopGroup && Object.entries(node.outputs).filter(([key]) => {
+            {/* MarchLoopGroup: always show the full definition output set + any dynamic
+                accumulator outputs (acc0, acc1…) from the stored node, skipping hidden ones */}
+            {isMarchLoopGroup && (() => {
+              const defOuts = def?.outputs ?? {};
+              // Dynamic acc* outputs not in the definition (added at compile time)
+              const dynOuts = Object.fromEntries(
+                Object.entries(node.outputs).filter(([k]) => k.startsWith('acc'))
+              );
+              const mergedOuts = { ...defOuts, ...dynOuts };
               const hidden = (node.params.hiddenOutputs as string[] | undefined) ?? [];
-              return !hidden.includes(key);
-            }).map(([key, output]) => (
+              return Object.entries(mergedOuts).filter(([key]) => !hidden.includes(key));
+            })().map(([key, output]) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '10px', color: '#a6adc8' }}>{output.label}</span>
                 <div
