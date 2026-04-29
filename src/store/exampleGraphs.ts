@@ -15868,8 +15868,11 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
   },
 
   // ── Depth of Field (post-process) ──────────────────────────────────────────
-  // Three spheres at depths ~2, ~4, ~8. focalDist=4 keeps the middle one sharp.
-  // The near sphere and far sphere get smooth bokeh blur from the DoF node.
+  // Camera at distance 6. Three spheres placed via translate3D (pos→SDF order):
+  //   Near  (t≈2.5): translate( 2.0, 0.6, 3.0)  — right, close, blurry
+  //   Mid   (t≈5.4): translate( 0,   0,   0   )  — center, in-focus
+  //   Far   (t≈10.6): translate(-2.5, -0.4, -5.0) — left, deep, blurry
+  // focalDist=5.5 keeps the center sphere sharp.
   dofDepthBlur: {
     label: 'Depth of Field: Post-Process Blur',
     counter: 20,
@@ -15883,7 +15886,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
-        params: { camDist: 2.0, camAngle: 0.0, camElevation: 0.15, rotSpeed: 0.08, fov: 1.2, aperture: 0.0, focalDist: 4.0 },
+        params: { camDist: 6.0, camAngle: 0.15, camElevation: 0.08, rotSpeed: 0.06, fov: 1.1, aperture: 0.0, focalDist: 5.5, lensSpeed: 0.0 },
       },
       {
         id: 'scene_3', type: 'sceneGroup', position: { x: 560, y: 400 },
@@ -15892,41 +15895,38 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           label: 'Three Spheres',
           subgraph: {
             nodes: [
-              { id: 'sp', type: 'scenePos', position: { x: 60, y: 160 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
-              // Near sphere (depth ~2): slightly left and close
-              { id: 'sdf_a', type: 'sphereSDF3D', position: { x: 260, y: 60 },
+              { id: 'sp', type: 'scenePos', position: { x: 60, y: 240 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              // Near sphere: translate then SDF
+              { id: 'tr_a', type: 'translate3D', position: { x: 240, y: 80 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
-                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.4 } },
-              { id: 'tr_a', type: 'translate3D', position: { x: 260, y: 160 },
-                inputs: { dist: { type: 'float', label: 'Dist', connection: { nodeId: 'sdf_a', outputKey: 'dist' } } },
-                outputs: { dist: { type: 'float', label: 'Dist' } }, params: { x: -1.1, y: 0.0, z: -2.0 } },
-              // Mid sphere (depth ~4): center, in-focus
-              { id: 'sdf_b', type: 'sphereSDF3D', position: { x: 260, y: 260 },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } }, params: { tx: 2.0, ty: 0.6, tz: 3.0 } },
+              { id: 'sdf_a', type: 'sphereSDF3D', position: { x: 440, y: 80 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr_a', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.45 } },
+              // Mid sphere: at origin (no translate)
+              { id: 'sdf_b', type: 'sphereSDF3D', position: { x: 440, y: 240 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
-                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.55 } },
-              { id: 'tr_b', type: 'translate3D', position: { x: 260, y: 360 },
-                inputs: { dist: { type: 'float', label: 'Dist', connection: { nodeId: 'sdf_b', outputKey: 'dist' } } },
-                outputs: { dist: { type: 'float', label: 'Dist' } }, params: { x: 0.2, y: 0.0, z: 2.0 } },
-              // Far sphere (depth ~8): right side, deep background
-              { id: 'sdf_c', type: 'sphereSDF3D', position: { x: 260, y: 460 },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.65 } },
+              // Far sphere: translate then SDF
+              { id: 'tr_c', type: 'translate3D', position: { x: 240, y: 400 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
-                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.7 } },
-              { id: 'tr_c', type: 'translate3D', position: { x: 260, y: 560 },
-                inputs: { dist: { type: 'float', label: 'Dist', connection: { nodeId: 'sdf_c', outputKey: 'dist' } } },
-                outputs: { dist: { type: 'float', label: 'Dist' } }, params: { x: 1.4, y: 0.1, z: 6.0 } },
-              // SDF union via smooth min
-              { id: 'u_ab', type: 'sdfSmoothUnion', position: { x: 480, y: 220 },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } }, params: { tx: -2.5, ty: -0.4, tz: -5.0 } },
+              { id: 'sdf_c', type: 'sphereSDF3D', position: { x: 440, y: 400 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr_c', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.85 } },
+              // Union all three
+              { id: 'u_ab', type: 'sdfUnion', position: { x: 640, y: 160 },
                 inputs: {
-                  a: { type: 'float', label: 'A', connection: { nodeId: 'tr_a', outputKey: 'dist' } },
-                  b: { type: 'float', label: 'B', connection: { nodeId: 'tr_b', outputKey: 'dist' } },
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'sdf_a', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'sdf_b', outputKey: 'dist' } },
                 },
-                outputs: { dist: { type: 'float', label: 'Dist' } }, params: { k: 0.01 } },
-              { id: 'u_abc', type: 'sdfSmoothUnion', position: { x: 480, y: 420 },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
+              { id: 'u_abc', type: 'sdfUnion', position: { x: 640, y: 320 },
                 inputs: {
-                  a: { type: 'float', label: 'A', connection: { nodeId: 'u_ab', outputKey: 'dist' } },
-                  b: { type: 'float', label: 'B', connection: { nodeId: 'tr_c', outputKey: 'dist' } },
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'u_ab',  outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'sdf_c', outputKey: 'dist' } },
                 },
-                outputs: { dist: { type: 'float', label: 'Dist' } }, params: { k: 0.01 } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
             ],
             outputNodeId: 'u_abc', outputKey: 'dist', inputPorts: [], outputPorts: [],
           },
@@ -15944,19 +15944,18 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         outputs: {
           color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' },
           normal: { type: 'vec3', label: 'Normal' }, hit: { type: 'float', label: 'Hit' },
-          depth: { type: 'float', label: 'Depth' },
         },
         params: {
-          maxSteps: 80, maxDist: 20.0, stepScale: 1.0, volumetric: false, passthrough: 0.1, jitter: 0.0,
-          bgR: 0.04, bgG: 0.04, bgB: 0.06, albedoR: 0.85, albedoG: 0.88, albedoB: 0.95,
+          maxSteps: 80, maxDist: 22.0, stepScale: 1.0, volumetric: false, passthrough: 0.1, jitter: 0.0,
+          bgR: 0.03, bgG: 0.03, bgB: 0.05, albedoR: 0.88, albedoG: 0.90, albedoB: 0.96,
           subgraph: { nodes: [], inputPorts: [], outputPorts: [] },
         },
       },
-      // Tone map first so prevFrame has a good looking image to sample from
+      // Tone map first so prevFrame holds a clean image for the blur to sample
       { id: 'tone_5', type: 'toneMap', position: { x: 1100, y: 240 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
-      // Depth of Field: focalDist=4 (mid sphere is ~4 units away), focalRange=0.8, maxBlur=10
+      // Post-process DoF: center sphere (t≈5.4) stays sharp, others blur out
       { id: 'dof_6', type: 'depthOfField', position: { x: 1300, y: 240 },
         inputs: {
           color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'tone_5', outputKey: 'color' } },
@@ -15964,7 +15963,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           dist:  { type: 'float', label: 'Dist',  connection: { nodeId: 'mlg_4',  outputKey: 'dist' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' }, coc: { type: 'float', label: 'CoC' } },
-        params: { focalDist: 4.0, focalRange: 0.8, maxBlur: 10.0, bokehShape: 'disc' } },
+        params: { focalDist: 5.5, focalRange: 1.2, maxBlur: 10.0, bokehShape: 'disc' } },
       { id: 'out_7', type: 'output', position: { x: 1520, y: 240 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'dof_6', outputKey: 'result' } } },
         outputs: {}, params: {} },

@@ -91,7 +91,7 @@ export const MarchCameraNode: NodeDefinition = {
   },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.0, fov: 1.5,
-    targetX: 0.0, targetY: 0.0, targetZ: 0.0, aperture: 0.0, focalDist: 3.0,
+    targetX: 0.0, targetY: 0.0, targetZ: 0.0, aperture: 0.0, focalDist: 3.0, lensSpeed: 0.0,
   },
   paramDefs: {
     camDist:      { label: 'Cam Dist',   type: 'float' as const, min: 0.1,  max: 20.0, step: 0.05, hint: 'Distance from the camera to the target point.' },
@@ -102,8 +102,9 @@ export const MarchCameraNode: NodeDefinition = {
     targetX:      { label: 'Target X',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'X position of the look-at target.' },
     targetY:      { label: 'Target Y',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Y position of the look-at target.' },
     targetZ:      { label: 'Target Z',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Z position of the look-at target.' },
-    aperture:     { label: 'Aperture',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, hint: 'Lens aperture radius. 0 = pinhole (no blur). Higher = more bokeh.' },
+    aperture:     { label: 'Aperture',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, hint: 'Lens aperture radius. 0 = pinhole (no blur). Higher = more edge grain.' },
     focalDist:    { label: 'Focal Dist', type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,   hint: 'Distance from camera at which the scene is perfectly sharp.' },
+    lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id           = node.id;
@@ -119,6 +120,7 @@ export const MarchCameraNode: NodeDefinition = {
     const targetZ      = inputVars.targetZ      || p(node.params.targetZ,      0.0);
     const aperture     = inputVars.aperture     || p(node.params.aperture,     0.0);
     const focalDist    = inputVars.focalDist    || p(node.params.focalDist,    3.0);
+    const lensSpeed    = inputVars.lensSpeed    || p(node.params.lensSpeed,    0.0);
 
     const code = [
       `    float ${id}_ang   = ${camAngle} + ${time} * ${rotSpeed};\n`,
@@ -132,11 +134,11 @@ export const MarchCameraNode: NodeDefinition = {
       `    vec3  ${id}_up2   = cross(${id}_fwd, ${id}_rgt);\n`,
       // Pinhole ray direction
       `    vec3  ${id}_rd0   = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
-      // Thin-lens DoF: stable per-pixel hash → disk sample → shift ro, redirect rd through focal point
+      // Per-pixel hash for lens disk radius; angle drifts over time via lensSpeed
       `    float ${id}_h1    = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
       `    float ${id}_h2    = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
       `    float ${id}_lr    = ${aperture} * sqrt(${id}_h1);\n`,
-      `    float ${id}_lth   = 6.28318 * ${id}_h2;\n`,
+      `    float ${id}_lth   = 6.28318 * ${id}_h2 + ${time} * ${lensSpeed};\n`,
       // When aperture=0, lr=0, so ro==ro0 and rd==rd0 (exact pinhole fallback, no branch needed)
       `    vec3  ${id}_ro    = ${id}_ro0 + ${id}_lr * (cos(${id}_lth) * ${id}_rgt + sin(${id}_lth) * ${id}_up2);\n`,
       `    vec3  ${id}_rd    = normalize((${id}_ro0 + ${id}_rd0 * max(${focalDist}, 0.05)) - ${id}_ro);\n`,
@@ -165,21 +167,23 @@ export const ForwardCameraNode: NodeDefinition = {
     ro: { type: 'vec3', label: 'Ray Origin' },
     rd: { type: 'vec3', label: 'Ray Dir' },
   },
-  defaultParams: { camDist: 3.0, fov: 1.0, aperture: 0.0, focalDist: 3.0 },
+  defaultParams: { camDist: 3.0, fov: 1.0, aperture: 0.0, focalDist: 3.0, lensSpeed: 0.0 },
   paramDefs: {
     camDist:   { label: 'Cam Dist',   type: 'float' as const, min: 0.1, max: 20.0, step: 0.1 },
     fov:       { label: 'FOV',        type: 'float' as const, min: 0.3, max: 3.0,  step: 0.05 },
     aperture:  { label: 'Aperture',   type: 'float' as const, min: 0.0, max: 0.5,  step: 0.005, hint: 'Lens aperture radius. 0 = pinhole (no blur).' },
     focalDist: { label: 'Focal Dist', type: 'float' as const, min: 0.1, max: 50.0, step: 0.1,   hint: 'Distance from camera at which the scene is perfectly sharp.' },
+    lensSpeed: { label: 'Lens Speed', type: 'float' as const, min: 0.0, max: 5.0,  step: 0.05,  hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const uv       = inputVars.uv   || 'g_uv';
-    const time     = inputVars.time || 'u_time';
-    const d        = p(node.params.camDist,   3.0);
-    const fov      = p(node.params.fov,       1.0);
-    const aperture = p(node.params.aperture,  0.0);
-    const focal    = p(node.params.focalDist, 3.0);
+    const id        = node.id;
+    const uv        = inputVars.uv   || 'g_uv';
+    const time      = inputVars.time || 'u_time';
+    const d         = p(node.params.camDist,   3.0);
+    const fov       = p(node.params.fov,       1.0);
+    const aperture  = p(node.params.aperture,  0.0);
+    const focal     = p(node.params.focalDist, 3.0);
+    const lensSpeed = p(node.params.lensSpeed, 0.0);
     return {
       code: [
         `    vec3  ${id}_ro0  = vec3(0.0, 0.0, -${d});\n`,
@@ -187,7 +191,7 @@ export const ForwardCameraNode: NodeDefinition = {
         `    float ${id}_h1   = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
         `    float ${id}_h2   = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
         `    float ${id}_lr   = ${aperture} * sqrt(${id}_h1);\n`,
-        `    float ${id}_lth  = 6.28318 * ${id}_h2;\n`,
+        `    float ${id}_lth  = 6.28318 * ${id}_h2 + ${time} * ${lensSpeed};\n`,
         `    vec3  ${id}_ro   = ${id}_ro0 + ${id}_lr * vec3(cos(${id}_lth), sin(${id}_lth), 0.0);\n`,
         `    vec3  ${id}_rd   = normalize((${id}_ro0 + ${id}_rd0 * max(${focal}, 0.05)) - ${id}_ro);\n`,
       ].join(''),
