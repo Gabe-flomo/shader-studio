@@ -1694,6 +1694,12 @@ export function generateFragmentShader(
               const sgFnDef = `float ${sceneFnNameLocal}(vec3 p${sgInlineExtraDecls ? ', ' + sgInlineExtraDecls : ''}) {\n${sgFnBody}    return ${sgLastFloatVar};\n}`;
               functions.add(sgFnDef);
               if (sgInlineExtraParams.length > 0) sceneFnExtraParams.set(sceneFnNameLocal, sgInlineExtraParams);
+              // Forward scene-fn external vars through marchBody_ so they're in scope when mapScene_ is called
+              for (const ep of sgInlineExtraParams) {
+                if (!mlBodyExtraParams.some(p => p.name === ep.name)) {
+                  mlBodyExtraParams.push(ep);
+                }
+              }
               sceneFnName = sceneFnNameLocal;
               nodeOutputs.set(sn.id, { scene: sceneFnNameLocal });
             }
