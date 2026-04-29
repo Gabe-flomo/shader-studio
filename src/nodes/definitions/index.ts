@@ -42,7 +42,7 @@ export {
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
-  ChromaShiftNode,
+  ChromaShiftNode, BloomNode, StochasticBloomNode,
 } from './effects';
 export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 export { LoopCarryNode } from './loop';
@@ -163,7 +163,7 @@ import {
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
-  ChromaShiftNode,
+  ChromaShiftNode, BloomNode, StochasticBloomNode,
 } from './effects';
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
@@ -318,6 +318,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   motionBlur: MotionBlurNode,
   depthOfField: DepthOfFieldNode,
   chromaShift: ChromaShiftNode,
+  bloom: BloomNode,
+  stochasticBloom: StochasticBloomNode,
   // Loops (wired pair system)
   loopCarry:             LoopCarryNode,
   loopStart:             LoopStartNode,

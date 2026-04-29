@@ -1772,6 +1772,168 @@ export const MotionBlurNode: NodeDefinition = {
   },
 };
 
+// ─── Bloom ────────────────────────────────────────────────────────────────────
+// Multi-tap bright-pixel extraction from u_prevFrame with gaussian weighting.
+// Pixels above the threshold glow; knee softens the cutoff edge. The bloom
+// accumulates over frames via u_prevFrame feedback — converges in 1-2 frames.
+
+export const BloomNode: NodeDefinition = {
+  type: 'bloom',
+  label: 'Bloom',
+  category: 'Effects',
+  description: 'Photographic glow from bright pixels. Wire scene color + UV, connect result to Output. Threshold sets the brightness cutoff; Knee softens it.',
+  inputs: {
+    color: { type: 'vec3', label: 'Color' },
+    uv:    { type: 'vec2', label: 'UV'    },
+  },
+  outputs: {
+    result: { type: 'vec3', label: 'Result'    },
+    glow:   { type: 'vec3', label: 'Glow Only' },
+  },
+  defaultParams: { threshold: 0.6, knee: 0.15, intensity: 1.5, radius: 6.0, quality: 'standard' },
+  paramDefs: {
+    threshold: { label: 'Threshold',   type: 'float', min: 0.0, max: 2.0,  step: 0.01 },
+    knee:      { label: 'Knee',        type: 'float', min: 0.0, max: 0.5,  step: 0.01 },
+    intensity: { label: 'Intensity',   type: 'float', min: 0.0, max: 8.0,  step: 0.05 },
+    radius:    { label: 'Radius (px)', type: 'float', min: 1.0, max: 32.0, step: 0.5  },
+    quality:   { label: 'Quality', type: 'select', options: [
+      { value: 'fast',     label: 'Fast (3×3)'   },
+      { value: 'standard', label: 'Medium (5×5)' },
+      { value: 'high',     label: 'High (7×7)'   },
+    ]},
+  },
+  glslFunction: `
+float bloomExtract(float luma, float threshold, float knee) {
+  float lo = threshold - knee;
+  float hi = threshold + knee;
+  if (luma <= lo) return 0.0;
+  if (luma >= hi) return (luma - threshold) / max(luma, 0.001);
+  float t = (luma - lo) / max(2.0 * knee, 0.0001);
+  return knee * t * t / max(luma, 0.001);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id        = node.id;
+    const col       = inputVars.color || 'vec3(0.0)';
+    const uvVar     = inputVars.uv    || 'g_uv';
+    const threshold = p(node.params.threshold, 0.6);
+    const knee      = p(node.params.knee,      0.15);
+    const intensity = p(node.params.intensity, 1.5);
+    const radius    = p(node.params.radius,    6.0);
+    const quality   = (node.params.quality as string) ?? 'standard';
+    const half_n    = quality === 'fast' ? 1 : quality === 'high' ? 3 : 2;
+    const sigma     = half_n === 1 ? 1.0 : half_n === 3 ? 2.0 : 1.5;
+
+    const gw = (x: number, y: number) => Math.exp(-0.5 * (x * x + y * y) / (sigma * sigma));
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
+      `    vec3  ${id}_glow = vec3(0.0);\n`,
+      `    float ${id}_wsum = 0.0001;\n`,
+    ];
+
+    for (let gx = -half_n; gx <= half_n; gx++) {
+      for (let gy = -half_n; gy <= half_n; gy++) {
+        const w = f(gw(gx, gy));
+        lines.push(
+          `    { vec3 ${id}_s = texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(gx)},${f(gy)}) * ${id}_px * ${radius}, 0.0, 1.0)).rgb; ` +
+          `float ${id}_l = dot(${id}_s, vec3(0.2126, 0.7152, 0.0722)); ` +
+          `float ${id}_bw = bloomExtract(${id}_l, ${threshold}, ${knee}) * ${w}; ` +
+          `${id}_glow += ${id}_s * ${id}_bw; ${id}_wsum += ${id}_bw; }\n`,
+        );
+      }
+    }
+
+    lines.push(
+      `    ${id}_glow /= ${id}_wsum;\n`,
+      `    ${id}_glow *= ${intensity};\n`,
+      `    vec3 ${id}_result = ${col} + ${id}_glow;\n`,
+    );
+
+    return { code: lines.join(''), outputVars: { result: `${id}_result`, glow: `${id}_glow` } };
+  },
+};
+
+// ─── Stochastic Bloom ─────────────────────────────────────────────────────────
+// Random-disc samples into u_prevFrame extract bright spots with organic jitter.
+// When temporal=true the hash seed shifts each frame — the per-frame noise
+// averages out via u_prevFrame feedback into a smooth, painterly glow.
+
+export const StochasticBloomNode: NodeDefinition = {
+  type: 'stochasticBloom',
+  label: 'Stochastic Bloom',
+  category: 'Effects',
+  description: 'Organic glow using random disc sampling. Temporal mode dithers samples across frames via u_prevFrame feedback, producing a smooth painterly bloom. Inspired by XorDev stochastic rendering.',
+  inputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    time:  { type: 'float', label: 'Time'  },
+  },
+  outputs: {
+    result: { type: 'vec3', label: 'Result'    },
+    glow:   { type: 'vec3', label: 'Glow Only' },
+  },
+  defaultParams: { threshold: 0.5, intensity: 2.0, spread: 12.0, samples: '16', temporal: 'true' },
+  paramDefs: {
+    threshold: { label: 'Threshold',   type: 'float', min: 0.0, max: 2.0,  step: 0.01 },
+    intensity: { label: 'Intensity',   type: 'float', min: 0.0, max: 8.0,  step: 0.05 },
+    spread:    { label: 'Spread (px)', type: 'float', min: 1.0, max: 60.0, step: 0.5  },
+    samples:   { label: 'Samples', type: 'select', options: [
+      { value: '8',  label: '8 (fast)'    },
+      { value: '16', label: '16 (medium)' },
+      { value: '32', label: '32 (high)'   },
+    ]},
+    temporal: { label: 'Temporal', type: 'select', options: [
+      { value: 'true',  label: 'On (smooth over time)' },
+      { value: 'false', label: 'Off (stable pattern)'  },
+    ]},
+  },
+  glslFunction: `
+vec2 bloomStochHash(vec2 p, float seed) {
+  vec3 q = fract(vec3(p.xyx) * vec3(127.1, 311.7, 74.7) + seed);
+  q += dot(q, q.yxz + 19.19);
+  return fract((q.xx + q.yz) * q.zy);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id        = node.id;
+    const col       = inputVars.color || 'vec3(0.0)';
+    const uvVar     = inputVars.uv    || 'g_uv';
+    const timeVar   = inputVars.time  || 'u_time';
+    const threshold = p(node.params.threshold, 0.5);
+    const intensity = p(node.params.intensity, 2.0);
+    const spread    = p(node.params.spread,    12.0);
+    const nSamples  = parseInt((node.params.samples as string) ?? '16', 10);
+    const temporal  = (node.params.temporal as string) ?? 'true';
+    const timeSeed  = temporal === 'true' ? `${timeVar} * 0.37` : '0.0';
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
+      `    vec3  ${id}_glow = vec3(0.0);\n`,
+    ];
+
+    for (let i = 0; i < nSamples; i++) {
+      lines.push(
+        `    { vec2 ${id}_h = bloomStochHash(${id}_uv01 * 177.3 + vec2(${f(i * 13.7)}, ${f(i * 7.31)}), ${timeSeed}); ` +
+        `float ${id}_ang = ${id}_h.x * 6.28318; ` +
+        `float ${id}_r   = sqrt(${id}_h.y) * ${spread}; ` +
+        `vec2  ${id}_off = vec2(cos(${id}_ang), sin(${id}_ang)) * ${id}_r * ${id}_px; ` +
+        `vec3  ${id}_s   = texture2D(u_prevFrame, clamp(${id}_uv01 + ${id}_off, 0.0, 1.0)).rgb; ` +
+        `float ${id}_l   = dot(${id}_s, vec3(0.2126, 0.7152, 0.0722)); ` +
+        `${id}_glow += ${id}_s * max(${id}_l - ${threshold}, 0.0); }\n`,
+      );
+    }
+
+    lines.push(
+      `    ${id}_glow /= ${f(nSamples)};\n`,
+      `    ${id}_glow *= ${intensity};\n`,
+      `    vec3 ${id}_result = ${col} + ${id}_glow;\n`,
+    );
+
+    return { code: lines.join(''), outputVars: { result: `${id}_result`, glow: `${id}_glow` } };
+  },
+};
+
 // ─── Chroma Shift ─────────────────────────────────────────────────────────────
 // Color-space chromatic aberration: takes an already-rendered vec3 color and
 // spreads the R and B channels apart from G. Same modes as Chroma Aberration Auto
