@@ -15999,7 +15999,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'bl_uv',   outputKey: 'uv'    } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' }, glow: { type: 'vec3', label: 'Glow Only' } },
-        params: { threshold: 0.75, knee: 0.15, intensity: 1.2, radius: 8.0, quality: 'standard' },
+        params: { threshold: 0.55, knee: 0.15, intensity: 2.5, radius: 10.0, quality: 'standard' },
       },
       {
         id: 'bl_out', type: 'output', position: { x: 1080, y: 120 },
@@ -16039,7 +16039,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           time:  { type: 'float', label: 'Time',  connection: { nodeId: 'sb_time', outputKey: 'time'  } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' }, glow: { type: 'vec3', label: 'Glow Only' } },
-        params: { threshold: 0.7, intensity: 2.0, spread: 20.0, samples: '16', temporal: 'true' },
+        params: { threshold: 0.5, intensity: 3.0, spread: 18.0, samples: '16', temporal: 'true' },
       },
       {
         id: 'sb_out', type: 'output', position: { x: 1100, y: 120 },

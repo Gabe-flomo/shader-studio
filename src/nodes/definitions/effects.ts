@@ -1844,8 +1844,12 @@ export const BloomNode: NodeDefinition = {
     lines.push(
       `    ${id}_glow /= ${id}_wsum;\n`,
       `    ${id}_glow *= ${intensity};\n`,
-      // Clamp: prevents u_prevFrame from exceeding [0,1] which causes exponential feedback
-      `    vec3 ${id}_result = clamp(${col} + ${id}_glow, 0.0, 1.0);\n`,
+      // Darkness gate: bloom only falls on pixels darker than threshold.
+      // Pixels already at/above threshold don't receive more glow, which breaks
+      // the positive u_prevFrame feedback loop that causes white blowup.
+      `    float ${id}_myL  = dot(${col}, vec3(0.2126, 0.7152, 0.0722));\n`,
+      `    float ${id}_gate = 1.0 - smoothstep(${threshold}, 1.0, ${id}_myL);\n`,
+      `    vec3 ${id}_result = clamp(${col} + ${id}_glow * ${id}_gate, 0.0, 1.0);\n`,
     );
 
     return { code: lines.join(''), outputVars: { result: `${id}_result`, glow: `${id}_glow` } };
@@ -1902,10 +1906,10 @@ export const StochasticBloomNode: NodeDefinition = {
       `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
       `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
       `    vec3  ${id}_glow = vec3(0.0);\n`,
+      `    float ${id}_wsum = 0.0001;\n`,
     ];
 
     for (let i = 0; i < nSamples; i++) {
-      // Inline hash using proven sin-based noise (same family as other nodes)
       const seed1 = f(i * 13.7 + 0.1);
       const seed2 = f(i * 7.31 + 0.2);
       lines.push(
@@ -1917,14 +1921,19 @@ export const StochasticBloomNode: NodeDefinition = {
         `vec2  ${id}_off = vec2(cos(${id}_ang), sin(${id}_ang)) * ${id}_r * ${id}_px; ` +
         `vec3  ${id}_s   = texture2D(u_prevFrame, clamp(${id}_uv01 + ${id}_off, 0.0, 1.0)).rgb; ` +
         `float ${id}_l   = dot(${id}_s, vec3(0.2126, 0.7152, 0.0722)); ` +
-        `${id}_glow += ${id}_s * max(${id}_l - ${threshold}, 0.0); }\n`,
+        // Weight by brightness above threshold, attenuated by distance (1/(r+1) falloff)
+        `float ${id}_wt  = max(${id}_l - ${threshold}, 0.0) / (${id}_r + 1.0); ` +
+        `${id}_glow += ${id}_s * ${id}_wt; ${id}_wsum += ${id}_wt; }\n`,
       );
     }
 
     lines.push(
-      `    ${id}_glow /= ${f(nSamples)};\n`,
+      `    ${id}_glow /= ${id}_wsum;\n`,
       `    ${id}_glow *= ${intensity};\n`,
-      `    vec3 ${id}_result = clamp(${col} + ${id}_glow, 0.0, 1.0);\n`,
+      // Darkness gate: only dark pixels receive glow — prevents feedback compounding
+      `    float ${id}_myL  = dot(${col}, vec3(0.2126, 0.7152, 0.0722));\n`,
+      `    float ${id}_gate = 1.0 - smoothstep(${threshold}, 1.0, ${id}_myL);\n`,
+      `    vec3 ${id}_result = clamp(${col} + ${id}_glow * ${id}_gate, 0.0, 1.0);\n`,
     );
 
     return { code: lines.join(''), outputVars: { result: `${id}_result`, glow: `${id}_glow` } };
