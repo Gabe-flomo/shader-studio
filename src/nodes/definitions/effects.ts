@@ -1760,8 +1760,8 @@ export const MotionBlurNode: NodeDefinition = {
     const sw    = p(node.params.scene_weight,   0.1);
     const hw    = p(node.params.history_weight, 0.9);
     // backward compat: if old persistence param exists, derive sw/hw from it
-    const pers  = node.params.persistence  != null ? node.params.persistence  : null;
-    const gain  = node.params.feedback_gain != null ? node.params.feedback_gain : null;
+    const pers  = node.params.persistence  != null ? Number(node.params.persistence)  : null;
+    const gain  = node.params.feedback_gain != null ? Number(node.params.feedback_gain) : null;
     const sceneW   = pers != null ? p(1.0 - pers, 0.1) : sw;
     const histW    = pers != null ? p(pers * (gain != null ? gain : 1.0), 0.9) : hw;
     const dr    = p(node.params.decay_r, 1.0);
