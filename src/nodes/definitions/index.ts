@@ -173,7 +173,7 @@ import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode
 import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
-  MandelboxDENode, KIFSTetrahedronDENode,
+  MandelboxDENode, KIFSTetrahedronDENode, PhaseHGNode, FresnelSchlickNode,
 } from './threed';
 import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import {
