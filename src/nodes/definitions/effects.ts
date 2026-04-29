@@ -1802,15 +1802,6 @@ export const BloomNode: NodeDefinition = {
       { value: 'high',     label: 'High (7×7)'   },
     ]},
   },
-  glslFunction: `
-float bloomExtract(float luma, float threshold, float knee) {
-  float lo = threshold - knee;
-  float hi = threshold + knee;
-  if (luma <= lo) return 0.0;
-  if (luma >= hi) return (luma - threshold) / max(luma, 0.001);
-  float t = (luma - lo) / max(2.0 * knee, 0.0001);
-  return knee * t * t / max(luma, 0.001);
-}`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
     const col       = inputVars.color || 'vec3(0.0)';
@@ -1825,6 +1816,11 @@ float bloomExtract(float luma, float threshold, float knee) {
 
     const gw = (x: number, y: number) => Math.exp(-0.5 * (x * x + y * y) / (sigma * sigma));
 
+    // Inline knee: quadratic ramp from (threshold-knee) to (threshold+knee)
+    // bright = 0 below lo, linear above hi, smooth quadratic in between
+    const lo = `(${threshold} - ${knee})`;
+    const hi = `(${threshold} + ${knee})`;
+
     const lines: string[] = [
       `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
       `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
@@ -1838,7 +1834,8 @@ float bloomExtract(float luma, float threshold, float knee) {
         lines.push(
           `    { vec3 ${id}_s = texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(gx)},${f(gy)}) * ${id}_px * ${radius}, 0.0, 1.0)).rgb; ` +
           `float ${id}_l = dot(${id}_s, vec3(0.2126, 0.7152, 0.0722)); ` +
-          `float ${id}_bw = bloomExtract(${id}_l, ${threshold}, ${knee}) * ${w}; ` +
+          `float ${id}_t = clamp((${id}_l - ${lo}) / max(${hi} - ${lo}, 0.0001), 0.0, 1.0); ` +
+          `float ${id}_bw = mix(0.0, max(${id}_l - ${threshold}, 0.0), ${id}_t) * ${w}; ` +
           `${id}_glow += ${id}_s * ${id}_bw; ${id}_wsum += ${id}_bw; }\n`,
         );
       }
@@ -1888,12 +1885,6 @@ export const StochasticBloomNode: NodeDefinition = {
       { value: 'false', label: 'Off (stable pattern)'  },
     ]},
   },
-  glslFunction: `
-vec2 bloomStochHash(vec2 p, float seed) {
-  vec3 q = fract(vec3(p.xyx) * vec3(127.1, 311.7, 74.7) + seed);
-  q += dot(q, q.yxz + 19.19);
-  return fract((q.xx + q.yz) * q.zy);
-}`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
     const col       = inputVars.color || 'vec3(0.0)';
@@ -1913,10 +1904,15 @@ vec2 bloomStochHash(vec2 p, float seed) {
     ];
 
     for (let i = 0; i < nSamples; i++) {
+      // Inline hash using proven sin-based noise (same family as other nodes)
+      const seed1 = f(i * 13.7 + 0.1);
+      const seed2 = f(i * 7.31 + 0.2);
       lines.push(
-        `    { vec2 ${id}_h = bloomStochHash(${id}_uv01 * 177.3 + vec2(${f(i * 13.7)}, ${f(i * 7.31)}), ${timeSeed}); ` +
-        `float ${id}_ang = ${id}_h.x * 6.28318; ` +
-        `float ${id}_r   = sqrt(${id}_h.y) * ${spread}; ` +
+        `    { vec2 ${id}_p = ${id}_uv01 + vec2(${seed1}, ${seed2}) + ${timeSeed}; ` +
+        `float ${id}_hx = fract(sin(dot(${id}_p, vec2(127.1, 311.7))) * 43758.5453); ` +
+        `float ${id}_hy = fract(sin(dot(${id}_p, vec2(269.5, 183.3))) * 43758.5453); ` +
+        `float ${id}_ang = ${id}_hx * 6.28318; ` +
+        `float ${id}_r   = sqrt(${id}_hy) * ${spread}; ` +
         `vec2  ${id}_off = vec2(cos(${id}_ang), sin(${id}_ang)) * ${id}_r * ${id}_px; ` +
         `vec3  ${id}_s   = texture2D(u_prevFrame, clamp(${id}_uv01 + ${id}_off, 0.0, 1.0)).rgb; ` +
         `float ${id}_l   = dot(${id}_s, vec3(0.2126, 0.7152, 0.0722)); ` +

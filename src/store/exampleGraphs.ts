@@ -15989,13 +15989,13 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'bl_bc', type: 'brightnessContrast', position: { x: 560, y: 120 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_frac', outputKey: 'color' } } },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
         params: { brightness: 0.1, contrast: 1.6 },
       },
       {
         id: 'bl_bloom', type: 'bloom', position: { x: 820, y: 120 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_bc',   outputKey: 'color' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_bc',   outputKey: 'result' } },
           uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'bl_uv',   outputKey: 'uv'    } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' }, glow: { type: 'vec3', label: 'Glow Only' } },
@@ -16028,13 +16028,13 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       {
         id: 'sb_bc', type: 'brightnessContrast', position: { x: 560, y: 120 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sb_frac', outputKey: 'color' } } },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
         params: { brightness: 0.0, contrast: 2.0 },
       },
       {
         id: 'sb_bloom', type: 'stochasticBloom', position: { x: 840, y: 120 },
         inputs: {
-          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'sb_bc',   outputKey: 'color' } },
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'sb_bc',   outputKey: 'result' } },
           uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'sb_uv',   outputKey: 'uv'    } },
           time:  { type: 'float', label: 'Time',  connection: { nodeId: 'sb_time', outputKey: 'time'  } },
         },
