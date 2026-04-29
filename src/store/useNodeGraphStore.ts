@@ -3289,7 +3289,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         let changed = false;
         const mergedOutputs = { ...node.outputs };
         for (const [key, sock] of Object.entries(dynSockets)) {
-          if (!mergedOutputs[key]) { mergedOutputs[key] = sock; changed = true; }
+          if (!mergedOutputs[key]) { mergedOutputs[key] = sock as import('../types/nodeGraph').OutputSocket; changed = true; }
         }
         // Remove stale acc* outputs that no longer exist in the compiled result
         for (const key of Object.keys(mergedOutputs)) {
