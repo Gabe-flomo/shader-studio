@@ -1731,7 +1731,7 @@ export const MotionBlurNode: NodeDefinition = {
   type: 'motionBlur',
   label: 'Motion Blur',
   category: 'Effects',
-  description: 'Temporal accumulation motion blur. Blends the current frame with the previous frame to create motion trails. Adjust persistence to control trail length.',
+  description: 'Temporal EMA blur: result = scene_weight * current + history_weight * previous. XorDev defaults (0.1 / 0.9) give smooth trails; raise scene_weight for snappier response.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
     uv:    { type: 'vec2', label: 'UV'   },
@@ -1740,13 +1740,13 @@ export const MotionBlurNode: NodeDefinition = {
     result: { type: 'vec3', label: 'Result' },
   },
   defaultParams: {
-    persistence:   0.65,
-    feedback_gain: 1.0,
+    scene_weight:   0.1,
+    history_weight: 0.9,
     decay_r: 1.0, decay_g: 1.0, decay_b: 1.0,
   },
   paramDefs: {
-    persistence:   { label: 'Persistence',    type: 'float', min: 0.0, max: 0.98, step: 0.01 },
-    feedback_gain: { label: 'Feedback Gain',  type: 'float', min: 0.5, max: 2.0,  step: 0.01 },
+    scene_weight:   { label: 'Scene Weight',   type: 'float', min: 0.01, max: 1.0,  step: 0.01 },
+    history_weight: { label: 'History Weight', type: 'float', min: 0.0,  max: 0.99, step: 0.01 },
     decay_r: { label: 'Decay R', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     decay_g: { label: 'Decay G', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     decay_b: { label: 'Decay B', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
@@ -1755,8 +1755,13 @@ export const MotionBlurNode: NodeDefinition = {
     const id    = node.id;
     const col   = inputVars.color || 'vec3(0.0)';
     const uvVar = inputVars.uv    || 'g_uv';
-    const pers  = p(node.params.persistence,   0.65);
-    const gain  = p(node.params.feedback_gain, 1.0);
+    const sw    = p(node.params.scene_weight,   0.1);
+    const hw    = p(node.params.history_weight, 0.9);
+    // backward compat: if old persistence param exists, derive sw/hw from it
+    const pers  = node.params.persistence  != null ? node.params.persistence  : null;
+    const gain  = node.params.feedback_gain != null ? node.params.feedback_gain : null;
+    const sceneW   = pers != null ? p(1.0 - pers, 0.1) : sw;
+    const histW    = pers != null ? p(pers * (gain != null ? gain : 1.0), 0.9) : hw;
     const dr    = p(node.params.decay_r, 1.0);
     const dg    = p(node.params.decay_g, 1.0);
     const db    = p(node.params.decay_b, 1.0);
@@ -1765,7 +1770,7 @@ export const MotionBlurNode: NodeDefinition = {
       code: [
         `    vec2  ${id}_uv01   = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
         `    vec3  ${id}_prev   = texture2D(u_prevFrame, ${id}_uv01).rgb * vec3(${dr}, ${dg}, ${db});\n`,
-        `    vec3  ${id}_result = clamp(mix(${col}, ${id}_prev, ${pers}) * ${gain}, 0.0, 1.0);\n`,
+        `    vec3  ${id}_result = clamp(${sceneW} * ${col} + ${histW} * ${id}_prev, 0.0, 1.0);\n`,
       ].join(''),
       outputVars: { result: `${id}_result` },
     };

@@ -7221,7 +7221,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'mb_uv',   outputKey: 'uv'    } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { persistence: 0.72, feedback_gain: 1.0, decay_r: 1.0, decay_g: 0.95, decay_b: 0.9 },
+        params: { scene_weight: 0.28, history_weight: 0.72, decay_r: 1.0, decay_g: 0.95, decay_b: 0.9 },
       },
       {
         id: 'mb_out', type: 'output', position: { x: 960, y: 200 },
@@ -8713,7 +8713,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           uv:    { type: 'vec2', label: 'UV',    connection: { nodeId: 'mfb_uv',   outputKey: 'uv'   } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { persistence: 0.78, feedback_gain: 1.0, decay_r: 1.0, decay_g: 0.96, decay_b: 0.9 },
+        params: { scene_weight: 0.22, history_weight: 0.78, decay_r: 1.0, decay_g: 0.96, decay_b: 0.9 },
       },
       {
         id: 'mfb_out', type: 'output', position: { x: 800, y: 200 },
