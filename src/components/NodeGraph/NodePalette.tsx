@@ -125,7 +125,7 @@ type ExKey = keyof typeof EXAMPLE_GRAPHS;
 
 // Items within each folder are sorted alphabetically at render time via sortedKeys()
 const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
-  { label: '3D Fractals',     color: '#cba6f7', keys: ['mandelboxMLG','kifsTetraMLG','mengerMLG','mandelbulbOrbitColor','sphericalFoldDemo'] as ExKey[] },
+  { label: '3D Fractals',     color: '#cba6f7', keys: ['mandelboxMLG','kifsTetraMLG','mengerMLG','mandelbulbOrbitColor','sphericalFoldDemo','mandelboxOrbitPalette','mandelboxGlowLayer','mandelboxNormalPalette','mandelboxIterEdge'] as ExKey[] },
   { label: '3D Lighting',     color: '#f9c468', keys: ['aoSphere','softShadowTorus','multiLightScene','fresnelGlowSphere','fakeSSSWax','foggyScene','glassSphereScene','mandelboxLit','kifsTetraSSS','fullLightRig','mandelboxFresnelGlow','phaseHGForwardCloud','phaseHGBacklit','fresnelSchlickRim','fresnelSchlickTwoTone','refractDirFakeGlass','refractDirDispersion'] as ExKey[] },
   { label: '3D SDF',          color: '#89dceb', keys: ['sdfBooleanShowcase','sdfOnionShell','sdfPrimitivesShowcase','sdfPolarRepeat','sdfSmoothMetaballs','sdfRoundedBox','sdfBoxFrame','sdfCappedCone','sdfHexPrism','sdfBend3D','sdfIntersectDemo','mengerSponge3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidShell','gyroidWarped','schwarzPShell','mirrorFoldSpheres','mirrorFoldBoxes','domainWarpSphere','swizzle3DNormalMap','swizzle3DPosGradient'] as ExKey[] },
   { label: 'Volumetric',      color: '#f5a97f', keys: ['glowMarcher','volHollowShell','volTorus','volRepeatLattice','volOctahedron','volAnimatedRepeat','jitterFogSphere','jitterTorusCloud'] as ExKey[] },
