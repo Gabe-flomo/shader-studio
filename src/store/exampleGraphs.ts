@@ -15970,4 +15970,227 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Spherical Fold Fractal ────────────────────────────────────────────────
+  sphericalFoldDemo: {
+    label: 'Spherical Fold Fractal',
+    counter: 3,
+    nodes: [
+      { id: 'sff_uv',   type: 'uv',   position: { x: 40,  y: 160 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'sff_time', type: 'time', position: { x: 40,  y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'sff_node', type: 'sphericalFoldFractal', position: { x: 300, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'sff_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'sff_time', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { zoom: 9.0, time_speed: 0.5, outer_steps: '18', fold_iters: '9', fold_x: 1.5, fold_y: 4.0, fold_z: 3.0, offset_x: 1.0, offset_y: 1.2, offset_z: 3.0, inv_scale: 9.0, inv_min: 0.95, hue: 0.59, saturation: 0.4, color_scale: 4000.0 },
+      },
+      {
+        id: 'sff_out', type: 'output', position: { x: 560, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sff_node', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Möbius + Fractal Loop — conformal warp over animated fractal rings ────
+  mobiusFractalLoop: {
+    label: 'Möbius Fractal Loop',
+    counter: 6,
+    nodes: [
+      { id: 'mb_uv',   type: 'uv',   position: { x: 40,  y: 160 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'mb_time', type: 'time', position: { x: 40,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'mb_lfo', type: 'sineLFO', position: { x: 240, y: 360 },
+        inputs: { time: { type: 'float', label: 'Time', connection: { nodeId: 'mb_time', outputKey: 'time' } } },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { freq: 0.15, phase: 0.0, amplitude: 3.14, offset: 0.0 },
+      },
+      {
+        id: 'mb_mob', type: 'mobiusSpace', position: { x: 460, y: 200 },
+        inputs: {
+          input: { type: 'vec2',  label: 'UV',    connection: { nodeId: 'mb_uv',  outputKey: 'uv'    } },
+          angle: { type: 'float', label: 'Angle', connection: { nodeId: 'mb_lfo', outputKey: 'value' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Möbius UV' } },
+        params: { poleX: 0.4, poleY: 0.0, angle: 0.0 },
+      },
+      {
+        id: 'mb_frac', type: 'fractalLoop', position: { x: 700, y: 120 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'mb_mob',  outputKey: 'output' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'mb_time', outputKey: 'time'   } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { iterations: 4, fract_scale: 1.8, scale_exp: 1.0, ring_freq: 8.0, glow: 0.012, glow_pow: 1.2, iter_offset: 0.4, time_scale: 0.3, offset: [0.5,0.5,0.5], amplitude: [0.5,0.5,0.5], freq: [1.0,1.0,1.0], phase: [0.0,0.33,0.67] },
+      },
+      {
+        id: 'mb_tone', type: 'toneMap', position: { x: 960, y: 120 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mb_frac', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' },
+      },
+      {
+        id: 'mb_out', type: 'output', position: { x: 1180, y: 120 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mb_tone', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Circle Inversion + Apollonian ────────────────────────────────────────
+  inversionApollonius: {
+    label: 'Inversion + Apollonian',
+    counter: 4,
+    nodes: [
+      { id: 'ia_uv',   type: 'uv',   position: { x: 40,  y: 160 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'ia_time', type: 'time', position: { x: 40,  y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ia_inv', type: 'inversionSpace', position: { x: 260, y: 160 },
+        inputs: { input: { type: 'vec2', label: 'UV', connection: { nodeId: 'ia_uv', outputKey: 'uv' } } },
+        outputs: { output: { type: 'vec2', label: 'Inverted UV' } },
+        params: { radius: 0.8 },
+      },
+      {
+        id: 'ia_ap', type: 'apollonian', position: { x: 480, y: 120 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'ia_inv',  outputKey: 'output' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'ia_time', outputKey: 'time'   } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { iterations: 10, scale: 1.5, zoom: 1.0, center_x: 0.0, center_y: 0.0, animate: 0.3, palette_preset: '1', color_scale: 1.2, color_offset: 0.1 },
+      },
+      {
+        id: 'ia_out', type: 'output', position: { x: 720, y: 120 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ia_ap', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Tangent Kaleidoscope (XorDev) ────────────────────────────────────────
+  // cos(length(tan(p) + p) - time) — cos of distance through tangent space
+  tangentKaleidoscope: {
+    label: 'Tangent Kaleidoscope',
+    counter: 3,
+    nodes: [
+      { id: 'tk_uv',   type: 'uv',   position: { x: 40, y: 160 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'tk_time', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'tk_fn', type: 'customFn', position: { x: 280, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'uv',   connection: { nodeId: 'tk_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'time', connection: { nodeId: 'tk_time', outputKey: 'time' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {
+          label: 'Tangent Kaleidoscope',
+          inputs: [{ name: 'uv', type: 'vec2', slider: null }, { name: 'time', type: 'float', slider: null }],
+          outputType: 'vec3',
+          body: 'vec2 p = uv * 5.0;\nvec2 tp = sin(p) / cos(p);\nreturn cos(length(tp + p) - time + vec3(0.0, 0.7, 1.0));',
+          glslFunctions: '',
+        },
+      },
+      {
+        id: 'tk_out', type: 'output', position: { x: 540, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tk_fn', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Inversive Spiral (XorDev) ────────────────────────────────────────────
+  // Kelvin inversion + noise jitter → tanh grating color
+  inversiveSpiral: {
+    label: 'Inversive Spiral',
+    counter: 3,
+    nodes: [
+      { id: 'is_uv',   type: 'uv',   position: { x: 40, y: 160 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'is_time', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'is_fn', type: 'customFn', position: { x: 280, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'uv',   connection: { nodeId: 'is_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'time', connection: { nodeId: 'is_time', outputKey: 'time' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {
+          label: 'Inversive Spiral',
+          inputs: [{ name: 'uv', type: 'vec2', slider: null }, { name: 'time', type: 'float', slider: null }],
+          outputType: 'vec3',
+          body: 'float noise = fract(dot(uv.xyxy, cos(time + uv.yxyx)));\nvec2 v = uv / max(dot(uv, uv), 0.0001) * (4.0 + noise);\nv.x += time;\nvec2 cv = cos(v + cos(0.6 * v).yx);\nreturn tanh(0.2 / cos(vec3(0.0, 0.1, 0.0) + 4.0 * length(cv)));',
+          glslFunctions: '',
+        },
+      },
+      {
+        id: 'is_out', type: 'output', position: { x: 540, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'is_fn', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Ring Glow (XorDev) ──────────────────────────────────────────────────
+  // smooth asymmetric ring: bright inside-face, dim outer halo
+  ringGlow: {
+    label: 'Ring Glow',
+    counter: 3,
+    nodes: [
+      { id: 'rg_uv',   type: 'uv',   position: { x: 40, y: 160 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'rg_time', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'rg_fn', type: 'customFn', position: { x: 280, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'uv',   connection: { nodeId: 'rg_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'time', connection: { nodeId: 'rg_time', outputKey: 'time' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {
+          label: 'Ring Glow',
+          inputs: [{ name: 'uv', type: 'vec2', slider: null }, { name: 'time', type: 'float', slider: null }],
+          outputType: 'vec3',
+          body: 'vec2 p = uv * 1.2;\nfloat l = length(p) - 1.0;\nvec3 col = 0.5 + tanh(0.1 / max(l * 10.0, -l) - sin(l + p.y * max(1.0, -l * 10.0) + time + vec3(0.0, 1.0, 2.0))) / 2.0;\nreturn col;',
+          glslFunctions: '',
+        },
+      },
+      {
+        id: 'rg_out', type: 'output', position: { x: 540, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'rg_fn', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Sphere Face Light (XorDev) ───────────────────────────────────────────
+  // analytical sphere surface — mix axis-aligned normal with cos-time axis
+  sphereFaceLight: {
+    label: 'Sphere Face Light',
+    counter: 3,
+    nodes: [
+      { id: 'sf_uv',   type: 'uv',   position: { x: 40, y: 160 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'sf_time', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'sf_fn', type: 'customFn', position: { x: 280, y: 160 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'uv',   connection: { nodeId: 'sf_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'time', connection: { nodeId: 'sf_time', outputKey: 'time' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {
+          label: 'Sphere Face Light',
+          inputs: [{ name: 'uv', type: 'vec2', slider: null }, { name: 'time', type: 'float', slider: null }],
+          outputType: 'vec3',
+          body: 'vec3 p = vec3(uv, 0.0);\nvec3 s = vec3(sqrt(max(0.5 - dot(uv, uv), 0.0)), uv);\nvec3 a = cos(time + vec3(0.0, 11.0, -time));\nvec3 col = 0.1 / abs(mix(a * dot(a, s), s, 0.8) - 0.6 * cross(a, s)) / (1.0 + dot(uv, uv));\nreturn tanh(col + length(col / 5.0));',
+          glslFunctions: '',
+        },
+      },
+      {
+        id: 'sf_out', type: 'output', position: { x: 540, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sf_fn', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };

@@ -51,7 +51,7 @@ export { LoopCarryNode } from './loop';
 export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 
 // Fractals
-export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
+export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 
 // Physics
 export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
@@ -168,7 +168,7 @@ import {
 import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
-import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode } from './fractals';
+import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
 import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
@@ -341,6 +341,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   newtonFractal: NewtonFractalNode,
   lyapunov: LyapunovNode,
   apollonian: ApollonianNode,
+  sphericalFoldFractal: SphericalFoldFractalNode,
   // Physics
   chladni: ChladniNode,
   chladni3d: Chladni3DNode,
