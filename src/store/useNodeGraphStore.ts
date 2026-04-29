@@ -3278,7 +3278,38 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       graphNodes = nodes;
     }
     const result = compileGraph({ nodes: graphNodes });
+
+    // Patch MLG node.outputs with dynamic acc* sockets discovered at compile time.
+    // Preserves any existing acc* labels already stored in the graph (e.g. from saved examples).
+    let patchedForAcc = get().nodes;
+    if (result.mlgDynamicOutputs && result.mlgDynamicOutputs.size > 0) {
+      patchedForAcc = patchedForAcc.map(node => {
+        const dynSockets = result.mlgDynamicOutputs!.get(node.id);
+        if (!dynSockets) return node;
+        let changed = false;
+        const mergedOutputs = { ...node.outputs };
+        for (const [key, sock] of Object.entries(dynSockets)) {
+          if (!mergedOutputs[key]) { mergedOutputs[key] = sock; changed = true; }
+        }
+        // Remove stale acc* outputs that no longer exist in the compiled result
+        for (const key of Object.keys(mergedOutputs)) {
+          if (key.startsWith('acc') && !dynSockets[key]) { delete mergedOutputs[key]; changed = true; }
+        }
+        return changed ? { ...node, outputs: mergedOutputs } : node;
+      });
+    } else {
+      // No acc outputs in this compile — strip any stale acc* from MLG nodes
+      patchedForAcc = patchedForAcc.map(node => {
+        if (node.type !== 'marchLoopGroup') return node;
+        const hasAcc = Object.keys(node.outputs).some(k => k.startsWith('acc'));
+        if (!hasAcc) return node;
+        const mergedOutputs = Object.fromEntries(Object.entries(node.outputs).filter(([k]) => !k.startsWith('acc')));
+        return { ...node, outputs: mergedOutputs };
+      });
+    }
+
     set({
+      nodes: patchedForAcc,
       vertexShader: result.vertexShader,
       fragmentShader: result.fragmentShader,
       compilationErrors: result.errors ?? [],
