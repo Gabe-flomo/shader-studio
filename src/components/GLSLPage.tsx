@@ -189,7 +189,10 @@ export function GLSLPage() {
   useEffect(() => {
     setRawGlslShader(code);
     localStorage.setItem(EDITOR_KEY, code);
-  }, [code, setRawGlslShader]);
+    // Re-sync overlay scroll after every code change — the browser silently
+    // repositions the textarea on paste/undo without firing onScroll.
+    requestAnimationFrame(syncScroll);
+  }, [code, setRawGlslShader, syncScroll]);
 
   useEffect(() => () => { setRawGlslShader(null); }, [setRawGlslShader]);
 
