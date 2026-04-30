@@ -2006,7 +2006,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   renameGroupPort: (nodeId, portKey, dir, newLabel) => {
     set(state => ({
       nodes: state.nodes.map(n => {
-        if (n.id !== nodeId || n.type !== 'group') return n;
+        if (n.id !== nodeId) return n;
+        if (!['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup'].includes(n.type)) return n;
         const subgraph = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
         if (!subgraph) return n;
         const updatedSubgraph: import('../types/nodeGraph').SubgraphData = {

@@ -1665,32 +1665,60 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           {/* Inputs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {/* MarchLoopGroup: render definition-based inputs */}
-            {isMarchLoopGroup && Object.entries(node.inputs).map(([key, input]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <div
-                  ref={el => { registerSocket(node.id, 'in', key, el); }}
-                  onMouseUp={e => {
-                    e.stopPropagation();
-                    if (node.inputs[key]?.connection && !isConnectionDragging) {
-                      disconnectInput(node.id, key);
-                    } else {
-                      onEndConnection(node.id, key);
-                    }
-                  }}
-                  style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: node.inputs[key]?.connection
-                      ? (TYPE_COLORS[input.type] ?? '#888')
-                      : '#1e1e2e',
-                    border: `2px solid ${TYPE_COLORS[input.type] ?? '#888'}`,
-                    cursor: 'crosshair',
-                    position: 'relative', left: -14,
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <span style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14 }}>{input.label}</span>
-              </div>
-            ))}
+            {isMarchLoopGroup && (() => {
+              const MLG_FIXED_INPUTS = new Set(['ro', 'rd', 'scene', 'uv', 'time']);
+              return Object.entries(node.inputs).map(([key, input]) => {
+                const isExtraInput = !MLG_FIXED_INPUTS.has(key) && !key.startsWith('ps_');
+                return (
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div
+                      ref={el => { registerSocket(node.id, 'in', key, el); }}
+                      onMouseUp={e => {
+                        e.stopPropagation();
+                        if (node.inputs[key]?.connection && !isConnectionDragging) {
+                          disconnectInput(node.id, key);
+                        } else {
+                          onEndConnection(node.id, key);
+                        }
+                      }}
+                      style={{
+                        width: 10, height: 10, borderRadius: '50%',
+                        background: node.inputs[key]?.connection
+                          ? (TYPE_COLORS[input.type] ?? '#888')
+                          : '#1e1e2e',
+                        border: `2px solid ${TYPE_COLORS[input.type] ?? '#888'}`,
+                        cursor: 'crosshair',
+                        position: 'relative', left: -14,
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    {isExtraInput && editingPortKey === `mlgext_${key}` ? (
+                      <input
+                        autoFocus
+                        value={editingPortLabel}
+                        onChange={e => setEditingPortLabel(e.target.value)}
+                        onMouseDown={e => e.stopPropagation()}
+                        onBlur={() => {
+                          if (editingPortLabel.trim()) renameMarchLoopInput(node.id, key, editingPortLabel.trim());
+                          setEditingPortKey(null);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          if (e.key === 'Escape') setEditingPortKey(null);
+                        }}
+                        style={{ width: '60px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #88aacc', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none', marginLeft: -14 }}
+                      />
+                    ) : (
+                      <span
+                        style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14, cursor: isExtraInput ? 'text' : 'default' }}
+                        title={isExtraInput ? 'Double-click to rename' : undefined}
+                        onDoubleClick={isExtraInput ? e => { e.stopPropagation(); setEditingPortKey(`mlgext_${key}`); setEditingPortLabel(input.label); } : undefined}
+                      >{input.label}</span>
+                    )}
+                  </div>
+                );
+              });
+            })()}
             {inputPorts.map((port) => (
               <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* Socket dot */}
