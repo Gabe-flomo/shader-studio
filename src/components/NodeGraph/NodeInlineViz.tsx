@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import type { GraphNode } from '../../types/nodeGraph';
+import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
 import { PALETTE_PRESETS } from '../../nodes/definitions/color';
-import { scopeValueRegistry } from '../../lib/scopeRegistry';
+import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -817,11 +817,13 @@ function renderSDF(
 ) {
   const W = imageData.width, H = imageData.height;
   const data = imageData.data;
+  const aspect = W / H;
 
   for (let yi = 0; yi < H; yi++) {
     for (let xi = 0; xi < W; xi++) {
       const ux = ((xi + 0.5) / W * 2 - 1) * uvScale;
-      const uy = ((1 - (yi + 0.5) / H) * 2 - 1) * uvScale;
+      // Correct for display aspect ratio so circles render as circles
+      const uy = ((1 - (yi + 0.5) / H) * 2 - 1) * uvScale / aspect;
       const d = evalSDF(ux, uy, type, params);
 
       // Visualization
@@ -1494,31 +1496,53 @@ export function ScaleColorViz({ node }: { node: GraphNode }) {
 
 // ─── Viz — Add Colors (addVec3, addColor) ─────────────────────────────────────
 export function AddColorsViz({ node }: { node: GraphNode }) {
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+  const rafRef    = useRef(0);
+  const aRef      = useRef<HTMLDivElement>(null);
+  const bRef      = useRef<HTMLDivElement>(null);
+  const rRef      = useRef<HTMLDivElement>(null);
+  const rLabelRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const toRgb = (v: number[]) => {
+      const r = Math.round(Math.max(0, Math.min(1, v[0])) * 255);
+      const g = Math.round(Math.max(0, Math.min(1, v[1])) * 255);
+      const b = Math.round(Math.max(0, Math.min(1, v[2])) * 255);
+      return `rgb(${r},${g},${b})`;
+    };
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const n = nodeRef.current;
+      const aConn = n.inputs.a?.connection;
+      const bConn = n.inputs.b?.connection;
+      const aVec = aConn ? (vectorValueRegistry.get(`__preview__${aConn.nodeId}:${aConn.outputKey}`) ?? [0,0,0]) : [0,0,0];
+      const bVec = bConn ? (vectorValueRegistry.get(`__preview__${bConn.nodeId}:${bConn.outputKey}`) ?? [0,0,0]) : [0,0,0];
+      const rVec = [aVec[0]+bVec[0], aVec[1]+bVec[1], aVec[2]+bVec[2]];
+      if (aRef.current) aRef.current.style.background = toRgb(aVec);
+      if (bRef.current) bRef.current.style.background = toRgb(bVec);
+      if (rRef.current) rRef.current.style.background = toRgb(rVec);
+      if (rLabelRef.current) rLabelRef.current.textContent =
+        `(${rVec[0].toFixed(2)}, ${rVec[1].toFixed(2)}, ${rVec[2].toFixed(2)})`;
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
   const scale = typeof node.params.scale === 'number' ? node.params.scale : null;
+  const sw: React.CSSProperties = { width: 22, height: 22, borderRadius: 3, border: '1px solid #45475a', flexShrink: 0, background: '#111' };
 
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 5,
-        background: 'linear-gradient(135deg, #334, #556)',
-        border: '1px solid #45475a',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '9px', color: '#a6adc8', fontFamily: 'monospace',
-      }}>A</div>
-      <span style={{ fontSize: '13px', color: '#6c7086', lineHeight: 1 }}>+</span>
-      <div style={{
-        width: 28, height: 28, borderRadius: 5,
-        background: 'linear-gradient(135deg, #343, #565)',
-        border: '1px solid #45475a',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '9px', color: '#a6adc8', fontFamily: 'monospace',
-      }}>B</div>
-      {scale !== null && (
-        <>
-          <span style={{ fontSize: '10px', color: '#6c7086' }}>×</span>
-          <span style={{ fontSize: '9px', color: '#f9e2af', fontFamily: 'monospace' }}>{scale.toFixed(2)}</span>
-        </>
-      )}
+    <div style={{ ...VIZ_CONTAINER, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'monospace' }}>
+      <div ref={aRef} style={sw} />
+      <span style={{ fontSize: '9px', color: '#585b70' }}>A</span>
+      <span style={{ fontSize: '12px', color: '#6c7086' }}>+</span>
+      <div ref={bRef} style={sw} />
+      <span style={{ fontSize: '9px', color: '#585b70' }}>B</span>
+      {scale !== null && <span style={{ fontSize: '9px', color: '#f9e2af' }}>×{scale.toFixed(2)}</span>}
+      <span style={{ fontSize: '12px', color: '#6c7086' }}>=</span>
+      <div ref={rRef} style={sw} />
+      <span ref={rLabelRef} style={{ fontSize: '9px', color: '#6c7086', marginLeft: 2 }} />
     </div>
   );
 }
@@ -1825,6 +1849,1893 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Viz — Subgraph mini-map (group, sceneGroup, marchLoopGroup, spaceWarpGroup) ─
+
+const TYPE_COLORS: Record<DataType, string> = {
+  float:       '#ff00aa',
+  vec2:        '#00aaff',
+  vec3:        '#00ffaa',
+  vec4:        '#ffaa00',
+  mat2:        '#f5c842',
+  mat3:        '#e8a020',
+  scene3d:     '#cc88aa',
+  spacewarp3d: '#aa88cc',
+};
+
+export function SubgraphMiniViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const subgraph = node.params.subgraph as SubgraphData | undefined;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !subgraph) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    const nodes       = subgraph.nodes       ?? [];
+    const inputPorts  = subgraph.inputPorts  ?? [];
+    const outputPorts = subgraph.outputPorts ?? [];
+
+    if (nodes.length === 0) return;
+
+    const getNodeColor = (n: GraphNode): string => {
+      const firstOutput = Object.values(n.outputs)[0];
+      return firstOutput ? (TYPE_COLORS[firstOutput.type as DataType] ?? '#6c7086') : '#6c7086';
+    };
+
+    // Build edges from input connections
+    type Edge = { fromId: string; toId: string };
+    const edges: Edge[] = [];
+    for (const n of nodes) {
+      for (const sock of Object.values(n.inputs)) {
+        if (sock.connection) edges.push({ fromId: sock.connection.nodeId, toId: n.id });
+      }
+    }
+
+    // Use actual node positions from the subgraph, normalized to canvas bounds.
+    // Pad left/right to leave room for input/output port markers.
+    const PAD_X = 14, PAD_Y = 8;
+    const nodePositions = nodes.map(n => n.position);
+    const minX = Math.min(...nodePositions.map(p => p.x));
+    const maxX = Math.max(...nodePositions.map(p => p.x));
+    const minY = Math.min(...nodePositions.map(p => p.y));
+    const maxY = Math.max(...nodePositions.map(p => p.y));
+    const rangeX = Math.max(1, maxX - minX);
+    const rangeY = Math.max(1, maxY - minY);
+
+    const toCanvasX = (wx: number) => PAD_X + ((wx - minX) / rangeX) * (W - PAD_X * 2);
+    const toCanvasY = (wy: number) => PAD_Y + ((wy - minY) / rangeY) * (H - PAD_Y * 2);
+
+    const positions = new Map<string, { x: number; y: number }>(
+      nodes.map(n => [n.id, { x: toCanvasX(n.position.x), y: toCanvasY(n.position.y) }])
+    );
+
+    // Input ports: placed at x=4, y derived from the target node's canvas Y
+    const inputPosArr = inputPorts.map(p => {
+      const target = positions.get(p.toNodeId);
+      return { p, x: 4, y: target?.y ?? H / 2 };
+    });
+
+    // Output ports: placed at x=W-4, y derived from the source node's canvas Y
+    const outputPosArr = outputPorts.map(p => {
+      const source = positions.get(p.fromNodeId);
+      return { p, x: W - 4, y: source?.y ?? H / 2 };
+    });
+
+    const drawEdge = (x1: number, y1: number, x2: number, y2: number, color: string) => {
+      const dx = (x2 - x1) * 0.45;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.bezierCurveTo(x1 + dx, y1, x2 - dx, y2, x2, y2);
+      ctx.stroke();
+    };
+
+    // Internal edges
+    for (const e of edges) {
+      const from = positions.get(e.fromId);
+      const to   = positions.get(e.toId);
+      if (from && to) drawEdge(from.x, from.y, to.x, to.y, '#2a2a3e');
+    }
+
+    // Group input → internal node edges
+    for (const ip of inputPosArr) {
+      const target = positions.get(ip.p.toNodeId);
+      if (target) drawEdge(ip.x, ip.y, target.x, target.y, (TYPE_COLORS[ip.p.type] ?? '#45475a') + '66');
+    }
+
+    // Internal node → group output edges
+    for (const op of outputPosArr) {
+      const source = positions.get(op.p.fromNodeId);
+      if (source) drawEdge(source.x, source.y, op.x, op.y, (TYPE_COLORS[op.p.type] ?? '#45475a') + '66');
+    }
+
+    // Internal node dots — circles for regular nodes, diamonds for nested groups
+    const DOT_R = 3;
+    const GROUP_TYPES = new Set(['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup']);
+    for (const n of nodes) {
+      const pos = positions.get(n.id);
+      if (!pos) continue;
+      const color = getNodeColor(n);
+      const isGroup = GROUP_TYPES.has(n.type);
+      ctx.fillStyle = color + '30';
+      if (isGroup) {
+        const s = DOT_R + 2;
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y - s); ctx.lineTo(pos.x + s, pos.y);
+        ctx.lineTo(pos.x, pos.y + s); ctx.lineTo(pos.x - s, pos.y);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = color;
+        const r = DOT_R;
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y - r); ctx.lineTo(pos.x + r, pos.y);
+        ctx.lineTo(pos.x, pos.y + r); ctx.lineTo(pos.x - r, pos.y);
+        ctx.closePath(); ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(pos.x, pos.y, DOT_R + 2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(pos.x, pos.y, DOT_R, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // Group input triangles (pointing right)
+    for (const ip of inputPosArr) {
+      const color = TYPE_COLORS[ip.p.type as DataType] ?? '#6c7086';
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(ip.x - 4, ip.y - 3); ctx.lineTo(ip.x + 3, ip.y); ctx.lineTo(ip.x - 4, ip.y + 3);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // Group output squares
+    for (const op of outputPosArr) {
+      const color = TYPE_COLORS[op.p.type as DataType] ?? '#6c7086';
+      ctx.fillStyle = color;
+      ctx.fillRect(op.x - 3, op.y - 3, 6, 6);
+    }
+
+    // Node count label
+    ctx.fillStyle = '#45475a';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${nodes.length}n`, W - 3, H - 3);
+    ctx.textAlign = 'left';
+  }, [subgraph]);
+
+  if (!subgraph) return null;
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={72}
+        style={{ display: 'block', width: '100%', height: '72px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz — 3D SDF param grid (sphereSDF3D, boxSDF3D, etc.) ───────────────────
+
+const SDF_SKIP_PARAMS = new Set(['_bands', 'mode', 'preset', 'subgraph', 'surfacedParams']);
+
+export function SDF3DParamViz({ node }: { node: GraphNode }) {
+  const entries = Object.entries(node.params).filter(([k]) => !SDF_SKIP_PARAMS.has(k));
+
+  const fmtVal = (v: unknown): string => {
+    if (Array.isArray(v)) return `[${(v as number[]).map(x => (Math.round(x * 100) / 100).toString()).join(', ')}]`;
+    if (typeof v === 'number') return (Math.round(v * 1000) / 1000).toString();
+    if (typeof v === 'boolean') return v ? 'on' : 'off';
+    return String(v).slice(0, 12);
+  };
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div style={{
+      ...VIZ_CONTAINER,
+      padding: '5px 8px 6px',
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: '2px 8px',
+    }}>
+      {entries.map(([k, v]) => (
+        <div key={k} style={{ display: 'flex', gap: '4px', alignItems: 'baseline', minWidth: 0 }}>
+          <span style={{ fontSize: '8px', color: '#6c7086', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{k}</span>
+          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtVal(v)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Viz — Scalar function curves (exp, pow, sqrt, ceil, floor, negate, sign, fract) ─
+
+type ScalarFn = (x: number, params: Record<string, unknown>) => number;
+
+const SCALAR_FNS: Record<string, ScalarFn> = {
+  exp:      (x, p) => Math.exp(x * (typeof p.scale === 'number' ? p.scale : 1)),
+  pow:      (x, p) => Math.pow(Math.max(0, x), typeof p.exponent === 'number' ? p.exponent : 1.2),
+  sqrt:     (x)    => Math.sqrt(Math.max(0, x)),
+  ceil:     (x)    => Math.ceil(x * 4) / 4,
+  floor:    (x)    => Math.floor(x * 4) / 4,
+  negate:   (x)    => -x,
+  sign:     (x)    => Math.sign(x),
+  fractRaw: (x)    => x - Math.floor(x),
+  abs:      (x)    => Math.abs(x),
+  mod:      (x, p) => { const period = typeof p.period === 'number' ? p.period : 1; return ((x % period) + period) % period; },
+  tanh:     (x)    => Math.tanh(x),
+  round:    (x)    => Math.round(x * 4) / 4,
+  step:     (x, p) => x >= (typeof p.edge === 'number' ? p.edge : 0) ? 1 : -1,
+  atan2:    (x)    => Math.atan2(x, 0.5) / Math.PI,
+};
+
+const SCALAR_COLORS: Record<string, string> = {
+  exp: '#fab387', pow: '#f9e2af', sqrt: '#a6e3a1',
+  ceil: '#89dceb', floor: '#89b4fa', negate: '#f38ba8',
+  sign: '#cba6f7', fractRaw: '#f9e2af', mod: '#f9e2af',
+  abs: '#a6e3a1',
+  tanh: '#cba6f7', round: '#89dceb', step: '#f9e2af', atan2: '#a6e3a1',
+};
+
+export function ScalarFnViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fn = SCALAR_FNS[node.type];
+  const color = SCALAR_COLORS[node.type] ?? '#cdd6f4';
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !fn) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+    }
+    // Axes
+    ctx.strokeStyle = '#45475a';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Sample first pass to find Y range, then auto-scale
+    const ys: number[] = [];
+    for (let i = 0; i <= W; i++) {
+      const x = (i / W) * 2 - 1;
+      ys.push(fn(x, node.params));
+    }
+    const rawMax = Math.max(...ys.map(Math.abs).filter(isFinite));
+    const yRange = Math.min(4, Math.max(0.5, rawMax * 1.1));
+
+    const samples: { px: number; py: number }[] = [];
+    for (let i = 0; i <= W; i++) {
+      const y = ys[i];
+      const px = i;
+      const py = H / 2 - Math.max(-yRange, Math.min(yRange, y)) / yRange * (H / 2 - 4);
+      samples.push({ px, py });
+    }
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    samples.forEach(({ px, py }, i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py));
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.fillText(node.type, 4, H - 4);
+  }, [fn, color, node.type, node.params]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={56}
+        style={{ display: 'block', width: '100%', height: '56px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Arithmetic op display (add, subtract, multiply, divide) ────────────
+
+const OP_SYMBOLS: Record<string, string> = {
+  add: '+', subtract: '−', multiply: '×', divide: '÷',
+};
+const OP_COLORS: Record<string, string> = {
+  add: '#a6e3a1', subtract: '#f38ba8', multiply: '#89b4fa', divide: '#f9e2af',
+};
+
+export function ArithmeticOpViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const n = nodeRef.current;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    const op    = OP_SYMBOLS[n.type] ?? '?';
+    const color = OP_COLORS[n.type]  ?? '#cdd6f4';
+
+    const fmt = (v: number) => {
+      const s = (Math.round(v * 1000) / 1000).toString();
+      return s.length > 7 ? v.toFixed(3) : s;
+    };
+
+    const getScope = (conn: { nodeId: string; outputKey: string }): number | null =>
+      floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) ?? null;
+
+    const aConn = n.inputs.a?.connection;
+    const bConn = n.inputs.b?.connection;
+    const aVal  = aConn ? getScope(aConn) : null;
+    const bVal  = bConn ? getScope(bConn) : (typeof n.params.b === 'number' ? n.params.b : null);
+
+    ctx.textBaseline = 'middle';
+    const cy = H / 2;
+    let x = 12;
+
+    // A
+    if (aVal !== null) {
+      ctx.font = '12px monospace'; ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'left';
+      const s = fmt(aVal); ctx.fillText(s, x, cy); x += ctx.measureText(s).width + 8;
+    } else {
+      ctx.font = '11px monospace'; ctx.fillStyle = '#585b70'; ctx.textAlign = 'left';
+      ctx.fillText('a', x, cy); x += 16;
+    }
+
+    // Op symbol
+    ctx.font = '15px monospace'; ctx.fillStyle = color; ctx.textAlign = 'left';
+    ctx.fillText(op, x, cy); x += ctx.measureText(op).width + 8;
+
+    // B
+    if (bVal !== null) {
+      ctx.font = '12px monospace'; ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'left';
+      ctx.fillText(fmt(bVal), x, cy);
+    } else {
+      ctx.font = '11px monospace'; ctx.fillStyle = '#585b70'; ctx.textAlign = 'left';
+      ctx.fillText('b', x, cy);
+    }
+
+    // Result label
+    ctx.font = '9px monospace'; ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
+    ctx.fillText('→ result', W - 8, cy);
+  }, []);
+
+  useEffect(() => {
+    const loop = () => { draw(); rafRef.current = requestAnimationFrame(loop); };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={36}
+        style={{ display: 'block', width: '100%', height: '36px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Vec2 arrow on grid (length, angleToVec2, vec2Angle) ────────────────
+
+function drawGrid2D(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  ctx.fillStyle = '#11111b';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#1e1e2e';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+  }
+  ctx.strokeStyle = '#313244';
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawArrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, vx: number, vy: number, color: string, scale = 1) {
+  const len = Math.sqrt(vx * vx + vy * vy);
+  if (len < 0.001) return;
+  const nx = vx / len, ny = vy / len;
+  const ex = cx + vx * scale, ey = cy - vy * scale; // flip Y for screen coords
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
+  // Arrowhead
+  const hs = 5;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - hs * nx + hs * 0.5 * ny, ey + hs * ny + hs * 0.5 * nx);
+  ctx.lineTo(ex - hs * nx - hs * 0.5 * ny, ey + hs * ny - hs * 0.5 * nx);
+  ctx.closePath(); ctx.fill();
+}
+
+export function LengthViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback((val?: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+
+    const cx = W / 2, cy = H / 2;
+    const mg = 20;
+    const axisW = W - mg * 2;
+
+    // Axis line
+    ctx.strokeStyle = '#313244'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(mg, cy); ctx.lineTo(W - mg, cy); ctx.stroke();
+    // Centre tick
+    ctx.beginPath(); ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4); ctx.stroke();
+    // End ticks
+    ctx.beginPath(); ctx.moveTo(mg, cy - 3); ctx.lineTo(mg, cy + 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W - mg, cy - 3); ctx.lineTo(W - mg, cy + 3); ctx.stroke();
+
+    const v = val ?? 0;
+    const range = niceGridScale(Math.max(Math.abs(v) * 1.2, 1));
+    const toX = (d: number) => cx + (d / range) * (axisW / 2);
+
+    // Filled bar from 0 → v
+    const barX = Math.min(cx, toX(v));
+    const barW = Math.abs(toX(v) - cx);
+    const isNeg = v < 0;
+    ctx.fillStyle = isNeg ? '#f38ba844' : '#00ffaa44';
+    ctx.fillRect(barX, cy - 6, barW, 12);
+
+    // Arrow pointing right (+) or left (-)
+    const tipX = toX(v);
+    ctx.strokeStyle = isNeg ? '#f38ba8' : '#00ffaa'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tipX, cy); ctx.stroke();
+    // arrowhead
+    const dir = isNeg ? -1 : 1;
+    ctx.beginPath();
+    ctx.moveTo(tipX, cy);
+    ctx.lineTo(tipX - dir * 6, cy - 4);
+    ctx.lineTo(tipX - dir * 6, cy + 4);
+    ctx.closePath(); ctx.fillStyle = isNeg ? '#f38ba8' : '#00ffaa'; ctx.fill();
+
+    // Scale labels
+    ctx.fillStyle = '#45475a'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(`-${range}`, mg, cy - 7);
+    ctx.fillText(`${range}`, W - mg, cy - 7);
+    ctx.fillText('0', cx, cy - 7);
+
+    // Value
+    ctx.font = '10px monospace';
+    ctx.fillStyle = val !== undefined ? (isNeg ? '#f38ba8' : '#00ffaa') : '#6c7086';
+    ctx.textAlign = 'left';
+    ctx.fillText(val !== undefined ? `|v| = ${val.toFixed(3)}` : '|v|', 4, H - 4);
+    ctx.textAlign = 'left';
+  }, []);
+
+  useEffect(() => {
+    const loop = () => {
+      const decoded = floatValueRegistry.get(`__preview__${nodeRef.current.id}`);
+      const raw = decoded !== undefined ? undefined : scopeValueRegistry.get(`__preview__${nodeRef.current.id}`);
+      draw(decoded !== undefined ? decoded : raw !== undefined ? raw * 2 - 1 : undefined);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id, draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={48}
+        style={{ display: 'block', width: '100%', height: '48px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — MakeVec2: dot on adaptive-scale 2D grid ───────────────────────────
+
+function niceGridScale(maxVal: number): number {
+  if (maxVal <= 1) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(maxVal)));
+  return Math.ceil(maxVal / mag) * mag;
+}
+
+export function MakeVec2Viz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback((x: number, y: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawGrid2D(ctx, W, H);
+    const cx = W / 2, cy = H / 2;
+    const margin = 10;
+    const axisR = cx - margin;
+
+    const maxVal = Math.max(Math.abs(x), Math.abs(y), 0.001);
+    const scale = niceGridScale(maxVal);
+    const toSX = (v: number) => cx + (v / scale) * axisR;
+    const toSY = (v: number) => cy - (v / scale) * axisR;
+
+    ctx.fillStyle = '#45475a'; ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${scale}`, toSX(scale), cy - 3);
+    ctx.fillText(`-${scale}`, toSX(-scale), cy - 3);
+    ctx.textAlign = 'left';
+    ctx.fillText(`${scale}`, cx + 2, toSY(scale));
+    ctx.fillText(`-${scale}`, cx + 2, toSY(-scale));
+
+    const px = toSX(x), py = toSY(y);
+    ctx.strokeStyle = '#313244'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, cy); ctx.lineTo(px, py); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, py); ctx.lineTo(px, py); ctx.stroke();
+    ctx.setLineDash([]);
+
+    drawArrow(ctx, cx, cy, x / scale, y / scale, '#00aaff', axisR);
+    ctx.fillStyle = '#00aaff';
+    ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#6c7086'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(`(${x.toFixed(2)}, ${y.toFixed(2)})`, 4, H - 4);
+  }, []);
+
+  useEffect(() => {
+    const loop = () => {
+      const n = nodeRef.current;
+      let lx = typeof n.params.x === 'number' ? n.params.x : 0;
+      let ly = typeof n.params.y === 'number' ? n.params.y : 0;
+      if (n.inputs.x?.connection) {
+        const c = n.inputs.x.connection;
+        const v = floatValueRegistry.get(`__preview__${c.nodeId}:${c.outputKey}`);
+        if (v !== undefined) lx = v;
+      }
+      if (n.inputs.y?.connection) {
+        const c = n.inputs.y.connection;
+        const v = floatValueRegistry.get(`__preview__${c.nodeId}:${c.outputKey}`);
+        if (v !== undefined) ly = v;
+      }
+      draw(lx, ly);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id, draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={80}
+        style={{ display: 'block', width: '100%', height: '80px' }} />
+    </div>
+  );
+}
+
+export function AngleToVec2Viz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const angle = typeof node.params.angle === 'number' ? node.params.angle : 0;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawGrid2D(ctx, W, H);
+    const cx = W / 2, cy = H / 2;
+    const r = Math.min(cx, cy) * 0.75;
+
+    // Draw the angle arc
+    ctx.strokeStyle = '#f9e2af44';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.35, 0, -angle, angle < 0); ctx.stroke();
+
+    // Draw the direction arrow
+    const vx = Math.cos(angle), vy = Math.sin(angle);
+    drawArrow(ctx, cx, cy, vx, vy, '#00ffaa', r);
+
+    // Angle label
+    const deg = ((angle * 180 / Math.PI) % 360 + 360) % 360;
+    ctx.fillStyle = '#f9e2af';
+    ctx.font = '9px monospace';
+    ctx.fillText(`${deg.toFixed(0)}°`, 4, H - 4);
+    ctx.fillStyle = '#6c7086';
+    ctx.textAlign = 'right';
+    ctx.fillText(`(${vx.toFixed(2)}, ${vy.toFixed(2)})`, W - 4, H - 4);
+    ctx.textAlign = 'left';
+  }, [angle]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={64}
+        style={{ display: 'block', width: '100%', height: '64px' }} />
+    </div>
+  );
+}
+
+export function Vec2AngleViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawGrid2D(ctx, W, H);
+    const cx = W / 2, cy = H / 2;
+    const r = Math.min(cx, cy) * 0.75;
+
+    // Draw a sample arrow (we don't know the live input, show a representative one)
+    const angle = Math.PI / 4; // 45° example
+    const vx = Math.cos(angle), vy = Math.sin(angle);
+    drawArrow(ctx, cx, cy, vx, vy, '#00aaff', r);
+
+    // Angle arc
+    ctx.strokeStyle = '#f9e2af88';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.35, 0, -angle, false); ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#00aaff';
+    ctx.font = '9px monospace';
+    ctx.fillText('v →', 4, H - 4);
+    ctx.fillStyle = '#f9e2af';
+    ctx.textAlign = 'right';
+    ctx.fillText('atan2(y,x)', W - 4, H - 4);
+    ctx.textAlign = 'left';
+  }, []);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={64}
+        style={{ display: 'block', width: '100%', height: '64px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Extract X / Extract Y component bracket notation ──────────────────
+
+// ─── Viz — Split Vec (shows all component labels, highlights none) ────────────
+export function SplitVecViz({ node }: { node: GraphNode }) {
+  const is3 = node.type === 'splitVec3';
+  const is4 = node.type === 'splitVec4';
+  const comps = is4 ? ['x','y','z','w'] : is3 ? ['x','y','z'] : ['x','y'];
+  const colors: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+  const rafRef  = useRef(0);
+  const rowRefs = useRef<(HTMLSpanElement | null)[]>([]);
+
+  useEffect(() => {
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const n = nodeRef.current;
+      const conn = n.inputs.v?.connection ?? n.inputs.vec?.connection;
+      if (!conn) return;
+      const vec = vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`);
+      comps.forEach((_, i) => {
+        const el = rowRefs.current[i];
+        if (el) el.textContent = vec ? vec[i]?.toFixed(3) : '—';
+      });
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '4px 12px', fontFamily: 'monospace' }}>
+      {comps.map((c, i) => (
+        <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '1px 0' }}>
+          <span style={{ fontSize: '10px', color: colors[c], width: '10px' }}>{c}</span>
+          <span ref={el => { rowRefs.current[i] = el; }} style={{ fontSize: '11px', color: '#cdd6f4' }}>—</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ExtractComponentViz({ node }: { node: GraphNode }) {
+  const isX = node.type === 'extractX';
+  const nodeRef  = useRef(node);
+  nodeRef.current = node;
+  const rafRef   = useRef(0);
+  const valRef   = useRef<HTMLSpanElement>(null);
+  const inputRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const n = nodeRef.current;
+      // Own output float value
+      const own = floatValueRegistry.get(`__preview__${n.id}`);
+      if (valRef.current) valRef.current.textContent = own != null ? own.toFixed(3) : '—';
+      // Input vec2 for context
+      const conn = n.inputs.v?.connection;
+      if (conn && inputRef.current) {
+        const vec = vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`);
+        if (vec) {
+          inputRef.current.textContent = `[${vec[0]?.toFixed(3)}, ${vec[1]?.toFixed(3)}]`;
+        }
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '5px 12px', fontFamily: 'monospace' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <span style={{ fontSize: '10px', color: isX ? '#f38ba8' : '#a6e3a1' }}>{isX ? 'x' : 'y'}</span>
+        <span ref={valRef} style={{ fontSize: '12px', color: '#cdd6f4', fontWeight: 500 }}>—</span>
+        <span ref={inputRef} style={{ fontSize: '9px', color: '#45475a', marginLeft: 'auto' }}></span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Viz — Combiner curve (min, max, smoothMin, smoothMax, sdfSubtract …) ────
+
+function _smin(a: number, b: number, k: number) {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * h * k / 6;
+}
+function _smax(a: number, b: number, k: number) { return -_smin(-a, -b, k); }
+function _ssub(a: number, b: number, k: number) { return _smax(a, -b, k); }
+
+type CombinerFn = (a: number, b: number, k: number) => number;
+
+const COMBINER_FNS: Record<string, CombinerFn> = {
+  smoothMin:         _smin,
+  smoothMax:         _smax,
+  smoothSubtract:    _ssub,
+  sdfSmoothUnion:    _smin,
+  sdfSmoothSubtract: _ssub,
+  sdfSmoothIntersect:(a, b, k) => _smax(a, b, k),
+  min:               (a, b) => Math.min(a, b),
+  minMath:           (a, b) => Math.min(a, b),
+  max:               (a, b) => Math.max(a, b),
+  sdfMax:            (a, b) => Math.max(a, b),
+  sdfSubtract:       (a, b) => Math.max(a, -b),
+  sdfUnion:          (a, b) => Math.min(a, b),
+  sdfIntersect:      (a, b) => Math.max(a, b),
+};
+
+const COMBINER_COLORS: Record<string, string> = {
+  smoothMin: '#a6e3a1', smoothMax: '#f38ba8', smoothSubtract: '#89b4fa',
+  sdfSmoothUnion: '#a6e3a1', sdfSmoothSubtract: '#89b4fa', sdfSmoothIntersect: '#f38ba8',
+  min: '#a6e3a1', minMath: '#a6e3a1', max: '#f38ba8',
+  sdfMax: '#f38ba8', sdfSubtract: '#89b4fa', sdfUnion: '#a6e3a1', sdfIntersect: '#f38ba8',
+};
+
+const SMOOTH_COMBINER_TYPES = new Set([
+  'smoothMin','smoothMax','smoothSubtract',
+  'sdfSmoothUnion','sdfSmoothSubtract','sdfSmoothIntersect',
+]);
+
+export function CombinerCurveViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const k = typeof node.params.smoothness === 'number' ? node.params.smoothness : 0.3;
+  const paramB = typeof node.params.b === 'number' ? node.params.b : null;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const fn = COMBINER_FNS[node.type];
+    if (!fn) return;
+    const color = COMBINER_COLORS[node.type] ?? '#cdd6f4';
+    const isSmooth = SMOOTH_COMBINER_TYPES.has(node.type);
+
+    // For smooth ops: use b=0 and zoom to transition zone so rounding is visible.
+    // For sharp ops:  use b=paramB (or 0.2 default) and show wider [-1,1] range.
+    const b      = isSmooth ? 0 : (paramB ?? 0.2);
+    const xRange = isSmooth ? Math.max(0.25, k + 0.3) : 1;
+    // y range: for smooth, tighten so k/6 deviation fills ~50% of half-height
+    const yRange = isSmooth ? Math.max(0.04, k / 3) : 1;
+
+    ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#1e1e2e'; ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+    }
+
+    const toY = (v: number) => H / 2 - Math.max(-yRange, Math.min(yRange, v)) / yRange * (H / 2 - 3);
+    const toA = (i: number) => (i / W) * xRange * 2 - xRange;
+
+    // Zero / b axis
+    ctx.strokeStyle = '#45475a'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, toY(0)); ctx.lineTo(W, toY(0)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // B horizontal
+    ctx.strokeStyle = '#585b70'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, toY(b)); ctx.lineTo(W, toY(b)); ctx.stroke();
+
+    // A diagonal
+    ctx.strokeStyle = '#45475a'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const a = toA(i);
+      i === 0 ? ctx.moveTo(i, toY(a)) : ctx.lineTo(i, toY(a));
+    }
+    ctx.stroke();
+
+    // Sharp reference (dim) for smooth types
+    if (isSmooth) {
+      const sharpFn = node.type.includes('Subtract') || node.type === 'sdfSmoothSubtract'
+        ? (a: number) => Math.max(a, -b) : node.type.includes('Max') || node.type === 'sdfSmoothIntersect'
+        ? (a: number) => Math.max(a, b)  : (a: number) => Math.min(a, b);
+      ctx.strokeStyle = '#31324488'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i <= W; i++) {
+        const a = toA(i);
+        i === 0 ? ctx.moveTo(i, toY(sharpFn(a))) : ctx.lineTo(i, toY(sharpFn(a)));
+      }
+      ctx.stroke();
+    }
+
+    // Result curve
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const a = toA(i);
+      const y = fn(a, b, k);
+      i === 0 ? ctx.moveTo(i, toY(y)) : ctx.lineTo(i, toY(y));
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = '#6c7086'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(node.type, 4, H - 4);
+    if (isSmooth) {
+      ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
+      ctx.fillText(`k=${k.toFixed(2)}`, W - 4, H - 4);
+    }
+    ctx.textAlign = 'left';
+  }, [node.type, k, paramB]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={60}
+        style={{ display: 'block', width: '100%', height: '60px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Vec2 vizzes (normalizeVec2, dot, addVec2, multiplyVec2) ────────────
+
+export function NormalizeVec2Viz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback((vx: number, vy: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawGrid2D(ctx, W, H);
+    const cx = W / 2, cy = H / 2;
+    const r = Math.min(cx, cy) * 0.72;
+
+    ctx.strokeStyle = '#00aaff44'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+
+    const len = Math.sqrt(vx * vx + vy * vy);
+    const scale = niceGridScale(Math.max(len, 0.01));
+    const pixPerUnit = r / scale;
+
+    // Input arrow (dim)
+    ctx.strokeStyle = '#45475a'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + vx * pixPerUnit, cy - vy * pixPerUnit); ctx.stroke();
+
+    // Normalized arrow (bright)
+    if (len > 0.001) {
+      drawArrow(ctx, cx, cy, vx / len, vy / len, '#00aaff', r);
+    }
+
+    ctx.fillStyle = '#6c7086'; ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`|v|=${len.toFixed(2)} → unit`, 4, H - 4);
+  }, []);
+
+  useEffect(() => {
+    const loop = () => {
+      const n = nodeRef.current;
+      const vc = n.inputs.v?.connection;
+      const v = vc
+        ? vectorValueRegistry.get(`__preview__${vc.nodeId}:${vc.outputKey}`)
+        : undefined;
+      draw(v?.[0] ?? 0.8, v?.[1] ?? 0.5);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id, draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={68}
+        style={{ display: 'block', width: '100%', height: '68px' }} />
+    </div>
+  );
+}
+
+export function DotProductViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback((aVec: number[], bVec: number[], dotVal?: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    drawGrid2D(ctx, W, H);
+    const cx = W / 2, cy = H / 2;
+
+    // Scale so both vectors fit
+    const maxComp = Math.max(Math.abs(aVec[0]), Math.abs(aVec[1]), Math.abs(bVec[0]), Math.abs(bVec[1]), 0.01);
+    const scale = niceGridScale(maxComp);
+    const r = (Math.min(cx, cy) - 6) / scale;
+
+    drawArrow(ctx, cx, cy, aVec[0], aVec[1], '#00aaff', r);
+    drawArrow(ctx, cx, cy, bVec[0], bVec[1], '#00ffaa', r);
+
+    ctx.font = '11px monospace'; ctx.textBaseline = 'middle';
+    if (dotVal !== undefined) {
+      ctx.fillStyle = '#f9e2af'; ctx.textAlign = 'right';
+      ctx.fillText(`A·B = ${dotVal.toFixed(3)}`, W - 6, 12);
+    } else {
+      ctx.fillStyle = '#6c7086'; ctx.textAlign = 'left';
+      ctx.fillText('A · B', 6, 12);
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }, []);
+
+  useEffect(() => {
+    const loop = () => {
+      const n = nodeRef.current;
+      const ac = n.inputs.a?.connection, bc = n.inputs.b?.connection;
+      const aVec = (ac ? vectorValueRegistry.get(`__preview__${ac.nodeId}:${ac.outputKey}`) : undefined) ?? [0.8, 0.5];
+      const bVec = (bc ? vectorValueRegistry.get(`__preview__${bc.nodeId}:${bc.outputKey}`) : undefined) ?? [0.5, -0.8];
+      const dotVal = floatValueRegistry.get(`__preview__${n.id}`) ?? undefined;
+      draw(aVec, bVec, dotVal);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id, draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={68}
+        style={{ display: 'block', width: '100%', height: '68px' }} />
+    </div>
+  );
+}
+
+export function Vec2OpViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+
+  useEffect(() => {
+    const loop = () => {
+      const n = nodeRef.current;
+      const canvas = canvasRef.current;
+      if (!canvas) { rafRef.current = requestAnimationFrame(loop); return; }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { rafRef.current = requestAnimationFrame(loop); return; }
+      const W = canvas.width, H = canvas.height;
+      const cx = W / 2, cy = H / 2;
+
+      const getVec = (key: string) => {
+        const conn = n.inputs[key]?.connection;
+        return conn ? (vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) ?? [0, 0]) : [0, 0];
+      };
+      const getFloat = (key: string): number => {
+        const conn = n.inputs[key]?.connection;
+        if (conn) {
+          const v = floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`);
+          if (v !== undefined) return v;
+        }
+        return typeof n.params[key] === 'number' ? n.params[key] as number : 1;
+      };
+
+      drawGrid2D(ctx, W, H);
+
+      if (n.type === 'multiplyVec2') {
+        const v = getVec('v'), s = getFloat('scale');
+        const out = [v[0] * s, v[1] * s];
+        const maxComp = Math.max(Math.abs(v[0]), Math.abs(v[1]), Math.abs(out[0]), Math.abs(out[1]), 0.01);
+        const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 6) / sc;
+        drawArrow(ctx, cx, cy, v[0], v[1], '#585b70', r);
+        drawArrow(ctx, cx, cy, out[0], out[1], '#00aaff', r);
+        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillText(`× ${s.toFixed(2)}`, 4, H - 4);
+        ctx.fillStyle = '#6c7086'; ctx.textAlign = 'right';
+        ctx.fillText(`(${out[0].toFixed(2)}, ${out[1].toFixed(2)})`, W - 4, H - 4);
+      } else {
+        // addVec2: triangle viz — B starts from tip of A, result is the diagonal
+        const a = getVec('a'), b = getVec('b');
+        const out = [a[0] + b[0], a[1] + b[1]];
+        const maxComp = Math.max(Math.abs(a[0]), Math.abs(a[1]), Math.abs(b[0]), Math.abs(b[1]), Math.abs(out[0]), Math.abs(out[1]), 0.01);
+        const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 8) / sc;
+        // A from origin (blue)
+        drawArrow(ctx, cx, cy, a[0], a[1], '#89b4fa', r);
+        // B from tip of A (green) — tail-to-tip chaining
+        drawArrow(ctx, cx + a[0] * r, cy - a[1] * r, b[0], b[1], '#a6e3a1', r);
+        // Result from origin (white, dashed-style using lighter color)
+        drawArrow(ctx, cx, cy, out[0], out[1], '#cdd6f4', r);
+        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillText('a + b', 4, H - 4);
+        ctx.fillStyle = '#6c7086'; ctx.textAlign = 'right';
+        ctx.fillText(`(${out[0].toFixed(2)}, ${out[1].toFixed(2)})`, W - 4, H - 4);
+      }
+      ctx.textAlign = 'left';
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={80}
+        style={{ display: 'block', width: '100%', height: '80px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Matrix × Vector (mat2MulVec, mat3MulVec) ──────────────────────────
+
+export function MatMulVecViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef(0);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+  const isMat3    = node.type === 'mat3MulVec';
+
+  useEffect(() => {
+    const loop = () => {
+      rafRef.current = requestAnimationFrame(loop);
+      const n = nodeRef.current;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const W = canvas.width, H = canvas.height;
+
+      if (!isMat3) {
+        // mat2MulVec: show input vec2 and output vec2 as arrows on 2D grid
+        drawGrid2D(ctx, W, H);
+        const cx = W / 2, cy = H / 2;
+
+        const vecConn = n.inputs.vec?.connection;
+        const inVec = vecConn
+          ? (vectorValueRegistry.get(`__preview__${vecConn.nodeId}:${vecConn.outputKey}`) ?? [0, 0])
+          : [0, 0];
+        const outVec = vectorValueRegistry.get(`__preview__${n.id}:output`) ?? null;
+
+        const maxComp = Math.max(
+          Math.abs(inVec[0]), Math.abs(inVec[1]),
+          outVec ? Math.abs(outVec[0]) : 0,
+          outVec ? Math.abs(outVec[1]) : 0,
+          0.01
+        );
+        const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 8) / sc;
+        drawArrow(ctx, cx, cy, inVec[0], inVec[1], '#585b70', r);
+        if (outVec) drawArrow(ctx, cx, cy, outVec[0], outVec[1], '#00aaff', r);
+
+        ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = '#585b70';
+        ctx.fillText(`in  (${inVec[0].toFixed(2)}, ${inVec[1].toFixed(2)})`, 4, H - 14);
+        ctx.fillStyle = outVec ? '#89b4fa' : '#45475a';
+        ctx.fillText(outVec ? `out (${outVec[0].toFixed(2)}, ${outVec[1].toFixed(2)})` : 'out  M × v', 4, H - 4);
+      } else {
+        // mat3MulVec: show input and output as component bars
+        ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+        const vecConn = n.inputs.vec?.connection;
+        const inVec  = vecConn
+          ? (vectorValueRegistry.get(`__preview__${vecConn.nodeId}:${vecConn.outputKey}`) ?? [0, 0, 0])
+          : [0, 0, 0];
+        const outVec = vectorValueRegistry.get(`__preview__${n.id}:output`) ?? null;
+
+        const comps = ['x', 'y', 'z'];
+        const colors = ['#f38ba8', '#a6e3a1', '#89b4fa'];
+        const barW = W - 70;
+
+        for (let i = 0; i < 3; i++) {
+          const rowY = 10 + i * 22;
+          const inV = inVec[i] ?? 0;
+          const outV = outVec?.[i] ?? null;
+
+          ctx.fillStyle = colors[i] + '88';
+          ctx.font = '9px monospace'; ctx.textAlign = 'left';
+          ctx.fillText(comps[i], 6, rowY + 10);
+
+          // Input bar
+          const inNorm = Math.max(-1, Math.min(1, inV));
+          const bx = 18, bh = 8;
+          ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx, rowY + 2, barW / 2 - 2, bh);
+          ctx.fillStyle = colors[i] + '66';
+          const fw = Math.abs(inNorm) * (barW / 2 - 2) / 2;
+          const fx = inNorm >= 0 ? bx + (barW / 4 - 1) : bx + (barW / 4 - 1) - fw;
+          ctx.fillRect(fx, rowY + 2, fw, bh);
+          ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
+          ctx.fillText(inV.toFixed(2), bx + barW / 2 - 4, rowY + 10);
+
+          // Output bar
+          if (outV !== null) {
+            const bx2 = bx + barW / 2 + 4;
+            const outNorm = Math.max(-1, Math.min(1, outV));
+            ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx2, rowY + 2, barW / 2 - 2, bh);
+            ctx.fillStyle = colors[i];
+            const fw2 = Math.abs(outNorm) * (barW / 2 - 2) / 2;
+            const fx2 = outNorm >= 0 ? bx2 + (barW / 4 - 1) : bx2 + (barW / 4 - 1) - fw2;
+            ctx.fillRect(fx2, rowY + 2, fw2, bh);
+            ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'right';
+            ctx.fillText(outV.toFixed(2), bx2 + barW / 2 - 4, rowY + 10);
+          }
+        }
+
+        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillText('in', 18, H - 4);
+        if (outVec) { ctx.fillStyle = '#6c7086'; ctx.fillText('out', 18 + barW / 2 + 4, H - 4); }
+        ctx.textAlign = 'left';
+      }
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [node.id, isMat3]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={isMat3 ? 84 : 80}
+        style={{ display: 'block', width: '100%', height: `${isMat3 ? 84 : 80}px` }} />
+    </div>
+  );
+}
+
+// ─── Viz — Sin/Cos Waveform (sin, cos) ───────────────────────────────────────
+
+export function SinCosWaveViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isCos = node.type === 'cos';
+  const freq  = typeof node.params.freq === 'number' ? node.params.freq : 1;
+  const amp   = typeof node.params.amp  === 'number' ? node.params.amp  : 1;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+    }
+
+    // Zero line
+    ctx.strokeStyle = '#45475a';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Waveform — fixed display range of 2; wave is proportionally shorter when amp < 2
+    const DISP = 2;
+    const color = isCos ? '#89b4fa' : '#a6e3a1';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const t = (i / W) * Math.PI * 2 * freq;
+      const y = amp * (isCos ? Math.cos(t) : Math.sin(t));
+      const py = H / 2 - Math.max(-DISP, Math.min(DISP, y)) / DISP * (H / 2 - 4);
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+
+    // Phase dot at t=0
+    const y0 = amp * (isCos ? 1 : 0);
+    const py0 = H / 2 - Math.max(-DISP, Math.min(DISP, y0)) / DISP * (H / 2 - 4);
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(2, py0, 3, 0, Math.PI * 2); ctx.fill();
+
+    // Label
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.fillText(`${isCos ? 'cos' : 'sin'}  freq:${freq.toFixed(2)}  amp:${amp.toFixed(2)}`, 4, H - 4);
+  }, [isCos, freq, amp]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={56}
+        style={{ display: 'block', width: '100%', height: '56px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz — Tone Curve Node (toneCurve) ───────────────────────────────────────
+
+export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const blacks   = typeof node.params.blacks   === 'number' ? node.params.blacks   : 0;
+  const whites   = typeof node.params.whites   === 'number' ? node.params.whites   : 1;
+  const strength = typeof node.params.strength === 'number' ? node.params.strength : 0.5;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+    }
+
+    // Identity diagonal
+    ctx.strokeStyle = '#45475a';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Tone curve: remap [blacks,whites]→[0,1], apply S-curve blended with linear
+    const range = Math.max(0.001, whites - blacks);
+    ctx.strokeStyle = '#cba6f7';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const x = i / W;
+      const t = Math.max(0, Math.min(1, (x - blacks) / range));
+      const curved = t * t * (3 - 2 * t);
+      const y = t + (curved - t) * strength;
+      const py = H - Math.max(0, Math.min(1, y)) * H;
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+
+    // Black/white point markers
+    const bx = Math.round(blacks * W);
+    const wx = Math.round(whites * W);
+    ctx.fillStyle = '#45475a';
+    ctx.fillRect(bx - 1, 0, 2, H);
+    ctx.fillRect(wx - 1, 0, 2, H);
+
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.fillText(`str ${strength.toFixed(2)}`, 4, H - 4);
+  }, [blacks, whites, strength]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={64}
+        style={{ display: 'block', width: '100%', height: '64px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz — Shadows / Highlights (shadowsHighlights) ──────────────────────────
+
+export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const shadows    = typeof node.params.shadows    === 'number' ? node.params.shadows    : 0;
+  const highlights = typeof node.params.highlights === 'number' ? node.params.highlights : 0;
+  const pivot      = typeof node.params.pivot      === 'number' ? node.params.pivot      : 0.5;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+    }
+
+    // Identity
+    ctx.strokeStyle = '#45475a';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Transfer curve: luma + shadowMask*shadows + highlightMask*highlights
+    const sm = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
+    ctx.strokeStyle = '#cba6f7';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const x = i / W;
+      const shadowMask    = 1 - sm(x / Math.max(0.001, pivot * 1.5));
+      const highlightMask = sm((x - pivot * 0.5) / Math.max(0.001, 1 - pivot * 0.5));
+      const y = Math.max(0, Math.min(1, x + shadowMask * shadows + highlightMask * highlights));
+      const py = H - y * H;
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+
+    // Shadow mask (blue tint)
+    ctx.strokeStyle = '#89b4fa88';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const x = i / W;
+      const t = Math.max(0, Math.min(1, x)); const t2 = t * t * (3 - 2 * t);
+      const shadowMask = 1 - t2 / Math.max(0.001, sm(Math.min(1, 1 / (pivot * 1.5))));
+      const y = Math.max(0, Math.min(1, 1 - sm(x / Math.max(0.001, pivot * 1.5))));
+      const py = H - y * H;
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+
+    // Highlight mask (orange tint)
+    ctx.strokeStyle = '#fab38788';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const x = i / W;
+      const y = sm((x - pivot * 0.5) / Math.max(0.001, 1 - pivot * 0.5));
+      const py = H - Math.max(0, Math.min(1, y)) * H;
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#89b4fa';
+    ctx.font = '9px monospace';
+    ctx.fillText(`shd ${shadows > 0 ? '+' : ''}${shadows.toFixed(2)}`, 4, H - 4);
+    ctx.fillStyle = '#fab387';
+    ctx.fillText(`hi ${highlights > 0 ? '+' : ''}${highlights.toFixed(2)}`, W - 70, H - 4);
+  }, [shadows, highlights, pivot]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={64}
+        style={{ display: 'block', width: '100%', height: '64px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz — Lift / Gamma / Gain (liftGammaGain) ───────────────────────────────
+
+export function LiftGammaGainViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lift  = Array.isArray(node.params.lift)  ? node.params.lift  as number[] : [0, 0, 0];
+  const gamma = Array.isArray(node.params.gamma) ? node.params.gamma as number[] : [1, 1, 1];
+  const gain  = Array.isArray(node.params.gain)  ? node.params.gain  as number[] : [1, 1, 1];
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+    }
+
+    ctx.strokeStyle = '#45475a';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const COLORS = ['#f38ba8', '#a6e3a1', '#89b4fa'];
+    for (let ch = 0; ch < 3; ch++) {
+      const l = lift[ch]  ?? 0;
+      const g = Math.max(0.001, gamma[ch] ?? 1);
+      const gn = gain[ch] ?? 1;
+      ctx.strokeStyle = COLORS[ch];
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i <= W; i++) {
+        const x = i / W;
+        const lifted = Math.max(0, x * gn + l);
+        const y = Math.max(0, Math.min(1, Math.pow(lifted, 1 / g)));
+        const py = H - y * H;
+        i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+      }
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.fillText('R  G  B', 4, H - 4);
+  }, [lift, gamma, gain]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={64}
+        style={{ display: 'block', width: '100%', height: '64px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz — Hue Rotate (hueRotate) ────────────────────────────────────────────
+
+export function HueRotateViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const angle = typeof node.params.angle === 'number' ? node.params.angle : 0;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    const cx = W / 2, cy = H / 2;
+    const R = Math.min(cx, cy) - 6;
+    const SEG = 72;
+
+    // Hue ring
+    for (let i = 0; i < SEG; i++) {
+      const a0 = (i / SEG) * Math.PI * 2 - Math.PI / 2;
+      const a1 = ((i + 1) / SEG) * Math.PI * 2 - Math.PI / 2;
+      const hue = (i / SEG) * 360;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, R, a0, a1);
+      ctx.closePath();
+      ctx.fillStyle = `hsl(${hue}, 80%, 55%)`;
+      ctx.fill();
+    }
+
+    // Inner circle (dark)
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2);
+    ctx.fillStyle = '#11111b';
+    ctx.fill();
+
+    // Arrow at angle (angle in radians, 0=red, clockwise)
+    const arrowAngle = angle - Math.PI / 2;
+    const ax = cx + Math.cos(arrowAngle) * R * 0.75;
+    const ay = cy + Math.sin(arrowAngle) * R * 0.75;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(ax, ay, 3, 0, Math.PI * 2); ctx.fill();
+
+    // Angle label
+    const deg = ((angle * 180 / Math.PI) % 360 + 360) % 360;
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${deg.toFixed(0)}°`, cx, cy + 4);
+    ctx.textAlign = 'left';
+  }, [angle]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={64}
+        style={{ display: 'block', width: '100%', height: '64px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz — Saturation (colorSaturation) ──────────────────────────────────────
+
+export function SaturationViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const amount = typeof node.params.amount === 'number' ? node.params.amount : 1.0;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Gradient strip: sample a rainbow desaturated → saturated by `amount`
+    const barH = 24;
+    const barY = (H - barH) / 2;
+    for (let i = 0; i < W; i++) {
+      const hue = (i / W) * 360;
+      const sat = Math.max(0, Math.min(100, amount * 80));
+      ctx.fillStyle = `hsl(${hue}, ${sat}%, 55%)`;
+      ctx.fillRect(i, barY, 1, barH);
+    }
+
+    // Border
+    ctx.strokeStyle = '#313244';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, barY, W, barH);
+
+    // Amount marker line
+    const markerX = Math.round(Math.max(0, Math.min(1, amount / 2)) * W);
+    ctx.strokeStyle = '#ffffff88';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(markerX, barY - 3); ctx.lineTo(markerX, barY + barH + 3); ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.fillText(`sat ×${amount.toFixed(2)}`, 4, H - 4);
+  }, [amount]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={48}
+        style={{ display: 'block', width: '100%', height: '48px' }}
+      />
+    </div>
+  );
+}
+
+// ─── Viz — Matrix Grid (mat2Construct, mat2Inspect, mat3Construct, mat3Inspect) ─
+
+export function MatrixGridViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nodeRef   = useRef(node);
+  nodeRef.current = node;
+  const rafRef    = useRef(0);
+  const size      = node.type.startsWith('mat2') ? 2 : 3;
+  const isInspect = node.type.endsWith('Inspect');
+
+  useEffect(() => {
+    const COL_COLORS = ['#89b4fa', '#a6e3a1', '#fab387'];
+    const cellW = 52, cellH = 22;
+
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const W = canvas.width, H = canvas.height;
+      const n = nodeRef.current;
+      const mode = (n.params.mode as string) ?? 'cols';
+
+      // Collect input/output vectors
+      // For construct: read upstream input vec2/vec3 connections
+      // For inspect: read own output vec2/vec3 keyed as `__preview__${nodeId}:vec0` etc.
+      const vecs: (number[] | null)[] = Array(size).fill(null);
+      if (!isInspect) {
+        const inputKeys = size === 2 ? ['v0', 'v1'] : ['v0', 'v1', 'v2'];
+        for (let i = 0; i < size; i++) {
+          const conn = n.inputs[inputKeys[i]]?.connection;
+          if (conn) vecs[i] = vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) ?? null;
+        }
+      } else {
+        const outKeys = size === 2 ? ['vec0', 'vec1'] : ['vec0', 'vec1', 'vec2'];
+        for (let i = 0; i < size; i++) {
+          vecs[i] = vectorValueRegistry.get(`__preview__${n.id}:${outKeys[i]}`) ?? null;
+        }
+      }
+
+      ctx.fillStyle = '#11111b';
+      ctx.fillRect(0, 0, W, H);
+
+      const totalW = size * cellW;
+      const totalH = size * cellH;
+      const startX = (W - totalW) / 2;
+      const startY = (H - totalH) / 2 + 4;
+
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const x = startX + col * cellW;
+          const y = startY + row * cellH;
+          const groupIdx = mode === 'rows' ? row : col;
+          const baseColor = COL_COLORS[groupIdx % COL_COLORS.length];
+
+          ctx.fillStyle = `${baseColor}14`;
+          ctx.fillRect(x, y, cellW, cellH);
+          ctx.strokeStyle = `${baseColor}44`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
+
+          // Value: in GLSL column-major mat2(v0,v1), cell [col][row] = v_col[row]
+          let val: number | null = null;
+          if (mode === 'cols') {
+            val = vecs[col]?.[row] ?? null;
+          } else {
+            // rows mode: transpose, so displayed [row][col] = v_row[col]
+            val = vecs[row]?.[col] ?? null;
+          }
+
+          ctx.fillStyle = val !== null ? `${baseColor}ee` : `${baseColor}44`;
+          ctx.font = '9px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(val !== null ? val.toFixed(2) : `[${col}][${row}]`, x + cellW / 2, y + cellH / 2 + 3);
+        }
+      }
+      ctx.textAlign = 'left';
+
+      ctx.fillStyle = '#45475a';
+      ctx.font = '9px monospace';
+      ctx.fillText(`mat${size}  ${mode}`, 4, H - 4);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [size, isInspect]);
+
+  const H = size === 2 ? 76 : 100;
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={H}
+        style={{ display: 'block', width: '100%', height: `${H}px` }} />
+    </div>
+  );
+}
+
+// ─── Color Swatch Viz (makeVec3 / floatToVec3) ───────────────────────────────
+
+function ColorSwatchViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+
+  useEffect(() => {
+    let rafId = 0;
+
+    const draw = () => {
+      const canvas = canvasRef.current;
+      const n = nodeRef.current;
+      if (!canvas) { rafId = requestAnimationFrame(draw); return; }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { rafId = requestAnimationFrame(draw); return; }
+
+      const W = canvas.width, H = canvas.height;
+      const isFloat = n.type === 'floatToVec3';
+
+      let r = 0, g = 0, b = 0;
+
+      if (isFloat) {
+        // Single float input → grayscale: read from floatValueRegistry or scopeValueRegistry
+        const conn = n.inputs.input?.connection;
+        const raw = conn
+          ? (floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) ?? 0)
+          : (Number(n.params.value) || 0);
+        const v = Math.max(0, Math.min(1, raw));
+        r = g = b = v;
+      } else {
+        // makeVec3: r/g/b float inputs
+        const connR = n.inputs.r?.connection;
+        const connG = n.inputs.g?.connection;
+        const connB = n.inputs.b?.connection;
+        const readFloat = (conn: { nodeId: string; outputKey: string } | undefined, paramKey: string) => {
+          if (conn) {
+            const v = floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`);
+            if (v !== undefined) return v;
+          }
+          return Number(n.params[paramKey]) || 0;
+        };
+        r = Math.max(0, Math.min(1, readFloat(connR, 'r')));
+        g = Math.max(0, Math.min(1, readFloat(connG, 'g')));
+        b = Math.max(0, Math.min(1, readFloat(connB, 'b')));
+      }
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#11111b';
+      ctx.fillRect(0, 0, W, H);
+
+      // Color swatch bar
+      const swatchH = 28;
+      const barY = (H - swatchH) / 2 - 6;
+      const rHex = Math.round(r * 255).toString(16).padStart(2, '0');
+      const gHex = Math.round(g * 255).toString(16).padStart(2, '0');
+      const bHex = Math.round(b * 255).toString(16).padStart(2, '0');
+      ctx.fillStyle = `#${rHex}${gHex}${bHex}`;
+      ctx.fillRect(8, barY, W - 16, swatchH);
+      ctx.strokeStyle = '#313244';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(8.5, barY + 0.5, W - 17, swatchH - 1);
+
+      // Component labels below
+      const labelY = barY + swatchH + 12;
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      if (isFloat) {
+        const v = r;
+        ctx.fillStyle = '#89b4fa';
+        ctx.fillText(`${v.toFixed(3)}  →  (${v.toFixed(2)}, ${v.toFixed(2)}, ${v.toFixed(2)})`, W / 2, labelY);
+      } else {
+        const labels = [
+          { text: `r:${r.toFixed(2)}`, color: '#f38ba8', x: W / 4 },
+          { text: `g:${g.toFixed(2)}`, color: '#a6e3a1', x: W / 2 },
+          { text: `b:${b.toFixed(2)}`, color: '#89b4fa', x: (3 * W) / 4 },
+        ];
+        for (const { text, color, x } of labels) {
+          ctx.fillStyle = color;
+          ctx.fillText(text, x, labelY);
+        }
+      }
+
+      rafId = requestAnimationFrame(draw);
+    };
+
+    rafId = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas
+        ref={canvasRef}
+        width={240}
+        height={64}
+        style={{ display: 'block', width: '100%', height: '64px' }}
+      />
+    </div>
+  );
+}
+
+// ─── LFO Waveform Viz ─────────────────────────────────────────────────────────
+
+function LFOWaveViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const freq      = typeof node.params.freq      === 'number' ? node.params.freq      : 1.0;
+  const phase     = typeof node.params.phase     === 'number' ? node.params.phase     : 0.0;
+  const amplitude = typeof node.params.amplitude === 'number' ? node.params.amplitude : 1.0;
+  const offset    = typeof node.params.offset    === 'number' ? node.params.offset    : 0.0;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const mg = 4;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
+    }
+    // Zero line
+    ctx.strokeStyle = '#313244';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const COLORS: Record<string, string> = {
+      sineLFO: '#89b4fa', squareLFO: '#cba6f7', sawtoothLFO: '#f9e2af',
+      triangleLFO: '#a6e3a1', bpmSync: '#fab387',
+    };
+    ctx.strokeStyle = COLORS[node.type] ?? '#cdd6f4';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+
+    const TWO_PI = 6.2831853;
+    // Show 2 cycles
+    for (let px = 0; px <= W; px++) {
+      const t = (px / W) * 2; // 0..2 cycles
+      const phase_t = t * freq * TWO_PI + phase;
+      let y = 0;
+      if (node.type === 'sineLFO') {
+        y = Math.sin(phase_t) * amplitude + offset;
+      } else if (node.type === 'squareLFO') {
+        y = Math.sign(Math.sin(phase_t)) * amplitude + offset;
+      } else if (node.type === 'sawtoothLFO') {
+        y = ((t * freq + phase / TWO_PI) % 1 + 1) % 1 * 2 - 1;
+        y = y * amplitude + offset;
+      } else if (node.type === 'triangleLFO') {
+        const ph = ((t * freq + phase / TWO_PI) % 1 + 1) % 1;
+        y = (Math.abs(ph * 2 - 1) * 2 - 1) * amplitude + offset;
+      } else {
+        // bpmSync: 0-1 sawtooth
+        y = ((t * freq) % 1 + 1) % 1;
+      }
+      const yRange = Math.max(Math.abs(amplitude) + Math.abs(offset) + 0.1, 1.1);
+      const py = mg + (1 - (y + yRange) / (2 * yRange)) * (H - 2 * mg);
+      px === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    ctx.fillText(`f=${freq.toFixed(2)} a=${amplitude.toFixed(2)}`, 3, H - 3);
+  }, [node.type, freq, phase, amplitude, offset]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={52}
+        style={{ display: 'block', width: '100%', height: '52px' }} />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -1865,7 +3776,139 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'doubleEllipticSigmoid':
     case 'quadBezierShaper':
     case 'cubicBezierShaper':  return <ShaperCurveViz    node={node} />;
-    default:               return null;
+    case 'sin':
+    case 'cos':            return <SinCosWaveViz          node={node} />;
+    case 'sineLFO':
+    case 'squareLFO':
+    case 'sawtoothLFO':
+    case 'triangleLFO':
+    case 'bpmSync':        return <LFOWaveViz             node={node} />;
+    case 'toneCurve':      return <ToneCurveNodeViz       node={node} />;
+    case 'shadowsHighlights': return <ShadowsHighlightsViz node={node} />;
+    case 'liftGammaGain':  return <LiftGammaGainViz       node={node} />;
+    case 'hueRotate':      return <HueRotateViz           node={node} />;
+    case 'colorSaturation': return <SaturationViz         node={node} />;
+    case 'mat2Construct':
+    case 'mat2Inspect':
+    case 'mat3Construct':
+    case 'mat3Inspect':    return <MatrixGridViz          node={node} />;
+    case 'mat2MulVec':
+    case 'mat3MulVec':     return <MatMulVecViz           node={node} />;
+    case 'group':
+    case 'sceneGroup':
+    case 'spaceWarpGroup':
+    case 'marchLoopGroup': return <SubgraphMiniViz         node={node} />;
+    case 'sphereSDF3D':
+    case 'boxSDF3D':
+    case 'torusSDF3D':
+    case 'capsuleSDF3D':
+    case 'cylinderSDF3D':
+    case 'coneSDF3D':
+    case 'octahedronSDF3D':
+    case 'planeSDF3D':
+    case 'translate3D':
+    case 'rotate3D':
+    case 'repeat3D':
+    case 'twist3D':
+    case 'fold3D':
+    // Additional 3D primitives
+    case 'roundedBoxSDF3D':
+    case 'boxFrameSDF3D':
+    case 'ellipsoidSDF3D':
+    case 'cappedTorusSDF3D':
+    case 'linkSDF3D':
+    case 'pyramidSDF3D':
+    case 'hexPrismSDF3D':
+    case 'triPrismSDF3D':
+    case 'cappedConeSDF3D':
+    case 'roundedCylinderSDF3D':
+    case 'solidAngleSDF3D':
+    case 'verticalCapsuleSDF3D':
+    // Additional 3D transforms
+    case 'scale3d':
+    case 'rotateAxis3D':
+    case 'sinWarp3D':
+    case 'bend3D':
+    case 'limitedRepeat3D':
+    case 'polarRepeat3D':
+    case 'displace3D':
+    // 3D boolean ops (param display only)
+    case 'sdfRound':
+    case 'sdfOnion':
+    // Effects / post-process nodes — show params instead of blank preview
+    case 'vignette':
+    case 'scanlines':
+    case 'sobel':
+    case 'chromaticAberrationAuto':
+    case 'gaussianBlur':
+    case 'radialBlur':
+    case 'tiltShiftBlur':
+    case 'lensBlur':
+    case 'depthOfField':
+    case 'motionBlur':
+    case 'chromaShift':
+    case 'gravitationalLens':
+    case 'floatWarp':        return <SDF3DParamViz           node={node} />;
+    // Scalar function curves
+    case 'exp':
+    case 'pow':
+    case 'sqrt':
+    case 'ceil':
+    case 'floor':
+    case 'negate':
+    case 'sign':
+    case 'fractRaw':
+    case 'abs':
+    case 'mod':
+    case 'tanh':
+    case 'round':
+    case 'step':
+    case 'atan2':            return <ScalarFnViz             node={node} />;
+    // Float arithmetic
+    case 'multiply':
+    case 'add':
+    case 'subtract':
+    case 'divide':           return <ArithmeticOpViz         node={node} />;
+    // Range mapping
+    case 'remap':            return <MapRangeViz             node={node} />;
+    // Color combiners
+    case 'combineRGB':       return <ColorSwatchViz          node={node} />;
+    case 'blend':
+    case 'screenBlend':      return <AddColorsViz            node={node} />;
+    // Param display
+    case 'constant':
+    case 'weightedAverage':  return <SDF3DParamViz           node={node} />;
+    // Combiners
+    case 'smoothMin':
+    case 'smoothMax':
+    case 'smoothSubtract':
+    case 'sdfSmoothUnion':
+    case 'sdfSmoothSubtract':
+    case 'sdfSmoothIntersect':
+    case 'min':
+    case 'minMath':
+    case 'max':
+    case 'sdfMax':
+    case 'sdfSubtract':
+    case 'sdfUnion':
+    case 'sdfIntersect':     return <CombinerCurveViz        node={node} />;
+    // Vec2
+    case 'length':           return <LengthViz               node={node} />;
+    case 'angleToVec2':      return <AngleToVec2Viz          node={node} />;
+    case 'vec2Angle':        return <Vec2AngleViz            node={node} />;
+    case 'extractX':
+    case 'extractY':         return <ExtractComponentViz     node={node} />;
+    case 'splitVec2':
+    case 'splitVec3':
+    case 'splitVec4':        return <SplitVecViz             node={node} />;
+    case 'makeVec2':         return <MakeVec2Viz             node={node} />;
+    case 'normalizeVec2':    return <NormalizeVec2Viz        node={node} />;
+    case 'dot':              return <DotProductViz           node={node} />;
+    case 'addVec2':
+    case 'multiplyVec2':     return <Vec2OpViz               node={node} />;
+    case 'makeVec3':
+    case 'floatToVec3':      return <ColorSwatchViz          node={node} />;
+    default:                 return null;
   }
 }
 
@@ -1881,4 +3924,48 @@ export const INLINE_VIZ_TYPES = new Set([
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
   'doubleEllipticSigmoid', 'quadBezierShaper', 'cubicBezierShaper',
+  'sin', 'cos',
+  'toneCurve', 'shadowsHighlights', 'liftGammaGain', 'hueRotate', 'colorSaturation',
+  'mat2Construct', 'mat2Inspect', 'mat3Construct', 'mat3Inspect',
+  'mat2MulVec', 'mat3MulVec',
+  'group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup',
+  // 3D primitives
+  'sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D',
+  'coneSDF3D', 'octahedronSDF3D', 'planeSDF3D',
+  'roundedBoxSDF3D', 'boxFrameSDF3D', 'ellipsoidSDF3D', 'cappedTorusSDF3D',
+  'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D',
+  'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
+  // 3D transforms
+  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D',
+  'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D',
+  // 3D boolean ops
+  'sdfRound', 'sdfOnion',
+  // Effects / post-process
+  'vignette', 'scanlines', 'sobel', 'chromaticAberrationAuto',
+  'gaussianBlur', 'radialBlur', 'tiltShiftBlur', 'lensBlur',
+  'depthOfField', 'motionBlur', 'chromaShift', 'gravitationalLens', 'floatWarp',
+  // Scalar math
+  'exp', 'pow', 'sqrt', 'ceil', 'floor', 'negate', 'sign', 'fractRaw', 'abs', 'mod',
+  'tanh', 'round', 'step', 'atan2',
+  // Float arithmetic
+  'multiply', 'add', 'subtract', 'divide',
+  // Range mapping
+  'remap',
+  // LFOs
+  'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO', 'bpmSync',
+  // Color combiners
+  'combineRGB', 'blend', 'screenBlend',
+  // Param display
+  'constant', 'weightedAverage',
+  // Combiners (2D + 3D)
+  'smoothMin', 'smoothMax', 'smoothSubtract',
+  'sdfSmoothUnion', 'sdfSmoothSubtract', 'sdfSmoothIntersect',
+  'min', 'minMath', 'max', 'sdfMax', 'sdfSubtract', 'sdfUnion', 'sdfIntersect',
+  // Vec2 / split
+  'length', 'angleToVec2', 'vec2Angle', 'extractX', 'extractY',
+  'splitVec2', 'splitVec3', 'splitVec4',
+  'makeVec2', 'normalizeVec2', 'dot', 'addVec2', 'multiplyVec2',
+  'makeVec3', 'floatToVec3',
+  // 2D SDF
+  'circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdBox', 'sdEllipse',
 ]);

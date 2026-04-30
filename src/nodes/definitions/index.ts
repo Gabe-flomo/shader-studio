@@ -10,6 +10,9 @@ export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNod
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 
+// Matrix
+export { Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+
 // Spaces
 export {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -96,7 +99,8 @@ export { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayR
 
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
-  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
+  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
 
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
@@ -196,10 +200,12 @@ import {
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
-  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
+  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
+import { Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 import { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
@@ -245,6 +251,13 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   curlWarp: CurlWarpNode,
   swirlWarp: SwirlWarpNode,
   displace: DisplaceNode,
+  // Matrix
+  mat2Construct: Mat2ConstructNode,
+  mat3Construct: Mat3ConstructNode,
+  mat2Inspect: Mat2InspectNode,
+  mat3Inspect: Mat3InspectNode,
+  mat2MulVec: Mat2MulVecNode,
+  mat3MulVec: Mat3MulVecNode,
   // Spaces
   polarSpace: PolarSpaceNode,
   logPolarSpace: LogPolarSpaceNode,
@@ -466,6 +479,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   blendModes: BlendModesNode,
   brightnessContrast: BrightnessContrastNode,
   blackbody: BlackbodyNode,
+  liftGammaGain: LiftGammaGainNode,
+  hueRotate: HueRotateNode,
+  colorSaturation: SaturationNode,
+  shadowsHighlights: ShadowsHighlightsNode,
+  toneCurve: ToneCurveNode,
   // Output
   output: OutputNode,
   vec4Output: Vec4OutputNode,

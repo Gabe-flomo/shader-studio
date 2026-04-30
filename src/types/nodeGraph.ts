@@ -1,5 +1,5 @@
 // Data types that flow between nodes
-export type DataType = "float" | "vec2" | "vec3" | "vec4" | "scene3d" | "spacewarp3d";
+export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d";
 
 // Socket (connection point on a node)
 export interface Socket {

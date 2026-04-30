@@ -33,7 +33,7 @@ import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz, SdfPreviewViz, SDF_TYPES } from './NodeInlineViz';
 import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
-import { scopeCanvasRegistry, scopeBufferRegistry } from '../../lib/scopeRegistry';
+import { scopeCanvasRegistry, scopeBufferRegistry, scopeValueRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
@@ -103,7 +103,7 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput', 'transformVec']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
@@ -114,6 +114,8 @@ const TYPE_COLORS: Record<string, string> = {
   vec2: '#0af',
   vec3: '#0fa',
   vec4: '#fa0',
+  mat2:        '#f5c842',  // golden yellow for 2×2 matrix wires
+  mat3:        '#e8a020',  // amber for 3×3 matrix wires
   scene3d:     '#cc88aa',  // pastel pink for 3D scene wires
   spacewarp3d: '#aa88cc',  // pastel purple for space warp wires
 };
@@ -164,9 +166,52 @@ function getCompatibleSources(
 }
 
 // ─── Node header tooltip ─────────────────────────────────────────────────────
-function NodeTooltip({ def }: { def: NodeDefinition }) {
+function formatVal(v: number | number[] | undefined, type: string): string | null {
+  if (v === undefined) return null;
+  if (Array.isArray(v)) {
+    const parts = v.map(n => n.toFixed(2));
+    if (type === 'vec2') return `(${parts[0]}, ${parts[1]})`;
+    if (type === 'vec3') return `(${parts[0]}, ${parts[1]}, ${parts[2]})`;
+    return `(${parts.join(', ')})`;
+  }
+  return (v as number).toFixed(3);
+}
+
+function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: GraphNode; allNodes: GraphNode[] }) {
   const inputEntries  = Object.entries(def.inputs);
   const outputEntries = Object.entries(def.outputs);
+
+  function getInputInfo(k: string, type: string): React.ReactNode {
+    const sock = node.inputs[k];
+    if (!sock) return null;
+    if (sock.connection) {
+      const src = allNodes.find(n => n.id === sock.connection!.nodeId);
+      const srcDef = src ? getNodeDefinition(src.type) : null;
+      const srcLabel = src && src.type === 'customFn' && typeof src.params.label === 'string'
+        ? src.params.label || srcDef?.label
+        : srcDef?.label;
+      const connKey = `${sock.connection.nodeId}:${sock.connection.outputKey}`;
+      if (type === 'float') {
+        const decoded = floatValueRegistry.get(`__preview__${connKey}`);
+        if (decoded !== undefined) {
+          return <span style={{ color: '#f9e2af', fontFamily: 'monospace', fontSize: '10px' }}>{decoded.toFixed(3)}</span>;
+        }
+      } else if (type === 'vec2' || type === 'vec3') {
+        const vals = vectorValueRegistry.get(`__preview__${connKey}`);
+        if (vals) {
+          const formatted = type === 'vec2'
+            ? `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)})`
+            : `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)}, ${vals[2].toFixed(2)})`;
+          return <span style={{ color: '#f9e2af', fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
+        }
+      }
+      return <span style={{ color: '#45475a', fontSize: '10px' }}>← {srcLabel ?? connId}</span>;
+    }
+    const formatted = formatVal(sock.defaultValue, type);
+    if (formatted) return <span style={{ color: '#6c7086', fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
+    return null;
+  }
+
   return (
     <div
       style={{
@@ -194,23 +239,33 @@ function NodeTooltip({ def }: { def: NodeDefinition }) {
       {inputEntries.length > 0 && (
         <div style={{ marginBottom: 5 }}>
           <div style={{ color: '#585b70', fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inputs</div>
-          {inputEntries.map(([k, s]) => (
-            <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1 }}>
-              <span style={{ color: '#89b4fa', fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
-              <span style={{ color: '#585b70', fontSize: '10px' }}>{s.type}</span>
-            </div>
-          ))}
+          {inputEntries.map(([k, s]) => {
+            const info = getInputInfo(k, s.type);
+            return (
+              <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
+                <span style={{ color: '#89b4fa', fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
+                <span style={{ color: '#585b70', fontSize: '10px', minWidth: 34 }}>{s.type}</span>
+                {info}
+              </div>
+            );
+          })}
         </div>
       )}
       {outputEntries.length > 0 && (
         <div style={{ marginBottom: def.glslFunction ? 8 : 0 }}>
           <div style={{ color: '#585b70', fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Outputs</div>
-          {outputEntries.map(([k, s]) => (
-            <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1 }}>
-              <span style={{ color: '#a6e3a1', fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
-              <span style={{ color: '#585b70', fontSize: '10px' }}>{s.type}</span>
-            </div>
-          ))}
+          {outputEntries.map(([k, s]) => {
+            // Show probed float output value if available
+            const probed = s.type === 'float' ? floatValueRegistry.get(`__preview__${node.id}`) : undefined;
+            const liveVal = probed !== undefined ? probed.toFixed(3) : null;
+            return (
+              <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
+                <span style={{ color: '#a6e3a1', fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
+                <span style={{ color: '#585b70', fontSize: '10px', minWidth: 34 }}>{s.type}</span>
+                {liveVal && <span style={{ color: '#f9e2af', fontFamily: 'monospace', fontSize: '10px' }}>{liveVal}</span>}
+              </div>
+            );
+          })}
         </div>
       )}
       {def.glslFunction && (
@@ -432,8 +487,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.type, node.id]);
 
-  // Determine if the primary output is float (for preview scope vs shader thumbnail)
-  const primaryOutputIsFloat = !!def && Object.values(def.outputs).some(s => s.type === 'float');
+  // Show scope canvas only when the node's dominant output is float — i.e. it has a float
+  // output but NO vec3/vec4 output that would be better shown as a shader thumbnail.
+  const primaryOutputIsFloat = !!def
+    && Object.values(def.outputs).some(s => s.type === 'float')
+    && !Object.values(def.outputs).some(s => s.type === 'vec3' || s.type === 'vec4');
 
   // Register preview scope canvas when 👁 is active and output is float
   React.useEffect(() => {
@@ -497,6 +555,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     };
     return (
       <div
+        data-node-id={node.id}
         style={nodeStyle}
         onMouseDown={e => {
           e.stopPropagation();
@@ -566,6 +625,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
     return (
       <div
+        data-node-id={node.id}
         style={{
           position: 'absolute', left: node.position.x, top: node.position.y,
           background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
@@ -972,6 +1032,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   if (node.type === 'scope') {
     return (
       <div
+        data-node-id={node.id}
         style={{
           position: 'absolute',
           left: node.position.x,
@@ -2323,6 +2384,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             </div>
           );
         })()}
+        {/* Subgraph mini-map — always visible for all group types */}
+        <NodeInlineViz node={node} />
       </div>
     );
   }
@@ -2490,6 +2553,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   return (
     <div
+      data-node-id={node.id}
       onMouseEnter={handleCardMouseEnter}
       onMouseLeave={handleCardMouseLeave}
       onMouseDown={() => setZIndex(++zCounter)}
@@ -2570,7 +2634,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <span style={{ fontSize: '8px', color: '#f9e2af', letterSpacing: '0.06em', opacity: 0.9, fontWeight: 400 }}>BYPASS</span>
           )}
         </span>
-        {showNodeTooltip && <NodeTooltip def={def} />}
+        {showNodeTooltip && <NodeTooltip def={def} node={node} allNodes={nodes} />}
         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
           {/* Code toggle button */}
           <button

@@ -15,6 +15,14 @@ export const scopeBufferRegistry = new Map<string, number[]>();
 // Used by inline vizzes (e.g. ShaperCurveViz) to read live probe values via rAF.
 export const scopeValueRegistry = new Map<string, number>();
 
+// Multi-channel probe values per key — stores decoded [-1, 1] components for vec2/vec3 inputs.
+// Keyed as `__preview__${nodeId}` same as scopeValueRegistry.
+export const vectorValueRegistry = new Map<string, number[]>();
+
+// Decoded actual float values — not normalized, not clamped to any display range.
+// Updated by drawScopeCanvas. Use this instead of rawNorm * 2 - 1 in inline vizzes.
+export const floatValueRegistry = new Map<string, number>();
+
 /**
  * Called from the animation loop once per frame per scope node.
  * rawNorm is the probe value already normalised to [0, 1] by the probe shader.
@@ -28,6 +36,8 @@ export function drawScopeCanvas(
 ): void {
   // Always store the live value so inline vizzes can read it without a canvas.
   scopeValueRegistry.set(nodeId, rawNorm);
+  // Store decoded actual value for vizzes that need true range (not clamped to ±1).
+  floatValueRegistry.set(nodeId, rawNorm * (max - min) + min);
 
   const canvas = scopeCanvasRegistry.get(nodeId);
   if (!canvas) return;

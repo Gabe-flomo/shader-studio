@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import ShaderCanvas, { type OfflineRenderHandle } from './components/ShaderCanvas';
+import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { CodePanel } from './components/CodePanel';
@@ -96,72 +96,118 @@ function AudioMasterVolumeWidget() {
   );
 }
 
-function HistogramOverlay({ bins }: { bins: Float32Array }) {
-  const maxBin = Math.max(...bins, 0.001);
+type HistChannel = 'luma' | 'r' | 'g' | 'b';
+
+const HIST_CH_COLORS: Record<HistChannel, string> = {
+  luma: '#cdd6f4', r: '#f38ba8', g: '#a6e3a1', b: '#89b4fa',
+};
+const HIST_CH_LABELS: Record<HistChannel, string> = {
+  luma: 'L', r: 'R', g: 'G', b: 'B',
+};
+
+function HistogramOverlay({ data }: { data: HistogramData }) {
+  const [active, setActive] = React.useState<Set<HistChannel>>(new Set(['luma']));
   const [hoverInfo, setHoverInfo] = React.useState<{ x: number; binIdx: number } | null>(null);
+
+  const toggle = (ch: HistChannel) => {
+    setActive(prev => {
+      const next = new Set(prev);
+      if (next.has(ch)) { if (next.size > 1) next.delete(ch); }
+      else next.add(ch);
+      return next;
+    });
+  };
+
+  const channels = (['luma', 'r', 'g', 'b'] as HistChannel[]).filter(ch => active.has(ch));
+  const allBins = channels.map(ch => data[ch]);
+  const globalMax = Math.max(...allBins.flatMap(b => Array.from(b)), 0.001);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const binIdx = Math.min(bins.length - 1, Math.floor(t * bins.length));
+    const binIdx = Math.min(data.luma.length - 1, Math.floor(t * data.luma.length));
     setHoverInfo({ x: t, binIdx });
   };
 
-  const hoverBrightness = hoverInfo !== null ? hoverInfo.binIdx / (bins.length - 1) : null;
-  const hoverCount = hoverInfo !== null ? bins[hoverInfo.binIdx] : null;
+  const btnStyle = (ch: HistChannel): React.CSSProperties => ({
+    padding: '1px 6px', fontSize: '9px', borderRadius: '3px', cursor: 'pointer',
+    fontFamily: 'monospace', letterSpacing: '0.04em',
+    background: active.has(ch) ? `${HIST_CH_COLORS[ch]}22` : 'transparent',
+    border: `1px solid ${active.has(ch) ? HIST_CH_COLORS[ch] : '#45475a'}`,
+    color: active.has(ch) ? HIST_CH_COLORS[ch] : '#585b70',
+  });
 
   return (
     <div style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, height: '72px',
-      background: 'rgba(17,17,27,0.88)', backdropFilter: 'blur(4px)',
+      position: 'absolute', bottom: 0, left: 0, right: 0, height: '84px',
+      background: 'rgba(17,17,27,0.92)', backdropFilter: 'blur(4px)',
       borderTop: '1px solid #31324466',
       display: 'flex', flexDirection: 'column',
       padding: '5px 8px 3px',
       zIndex: 5,
-    }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverInfo(null)}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
-        <span style={{ fontSize: '8px', color: '#45475a', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Brightness</span>
-        {hoverInfo !== null && hoverBrightness !== null && hoverCount !== null && (
+    }}>
+      {/* Header row: channel toggles + fps + hover readout */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+        {(['luma', 'r', 'g', 'b'] as HistChannel[]).map(ch => (
+          <button key={ch} style={btnStyle(ch)} onClick={() => toggle(ch)}>
+            {HIST_CH_LABELS[ch]}
+          </button>
+        ))}
+        <div style={{ flex: 1 }} />
+        {hoverInfo !== null && (
           <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>
-            {hoverBrightness.toFixed(3)}
-            <span style={{ color: '#585b70', marginLeft: '5px' }}>{(hoverCount * 100).toFixed(1)}%</span>
+            {(hoverInfo.binIdx / (data.luma.length - 1)).toFixed(3)}
+            {channels.map(ch => (
+              <span key={ch} style={{ color: HIST_CH_COLORS[ch], marginLeft: '5px' }}>
+                {(data[ch][hoverInfo.binIdx] * 100).toFixed(1)}%
+              </span>
+            ))}
+          </span>
+        )}
+        {data.fps > 0 && (
+          <span style={{ fontSize: '9px', color: '#585b70', fontFamily: 'monospace', marginLeft: '6px' }}>
+            {data.fps}<span style={{ color: '#45475a' }}>fps</span>
           </span>
         )}
       </div>
+
+      {/* Histogram bars — overlapping, one layer per active channel */}
       <div
-        style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '1px', position: 'relative', cursor: 'crosshair' }}
+        style={{ flex: 1, position: 'relative', cursor: 'crosshair' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoverInfo(null)}
       >
-        {Array.from(bins).map((v, i) => {
-          const t = i / (bins.length - 1);
-          // lerp from blue (#89b4fa) at 0 to white (#cdd6f4) at 1 — always readable
-          const r = Math.round(137 + t * (205 - 137));
-          const g = Math.round(180 + t * (214 - 180));
-          const b = Math.round(250 + t * (250 - 250));
-          const isHovered = hoverInfo?.binIdx === i;
-          return (
-            <div key={i} style={{
-              flex: 1, minHeight: v > 0 ? '1px' : '0',
-              height: `${Math.round((v / maxBin) * 100)}%`,
-              background: isHovered ? '#ffffff' : `rgb(${r},${g},${b})`,
-              opacity: isHovered ? 1 : 0.55 + t * 0.45,
-            }} />
-          );
-        })}
+        {channels.map(ch => (
+          <div key={ch} style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'flex-end', gap: '1px',
+            pointerEvents: 'none',
+          }}>
+            {Array.from(data[ch]).map((v, i) => (
+              <div key={i} style={{
+                flex: 1,
+                height: `${Math.round((v / globalMax) * 100)}%`,
+                minHeight: v > 0 ? '1px' : '0',
+                background: HIST_CH_COLORS[ch],
+                opacity: hoverInfo?.binIdx === i ? 0.95 : 0.45,
+              }} />
+            ))}
+          </div>
+        ))}
         {/* Hover cursor line */}
         {hoverInfo !== null && (
           <div style={{
             position: 'absolute', top: 0, bottom: 0,
             left: `${hoverInfo.x * 100}%`,
-            width: '1px', background: 'rgba(255,255,255,0.25)',
+            width: '1px', background: 'rgba(255,255,255,0.3)',
             pointerEvents: 'none',
           }} />
         )}
       </div>
+
+      {/* Scale labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#45475a', marginTop: '2px' }}>
-        <span>0</span><span>0.5</span><span>1</span>
+        <span>0</span><span>0.5</span><span>1.0</span>
       </div>
     </div>
   );
@@ -241,8 +287,8 @@ function App() {
   const handleRegisterOfflineRender = useCallback((handle: OfflineRenderHandle) => { offlineRenderRef.current = handle; }, []);
 
   const [showHistogram, setShowHistogram] = useState(false);
-  const [histBins, setHistBins]           = useState<Float32Array | null>(null);
-  const handleHistogram = useCallback((bins: Float32Array) => { setHistBins(new Float32Array(bins)); }, []);
+  const [histData, setHistData]           = useState<HistogramData | null>(null);
+  const handleHistogram = useCallback((data: HistogramData) => { setHistData(data); }, []);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
 
   // Update preview width when breakpoint changes
@@ -843,7 +889,7 @@ function App() {
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
-              {showHistogram && histBins && <HistogramOverlay bins={histBins} />}
+              {showHistogram && histData && <HistogramOverlay data={histData} />}
               {/* Overlay controls: histogram toggle + float */}
               <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: '4px' }}>
                 <button

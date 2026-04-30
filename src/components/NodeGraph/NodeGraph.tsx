@@ -77,6 +77,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const exitToRoot          = useNodeGraphStore(s => s.exitToRoot);
   const exitToDepth         = useNodeGraphStore(s => s.exitToDepth);
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
+  const duplicateNode       = useNodeGraphStore(s => s.duplicateNode);
+  const duplicateNodes      = useNodeGraphStore(s => s.duplicateNodes);
   const removeNode          = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
   const deselectAll         = useNodeGraphStore(s => s.deselectAll);
@@ -638,7 +640,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    // Determine if a group node was right-clicked
+    // Ctrl+click on Mac triggers contextmenu — suppress the menu, only handle right-click
+    if (e.ctrlKey) return;
     const target = e.target as HTMLElement;
     const nodeEl = target.closest('[data-node-id]') as HTMLElement | null;
     const nodeId = nodeEl?.dataset.nodeId ?? null;
@@ -1026,12 +1029,21 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             return (
               <>
                 {canGroup && (
-                  <button style={ctxBtnStyle} onClick={() => {
-                    groupNodes(ids, 'Group');
-                    setContextMenu(null);
-                  }}>
-                    Group Selection <span style={{ color: '#585b70', fontSize: '10px' }}>⌘G</span>
-                  </button>
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      groupNodes(ids, 'Group');
+                      setContextMenu(null);
+                    }}>
+                      Group Selection <span style={{ color: '#585b70', fontSize: '10px' }}>⌘G</span>
+                    </button>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      duplicateNodes(ids);
+                      setContextMenu(null);
+                    }}>
+                      Duplicate Selection
+                    </button>
+                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                  </>
                 )}
                 {isSceneGroup && clickedNode && (
                   <>
@@ -1116,10 +1128,22 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     </button>
                   </>
                 )}
-                {!canGroup && !isGroup && (
-                  <div style={{ padding: '6px 12px', color: '#585b70', fontSize: '11px' }}>
-                    Select nodes to group
-                  </div>
+                {clickedNode && !isGroup && !isSceneGroup && !isSpaceWarpGroup && !isMarchLoopGroup && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => {
+                      duplicateNode(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Duplicate
+                    </button>
+                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                      removeNode(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Delete
+                    </button>
+                  </>
                 )}
               </>
             );
