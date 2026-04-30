@@ -77,6 +77,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const exitToRoot          = useNodeGraphStore(s => s.exitToRoot);
   const exitToDepth         = useNodeGraphStore(s => s.exitToDepth);
   const ungroupNode         = useNodeGraphStore(s => s.ungroupNode);
+  const duplicateNode       = useNodeGraphStore(s => s.duplicateNode);
   const removeNode          = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
   const deselectAll         = useNodeGraphStore(s => s.deselectAll);
@@ -1116,7 +1117,25 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
                     </button>
                   </>
                 )}
-                {!canGroup && !isGroup && (
+                {clickedNode && !isGroup && !isSceneGroup && !isSpaceWarpGroup && !isMarchLoopGroup && (
+                  <>
+                    {canGroup && <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />}
+                    <button style={ctxBtnStyle} onClick={() => {
+                      duplicateNode(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Duplicate
+                    </button>
+                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                      removeNode(clickedNode.id);
+                      setContextMenu(null);
+                    }}>
+                      Delete
+                    </button>
+                  </>
+                )}
+                {!clickedNode && !canGroup && (
                   <div style={{ padding: '6px 12px', color: '#585b70', fontSize: '11px' }}>
                     Select nodes to group
                   </div>

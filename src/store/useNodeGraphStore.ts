@@ -359,6 +359,7 @@ interface NodeGraphState {
   exitToRoot: () => void;
   exitToDepth: (depth: number) => void;
   duplicateGroup: (groupId: string) => string | null;
+  duplicateNode: (nodeId: string) => string | null;
 
   // Texture inputs — maps nodeId → loaded THREE.Texture (or null if not yet loaded)
   // Populated by NodeComponent file picker; consumed by ShaderCanvas to bind sampler2D uniforms.
@@ -628,34 +629,107 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
   const targetNode = nodes.find(n => n.id === targetId);
   if (!targetNode) return nodes; // fallback: don't break if node vanished
 
-  // Pick the best output to preview — prefer vec3, then vec4, then any
+  // Pick the best output to preview — prefer vec3, then vec4, then vec2, then float, then any
   const outputEntries = Object.entries(targetNode.outputs);
-  const vec3Entry = outputEntries.find(([, s]) => s.type === 'vec3');
-  const vec4Entry = outputEntries.find(([, s]) => s.type === 'vec4');
-  const chosen = vec3Entry ?? vec4Entry ?? outputEntries[0];
+  const vec3Entry  = outputEntries.find(([, s]) => s.type === 'vec3');
+  const vec4Entry  = outputEntries.find(([, s]) => s.type === 'vec4');
+  const vec2Entry  = outputEntries.find(([, s]) => s.type === 'vec2');
+  const floatEntry = outputEntries.find(([, s]) => s.type === 'float');
+  const chosen = vec3Entry ?? vec4Entry ?? vec2Entry ?? floatEntry ?? outputEntries[0];
   if (!chosen) return nodes; // no outputs to preview
 
   const [chosenKey, chosenSocket] = chosen;
   const outType = (chosenSocket as { type: string }).type;
-  const isVec4 = outType === 'vec4';
 
-  // Synthetic output node (exists only in the compiled preview graph)
-  const syntheticOutput: GraphNode = {
-    id: '__preview_output__',
-    type: isVec4 ? 'vec4Output' : 'output',
-    position: { x: 0, y: 0 },
-    params: {},
-    inputs: {
-      color: {
-        type: isVec4 ? 'vec4' : 'vec3',
-        label: 'Color',
-        connection: { nodeId: targetId, outputKey: chosenKey },
+  if (outType === 'vec4') {
+    const syntheticOutput: GraphNode = {
+      id: '__preview_output__',
+      type: 'vec4Output',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: { color: { type: 'vec4', label: 'Color', connection: { nodeId: targetId, outputKey: chosenKey } } },
+      outputs: {},
+    };
+    return [...subgraph, syntheticOutput];
+  }
+
+  if (outType === 'vec3') {
+    const syntheticOutput: GraphNode = {
+      id: '__preview_output__',
+      type: 'output',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: targetId, outputKey: chosenKey } } },
+      outputs: {},
+    };
+    return [...subgraph, syntheticOutput];
+  }
+
+  // vec2: promote (x, y, 0) → vec3 via extractX/Y + makeVec3
+  if (outType === 'vec2') {
+    const extX: GraphNode = {
+      id: '__preview_extX__',
+      type: 'extractX',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: targetId, outputKey: chosenKey } } },
+      outputs: { x: { type: 'float', label: 'X' } },
+    };
+    const extY: GraphNode = {
+      id: '__preview_extY__',
+      type: 'extractY',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: targetId, outputKey: chosenKey } } },
+      outputs: { y: { type: 'float', label: 'Y' } },
+    };
+    const mkVec3: GraphNode = {
+      id: '__preview_mkVec3__',
+      type: 'makeVec3',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: {
+        r: { type: 'float', label: 'R', connection: { nodeId: '__preview_extX__', outputKey: 'x' } },
+        g: { type: 'float', label: 'G', connection: { nodeId: '__preview_extY__', outputKey: 'y' } },
+        b: { type: 'float', label: 'B' },
       },
-    },
-    outputs: {},
-  };
+      outputs: { rgb: { type: 'vec3', label: 'RGB' } },
+    };
+    const syntheticOutput: GraphNode = {
+      id: '__preview_output__',
+      type: 'output',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: '__preview_mkVec3__', outputKey: 'rgb' } } },
+      outputs: {},
+    };
+    return [...subgraph, extX, extY, mkVec3, syntheticOutput];
+  }
 
-  return [...subgraph, syntheticOutput];
+  // float: promote to grayscale vec3
+  if (outType === 'float') {
+    const toVec3: GraphNode = {
+      id: '__preview_toVec3__',
+      type: 'floatToVec3',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: { input: { type: 'float', label: 'Value', connection: { nodeId: targetId, outputKey: chosenKey } } },
+      outputs: { rgb: { type: 'vec3', label: 'RGB' } },
+    };
+    const syntheticOutput: GraphNode = {
+      id: '__preview_output__',
+      type: 'output',
+      position: { x: 0, y: 0 },
+      params: {},
+      inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: '__preview_toVec3__', outputKey: 'rgb' } } },
+      outputs: {},
+    };
+    return [...subgraph, toVec3, syntheticOutput];
+  }
+
+  // Fallback for unsupported types (mat2, mat3, scene3d, etc.) — compile the full graph so
+  // ShaderCanvas can still probe the node's input variables via nodeOutputVarMap.
+  return nodes;
 }
 
 let nodeIdCounter = 0;
@@ -1558,6 +1632,28 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     get().compile();
     return newNode.id;
+  },
+
+  duplicateNode: (nodeId) => {
+    const { nodes, activeGroupPath } = get();
+    pushHistory(nodes);
+    const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const node = activeNodes.find(n => n.id === nodeId);
+    if (!node) return null;
+    const newId = `node_${nodeIdCounter++}`;
+    const clearedInputs = Object.fromEntries(
+      Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])
+    );
+    const newNode = { ...node, id: newId, inputs: clearedInputs, position: { x: node.position.x + 60, y: node.position.y + 60 } };
+    if (activeGroupPath.length > 0) {
+      const newActiveNodes = [...activeNodes, newNode];
+      const newNodes = setActiveNodes(nodes, activeGroupPath, newActiveNodes);
+      if (newNodes) set({ nodes: newNodes });
+    } else {
+      set(state => ({ nodes: [...state.nodes, newNode] }));
+    }
+    get().compile();
+    return newId;
   },
 
   setNodeTexture: (nodeId, texture) => set(state => ({

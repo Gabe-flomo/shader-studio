@@ -14,7 +14,7 @@ export const PaletteNode: NodeDefinition = {
   category: 'Color',
   description: 'Cosine-based color palette. Wire float nodes to offset_r/offset_g/offset_b etc. to animate palette coefficients, or use the vec3 sliders as static fallbacks.',
   inputs: {
-    t:           { type: 'float', label: 'T' },
+    t:           { type: 'float', label: 'T', defaultValue: 0 },
     offset_r:    { type: 'float', label: 'offset.r' },
     offset_g:    { type: 'float', label: 'offset.g' },
     offset_b:    { type: 'float', label: 'offset.b' },
@@ -158,7 +158,7 @@ export const PalettePresetNode: NodeDefinition = {
   category: 'Color',
   description: 'Cosine palette with named presets. Wire a float to T, pick a preset from the dropdown.',
   inputs: {
-    t: { type: 'float', label: 'T' },
+    t: { type: 'float', label: 'T', defaultValue: 0 },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -509,6 +509,174 @@ export const BrightnessContrastNode: NodeDefinition = {
     return {
       code: `    vec3 ${id}_result = clamp((${c} - 0.5) * ${con} + 0.5 + ${br}, 0.0, 1.0);\n`,
       outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+// ─── Color Grading Suite ──────────────────────────────────────────────────────
+
+// Lift/Gamma/Gain: classic 3-way color correction
+// lift shifts black point (additive), gain scales whites (multiplicative),
+// gamma applies a power curve to midtones.
+export const LiftGammaGainNode: NodeDefinition = {
+  type: 'liftGammaGain', label: 'Lift / Gamma / Gain', category: 'Color Grading',
+  description: 'Classic 3-way color correction. Lift shifts shadows (additive), Gain scales highlights (multiplicative), Gamma applies a per-channel power curve to midtones.',
+  inputs: {
+    color: { type: 'vec3', label: 'Color' },
+    lift:  { type: 'vec3', label: 'Lift'  },
+    gamma: { type: 'vec3', label: 'Gamma' },
+    gain:  { type: 'vec3', label: 'Gain'  },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { lift: [0.0, 0.0, 0.0], gamma: [1.0, 1.0, 1.0], gain: [1.0, 1.0, 1.0] },
+  paramDefs: {
+    lift:  { label: 'Lift',  type: 'vec3', min: -1.0, max: 1.0, step: 0.01 },
+    gamma: { label: 'Gamma', type: 'vec3', min:  0.1, max: 4.0, step: 0.01 },
+    gain:  { label: 'Gain',  type: 'vec3', min:  0.0, max: 4.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const c  = inputVars.color ?? 'vec3(0.5)';
+    const lv = Array.isArray(node.params.lift)  ? node.params.lift  as number[] : [0, 0, 0];
+    const gv = Array.isArray(node.params.gamma) ? node.params.gamma as number[] : [1, 1, 1];
+    const kv = Array.isArray(node.params.gain)  ? node.params.gain  as number[] : [1, 1, 1];
+    const lt = inputVars.lift  ?? `vec3(${f(lv[0])}, ${f(lv[1])}, ${f(lv[2])})`;
+    const gm = inputVars.gamma ?? `vec3(${f(gv[0])}, ${f(gv[1])}, ${f(gv[2])})`;
+    const gn = inputVars.gain  ?? `vec3(${f(kv[0])}, ${f(kv[1])}, ${f(kv[2])})`;
+    return {
+      code: [
+        `    vec3 ${id}_g = max(${gm}, vec3(0.001));\n`,
+        `    vec3 ${id}_lifted = max(${c} * ${gn} + ${lt}, vec3(0.0));\n`,
+        `    vec3 ${id}_color = vec3(\n`,
+        `        pow(${id}_lifted.r, 1.0 / ${id}_g.r),\n`,
+        `        pow(${id}_lifted.g, 1.0 / ${id}_g.g),\n`,
+        `        pow(${id}_lifted.b, 1.0 / ${id}_g.b));\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// Hue Rotate: rotates all hues by an angle (radians) by rotating around the
+// neutral-gray axis (1,1,1)/√3 in RGB space via Rodrigues' formula.
+export const HueRotateNode: NodeDefinition = {
+  type: 'hueRotate', label: 'Hue Rotate', category: 'Color Grading',
+  description: 'Rotate all hues by angle (radians). Uses a matrix rotation around the neutral-gray (1,1,1) axis in RGB space — preserves luminance.',
+  inputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    angle: { type: 'float', label: 'Angle' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { angle: 0.0 },
+  paramDefs: { angle: { label: 'Angle (rad)', type: 'float', min: -3.14159, max: 3.14159, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const c  = inputVars.color ?? 'vec3(0.5)';
+    const a  = inputVars.angle ?? p(node.params.angle, 0.0);
+    return {
+      code: [
+        `    float ${id}_c = cos(${a});\n`,
+        `    float ${id}_s = sin(${a});\n`,
+        `    float ${id}_lum = dot(${c}, vec3(0.333333));\n`,
+        `    vec3  ${id}_cross = vec3((${c}).g - (${c}).b, (${c}).b - (${c}).r, (${c}).r - (${c}).g);\n`,
+        `    vec3  ${id}_color = ${c} * ${id}_c + ${id}_cross * (${id}_s * 0.57735) + vec3(${id}_lum) * (1.0 - ${id}_c);\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// Saturation: mix between grayscale luminance and original color.
+// amount=1 → original, amount=0 → grayscale, amount>1 → hyper-saturated.
+export const SaturationNode: NodeDefinition = {
+  type: 'colorSaturation', label: 'Saturation', category: 'Color Grading',
+  description: 'Scale color saturation. 1 = unchanged, 0 = grayscale, >1 = hyper-saturated, <0 = inverted chrominance. Wire a float node to override the slider.',
+  inputs: {
+    color:  { type: 'vec3',  label: 'Color'  },
+    amount: { type: 'float', label: 'Amount' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { amount: 1.0 },
+  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 3.0, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const c   = inputVars.color  ?? 'vec3(0.5)';
+    const amt = inputVars.amount ?? p(node.params.amount, 1.0);
+    return {
+      code: [
+        `    float ${id}_lum = dot(${c}, vec3(0.2126, 0.7152, 0.0722));\n`,
+        `    vec3  ${id}_color = mix(vec3(${id}_lum), ${c}, ${amt});\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// Shadows/Highlights: push shadows and highlights independently using a
+// luminance mask. Positive shadows = brighten darks, negative = crush them.
+export const ShadowsHighlightsNode: NodeDefinition = {
+  type: 'shadowsHighlights', label: 'Shadows / Highlights', category: 'Color Grading',
+  description: 'Push shadows and highlights independently. Uses a luminance mask: positive shadows lifts darks, negative crushes them. Pivot sets the midpoint.',
+  inputs: {
+    color:      { type: 'vec3',  label: 'Color'      },
+    shadows:    { type: 'float', label: 'Shadows'    },
+    highlights: { type: 'float', label: 'Highlights' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { shadows: 0.0, highlights: 0.0, pivot: 0.5 },
+  paramDefs: {
+    shadows:    { label: 'Shadows',    type: 'float', min: -1.0, max: 1.0, step: 0.01 },
+    highlights: { label: 'Highlights', type: 'float', min: -1.0, max: 1.0, step: 0.01 },
+    pivot:      { label: 'Pivot',      type: 'float', min:  0.1, max: 0.9, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const c   = inputVars.color      ?? 'vec3(0.5)';
+    const sh  = inputVars.shadows    ?? p(node.params.shadows,    0.0);
+    const hi  = inputVars.highlights ?? p(node.params.highlights, 0.0);
+    const pv  = p(node.params.pivot, 0.5);
+    return {
+      code: [
+        `    float ${id}_lum    = dot(${c}, vec3(0.2126, 0.7152, 0.0722));\n`,
+        `    float ${id}_shMask = 1.0 - smoothstep(0.0, ${pv}, ${id}_lum);\n`,
+        `    float ${id}_hiMask = smoothstep(${pv}, 1.0, ${id}_lum);\n`,
+        `    vec3  ${id}_color  = clamp(${c} + ${id}_shMask * ${sh} + ${id}_hiMask * ${hi}, vec3(0.0), vec3(1.0));\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// Tone Curve: remap the tonal range with a black point, white point, and
+// S-curve strength. Blacks/whites set the input range; strength blends
+// between linear and the smoothstep S-curve.
+export const ToneCurveNode: NodeDefinition = {
+  type: 'toneCurve', label: 'Tone Curve', category: 'Color Grading',
+  description: 'Remap tonal range. Blacks sets the dark floor, Whites sets the bright ceiling, Strength blends between linear (0) and a smoothstep S-curve (1).',
+  inputs: {
+    color:    { type: 'vec3',  label: 'Color'    },
+    strength: { type: 'float', label: 'Strength' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { blacks: 0.0, whites: 1.0, strength: 0.5 },
+  paramDefs: {
+    blacks:   { label: 'Blacks',   type: 'float', min: -0.5, max: 0.5,  step: 0.01 },
+    whites:   { label: 'Whites',   type: 'float', min:  0.5, max: 2.0,  step: 0.01 },
+    strength: { label: 'Strength', type: 'float', min:  0.0, max: 1.0,  step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const c   = inputVars.color    ?? 'vec3(0.5)';
+    const str = inputVars.strength ?? p(node.params.strength, 0.5);
+    const bl  = p(node.params.blacks, 0.0);
+    const wh  = p(node.params.whites, 1.0);
+    return {
+      code: [
+        `    vec3  ${id}_r  = clamp((${c} - vec3(${bl})) / max(${wh} - ${bl}, 0.001), vec3(0.0), vec3(1.0));\n`,
+        `    vec3  ${id}_sc = ${id}_r * ${id}_r * (3.0 - 2.0 * ${id}_r);\n`,
+        `    vec3  ${id}_color = mix(${id}_r, ${id}_sc, ${str});\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color` },
     };
   },
 };

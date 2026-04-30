@@ -99,7 +99,8 @@ export { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayR
 
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
-  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
+  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
 
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
@@ -199,7 +200,8 @@ import {
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
-  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode } from './color';
+  ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
@@ -477,6 +479,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   blendModes: BlendModesNode,
   brightnessContrast: BrightnessContrastNode,
   blackbody: BlackbodyNode,
+  liftGammaGain: LiftGammaGainNode,
+  hueRotate: HueRotateNode,
+  colorSaturation: SaturationNode,
+  shadowsHighlights: ShadowsHighlightsNode,
+  toneCurve: ToneCurveNode,
   // Output
   output: OutputNode,
   vec4Output: Vec4OutputNode,
