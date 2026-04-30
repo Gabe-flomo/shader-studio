@@ -16610,6 +16610,197 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Matrix: Animated Rotation ─────────────────────────────────────────────
+  // Builds a rotation matrix from cos/sin of time, applies it to UV, then renders a circle.
+  matrixRotation: {
+    label: 'Matrix: Animated Rotation',
+    counter: 12,
+    nodes: [
+      { id: 'uv_1',   type: 'uv',   position: { x: 40,  y: 260 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_2', type: 'time', position: { x: 40,  y: 440 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cos_3', type: 'cos', position: { x: 260, y: 320 },
+        inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'time_2', outputKey: 'time' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {},
+      },
+      {
+        id: 'sin_4', type: 'sin', position: { x: 260, y: 460 },
+        inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'time_2', outputKey: 'time' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {},
+      },
+      {
+        id: 'neg_5', type: 'negate', position: { x: 460, y: 460 },
+        inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'sin_4', outputKey: 'output' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {},
+      },
+      {
+        id: 'col0_6', type: 'makeVec2', position: { x: 660, y: 300 },
+        inputs: {
+          x: { type: 'float', label: 'X', connection: { nodeId: 'cos_3', outputKey: 'output' } },
+          y: { type: 'float', label: 'Y', connection: { nodeId: 'sin_4', outputKey: 'output' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Vec2' } }, params: {},
+      },
+      {
+        id: 'col1_7', type: 'makeVec2', position: { x: 660, y: 480 },
+        inputs: {
+          x: { type: 'float', label: 'X', connection: { nodeId: 'neg_5',  outputKey: 'output' } },
+          y: { type: 'float', label: 'Y', connection: { nodeId: 'cos_3',  outputKey: 'output' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Vec2' } }, params: {},
+      },
+      {
+        id: 'mat_8', type: 'mat2Construct', position: { x: 880, y: 380 },
+        inputs: {
+          v0: { type: 'vec2', label: 'Vec 0', connection: { nodeId: 'col0_6', outputKey: 'output' } },
+          v1: { type: 'vec2', label: 'Vec 1', connection: { nodeId: 'col1_7', outputKey: 'output' } },
+        },
+        outputs: { mat: { type: 'mat2', label: 'Mat2' } }, params: { mode: 'cols' },
+      },
+      {
+        id: 'mul_9', type: 'mat2MulVec', position: { x: 1100, y: 300 },
+        inputs: {
+          mat: { type: 'mat2', label: 'Mat2', connection: { nodeId: 'mat_8',  outputKey: 'mat' } },
+          vec: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'uv_1',   outputKey: 'uv'  } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Vec2 out' } }, params: {},
+      },
+      {
+        id: 'circle_10', type: 'circleSDF', position: { x: 1320, y: 260 },
+        inputs: {
+          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'mul_9', outputKey: 'output' } },
+          radius:   { type: 'float', label: 'Radius' },
+          offset:   { type: 'vec2',  label: 'Offset' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.35 },
+      },
+      {
+        id: 'colorize_11', type: 'sdfColorize', position: { x: 1540, y: 260 },
+        inputs: {
+          d:       { type: 'float', label: 'SDF',           connection: { nodeId: 'circle_10', outputKey: 'distance' } },
+          inside:  { type: 'vec3',  label: 'Inside Color' },
+          outside: { type: 'vec3',  label: 'Outside Color' },
+          edge:    { type: 'float', label: 'Edge Softness' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { edge: 0.015, inside: [0.2, 0.7, 1.0], outside: [0.05, 0.05, 0.1] },
+      },
+      {
+        id: 'output_12', type: 'output', position: { x: 1760, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'colorize_11', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Matrix: Inspect & Reassemble ──────────────────────────────────────────
+  // Decompose a mat2 into its columns, swap them, reassemble — a 90° flip of UV space.
+  matrixInspect: {
+    label: 'Matrix: Inspect & Reassemble',
+    counter: 10,
+    nodes: [
+      { id: 'uv_1',   type: 'uv',   position: { x: 40,  y: 260 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_2', type: 'time', position: { x: 40,  y: 440 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cos_3', type: 'cos', position: { x: 260, y: 320 },
+        inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'time_2', outputKey: 'time' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {},
+      },
+      {
+        id: 'sin_4', type: 'sin', position: { x: 260, y: 460 },
+        inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'time_2', outputKey: 'time' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {},
+      },
+      {
+        id: 'neg_5', type: 'negate', position: { x: 460, y: 460 },
+        inputs:  { input: { type: 'float', label: 'Input', connection: { nodeId: 'sin_4', outputKey: 'output' } } },
+        outputs: { output: { type: 'float', label: 'Output' } }, params: {},
+      },
+      {
+        id: 'col0_6', type: 'makeVec2', position: { x: 660, y: 300 },
+        inputs: {
+          x: { type: 'float', label: 'X', connection: { nodeId: 'cos_3', outputKey: 'output' } },
+          y: { type: 'float', label: 'Y', connection: { nodeId: 'sin_4', outputKey: 'output' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Vec2' } }, params: {},
+      },
+      {
+        id: 'col1_7', type: 'makeVec2', position: { x: 660, y: 480 },
+        inputs: {
+          x: { type: 'float', label: 'X', connection: { nodeId: 'neg_5', outputKey: 'output' } },
+          y: { type: 'float', label: 'Y', connection: { nodeId: 'cos_3', outputKey: 'output' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Vec2' } }, params: {},
+      },
+      {
+        id: 'mat_8', type: 'mat2Construct', position: { x: 880, y: 380 },
+        inputs: {
+          v0: { type: 'vec2', label: 'Vec 0', connection: { nodeId: 'col0_6', outputKey: 'output' } },
+          v1: { type: 'vec2', label: 'Vec 1', connection: { nodeId: 'col1_7', outputKey: 'output' } },
+        },
+        outputs: { mat: { type: 'mat2', label: 'Mat2' } }, params: { mode: 'cols' },
+      },
+      {
+        id: 'inspect_9', type: 'mat2Inspect', position: { x: 1100, y: 380 },
+        inputs: {
+          mat: { type: 'mat2', label: 'Mat2', connection: { nodeId: 'mat_8', outputKey: 'mat' } },
+        },
+        outputs: {
+          mat:  { type: 'mat2', label: 'Mat2' },
+          vec0: { type: 'vec2', label: 'Vec 0' },
+          vec1: { type: 'vec2', label: 'Vec 1' },
+        },
+        params: { mode: 'cols' },
+      },
+      {
+        id: 'reassemble_10', type: 'mat2Construct', position: { x: 1340, y: 380 },
+        inputs: {
+          v0: { type: 'vec2', label: 'Vec 0', connection: { nodeId: 'inspect_9', outputKey: 'vec1' } },
+          v1: { type: 'vec2', label: 'Vec 1', connection: { nodeId: 'inspect_9', outputKey: 'vec0' } },
+        },
+        outputs: { mat: { type: 'mat2', label: 'Mat2' } }, params: { mode: 'cols' },
+      },
+      {
+        id: 'mul_11', type: 'mat2MulVec', position: { x: 1580, y: 280 },
+        inputs: {
+          mat: { type: 'mat2', label: 'Mat2', connection: { nodeId: 'reassemble_10', outputKey: 'mat' } },
+          vec: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'uv_1',          outputKey: 'uv'  } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Vec2 out' } }, params: {},
+      },
+      {
+        id: 'fract_12', type: 'fract', position: { x: 1800, y: 280 },
+        inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'mul_11', outputKey: 'output' } }, scale: { type: 'float', label: 'Scale' } },
+        outputs: { output: { type: 'vec2', label: 'Output' } }, params: { scale: 3.0 },
+      },
+      {
+        id: 'circle_13', type: 'circleSDF', position: { x: 2020, y: 240 },
+        inputs: {
+          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'fract_12', outputKey: 'output' } },
+          radius:   { type: 'float', label: 'Radius' },
+          offset:   { type: 'vec2',  label: 'Offset' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.3 },
+      },
+      {
+        id: 'colorize_14', type: 'sdfColorize', position: { x: 2240, y: 240 },
+        inputs: {
+          d:       { type: 'float', label: 'SDF',           connection: { nodeId: 'circle_13', outputKey: 'distance' } },
+          inside:  { type: 'vec3',  label: 'Inside Color' },
+          outside: { type: 'vec3',  label: 'Outside Color' },
+          edge:    { type: 'float', label: 'Edge Softness' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { edge: 0.015, inside: [1.0, 0.5, 0.1], outside: [0.05, 0.05, 0.1] },
+      },
+      {
+        id: 'output_15', type: 'output', position: { x: 2460, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'colorize_14', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
