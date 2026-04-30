@@ -1778,20 +1778,26 @@ export function generateFragmentShader(
               }
               // Special case: marchSceneDist inside inline group → emit real scene function call
               if (gn.type === 'marchSceneDist') {
-                const resolvedSceneFn2 = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
-                const resolvedExtraParams2 = sceneFnExtraParams.get(resolvedSceneFn2) ?? [];
-                const resolvedExtraStr2 = resolvedExtraParams2.length > 0
-                  ? ', ' + resolvedExtraParams2.map(v => v.name).join(', ') : '';
-                const posVar2 = gnInputVars.pos || `${nodeSlug}_mp`;
-                const rawVar2 = `${gn.id}_sd_raw`;
-                const outVar2 = `${gn.id}_sd`;
-                if (mlVolumetric) {
-                  bodyLines.push(`    float ${rawVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
-                  bodyLines.push(`    float ${outVar2} = max(${rawVar2}, ${mlPassthrough});\n`);
-                  nodeOutputs.set(gn.id, { dist: outVar2, rawDist: rawVar2 });
+                const resolvedSceneFn2 = sceneFnName || inputVars.scene || '';
+                if (!resolvedSceneFn2) {
+                  const fbResult2 = gDef.generateGLSL(gn, gnInputVars);
+                  bodyLines.push(fbResult2.code);
+                  nodeOutputs.set(gn.id, fbResult2.outputVars);
                 } else {
-                  bodyLines.push(`    float ${outVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
-                  nodeOutputs.set(gn.id, { dist: outVar2 });
+                  const resolvedExtraParams2 = sceneFnExtraParams.get(resolvedSceneFn2) ?? [];
+                  const resolvedExtraStr2 = resolvedExtraParams2.length > 0
+                    ? ', ' + resolvedExtraParams2.map(v => v.name).join(', ') : '';
+                  const posVar2 = gnInputVars.pos || `${nodeSlug}_mp`;
+                  const rawVar2 = `${gn.id}_sd_raw`;
+                  const outVar2 = `${gn.id}_sd`;
+                  if (mlVolumetric) {
+                    bodyLines.push(`    float ${rawVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
+                    bodyLines.push(`    float ${outVar2} = max(${rawVar2}, ${mlPassthrough});\n`);
+                    nodeOutputs.set(gn.id, { dist: outVar2, rawDist: rawVar2 });
+                  } else {
+                    bodyLines.push(`    float ${outVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
+                    nodeOutputs.set(gn.id, { dist: outVar2 });
+                  }
                 }
                 continue;
               }
@@ -1865,22 +1871,28 @@ export function generateFragmentShader(
 
           // ── marchSceneDist: emit a direct call to the scene SDF function ────────
           if (sn.type === 'marchSceneDist') {
-            const resolvedSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
-            const resolvedExtraParams = sceneFnExtraParams.get(resolvedSceneFn) ?? [];
-            const resolvedExtraStr = resolvedExtraParams.length > 0
-              ? ', ' + resolvedExtraParams.map(v => v.name).join(', ')
-              : '';
-            const posVar = snInputVars.pos || `${nodeSlug}_mp`;
-            const rawVar = `${sn.id}_sd_raw`;
-            const outVar = `${sn.id}_sd`;
-            if (mlVolumetric) {
-              // In volumetric mode expose both raw d and max(d, passthrough) clamped vol
-              bodyLines.push(`    float ${rawVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
-              bodyLines.push(`    float ${outVar} = max(${rawVar}, ${mlPassthrough});\n`);
-              nodeOutputs.set(sn.id, { dist: outVar, rawDist: rawVar });
+            const resolvedSceneFn = sceneFnName || inputVars.scene || '';
+            if (!resolvedSceneFn) {
+              // No scene connected — fall back to node's own generateGLSL (length(p)-1.0)
+              const fbResult = snDef.generateGLSL(snEffective, snInputVars);
+              bodyLines.push(fbResult.code);
+              nodeOutputs.set(sn.id, fbResult.outputVars);
             } else {
-              bodyLines.push(`    float ${outVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
-              nodeOutputs.set(sn.id, { dist: outVar });
+              const resolvedExtraParams = sceneFnExtraParams.get(resolvedSceneFn) ?? [];
+              const resolvedExtraStr = resolvedExtraParams.length > 0
+                ? ', ' + resolvedExtraParams.map(v => v.name).join(', ')
+                : '';
+              const posVar = snInputVars.pos || `${nodeSlug}_mp`;
+              const rawVar = `${sn.id}_sd_raw`;
+              const outVar = `${sn.id}_sd`;
+              if (mlVolumetric) {
+                bodyLines.push(`    float ${rawVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+                bodyLines.push(`    float ${outVar} = max(${rawVar}, ${mlPassthrough});\n`);
+                nodeOutputs.set(sn.id, { dist: outVar, rawDist: rawVar });
+              } else {
+                bodyLines.push(`    float ${outVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+                nodeOutputs.set(sn.id, { dist: outVar });
+              }
             }
             continue;
           }

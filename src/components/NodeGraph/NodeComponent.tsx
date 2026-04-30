@@ -327,6 +327,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
   const addMarchLoopInput      = useNodeGraphStore(s => s.addMarchLoopInput);
   const removeMarchLoopInput   = useNodeGraphStore(s => s.removeMarchLoopInput);
+  const renameMarchLoopInput   = useNodeGraphStore(s => s.renameMarchLoopInput);
   const toggleMarchLoopOutputPort = useNodeGraphStore(s => s.toggleMarchLoopOutputPort);
   // NOTE: do NOT inline `?? []` inside the selector — that creates a new array
   // reference on every call, making Object.is always fail and causing infinite re-renders.
@@ -1233,7 +1234,29 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   }}
                   title={`Remove ${label}`}
                 >&#10005;</button>
-                <span style={{ fontSize: '11px', color: '#cdd6f4' }}>{label}</span>
+                {editingPortKey === `mlgin_${key}` ? (
+                  <input
+                    autoFocus
+                    value={editingPortLabel}
+                    onChange={e => setEditingPortLabel(e.target.value)}
+                    onMouseDown={e => e.stopPropagation()}
+                    onBlur={() => {
+                      if (editingPortLabel.trim() && activeGroupId) renameMarchLoopInput(activeGroupId, key, editingPortLabel.trim());
+                      setEditingPortKey(null);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      if (e.key === 'Escape') setEditingPortKey(null);
+                    }}
+                    style={{ width: '60px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #88aacc', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                  />
+                ) : (
+                  <span
+                    style={{ fontSize: '11px', color: '#cdd6f4', cursor: 'text' }}
+                    title="Double-click to rename"
+                    onDoubleClick={() => { setEditingPortKey(`mlgin_${key}`); setEditingPortLabel(label); }}
+                  >{label}</span>
+                )}
                 <span style={{ fontSize: '10px', color: '#585b70' }}>({type})</span>
                 <div
                   ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
