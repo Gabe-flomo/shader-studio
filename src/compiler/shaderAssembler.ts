@@ -1445,6 +1445,29 @@ export function generateFragmentShader(
             mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
           }
         }
+        // Also pre-scan accumulator nodes nested inside group nodes within the MLG body.
+        // Uses raw node IDs (not slugs) to avoid slug collision with the later processing pass.
+        for (const outerGrpSn of subgraph.nodes) {
+          if (outerGrpSn.type !== 'group') continue;
+          const outerSlugForAcc = mlSubSlugMap.get(outerGrpSn.id) ?? outerGrpSn.id;
+          const innerSg = outerGrpSn.params?.subgraph as SubgraphData | undefined;
+          if (!innerSg) continue;
+          for (const innerGn of innerSg.nodes) {
+            const op = innerGn.assignOp;
+            if (!op || op === '=') continue;
+            const innerDef = getNodeDefinition(innerGn.type);
+            if (!innerDef) continue;
+            const isMultiplyAcc = op === '*=' || op === '/=';
+            const safeInnerNodeId = innerGn.id.replace(/[^a-zA-Z0-9]/g, '');
+            for (const [outKey, outSock] of Object.entries(innerDef.outputs)) {
+              if (outSock.type !== 'float') continue;
+              const accVar = `${nodeSlug}_mlgacc_${outerSlugForAcc}_ng_${safeInnerNodeId}_${outKey}`;
+              const neutral = isMultiplyAcc ? '1.0' : '0.0';
+              const initExpr = innerGn.assignInit?.trim() || neutral;
+              mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
+            }
+          }
+        }
 
         const mlSorted = topologicalSort(mlPrefixedNodes);
         // Ensure sceneGroup is processed before marchSceneDist (needs sceneFnName set first)
@@ -1712,6 +1735,12 @@ export function generateFragmentShader(
             if (!mlGrpSubgraph || mlGrpSubgraph.nodes.length === 0) { nodeOutputs.set(sn.id, {}); continue; }
             const mlGrpSlugMap = new Map<string, string>();
             for (const gn of mlGrpSubgraph.nodes) mlGrpSlugMap.set(gn.id, computeNodeSlug(gn, usedSlugs));
+            // Reverse map: slug → original GraphNode, used for assignOp + raw-ID lookup
+            const mlGrpSlugToOrigNode = new Map<string, GraphNode>();
+            for (const origGn of mlGrpSubgraph.nodes) {
+              const slug = mlGrpSlugMap.get(origGn.id);
+              if (slug) mlGrpSlugToOrigNode.set(slug, origGn);
+            }
             const mlGrpPrefix = `${sn.id}_g_`;
             const mlGrpPortOverrides = new Map<string, string>();
             for (const port of (mlGrpSubgraph.inputPorts ?? [])) {
@@ -1747,9 +1776,44 @@ export function generateFragmentShader(
                   }
                 }
               }
+              // Special case: marchSceneDist inside inline group → emit real scene function call
+              if (gn.type === 'marchSceneDist') {
+                const resolvedSceneFn2 = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
+                const resolvedExtraParams2 = sceneFnExtraParams.get(resolvedSceneFn2) ?? [];
+                const resolvedExtraStr2 = resolvedExtraParams2.length > 0
+                  ? ', ' + resolvedExtraParams2.map(v => v.name).join(', ') : '';
+                const posVar2 = gnInputVars.pos || `${nodeSlug}_mp`;
+                const rawVar2 = `${gn.id}_sd_raw`;
+                const outVar2 = `${gn.id}_sd`;
+                if (mlVolumetric) {
+                  bodyLines.push(`    float ${rawVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
+                  bodyLines.push(`    float ${outVar2} = max(${rawVar2}, ${mlPassthrough});\n`);
+                  nodeOutputs.set(gn.id, { dist: outVar2, rawDist: rawVar2 });
+                } else {
+                  bodyLines.push(`    float ${outVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
+                  nodeOutputs.set(gn.id, { dist: outVar2 });
+                }
+                continue;
+              }
               const gnResult = gDef.generateGLSL(gn, gnInputVars);
-              bodyLines.push(gnResult.code); nodeOutputs.set(gn.id, gnResult.outputVars);
-              for (const [ok, vn] of Object.entries(gnResult.outputVars)) { if (gDef.outputs[ok]?.type === 'vec3') mlLastVec3Var = vn; }
+              bodyLines.push(gnResult.code);
+              // Handle assignOp accumulators nested inside this inline group
+              const gnSlugKey = gn.id.slice(mlGrpPrefix.length);
+              const origGnForAcc = mlGrpSlugToOrigNode.get(gnSlugKey);
+              if (origGnForAcc?.assignOp && origGnForAcc.assignOp !== '=') {
+                const outerGroupSlug = sn.id.slice(mlPrefix.length);
+                const sanitizedOrigId = origGnForAcc.id.replace(/[^a-zA-Z0-9]/g, '');
+                const accOutVars: Record<string, string> = {};
+                for (const [outKey, tempVar] of Object.entries(gnResult.outputVars)) {
+                  const accVar = `${nodeSlug}_mlgacc_${outerGroupSlug}_ng_${sanitizedOrigId}_${outKey}`;
+                  bodyLines.push(`    ${accVar} ${origGnForAcc.assignOp} ${tempVar};\n`);
+                  accOutVars[outKey] = accVar;
+                }
+                nodeOutputs.set(gn.id, accOutVars);
+              } else {
+                nodeOutputs.set(gn.id, gnResult.outputVars);
+                for (const [ok, vn] of Object.entries(gnResult.outputVars)) { if (gDef.outputs[ok]?.type === 'vec3') mlLastVec3Var = vn; }
+              }
             }
             const mlGrpOutVars: Record<string, string> = {};
             for (const port of (mlGrpSubgraph.outputPorts ?? [])) {
