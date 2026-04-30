@@ -399,6 +399,8 @@ interface NodeGraphState {
   addMarchLoopInput: (groupNodeId: string, key: string, type: import('../types/nodeGraph').DataType, label: string) => void;
   /** Remove a user-defined extra input from a marchLoopGroup */
   removeMarchLoopInput: (groupNodeId: string, key: string) => void;
+  /** Rename a user-defined extra input on a marchLoopGroup */
+  renameMarchLoopInput: (groupNodeId: string, key: string, newLabel: string) => void;
   /** Toggle visibility of a standard output port on the exterior marchLoopGroup node */
   toggleMarchLoopOutputPort: (groupNodeId: string, outputKey: string) => void;
   /** Add a new dynamic input port to a group (from inside the group view) */
@@ -2004,7 +2006,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   renameGroupPort: (nodeId, portKey, dir, newLabel) => {
     set(state => ({
       nodes: state.nodes.map(n => {
-        if (n.id !== nodeId || n.type !== 'group') return n;
+        if (n.id !== nodeId) return n;
+        if (!['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup'].includes(n.type)) return n;
         const subgraph = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
         if (!subgraph) return n;
         const updatedSubgraph: import('../types/nodeGraph').SubgraphData = {
@@ -2978,6 +2981,28 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return { nodes };
     });
     get().compile();
+  },
+
+  renameMarchLoopInput: (groupNodeId, key, newLabel) => {
+    set(state => {
+      const nodes = state.nodes.map(n => {
+        if (n.id !== groupNodeId) return n;
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const newSgNodes = sg.nodes.map(sn => {
+          if (sn.type !== 'marchLoopInputs') return sn;
+          const extraInputs = ((sn.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>)
+            .map(e => e.key === key ? { ...e, label: newLabel } : e);
+          return { ...sn, outputs: { ...sn.outputs, [key]: { ...sn.outputs[key], label: newLabel } }, params: { ...sn.params, extraInputs } };
+        });
+        return {
+          ...n,
+          inputs: n.inputs[key] ? { ...n.inputs, [key]: { ...n.inputs[key], label: newLabel } } : n.inputs,
+          params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes } },
+        };
+      });
+      return { nodes };
+    });
   },
 
   toggleMarchLoopOutputPort: (groupNodeId, outputKey) => {
