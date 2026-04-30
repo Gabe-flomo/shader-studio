@@ -555,6 +555,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     };
     return (
       <div
+        data-node-id={node.id}
         style={nodeStyle}
         onMouseDown={e => {
           e.stopPropagation();
@@ -624,6 +625,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
     return (
       <div
+        data-node-id={node.id}
         style={{
           position: 'absolute', left: node.position.x, top: node.position.y,
           background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
@@ -1030,6 +1032,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   if (node.type === 'scope') {
     return (
       <div
+        data-node-id={node.id}
         style={{
           position: 'absolute',
           left: node.position.x,
@@ -2550,6 +2553,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   return (
     <div
+      data-node-id={node.id}
       onMouseEnter={handleCardMouseEnter}
       onMouseLeave={handleCardMouseLeave}
       onMouseDown={() => setZIndex(++zCounter)}

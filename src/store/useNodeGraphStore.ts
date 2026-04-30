@@ -360,6 +360,7 @@ interface NodeGraphState {
   exitToDepth: (depth: number) => void;
   duplicateGroup: (groupId: string) => string | null;
   duplicateNode: (nodeId: string) => string | null;
+  duplicateNodes: (nodeIds: string[]) => void;
 
   // Texture inputs — maps nodeId → loaded THREE.Texture (or null if not yet loaded)
   // Populated by NodeComponent file picker; consumed by ShaderCanvas to bind sampler2D uniforms.
@@ -1654,6 +1655,29 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     get().compile();
     return newId;
+  },
+
+  duplicateNodes: (nodeIds) => {
+    const { nodes, activeGroupPath } = get();
+    pushHistory(nodes);
+    const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const newNodes = nodeIds.flatMap(nodeId => {
+      const node = activeNodes.find(n => n.id === nodeId);
+      if (!node) return [];
+      const newId = `node_${nodeIdCounter++}`;
+      const clearedInputs = Object.fromEntries(
+        Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])
+      );
+      return [{ ...node, id: newId, inputs: clearedInputs, position: { x: node.position.x + 60, y: node.position.y + 60 } }];
+    });
+    if (!newNodes.length) return;
+    if (activeGroupPath.length > 0) {
+      const updated = setActiveNodes(nodes, activeGroupPath, [...activeNodes, ...newNodes]);
+      if (updated) set({ nodes: updated });
+    } else {
+      set(state => ({ nodes: [...state.nodes, ...newNodes] }));
+    }
+    get().compile();
   },
 
   setNodeTexture: (nodeId, texture) => set(state => ({
