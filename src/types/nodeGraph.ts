@@ -85,8 +85,8 @@ export interface NodeDefinition {
   category: string;
   description?: string;
 
-  inputs: Record<string, Socket>;
-  outputs: Record<string, Socket>;
+  inputs: Record<string, InputSocket>;
+  outputs: Record<string, OutputSocket>;
 
   // How to generate GLSL for this node
   generateGLSL: (

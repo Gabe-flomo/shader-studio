@@ -33,7 +33,7 @@ import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz, SdfPreviewViz, SDF_TYPES } from './NodeInlineViz';
 import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
-import { scopeCanvasRegistry, scopeBufferRegistry, scopeValueRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
+import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
@@ -205,7 +205,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
           return <span style={{ color: '#f9e2af', fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
         }
       }
-      return <span style={{ color: '#45475a', fontSize: '10px' }}>← {srcLabel ?? connId}</span>;
+      return <span style={{ color: '#45475a', fontSize: '10px' }}>← {srcLabel ?? src?.type}</span>;
     }
     const formatted = formatVal(sock.defaultValue, type);
     if (formatted) return <span style={{ color: '#6c7086', fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;

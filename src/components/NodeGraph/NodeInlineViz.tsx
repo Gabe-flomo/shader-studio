@@ -2480,7 +2480,7 @@ export function AngleToVec2Viz({ node }: { node: GraphNode }) {
   );
 }
 
-export function Vec2AngleViz({ node }: { node: GraphNode }) {
+export function Vec2AngleViz({ node: _node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -3225,8 +3225,7 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
       const x = i / W;
-      const t = Math.max(0, Math.min(1, x)); const t2 = t * t * (3 - 2 * t);
-      const shadowMask = 1 - t2 / Math.max(0.001, sm(Math.min(1, 1 / (pivot * 1.5))));
+      const t = Math.max(0, Math.min(1, x)); const t2 = t * t * (3 - 2 * t); void t2;
       const y = Math.max(0, Math.min(1, 1 - sm(x / Math.max(0.001, pivot * 1.5))));
       const py = H - y * H;
       i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
