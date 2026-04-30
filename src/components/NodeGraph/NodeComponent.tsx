@@ -2998,13 +2998,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }}
                 onMouseUp={(e) => {
                   e.stopPropagation();
-                  if (isExternal) return;
-                  if (e.altKey && !isConnected) return; // handled by onMouseDown
-                  // When a connection wire is being dragged, always complete the connection
-                  // (never disconnect an existing socket mid-drag)
-                  if (isConnected && !isConnectionDragging) {
+                  if (e.altKey && !isConnected && !isExternal) return; // handled by onMouseDown
+                  // When a connection wire is being dragged, accept drop only on non-external sockets
+                  if (isConnectionDragging) {
+                    if (!isExternal) onEndConnection(node.id, key);
+                    return;
+                  }
+                  // Allow disconnecting the local wire even on external-locked sockets
+                  if (isConnected) {
                     disconnectInput(node.id, key);
-                  } else {
+                  } else if (!isExternal) {
                     onEndConnection(node.id, key);
                   }
                 }}
