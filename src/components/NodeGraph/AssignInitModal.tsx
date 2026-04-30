@@ -50,6 +50,8 @@ const TYPE_COLOR: Record<DataType, string> = {
   vec2:        '#00aaff',
   vec3:        '#00ffaa',
   vec4:        '#ffaa00',
+  mat2:        '#f5c842',
+  mat3:        '#f5c842',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
 };
