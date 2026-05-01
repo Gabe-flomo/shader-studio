@@ -1,130 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset } from '../../store/useNodeGraphStore';
-import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
+import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
+import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
-import type { NodeDefinition } from '../../types/nodeGraph';
+import { getAssetTags, saveAssetTags, getTagSuggestions } from '../../utils/assetTags';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
 import type { TransformPreset } from '../../types/transformPreset';
 
-// ── Nodes hidden from the palette (still functional in existing graphs) ───────
-const HIDDEN_NODES = new Set([
-  'forLoop',           // legacy — use iterated groups instead
-  'loopStart',         // deprecated — use MarchLoopGroup instead
-  'loopEnd',           // deprecated — use MarchLoopGroup instead
-  'loopRippleStep',
-  'loopRotateStep',
-  'loopDomainFold',
-  'loopFloatAccumulate',
-  'loopColorRingStep',
-  'loopRingStep',
-  'lumaGrain',     // consolidated into Grain node (Luma mode)
-  'temporalGrain', // consolidated into Grain node (Temporal mode)
-  'forwardCamera', // superseded by MarchCamera — kept in registry for backward compat
-  'marchPos',      // auto-added to MLG subgraph, not user-selectable
-  'marchDist',     // auto-added to MLG subgraph, not user-selectable
-  'marchOutput',   // auto-added to MLG subgraph, not user-selectable
-  'scenePos',      // auto-added to SceneGroup subgraph, not user-selectable
-  'sceneOutput',   // auto-added to SceneGroup subgraph, not user-selectable
-  'spaceWarpGroup', // no examples remain; hidden but kept for backward compat
-  'marchLoopInputs', // auto-added to group subgraph; not user-selectable
-  'marchLoopOutput', // auto-added to group subgraph; not user-selectable
-  // Non-fractal nodes previously in Presets — hidden for cleaner palette
-  'rotatingLinesLoop',
-  'accumulateLoop',
-  'flowField',
-  'circlePack',
-  'raymarch3d',
-  'volumeClouds',
-  'rayMarch',      // superseded by sceneGroup+marchLoopGroup+marchCamera rig
-  // Loops section removed — loop nodes hidden
-  'loopCarry',
-  'loop',
-]);
-
-// ── Math node ordering & sub-groups ──────────────────────────────────────────
-const MATH_GROUPS: Array<{ label: string; types: string[] }> = [
-  { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
-  { label: 'Trig',       types: ['sin', 'cos', 'atan2'] },
-  { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
-  { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
-  { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod'] },
-  { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
-  { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'luminance'] },
-  { label: 'Vec2',       types: ['makeVec2', 'splitVec2', 'transformVec', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
-  { label: 'Vec3',       types: ['makeVec3', 'splitVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
-  { label: 'Vec4',       types: ['splitVec4'] },
-  { label: 'Complex',    types: ['complexMul', 'complexPow'] },
-  { label: 'Remap',      types: ['remap'] },
-];
-
-const MATH_ORDER: string[] = MATH_GROUPS.flatMap(g => g.types);
-
-// ── Shaper node ordering & sub-groups ────────────────────────────────────────
-const SHAPER_GROUPS: Array<{ label: string; types: string[] }> = [
-  { label: 'Ease',     types: ['expEase', 'circularEaseIn', 'circularEaseOut'] },
-  { label: 'Seat',     types: ['doubleExpSeat', 'doubleCircleSeat'] },
-  { label: 'Sigmoid',  types: ['doubleExpSigmoid', 'logisticSigmoid', 'doubleCircleSigmoid', 'doubleEllipticSigmoid'] },
-  { label: 'Bezier',   types: ['quadBezierShaper', 'cubicBezierShaper'] },
-];
-
-const SHAPER_ORDER: string[] = SHAPER_GROUPS.flatMap(g => g.types);
-
-function sortShaperNodes(nodes: NodeDefinition[]): NodeDefinition[] {
-  const indexMap = new Map(SHAPER_ORDER.map((id, i) => [id, i]));
-  return [...nodes].sort((a, b) => {
-    const ia = indexMap.get(a.type) ?? 999;
-    const ib = indexMap.get(b.type) ?? 999;
-    return ia - ib;
-  });
-}
-
-function sortMathNodes(nodes: NodeDefinition[]): NodeDefinition[] {
-  const indexMap = new Map(MATH_ORDER.map((id, i) => [id, i]));
-  return [...nodes].sort((a, b) => {
-    const ia = indexMap.get(a.type) ?? 999;
-    const ib = indexMap.get(b.type) ?? 999;
-    return ia - ib;
-  });
-}
-
-// Category accent colors
-const CATEGORY_COLORS: Record<string, string> = {
-  Sources:         '#89b4fa',  // blue
-  Transforms:      '#a6e3a1',  // green
-  Math:            '#b4befe',  // lavender
-  Color:           '#fab387',  // orange
-  'Color Grading': '#f9a86b',  // warm orange — color grading suite
-  Noise:           '#74c7ec',  // sky blue
-  Effects:         '#f38ba8',  // pink
-  Loops:           '#89dceb',  // cyan
-  '2D Primitives': '#f9e2af',  // yellow — includes SDF nodes
-  Combiners:       '#cba6f7',  // purple
-  Spaces:          '#f2cdcd',  // rose — UV space warp nodes
-  Shapers:         '#f9e2af',  // yellow — curve/easing nodes
-  Science:         '#94e2d5',  // teal
-  Fractals:        '#cba6f7',  // purple — fractal preset nodes
-  Output:          '#94e2d5',  // teal
-  '3D Primitives': '#f5c2e7',  // pink
-  '3D Transforms': '#f5c2e7',  // pink
-  '3D Scene':      '#cc88aa',  // purple-pink
-};
-
-// Preferred display order for categories — alphabetical, with Output pinned last
-const CATEGORY_ORDER = [
-  '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
-  '3D Primitives', '3D Scene', '3D Transforms',
-  'Animation', 'Color', 'Color Grading', 'Combiners', 'Conditionals', 'Effects', 'Fractals', 'Math', 'Noise',
-  'Science', 'Shapers', 'Sources', 'Spaces', 'Transforms', 'Utility',
-  'Output',
-];
-
 // ── Example folders ───────────────────────────────────────────────────────────
 type ExKey = keyof typeof EXAMPLE_GRAPHS;
 
-// Items within each folder are sorted alphabetically at render time via sortedKeys()
 const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
   { label: '3D Lighting',     color: '#f9c468', keys: ['aoSphere','phaseHGForwardCloud','phaseHGBacklit','fresnelSchlickRim','fresnelSchlickTwoTone','refractDirFakeGlass','refractDirDispersion'] as ExKey[] },
   { label: '3D SDF',          color: '#89dceb', keys: ['sdfPolarRepeat','sdfSmoothMetaballs','sdfBend3D','sdfIntersectDemo','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','mirrorFoldSpheres','mirrorFoldBoxes','domainWarpSphere','swizzle3DNormalMap','swizzle3DPosGradient'] as ExKey[] },
@@ -147,158 +35,365 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['displaceDemo'] as ExKey[] },
 ];
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions';
 
-interface NodePaletteProps {
-  /** 'full' = normal left sidebar; 'drawer' = fills container (used in mobile bottom sheet) */
-  mode?: 'full' | 'drawer';
-  /** Called when a node is added (e.g. to close the drawer on mobile) */
-  onNodeAdded?: () => void;
+interface ContentPaneState {
+  id: string;
+  activeTab: TabId;
+  tagFilters: string[];
+  flexGrow: number;
 }
 
-export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
-  const { addNode, deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk,
-    swapTargetNodeId, setSwapTargetNodeId, swapNode, nodes: graphNodes } = useNodeGraphStore();
-  const saveGraph           = useNodeGraphStore(s => s.saveGraph);
-  const getSavedGraphNames  = useNodeGraphStore(s => s.getSavedGraphNames);
-  const loadSavedGraph      = useNodeGraphStore(s => s.loadSavedGraph);
-  const deleteSavedGraph    = useNodeGraphStore(s => s.deleteSavedGraph);
-  const [savedNames, setSavedNames] = useState<string[]>(() => getSavedGraphNames());
-  const [graphSaveInput, setGraphSaveInput] = useState('');
-  const [showGraphSaveInput, setShowGraphSaveInput] = useState(false);
-  const [hoverSavedName, setHoverSavedName] = useState<string | null>(null);
+// ── SVG icons ─────────────────────────────────────────────────────────────────
+const NodesIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="4.5" y="3.5" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+    <line x1="1" y1="6.5" x2="4.5" y2="6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    <line x1="1" y1="9.5" x2="4.5" y2="9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    <line x1="11.5" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    <circle cx="1.5" cy="6.5" r="1" fill="currentColor"/>
+    <circle cx="1.5" cy="9.5" r="1" fill="currentColor"/>
+    <circle cx="14.5" cy="8" r="1" fill="currentColor"/>
+  </svg>
+);
+const FavoritesIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <polygon points="8,1.5 9.7,6 14.5,6 10.7,8.9 12.1,13.5 8,10.6 3.9,13.5 5.3,8.9 1.5,6 6.3,6"
+      stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+  </svg>
+);
+const GraphsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="3" cy="4.5" r="1.8" stroke="currentColor" strokeWidth="1.3"/>
+    <circle cx="3" cy="11.5" r="1.8" stroke="currentColor" strokeWidth="1.3"/>
+    <circle cx="13" cy="8" r="1.8" stroke="currentColor" strokeWidth="1.3"/>
+    <line x1="4.75" y1="5.1" x2="11.25" y2="7.4" stroke="currentColor" strokeWidth="1.3"/>
+    <line x1="4.75" y1="10.9" x2="11.25" y2="8.6" stroke="currentColor" strokeWidth="1.3"/>
+  </svg>
+);
+const PresetsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="2" y="2" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/>
+    <rect x="9" y="2" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/>
+    <rect x="2" y="9" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/>
+    <rect x="9" y="9" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/>
+  </svg>
+);
+const FunctionsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+    <text x="2" y="13" fontSize="13" fontFamily="Georgia, 'Times New Roman', serif" fontStyle="italic">ƒ</text>
+  </svg>
+);
+const ExpressionsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+    <text x="0.5" y="13" fontSize="12" fontFamily="'Courier New', Courier, monospace">{'{}'}</text>
+  </svg>
+);
 
-  const refreshSavedNames = () => setSavedNames(getSavedGraphNames());
-  const groupPresets         = useNodeGraphStore(s => s.groupPresets);
-  const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
-  const deleteGroupPreset    = useNodeGraphStore(s => s.deleteGroupPreset);
-  const [hoverGroupPresetId, setHoverGroupPresetId] = useState<string | null>(null);
-  // Sort categories by preferred order; unknown categories appended alphabetically
-  const rawCategories = getAllCategories();
-  const categories = [
-    ...CATEGORY_ORDER.filter(c => rawCategories.includes(c)),
-    ...rawCategories.filter(c => !CATEGORY_ORDER.includes(c)).sort(),
-  ];
+const SIDEBAR_TABS: Array<{ id: TabId; label: string; color: string; Icon: () => React.ReactElement }> = [
+  { id: 'nodes',       label: 'Nodes',        color: '#89b4fa', Icon: NodesIcon },
+  { id: 'favorites',   label: 'Favorites',    color: '#f9e2af', Icon: FavoritesIcon },
+  { id: 'graphs',      label: 'Saved Graphs', color: '#a6e3a1', Icon: GraphsIcon },
+  { id: 'presets',     label: 'Presets',      color: '#f9e2af', Icon: PresetsIcon },
+  { id: 'functions',   label: 'Functions',    color: '#89dceb', Icon: FunctionsIcon },
+  { id: 'expressions', label: 'Expr Blocks',  color: '#cba6f7', Icon: ExpressionsIcon },
+];
 
-  const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
-  const loadExampleGraph = useNodeGraphStore(s => s.loadExampleGraph);
-  const [examplesExpanded, setExamplesExpanded] = useState(false);
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
-  const toggleFolder = (label: string) =>
-    setOpenFolders(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
+// ── TabPill (with tag editing support) ────────────────────────────────────────
+function TabPill({ label, color, onClick, onDelete, onRename, prefix, tabId, assetId }: {
+  label: string; color: string;
+  onClick: () => void;
+  onDelete?: () => void;
+  onRename?: () => void;
+  prefix?: string;
+  tabId?: TabId;
+  assetId?: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagInput, setTagInput] = useState('');
 
-  // Search query
-  const [query, setQuery] = useState('');
+  const currentTags = tabId && assetId ? getAssetTags(tabId, assetId) : [];
+  const hasTags = currentTags.length > 0;
+  const canTag = !!(tabId && assetId);
 
-  // Favorites — persisted to localStorage
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('nodepalette_favorites') ?? '[]'); } catch { return []; }
-  });
-  const [favoritesExpanded, setFavoritesExpanded] = useState(true);
-  const toggleFavorite = (type: string) => {
-    setFavorites(prev => {
-      const next = prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type];
-      localStorage.setItem('nodepalette_favorites', JSON.stringify(next));
-      return next;
-    });
+  // # tag button is always visible; rename/delete appear on hover only
+  const hoverBtnCount  = (onDelete ? 1 : 0) + (onRename ? 1 : 0);
+  const tagBtnRight    = hovered ? `${hoverBtnCount * 18 + 4}px` : '4px';
+  const renameBtnRight = onDelete ? '20px' : '4px';
+  // Always reserve space for # button when canTag; add hover button space when hovered
+  const extraRight = canTag
+    ? (hovered ? (hoverBtnCount + 1) * 18 + 4 : 22)
+    : (hovered && hoverBtnCount > 0 ? hoverBtnCount * 18 + 4 : 0);
+
+  const handleSaveTags = () => {
+    if (tabId && assetId) {
+      const tags = tagInput.split(',').map(t => t.trim()).filter(Boolean);
+      saveAssetTags(tabId, assetId, tags);
+    }
+    setEditingTags(false);
   };
 
-  // Which categories are expanded (accordion). Default: all collapsed.
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  return (
+    <div
+      style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <button
+        onClick={onClick}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          padding: '4px 8px',
+          paddingRight: extraRight > 0 ? `${extraRight}px` : '10px',
+          background: hovered ? '#2a2a3e' : '#252535',
+          border: `1px solid ${hovered ? color + '55' : '#3a3a4e'}`,
+          borderBottom: hasTags ? `2px solid ${color}66` : undefined,
+          borderRadius: '20px',
+          color: hovered ? color : '#a6adc8',
+          fontSize: '11px', fontWeight: 500,
+          cursor: 'pointer', userSelect: 'none',
+          transition: 'background 0.12s, border-color 0.12s, color 0.12s',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {prefix && <span style={{ opacity: 0.65, fontSize: '10px' }}>{prefix}</span>}
+        {label}
+      </button>
 
-  // Palette navigation: highlight a node type when ctrl+clicked in the graph
-  const [highlightType, setHighlightType] = useState<string | null>(null);
-  const nodeButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const paletteScrollRef = useRef<HTMLDivElement>(null);
+      {/* # always visible for taggable assets */}
+      {canTag && (
+        <button
+          onClick={e => { e.stopPropagation(); setTagInput(currentTags.join(', ')); setEditingTags(v => !v); }}
+          title="Edit tags"
+          style={{ position: 'absolute', right: tagBtnRight, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: hasTags ? color : '#45475a', fontSize: '10px', padding: '0 2px', lineHeight: 1, fontFamily: 'monospace', transition: 'right 0.1s, color 0.1s' }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = hasTags ? color : '#45475a')}
+        >#</button>
+      )}
+      {hovered && onRename && (
+        <button onClick={e => { e.stopPropagation(); onRename(); }}
+          style={{ position: 'absolute', right: renameBtnRight, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#585b70', fontSize: '11px', padding: '0 2px', lineHeight: 1 }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+        >✎</button>
+      )}
+      {hovered && onDelete && (
+        <button onClick={e => { e.stopPropagation(); onDelete(); }}
+          style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#585b70', fontSize: '11px', padding: '0 2px', lineHeight: 1 }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+        >✕</button>
+      )}
 
-  const handlePaletteNavigate = useCallback((e: Event) => {
-    const { nodeType } = (e as CustomEvent<{ nodeType: string }>).detail;
-    const def = NODE_REGISTRY[nodeType];
-    if (!def) return;
-    // Expand the category containing this node
-    setOpen(prev => { const next = new Set(prev); next.add(def.category); return next; });
-    setHighlightType(nodeType);
-    // Scroll to the node button after a brief delay (category needs to expand first)
-    setTimeout(() => {
-      const btn = nodeButtonRefs.current.get(nodeType);
-      if (btn) {
-        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      // Clear highlight after 2 seconds
-      setTimeout(() => setHighlightType(null), 2000);
-    }, 80);
-  }, []);
+      {editingTags && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, marginTop: '3px', background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px', padding: '7px 9px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)', minWidth: '190px' }}
+        >
+          <div style={{ fontSize: '9px', color: '#585b70', marginBottom: '5px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tags · comma-separated</div>
+          <input
+            autoFocus
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); handleSaveTags(); }
+              if (e.key === 'Escape') { e.preventDefault(); setEditingTags(false); }
+              e.stopPropagation();
+            }}
+            onBlur={handleSaveTags}
+            placeholder="math, trig, favorite…"
+            style={{ width: '100%', background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', outline: 'none', boxSizing: 'border-box' }}
+          />
+          {currentTags.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '5px' }}>
+              {currentTags.map(t => (
+                <span key={t} style={{ fontSize: '9px', padding: '1px 6px', background: color + '22', color, borderRadius: '10px' }}>#{t}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    window.addEventListener('palette-navigate', handlePaletteNavigate);
-    return () => window.removeEventListener('palette-navigate', handlePaletteNavigate);
-  }, [handlePaletteNavigate]);
+// ── EmptyHint ─────────────────────────────────────────────────────────────────
+function EmptyHint({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '2px', fontStyle: 'italic', lineHeight: 1.6 }}>
+      {children}
+    </div>
+  );
+}
 
-  // Import GLSL modal
-  const [showImport, setShowImport] = useState(false);
+// ── TabSectionHeader ──────────────────────────────────────────────────────────
+function TabSectionHeader({ label, color, action }: { label: string; color: string; action?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', marginTop: '10px' }}>
+      <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color }}>{label}</span>
+      <div style={{ flex: 1, height: '1px', background: color + '22' }} />
+      {action}
+    </div>
+  );
+}
 
-  // User-saved custom function presets
-  const [userPresets, setUserPresets] = useState<CustomFnPreset[]>(() => loadCustomFns());
-  // ID of preset being hovered (for showing delete button)
-  const [hoverPresetId, setHoverPresetId] = useState<string | null>(null);
-  // Current presets folder path (for display)
-  const [presetsDir, setPresetsDir] = useState<string>(() => getCustomFnDir());
+// ── FilterBar ─────────────────────────────────────────────────────────────────
+function FilterBar({ tabId, filters, onFiltersChange }: {
+  tabId: TabId; filters: string[]; onFiltersChange: (f: string[]) => void;
+}) {
+  const [inputVal, setInputVal] = useState('');
+  const [focused, setFocused] = useState(false);
 
-  // User-saved ExprBlock presets
-  const [exprPresets, setExprPresets] = useState<ExprPreset[]>(() => loadExprPresets());
-  const [hoverExprPresetId, setHoverExprPresetId] = useState<string | null>(null);
-  const [renamingExprId, setRenamingExprId] = useState<string | null>(null);
-  const [renameExprValue, setRenameExprValue] = useState('');
+  const allSuggestions = getTagSuggestions(tabId, filters);
+  const suggestions = inputVal.trim()
+    ? allSuggestions.filter(t => t.includes(inputVal.toLowerCase()))
+    : allSuggestions;
+  const showDropdown = focused && suggestions.length > 0;
 
-  const refreshExprPresets = () => setExprPresets(loadExprPresets());
+  const addFilter = (tag: string) => {
+    const t = tag.trim();
+    if (t && !filters.includes(t)) onFiltersChange([...filters, t]);
+    setInputVal('');
+  };
 
-  // User-saved Transform Vec presets
-  const [transformPresets, setTransformPresets] = useState<TransformPreset[]>(() => loadTransformPresets());
-  const [hoverTransformPresetId, setHoverTransformPresetId] = useState<string | null>(null);
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', alignItems: 'center', padding: '4px 8px', borderBottom: '1px solid #2a2a3e', background: '#181825', minHeight: '26px' }}>
+        {filters.map(tag => (
+          <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '9px', padding: '1px 6px', background: '#89b4fa22', border: '1px solid #89b4fa44', color: '#89b4fa', borderRadius: '10px', whiteSpace: 'nowrap' }}>
+            #{tag}
+            <button onClick={() => onFiltersChange(filters.filter(f => f !== tag))} style={{ background: 'none', border: 'none', color: '#89b4fa99', cursor: 'pointer', fontSize: '10px', padding: '0', lineHeight: 1, marginLeft: '1px' }}>×</button>
+          </span>
+        ))}
+        <input
+          value={inputVal}
+          onChange={e => setInputVal(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 150)}
+          onKeyDown={e => {
+            if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) { e.preventDefault(); addFilter(inputVal.replace(',', '')); }
+            if (e.key === 'Escape') { setInputVal(''); setFocused(false); }
+          }}
+          placeholder={filters.length === 0 ? '# tag filter…' : '+ tag'}
+          style={{ flex: 1, minWidth: '60px', background: 'transparent', border: 'none', color: '#6c7086', fontSize: '9px', outline: 'none', padding: '1px 0', fontFamily: 'monospace' }}
+        />
+        {filters.length > 0 && (
+          <button
+            onClick={() => onFiltersChange([])}
+            style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '9px', padding: '0 2px', whiteSpace: 'nowrap', lineHeight: 1 }}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+          >✕</button>
+        )}
+      </div>
+
+      {/* Custom pill suggestions dropdown */}
+      {showDropdown && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 300,
+          background: '#1e1e2e', border: '1px solid #313244', borderTop: 'none',
+          padding: '6px 8px', display: 'flex', flexWrap: 'wrap', gap: '4px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+        }}>
+          {suggestions.map(t => (
+            <button
+              key={t}
+              onMouseDown={e => { e.preventDefault(); addFilter(t); }}
+              style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '3px 9px 3px 7px',
+                background: '#252535', border: '1px solid #3a3a4e',
+                borderRadius: '20px', color: '#a6adc8',
+                fontSize: '10px', fontWeight: 500, fontFamily: 'monospace',
+                cursor: 'pointer',
+                transition: 'background 0.1s, border-color 0.1s, color 0.1s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2a2a3e'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#89b4fa55'; (e.currentTarget as HTMLButtonElement).style.color = '#89b4fa'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#252535'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#3a3a4e'; (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
+            >
+              #{t}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ContentPane ───────────────────────────────────────────────────────────────
+interface ContentPaneProps {
+  state: ContentPaneState;
+  onStateChange: (updates: Partial<ContentPaneState>) => void;
+  isFocused: boolean;
+  onFocus: () => void;
+  onClose?: () => void;
+  isOnly: boolean;
+  favorites: string[];
+  onToggleFavorite: (type: string) => void;
+  nodeButtonRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
+  onNodeAdded?: () => void;
+  flexGrow: number;
+  context?: 'studio' | 'glsl';
+  onGlslInsert?: (code: string) => void;
+}
+
+function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
+  const {
+    addNode, saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph,
+    deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk,
+    swapTargetNodeId, setSwapTargetNodeId, swapNode,
+  } = useNodeGraphStore();
+  const graphNodes        = useNodeGraphStore(s => s.nodes);
+  const groupPresets      = useNodeGraphStore(s => s.groupPresets);
+  const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
+  const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
+  const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
+  const loadExampleGraph  = useNodeGraphStore(s => s.loadExampleGraph);
+
+  const [query, setQuery]                           = useState('');
+  const [savedNames, setSavedNames]                 = useState<string[]>(() => getSavedGraphNames());
+  const [graphSaveInput, setGraphSaveInput]         = useState('');
+  const [showGraphSaveInput, setShowGraphSaveInput] = useState(false);
+  const [userPresets, setUserPresets]               = useState<CustomFnPreset[]>(() => loadCustomFns());
+  const [presetsDir, setPresetsDir]                 = useState<string>(() => getCustomFnDir());
+  const [exprPresets, setExprPresets]               = useState<ExprPreset[]>(() => loadExprPresets());
+  const [transformPresets, setTransformPresets]     = useState<TransformPreset[]>(() => loadTransformPresets());
+  const [renamingExprId, setRenamingExprId]         = useState<string | null>(null);
+  const [renameExprValue, setRenameExprValue]       = useState('');
   const [renamingTransformId, setRenamingTransformId] = useState<string | null>(null);
   const [renameTransformValue, setRenameTransformValue] = useState('');
+  const [examplesExpanded, setExamplesExpanded]     = useState(false);
+  const [openFolders, setOpenFolders]               = useState<Set<string>>(new Set());
+  const [showImport, setShowImport]                 = useState(false);
 
+  const { activeTab, tagFilters } = state;
+  const hasTagFilter = tagFilters.length > 0;
+
+  const refreshSavedNames     = () => setSavedNames(getSavedGraphNames());
+  const refreshExprPresets    = () => setExprPresets(loadExprPresets());
   const refreshTransformPresets = () => setTransformPresets(loadTransformPresets());
 
-  // Collapsible bottom sections — persisted to localStorage
-  const [sectionsOpen, setSectionsOpen] = useState<Record<string, boolean>>(() => {
-    try { return JSON.parse(localStorage.getItem('nodepalette_sections') ?? '{}'); } catch { return {}; }
-  });
-  const toggleSection = (key: string) => {
-    setSectionsOpen(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem('nodepalette_sections', JSON.stringify(next));
-      return next;
-    });
-  };
-  const isSectionOpen = (key: string, defaultOpen = false) => key in sectionsOpen ? sectionsOpen[key] : defaultOpen;
-
-  // Merge localStorage presets with disk presets (dedup by id)
-  const refreshPresets = async () => {
+  const refreshPresets = useCallback(async () => {
     const local = loadCustomFns();
-    const disk = await loadCustomFnsFromDisk();
-    // Merge: disk takes precedence, then fill in from local
-    const seen = new Set<string>();
+    const disk  = await loadCustomFnsFromDisk();
+    const seen  = new Set<string>();
     const merged: CustomFnPreset[] = [];
     for (const p of [...disk, ...local]) {
       if (!seen.has(p.id)) { seen.add(p.id); merged.push(p); }
     }
     merged.sort((a, b) => a.savedAt - b.savedAt);
     setUserPresets(merged);
-  };
+  }, [loadCustomFnsFromDisk]);
 
-  // Load from disk on mount + refresh on window focus or any save/delete
   useEffect(() => {
     refreshPresets();
     window.addEventListener('focus', refreshPresets);
     window.addEventListener('customfn-changed', refreshPresets);
-    return () => {
-      window.removeEventListener('focus', refreshPresets);
-      window.removeEventListener('customfn-changed', refreshPresets);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => { window.removeEventListener('focus', refreshPresets); window.removeEventListener('customfn-changed', refreshPresets); };
+  }, [refreshPresets]);
 
-  // Refresh ExprBlock presets on mount and when changed
   useEffect(() => {
     refreshExprPresets();
     window.addEventListener('exprpreset-changed', refreshExprPresets);
@@ -306,7 +401,6 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refresh Transform Vec presets on mount and when changed
   useEffect(() => {
     refreshTransformPresets();
     window.addEventListener('transformpreset-changed', refreshTransformPresets);
@@ -322,953 +416,555 @@ export function NodePalette({ mode = 'full', onNodeAdded }: NodePaletteProps) {
     await refreshPresets();
   };
 
-  const toggleCategory = (cat: string) => {
-    setOpen(prev => {
-      const next = new Set(prev);
-      if (next.has(cat)) { next.delete(cat); } else { next.add(cat); }
+  const handleAdd = (type: string) => {
+    if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
+    const center = getViewportCenter?.() ?? { x: 300, y: 200 };
+    addNode(type, { x: center.x + (Math.random() - 0.5) * 60, y: center.y + (Math.random() - 0.5) * 60 });
+    onNodeAdded?.();
+  };
+
+  const swapTargetLabel = swapTargetNodeId
+    ? (() => { const n = graphNodes.find(nd => nd.id === swapTargetNodeId); if (!n) return null; return getNodeDefinition(n.type)?.label ?? n.type; })()
+    : null;
+
+  const toggleFolder = (label: string) =>
+    setOpenFolders(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
+
+  const tabInfo = SIDEBAR_TABS.find(t => t.id === activeTab)!;
+
+  // ── Tag-filtered flat view ────────────────────────────────────────────────
+  const renderTagFiltered = () => {
+    switch (activeTab) {
+      case 'nodes': {
+        const matches = Object.values(NODE_REGISTRY).filter(def => {
+          const tags = getAssetTags('nodes', def.type);
+          return tagFilters.every(f => tags.includes(f));
+        });
+        if (matches.length === 0) return <EmptyHint>No nodes tagged with {tagFilters.map(t => `#${t}`).join(' + ')}.</EmptyHint>;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {matches.map(def => (
+              <TabPill key={def.type} label={def.label} color="#89b4fa" tabId="nodes" assetId={def.type}
+                onClick={() => handleAdd(def.type)}
+              />
+            ))}
+          </div>
+        );
+      }
+      case 'graphs': {
+        const matches = savedNames.filter(name => { const tags = getAssetTags('graphs', name); return tagFilters.every(f => tags.includes(f)); });
+        if (matches.length === 0) return <EmptyHint>No saved graphs tagged with {tagFilters.map(t => `#${t}`).join(' + ')}.</EmptyHint>;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {matches.map(name => (
+              <TabPill key={name} label={name} color="#a6e3a1" tabId="graphs" assetId={name}
+                onClick={() => { loadSavedGraph(name); onNodeAdded?.(); }}
+                onDelete={() => { deleteSavedGraph(name); refreshSavedNames(); }}
+              />
+            ))}
+          </div>
+        );
+      }
+      case 'presets': {
+        const gMatches = (groupPresets as GroupPreset[]).filter(p => { const tags = getAssetTags('presets', p.id); return tagFilters.every(f => tags.includes(f)); });
+        const tMatches = (transformPresets as TransformPreset[]).filter(p => { const tags = getAssetTags('presets', p.id); return tagFilters.every(f => tags.includes(f)); });
+        if (gMatches.length === 0 && tMatches.length === 0) return <EmptyHint>No presets tagged with {tagFilters.map(t => `#${t}`).join(' + ')}.</EmptyHint>;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {gMatches.map(p => <TabPill key={p.id} label={p.label} color="#f9e2af" prefix="⬡" tabId="presets" assetId={p.id} onClick={() => { const x = 200 + Math.random()*120, y = 120 + Math.random()*200; instantiateGroupPreset(p.id, {x,y}); onNodeAdded?.(); }} onDelete={() => deleteGroupPreset(p.id)} />)}
+            {tMatches.map(p => <TabPill key={p.id} label={p.label} color="#89b4fa" prefix="⊞" tabId="presets" assetId={p.id} onClick={() => { const x = 200 + Math.random()*120, y = 120 + Math.random()*200; addNode('transformVec', {x,y}, { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW }); onNodeAdded?.(); }} onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }} />)}
+          </div>
+        );
+      }
+      case 'functions': {
+        const matches = (userPresets as CustomFnPreset[]).filter(p => { const tags = getAssetTags('functions', p.id); return tagFilters.every(f => tags.includes(f)); });
+        if (matches.length === 0) return <EmptyHint>No functions tagged with {tagFilters.map(t => `#${t}`).join(' + ')}.</EmptyHint>;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {matches.map(p => <TabPill key={p.id} label={p.label} color="#89dceb" prefix="ƒ" tabId="functions" assetId={p.id} onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('customFn',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,body:p.body,glslFunctions:p.glslFunctions}); onNodeAdded?.(); }} onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }} />)}
+          </div>
+        );
+      }
+      case 'expressions': {
+        const matches = (exprPresets as ExprPreset[]).filter(p => { const tags = getAssetTags('expressions', p.id); return tagFilters.every(f => tags.includes(f)); });
+        if (matches.length === 0) return <EmptyHint>No expression blocks tagged with {tagFilters.map(t => `#${t}`).join(' + ')}.</EmptyHint>;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {matches.map(p => <TabPill key={p.id} label={p.label} color="#cba6f7" prefix="⟴" tabId="expressions" assetId={p.id} onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('exprNode',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,lines:p.lines,result:p.result}); onNodeAdded?.(); }} onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }} />)}
+          </div>
+        );
+      }
+      default:
+        return <EmptyHint>Tag filtering not available for this tab.</EmptyHint>;
+    }
+  };
+
+  // ── Normal tab content ────────────────────────────────────────────────────
+  const renderNormal = () => {
+    switch (activeTab) {
+      case 'nodes':
+        return (
+          <>
+            <input
+              type="text" placeholder="Search nodes…" value={query}
+              onChange={e => setQuery(e.target.value)}
+              style={{ background: '#181825', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '5px', padding: '5px 8px', fontSize: '11px', outline: 'none', marginBottom: '4px', width: '100%', boxSizing: 'border-box' }}
+            />
+            <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} />
+            {query.trim().length === 0 && (
+              <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
+                <button onClick={() => setExamplesExpanded(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: '3px', textAlign: 'left' }}
+                >
+                  <span style={{ fontSize: '7px', opacity: 0.5, color: '#585b70', width: '7px' }}>{examplesExpanded ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#585b70' }}>Examples</span>
+                </button>
+                {examplesExpanded && EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
+                  const isOpen = openFolders.has(folder.label);
+                  return (
+                    <div key={folder.label} style={{ marginBottom: '1px' }}>
+                      <button onClick={() => toggleFolder(folder.label)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', borderRadius: '4px', color: folder.color, fontSize: '11px', fontWeight: 600, textAlign: 'left' }}
+                        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+                        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}
+                      >
+                        <span style={{ fontSize: '8px', opacity: 0.6, width: '8px' }}>{isOpen ? '▼' : '▶'}</span>
+                        <span style={{ fontSize: '12px', marginRight: '2px' }}>📁</span>
+                        {folder.label}
+                        <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.4 }}>{folder.keys.filter(k => EXAMPLE_GRAPHS[k]).length}</span>
+                      </button>
+                      {isOpen && (
+                        <div style={{ paddingLeft: '18px', paddingBottom: '2px' }}>
+                          {folder.keys.filter(k => EXAMPLE_GRAPHS[k])
+                            .sort((a, b) => EXAMPLE_GRAPHS[a].label.localeCompare(EXAMPLE_GRAPHS[b].label))
+                            .map(k => {
+                              const ex = EXAMPLE_GRAPHS[k];
+                              return (
+                                <button key={k} onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }}
+                                  style={{ display: 'block', width: '100%', padding: '3px 6px', background: '#181825', border: 'none', color: '#a6adc8', cursor: 'pointer', textAlign: 'left', borderRadius: '4px', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#313244'; (e.currentTarget as HTMLButtonElement).style.color = folder.color; }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#181825'; (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
+                                  title={ex.label}
+                                >{ex.label}</button>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        );
+
+      case 'favorites':
+        return favorites.length === 0
+          ? <EmptyHint>Star a node in the Nodes tab to add it here.</EmptyHint>
+          : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {favorites.map(t => {
+                const def = NODE_REGISTRY[t];
+                if (!def) return null;
+                return <TabPill key={t} label={def.label} color="#f9e2af" tabId="favorites" assetId={t} onClick={() => handleAdd(t)} onDelete={() => onToggleFavorite(t)} />;
+              })}
+            </div>
+          );
+
+      case 'graphs':
+        return (
+          <>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '6px' }}>
+              <button onClick={() => { setShowGraphSaveInput(v => !v); setGraphSaveInput(''); }}
+                style={{ background: '#1a2535', border: '1px solid #89b4fa44', color: '#89b4fa', borderRadius: '5px', fontSize: '10px', padding: '3px 10px', cursor: 'pointer' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1e3040')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
+              >+ Save Current</button>
+            </div>
+            {showGraphSaveInput && (
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                <input autoFocus value={graphSaveInput} onChange={e => setGraphSaveInput(e.target.value)}
+                  placeholder="Graph name…"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && graphSaveInput.trim()) { saveGraph(graphSaveInput.trim()); refreshSavedNames(); setShowGraphSaveInput(false); setGraphSaveInput(''); }
+                    if (e.key === 'Escape') setShowGraphSaveInput(false);
+                  }}
+                  style={{ flex: 1, background: '#181825', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', outline: 'none' }}
+                />
+                <button onClick={() => { if (graphSaveInput.trim()) { saveGraph(graphSaveInput.trim()); refreshSavedNames(); setShowGraphSaveInput(false); setGraphSaveInput(''); } }}
+                  disabled={!graphSaveInput.trim()}
+                  style={{ background: graphSaveInput.trim() ? '#89b4fa22' : 'none', border: `1px solid ${graphSaveInput.trim() ? '#89b4fa55' : '#313244'}`, color: graphSaveInput.trim() ? '#89b4fa' : '#45475a', borderRadius: '3px', fontSize: '10px', padding: '2px 6px', cursor: 'pointer' }}
+                >✓</button>
+              </div>
+            )}
+            {savedNames.length === 0 && !showGraphSaveInput
+              ? <EmptyHint>Click "+ Save Current" to save the active graph.</EmptyHint>
+              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {savedNames.map(name => (
+                    <TabPill key={name} label={name} color="#a6e3a1" tabId="graphs" assetId={name}
+                      onClick={() => { loadSavedGraph(name); onNodeAdded?.(); }}
+                      onDelete={() => { deleteSavedGraph(name); refreshSavedNames(); }}
+                    />
+                  ))}
+                </div>
+            }
+          </>
+        );
+
+      case 'presets':
+        return (
+          <>
+            <TabSectionHeader label="Group Presets" color="#f9e2af" />
+            {groupPresets.length === 0
+              ? <EmptyHint>Select a group node and click ⬇ Save to create a preset.</EmptyHint>
+              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {(groupPresets as GroupPreset[]).map(p => (
+                    <TabPill key={p.id} label={p.label} color="#f9e2af" prefix="⬡" tabId="presets" assetId={p.id}
+                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; instantiateGroupPreset(p.id, {x,y}); onNodeAdded?.(); }}
+                      onDelete={() => deleteGroupPreset(p.id)}
+                    />
+                  ))}
+                </div>
+            }
+            <TabSectionHeader label="Transform Vec" color="#89b4fa" />
+            {transformPresets.length === 0
+              ? <EmptyHint>Open a Transform Vec node and click "↑ Save Preset".</EmptyHint>
+              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {(transformPresets as TransformPreset[]).map(p => (
+                    renamingTransformId === p.id
+                      ? <input key={p.id} autoFocus value={renameTransformValue} onChange={e => setRenameTransformValue(e.target.value)}
+                          onBlur={() => { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
+                          onKeyDown={e => { if (e.key === 'Enter') { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); } if (e.key === 'Escape') setRenamingTransformId(null); e.stopPropagation(); }}
+                          style={{ background: '#11111b', border: '1px solid #89b4fa', color: '#89b4fa', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                        />
+                      : <TabPill key={p.id} label={p.label} color="#89b4fa" prefix="⊞" tabId="presets" assetId={p.id}
+                          onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('transformVec',{x,y},{outputType:p.outputType,exprX:p.exprX,exprY:p.exprY,exprZ:p.exprZ,exprW:p.exprW}); onNodeAdded?.(); }}
+                          onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
+                          onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }}
+                        />
+                  ))}
+                </div>
+            }
+          </>
+        );
+
+      case 'functions':
+        return (
+          <>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
+              <button onClick={handlePickFolder} title={presetsDir ? `Saving to: ${presetsDir}` : 'Pick a folder to save presets on disk'}
+                style={{ background: presetsDir ? '#89dceb18' : 'none', border: `1px solid ${presetsDir ? '#89dceb55' : '#313244'}`, color: presetsDir ? '#89dceb' : '#6c7086', borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
+              >📁 {presetsDir ? presetsDir.split('/').pop() : 'Pick folder'}</button>
+              {userPresets.length > 0 && (
+                <button onClick={() => exportCustomFns()} title="Export functions"
+                  style={{ background: 'none', border: '1px solid #313244', color: '#6c7086', borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+                >↑ Export</button>
+              )}
+              <button onClick={async () => { await importCustomFnsFromFile(); await refreshPresets(); }} title="Import functions"
+                style={{ background: 'none', border: '1px solid #313244', color: '#6c7086', borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+              >↓ Import</button>
+            </div>
+            {userPresets.length === 0
+              ? <EmptyHint>Open a Custom Fn node and click "↑ Save Preset".</EmptyHint>
+              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {(userPresets as CustomFnPreset[]).map(p => (
+                    <TabPill key={p.id} label={p.label} color="#89dceb" prefix="ƒ" tabId="functions" assetId={p.id}
+                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('customFn',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,body:p.body,glslFunctions:p.glslFunctions}); onNodeAdded?.(); }}
+                      onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }}
+                    />
+                  ))}
+                </div>
+            }
+          </>
+        );
+
+      case 'expressions':
+        return exprPresets.length === 0
+          ? <EmptyHint>Open an Expr Block node and click "↑ Save Preset".</EmptyHint>
+          : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {(exprPresets as ExprPreset[]).map(p => (
+                renamingExprId === p.id
+                  ? <input key={p.id} autoFocus value={renameExprValue} onChange={e => setRenameExprValue(e.target.value)}
+                      onBlur={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
+                      onKeyDown={e => { if (e.key === 'Enter') { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); } if (e.key === 'Escape') setRenamingExprId(null); e.stopPropagation(); }}
+                      style={{ background: '#11111b', border: '1px solid #cba6f7', color: '#cba6f7', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                    />
+                  : <TabPill key={p.id} label={p.label} color="#cba6f7" prefix="⟴" tabId="expressions" assetId={p.id}
+                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('exprNode',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,lines:p.lines,result:p.result}); onNodeAdded?.(); }}
+                      onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
+                      onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }}
+                    />
+              ))}
+            </div>
+          );
+
+      default: return null;
+    }
+  };
+
+  return (
+    <div
+      onMouseDown={onFocus}
+      style={{ flex: `${flexGrow} ${flexGrow} 0`, minHeight: '80px', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: isFocused ? '1px solid #3a3a5a' : '1px solid #252535' }}
+    >
+      {/* Pane header: tab name + close button */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px', height: '22px', background: isFocused ? '#1e1e2e' : '#181825', borderBottom: `1px solid ${isFocused ? '#3a3a5a' : '#252535'}`, flexShrink: 0, gap: '5px' }}>
+        <span style={{ color: isFocused ? tabInfo.color : '#45475a', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <tabInfo.Icon />
+        </span>
+        <span style={{ fontSize: '9px', color: isFocused ? '#a6adc8' : '#45475a', fontWeight: 600, letterSpacing: '0.06em', flex: 1, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {tabInfo.label}
+        </span>
+        {!isOnly && (
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '10px', padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+          >✕</button>
+        )}
+      </div>
+
+      {/* Filter bar */}
+      <FilterBar tabId={activeTab} filters={tagFilters} onFiltersChange={f => onStateChange({ tagFilters: f })} />
+
+      {/* Swap banner */}
+      {swapTargetNodeId && (
+        <div style={{ background: '#f9e2af22', borderBottom: '1px solid #f9e2af33', padding: '4px 8px', fontSize: '11px', color: '#f9e2af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexShrink: 0 }}>
+          <span>↔ Replace <strong>{swapTargetLabel}</strong></span>
+          <button onClick={() => setSwapTargetNodeId(null)} style={{ background: 'none', border: 'none', color: '#f9e2af', cursor: 'pointer', fontSize: '11px', padding: '0 2px', opacity: 0.7 }}>✕</button>
+        </div>
+      )}
+
+      {/* Scrollable content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', minHeight: 0 }}>
+        {hasTagFilter
+          ? <>
+              <div style={{ fontSize: '9px', color: '#585b70', marginBottom: '6px', letterSpacing: '0.06em' }}>
+                Filtered by: {tagFilters.map(t => <span key={t} style={{ color: '#89b4fa', marginRight: '4px' }}>#{t}</span>)}
+              </div>
+              {renderTagFiltered()}
+            </>
+          : renderNormal()
+        }
+      </div>
+
+      {showImport && <ImportGlslModal onClose={() => setShowImport(false)} />}
+    </div>
+  );
+}
+
+// ── NodePalette ───────────────────────────────────────────────────────────────
+interface NodePaletteProps {
+  mode?: 'full' | 'drawer';
+  onNodeAdded?: () => void;
+  onCollapse?: () => void;
+  context?: 'studio' | 'glsl';
+  onGlslInsert?: (code: string) => void;
+}
+
+let _paneCounter = 1;
+function mkPane(activeTab: TabId = 'nodes'): ContentPaneState {
+  return { id: `pane-${_paneCounter++}`, activeTab, tagFilters: [], flexGrow: 1 };
+}
+
+export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, onGlslInsert }: NodePaletteProps) {
+  // All hooks must be at the top — no hooks after conditional returns
+  const { addNode, swapTargetNodeId, setSwapTargetNodeId, swapNode, nodes: graphNodes } = useNodeGraphStore();
+  const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
+
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('nodepalette_favorites') ?? '[]'); } catch { return []; }
+  });
+  const [drawerQuery, setDrawerQuery] = useState('');
+  const [panes, setPanes]             = useState<ContentPaneState[]>(() => [mkPane('nodes')]);
+  const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0].id);
+
+  const nodeButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const panesContainerRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef<{ startY: number; idxA: number; idxB: number; heightA: number; heightB: number } | null>(null);
+
+  const toggleFavorite = (type: string) => {
+    setFavorites(prev => {
+      const next = prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type];
+      localStorage.setItem('nodepalette_favorites', JSON.stringify(next));
       return next;
     });
   };
 
-  const handleAdd = (type: string) => {
-    if (swapTargetNodeId) {
-      swapNode(swapTargetNodeId, type);
+  // ── Drawer mode ───────────────────────────────────────────────────────────
+  if (mode === 'drawer') {
+    const handleAdd = (type: string) => {
+      if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
+      const center = getViewportCenter?.() ?? { x: 300, y: 200 };
+      addNode(type, { x: center.x + (Math.random()-0.5)*60, y: center.y + (Math.random()-0.5)*60 });
       onNodeAdded?.();
-      return;
-    }
-    const center = getViewportCenter?.() ?? { x: 300, y: 200 };
-    const x = center.x + (Math.random() - 0.5) * 60;
-    const y = center.y + (Math.random() - 0.5) * 60;
-    addNode(type, { x, y });
-    onNodeAdded?.();
-  };
-
-  // Label of the node currently targeted for swap
-  const swapTargetLabel = swapTargetNodeId
-    ? (() => {
-        const n = graphNodes.find(nd => nd.id === swapTargetNodeId);
-        if (!n) return null;
-        return getNodeDefinition(n.type)?.label ?? n.type;
-      })()
-    : null;
-
-  // Search mode: show all matching nodes across categories, ungrouped
-  const trimmed = query.trim().toLowerCase();
-  const isSearching = trimmed.length > 0;
-
-  const searchResults = isSearching
-    ? Object.values(NODE_REGISTRY).filter(def =>
-        !HIDDEN_NODES.has(def.type) && (
-          def.label.toLowerCase().includes(trimmed) ||
-          def.type.toLowerCase().includes(trimmed) ||
-          (def.description ?? '').toLowerCase().includes(trimmed)
-        )
-      )
-    : [];
-
-  const nodeBtn = (type: string, label: string, description?: string) => {
-    const isFav = favorites.includes(type);
-    const isHighlighted = highlightType === type;
+    };
     return (
-      <div key={type} style={{ position: 'relative', marginBottom: '3px' }}>
-        <button
-          ref={el => {
-            if (el) nodeButtonRefs.current.set(type, el);
-            else nodeButtonRefs.current.delete(type);
-          }}
-          onClick={() => handleAdd(type)}
-          title={description ?? `Drag to canvas or click to ${swapTargetNodeId ? 'replace' : 'add'}`}
-          draggable={!swapTargetNodeId}
-          onDragStart={e => {
-            e.dataTransfer.setData('application/shader-studio-node', type);
-            e.dataTransfer.effectAllowed = 'copy';
-          }}
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: isDrawer ? '9px 28px 9px 12px' : '5px 24px 5px 10px',
-            background: isHighlighted ? '#2a2a3e' : '#313244',
-            border: isHighlighted ? '1px solid #89b4fa' : '1px solid #45475a',
-            color: isHighlighted ? '#89b4fa' : '#cdd6f4',
-            cursor: swapTargetNodeId ? 'pointer' : 'grab',
-            textAlign: 'left',
-            borderRadius: '6px',
-            fontSize: isDrawer ? '13px' : '12px',
-            transition: 'background 0.1s, border-color 0.15s, color 0.15s, box-shadow 0.15s',
-            touchAction: 'manipulation',
-            boxShadow: isHighlighted ? '0 0 0 2px #89b4fa44' : 'none',
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = isHighlighted ? '#2a2a3e' : '#313244')}
-        >
-          {label}
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); toggleFavorite(type); }}
-          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-          style={{
-            position: 'absolute',
-            right: '5px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '2px 3px',
-            lineHeight: 1,
-            fontSize: '11px',
-            color: isFav ? '#f9e2af' : '#a6adc8',
-            transition: 'color 0.1s',
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#fab387' : '#ffffff')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = isFav ? '#f9e2af' : '#a6adc8')}
-        >★</button>
+      <div style={{ width: '100%', background: '#1e1e2e', color: '#cdd6f4', padding: '4px 12px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0, boxSizing: 'border-box' }}>
+        <input type="text" placeholder="Search nodes…" value={drawerQuery} onChange={e => setDrawerQuery(e.target.value)}
+          style={{ background: '#181825', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '5px', padding: '5px 8px', fontSize: '11px', outline: 'none', marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}
+        />
+        <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={toggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={drawerQuery} />
       </div>
     );
+  }
+
+  // ── Full mode: sidebar + multi-pane ───────────────────────────────────────
+
+  const focusedPane = panes.find(p => p.id === focusedPaneId) ?? panes[0];
+
+  const updatePane = (id: string, updates: Partial<ContentPaneState>) =>
+    setPanes(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+
+  const addPane = () => {
+    const newPane = mkPane(focusedPane.activeTab);
+    setPanes(prev => [...prev, newPane]);
+    setFocusedPaneId(newPane.id);
   };
 
-  const isDrawer = mode === 'drawer';
+  const closePane = (id: string) => {
+    const idx = panes.findIndex(p => p.id === id);
+    const newPanes = panes.filter(p => p.id !== id);
+    if (focusedPaneId === id) {
+      setFocusedPaneId(newPanes[Math.min(idx, newPanes.length - 1)]?.id ?? '');
+    }
+    setPanes(newPanes);
+  };
+
+  const startPaneResize = (e: React.MouseEvent, idxA: number) => {
+    e.preventDefault();
+    const container = panesContainerRef.current;
+    if (!container) return;
+    const children = Array.from(container.children) as HTMLElement[];
+    // children alternate: pane, handle, pane, handle, pane ...
+    // pane at idxA is children[idxA * 2], pane at idxB is children[idxA * 2 + 2]
+    const elA = children[idxA * 2];
+    const elB = children[idxA * 2 + 2];
+    if (!elA || !elB) return;
+    dragState.current = {
+      startY: e.clientY,
+      idxA,
+      idxB: idxA + 1,
+      heightA: elA.getBoundingClientRect().height,
+      heightB: elB.getBoundingClientRect().height,
+    };
+
+    const onMove = (ev: MouseEvent) => {
+      const ds = dragState.current;
+      if (!ds) return;
+      const delta = ev.clientY - ds.startY;
+      const MIN_H = 80;
+      const combined = ds.heightA + ds.heightB;
+      const newHeightA = Math.max(MIN_H, Math.min(combined - MIN_H, ds.heightA + delta));
+      const newHeightB = combined - newHeightA;
+      const totalFlex = panes.reduce((s, p) => s + p.flexGrow, 0);
+      const containerH = container.getBoundingClientRect().height;
+      const flexPerPx = totalFlex / containerH;
+      setPanes(prev => prev.map((p, i) => {
+        if (i === ds.idxA) return { ...p, flexGrow: Math.max(0.1, newHeightA * flexPerPx) };
+        if (i === ds.idxB) return { ...p, flexGrow: Math.max(0.1, newHeightB * flexPerPx) };
+        return p;
+      }));
+    };
+
+    const onUp = () => {
+      dragState.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   return (
-    <div
-      ref={paletteScrollRef}
-      style={{
-        // In full mode: fixed sidebar. In drawer mode: fill the parent container.
-        width:    isDrawer ? '100%'    : '210px',
-        minWidth: isDrawer ? undefined : '210px',
-        height:   isDrawer ? undefined : '100%',
-        background: '#1e1e2e',
-        color: '#cdd6f4',
-        padding: isDrawer ? '4px 12px 20px' : '10px 8px',
-        overflowY: 'auto',
-        borderRight: isDrawer ? 'none' : '1px solid #313244',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        flex: isDrawer ? 1 : undefined,
-        minHeight: 0,
-        boxSizing: 'border-box',
-      }}
-    >
-      {/* Title */}
-      <div style={{ fontWeight: 700, fontSize: '13px', paddingLeft: '4px', color: '#89b4fa', marginBottom: '6px' }}>
-        {swapTargetNodeId ? 'Replace Node' : 'Add Node'}
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden', background: '#1e1e2e', color: '#cdd6f4' }}>
 
-      {/* Swap mode banner */}
-      {swapTargetNodeId && (
-        <div style={{
-          background: '#f9e2af22',
-          border: '1px solid #f9e2af55',
-          borderRadius: '6px',
-          padding: '6px 10px',
-          fontSize: '11px',
-          color: '#f9e2af',
-          marginBottom: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '6px',
-        }}>
-          <span>↔ Replace <strong>{swapTargetLabel}</strong></span>
-          <button
-            onClick={() => setSwapTargetNodeId(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#f9e2af',
-              cursor: 'pointer',
-              fontSize: '11px',
-              padding: '0 2px',
-              opacity: 0.7,
-            }}
-            title="Cancel swap"
-          >✕</button>
-        </div>
-      )}
+      {/* Main row: sidebar + panes */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
-      {/* Search */}
-      <input
-        type="text"
-        placeholder="Search nodes…"
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        style={{
-          background: '#181825',
-          border: '1px solid #45475a',
-          color: '#cdd6f4',
-          borderRadius: '5px',
-          padding: '5px 8px',
-          fontSize: '11px',
-          outline: 'none',
-          marginBottom: '6px',
-          width: '100%',
-          boxSizing: 'border-box',
-        }}
-      />
-
-      {/* ── Favorites ── */}
-      {favorites.length > 0 && (
-        <div style={{ marginBottom: '6px' }}>
-          <button
-            onClick={() => setFavoritesExpanded(v => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              width: '100%', background: 'none', border: 'none',
-              cursor: 'pointer', padding: '2px 4px', marginBottom: '3px',
-              textAlign: 'left',
-            }}
-          >
-            <span style={{ fontSize: '7px', opacity: 0.5, color: '#f9e2af', width: '7px', flexShrink: 0 }}>
-              {favoritesExpanded ? '▼' : '▶'}
-            </span>
-            <span style={{ fontSize: '11px' }}>★</span>
-            <span style={{
-              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#f9e2af',
-            }}>
-              Favorites
-            </span>
-            <span style={{ marginLeft: 'auto', opacity: 0.4, fontSize: '9px', color: '#f9e2af' }}>
-              {favorites.length}
-            </span>
-          </button>
-          {favoritesExpanded && (
-            <div style={{ paddingLeft: '4px' }}>
-              {favorites
-                .map(t => NODE_REGISTRY[t])
-                .filter(Boolean)
-                .map(def => nodeBtn(def.type, def.label, def.description))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Examples browser ── */}
-      {!isSearching && (
-        <div style={{ marginBottom: '6px' }}>
-          <button
-            onClick={() => setExamplesExpanded(v => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              width: '100%', background: 'none', border: 'none',
-              cursor: 'pointer', padding: '2px 4px', marginBottom: '3px',
-              textAlign: 'left',
-            }}
-          >
-            <span style={{ fontSize: '7px', opacity: 0.5, color: '#585b70', width: '7px', flexShrink: 0 }}>
-              {examplesExpanded ? '▼' : '▶'}
-            </span>
-            <span style={{
-              fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#585b70',
-            }}>
-              Examples
-            </span>
-          </button>
-          {examplesExpanded && EXAMPLE_FOLDERS.filter(folder => folder.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
-            const isOpen = openFolders.has(folder.label);
+        {/* Sidebar */}
+        <div style={{ width: 36, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: '2px', borderRight: '1px solid #313244', background: '#181825' }}>
+          {SIDEBAR_TABS.map(({ id, label, color, Icon }) => {
+            const isActive = focusedPane.activeTab === id;
             return (
-              <div key={folder.label} style={{ marginBottom: '1px' }}>
-                {/* Folder row */}
-                <button
-                  onClick={() => toggleFolder(folder.label)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    width: '100%', background: 'none', border: 'none',
-                    cursor: 'pointer', padding: '3px 4px', borderRadius: '4px',
-                    color: folder.color, fontSize: '11px', fontWeight: 600,
-                    textAlign: 'left', transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}
-                >
-                  <span style={{ fontSize: '8px', opacity: 0.6, width: '8px', flexShrink: 0 }}>
-                    {isOpen ? '▼' : '▶'}
-                  </span>
-                  <span style={{ fontSize: '12px', marginRight: '2px' }}>📁</span>
-                  {folder.label}
-                  <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.4 }}>
-                    {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).length}
-                  </span>
-                </button>
-
-                {/* Example items inside folder — sorted alphabetically by label */}
-                {isOpen && (
-                  <div style={{ paddingLeft: '18px', paddingBottom: '2px' }}>
-                    {folder.keys
-                      .filter(k => EXAMPLE_GRAPHS[k])
-                      .sort((a, b) => EXAMPLE_GRAPHS[a].label.localeCompare(EXAMPLE_GRAPHS[b].label))
-                      .map(k => {
-                        const ex = EXAMPLE_GRAPHS[k];
-                        return (
-                          <button
-                            key={k}
-                            onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }}
-                            style={{
-                              display: 'block', width: '100%',
-                              padding: '3px 8px', marginBottom: '1px',
-                              background: '#181825',
-                              border: `1px solid ${folder.color}22`,
-                              color: '#a6adc8', cursor: 'pointer',
-                              textAlign: 'left', borderRadius: '4px',
-                              fontSize: '11px', transition: 'background 0.1s',
-                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                            }}
-                            onMouseEnter={e => {
-                              (e.currentTarget as HTMLButtonElement).style.background = '#313244';
-                              (e.currentTarget as HTMLButtonElement).style.color = folder.color;
-                            }}
-                            onMouseLeave={e => {
-                              (e.currentTarget as HTMLButtonElement).style.background = '#181825';
-                              (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8';
-                            }}
-                            title={ex.label}
-                          >
-                            {ex.label}
-                          </button>
-                        );
-                      })
-                    }
-                  </div>
-                )}
-              </div>
+              <button
+                key={id}
+                onClick={() => updatePane(focusedPane.id, { activeTab: id })}
+                title={label}
+                style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isActive ? '#313244' : 'none', border: isActive ? `1px solid ${color}33` : '1px solid transparent', borderRadius: 6, color: isActive ? color : '#585b70', cursor: 'pointer', transition: 'background 0.1s, color 0.1s, border-color 0.1s', padding: 0 }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+              >
+                <Icon />
+              </button>
             );
           })}
-        </div>
-      )}
 
-      {/* Search results */}
-      {isSearching ? (
-        <div>
-          {searchResults.length === 0 ? (
-            <div style={{ color: '#585b70', fontSize: '11px', paddingLeft: '4px' }}>No matches</div>
-          ) : (
-            searchResults.map(def => nodeBtn(def.type, def.label, def.description))
+          {/* Collapse button pinned to bottom */}
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              title="Collapse palette"
+              style={{ marginTop: 'auto', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid transparent', borderRadius: 6, color: '#45475a', cursor: 'pointer', fontSize: '10px', padding: 0, transition: 'color 0.1s' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+            >◀</button>
           )}
         </div>
-      ) : (
-        /* Accordion categories */
-        categories.map(category => {
-          const isOpen   = open.has(category);
-          const color    = CATEGORY_COLORS[category] ?? '#888';
-          const rawNodes = getNodesByCategory(category).filter(d => !HIDDEN_NODES.has(d.type));
-          const nodes    = category === 'Math'
-            ? sortMathNodes(rawNodes)
-            : category === 'Shapers'
-            ? sortShaperNodes(rawNodes)
-            : [...rawNodes].sort((a, b) => a.label.localeCompare(b.label));
-          if (nodes.length === 0) return null;
-          return (
-            <div key={category} style={{ marginBottom: '2px' }}>
-              {/* Category header toggle */}
-              <button
-                onClick={() => toggleCategory(category)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  width: '100%',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px 4px',
-                  borderRadius: '4px',
-                  color,
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  textAlign: 'left',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}
-              >
-                <span style={{ fontSize: '9px', opacity: 0.7 }}>{isOpen ? '▼' : '▶'}</span>
-                {category}
-                <span style={{ marginLeft: 'auto', opacity: 0.4, fontSize: '9px' }}>{nodes.length}</span>
-              </button>
 
-              {/* Node buttons — only shown when open */}
-              {isOpen && (
-                <div style={{ marginTop: '2px', paddingLeft: '4px' }}>
-                  {category === 'Math' ? (
-                    MATH_GROUPS.map(group => {
-                      const groupNodes = nodes.filter(d => group.types.includes(d.type)).sort((a, b) => a.label.localeCompare(b.label));
-                      if (groupNodes.length === 0) return null;
-                      return (
-                        <div key={group.label}>
-                          <div style={{
-                            fontSize: '8px', color: '#45475a', letterSpacing: '0.08em',
-                            textTransform: 'uppercase', padding: '4px 2px 2px',
-                            fontWeight: 600,
-                          }}>
-                            {group.label}
-                          </div>
-                          {groupNodes.map(def => nodeBtn(def.type, def.label, def.description))}
-                        </div>
-                      );
-                    })
-                  ) : category === 'Shapers' ? (
-                    SHAPER_GROUPS.map(group => {
-                      const groupNodes = nodes.filter(d => group.types.includes(d.type));
-                      if (groupNodes.length === 0) return null;
-                      return (
-                        <div key={group.label}>
-                          <div style={{
-                            fontSize: '8px', color: '#45475a', letterSpacing: '0.08em',
-                            textTransform: 'uppercase', padding: '4px 2px 2px',
-                            fontWeight: 600,
-                          }}>
-                            {group.label}
-                          </div>
-                          {groupNodes.map(def => nodeBtn(def.type, def.label, def.description))}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    nodes.map(def => nodeBtn(def.type, def.label, def.description))
-                  )}
-                </div>
+        {/* Content panes — stacked vertically */}
+        <div ref={panesContainerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          {panes.map((pane, idx) => (
+            <React.Fragment key={pane.id}>
+              {idx > 0 && (
+                <div
+                  onMouseDown={e => startPaneResize(e, idx - 1)}
+                  style={{ height: '5px', flexShrink: 0, cursor: 'ns-resize', background: 'transparent', position: 'relative', zIndex: 10 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a5a'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                />
               )}
-            </div>
-          );
-        })
-      )}
-
-      {/* ── Group Presets ── */}
-      {!isSearching && (
-        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <button
-            onClick={() => toggleSection('groupPresets')}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('groupPresets') ? '4px' : '0', textAlign: 'left' }}
-          >
-            <span style={{ fontSize: '7px', opacity: 0.5, color: '#f9e2af', width: '7px' }}>{isSectionOpen('groupPresets') ? '▼' : '▶'}</span>
-            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#f9e2af' }}>Group Presets</span>
-          </button>
-          {isSectionOpen('groupPresets') && <div>
-          {groupPresets.length === 0 ? (
-            <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '4px', fontStyle: 'italic', lineHeight: 1.6 }}>
-              Select a group node and click<br />⬇ Save to create a preset.
-            </div>
-          ) : (
-            groupPresets.map((preset: GroupPreset) => (
-              <div
-                key={preset.id}
-                style={{ position: 'relative', marginBottom: '2px' }}
-                onMouseEnter={() => setHoverGroupPresetId(preset.id)}
-                onMouseLeave={() => setHoverGroupPresetId(null)}
-              >
-                <button
-                  onClick={() => {
-                    const x = 200 + Math.random() * 120;
-                    const y = 120 + Math.random() * 200;
-                    instantiateGroupPreset(preset.id, { x, y });
-                    onNodeAdded?.();
-                  }}
-                  title={preset.description ?? `Add "${preset.label}" group`}
-                  style={{
-                    display: 'block', width: '100%',
-                    padding: '5px 28px 5px 10px', marginBottom: '0',
-                    background: '#1e1a0e',
-                    border: '1px solid #f9e2af33',
-                    color: '#f9e2af', cursor: 'pointer',
-                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#2a2412')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1e1a0e')}
-                >
-                  <div>⬡ {preset.label}</div>
-                  {preset.description && (
-                    <div style={{ fontSize: '10px', color: '#a89060', marginTop: '1px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                      {preset.description}
-                    </div>
-                  )}
-                </button>
-                {hoverGroupPresetId === preset.id && (
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteGroupPreset(preset.id); }}
-                    title="Delete preset"
-                    style={{
-                      position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none',
-                      color: '#585b70', cursor: 'pointer',
-                      fontSize: '11px', padding: '2px 4px', lineHeight: 1,
-                    }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                  >✕</button>
-                )}
-              </div>
-            ))
-          )}
-          </div>}
-        </div>
-      )}
-
-      {/* ── Saved Graphs ── */}
-      {!isSearching && (
-        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: isSectionOpen('savedGraphs') ? '4px' : '0' }}>
-            <button
-              onClick={() => toggleSection('savedGraphs')}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', textAlign: 'left' }}
-            >
-              <span style={{ fontSize: '7px', opacity: 0.5, color: '#89b4fa', width: '7px' }}>{isSectionOpen('savedGraphs') ? '▼' : '▶'}</span>
-              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89b4fa' }}>Saved Graphs</span>
-            </button>
-            <button
-              onClick={() => { setShowGraphSaveInput(v => !v); setGraphSaveInput(''); }}
-              title="Save current graph"
-              style={{
-                background: 'none', border: '1px solid #313244', color: '#6c7086',
-                borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
-            >
-              +
-            </button>
-          </div>
-
-          {isSectionOpen('savedGraphs') && <>
-          {/* Inline save input */}
-          {showGraphSaveInput && (
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
-              <input
-                autoFocus
-                value={graphSaveInput}
-                onChange={e => setGraphSaveInput(e.target.value)}
-                placeholder="Graph name…"
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && graphSaveInput.trim()) {
-                    saveGraph(graphSaveInput.trim());
-                    refreshSavedNames();
-                    setShowGraphSaveInput(false);
-                    setGraphSaveInput('');
-                  }
-                  if (e.key === 'Escape') setShowGraphSaveInput(false);
-                }}
-                style={{
-                  flex: 1, background: '#181825', border: '1px solid #89b4fa',
-                  color: '#cdd6f4', borderRadius: '4px', padding: '3px 7px',
-                  fontSize: '11px', outline: 'none',
-                }}
+              <ContentPane
+                state={pane}
+                onStateChange={updates => updatePane(pane.id, updates)}
+                isFocused={pane.id === focusedPaneId}
+                onFocus={() => setFocusedPaneId(pane.id)}
+                onClose={panes.length > 1 ? () => closePane(pane.id) : undefined}
+                isOnly={panes.length === 1}
+                favorites={favorites}
+                onToggleFavorite={toggleFavorite}
+                nodeButtonRefs={nodeButtonRefs}
+                onNodeAdded={onNodeAdded}
+                flexGrow={pane.flexGrow}
+                context={context}
+                onGlslInsert={onGlslInsert}
               />
-              <button
-                onClick={() => {
-                  if (graphSaveInput.trim()) {
-                    saveGraph(graphSaveInput.trim());
-                    refreshSavedNames();
-                    setShowGraphSaveInput(false);
-                    setGraphSaveInput('');
-                  }
-                }}
-                disabled={!graphSaveInput.trim()}
-                style={{
-                  background: graphSaveInput.trim() ? '#89b4fa22' : 'none',
-                  border: `1px solid ${graphSaveInput.trim() ? '#89b4fa55' : '#313244'}`,
-                  color: graphSaveInput.trim() ? '#89b4fa' : '#45475a',
-                  borderRadius: '3px', fontSize: '10px', padding: '2px 6px', cursor: 'pointer',
-                }}
-              >✓</button>
-            </div>
-          )}
-
-          {savedNames.length === 0 && !showGraphSaveInput ? (
-            <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '4px', fontStyle: 'italic' }}>
-              Click + to save the current graph
-            </div>
-          ) : (
-            savedNames.map(name => (
-              <div
-                key={name}
-                style={{ position: 'relative', marginBottom: '2px' }}
-                onMouseEnter={() => setHoverSavedName(name)}
-                onMouseLeave={() => setHoverSavedName(null)}
-              >
-                <button
-                  onClick={() => { loadSavedGraph(name); onNodeAdded?.(); }}
-                  title={`Load "${name}"`}
-                  style={{
-                    display: 'block', width: '100%',
-                    padding: '5px 28px 5px 10px',
-                    background: '#181825',
-                    border: '1px solid #89b4fa22',
-                    color: '#89b4fa', cursor: 'pointer',
-                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#181825')}
-                >
-                  {name}
-                </button>
-                {hoverSavedName === name && (
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteSavedGraph(name); refreshSavedNames(); }}
-                    title="Delete saved graph"
-                    style={{
-                      position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none',
-                      color: '#585b70', cursor: 'pointer',
-                      fontSize: '11px', padding: '2px 4px', lineHeight: 1,
-                    }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                  >✕</button>
-                )}
-              </div>
-            ))
-          )}
-          </>}
+            </React.Fragment>
+          ))}
         </div>
+      </div>
+
+      {/* Add pane button — only show when fewer than 4 panes */}
+      {panes.length < 4 && (
+        <button
+          onClick={addPane}
+          title="Add pane"
+          style={{ height: '22px', flexShrink: 0, background: 'none', border: 'none', borderTop: '1px solid #252535', color: '#45475a', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'background 0.1s, color 0.1s' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#252535'; (e.currentTarget as HTMLButtonElement).style.color = '#89b4fa'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = '#45475a'; }}
+        >
+          <span style={{ fontSize: '12px', lineHeight: 1 }}>+</span>
+          <span>pane</span>
+        </button>
       )}
-
-      {/* ── My Functions ── */}
-      {!isSearching && (
-        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: isSectionOpen('myFunctions') ? '4px' : '0' }}>
-            <button
-              onClick={() => toggleSection('myFunctions')}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', textAlign: 'left' }}
-            >
-              <span style={{ fontSize: '7px', opacity: 0.5, color: '#89dceb', width: '7px' }}>{isSectionOpen('myFunctions') ? '▼' : '▶'}</span>
-              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89dceb' }}>My Functions</span>
-            </button>
-            {/* Folder picker */}
-            <button
-              onClick={handlePickFolder}
-              title={presetsDir ? `Saving to: ${presetsDir}` : 'Pick a folder to save presets on disk'}
-              style={{
-                background: presetsDir ? '#89dceb18' : 'none',
-                border: `1px solid ${presetsDir ? '#89dceb55' : '#313244'}`,
-                color: presetsDir ? '#89dceb' : '#6c7086',
-                borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = presetsDir ? '#89dceb' : '#6c7086')}
-            >
-              📁
-            </button>
-            {/* Export / Import buttons — only show when presets exist or always for import */}
-            {userPresets.length > 0 && (
-              <button
-                onClick={() => exportCustomFns()}
-                title="Export saved functions to a JSON file"
-                style={{
-                  background: 'none', border: '1px solid #313244', color: '#6c7086',
-                  borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
-                }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
-              >
-                ↑
-              </button>
-            )}
-            <button
-              onClick={async () => { await importCustomFnsFromFile(); await refreshPresets(); }}
-              title="Import saved functions from a JSON file"
-              style={{
-                background: 'none', border: '1px solid #313244', color: '#6c7086',
-                borderRadius: '3px', fontSize: '10px', padding: '1px 5px', cursor: 'pointer',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
-            >
-              ↓
-            </button>
-          </div>
-
-          {isSectionOpen('myFunctions') && <>
-          {/* Folder path display */}
-          {presetsDir && (
-            <div style={{
-              fontSize: '9px', color: '#45475a', paddingLeft: '4px', marginBottom: '4px',
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              fontFamily: 'monospace',
-            }}
-              title={presetsDir}
-            >
-              {presetsDir.split('/').pop() ?? presetsDir}
-            </div>
-          )}
-
-          {userPresets.length === 0 ? (
-            <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
-              Open a Custom Fn node and click "↑ Save Preset"
-            </div>
-          ) : (
-            userPresets.map(preset => (
-              <div
-                key={preset.id}
-                style={{ position: 'relative', marginBottom: '2px' }}
-                onMouseEnter={() => setHoverPresetId(preset.id)}
-                onMouseLeave={() => setHoverPresetId(null)}
-              >
-                <button
-                  onClick={() => {
-                    const x = 200 + Math.random() * 120;
-                    const y = 120 + Math.random() * 200;
-                    addNode('customFn', { x, y }, {
-                      label: preset.label,
-                      inputs: preset.inputs,
-                      outputType: preset.outputType,
-                      body: preset.body,
-                      glslFunctions: preset.glslFunctions,
-                    });
-                    onNodeAdded?.();
-                  }}
-                  title={`Add "${preset.label}" as a Custom Fn node`}
-                  style={{
-                    display: 'block', width: '100%',
-                    padding: '5px 28px 5px 10px',
-                    background: '#1a2535',
-                    border: '1px solid #89dceb33',
-                    color: '#89dceb', cursor: 'pointer',
-                    textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1e3040')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
-                >
-                  ƒ {preset.label}
-                </button>
-                {/* Delete button — shown on hover */}
-                {hoverPresetId === preset.id && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      deleteCustomFn(preset.id);
-                      refreshPresets();
-                    }}
-                    title="Remove this preset"
-                    style={{
-                      position: 'absolute', right: '4px', top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none', border: 'none',
-                      color: '#f38ba8', cursor: 'pointer',
-                      fontSize: '13px', padding: '0 4px', lineHeight: 1,
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-          </>}
-        </div>
-      )}
-
-      {/* ── Expr Block Presets ── */}
-      {!isSearching && (
-        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <button
-            onClick={() => toggleSection('exprPresets')}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('exprPresets') ? '4px' : '0', textAlign: 'left' }}
-          >
-            <span style={{ fontSize: '7px', opacity: 0.5, color: '#a6e3a1', width: '7px' }}>{isSectionOpen('exprPresets') ? '▼' : '▶'}</span>
-            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#a6e3a1' }}>Expr Block Presets</span>
-          </button>
-
-          {isSectionOpen('exprPresets') && <>
-          {exprPresets.length === 0 ? (
-            <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
-              Open an Expr Block node and click "↑ Save Preset"
-            </div>
-          ) : (
-            exprPresets.map((preset: ExprPreset) => (
-              <div
-                key={preset.id}
-                style={{ position: 'relative', marginBottom: '2px' }}
-                onMouseEnter={() => setHoverExprPresetId(preset.id)}
-                onMouseLeave={() => setHoverExprPresetId(null)}
-              >
-                {renamingExprId === preset.id ? (
-                  <input
-                    autoFocus
-                    value={renameExprValue}
-                    onChange={e => setRenameExprValue(e.target.value)}
-                    onBlur={() => {
-                      renameExprPreset(preset.id, renameExprValue);
-                      setRenamingExprId(null);
-                      refreshExprPresets();
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { renameExprPreset(preset.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }
-                      if (e.key === 'Escape') setRenamingExprId(null);
-                      e.stopPropagation();
-                    }}
-                    style={{
-                      display: 'block', width: '100%', boxSizing: 'border-box',
-                      padding: '5px 10px', background: '#11111b',
-                      border: '1px solid #a6e3a1', color: '#a6e3a1',
-                      borderRadius: '5px', fontSize: '12px', outline: 'none',
-                    }}
-                  />
-                ) : (
-                  <button
-                    onClick={() => {
-                      const x = 200 + Math.random() * 120;
-                      const y = 120 + Math.random() * 200;
-                      addNode('exprNode', { x, y }, {
-                        label:      preset.label,
-                        inputs:     preset.inputs,
-                        outputType: preset.outputType,
-                        lines:      preset.lines,
-                        result:     preset.result,
-                      });
-                      onNodeAdded?.();
-                    }}
-                    title={`Add "${preset.label}" as an Expr Block node`}
-                    style={{
-                      display: 'block', width: '100%',
-                      padding: '5px 52px 5px 10px',
-                      background: '#0e1e12',
-                      border: '1px solid #a6e3a133',
-                      color: '#a6e3a1', cursor: 'pointer',
-                      textAlign: 'left', borderRadius: '5px', fontSize: '12px',
-                      transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#132419')}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#0e1e12')}
-                  >
-                    ⟴ {preset.label}
-                  </button>
-                )}
-                {hoverExprPresetId === preset.id && renamingExprId !== preset.id && (
-                  <>
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        setRenameExprValue(preset.label);
-                        setRenamingExprId(preset.id);
-                      }}
-                      title="Rename preset"
-                      style={{
-                        position: 'absolute', right: '24px', top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none', border: 'none',
-                        color: '#585b70', cursor: 'pointer',
-                        fontSize: '11px', padding: '0 3px', lineHeight: 1,
-                      }}
-                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
-                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                    >✎</button>
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        deleteExprPreset(preset.id);
-                        refreshExprPresets();
-                      }}
-                      title="Remove this preset"
-                      style={{
-                        position: 'absolute', right: '4px', top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none', border: 'none',
-                        color: '#585b70', cursor: 'pointer',
-                        fontSize: '13px', padding: '0 4px', lineHeight: 1,
-                      }}
-                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                    >×</button>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-          </>}
-        </div>
-      )}
-
-      {/* ── Transform Vec Presets ── */}
-      {!isSearching && (
-        <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
-          <button
-            onClick={() => toggleSection('transformPresets')}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: isSectionOpen('transformPresets') ? '4px' : '0', textAlign: 'left' }}
-          >
-            <span style={{ fontSize: '7px', opacity: 0.5, color: '#89b4fa', width: '7px' }}>{isSectionOpen('transformPresets') ? '▼' : '▶'}</span>
-            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#89b4fa' }}>Transform Vec Presets</span>
-          </button>
-
-          {isSectionOpen('transformPresets') && <>
-          {transformPresets.length === 0 ? (
-            <div style={{ color: '#45475a', fontSize: '10px', paddingLeft: '4px', paddingBottom: '4px', fontStyle: 'italic' }}>
-              Open a Transform Vec node and click "↑ Save Preset"
-            </div>
-          ) : (
-            transformPresets.map((preset: TransformPreset) => (
-              <div
-                key={preset.id}
-                style={{ position: 'relative', marginBottom: '2px' }}
-                onMouseEnter={() => setHoverTransformPresetId(preset.id)}
-                onMouseLeave={() => setHoverTransformPresetId(null)}
-              >
-                {renamingTransformId === preset.id ? (
-                  <input
-                    autoFocus
-                    value={renameTransformValue}
-                    onChange={e => setRenameTransformValue(e.target.value)}
-                    onBlur={() => { renameTransformPreset(preset.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { renameTransformPreset(preset.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }
-                      if (e.key === 'Escape') setRenamingTransformId(null);
-                      e.stopPropagation();
-                    }}
-                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '5px 10px', background: '#11111b', border: '1px solid #89b4fa', color: '#89b4fa', borderRadius: '5px', fontSize: '12px', outline: 'none' }}
-                  />
-                ) : (
-                  <button
-                    onClick={() => {
-                      const x = 200 + Math.random() * 120;
-                      const y = 120 + Math.random() * 200;
-                      addNode('transformVec', { x, y }, {
-                        outputType: preset.outputType,
-                        exprX: preset.exprX, exprY: preset.exprY,
-                        exprZ: preset.exprZ, exprW: preset.exprW,
-                      });
-                      onNodeAdded?.();
-                    }}
-                    title={`Add "${preset.label}" as a Transform Vec node`}
-                    style={{ display: 'block', width: '100%', padding: '5px 52px 5px 10px', background: '#111827', border: '1px solid #89b4fa33', color: '#89b4fa', cursor: 'pointer', textAlign: 'left', borderRadius: '5px', fontSize: '12px', transition: 'background 0.1s' }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
-                    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#111827')}
-                  >
-                    ⊞ {preset.label}
-                    <span style={{ fontSize: '9px', color: '#45475a', marginLeft: '6px' }}>{preset.outputType}</span>
-                  </button>
-                )}
-                {hoverTransformPresetId === preset.id && renamingTransformId !== preset.id && (
-                  <>
-                    <button
-                      onClick={e => { e.stopPropagation(); setRenameTransformValue(preset.label); setRenamingTransformId(preset.id); }}
-                      title="Rename preset"
-                      style={{ position: 'absolute', right: '24px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '0 3px', lineHeight: 1 }}
-                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
-                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                    >✎</button>
-                    <button
-                      onClick={e => { e.stopPropagation(); deleteTransformPreset(preset.id); refreshTransformPresets(); }}
-                      title="Remove this preset"
-                      style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '0 4px', lineHeight: 1 }}
-                      onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                      onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-                    >×</button>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-          </>}
-        </div>
-      )}
-
-      {/* Import GLSL modal */}
-      {showImport && <ImportGlslModal onClose={() => setShowImport(false)} />}
     </div>
   );
 }

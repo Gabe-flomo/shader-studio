@@ -290,6 +290,8 @@ function App() {
   const [histData, setHistData]           = useState<HistogramData | null>(null);
   const handleHistogram = useCallback((data: HistogramData) => { setHistData(data); }, []);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const [paletteUserW, setPaletteUserW] = useState<number | null>(null);
+  const paletteResizeRef = useRef<{ startX: number; startW: number } | null>(null);
 
   // Update preview width when breakpoint changes
   useEffect(() => {
@@ -810,7 +812,25 @@ function App() {
   // DESKTOP LAYOUT (1024px+) — original 3-panel layout, responsively sized
   // ══════════════════════════════════════════════════════════════════════════
   const paletteW = getPaletteWidth(bp);
-  const effectivePaletteW = paletteW === 0 ? 0 : paletteCollapsed ? 28 : paletteW;
+  const paletteBaseW = paletteUserW ?? paletteW;
+  const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
+
+  const handlePaletteResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    paletteResizeRef.current = { startX: e.clientX, startW: paletteBaseW };
+    const onMove = (ev: MouseEvent) => {
+      if (!paletteResizeRef.current) return;
+      const delta = ev.clientX - paletteResizeRef.current.startX;
+      setPaletteUserW(Math.max(160, Math.min(480, paletteResizeRef.current.startW + delta)));
+    };
+    const onUp = () => {
+      paletteResizeRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [paletteBaseW]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
@@ -827,25 +847,40 @@ function App() {
       <div style={{ display: (page === 'studio' || page === 'glsl') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
         {/* Left: Node Palette — hidden on GLSL page */}
-        {page === 'studio' && paletteW > 0 && (
-          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', transition: 'width 0.15s ease', background: '#181825', borderRight: '1px solid #313244' }}>
-            {/* Collapse toggle — always visible */}
-            <button
-              onClick={() => setPaletteCollapsed(v => !v)}
-              title={paletteCollapsed ? 'Expand palette' : 'Collapse palette'}
-              style={{
-                position: 'absolute', top: '8px', right: paletteCollapsed ? '4px' : '6px',
-                zIndex: 10, background: 'none', border: '1px solid #313244',
-                color: '#45475a', cursor: 'pointer', borderRadius: '3px',
-                fontSize: '10px', padding: '2px 4px', lineHeight: 1,
-                transition: 'color 0.1s',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
-            >
-              {paletteCollapsed ? '▶' : '◀'}
-            </button>
-            {!paletteCollapsed && <NodePalette />}
+        {page === 'studio' && paletteBaseW > 0 && (
+          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: '#181825', borderRight: '1px solid #313244' }}>
+            {/* Collapsed state: show only an expand button */}
+            {paletteCollapsed ? (
+              <button
+                onClick={() => setPaletteCollapsed(false)}
+                title="Expand palette"
+                style={{
+                  position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)',
+                  zIndex: 10, background: 'none', border: '1px solid #313244',
+                  color: '#45475a', cursor: 'pointer', borderRadius: '3px',
+                  fontSize: '10px', padding: '2px 4px', lineHeight: 1,
+                  transition: 'color 0.1s',
+                }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+              >▶</button>
+            ) : (
+              <>
+                <NodePalette onCollapse={() => setPaletteCollapsed(true)} />
+                {/* Resize handle */}
+                <div
+                  onMouseDown={handlePaletteResizeStart}
+                  title="Drag to resize"
+                  style={{
+                    position: 'absolute', right: 0, top: 0, bottom: 0, width: '4px',
+                    cursor: 'col-resize', zIndex: 20, background: 'transparent',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = '#45475a')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.background = 'transparent')}
+                />
+              </>
+            )}
           </div>
         )}
 
