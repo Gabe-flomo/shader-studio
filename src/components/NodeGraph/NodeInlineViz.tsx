@@ -2643,7 +2643,6 @@ const SMOOTH_COMBINER_TYPES = new Set([
 export function CombinerCurveViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const k = typeof node.params.smoothness === 'number' ? node.params.smoothness : 0.3;
-  const paramB = typeof node.params.b === 'number' ? node.params.b : null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -2653,82 +2652,127 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
     const W = canvas.width, H = canvas.height;
     const fn = COMBINER_FNS[node.type];
     if (!fn) return;
+
     const color = COMBINER_COLORS[node.type] ?? '#cdd6f4';
     const isSmooth = SMOOTH_COMBINER_TYPES.has(node.type);
 
-    // For smooth ops: use b=0 and zoom to transition zone so rounding is visible.
-    // For sharp ops:  use b=paramB (or 0.2 default) and show wider [-1,1] range.
-    const b      = isSmooth ? 0 : (paramB ?? 0.2);
-    const xRange = isSmooth ? Math.max(0.25, k + 0.3) : 1;
-    // y range: for smooth, tighten so k/6 deviation fills ~50% of half-height
-    const yRange = isSmooth ? Math.max(0.04, k / 3) : 1;
+    // Fixed B value — for subtract variants, offset so the cutoff is visible
+    const isSubtract = node.type.includes('Subtract') || node.type === 'sdfSubtract';
+    const fixedB = isSubtract ? -0.25 : 0;
 
-    ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = '#1e1e2e'; ctx.lineWidth = 1;
-    for (let i = 1; i < 4; i++) {
-      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
-    }
+    // World space: a ∈ [-0.85, 0.85], result ∈ same
+    const RANGE = 0.82;
+    const PAD = 6;
+    const usableH = H - PAD * 2;
+    const toX = (a: number) => ((a + RANGE) / (2 * RANGE)) * W;
+    const toY = (v: number) => PAD + (1 - (v + RANGE) / (2 * RANGE)) * usableH;
 
-    const toY = (v: number) => H / 2 - Math.max(-yRange, Math.min(yRange, v)) / yRange * (H / 2 - 3);
-    const toA = (i: number) => (i / W) * xRange * 2 - xRange;
+    // Sharp reference function for smooth types
+    const sharpFn = isSmooth ? (a: number): number => {
+      if (node.type.includes('Min') || node.type === 'sdfSmoothUnion') return Math.min(a, fixedB);
+      if (node.type.includes('Subtract') || node.type === 'sdfSmoothSubtract') return Math.max(a, -fixedB);
+      return Math.max(a, fixedB); // intersect / max
+    } : null;
 
-    // Zero / b axis
-    ctx.strokeStyle = '#45475a'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    // Parse color for fills
+    const hex = color.replace('#', '');
+    const cr = parseInt(hex.slice(0, 2), 16);
+    const cg = parseInt(hex.slice(2, 4), 16);
+    const cb = parseInt(hex.slice(4, 6), 16);
+
+    // Background
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle axis grid
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, toY(0)); ctx.lineTo(W, toY(0)); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(toX(0), 0); ctx.lineTo(toX(0), H); ctx.stroke();
+
+    // Input A — diagonal (a=result)
+    ctx.strokeStyle = '#2d2f4a';
+    ctx.lineWidth = 1;
     ctx.setLineDash([]);
-
-    // B horizontal
-    ctx.strokeStyle = '#585b70'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, toY(b)); ctx.lineTo(W, toY(b)); ctx.stroke();
-
-    // A diagonal
-    ctx.strokeStyle = '#45475a'; ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let i = 0; i <= W; i++) {
-      const a = toA(i);
-      i === 0 ? ctx.moveTo(i, toY(a)) : ctx.lineTo(i, toY(a));
-    }
+    ctx.moveTo(toX(-RANGE), toY(-RANGE));
+    ctx.lineTo(toX(RANGE), toY(RANGE));
     ctx.stroke();
 
-    // Sharp reference (dim) for smooth types
-    if (isSmooth) {
-      const sharpFn = node.type.includes('Subtract') || node.type === 'sdfSmoothSubtract'
-        ? (a: number) => Math.max(a, -b) : node.type.includes('Max') || node.type === 'sdfSmoothIntersect'
-        ? (a: number) => Math.max(a, b)  : (a: number) => Math.min(a, b);
-      ctx.strokeStyle = '#31324488'; ctx.lineWidth = 1.5;
+    // Input B — horizontal at fixedB
+    ctx.strokeStyle = '#2d2f4a';
+    ctx.beginPath();
+    ctx.moveTo(toX(-RANGE), toY(fixedB));
+    ctx.lineTo(toX(RANGE), toY(fixedB));
+    ctx.stroke();
+
+    // Smooth blend fill zone (between sharp and smooth curves)
+    if (isSmooth && sharpFn) {
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},0.10)`;
       ctx.beginPath();
-      for (let i = 0; i <= W; i++) {
-        const a = toA(i);
-        i === 0 ? ctx.moveTo(i, toY(sharpFn(a))) : ctx.lineTo(i, toY(sharpFn(a)));
+      // Forward: smooth result curve
+      let first = true;
+      for (let px = 0; px <= W; px++) {
+        const a = (px / W) * 2 * RANGE - RANGE;
+        const v = Math.max(-RANGE, Math.min(RANGE, fn(a, fixedB, k)));
+        if (first) { ctx.moveTo(px, toY(v)); first = false; }
+        else ctx.lineTo(px, toY(v));
+      }
+      // Backward: sharp reference curve
+      for (let px = W; px >= 0; px--) {
+        const a = (px / W) * 2 * RANGE - RANGE;
+        const v = Math.max(-RANGE, Math.min(RANGE, sharpFn(a)));
+        ctx.lineTo(px, toY(v));
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Sharp dashed reference
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.22)`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      first = true;
+      for (let px = 0; px <= W; px++) {
+        const a = (px / W) * 2 * RANGE - RANGE;
+        const v = Math.max(-RANGE, Math.min(RANGE, sharpFn(a)));
+        if (first) { ctx.moveTo(px, toY(v)); first = false; }
+        else ctx.lineTo(px, toY(v));
       }
       ctx.stroke();
+      ctx.setLineDash([]);
     }
 
-    // Result curve
-    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    // Result curve (main)
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    for (let i = 0; i <= W; i++) {
-      const a = toA(i);
-      const y = fn(a, b, k);
-      i === 0 ? ctx.moveTo(i, toY(y)) : ctx.lineTo(i, toY(y));
+    let first = true;
+    for (let px = 0; px <= W; px++) {
+      const a = (px / W) * 2 * RANGE - RANGE;
+      const v = Math.max(-RANGE, Math.min(RANGE, fn(a, fixedB, k)));
+      if (first) { ctx.moveTo(px, toY(v)); first = false; }
+      else ctx.lineTo(px, toY(v));
     }
     ctx.stroke();
 
-    ctx.fillStyle = '#6c7086'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(node.type, 4, H - 4);
+    // Corner labels
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#45475a';
+    ctx.textAlign = 'left';
+    ctx.fillText('A', 3, toY(RANGE * 0.78) - 2);
+    ctx.fillText('B', 3, toY(fixedB) - 3);
     if (isSmooth) {
-      ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
-      ctx.fillText(`k=${k.toFixed(2)}`, W - 4, H - 4);
+      ctx.textAlign = 'right';
+      ctx.fillText(`k=${k.toFixed(2)}`, W - 3, H - 3);
     }
     ctx.textAlign = 'left';
-  }, [node.type, k, paramB]);
+  }, [node.type, k]);
 
   return (
     <div style={VIZ_CONTAINER}>
-      <canvas ref={canvasRef} width={240} height={60}
-        style={{ display: 'block', width: '100%', height: '60px' }} />
+      <canvas ref={canvasRef} width={240} height={80}
+        style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
   );
 }
@@ -2868,7 +2912,14 @@ export function Vec2OpViz({ node }: { node: GraphNode }) {
 
       const getVec = (key: string) => {
         const conn = n.inputs[key]?.connection;
-        return conn ? (vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) ?? [0, 0]) : [0, 0];
+        if (conn) return vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) ?? [0, 0];
+        const dv = n.inputs[key]?.defaultValue;
+        if (Array.isArray(dv)) return dv as number[];
+        // Palette preview fallbacks — show something meaningful
+        if (key === 'a') return [0.6, 0.2];
+        if (key === 'b') return [0.1, 0.5];
+        if (key === 'v') return [0.65, 0.35];
+        return [0.5, 0.3];
       };
       const getFloat = (key: string): number => {
         const conn = n.inputs[key]?.connection;
@@ -3907,6 +3958,13 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'multiplyVec2':     return <Vec2OpViz               node={node} />;
     case 'makeVec3':
     case 'floatToVec3':      return <ColorSwatchViz          node={node} />;
+    // 2D SDF
+    case 'circleSDF':
+    case 'boxSDF':
+    case 'ringSDF':
+    case 'shapeSDF':
+    case 'sdBox':
+    case 'sdEllipse':        return <SdfPreviewViz           node={node} />;
     default:                 return null;
   }
 }

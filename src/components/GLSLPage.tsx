@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { tokenizeLine, C } from './CodePanel';
+import { NodePalette } from './NodeGraph/NodePalette';
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -343,6 +344,27 @@ export function GLSLPage() {
   const lineCount  = code.split('\n').length;
   const lines      = code.split('\n');
 
+  const [paletteWidth, setPaletteWidth] = useState(210);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const paletteResizeRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  const handlePaletteResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    paletteResizeRef.current = { startX: e.clientX, startW: paletteWidth };
+    const onMove = (ev: MouseEvent) => {
+      if (!paletteResizeRef.current) return;
+      const delta = ev.clientX - paletteResizeRef.current.startX;
+      setPaletteWidth(Math.max(160, Math.min(400, paletteResizeRef.current.startW + delta)));
+    };
+    const onUp = () => {
+      paletteResizeRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [paletteWidth]);
+
   const btnBase: React.CSSProperties = {
     borderRadius: '4px', padding: '2px 10px',
     fontSize: '10px', cursor: 'pointer', border: '1px solid #45475a',
@@ -364,6 +386,30 @@ export function GLSLPage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', height: '100%', background: '#11111b', fontFamily: 'monospace', overflow: 'hidden' }}>
+
+      {/* ── Node palette sidebar ──────────────────────────────────────── */}
+      {paletteCollapsed ? (
+        <div style={{ width: '28px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e2e', borderRight: '1px solid #313244', cursor: 'pointer' }}
+          onClick={() => setPaletteCollapsed(false)} title="Expand palette">
+          <span style={{ fontSize: '10px', color: '#45475a' }}>▶</span>
+        </div>
+      ) : (
+        <>
+          <div style={{ width: paletteWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid #313244' }}>
+            <NodePalette
+              context="glsl"
+              onGlslInsert={insertAtCursor}
+              onCollapse={() => setPaletteCollapsed(true)}
+            />
+          </div>
+          <div
+            onMouseDown={handlePaletteResizeStart}
+            style={{ width: '4px', flexShrink: 0, background: 'transparent', cursor: 'col-resize', borderRight: '1px solid #313244' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a5a'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+          />
+        </>
+      )}
 
       {/* ── Editor pane ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #313244', minWidth: 0 }}>
