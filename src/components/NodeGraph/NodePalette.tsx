@@ -776,7 +776,7 @@ function mkPane(activeTab: TabId = 'nodes'): ContentPaneState {
 
 export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, onGlslInsert }: NodePaletteProps) {
   // All hooks must be at the top — no hooks after conditional returns
-  const { addNode, swapTargetNodeId, setSwapTargetNodeId, swapNode, nodes: graphNodes } = useNodeGraphStore();
+  const { addNode, swapTargetNodeId, swapNode } = useNodeGraphStore();
   const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
 
   const [favorites, setFavorites] = useState<string[]>(() => {
