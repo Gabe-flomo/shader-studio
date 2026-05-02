@@ -43,7 +43,8 @@ const ZOOM_MAX = 2.5;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const bp = useBreakpoint();
-  const compactToolbar = bp === 'desktop-sm';
+  const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
+  const compactToolbar = canvasWidth < 700;
   const nodes                 = useNodeGraphStore(s => s.nodes);
   const compilationErrors     = useNodeGraphStore(s => s.compilationErrors);
   const connectNodes          = useNodeGraphStore(s => s.connectNodes);
@@ -255,7 +256,11 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   useEffect(() => {
     setCanvasEl(canvasRef.current);
     if (!canvasRef.current) return;
-    const ro = new ResizeObserver(() => setTick(t => t + 1));
+    const ro = new ResizeObserver(entries => {
+      setTick(t => t + 1);
+      const w = entries[0].contentRect.width;
+      if (w > 0) setCanvasWidth(w);
+    });
     ro.observe(canvasRef.current);
     return () => ro.disconnect();
   }, []);

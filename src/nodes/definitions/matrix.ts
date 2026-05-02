@@ -1,4 +1,107 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
+import { p } from './helpers';
+
+// ─── Vec2 Const ───────────────────────────────────────────────────────────────
+
+export const Vec2ConstNode: NodeDefinition = {
+  type: 'vec2Const',
+  label: 'Vec2 Const',
+  category: 'Sources',
+  description: 'A constant vec2 — type in X and Y directly, no inputs.',
+  inputs: {},
+  outputs: { val: { type: 'vec2', label: 'Vec2' } },
+  defaultParams: { x: 0, y: 0 },
+  paramDefs: {
+    x: { label: 'X', type: 'float', step: 0.01 },
+    y: { label: 'Y', type: 'float', step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    return {
+      code: `    vec2 ${id}_val = vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)});\n`,
+      outputVars: { val: `${id}_val` },
+    };
+  },
+};
+
+// ─── Vec3 Const ───────────────────────────────────────────────────────────────
+
+export const Vec3ConstNode: NodeDefinition = {
+  type: 'vec3Const',
+  label: 'Vec3 Const',
+  category: 'Sources',
+  description: 'A constant vec3 — type in X, Y, Z directly, no inputs.',
+  inputs: {},
+  outputs: { val: { type: 'vec3', label: 'Vec3' } },
+  defaultParams: { x: 0, y: 0, z: 0 },
+  paramDefs: {
+    x: { label: 'X', type: 'float', step: 0.01 },
+    y: { label: 'Y', type: 'float', step: 0.01 },
+    z: { label: 'Z', type: 'float', step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    return {
+      code: `    vec3 ${id}_val = vec3(${p(node.params.x, 0)}, ${p(node.params.y, 0)}, ${p(node.params.z, 0)});\n`,
+      outputVars: { val: `${id}_val` },
+    };
+  },
+};
+
+// ─── Matrix Const ─────────────────────────────────────────────────────────────
+
+export const MatConstNode: NodeDefinition = {
+  type: 'matConst',
+  label: 'Matrix Const',
+  category: 'Matrix',
+  description: 'A constant matrix with typed-in values. Switch between 2×2 and 3×3 — grid updates accordingly.',
+  inputs: {},
+  outputs: { mat: { type: 'mat3', label: 'Matrix' } },
+  defaultParams: {
+    size: 'mat3',
+    m00: 1, m01: 0, m02: 0,
+    m10: 0, m11: 1, m12: 0,
+    m20: 0, m21: 0, m22: 1,
+  },
+  paramDefs: {
+    size: {
+      label: 'Size',
+      type: 'select',
+      options: [
+        { value: 'mat2', label: '2 × 2' },
+        { value: 'mat3', label: '3 × 3' },
+      ],
+    },
+    // individual matrix cell params — m[row][col]
+    // m02/m12/m20/m21/m22 only visible for mat3
+    m00: { label: 'm00', type: 'float', step: 0.01 },
+    m01: { label: 'm01', type: 'float', step: 0.01 },
+    m02: { label: 'm02', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
+    m10: { label: 'm10', type: 'float', step: 0.01 },
+    m11: { label: 'm11', type: 'float', step: 0.01 },
+    m12: { label: 'm12', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
+    m20: { label: 'm20', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
+    m21: { label: 'm21', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
+    m22: { label: 'm22', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
+  },
+  generateGLSL: (node: GraphNode) => {
+    const id   = node.id;
+    const size = (node.params.size as string) ?? 'mat3';
+    const f    = (k: string) => p(node.params[k] as number ?? 0, 0);
+    if (size === 'mat2') {
+      // GLSL mat2 is column-major: mat2(col0.x, col0.y, col1.x, col1.y)
+      return {
+        code: `    mat2 ${id}_mat = mat2(${f('m00')}, ${f('m10')}, ${f('m01')}, ${f('m11')});\n`,
+        outputVars: { mat: `${id}_mat` },
+      };
+    }
+    // mat3 column-major
+    return {
+      code: `    mat3 ${id}_mat = mat3(${f('m00')}, ${f('m10')}, ${f('m20')}, ${f('m01')}, ${f('m11')}, ${f('m21')}, ${f('m02')}, ${f('m12')}, ${f('m22')});\n`,
+      outputVars: { mat: `${id}_mat` },
+    };
+  },
+};
 
 // ─── Mat2 Construct ───────────────────────────────────────────────────────────
 

@@ -477,6 +477,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   // Register / unregister this canvas in the global scope registry so ShaderCanvas
   // can draw directly without going through React state (eliminates setState→re-render lag).
+  // Keep matConst output type in sync with its size param (mat2 vs mat3)
+  React.useEffect(() => {
+    if (node.type !== 'matConst') return;
+    const size = (node.params.size as string) ?? 'mat3';
+    const currentType = node.outputs.mat?.type;
+    if (currentType !== size) {
+      updateNodeOutputs(node.id, { mat: { type: size as import('../../types/nodeGraph').DataType, label: 'Matrix' } });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.type, node.id, node.params.size]);
+
   React.useEffect(() => {
     if (node.type !== 'scope' && !LFO_TYPES.has(node.type)) return;
     const canvas = scopeCanvasRef.current;
@@ -3365,8 +3376,61 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           );
         })()}
 
+        {/* ── matConst: size selector + grid of number inputs ── */}
+        {!collapsed && node.type === 'matConst' && (() => {
+          const size = (node.params.size as string) ?? 'mat3';
+          const dim  = size === 'mat2' ? 2 : 3;
+          const rows = Array.from({ length: dim }, (_, r) => r);
+          const cols = Array.from({ length: dim }, (_, c) => c);
+          const cellKey = (r: number, c: number) => `m${r}${c}`;
+          const cellStyle: React.CSSProperties = {
+            width: '100%', padding: '2px 4px', background: '#11111b',
+            border: '1px solid #313244', borderRadius: '3px',
+            color: '#cdd6f4', fontSize: '11px', textAlign: 'center',
+            outline: 'none', boxSizing: 'border-box' as const,
+            fontFamily: 'monospace',
+          };
+          return (
+            <div onMouseDown={e => e.stopPropagation()}>
+              {/* Size selector */}
+              <div style={{ padding: '3px 10px 4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#6c7086', fontSize: '11px' }}>Size</span>
+                <select
+                  value={size}
+                  onChange={e => updateNodeParams(node.id, { size: e.target.value })}
+                  style={{ background: '#1e1e2e', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '3px', fontSize: '11px', padding: '1px 4px', cursor: 'pointer' }}
+                >
+                  <option value="mat2">2 × 2</option>
+                  <option value="mat3">3 × 3</option>
+                </select>
+              </div>
+              {/* Matrix grid */}
+              <div style={{ padding: '2px 10px 6px', display: 'grid', gridTemplateColumns: `repeat(${dim}, 1fr)`, gap: '3px' }}>
+                {rows.map(r => cols.map(c => {
+                  const k = cellKey(r, c);
+                  const raw = node.params[k];
+                  const val = typeof raw === 'number' ? raw : 0;
+                  return (
+                    <input
+                      key={k}
+                      type="number"
+                      step="0.01"
+                      value={val}
+                      onChange={e => {
+                        const n = parseFloat(e.target.value);
+                        if (!isNaN(n)) updateNodeParams(node.id, { [k]: n });
+                      }}
+                      style={cellStyle}
+                    />
+                  );
+                }))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Params (hidden when collapsed) ── */}
-        {!collapsed && Object.entries(paramDefs).map(([key, paramDef]) => {
+        {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => {
           // showWhen — conditionally hide params based on another param's value
           if (paramDef.showWhen) {
             const watchedVal = node.params[paramDef.showWhen.param] as string;

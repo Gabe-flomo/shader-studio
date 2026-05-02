@@ -411,12 +411,16 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floatPos.x, floatPos.y]);
 
-  // Track float window size via ResizeObserver so canvas always knows its container dims
+  // Track float window size via ResizeObserver so canvas always knows its container dims.
+  // Must use borderBoxSize (includes borders) not contentRect (excludes borders) — contentRect
+  // creates a feedback loop: we read N-2, write N-2 as width, read N-4, write N-4... collapses to minWidth.
   useEffect(() => {
     const el = floatContainerRef.current;
     if (!el || !previewFloated) return;
     const ro = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
+      const box = entries[0].borderBoxSize?.[0];
+      const width  = box ? box.inlineSize : entries[0].contentRect.width;
+      const height = box ? box.blockSize  : entries[0].contentRect.height;
       if (width > 0 && height > 0) setFloatSize({ w: width, h: height });
     });
     ro.observe(el);
@@ -508,41 +512,32 @@ function App() {
   const graphToolbarEl = (
     <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '4px' }}>
 
-      {/* On compact screens, Export + Record collapse into a ··· menu */}
-      {compact ? (
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setShowToolbarMenu(v => !v)}
-            style={{ ...btnStyle(showToolbarMenu), minWidth: 32 }}
-            title="More actions"
-          >···</button>
-          {showToolbarMenu && (
-            <div
-              style={{
-                position: 'absolute', top: 'calc(100% + 4px)', left: 0,
-                background: '#1e1e2e', border: '1px solid #45475a',
-                borderRadius: '8px', padding: '4px',
-                display: 'flex', flexDirection: 'column', gap: '3px',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
-                minWidth: '130px',
-              }}
-              onMouseLeave={() => setShowToolbarMenu(false)}
-            >
-              <button onClick={() => { exportGraph(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
-              <button onClick={() => { importGraphFromFile(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
-              <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
-              <button onClick={() => { setShowExport(true); setShowToolbarMenu(false); }} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744', textAlign: 'left', width: '100%' }}>🎬 Record</button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <>
-          <button onClick={exportGraph} style={btnStyle()} title="Export graph">⬇ Export</button>
-          <button onClick={importGraphFromFile} style={btnStyle()} title="Import graph">⬆ Import</button>
-          <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 1px' }} />
-          <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Record animation">🎬 Record</button>
-        </>
-      )}
+      {/* Export / Import / Record always collapsed into a ··· menu */}
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setShowToolbarMenu(v => !v)}
+          style={{ ...btnStyle(showToolbarMenu), minWidth: 32 }}
+          title="Export, Import, Record"
+        >···</button>
+        {showToolbarMenu && (
+          <div
+            style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0,
+              background: '#1e1e2e', border: '1px solid #45475a',
+              borderRadius: '8px', padding: '4px',
+              display: 'flex', flexDirection: 'column', gap: '3px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
+              minWidth: '130px',
+            }}
+            onMouseLeave={() => setShowToolbarMenu(false)}
+          >
+            <button onClick={() => { exportGraph(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
+            <button onClick={() => { importGraphFromFile(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
+            <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
+            <button onClick={() => { setShowExport(true); setShowToolbarMenu(false); }} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744', textAlign: 'left', width: '100%' }}>🎬 Record</button>
+          </div>
+        )}
+      </div>
 
       <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts">
         {compact ? '⌨' : '⌨ Keys'}
@@ -1049,6 +1044,14 @@ function App() {
             <span style={{ fontSize: '10px', color: '#585b70', letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
             <button
               onMouseDown={e => e.stopPropagation()}
+              onClick={() => setShowHistogram(v => !v)}
+              title="Toggle brightness histogram"
+              style={{ background: 'none', border: 'none', color: showHistogram ? '#cba6f7' : '#585b70', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cba6f7'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? '#cba6f7' : '#585b70'; }}
+            >∿</button>
+            <button
+              onMouseDown={e => e.stopPropagation()}
               onClick={() => setPreviewFloated(false)}
               title="Dock preview"
               style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
@@ -1059,7 +1062,8 @@ function App() {
 
           {/* Canvas */}
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-            <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+            <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
+            {showHistogram && histData && <HistogramOverlay data={histData} />}
           </div>
 
           {/* Status bar */}
