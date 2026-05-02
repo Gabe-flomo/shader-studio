@@ -695,6 +695,7 @@ export function generateFragmentShader(
           }
         }
         compileSubgraphPass(prefix, portInputOverrides);
+        for (const [sid, sslug] of subSlugMap) nodeSlugMap.set(sid, prefix + sslug);
         const groupOutputVars: Record<string, string> = {};
         for (const port of (subgraph.outputPorts ?? [])) {
           const mappedFromNodeId = subSlugMap.get(port.fromNodeId) ?? port.fromNodeId;
@@ -942,6 +943,7 @@ export function generateFragmentShader(
         //    carryModeNaturalVars tells the pass to strip the type from carry-mode node output
         //    declarations, producing `d = f(d);` instead of `T d = f(d);` inside the loop.
         compileSubgraphPass(prefix, portInputOverrides, carryModeNaturalVars, exprBlockCarryVars);
+        for (const [sid, sslug] of subSlugMap) nodeSlugMap.set(sid, prefix + sslug);
 
         // 3b. Update LoopCarry vars from their `next` inputs (end of iteration)
         for (const sn of loopCarryNodes) {
@@ -1254,6 +1256,9 @@ export function generateFragmentShader(
           if (outType === 'float') sgLastFloatVar = varName;
         }
       }
+
+      // Populate nodeSlugMap for scene group inner nodes
+      for (const [sid, sslug] of sgSubSlugMap) nodeSlugMap.set(sid, sgPrefix + sslug);
 
       // Find return value from the subgraph's output port (if defined)
       for (const port of (subgraph.outputPorts ?? [])) {
@@ -1921,6 +1926,9 @@ export function generateFragmentShader(
             if (outType === 'vec3') mlLastVec3Var = varName;
           }
         }
+
+        // Populate nodeSlugMap for march loop group body nodes
+        for (const [sid, sslug] of mlSubSlugMap) nodeSlugMap.set(sid, mlPrefix + sslug);
 
         // Override return value from the subgraph's output port (if defined)
         for (const port of (subgraph.outputPorts ?? [])) {
