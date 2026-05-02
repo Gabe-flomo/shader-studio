@@ -99,7 +99,7 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
       {/* Learn tab — opens standalone docs page */}
       <TabButton
         active={false}
-        onClick={() => window.open('/docs.html', '_blank')}
+        onClick={() => window.open(import.meta.env.BASE_URL + 'docs.html', '_blank')}
         label={mobile ? '📖' : '📖 Learn'}
         title="Documentation"
       />
