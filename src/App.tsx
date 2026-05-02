@@ -262,6 +262,7 @@ function App() {
   const [floatPos, setFloatPos]   = useState({ x: 40, y: 60 });
   const [floatSize, setFloatSize] = useState({ w: 480, h: 360 });
   const floatDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const floatContainerRef = useRef<HTMLDivElement>(null);
   const [showToolbarMenu, setShowToolbarMenu] = useState(false);
 
   // Mobile/tablet drawer state
@@ -409,6 +410,18 @@ function App() {
     window.addEventListener('mouseup', onUp);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floatPos.x, floatPos.y]);
+
+  // Track float window size via ResizeObserver so canvas always knows its container dims
+  useEffect(() => {
+    const el = floatContainerRef.current;
+    if (!el || !previewFloated) return;
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setFloatSize({ w: width, h: height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [previewFloated]);
 
   // ── Error badge ───────────────────────────────────────────────────────────
   const errorCount = compilationErrors.length + glslErrors.length;
@@ -998,6 +1011,7 @@ function App() {
       {/* Floating preview window */}
       {previewFloated && (
         <div
+          ref={floatContainerRef}
           style={{
             position: 'fixed',
             left: floatPos.x,
@@ -1015,11 +1029,6 @@ function App() {
             resize: 'both',
             minWidth: 240,
             minHeight: 180,
-          }}
-          onMouseUp={e => {
-            // Capture resize changes via onMouseUp on the container
-            const el = e.currentTarget as HTMLDivElement;
-            setFloatSize({ w: el.offsetWidth, h: el.offsetHeight });
           }}
         >
           {/* Drag handle / title bar */}
