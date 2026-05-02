@@ -8,7 +8,6 @@ import { NodeSearchPalette } from './NodeSearchPalette';
 import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
 import { collectLoopPairChains } from '../../compiler/topoSort';
-import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 240;
@@ -42,7 +41,6 @@ const ZOOM_MIN = 0.15;
 const ZOOM_MAX = 2.5;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
-  const bp = useBreakpoint();
   const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
   const compactToolbar = canvasWidth < 700;
   const nodes                 = useNodeGraphStore(s => s.nodes);
