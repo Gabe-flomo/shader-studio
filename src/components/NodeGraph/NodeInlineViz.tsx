@@ -3808,6 +3808,169 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── UV Gradient Viz (uv, pixelUV) ───────────────────────────────────────────
+
+function UVGradientViz(_props: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const img = ctx.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        img.data[i]     = Math.round((x / W) * 255);
+        img.data[i + 1] = Math.round(((H - 1 - y) / H) * 255);
+        img.data[i + 2] = 0;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, H - 13, W, 13);
+    ctx.font = '8px monospace';
+    ctx.fillStyle = '#f38ba8'; ctx.fillText('U', 4, H - 3);
+    ctx.fillStyle = '#a6e3a1'; ctx.fillText('V', 14, H - 3);
+  }, []);
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={48}
+        style={{ display: 'block', width: '100%', height: '48px' }} />
+    </div>
+  );
+}
+
+// ─── Time Badge Viz (time) ────────────────────────────────────────────────────
+
+function TimeBadgeViz(_props: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+    // sine preview
+    ctx.strokeStyle = '#cba6f7'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const t = x / W;
+      const y = H / 2 - Math.sin(t * Math.PI * 4) * (H * 0.3);
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#cba6f7';
+    ctx.textAlign = 'center';
+    ctx.fillText('u_time', W / 2, H - 4);
+  }, []);
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={44}
+        style={{ display: 'block', width: '100%', height: '44px' }} />
+    </div>
+  );
+}
+
+// ─── Mouse Badge Viz (mouse) ──────────────────────────────────────────────────
+
+function MouseBadgeViz(_props: { node: GraphNode }) {
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontSize: '18px', lineHeight: 1 }}>⊕</span>
+      <div>
+        <div style={{ fontSize: '9px', color: '#6c7086', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mouse position</div>
+        <div style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>u_mouse · vec2(0..1)</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Texture Badge Viz (prevFrame, textureInput) ──────────────────────────────
+
+function TextureBadgeViz({ node }: { node: GraphNode }) {
+  const isPrev = node.type === 'prevFrame';
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontSize: '18px', lineHeight: 1, color: '#89b4fa' }}>{isPrev ? '⊡' : '⊞'}</span>
+      <div>
+        <div style={{ fontSize: '9px', color: '#6c7086', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {isPrev ? 'Previous frame' : 'Texture input'}
+        </div>
+        <div style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>sampler2D</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Vec2 Const Viz ───────────────────────────────────────────────────────────
+
+function Vec2ConstViz({ node }: { node: GraphNode }) {
+  const x = typeof node.params.x === 'number' ? node.params.x : 0;
+  const y = typeof node.params.y === 'number' ? node.params.y : 0;
+  const toBar = (v: number) => Math.max(0, Math.min(1, (v + 1) / 2));
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
+      {([['x', x, '#f38ba8'], ['y', y, '#a6e3a1']] as [string, number, string][]).map(([label, val, col]) => (
+        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+          <span style={{ fontSize: '9px', color: col, fontFamily: 'monospace', width: '8px' }}>{label}</span>
+          <div style={{ flex: 1, height: '6px', background: '#1e1e2e', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ width: `${toBar(val) * 100}%`, height: '100%', background: col, opacity: 0.7, borderRadius: '3px' }} />
+          </div>
+          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Vec3 Const Viz ───────────────────────────────────────────────────────────
+
+function Vec3ConstViz({ node }: { node: GraphNode }) {
+  const x = Math.max(0, Math.min(1, typeof node.params.x === 'number' ? node.params.x : 0));
+  const y = Math.max(0, Math.min(1, typeof node.params.y === 'number' ? node.params.y : 0));
+  const z = Math.max(0, Math.min(1, typeof node.params.z === 'number' ? node.params.z : 0));
+  const hex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
+      <div style={{ height: '20px', background: `#${hex(x)}${hex(y)}${hex(z)}`, borderRadius: '3px', marginBottom: '4px', border: '1px solid #313244' }} />
+      {([['x', x, '#f38ba8'], ['y', y, '#a6e3a1'], ['z', z, '#89b4fa']] as [string, number, string][]).map(([label, val, col]) => (
+        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+          <span style={{ fontSize: '9px', color: col, fontFamily: 'monospace', width: '8px' }}>{label}</span>
+          <div style={{ flex: 1, height: '5px', background: '#1e1e2e', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ width: `${val * 100}%`, height: '100%', background: col, opacity: 0.7, borderRadius: '3px' }} />
+          </div>
+          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Expr / Custom Fn Badge ───────────────────────────────────────────────────
+
+function ExprBadgeViz({ node }: { node: GraphNode }) {
+  const isCustom = node.type === 'customFn';
+  const body = typeof node.params.body === 'string' ? node.params.body.trim() : '';
+  const label = isCustom
+    ? (typeof node.params.label === 'string' ? node.params.label : 'Custom Fn')
+    : (typeof node.params.label === 'string' ? node.params.label : 'Expr');
+  const snippet = body.split('\n')[0].slice(0, 48) || (isCustom ? 'no body yet' : 'no expression');
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
+      <div style={{ fontSize: '9px', color: '#cba6f7', fontFamily: 'monospace', fontWeight: 700, marginBottom: '2px' }}>
+        {isCustom ? 'ƒ' : '∑'} {label}
+      </div>
+      <div style={{ fontSize: '9px', color: '#6c7086', fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {snippet}
+      </div>
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -3987,6 +4150,145 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'shapeSDF':
     case 'sdBox':
     case 'sdEllipse':        return <SdfPreviewViz           node={node} />;
+
+    // ── Sources ──────────────────────────────────────────────────────────────
+    case 'uv':
+    case 'pixelUV':          return <UVGradientViz           node={node} />;
+    case 'time':             return <TimeBadgeViz            node={node} />;
+    case 'mouse':            return <MouseBadgeViz           node={node} />;
+    case 'prevFrame':
+    case 'textureInput':     return <TextureBadgeViz         node={node} />;
+    case 'vec2Const':        return <Vec2ConstViz            node={node} />;
+    case 'vec3Const':        return <Vec3ConstViz            node={node} />;
+    case 'matConst':         return <MatrixGridViz           node={node} />;
+
+    // ── Expr / custom fn ─────────────────────────────────────────────────────
+    case 'exprNode':
+    case 'customFn':         return <ExprBadgeViz            node={node} />;
+
+    // ── Noise ─────────────────────────────────────────────────────────────────
+    case 'fbm':
+    case 'voronoi':
+    case 'noiseFloat':       return <NoisePatchViz           node={node} />;
+
+    // ── Space / UV warps → param display ─────────────────────────────────────
+    case 'fract':
+    case 'rotate2d':
+    case 'uvWarp':
+    case 'smoothWarp':
+    case 'curlWarp':
+    case 'swirlWarp':
+    case 'displace':
+    case 'domainWarp':
+    case 'flowField':
+    case 'polarSpace':
+    case 'logPolarSpace':
+    case 'hyperbolicSpace':
+    case 'inversionSpace':
+    case 'mobiusSpace':
+    case 'swirlSpace':
+    case 'kaleidoSpace':
+    case 'sphericalSpace':
+    case 'rippleSpace':
+    case 'infiniteRepeatSpace':
+    case 'shear':
+    case 'perspective2d':
+    case 'mirroredRepeat2D':
+    case 'limitedRepeat2D':
+    case 'angularRepeat2D':  return <SDF3DParamViz           node={node} />;
+
+    // ── Color ops → param display ─────────────────────────────────────────────
+    case 'hsv':
+    case 'invert':
+    case 'blendModes':
+    case 'lumaKey':
+    case 'sdfColorize':
+    case 'sdfOutline':
+    case 'mask':
+    case 'glowLayer':
+    case 'alphaBlend':
+    case 'chromaticAberration': return <SDF3DParamViz        node={node} />;
+
+    // ── Math → param display ──────────────────────────────────────────────────
+    case 'luminance':
+    case 'compare':
+    case 'select':
+    case 'reflect':
+    case 'crossProduct':
+    case 'complexMul':
+    case 'complexPow':       return <SDF3DParamViz           node={node} />;
+
+    // ── 2D SDF missing ────────────────────────────────────────────────────────
+    case 'sdSegment':
+    case 'opRepeat':
+    case 'opRepeatPolar':
+    case 'simpleSDF':        return <SDF3DParamViz           node={node} />;
+
+    // ── 3D SDF missing ────────────────────────────────────────────────────────
+    case 'sdCross3D':
+    case 'mengerSponge':
+    case 'mandelboxDE':
+    case 'kifsTetra':
+    case 'mandelbulb':       return <SDF3DParamViz           node={node} />;
+
+    // ── 3D transforms missing ─────────────────────────────────────────────────
+    case 'mirroredRepeat3D':
+    case 'spiralWarp3D':     return <SDF3DParamViz           node={node} />;
+
+    // ── Lighting ──────────────────────────────────────────────────────────────
+    case 'makeLight':
+    case 'light':
+    case 'light2d':
+    case 'multiLight':
+    case 'fresnel3d':
+    case 'sdfAo':
+    case 'softShadow':       return <SDF3DParamViz           node={node} />;
+
+    // ── 2D Fractals / Patterns / Physics → param display ─────────────────────
+    case 'mandelbrot':
+    case 'ifs':
+    case 'newtonFractal':
+    case 'lyapunov':
+    case 'apollonian':
+    case 'truchet':
+    case 'metaballs':
+    case 'lissajous':
+    case 'chladni':
+    case 'chladni3d':
+    case 'chladni3dParticles': return <SDF3DParamViz         node={node} />;
+
+    // ── Loop / Effect nodes → param display ───────────────────────────────────
+    case 'fractalLoop':
+    case 'rotatingLinesLoop':
+    case 'accumulateLoop':
+    case 'forLoop':
+    case 'loopStart':
+    case 'loopCarry':
+    case 'loopDomainFold':   return <SDF3DParamViz           node={node} />;
+
+    // ── Volumetrics / complex effects → param display ─────────────────────────
+    case 'fakeSSS':
+    case 'volumeClouds':
+    case 'volumetricFog':
+    case 'glass3d':
+    case 'glassDistortion':
+    case 'orbitalVolume3d':
+    case 'radianceCascadesApprox': return <SDF3DParamViz     node={node} />;
+
+    // ── Particle fields ───────────────────────────────────────────────────────
+    case 'vectorField':
+    case 'gravityField':
+    case 'spiralField':      return <SDF3DParamViz           node={node} />;
+
+    // ── 3D Scene nodes → param display ────────────────────────────────────────
+    case 'scenePos':
+    case 'rayMarch':
+    case 'marchOutput':
+    case 'marchCamera':
+    case 'forwardCamera':
+    case 'marchLoopInputs':
+    case 'marchLoopOutput':  return <SDF3DParamViz           node={node} />;
+
     default:                 return null;
   }
 }
@@ -4030,8 +4332,8 @@ export const INLINE_VIZ_TYPES = new Set([
   'multiply', 'add', 'subtract', 'divide',
   // Range mapping
   'remap',
-  // LFOs
-  'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO', 'bpmSync',
+  // LFOs — deliberately excluded: they have a live scope canvas in NodeComponent
+  // 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO', 'bpmSync',
   // Color combiners
   'combineRGB', 'blend', 'screenBlend',
   // Param display
@@ -4047,4 +4349,45 @@ export const INLINE_VIZ_TYPES = new Set([
   'makeVec3', 'floatToVec3',
   // 2D SDF
   'circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdBox', 'sdEllipse',
+  // Sources
+  'uv', 'pixelUV', 'time', 'mouse', 'prevFrame', 'textureInput',
+  'vec2Const', 'vec3Const', 'matConst',
+  // Expr / custom fn
+  'exprNode', 'customFn',
+  // Noise — excluded: float outputs render as grayscale shader thumbnails
+  // 'fbm', 'voronoi', 'noiseFloat',
+  // Space / UV warps
+  'fract', 'rotate2d', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'displace',
+  'domainWarp', 'flowField',
+  'polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace',
+  'swirlSpace', 'kaleidoSpace', 'sphericalSpace', 'rippleSpace', 'infiniteRepeatSpace',
+  'shear', 'perspective2d', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D',
+  // Color ops
+  'hsv', 'invert', 'blendModes', 'lumaKey', 'sdfColorize', 'sdfOutline',
+  'mask', 'glowLayer', 'alphaBlend', 'chromaticAberration',
+  // Math
+  'luminance', 'compare', 'select', 'reflect', 'crossProduct', 'complexMul', 'complexPow',
+  // 2D SDF missing
+  'sdSegment', 'opRepeat', 'opRepeatPolar', 'simpleSDF',
+  // 3D SDF missing
+  'sdCross3D', 'mengerSponge', 'mandelboxDE', 'kifsTetra', 'mandelbulb',
+  // 3D transforms missing
+  'mirroredRepeat3D', 'spiralWarp3D',
+  // Lighting
+  'makeLight', 'light', 'light2d', 'multiLight', 'fresnel3d', 'sdfAo', 'softShadow',
+  // 2D Fractals / Patterns / Physics
+  'mandelbrot', 'ifs', 'newtonFractal', 'lyapunov', 'apollonian',
+  'truchet', 'metaballs', 'lissajous',
+  'chladni', 'chladni3d', 'chladni3dParticles',
+  // Loop / Effect nodes
+  'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
+  'loopStart', 'loopCarry', 'loopDomainFold',
+  // Volumetrics / complex effects
+  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassDistortion',
+  'orbitalVolume3d', 'radianceCascadesApprox',
+  // Particle fields
+  'vectorField', 'gravityField', 'spiralField',
+  // 3D Scene nodes
+  'scenePos', 'rayMarch', 'marchOutput', 'marchCamera', 'forwardCamera',
+  'marchLoopInputs', 'marchLoopOutput',
 ]);

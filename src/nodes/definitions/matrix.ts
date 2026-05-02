@@ -6,7 +6,7 @@ import { p } from './helpers';
 export const Vec2ConstNode: NodeDefinition = {
   type: 'vec2Const',
   label: 'Vec2 Const',
-  category: 'Sources',
+  category: 'Math',
   description: 'A constant vec2 — type in X and Y directly, no inputs.',
   inputs: {},
   outputs: { val: { type: 'vec2', label: 'Vec2' } },
@@ -29,7 +29,7 @@ export const Vec2ConstNode: NodeDefinition = {
 export const Vec3ConstNode: NodeDefinition = {
   type: 'vec3Const',
   label: 'Vec3 Const',
-  category: 'Sources',
+  category: 'Math',
   description: 'A constant vec3 — type in X, Y, Z directly, no inputs.',
   inputs: {},
   outputs: { val: { type: 'vec3', label: 'Vec3' } },

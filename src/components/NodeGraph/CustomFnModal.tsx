@@ -611,12 +611,17 @@ export function CustomFnModal({ node, onClose }: Props) {
             fontSize: '11px',
             fontFamily: 'monospace',
             width: '100%',
+            minHeight: '120px',
             resize: 'vertical',
             outline: 'none',
             boxSizing: 'border-box',
             lineHeight: 1.5,
+            display: 'block',
+            flexShrink: 0,
           }}
         />
+        {/* Spacer so the resize handle has room to grab at the bottom of the scroll container */}
+        <div style={{ height: '24px', flexShrink: 0 }} />
       </div>
     </div>,
     document.body,
