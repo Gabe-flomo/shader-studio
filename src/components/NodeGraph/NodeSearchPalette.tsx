@@ -47,27 +47,26 @@ const ALL_ENTRIES: SearchEntry[] = Object.entries(NODE_REGISTRY)
     searchKey: [def.label, type, def.category, def.description ?? ''].join(' ').toLowerCase(),
   }));
 
-// ── Simple fuzzy scorer ────────────────────────────────────────────────────────
+// ── Scorer — substring/prefix only, no fuzzy char-scatter ────────────────────
 function scoreEntry(entry: SearchEntry, query: string): number {
   if (!query) return 1;
   const q = query.toLowerCase();
-  const { searchKey, def } = entry;
+  const { def } = entry;
+  const label = def.label.toLowerCase();
+  const type  = entry.type.toLowerCase();
+  const cat   = def.category.toLowerCase();
   // Exact label prefix → highest score
-  if (def.label.toLowerCase().startsWith(q)) return 100;
+  if (label.startsWith(q)) return 100;
   // Label contains query
-  if (def.label.toLowerCase().includes(q)) return 80;
+  if (label.includes(q)) return 80;
   // Type contains query
-  if (entry.type.toLowerCase().includes(q)) return 60;
-  // Category matches
-  if (def.category.toLowerCase().includes(q)) return 40;
-  // All chars present in order (fuzzy)
-  let idx = 0;
-  for (const ch of q) {
-    const found = searchKey.indexOf(ch, idx);
-    if (found === -1) return 0;
-    idx = found + 1;
-  }
-  return 20;
+  if (type.includes(q)) return 60;
+  // Category contains query (pulls in related nodes, e.g. "trig" or "sin" → Trig category)
+  if (cat.includes(q)) return 40;
+  // Description word starts with query (e.g. "noise" in description → score 20)
+  const desc = (def.description ?? '').toLowerCase();
+  if (desc.split(/\s+/).some(w => w.startsWith(q))) return 20;
+  return 0;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
