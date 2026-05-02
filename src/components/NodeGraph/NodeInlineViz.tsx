@@ -2995,31 +2995,53 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
       const W = canvas.width, H = canvas.height;
 
       if (!isMat3) {
-        // mat2MulVec: show input vec2 and output vec2 as arrows on 2D grid
-        drawGrid2D(ctx, W, H);
-        const cx = W / 2, cy = H / 2;
-
+        // mat2MulVec: same bar layout as mat3 but with x/y only
+        ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
         const vecConn = n.inputs.vec?.connection;
         const inVec = vecConn
           ? (vectorValueRegistry.get(`__preview__${vecConn.nodeId}:${vecConn.outputKey}`) ?? [0, 0])
           : [0, 0];
         const outVec = vectorValueRegistry.get(`__preview__${n.id}:output`) ?? null;
 
-        const maxComp = Math.max(
-          Math.abs(inVec[0]), Math.abs(inVec[1]),
-          outVec ? Math.abs(outVec[0]) : 0,
-          outVec ? Math.abs(outVec[1]) : 0,
-          0.01
-        );
-        const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 8) / sc;
-        drawArrow(ctx, cx, cy, inVec[0], inVec[1], '#585b70', r);
-        if (outVec) drawArrow(ctx, cx, cy, outVec[0], outVec[1], '#00aaff', r);
+        const comps2 = ['x', 'y'];
+        const colors2 = ['#f38ba8', '#a6e3a1'];
+        const barW2 = W - 70;
 
-        ctx.font = '9px monospace'; ctx.textAlign = 'left';
-        ctx.fillStyle = '#585b70';
-        ctx.fillText(`in  (${inVec[0].toFixed(2)}, ${inVec[1].toFixed(2)})`, 4, H - 14);
-        ctx.fillStyle = outVec ? '#89b4fa' : '#45475a';
-        ctx.fillText(outVec ? `out (${outVec[0].toFixed(2)}, ${outVec[1].toFixed(2)})` : 'out  M × v', 4, H - 4);
+        for (let i = 0; i < 2; i++) {
+          const rowY = 14 + i * 22;
+          const inV = inVec[i] ?? 0;
+          const outV = outVec?.[i] ?? null;
+
+          ctx.fillStyle = colors2[i] + '88';
+          ctx.font = '9px monospace'; ctx.textAlign = 'left';
+          ctx.fillText(comps2[i], 6, rowY + 10);
+
+          const inNorm = Math.max(-1, Math.min(1, inV));
+          const bx = 18, bh = 8;
+          ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx, rowY + 2, barW2 / 2 - 2, bh);
+          ctx.fillStyle = colors2[i] + '66';
+          const fw = Math.abs(inNorm) * (barW2 / 2 - 2) / 2;
+          const fx = inNorm >= 0 ? bx + (barW2 / 4 - 1) : bx + (barW2 / 4 - 1) - fw;
+          ctx.fillRect(fx, rowY + 2, fw, bh);
+          ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
+          ctx.fillText(inV.toFixed(2), bx + barW2 / 2 - 4, rowY + 10);
+
+          if (outV !== null) {
+            const bx2 = bx + barW2 / 2 + 4;
+            const outNorm = Math.max(-1, Math.min(1, outV));
+            ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx2, rowY + 2, barW2 / 2 - 2, bh);
+            ctx.fillStyle = colors2[i];
+            const fw2 = Math.abs(outNorm) * (barW2 / 2 - 2) / 2;
+            const fx2 = outNorm >= 0 ? bx2 + (barW2 / 4 - 1) : bx2 + (barW2 / 4 - 1) - fw2;
+            ctx.fillRect(fx2, rowY + 2, fw2, bh);
+            ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'right';
+            ctx.fillText(outV.toFixed(2), bx2 + barW2 / 2 - 4, rowY + 10);
+          }
+        }
+
+        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillText('in', 18, H - 4);
+        if (outVec) { ctx.fillStyle = '#6c7086'; ctx.fillText('out', 18 + barW2 / 2 + 4, H - 4); }
       } else {
         // mat3MulVec: show input and output as component bars
         ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
