@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
@@ -1012,15 +1013,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
-      {/* Right-click context menu */}
-      {contextMenu && (
+      {/* Right-click context menu — rendered via portal so it's outside the transformed canvas tree */}
+      {contextMenu && createPortal(
         <div
           onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
           style={{
             position: 'fixed', left: contextMenu.x, top: contextMenu.y,
             background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
-            padding: '4px 0', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+            padding: '4px 0', zIndex: 10000, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
             minWidth: '160px', fontSize: '12px',
           }}
         >
@@ -1154,7 +1155,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               </>
             );
           })()}
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Minimap overlay — screen space, bottom-right (hidden on touch devices) */}
