@@ -357,6 +357,24 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     return () => el.removeEventListener('wheel', prevent);
   }, []);
 
+  // ── Non-passive touchmove: must be a native listener so preventDefault works ──
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && touchPanStart.current) {
+        const t = e.touches[0];
+        setPan({
+          x: touchPanOrigin.current.x + (t.clientX - touchPanStart.current.x),
+          y: touchPanOrigin.current.y + (t.clientY - touchPanStart.current.y),
+        });
+      }
+    };
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onTouchMove);
+  }, [setPan]);
+
   // ── Wheel / trackpad handler (Ableton-style) ─────────────────────────────
   // • Two-finger scroll (no ctrl) → pan X + Y
   // • Pinch gesture / ctrl+wheel  → zoom toward cursor
@@ -618,18 +636,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     }
   }, []);
 
-  const handleCanvasTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (e.touches.length === 1 && touchPanStart.current) {
-      const t = e.touches[0];
-      setPan({
-        x: touchPanOrigin.current.x + (t.clientX - touchPanStart.current.x),
-        y: touchPanOrigin.current.y + (t.clientY - touchPanStart.current.y),
-      });
-    }
-  }, []);
-
-  const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
+const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     // If the touch ended on the raw canvas background (not a node/socket), cancel pending
     const target = e.target as HTMLElement;
     if (!target.closest('[data-node-id]') && !target.closest('[data-socket]')) {
@@ -754,7 +761,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       onContextMenu={handleContextMenu}
       onClick={() => setContextMenu(null)}
       onTouchStart={handleCanvasTouchStart}
-      onTouchMove={handleCanvasTouchMove}
       onTouchEnd={handleCanvasTouchEnd}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
       onDrop={e => {
