@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shader Studio — Documentation</title>
+<style>
+  :root {
+    --bg: #11111b;
+    --surface: #181825;
+    --surface2: #1e1e2e;
+    --border: #313244;
+    --border2: #45475a;
+    --text: #bac2de;
+    --text-bold: #cdd6f4;
+    --dim: #6c7086;
+    --dim2: #45475a;
+    --blue: #89b4fa;
+    --green: #a6e3a1;
+    --red: #f38ba8;
+    --yellow: #f9e2af;
+    --mauve: #cba6f7;
+    --peach: #fab387;
+    --teal: #94e2d5;
+    --sky: #89dceb;
+    --sidebar-width: 220px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+
+  /* Layout */
+  #app { display: flex; height: 100vh; overflow: hidden; }
+  #sidebar {
+    width: var(--sidebar-width); flex-shrink: 0;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #sidebar-header {
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #sidebar-header .logo { font-size: 13px; font-weight: 700; color: var(--text-bold); letter-spacing: -0.02em; }
+  #sidebar-header .sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  #sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0 24px; }
+  #content { flex: 1; overflow-y: auto; }
+  #content-inner { max-width: 780px; padding: 48px 60px 80px; }
+
+  /* Sidebar nav */
+  .nav-section { padding: 12px 16px 4px; font-size: 10px; font-weight: 700; color: var(--dim2); text-transform: uppercase; letter-spacing: 0.08em; }
+  .nav-item { display: flex; align-items: center; padding: 5px 16px; font-size: 12px; color: var(--dim); cursor: pointer; border-left: 2px solid transparent; text-decoration: none; line-height: 1.4; transition: color 0.1s, border-color 0.1s; gap: 6px; }
+  .nav-item:hover { color: var(--text-bold); border-left-color: var(--dim2); }
+  .nav-item.active { color: var(--blue); border-left-color: var(--blue); background: rgba(137,180,250,0.05); }
+  .nav-badge { font-size: 9px; background: var(--mauve); color: var(--bg); border-radius: 3px; padding: 1px 4px; font-weight: 700; }
+
+  /* Typography */
+  h1 { font-size: 28px; font-weight: 700; color: var(--text-bold); letter-spacing: -0.03em; line-height: 1.2; margin-bottom: 12px; }
+  h2 { font-size: 20px; font-weight: 700; color: var(--text-bold); letter-spacing: -0.02em; margin: 48px 0 8px; }
+  h2:first-child { margin-top: 0; }
+  h3 { font-size: 14px; font-weight: 700; color: var(--text-bold); margin: 32px 0 8px; letter-spacing: -0.01em; }
+  h4 { font-size: 13px; font-weight: 600; color: var(--blue); margin: 20px 0 6px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; }
+  p { font-size: 13px; color: var(--text); line-height: 1.8; margin-bottom: 12px; }
+  .lead { font-size: 15px; color: var(--text); line-height: 1.7; margin-bottom: 20px; }
+  .divider { height: 1px; background: var(--border); margin: 0 0 28px; }
+  ul, ol { padding-left: 22px; margin-bottom: 12px; }
+  li { font-size: 13px; color: var(--text); line-height: 1.75; margin-bottom: 4px; }
+  li strong { color: var(--text-bold); }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: var(--text-bold); font-weight: 600; }
+
+  /* Code */
+  code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--green); }
+  pre { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; overflow-x: auto; position: relative; }
+  pre code { background: none; border: none; padding: 0; font-size: 12px; color: var(--green); line-height: 1.7; }
+  .copy-btn { position: absolute; top: 8px; right: 10px; background: var(--surface); border: 1px solid var(--border2); color: var(--dim); font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: monospace; transition: color 0.1s, border-color 0.1s; }
+  .copy-btn:hover { color: var(--text-bold); border-color: var(--blue); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+  /* Callouts */
+  .tip { background: var(--surface2); border-left: 3px solid var(--blue); border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: var(--text); line-height: 1.65; }
+  .tip::before { content: '💡 '; }
+  .warn { background: var(--surface2); border-left: 3px solid var(--yellow); border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: var(--text); line-height: 1.65; }
+  .warn::before { content: '⚠ '; }
+  .note { background: var(--surface2); border-left: 3px solid var(--mauve); border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: var(--text); line-height: 1.65; }
+  .note::before { content: '→ '; }
+
+  /* Type badges */
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-family: monospace; margin: 0 2px; }
+  .badge-float { background: rgba(249,226,175,0.15); color: var(--yellow); border: 1px solid rgba(249,226,175,0.3); }
+  .badge-vec2  { background: rgba(137,220,235,0.15); color: var(--sky);    border: 1px solid rgba(137,220,235,0.3); }
+  .badge-vec3  { background: rgba(166,227,161,0.15); color: var(--green);  border: 1px solid rgba(166,227,161,0.3); }
+  .badge-vec4  { background: rgba(203,166,247,0.15); color: var(--mauve);  border: 1px solid rgba(203,166,247,0.3); }
+
+  /* Node diagram */
+  .node-diagram { display: flex; align-items: center; gap: 0; margin: 16px 0; flex-wrap: wrap; }
+  .node-box { background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; padding: 6px 12px; font-size: 11px; font-weight: 600; color: var(--text-bold); white-space: nowrap; }
+  .node-box.source { border-color: var(--sky); color: var(--sky); }
+  .node-box.transform { border-color: var(--mauve); color: var(--mauve); }
+  .node-box.sdf { border-color: var(--yellow); color: var(--yellow); }
+  .node-box.color { border-color: var(--peach); color: var(--peach); }
+  .node-box.output { border-color: var(--green); color: var(--green); }
+  .node-box.loop { border-color: var(--red); color: var(--red); }
+  .node-box.math { border-color: var(--teal); color: var(--teal); }
+  .arrow { color: var(--dim2); font-size: 14px; padding: 0 6px; }
+
+  /* Data table */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; }
+  th { text-align: left; padding: 8px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--dim); border-bottom: 1px solid var(--border); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; line-height: 1.6; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Step list */
+  .steps { counter-reset: steps; list-style: none; padding-left: 0; }
+  .steps li { counter-increment: steps; padding-left: 36px; position: relative; margin-bottom: 16px; }
+  .steps li::before { content: counter(steps); position: absolute; left: 0; top: 0; width: 22px; height: 22px; background: var(--blue); color: var(--bg); border-radius: 50%; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .steps li strong { display: block; color: var(--text-bold); margin-bottom: 4px; font-size: 13px; }
+
+  /* Page header */
+  .page-header { margin-bottom: 8px; }
+  .page-header .breadcrumb { font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+  .page-header .breadcrumb a { color: var(--dim); }
+  .page-header .breadcrumb a:hover { color: var(--blue); }
+
+  /* Shortcut table */
+  .shortcut-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .shortcut-row:last-child { border-bottom: none; }
+  .shortcut-label { font-size: 12px; color: var(--text); }
+  .shortcut-desc { font-size: 11px; color: var(--dim); margin-top: 1px; }
+  .key { display: inline-block; background: var(--surface2); border: 1px solid var(--border2); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-family: monospace; color: var(--text-bold); box-shadow: 0 1px 0 var(--border2); }
+
+  /* Node reference card */
+  .node-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
+  .node-card-title { font-size: 13px; font-weight: 700; color: var(--text-bold); margin-bottom: 4px; }
+  .node-card-desc { font-size: 12px; color: var(--text); line-height: 1.6; }
+  .node-card-ports { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+  .port { font-size: 10px; color: var(--dim); }
+  .port strong { color: var(--text); }
+
+  /* Hidden pages */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+  /* Mobile */
+  @media (max-width: 700px) {
+    #sidebar { width: 180px; }
+    #content-inner { padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- SIDEBAR -->
+  <nav id="sidebar">
+    <div id="sidebar-header">
+      <div class="logo">Shader Studio</div>
+      <div class="sub">Documentation</div>
+    </div>
+    <div id="sidebar-nav">
+      <div class="nav-section">Getting Started</div>
+      <a class="nav-item" href="#intro">Introduction</a>
+      <a class="nav-item" href="#what-is-a-shader">What is a Shader?</a>
+      <a class="nav-item" href="#uv-space">UV Space</a>
+      <a class="nav-item" href="#first-shader">Your First Shader</a>
+      <a class="nav-item" href="#interface">The Interface</a>
+
+      <div class="nav-section">Core Concepts</div>
+      <a class="nav-item" href="#data-types">Data Types</a>
+      <a class="nav-item" href="#vectors-matrices">Vectors &amp; Matrices</a>
+      <a class="nav-item" href="#sources">Sources</a>
+      <a class="nav-item" href="#transforms">Transforms</a>
+      <a class="nav-item" href="#sdf">2D SDFs</a>
+      <a class="nav-item" href="#groups">Groups</a>
+
+      <div class="nav-section">Visuals</div>
+      <a class="nav-item" href="#noise">Noise</a>
+      <a class="nav-item" href="#color">Color</a>
+      <a class="nav-item" href="#math">Math Nodes</a>
+      <a class="nav-item" href="#animation">Animation / LFOs</a>
+      <a class="nav-item" href="#effects">Effects</a>
+      <a class="nav-item" href="#fractals">Fractals</a>
+
+      <div class="nav-section">Loops</div>
+      <a class="nav-item" href="#loops-overview">How Loops Work</a>
+      <a class="nav-item" href="#loops-iterated-group">Iterated Groups</a>
+      <a class="nav-item" href="#loops-carry">Carry Mode</a>
+      <a class="nav-item" href="#loops-examples">Loop Examples</a>
+
+      <div class="nav-section">3D</div>
+      <a class="nav-item" href="#3d-intro">Ray Marching</a>
+      <a class="nav-item" href="#3d-sdf">3D SDFs</a>
+      <a class="nav-item" href="#3d-lighting">Lighting</a>
+      <a class="nav-item" href="#volumetrics">Volumetrics</a>
+
+      <div class="nav-section">Tools</div>
+      <a class="nav-item" href="#function-builder">Function Builder</a>
+      <a class="nav-item" href="#glsl-editor">GLSL / Expr Editor</a>
+      <a class="nav-item" href="#preview-code">Preview & Code Output</a>
+      <a class="nav-item" href="#shortcuts">Keyboard Shortcuts</a>
+
+      <div class="nav-section">Reference</div>
+      <a class="nav-item" href="#node-reference">Node Reference</a>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <main id="content">
+    <div id="content-inner">
+
+
+<!-- ═══════════════════════════════════════════════════════ INTRO -->
+<div class="page" id="page-intro">
+  <div class="page-header">
+    <h1>Shader Studio</h1>
+    <p class="lead">A visual node editor for writing GPU shaders — without writing GPU shaders. Connect nodes, see pixels move, understand why.</p>
+  </div>
+  <div class="divider"></div>
+  <p>There's something deeply human about the desire to make things glow. To coax color out of mathematics. To look at a blank screen and think: <em>I could put something beautiful there.</em></p>
+  <p>Shader Studio is built for that impulse. It takes the arcane craft of GPU programming — a discipline historically gated behind unfriendly syntax and counter-intuitive mental models — and asks: what if you could just... see it?</p>
+  <p>Every node you connect is a line of GLSL being written for you. Every parameter you drag is a uniform being patched into a running program. The GPU is doing what it has always done — running the same function on millions of pixels simultaneously — but now you're the one deciding what that function looks like, without needing to speak its native tongue.</p>
+  <h3>How to use these docs</h3>
+  <p>Each section in the sidebar is its own page. You can right-click any link and open it in a new tab, bookmark specific sections, or share a link to exactly the concept you're trying to explain to someone.</p>
+  <p>If you're new, start with <a href="#what-is-a-shader">What is a Shader?</a> and work forward. If you're here for something specific — say, loops — jump straight to <a href="#loops-overview">How Loops Work</a>.</p>
+  <h3>Quick orientation</h3>
+  <ul>
+    <li><strong>The canvas</strong> — where nodes live. Drag to pan, scroll to zoom.</li>
+    <li><strong>Node palette</strong> — press <kbd class="key">A</kbd> or right-click to add nodes.</li>
+    <li><strong>Connections</strong> — drag from an output dot to an input dot. Colors indicate type.</li>
+    <li><strong>Preview</strong> — the canvas in the top-right renders your shader live.</li>
+    <li><strong>Code output</strong> — click any node to highlight its contribution in the GLSL panel.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ WHAT IS A SHADER -->
+<div class="page" id="page-what-is-a-shader">
+  <div class="page-header">
+    <h1>What is a Shader?</h1>
+    <p class="lead">Understanding the mental model that makes everything else click.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Consider the modern screen. One million, two hundred and eighty thousand pixels, give or take, each one a small burning question: <em>what color should I be?</em></p>
+  <p>A shader is the answer. More precisely, a fragment shader is a program that runs once per pixel, in parallel, on thousands of GPU cores simultaneously. It receives a coordinate — where on screen this particular pixel lives — and must return a color. That's it. That's the entire contract.</p>
+  <pre><code>// A fragment shader, in its simplest possible form:
+// Given this coordinate... what color am I?
+vec3 color = someComputationOf(coordinate);
+gl_FragColor = vec4(color, 1.0);</code></pre>
+  <p>The profundity — and the source of all the visual complexity you see in shader art — is that <em>the same program</em> runs on every pixel. There is no loop over pixels. There is no "draw this shape here." There is only: given my position, what should I be?</p>
+  <h3>CPU vs GPU thinking</h3>
+  <p>CPU programming is sequential. You do step 1, then step 2, then step 3. You iterate over things. You check conditions. You maintain state between operations.</p>
+  <p>GPU programming is massively parallel. You write one function. The GPU calls it simultaneously for every pixel. There is no "previous pixel." There is no shared state between them. Each pixel is an island, doing its own computation, unaware of its neighbors.</p>
+  <p>This is why shaders produce the effects they do. A circle isn't drawn by tracing around its perimeter — it's produced by every pixel asking "am I within distance <em>r</em> of the center?" and coloring itself accordingly. A noise texture isn't painted stroke by stroke — it's every pixel evaluating the same mathematical function at its own coordinate and getting a slightly different answer.</p>
+  <h3>What Shader Studio does</h3>
+  <p>Shader Studio compiles your node graph into a real GLSL fragment shader and runs it on your GPU in real time. Every node represents a piece of GLSL code. Every connection is a variable being passed between operations. When you change a parameter, Shader Studio patches the corresponding uniform and the GPU re-runs the shader immediately — every pixel, simultaneously, in the time it takes you to release the mouse button.</p>
+  <div class="tip">The GLSL panel (toggle with <kbd class="key">⌘\</kbd>) shows the exact shader being compiled. Click any node to highlight the code it contributes. This is the single most useful tool for understanding how your graph maps to the GPU.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ UV SPACE -->
+<div class="page" id="page-uv-space">
+  <div class="page-header">
+    <h1>UV Space</h1>
+    <p class="lead">The coordinate system that everything in Shader Studio flows from.</p>
+  </div>
+  <div class="divider"></div>
+  <p>There's something profound about the question of where you are. A pixel could describe its position as raw screen coordinates — "I am pixel 847, 312" — but that answer is contingent, fragile, hardware-specific. It means something entirely different on a 1080p monitor than on a 4K display. The shape you build for one resolution becomes the wrong shape on another.</p>
+  <p>UV space is the resolution to this existential problem. It describes position not in pixels, but in <em>proportions</em>. And in Shader Studio specifically, it describes position relative to the center of the screen, in a way that accounts for aspect ratio so that circles look like circles.</p>
+  <h3>The UV node</h3>
+  <p>When you place a <strong>UV</strong> node, it outputs a <code class="badge badge-vec2">vec2</code> with these properties:</p>
+  <ul>
+    <li><strong>Origin at center</strong> — (0, 0) is the middle of the canvas.</li>
+    <li><strong>Range: roughly -1 to +1</strong> in both axes, with the exact horizontal range adjusted for aspect ratio.</li>
+    <li><strong>Aspect-corrected</strong> — on a widescreen canvas, X extends beyond ±1, but Y stays within ±1. This means a circle drawn at radius 0.5 looks perfectly round regardless of canvas dimensions.</li>
+  </ul>
+  <pre><code>// What the UV node actually computes:
+vec2 uv = (vUv - 0.5) * 2.0;
+uv.x *= resolution.x / resolution.y;</code></pre>
+  <p>This is why the UV node is almost always the first thing in any graph. It's your foundation — the coordinate system everything else builds on.</p>
+  <h3>Using UV as input</h3>
+  <p>Most nodes that work in 2D space expect a <code class="badge badge-vec2">vec2</code> input labeled "UV" or "P". They use this to decide <em>where in space</em> to evaluate whatever they compute. Feed them the UV node's output and they'll evaluate relative to screen center.</p>
+  <div class="node-diagram">
+    <div class="node-box source">UV</div>
+    <div class="arrow">→</div>
+    <div class="node-box sdf">Circle SDF</div>
+    <div class="arrow">→</div>
+    <div class="node-box color">Make Light</div>
+    <div class="arrow">→</div>
+    <div class="node-box output">Output</div>
+  </div>
+  <h3>Pixel UV — the alternative</h3>
+  <p>The <strong>Pixel UV</strong> node outputs <code>gl_FragCoord.xy / resolution.y</code> — raw pixel coordinates divided by screen height. Origin is bottom-left. X extends to the aspect ratio. This is useful for shaders that need to work in pixel-proportional space rather than centered space, but for most visual work, the centered UV node is what you want.</p>
+  <h3>UV transforms propagate downstream</h3>
+  <p>One of the most important things to internalize: in Shader Studio, you don't move shapes. You move the <em>coordinate space</em>, and then evaluate shapes in the transformed space. When you add a Rotate 2D or Fract node, you're transforming UV before it reaches the SDF. The SDF stays at the origin — you moved the floor under it.</p>
+  <div class="node-diagram">
+    <div class="node-box source">UV</div>
+    <div class="arrow">→</div>
+    <div class="node-box transform">Rotate 2D</div>
+    <div class="arrow">→</div>
+    <div class="node-box transform">Fract / Tile</div>
+    <div class="arrow">→</div>
+    <div class="node-box sdf">sdBox</div>
+  </div>
+  <p>Reading this chain: take the screen coordinate, rotate it, tile it, then ask "is this (now tiled, rotated) coordinate inside a box?" The box sits at the origin of the tiled space — which appears as many boxes arranged in a grid on screen.</p>
+  <div class="tip">Everything downstream of a UV transform inherits that transform. If you want only some shapes to be rotated, branch your UV before the rotation and wire the unrotated branch to the other shapes.</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ FIRST SHADER -->
+<div class="page" id="page-first-shader">
+  <div class="page-header">
+    <h1>Your First Shader</h1>
+    <p class="lead">From blank canvas to glowing circle in five steps.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Witness, for a moment, the blank canvas. A rectangle of pure darkness. No color. No form. Just the quiet of a GPU awaiting instruction. In the time it takes to add five nodes, we will give it something worth looking at.</p>
+  <ol class="steps">
+    <li>
+      <strong>Add a UV node</strong>
+      Press <kbd class="key">A</kbd> to open the node palette and search "UV", or press <kbd class="key">U</kbd> as a shortcut. This outputs the screen coordinate as a centered, aspect-corrected <code class="badge badge-vec2">vec2</code>. It goes in the output, so you'll see a gradient — red on the right, dark on the left.
+    </li>
+    <li>
+      <strong>Add an Output node</strong>
+      Press <kbd class="key">O</kbd>. Drag a connection from the UV node's output to the Output node's Color input. The canvas shows a gradient — you're looking at raw UV coordinates being interpreted as color. This is normal and useful.
+    </li>
+    <li>
+      <strong>Add a Circle SDF node</strong>
+      Open the palette, search "circle". Connect UV → Circle SDF's P input. The SDF outputs a <code class="badge badge-float">float</code> — the signed distance from each pixel to the circle edge. Connect it to Output. You'll see a gray gradient that's lighter in the center — that's the raw distance field.
+    </li>
+    <li>
+      <strong>Add a Make Light node</strong>
+      Search "make light". Connect Circle SDF's Distance → Make Light's Distance input. Make Light computes <code>brightness / abs(distance)</code> — a glow that's bright near zero and falls off with distance. Connect Make Light's Glow → Output. You'll see a white glow ring. Adjust the Brightness slider to taste.
+    </li>
+    <li>
+      <strong>Add a Palette Preset node</strong>
+      Search "palette preset". Add a Time node (<kbd class="key">T</kbd>). Connect Time → Palette's T input. Connect Palette's Color → a Scale Color node, Scale Color → Output. Now connect Make Light's Glow → Scale Color's Scale. You have an animated, color-cycling glowing circle.
+    </li>
+  </ol>
+  <div class="node-diagram">
+    <div class="node-box source">UV</div>
+    <div class="arrow">→</div>
+    <div class="node-box sdf">Circle SDF</div>
+    <div class="arrow">→</div>
+    <div class="node-box color">Make Light</div>
+    <div class="arrow">→</div>
+    <div class="node-box math">Scale Color</div>
+    <div class="arrow">→</div>
+    <div class="node-box output">Output</div>
+  </div>
+  <div class="tip">Once you have this working, try adding a Tone Map node before Output (ACES mode). It handles the HDR brightness gracefully and gives the glow a more cinematic quality.</div>
+  <h3>What just happened</h3>
+  <p>You defined a function: for every pixel, compute its distance to a circle centered at the origin, turn that distance into a brightness value, color it with a cosine palette driven by time, and output the result. That function ran on every pixel simultaneously, 60 times per second. The animation is just time flowing into the palette's input — the GPU recomputes the whole thing each frame.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ INTERFACE -->
+<div class="page" id="page-interface">
+  <div class="page-header">
+    <h1>The Interface</h1>
+    <p class="lead">Everything on screen and what it does.</p>
+  </div>
+  <div class="divider"></div>
+  <h3>The node canvas</h3>
+  <p>The main area where you build your graph. Scroll to zoom, click and drag on empty space to pan. Nodes can be moved by dragging their header.</p>
+  <ul>
+    <li><strong>Right-click empty space</strong> — opens the node palette</li>
+    <li><strong>Press <kbd class="key">A</kbd></strong> — opens the searchable node palette</li>
+    <li><strong>Press <kbd class="key">F</kbd></strong> — fit all nodes in view</li>
+    <li><strong>Click a node</strong> — select it; its parameters appear in the right panel</li>
+    <li><strong>Drag output → input</strong> — create a connection. Colors indicate type compatibility.</li>
+    <li><strong>Click a connection</strong> — delete it</li>
+  </ul>
+  <h3>Node anatomy</h3>
+  <p>Each node has a <strong>header</strong> with its name, <strong>input sockets</strong> on the left, and <strong>output sockets</strong> on the right. Socket colors map to data types: <span class="badge badge-float">float</span> yellow, <span class="badge badge-vec2">vec2</span> teal, <span class="badge badge-vec3">vec3</span> green, <span class="badge badge-vec4">vec4</span> purple.</p>
+  <p>Most nodes have <strong>parameter sliders</strong> that appear when selected. If a socket is wired, the connected value overrides the slider. If unwired, the slider value is used as a constant.</p>
+  <h3>The preview canvas</h3>
+  <p>The live preview renders your shader in real time. It updates every frame when animated, or immediately when you change a parameter. Resize it by dragging the divider. The preview respects aspect ratio — if you make it wider, the UV node's X range expands.</p>
+  <h3>The GLSL panel</h3>
+  <p>Toggle with <kbd class="key">⌘\</kbd>. Shows the compiled fragment shader exactly as it runs on the GPU. Click any node in the canvas — the corresponding lines in the GLSL panel highlight. This is the most direct way to understand what your graph compiles to.</p>
+  <h3>The parameter panel</h3>
+  <p>Right sidebar. Shows all parameters for the selected node. Sliders, dropdowns, color pickers, and vec2/vec3 inputs depending on the node type. Any slider can be overridden by wiring a float output to the corresponding input socket.</p>
+  <h3>The minimap</h3>
+  <p>Bottom-right of the canvas. Shows a bird's-eye view of your entire graph. Click or drag to navigate. Useful when graphs get large.</p>
+  <h3>Node inline preview</h3>
+  <p>Small nodes can show a tiny live preview of their output directly on the canvas. Toggle this per-node. Useful for verifying what a noise or SDF node is producing without wiring it to output.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ DATA TYPES -->
+<div class="page" id="page-data-types">
+  <div class="page-header">
+    <h1>Data Types</h1>
+    <p class="lead">The language of values flowing between nodes.</p>
+  </div>
+  <div class="divider"></div>
+  <p>In GLSL — and by extension in Shader Studio — every value has a type. A type tells you how many numbers are bundled together and how to interpret them. Most of what you'll work with falls into four families:</p>
+  <table>
+    <tr><th>Type</th><th>What it holds</th><th>Typical use</th></tr>
+    <tr><td><span class="badge badge-float">float</span></td><td>A single decimal number</td><td>Distance, brightness, time, opacity, any scalar</td></tr>
+    <tr><td><span class="badge badge-vec2">vec2</span></td><td>Two floats: (x, y)</td><td>UV coordinates, 2D positions, offsets</td></tr>
+    <tr><td><span class="badge badge-vec3">vec3</span></td><td>Three floats: (x, y, z) or (r, g, b)</td><td>Colors, 3D positions, normals</td></tr>
+    <tr><td><span class="badge badge-vec4">vec4</span></td><td>Four floats: (r, g, b, a)</td><td>Colors with alpha, homogeneous coordinates</td></tr>
+  </table>
+  <h3>Why this matters</h3>
+  <p>Socket colors in Shader Studio directly reflect these types. You can only connect an output to an input of the same type (or compatible types). When you try to connect a float to a vec2 input, the connection won't be accepted — the compiler can't know which two floats you meant to pair.</p>
+  <h3>Swizzling</h3>
+  <p>GLSL lets you extract and rearrange components with dot notation. This is called swizzling, and it's worth knowing because some nodes expose it:</p>
+  <pre><code>vec3 color = vec3(0.2, 0.8, 0.5);
+float r = color.r;        // 0.2  (same as color.x)
+float g = color.g;        // 0.8  (same as color.y)
+vec2 rg = color.rg;       // vec2(0.2, 0.8)
+vec3 flip = color.bgr;    // vec3(0.5, 0.8, 0.2) — reversed channels</code></pre>
+  <p>The spatial aliases <code>.x .y .z .w</code> and color aliases <code>.r .g .b .a</code> are interchangeable — <code>uv.x</code> and <code>uv.r</code> refer to the same component.</p>
+  <h3>Numbers in GLSL</h3>
+  <p>GLSL is strict about floats. <code>1</code> is an integer literal. <code>1.0</code> is a float. Mixing them without explicit casting causes compiler errors. Shader Studio handles this for you in node outputs, but if you're writing expressions in the Expr node, always use decimal points: <code>0.5</code> not <code>0</code>, <code>2.0</code> not <code>2</code>.</p>
+  <div class="tip">vec3 doubles as both "color" and "3D position" depending on context. This is fine — they're the same underlying type. A vec3 of (1.0, 0.0, 0.0) means "red" in a color context and "point on the X axis" in a geometry context.</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ SOURCES -->
+<div class="page" id="page-sources">
+  <div class="page-header">
+    <h1>Sources</h1>
+    <p class="lead">Nodes with no inputs — the raw material that everything else is built from.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Source nodes are where data enters the graph. They have no input sockets — they generate values from the universe outside the shader (screen coordinates, elapsed time, user input, uploaded files) and offer them as outputs you can wire into anything downstream.</p>
+
+  <h3>UV <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>The centered, aspect-corrected screen coordinate. Origin at center, range approximately ±1 vertically. The X range extends beyond ±1 on wide canvases. This is your primary coordinate input for almost everything. See <a href="#uv-space">UV Space</a> for a full explanation.</p>
+
+  <h3>Pixel UV <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Raw pixel UV: <code>gl_FragCoord.xy / resolution.y</code>. Origin is bottom-left. X extends to the aspect ratio. Use this for shaders that need to work in pixel-proportional space rather than centered space.</p>
+
+  <h3>Time <span class="badge badge-float">→ float</span></h3>
+  <p>Elapsed time in seconds since the shader started. Wire this into any parameter to animate it. The most common pattern: connect Time into a Sin node to get a smooth oscillating value, or directly into palette/noise nodes that accept a time input. Press <kbd class="key">T</kbd> to place one instantly.</p>
+
+  <h3>Mouse <span class="badge badge-vec2">→ vec2, float, float</span></h3>
+  <p>The current cursor position in the same centered UV space as the UV node. Outputs three values: the full UV position, the X component as a float, and the Y component as a float. Wire this into an SDF's offset input to make shapes follow your cursor.</p>
+
+  <h3>Loop Index <span class="badge badge-float">→ float</span></h3>
+  <p>When placed inside an iterated group, this outputs the current iteration number as a float (0.0, 1.0, 2.0...). Outside an iterated group it always outputs 0.0. This is the key to making each iteration of a loop do something slightly different. See <a href="#loops-iterated-group">Iterated Groups</a>.</p>
+
+  <h3>Constant <span class="badge badge-float">→ float</span></h3>
+  <p>A fixed float value with a slider. Wire a float input to override the slider dynamically. Useful for parameterizing values you want to control from outside a group, or for wiring a specific literal value into a node that expects a socket connection. Press <kbd class="key">Shift+F</kbd> to place one.</p>
+
+  <h3>Prev Frame <span class="badge badge-vec3">→ vec3, float</span></h3>
+  <p>Samples the previous frame's rendered output at a given UV coordinate. Enables feedback loops — the shader reads its own prior output. Use this for paint trails (blend current with 95% of previous), reaction-diffusion patterns, and fluid simulations. Outputs color (vec3) and alpha (float).</p>
+  <div class="warn">Prev Frame makes the shader stateful — it needs a framebuffer to store the previous frame. The preview rendering mode changes when this node is present. Stateful shaders cannot be exported as standalone fragments without a rendering harness.</div>
+
+  <h3>Texture Input <span class="badge badge-vec3">→ vec3, float</span></h3>
+  <p>Samples an uploaded image at a given UV coordinate. Click the node to upload an image. Connect a UV (or transformed UV) to control where on the image is sampled. Outputs RGB color and alpha separately.</p>
+
+  <h3>Audio Input <span class="badge badge-float">→ float per band</span></h3>
+  <p>Load an audio file and get per-frequency-band amplitude as floats between 0 and 1. Add multiple bands to react to bass, mids, and highs independently. Use Full Spectrum mode for a single overall volume value. Wire amplitude into SDF scale, palette phase, or any float input to create audio-reactive visuals.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ TRANSFORMS -->
+<div class="page" id="page-transforms">
+  <div class="page-header">
+    <h1>Transforms</h1>
+    <p class="lead">You don't move the shape. You move the space the shape lives in.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Consider what it means to "rotate a circle." In a traditional drawing program, you'd rotate the circle's vertices. In a shader, there are no vertices. There is only a question — <em>am I inside this circle?</em> — asked at every pixel.</p>
+  <p>To rotate the circle, you rotate the coordinate before asking the question. Instead of asking "is this pixel inside the circle?", you ask "is this pixel, rotated backward by the rotation amount, inside the circle?" The circle appears rotated. The math is the same.</p>
+  <p>This is the foundational insight behind all UV transforms: they modify the coordinate that gets fed into downstream nodes. Everything downstream sees a different version of space.</p>
+
+  <h3>Fract / Tile <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Tiles space by applying <code>fract(uv * scale) - 0.5</code>. Every tile is a copy of the same centered coordinate space. Feed a tiled UV into an SDF and you get infinite repetitions of that shape. The Scale parameter controls how many tiles appear across the screen.</p>
+  <pre><code>// What Fract does:
+vec2 output = fract(input * scale) - 0.5;</code></pre>
+  <div class="node-diagram">
+    <div class="node-box source">UV</div>
+    <div class="arrow">→</div>
+    <div class="node-box transform">Fract (scale 4)</div>
+    <div class="arrow">→</div>
+    <div class="node-box sdf">Circle SDF</div>
+    <div class="arrow">→</div>
+    <div class="node-box output">Output</div>
+  </div>
+
+  <h3>Rotate 2D <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Rotates a vec2 by an angle in radians. Connect a Time node (multiplied by a speed) into the Angle input to spin things. The rotation is around the origin (0,0) — if you want to rotate around a different point, translate first, rotate, then translate back using a Displace node.</p>
+
+  <h3>Displace <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>The "bring your own warp field" node. Takes any vec2 as an offset and adds it to the input UV, scaled by an Amount parameter. Plug in noise, a math expression, or any other vec2 source to use it as a displacement field. This is the most flexible warp — the other warp nodes are specialized versions of this idea.</p>
+
+  <h3>UV Warp (Jitter) <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Hash-grid jitter — intentionally blocky, pixelated displacement. Good for glitch effects, mosaic distortion, and digital noise aesthetics. The grid structure is visible by design.</p>
+
+  <h3>UV Warp (Smooth) <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Bilinear value-noise warp with no visible grid edges. Flowing, organic displacement. Parameters: Strength (how far pixels move), Scale (frequency of the warp pattern), Speed (animation rate). The most generally useful warp for natural-looking distortion.</p>
+
+  <h3>UV Warp (Curl) <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Divergence-free curl noise. Particles in this field neither converge nor diverge — they flow in closed loops, giving a fluid or smoke-like motion. The mathematical guarantee of divergence-freedom is what separates curl warp from smooth warp aesthetically.</p>
+
+  <h3>UV Warp (Swirl) <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Rotational twist that's strongest at the center and decays outward. Twist sets the maximum rotation angle. Falloff controls how quickly the rotation fades with distance. Animates smoothly with time. Center X/Y lets you shift the vortex origin.</p>
+
+  <h3>opRepeat <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Infinite domain repetition: <code>mod(p + 0.5*s, s) - 0.5*s</code>. Tiles space every <em>s</em> units. Unlike Fract, opRepeat doesn't center each tile — it tiles in a way that's mathematically consistent with SDF operations, making it the right choice when you need to tile an SDF and then perform boolean operations on the result.</p>
+
+  <h3>opRepeatPolar <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Polar domain repetition — creates N-fold rotational symmetry. Feed it a UV and the number of segments, and it folds space so that evaluating any SDF inside it produces N copies arranged radially. The building block for mandalas, radial patterns, and snowflake-like geometry.</p>
+  <pre><code>// Classic mandala pipeline:
+// UV → opRepeatPolar(6) → Rotate2D → sdBox → Make Light → Palette → Output</code></pre>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ VECTORS & MATRICES -->
+<div class="page" id="page-vectors-matrices">
+  <div class="page-header">
+    <h1>Vectors, Matrices & Transformations</h1>
+    <p class="lead">The mathematical objects that make shader geometry possible.</p>
+  </div>
+  <div class="divider"></div>
+  <p>There's something deeply satisfying about the moment a coordinate stops being a pair of numbers and starts being a thing you can rotate, scale, and project. This is the domain of linear algebra — and while you don't need to prove theorems to use Shader Studio, understanding the objects you're working with unlocks everything from smooth rotations to full 3D cameras.</p>
+
+  <h3>Vectors</h3>
+  <p>A vector is an ordered list of numbers. In GLSL, <code>vec2</code>, <code>vec3</code>, and <code>vec4</code> are vectors of 2, 3, and 4 components respectively. You can think of them two ways depending on context:</p>
+  <ul>
+    <li><strong>As a point</strong> — a location in space. <code>vec2(0.5, 0.3)</code> is the point 0.5 units right, 0.3 units up from the origin.</li>
+    <li><strong>As a direction + magnitude</strong> — an arrow. <code>vec2(1.0, 0.0)</code> points right with length 1. <code>vec2(0.0, 2.0)</code> points up with length 2.</li>
+  </ul>
+  <p>The same math works on both interpretations. Whether you call it "a position" or "a displacement" depends on what you're doing with it.</p>
+
+  <h4>Key vector operations</h4>
+  <table>
+    <tr><th>Operation</th><th>GLSL</th><th>What it does</th></tr>
+    <tr><td>Addition</td><td><code>a + b</code></td><td>Translate: move point <em>a</em> by offset <em>b</em></td></tr>
+    <tr><td>Subtraction</td><td><code>a - b</code></td><td>Direction from <em>b</em> to <em>a</em></td></tr>
+    <tr><td>Scalar multiply</td><td><code>v * 2.0</code></td><td>Scale: double length, keep direction</td></tr>
+    <tr><td>Length</td><td><code>length(v)</code></td><td>Distance from origin to <em>v</em>. Core of every circle SDF.</td></tr>
+    <tr><td>Normalize</td><td><code>normalize(v)</code></td><td>Same direction, but length = 1. Used for light directions.</td></tr>
+    <tr><td>Dot product</td><td><code>dot(a, b)</code></td><td>Scalar: how much <em>a</em> and <em>b</em> point in the same direction. 1 = same, 0 = perpendicular, -1 = opposite.</td></tr>
+    <tr><td>Cross product</td><td><code>cross(a, b)</code></td><td>vec3 only: a vector perpendicular to both <em>a</em> and <em>b</em>. Used to compute normals.</td></tr>
+    <tr><td>Mix / lerp</td><td><code>mix(a, b, t)</code></td><td>Linear interpolation: at t=0 returns a, at t=1 returns b, in between blends.</td></tr>
+    <tr><td>Reflect</td><td><code>reflect(v, n)</code></td><td>Reflect vector <em>v</em> around surface normal <em>n</em>. Used in specular lighting.</td></tr>
+  </table>
+
+  <h3>The dot product, practically</h3>
+  <p>The dot product is one of the most useful operations in shader code. Given two normalized vectors, <code>dot(a, b)</code> returns the cosine of the angle between them. This single fact powers most lighting calculations:</p>
+  <pre><code>vec3 normal = ...; // surface normal, pointing outward
+vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
+
+// How much does this surface face the light?
+float diffuse = max(dot(normal, lightDir), 0.0);
+// At 0° (facing directly): dot = 1.0 → full brightness
+// At 90° (side-on):        dot = 0.0 → no contribution
+// Below 90° (facing away): dot < 0   → clamped to 0</code></pre>
+
+  <h3>Matrices</h3>
+  <p>A matrix is a grid of numbers that transforms vectors when you multiply them together. In GLSL: <code>mat2</code> is a 2×2 matrix, <code>mat3</code> is 3×3, <code>mat4</code> is 4×4. You multiply a matrix by a vector to apply the transformation the matrix encodes.</p>
+  <pre><code>// A 2D rotation matrix for angle θ:
+mat2 rotation = mat2(
+    cos(theta), -sin(theta),  // column 0
+    sin(theta),  cos(theta)   // column 1
+);
+
+vec2 rotatedUV = rotation * uv;</code></pre>
+  <p>GLSL matrices are <strong>column-major</strong>: the constructor fills columns, not rows. <code>mat2(a, b, c, d)</code> creates the matrix with column 0 = (a, b) and column 1 = (c, d).</p>
+
+  <h4>The four fundamental 2D transformations as matrices</h4>
+  <table>
+    <tr><th>Transform</th><th>Matrix</th><th>Notes</th></tr>
+    <tr>
+      <td>Rotation by θ</td>
+      <td><code>mat2(cos θ, sin θ, -sin θ, cos θ)</code></td>
+      <td>Rotates counterclockwise. The Rotate 2D node does this.</td>
+    </tr>
+    <tr>
+      <td>Scale by (sx, sy)</td>
+      <td><code>mat2(sx, 0, 0, sy)</code></td>
+      <td>Stretches independently per axis.</td>
+    </tr>
+    <tr>
+      <td>Uniform scale by s</td>
+      <td><code>mat2(s, 0, 0, s)</code></td>
+      <td>Same as multiplying the vec2 by a scalar: <code>uv * s</code>.</td>
+    </tr>
+    <tr>
+      <td>Shear (skew)</td>
+      <td><code>mat2(1, 0, k, 1)</code></td>
+      <td>Slides the Y axis. Used in parallelogram / kaleidoscope patterns.</td>
+    </tr>
+  </table>
+  <div class="note">Translation cannot be represented by a 2×2 matrix — it's not a linear transformation. To translate, just add a vec2: <code>uv + offset</code>. For 3D, mat4 uses a trick called homogeneous coordinates to encode translation in the 4th column, which is why 3D camera matrices are 4×4.</div>
+
+  <h3>Composing transformations</h3>
+  <p>You can chain transformations by multiplying matrices together, or equivalently in Shader Studio, by connecting transform nodes in sequence. The order matters — matrix multiplication is not commutative:</p>
+  <pre><code>// Rotate then scale ≠ scale then rotate
+// (unless the scale is uniform)
+
+// In nodes: UV → Rotate 2D → Scale
+// is different from: UV → Scale → Rotate 2D</code></pre>
+  <p>The practical rule: transformations apply in the order you'd read them — the first node in the chain transforms the coordinate first. Think of it as transforming the floor, not the object.</p>
+
+  <h3>Polar coordinates — a non-matrix transform</h3>
+  <p>Not all useful coordinate transforms are linear. Polar coordinates convert (x, y) into (radius, angle):</p>
+  <pre><code>vec2 uv = ...; // Cartesian: (x, y)
+float r     = length(uv);         // distance from origin
+float angle = atan(uv.y, uv.x);   // angle in radians [-π, π]
+vec2 polar  = vec2(r, angle);</code></pre>
+  <p>Working in polar space is how you build radially symmetric patterns. Repeat the angle with <code>mod(angle, 2π/N)</code> to get N-fold symmetry. Animate the angle with time to get rotation. Use <code>r</code> directly as an SDF input to get ring patterns.</p>
+
+  <h3>The 3D camera matrix</h3>
+  <p>In 3D ray marching, a camera matrix (often called a "look-at" matrix) transforms a ray direction from screen space into world space. Shader Studio's camera nodes build this for you, but the math is:</p>
+  <pre><code>// Look-at camera: builds an orthonormal basis
+// ro = camera position, ta = target point, cr = roll angle
+mat3 setCamera(vec3 ro, vec3 ta, float cr) {
+    vec3 cw = normalize(ta - ro);          // forward
+    vec3 cp = vec3(sin(cr), cos(cr), 0.0); // up hint
+    vec3 cu = normalize(cross(cw, cp));    // right
+    vec3 cv = normalize(cross(cu, cw));    // up (corrected)
+    return mat3(cu, cv, cw);
+}
+
+// Usage per pixel:
+vec2 p = (fragCoord - 0.5 * resolution) / resolution.y;
+vec3 rayDir = normalize(cameraMatrix * vec3(p, focalLength));</code></pre>
+  <p>The result is a ray that starts at the camera position and points toward whatever that pixel "looks at" in the scene. The SDF scene is then sampled along this ray.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ 2D SDFs -->
+<div class="page" id="page-sdf">
+  <div class="page-header">
+    <h1>2D Signed Distance Functions</h1>
+    <p class="lead">The geometry system at the heart of Shader Studio's 2D visuals.</p>
+  </div>
+  <div class="divider"></div>
+  <p>A signed distance function answers a single question: <em>how far is this point from the nearest surface?</em> The sign tells you which side you're on — negative means inside, positive means outside, and zero means exactly on the edge.</p>
+  <p>This is profound. A circle is no longer "a set of points equidistant from a center." It is the zero level set of the function <code>length(p) - r</code>. Every pixel evaluates this function. Those that get back a value near zero are near the edge. Those that get back a large positive value are far outside. Those that get back a negative value are inside.</p>
+  <pre><code>float sdCircle(vec2 p, float r) {
+    return length(p) - r;
+}
+// p = pixel coordinate, r = radius
+// Returns: negative inside, 0 on edge, positive outside</code></pre>
+
+  <h3>From distance to color</h3>
+  <p>The raw distance value is just a float. To make it visible, you need to decide what to do with it:</p>
+  <pre><code>float d = sdCircle(uv, 0.4);
+
+// Hard fill — sharp edge:
+float fill = step(0.0, -d);           // 1.0 inside, 0.0 outside
+
+// Smooth edge — anti-aliased:
+float smooth = smoothstep(0.01, -0.01, d);  // soft edge 2px wide
+
+// Glow — bright near zero, fades with distance:
+float glow = 0.02 / abs(d);           // the classic shader glow
+
+// Outline only — ring on the surface:
+float ring = smoothstep(0.02, 0.0, abs(d));</code></pre>
+
+  <h3>The Make Light node</h3>
+  <p>The <strong>Make Light</strong> node encodes the glow formula: <code>brightness / abs(distance)</code>. It's the most common way to turn an SDF into something that looks good. Use the Brightness parameter to control intensity, and wire the output into a Scale Color node (to tint it) before Output.</p>
+
+  <h3>Available 2D SDF nodes</h3>
+  <p>Shader Studio includes the full IQ SDF library. The Shape SDF node lets you pick from all of them in a single node via a dropdown:</p>
+  <ul>
+    <li><strong>Circle</strong> — <code>length(p) - r</code>. The simplest and most used.</li>
+    <li><strong>Box / Rounded Box</strong> — Axis-aligned rectangle, optionally rounded.</li>
+    <li><strong>Segment</strong> — Distance to a line segment between two points A and B.</li>
+    <li><strong>Ellipse</strong> — Stretched circle with independent radii.</li>
+    <li><strong>Triangle / Isosceles Triangle</strong> — Equilateral or custom-proportioned triangle.</li>
+    <li><strong>Pentagon, Hexagon, Octagon</strong> — Regular polygons.</li>
+    <li><strong>Star (5-point and N-point)</strong> — Stars with configurable inner/outer radius ratio.</li>
+    <li><strong>Arc / Ring / Pie</strong> — Circular slice and ring variants.</li>
+    <li><strong>Cross / Rounded X</strong> — Plus sign and rounded cross shapes.</li>
+    <li><strong>Parabola, Hyperbola</strong> — Conic section distance fields.</li>
+    <li><strong>Moon, Vesica</strong> — Lens-shaped geometry.</li>
+    <li><strong>Horseshoe, Tunnel, Stairs</strong> — Architectural/decorative shapes.</li>
+  </ul>
+
+  <h3>Boolean operations</h3>
+  <p>Because SDFs are just floats, you can combine them with simple math:</p>
+  <pre><code>float d1 = sdCircle(uv, 0.4);
+float d2 = sdBox(uv, vec2(0.3, 0.2));
+
+float union_      = min(d1, d2);       // both shapes
+float subtract    = max(-d1, d2);      // d2 minus d1
+float intersect   = max(d1, d2);       // only the overlap
+float smooth_union = smin(d1, d2, 0.1); // blended/melted union</code></pre>
+  <p>Smooth union (<code>smin</code>) is what gives shader geometry that organic, melted-together look. The third parameter controls the blend radius.</p>
+
+  <h3>opRepeat and opRepeatPolar</h3>
+  <p><strong>opRepeat</strong> tiles space every S units — apply it to a UV before an SDF to get infinite tiling. <strong>opRepeatPolar</strong> creates N-fold rotational symmetry. These are in the Spaces category and are the correct building blocks for grid and radial layouts of SDFs.</p>
+
+  <h3>Rounding and onion skinning</h3>
+  <pre><code>float rounded = d - r;       // expand by r (rounds/inflates shapes)
+float onion   = abs(d) - r;  // hollow ring at distance r from surface</code></pre>
+  <p>Rounding is achieved by subtracting a small value from the SDF — this inflates the shape and rounds its corners. Onion skinning takes the absolute value of a distance field to create concentric rings.</p>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ GROUPS -->
+<div class="page" id="page-groups">
+  <div class="page-header">
+    <h1>Groups</h1>
+    <p class="lead">Collapsing complexity into a single node — and making that node run multiple times.</p>
+  </div>
+  <div class="divider"></div>
+  <p>A group is a subgraph that collapses into a single node. The nodes inside are still there, still compiling, still contributing to the shader — they're just hidden behind a cleaner interface. Groups have wired input and output sockets, just like any other node.</p>
+
+  <h3>Creating a group</h3>
+  <ol class="steps">
+    <li><strong>Select nodes</strong> Click nodes to select them, or drag a selection box. Selected nodes highlight.</li>
+    <li><strong>Group them</strong> Press <kbd class="key">⌘G</kbd> or right-click → "Group selected". A dialog asks you to name the exposed input and output ports.</li>
+    <li><strong>Result</strong> The selected nodes disappear into a single collapsed node. Double-click the group to expand and edit its internals.</li>
+  </ol>
+  <p>By default, a group runs its subgraph exactly once per pixel — the same as if the nodes were inline.</p>
+
+  <h3>The Iterations parameter</h3>
+  <p>Every group has an <strong>Iterations</strong> parameter in its settings panel. Set it to anything greater than 1 and the group becomes an <em>iterated group</em> — its subgraph runs multiple times per pixel, with the output of each iteration feeding into the next as input.</p>
+  <p>This is Shader Studio's loop system. There are no separate loop nodes to wire together — just a group with Iterations > 1. See <a href="#loops-overview">How Loops Work</a> for the full picture.</p>
+
+  <h3>Parameter overrides</h3>
+  <p>Parameters of nodes inside a group can be promoted to the group's outer interface. When you expose an inner node's parameter, it appears as a socket on the group node itself — letting you override it from outside without opening the group.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ LOOPS OVERVIEW -->
+<div class="page" id="page-loops-overview">
+  <div class="page-header">
+    <h1>How Loops Work</h1>
+    <p class="lead">The most powerful tool in Shader Studio — and the one that most deserves a careful introduction.</p>
+  </div>
+  <div class="divider"></div>
+  <p>There's something profound about repetition. A single circle is a circle. That same circle, evaluated six times with a slightly different coordinate each time and its outputs threaded through, becomes something approaching a fractal. The gap between those two statements — between one and six — is the loop.</p>
+  <p>Loops in Shader Studio are built on a single mechanism: <strong>iterated groups</strong>. A group with Iterations set to N runs its subgraph N times per pixel. That's the whole system. Everything else follows from it.</p>
+
+  <h3>The core mental model</h3>
+  <p>When you set a group's Iterations to 4, the compiler generates a GLSL <code>for</code> loop that runs your subgraph four times. On each pass:</p>
+  <ul>
+    <li>The iteration number is available via a <strong>Loop Index</strong> node inside the group (outputs 0.0, 1.0, 2.0, 3.0)</li>
+    <li>Any node you mark as a <strong>carry node</strong> has its output variable persist across iterations — the result of one pass becomes the starting point for the next</li>
+    <li>All other nodes evaluate fresh each iteration, as if running independently</li>
+  </ul>
+  <p>The key question is: <em>what value are you threading through?</em></p>
+  <ul>
+    <li><strong>vec2 carry</strong> → transforming a UV coordinate through N iterations (domain folding, fractal UV)</li>
+    <li><strong>vec3 carry</strong> → accumulating a color (summing contributions from N light sources, N ring glows)</li>
+    <li><strong>float carry</strong> → accumulating a scalar (noise layers, distance field accumulation)</li>
+  </ul>
+
+  <h3>What actually gets compiled</h3>
+  <p>Say you have a Fract node inside a group with Iterations=4, and you've marked Fract as a carry node. The compiler generates roughly this GLSL:</p>
+  <pre><code>// Carry node's variable is declared OUTSIDE the loop, initialized from group input
+vec2 fract_output = groupInput;
+
+for (int i = 0; i < 4; i++) {
+    float loopIndex = float(i);  // Loop Index node
+
+    // The carry node runs using its own previous output as input
+    fract_output = fract(fract_output * 1.5) - 0.5;
+
+    // Non-carry nodes run normally, reading the carry value where wired
+    float dist = length(fract_output) - 0.3;
+}
+
+// fract_output now holds the 4x-folded UV
+// dist holds the distance from the final iteration</code></pre>
+  <p>The key insight: a carry node's output variable persists between iterations because it's declared outside the loop. On each pass, the node writes back to its own variable. This is the carry mechanism — no separate node required, just a flag on any existing node.</p>
+  <p>The subgraph is not copied N times in source. The GPU runs a real loop, and carry variables thread state through it iteration by iteration.</p>
+
+  <div class="warn">Loop count is a compile-time constant. You cannot drive it from a Time node or any runtime value — Iterations is a slider on the group, not a socket. To change iteration count, adjust the group parameter and let the shader recompile.</div>
+</div>
+
+<!-- ════════════════════════════════════════ LOOPS: ITERATED GROUPS -->
+<div class="page" id="page-loops-iterated-group">
+  <div class="page-header">
+    <h1>Iterated Groups</h1>
+    <p class="lead">How to build a group that loops.</p>
+  </div>
+  <div class="divider"></div>
+  <h3>Step by step: creating your first iterated group</h3>
+  <ol class="steps">
+    <li>
+      <strong>Build the single-pass version first</strong>
+      Before making it loop, get the single-iteration version working on canvas. For example: UV → Fract (scale 1.5) → Circle SDF → Make Light → Output. Verify it looks right.
+    </li>
+    <li>
+      <strong>Select the nodes you want to repeat</strong>
+      Select Fract and Circle SDF (not the UV source, not Output). These are the nodes whose logic will run N times per pixel.
+    </li>
+    <li>
+      <strong>Group them with ⌘G</strong>
+      Give the group meaningful port names. You'll expose at minimum: an input UV (vec2) and an output color (vec3) or distance (float).
+    </li>
+    <li>
+      <strong>Set Iterations in the group's parameter panel</strong>
+      Select the group node and set Iterations to 4 (start here). The group now runs its subgraph 4 times per pixel.
+    </li>
+    <li>
+      <strong>Double-click to enter the group, then mark the carry node</strong>
+      Inside the group, right-click the node whose output you want to thread through iterations — for example, Fract. Toggle <strong>Carry Mode</strong> on. The node will visually indicate it's a carry node. That's it. No additional nodes required.
+    </li>
+  </ol>
+
+  <h3>What marking a node as carry actually does</h3>
+  <p>When Carry Mode is enabled on a node, the compiler declares that node's output variable <em>outside</em> the for loop, initialized from the group's input. Each iteration, the node computes normally — but because its output variable persists, the result feeds back as the input on the next pass.</p>
+  <p>For the Fract example:</p>
+  <div class="node-diagram">
+    <div class="node-box source">Group Input (UV)</div>
+    <div class="arrow">→ init</div>
+    <div class="node-box loop">Fract <em style="font-size:10px">[carry]</em></div>
+    <div class="arrow">↺ feeds back each iteration</div>
+  </div>
+  <p>Iteration 0: Fract receives the original UV, outputs folded UV.<br>
+  Iteration 1: Fract receives the folded UV from iteration 0, folds again.<br>
+  Iteration 2: Fract receives the doubly-folded UV. And so on.</p>
+
+  <p>You can mark <em>multiple</em> nodes as carry inside the same group. A common pattern is to carry both a UV (for folding) and a color accumulator (for adding glow each pass) simultaneously — each carry variable is independent.</p>
+
+  <h3>The Loop Index node</h3>
+  <p>Inside an iterated group, a <strong>Loop Index</strong> node outputs the current iteration number as a float: 0.0 on the first pass, 1.0 on the second, and so on. This is what makes each iteration distinct — you can shift a palette phase, offset a position, scale a frequency, or use any expression that varies per pass.</p>
+  <pre><code>// Classic use: offset palette phase per iteration
+float phase = loopIndex * 0.4;  // each ring gets a different hue
+vec3 color = palette(distance + phase, ...);</code></pre>
+  <p>Without Loop Index, every iteration would read the same parameters and produce structurally identical results. Loop Index is the mechanism that makes iterative loops produce variety rather than pure repetition.</p>
+
+  <div class="tip">Start with Iterations = 3 or 4 while building. It's much easier to reason about what's happening with fewer passes. Once the pattern is correct, push to 6–8 for the final look.</div>
+</div>
+
+<!-- ════════════════════════════════════════════ LOOPS: CARRY MODE -->
+<div class="page" id="page-loops-carry">
+  <div class="page-header">
+    <h1>Carry Mode</h1>
+    <p class="lead">How a node's output threads through all iterations of a loop.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Carry mode is a toggle on individual nodes inside an iterated group. When enabled, that node's output variable persists across iterations instead of being recalculated fresh each pass. The output of iteration N becomes the input of iteration N+1 — automatically, by virtue of how the GLSL variable is declared.</p>
+
+  <h3>How to enable it</h3>
+  <p>Right-click any node inside an iterated group and toggle <strong>Carry Mode</strong>. The node will display a visual indicator that it's a carry node. That's the entire interface. There's no separate Loop Carry node to wire up — the carry is an attribute of the node itself.</p>
+
+  <h3>What changes in the compiled shader</h3>
+  <p>Normally, every node's output variable is declared inside the for loop, so it's fresh on each iteration. A carry-mode node's variable is instead declared <em>before</em> the loop begins, initialized from whatever feeds into the group's input port. Inside the loop, the node writes back to that same variable each pass.</p>
+  <pre><code>// Non-carry node: variable declared inside the loop (fresh each iteration)
+for (int i = 0; i &lt; 4; i++) {
+    vec2 regularNode_out = someFunction(input);  // recalculated from scratch
+}
+
+// Carry-mode node: variable declared outside the loop (persists)
+vec2 carryNode_out = groupInput;  // initialized once before the loop
+for (int i = 0; i &lt; 4; i++) {
+    carryNode_out = someFunction(carryNode_out);  // reads its own previous output
+}</code></pre>
+
+  <h3>Multiple carry nodes</h3>
+  <p>A single iterated group can have multiple nodes in carry mode simultaneously. Each has its own persistent variable, initialized from whatever is wired to it at the group level. A common pattern: mark a Fract node as carry (to thread a UV through folding passes) and also mark an Add Colors node as carry (to accumulate glow each iteration). The two carry variables are entirely independent.</p>
+
+  <h3>What happens without any carry nodes</h3>
+  <p>A group with Iterations > 1 but no carry nodes is valid. The subgraph runs N times, but every iteration starts from the same inputs and produces the same result — you effectively get N identical passes and the output of the last one. This is occasionally useful when you want N independent evaluations all driven by Loop Index (orbiting shapes, for example), but more often it's a mistake. If your loop looks like it's doing nothing, check that you've marked a carry node.</p>
+
+  <h3>Carry mode and compound assignment</h3>
+  <p>It helps to think of carry mode in terms of compound assignment operators. When a carry-mode node runs each iteration, it's conceptually doing this:</p>
+  <pre><code>// UV folding carry (Fract node in carry mode):
+uv = fract(uv * 1.5) - 0.5;  // = operator: replace with transformed value
+
+// Color accumulation carry (Add Colors node in carry mode):
+color += thisIterationGlow;    // += operator: add to running total
+
+// Damping carry (Scale Color node in carry mode):
+color *= 0.95;                 // *= operator: decay each pass</code></pre>
+  <p>The operator that best describes the accumulation determines which node type to put in carry mode. If you're building up (<code>+=</code>), put an Add node in carry mode. If you're transforming (<code>=</code>), put the transform node itself in carry mode. If you're decaying (<code>*=</code>), a Scale node in carry mode does it.</p>
+  <p>The same operators — <code>=</code>, <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code> — are available explicitly in the <a href="#glsl-editor">Expr Block node</a> for single-node accumulation outside of loops too.</p>
+
+  <div class="tip">The most natural carry node is often the one that represents "the thing being transformed." For UV folding, that's your Fract or warp node. For color accumulation, that's your Add Colors node. Think about which node's output you want to "remember" between passes — that's your carry.</div>
+</div>
+
+<!-- ════════════════════════════════════════════ LOOPS: EXAMPLES -->
+<div class="page" id="page-loops-examples">
+  <div class="page-header">
+    <h1>Loop Examples</h1>
+    <p class="lead">Three concrete loop patterns, built from scratch.</p>
+  </div>
+  <div class="divider"></div>
+
+  <h3>Example 1: Fractal UV folding</h3>
+  <p>The classic fractal rings effect. Each iteration folds the UV space, evaluates a ring SDF, and accumulates a color glow. The UV gets denser and more self-similar each pass, producing detail at multiple scales simultaneously.</p>
+  <p><strong>Carry nodes:</strong> Fract (vec2, threads the UV through) + Add Colors (vec3, accumulates glow each pass)</p>
+  <p><strong>Iterations:</strong> 5–8</p>
+  <p><strong>Inside the group:</strong></p>
+  <ol>
+    <li>Add a Fract node — set scale to 1.5. Right-click → enable Carry Mode. It will receive the initial UV on the first pass, then its own folded output on each subsequent pass.</li>
+    <li>Wire Fract's output to a Circle SDF.</li>
+    <li>Wire Loop Index (scaled by 0.4) into a Palette node's T input, offset by the distance — each iteration gets a different hue phase.</li>
+    <li>Wire distance into a Make Light node → glow intensity.</li>
+    <li>Scale the palette color by the glow.</li>
+    <li>Add an Add Colors node. Right-click → enable Carry Mode. It starts at vec3(0.0) and accumulates each iteration's color contribution.</li>
+    <li>Wire the scaled color into Add Colors' second input. Its output is the running total.</li>
+  </ol>
+  <pre><code>// Compiled GLSL — Fract and Add Colors are both carry-mode nodes:
+vec2 fract_out = inputUV;          // Fract carry, initialized from group input
+vec3 addcol_out = vec3(0.0);       // Add Colors carry, starts at black
+
+for (int i = 0; i &lt; 6; i++) {
+    float idx = float(i);
+    fract_out = fract(fract_out * 1.5) - 0.5;   // folds and persists
+    float d = length(fract_out);
+    float ring = sin(d * 8.0 + u_time) / 8.0;
+    float glow = 0.01 / abs(ring);
+    vec3 col = palette(d + idx * 0.4 + u_time * 0.4, ...);
+    addcol_out += col * glow;                     // accumulates and persists
+}
+// addcol_out is the final color output from the group</code></pre>
+
+  <h3>Example 2: Layered noise (manual FBM)</h3>
+  <p>Build Fractal Brownian Motion manually — each iteration samples the same noise at a higher frequency and lower amplitude, layering detail from coarse to fine.</p>
+  <p><strong>Carry node:</strong> An Add (float) node that accumulates the noise sum</p>
+  <p><strong>Iterations:</strong> 5</p>
+  <p><strong>Inside the group:</strong></p>
+  <ol>
+    <li>Add an Expr node that computes <code>pow(2.0, loopIndex)</code> — this is the frequency for this pass.</li>
+    <li>Multiply UV by frequency → scaled UV for noise sampling.</li>
+    <li>Wire scaled UV into a Value Noise node → raw noise float.</li>
+    <li>Compute amplitude: <code>pow(0.5, loopIndex)</code>. Multiply by raw noise → weighted contribution.</li>
+    <li>Add a float Add node. Right-click → enable Carry Mode. It accumulates the weighted noise each iteration, starting from 0.0.</li>
+  </ol>
+  <pre><code>float noiseSum = 0.0;   // Add node in carry mode, initialized to 0
+for (int i = 0; i &lt; 5; i++) {
+    float freq = pow(2.0, float(i));
+    float amp  = pow(0.5, float(i));
+    noiseSum += amp * valueNoise(uv * freq);
+}</code></pre>
+
+  <h3>Example 3: Orbiting shapes</h3>
+  <p>Place N shapes arranged in a ring, each given a distinct position via Loop Index. Accumulate all their glows into a single color output.</p>
+  <p><strong>Carry node:</strong> Add Colors (vec3) that accumulates each shape's glow contribution</p>
+  <p><strong>Iterations:</strong> 6</p>
+  <p><strong>Inside the group:</strong></p>
+  <ol>
+    <li>Loop Index → compute angle per shape: <code>loopIndex * 6.283 / 6.0 + time * 0.5</code></li>
+    <li>From angle: <code>vec2(cos(angle), sin(angle)) * radius</code> → position of this shape</li>
+    <li>Subtract from UV → local coordinate centered on this shape's position</li>
+    <li>Circle SDF → distance to this shape</li>
+    <li>Make Light → glow</li>
+    <li>Palette with <code>loopIndex / 6.0 + time * 0.2</code> → this shape's hue</li>
+    <li>Scale Color by glow → this shape's color contribution</li>
+    <li>Add Colors node with Carry Mode enabled → running total of all shapes</li>
+  </ol>
+  <pre><code>vec3 colorSum = vec3(0.0);   // Add Colors in carry mode
+for (int i = 0; i &lt; 6; i++) {
+    float angle = float(i) * 6.283 / 6.0 + u_time * 0.5;
+    vec2 pos = vec2(cos(angle), sin(angle)) * 0.5;
+    float d   = length(uv - pos) - 0.08;
+    float g   = 0.01 / abs(d);
+    vec3  col = palette(float(i) / 6.0 + u_time * 0.2, ...);
+    colorSum += col * g;
+}</code></pre>
+  <div class="tip">Start loops with 3–4 iterations while building. They're easier to reason about. Once the pattern is right, push to 6–8 for the final look.</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ NOISE -->
+<div class="page" id="page-noise">
+  <div class="page-header">
+    <h1>Noise</h1>
+    <p class="lead">Controlled randomness — the texture of the natural world.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Pure math produces forms that are too perfect. Real clouds don't have uniform density. Real fire doesn't burn symmetrically. Noise is the discipline of making math imperfect in beautiful, controllable ways.</p>
+
+  <h3>FBM — Fractal Brownian Motion <span class="badge badge-float">→ float</span></h3>
+  <p>FBM layers multiple octaves of value noise at increasing frequencies and decreasing amplitudes. Each octave adds finer detail at lower intensity, producing the characteristic "natural" texture seen in clouds, terrain, and organic surfaces.</p>
+  <pre><code>// FBM at its core:
+float fbm(vec2 p, int octaves) {
+    float value = 0.0;
+    float amp   = 0.5;
+    float freq  = 1.0;
+    for (int i = 0; i < octaves; i++) {
+        value += amp * valueNoise(p * freq);
+        amp   *= gain;       // typically 0.5 — each octave is quieter
+        freq  *= lacunarity; // typically 2.0 — each octave is finer
+    }
+    return value;
+}</code></pre>
+  <p><strong>Parameters:</strong></p>
+  <ul>
+    <li><strong>Octaves</strong> — how many layers. More = more detail but slower. 4–6 is the sweet spot.</li>
+    <li><strong>Lacunarity</strong> — frequency multiplier per octave. 2.0 doubles frequency each time (standard).</li>
+    <li><strong>Gain</strong> — amplitude multiplier per octave. 0.5 halves amplitude each time (standard).</li>
+    <li><strong>Scale</strong> — overall spatial scale of the noise.</li>
+    <li><strong>Anim Speed</strong> — drives the noise through time by sliding the UV in a diagonal direction.</li>
+  </ul>
+  <p>FBM outputs a float in approximately [0, 1]. Wire it into palette T for colored noise, use it as a displacement amount for the Displace node, or subtract 0.5 and use it as a signed warp offset.</p>
+
+  <h3>Voronoi / Worley noise <span class="badge badge-float">→ float</span></h3>
+  <p>Voronoi noise divides space into irregular cells, one per randomly placed seed point, and returns the distance to the nearest cell center. The result looks organic — cells, cracks, cobblestones.</p>
+  <ul>
+    <li><strong>Jitter</strong> — how randomly the cell centers are placed. 0 = regular grid, 1 = fully random.</li>
+    <li><strong>Scale</strong> — number of cells across the canvas.</li>
+  </ul>
+  <p>The raw distance output (<em>f1</em>) gives a smooth gradient inside each cell. For crack/vein patterns, you want the difference between the two nearest cells (<em>f2 - f1</em>) — this is brightest at cell edges. Use an Expr node: <code>f2 - f1</code> where you compute the second nearest distance.</p>
+  <pre><code>// Crack / vein pattern from Voronoi:
+float veins = voronoi_f2(uv) - voronoi_f1(uv);
+float brightness = 0.02 / max(veins, 0.001);</code></pre>
+
+  <h3>Domain Warp <span class="badge badge-vec2">→ vec2</span></h3>
+  <p>Domain warping feeds the output of one noise evaluation back as the input UV for the next. The result is dramatically more complex and organic than either noise alone — the characteristic look of lava, storm systems, and wet paint.</p>
+  <pre><code>// Two levels of domain warp:
+vec2 q = vec2(fbm(p),             fbm(p + vec2(5.2, 1.3)));
+vec2 r = vec2(fbm(p + 4.0*q),     fbm(p + 4.0*q + vec2(1.7, 9.2)));
+float f = fbm(p + 4.0*r);</code></pre>
+  <p>Apply domain warp 2–3 levels deep for maximum complexity. Each level wraps around the previous, producing recursively distorted forms.</p>
+  <div class="tip">Wire Time at a slow speed (0.1–0.2) into the noise nodes inside a Domain Warp setup. The result animates like a living fluid — fast time makes it look like boiling, slow time looks like glacial drift.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ COLOR -->
+<div class="page" id="page-color">
+  <div class="page-header">
+    <h1>Color</h1>
+    <p class="lead">From raw floats to rich, animated palettes.</p>
+  </div>
+  <div class="divider"></div>
+
+  <h3>IQ Cosine Palette</h3>
+  <p>The Palette node implements Inigo Quilez's cosine palette formula — perhaps the most elegant color tool in shader programming:</p>
+  <pre><code>vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+    return a + b * cos(6.28318 * (c * t + d));
+}</code></pre>
+  <p>Feed a float into <code>t</code> and the formula cycles through a rich color space. The four vec3 parameters control the character of the palette:</p>
+  <ul>
+    <li><strong>Offset (a)</strong> — the baseline brightness of each channel. <code>vec3(0.5)</code> centers everything.</li>
+    <li><strong>Amplitude (b)</strong> — how much each channel varies. <code>vec3(0.5)</code> fills the full range.</li>
+    <li><strong>Frequency (c)</strong> — how many times each channel cycles per unit of t. <code>vec3(1.0)</code> cycles once.</li>
+    <li><strong>Phase (d)</strong> — the phase offset of each channel. <code>vec3(0.0, 0.33, 0.67)</code> spreads R/G/B 120° apart for a rainbow.</li>
+  </ul>
+  <p>Wire Time into <code>t</code> for cycling animation. Wire an SDF distance into <code>t</code> for distance-based coloring. Wire Loop Index into <code>t</code> (offset per iteration) for per-ring color variation in loops.</p>
+
+  <h3>Palette Preset</h3>
+  <p>10 curated palette configurations ready to use: IQ Blue-Teal, IQ Rainbow, IQ Warm, IQ Lemon, Sunset, Fire, Forest, Purple Haze, Deep Purple, Psychedelic. Use this for quick results; switch to the manual Palette node when you want to dial in specific colors.</p>
+
+  <h3>Gradient <span class="badge badge-vec3">→ vec3</span></h3>
+  <p>Blends between two colors across UV space. Five modes: Linear X, Linear Y, Radial (by distance from center), Angular (by atan2 angle), Diagonal. The T Offset parameter shifts the blend point. Wire a float into the Color A and Color B inputs to animate the colors themselves.</p>
+
+  <h3>Tone Map <span class="badge badge-vec3">→ vec3</span></h3>
+  <p>HDR colors (values above 1.0) need to be mapped back into displayable range [0,1]. Without tone mapping, bright areas clip to white. The Tone Map node applies a curve that preserves highlight detail:</p>
+  <ul>
+    <li><strong>ACES</strong> — filmic S-curve. Slightly desaturates highlights and deepens shadows. Most cinematic result. Use this by default.</li>
+    <li><strong>Reinhard</strong> — simple <code>x / (1 + x)</code>. Preserves color hue, gentle rolloff.</li>
+    <li><strong>Filmic / Hable</strong> — stronger contrast in the mids, good for stylized looks.</li>
+    <li><strong>Exposure</strong> — pure brightness multiplier, no curve. Useful for debugging actual values.</li>
+  </ul>
+  <div class="tip">Place a Tone Map node as the last step before Output whenever your shader uses Make Light, glow formulas, or accumulation loops. Without it, hot pixels blow out to white and you lose the color detail in bright areas.</div>
+
+  <h3>HSV ↔ RGB conversion</h3>
+  <p>The <strong>RGB to HSV</strong> and <strong>HSV to RGB</strong> nodes convert between color spaces. Working in HSV is useful when you want to shift hue independently, animate saturation, or create color wheels. The H component cycles: 0 and 1 are both red.</p>
+
+  <h3>Mix, Clamp, Posterize, Invert</h3>
+  <ul>
+    <li><strong>Mix</strong> — linear interpolation between two vec3 colors. Wire a float into T (0 = all A, 1 = all B).</li>
+    <li><strong>Clamp</strong> — restricts a value to [min, max]. Essential before Output if your shader produces out-of-range values without tone mapping.</li>
+    <li><strong>Posterize</strong> — quantizes color into N discrete bands. Creates a cel-shaded / retro look.</li>
+    <li><strong>Invert</strong> — <code>1.0 - color</code>. Flips all channels.</li>
+    <li><strong>Gamma</strong> — applies a power curve. Gamma < 1 brightens midtones, Gamma > 1 darkens them.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════ MATH -->
+<div class="page" id="page-math">
+  <div class="page-header">
+    <h1>Math Nodes</h1>
+    <p class="lead">The arithmetic layer that connects everything else.</p>
+  </div>
+  <div class="divider"></div>
+
+  <h3>Arithmetic</h3>
+  <ul>
+    <li><code>Add</code>, <code>Subtract</code>, <code>Multiply</code>, <code>Divide</code> — basic float operations. Each has a B slider as fallback when the B socket is unwired.</li>
+    <li><code>Add Colors</code> — adds two vec3 values. The accumulation workhorse for multi-light setups and loop color building.</li>
+    <li><code>Scale Color</code> — multiplies a vec3 by a float. Use this to apply a glow intensity to a palette color.</li>
+  </ul>
+
+  <h3>Trigonometry</h3>
+  <ul>
+    <li><code>Sin</code>, <code>Cos</code> — outputs <code>amp * sin(input * freq)</code>. Both the amplitude and frequency can be overridden by sockets. Wire Time into input for oscillation.</li>
+    <li>All trig functions work in radians. One full rotation = 2π ≈ 6.2832.</li>
+  </ul>
+
+  <h3>Shaping functions</h3>
+  <ul>
+    <li><strong>Step</strong> — hard threshold: <code>step(edge, x)</code> = 0 if x < edge, 1 if x ≥ edge. Creates a sharp binary boundary.</li>
+    <li><strong>Smoothstep</strong> — hermite interpolation between two edges. Produces a smooth 0→1 transition. The most useful shaping function in the library.</li>
+    <li><strong>Mix</strong> — linear interpolation: <code>mix(a, b, t)</code>. Blends any two values.</li>
+    <li><strong>Clamp</strong> — restricts a value to a range.</li>
+    <li><strong>Remap</strong> — maps a value from one range to another: <code>remap(x, inMin, inMax, outMin, outMax)</code>.</li>
+  </ul>
+
+  <h3>Component operations</h3>
+  <ul>
+    <li><strong>Abs</strong> — absolute value. Mirrors negative values to positive. Core of onion-skinning: <code>abs(d) - r</code>.</li>
+    <li><strong>Floor, Ceil, Fract</strong> — decompose a float into integer and fractional parts.</li>
+    <li><strong>Mod</strong> — modulo. The basis of tiling and repetition.</li>
+    <li><strong>Sign</strong> — returns -1.0, 0.0, or 1.0. Useful for extracting directionality from a signed distance.</li>
+    <li><strong>Pow</strong> — base raised to exponent. Use for gamma curves and sharp shaping functions.</li>
+    <li><strong>Sqrt, Exp, Log</strong> — standard math functions.</li>
+  </ul>
+
+  <h3>Vector operations</h3>
+  <ul>
+    <li><strong>Length</strong> — distance from a vec2 to the origin. The Circle SDF formula is just <code>length(uv) - radius</code>.</li>
+    <li><strong>Normalize</strong> — scales a vector to length 1.</li>
+    <li><strong>Dot</strong> — dot product of two vectors. See <a href="#vectors-matrices">Vectors & Matrices</a>.</li>
+    <li><strong>Split</strong> — separates a vec2/vec3 into its individual float components.</li>
+    <li><strong>Join</strong> — combines two or three floats into a vec2 or vec3.</li>
+    <li><strong>Swizzle</strong> — reorder or duplicate components: turn a vec3 (r,g,b) into vec3 (b,g,r).</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════ ANIMATION -->
+<div class="page" id="page-animation">
+  <div class="page-header">
+    <h1>Animation & LFOs</h1>
+    <p class="lead">Time as raw material.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Animation in shaders is nothing more than making output depend on time. Wire the Time node into anything — a palette's T input, a Rotate 2D's angle, a noise's offset — and that thing becomes animated. Every parameter is a potential dimension of motion.</p>
+  <p>LFOs (Low Frequency Oscillators) are nodes that transform raw time into specific oscillation patterns. They take a Time input and output a value that moves predictably between a min and max at a given frequency.</p>
+
+  <h3>Sine LFO <span class="badge badge-float">→ float</span></h3>
+  <p>Smooth sinusoidal oscillation. The most natural-feeling LFO — it eases in and out at each extreme, like breathing. Use for scale pulsing, opacity breathing, gentle color shifts. Frequency is in Hz (cycles per second).</p>
+
+  <h3>Square LFO <span class="badge badge-float">→ float</span></h3>
+  <p>Instant switch between min and max. No transition. Use for strobing, binary state changes, rhythm-locked flashing. The duty cycle parameter (0–1) controls how long it spends in the "high" state.</p>
+
+  <h3>Sawtooth LFO <span class="badge badge-float">→ float</span></h3>
+  <p>Linear ramp from min to max, then instant reset. Like a countdown that resets. Use for looping motion, scrolling textures, anything that needs to sweep and restart. Phase controls where in the cycle it starts.</p>
+
+  <h3>Triangle LFO <span class="badge badge-float">→ float</span></h3>
+  <p>Symmetric ramp up then ramp down. Like Sawtooth but without the sharp reset — it reverses at both ends. Slightly more natural than Sawtooth for back-and-forth motion.</p>
+
+  <h3>BPM Sync</h3>
+  <p>Takes a BPM value and outputs a normalized phase [0, 1] that completes one cycle per beat. Wire this into any LFO's phase input or use it directly as a palette T driver to lock your visuals to a music tempo. At 120 BPM, one cycle completes every 0.5 seconds.</p>
+
+  <div class="tip">Layer multiple LFOs at different frequencies for complex motion that never quite repeats. For example: a slow Sine at 0.1 Hz driving scale, plus a faster Sine at 0.37 Hz driving rotation, produces motion that takes over 10 seconds to approximately cycle.</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════ EFFECTS -->
+<div class="page" id="page-effects">
+  <div class="page-header">
+    <h1>Effects</h1>
+    <p class="lead">Post-processing that happens after the main computation.</p>
+  </div>
+  <div class="divider"></div>
+
+  <h3>Make Light <span class="badge badge-float">→ float</span></h3>
+  <p>The foundational glow formula: <code>brightness / abs(distance)</code>. Feed any SDF distance into Distance, adjust Brightness to control how intense the glow is. The output is a scalar intensity — multiply it against a color to get a tinted glow. Multiple Make Light nodes can be added together for multi-light scenes.</p>
+
+  <h3>Tone Map <span class="badge badge-vec3">→ vec3</span></h3>
+  <p>Maps HDR values (above 1.0) into displayable range. See <a href="#color">Color</a> for full details on the available modes. Always place this before Output when using accumulation loops or glow.</p>
+
+  <h3>Chromatic Aberration</h3>
+  <p>Offsets the R, G, and B channels by slightly different amounts, simulating the color fringing seen in cheap camera lenses. The offset increases radially from the center, strongest at screen edges. Strength parameter controls offset magnitude. Wire a subtle amount (0.005–0.02) for a subtle analog feel.</p>
+
+  <h3>Film Grain</h3>
+  <p>Adds high-frequency random noise to the output. Animates each frame so it looks like physical film grain rather than a static texture. Intensity parameter. Best applied as the very last step before Output, after tone mapping.</p>
+
+  <h3>Gravitational Lens</h3>
+  <p>UV distortion that bends rays around a center point, imitating the lensing effect of a massive object. The distortion is strongest close to the lens center and falls off with distance. Strength, Center X, Center Y, and Falloff parameters.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ FRACTALS -->
+<div class="page" id="page-fractals">
+  <div class="page-header">
+    <h1>Fractals</h1>
+    <p class="lead">Infinite complexity from finite rules.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Fractal nodes run iterative algorithms that produce self-similar patterns at all scales of zoom. They're the computational cousins of the iterated group — both use repetition to build complexity — but fractal nodes are pre-packaged for specific mathematical systems.</p>
+
+  <h3>Fractal Loop (Fractal Rings)</h3>
+  <p>The compound "Fractal Rings" node packages the classic IQ fractal ring pattern — UV folding + ring glow accumulation — in a single pre-built node. Connect UV and Time, adjust iterations, scale, and ring frequency. For full control over the loop behavior, build it manually with an iterated group instead.</p>
+
+  <h3>Mandelbrot <span class="badge badge-float">→ float</span></h3>
+  <p>Iterates the formula <code>z = z² + c</code> where c is the pixel coordinate and z starts at 0. Returns the normalized escape count — how quickly the sequence diverges. Wire into a Palette node for classic Mandelbrot coloring.</p>
+  <ul>
+    <li><strong>Max Iterations</strong> — higher = more detail at cost of performance. 64–128 is typical.</li>
+    <li><strong>Zoom</strong> — scale into the fractal. Animate with Time for a zoom sequence.</li>
+    <li><strong>Center X/Y</strong> — the point you're zooming into.</li>
+  </ul>
+
+  <h3>Julia Set <span class="badge badge-float">→ float</span></h3>
+  <p>Like Mandelbrot but with a fixed complex parameter c rather than using the pixel coordinate. Different c values produce radically different shapes — from connected islands to fractal dust. The C X and C Y parameters define the complex constant. Animate them slowly with Time for morphing shapes.</p>
+
+  <h3>Burning Ship <span class="badge badge-float">→ float</span></h3>
+  <p>Mandelbrot variant: <code>z = (|Re(z)| + i|Im(z)|)² + c</code>. The absolute values before squaring create a completely different fractal geometry — resembling a burning ship when oriented correctly.</p>
+
+  <h3>Apollonian Gasket <span class="badge badge-float">→ float</span></h3>
+  <p>Iterated circle inversions. Each iteration inverts the coordinate through a set of circles, producing a fractal arrangement of tangent circles packed at all scales. Feed output into Palette for classic gasket coloring.</p>
+
+  <h3>Menger Sponge (3D) <span class="badge badge-float">→ float</span></h3>
+  <p>3D SDF fractal. Produced by iterating box subtraction at decreasing scales. Use inside a 3D scene via the Scene Group. The iteration count controls how many levels of sponge holes appear — 3–4 is usually sufficient.</p>
+
+  <div class="tip">All fractal nodes output a float in [0, 1] representing the iteration ratio or escape time. This float is designed to be fed into Palette — that's the standard pattern for getting color from a fractal computation.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ 3D INTRO -->
+<div class="page" id="page-3d-intro">
+  <div class="page-header">
+    <h1>Ray Marching</h1>
+    <p class="lead">3D without triangles — the complete pipeline.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Traditional 3D rendering works by rasterizing triangles — projecting geometry vertices onto the screen. Ray marching works differently: for each pixel, it shoots a ray from the camera into the scene and asks, over and over, "am I close to any surface yet?"</p>
+  <p>The answer at each step comes from an SDF — the same signed distance function you've been using in 2D, extended into 3D. The SDF tells the ray how far it can step safely without missing a surface. When that distance gets very small, the ray has hit something.</p>
+
+  <h3>The march loop</h3>
+  <pre><code>vec3 rayOrigin = cameraPosition;
+vec3 rayDir    = normalize(cameraMatrix * vec3(screenUV, focalLength));
+
+float totalDist = 0.0;
+for (int i = 0; i < MAX_STEPS; i++) {
+    vec3 p = rayOrigin + rayDir * totalDist;
+    float d = sceneSDF(p);           // distance to nearest surface
+    if (d < SURFACE_THRESHOLD) break; // we've hit something
+    if (totalDist > MAX_DIST)   break; // ray escaped the scene
+    totalDist += d;                  // safe to step this far
+}</code></pre>
+  <p>The insight is that stepping by exactly <code>d</code> at each iteration is always safe — by definition of the SDF, there is no surface within distance <code>d</code> of the current point. This is called sphere tracing, and it's why SDF-based ray marching converges quickly.</p>
+
+  <h3>The 3D pipeline in Shader Studio</h3>
+  <div class="node-diagram">
+    <div class="node-box source">UV + Time</div>
+    <div class="arrow">→</div>
+    <div class="node-box transform">Raymarch 3D</div>
+    <div class="arrow">→ color, normal, depth</div>
+    <div class="node-box color">Shading</div>
+    <div class="arrow">→</div>
+    <div class="node-box output">Output</div>
+  </div>
+  <p>The <strong>Raymarch 3D</strong> node is the all-in-one 3D renderer. Wire UV and Time into it, configure the scene type (sphere, box, torus, repeating objects, or blended shapes), adjust camera distance, height, orbit speed, and lighting parameters. It outputs:</p>
+  <ul>
+    <li><strong>Color</strong> <span class="badge badge-vec3">vec3</span> — the lit, fog-blended color of the hit point</li>
+    <li><strong>Normal</strong> <span class="badge badge-vec3">vec3</span> — surface normal at the hit point (useful for custom shading)</li>
+    <li><strong>Depth</strong> <span class="badge badge-float">float</span> — ray travel distance (useful for fog, depth-of-field)</li>
+    <li><strong>Occlusion</strong> <span class="badge badge-float">float</span> — ambient occlusion estimate</li>
+    <li><strong>Fog Mask</strong> <span class="badge badge-float">float</span> — how much fog applies at this pixel</li>
+  </ul>
+
+  <h3>Surface normals</h3>
+  <p>A surface normal at a point is computed numerically — by sampling the SDF at tiny offsets and computing the gradient:</p>
+  <pre><code>vec3 calcNormal(vec3 p) {
+    float e = 0.001;
+    return normalize(vec3(
+        sceneSDF(p + vec3(e,0,0)) - sceneSDF(p - vec3(e,0,0)),
+        sceneSDF(p + vec3(0,e,0)) - sceneSDF(p - vec3(0,e,0)),
+        sceneSDF(p + vec3(0,0,e)) - sceneSDF(p - vec3(0,0,e))
+    ));
+}</code></pre>
+  <p>The Raymarch 3D node computes this automatically. When you receive the Normal output, it's already normalized and ready for lighting calculations.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ 3D SDFs -->
+<div class="page" id="page-3d-sdf">
+  <div class="page-header">
+    <h1>3D SDFs</h1>
+    <p class="lead">The geometry vocabulary of ray marching.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Every shape in a ray marched scene is defined by a signed distance function in 3D space. The same principles as 2D SDFs apply — negative inside, positive outside, zero on the surface — but now operating on vec3 positions.</p>
+
+  <h3>Primitive nodes</h3>
+  <ul>
+    <li><code>Sphere SDF 3D</code> — <code>length(p) - r</code>. The fundamental 3D primitive.</li>
+    <li><code>Box SDF 3D</code> — axis-aligned box with independent X/Y/Z half-sizes.</li>
+    <li><code>Torus SDF 3D</code> — a donut. Major radius R (ring size), tube radius r (thickness).</li>
+    <li><code>Cylinder SDF 3D</code> — capped cylinder with radius and half-height.</li>
+    <li><code>Cone SDF 3D</code> — cone defined by angle and height.</li>
+    <li><code>Capsule SDF 3D</code> — pill shape (cylinder + sphere caps).</li>
+    <li><code>Octahedron SDF 3D</code> — 8-sided diamond.</li>
+    <li><code>Rounded Box SDF 3D</code> — box with rounded corners/edges.</li>
+    <li><code>Box Frame SDF 3D</code> — wireframe box (hollow, shows only the edges).</li>
+    <li><code>Ellipsoid SDF 3D</code> — sphere stretched independently per axis.</li>
+    <li><code>Pyramid SDF 3D</code> — square-based pyramid.</li>
+    <li><code>Hex Prism SDF 3D</code> — hexagonal prism.</li>
+  </ul>
+
+  <h3>3D boolean operations</h3>
+  <p>Same as 2D — min, max, smooth-min:</p>
+  <pre><code>float scene(vec3 p) {
+    float sphere = sdSphere(p - vec3(0, 0, 0), 0.5);
+    float box    = sdBox3(p - vec3(0.3, 0, 0), vec3(0.4));
+    return sminSDF(sphere, box, 0.1); // smooth blend
+}</code></pre>
+
+  <h3>3D space operations</h3>
+  <ul>
+    <li><strong>opRep</strong> — infinite domain repetition in 3D. Tiles your entire scene infinitely.</li>
+    <li><strong>opTwist</strong> — twists the geometry around the Y axis. Amount controls twist per unit height.</li>
+    <li><strong>Menger Sponge</strong> — iterative box subtraction fractal (see <a href="#fractals">Fractals</a>).</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════ 3D LIGHTING -->
+<div class="page" id="page-3d-lighting">
+  <div class="page-header">
+    <h1>3D Lighting</h1>
+    <p class="lead">How surfaces become visible.</p>
+  </div>
+  <div class="divider"></div>
+  <p>A surface hit by a ray has a position and a normal. Lighting turns those two pieces of information into a color. The Raymarch 3D node handles this internally, but understanding the components lets you customize the output using the Normal and Depth sockets.</p>
+
+  <h3>Diffuse lighting</h3>
+  <p>The most fundamental lighting model: how much does the surface face the light?</p>
+  <pre><code>vec3 normal   = calcNormal(hitPoint);
+vec3 lightDir = normalize(vec3(1.0, 1.5, 0.5)); // light direction
+float diffuse = max(dot(normal, lightDir), 0.0);
+vec3 color = surfaceColor * diffuse;</code></pre>
+
+  <h3>Specular (Phong)</h3>
+  <p>The bright highlight that appears when the surface is at the right angle relative to both the light and the viewer:</p>
+  <pre><code>vec3 viewDir  = -rayDir; // camera is looking from here
+vec3 reflect  = reflect(-lightDir, normal);
+float spec    = pow(max(dot(viewDir, reflect), 0.0), shininess);
+vec3 color   += specularColor * spec;</code></pre>
+
+  <h3>Ambient occlusion</h3>
+  <p>AO darkens crevices and corners where light can't easily reach. It's estimated by sampling the SDF at small offsets along the normal — nearby surfaces reduce the ambient contribution. The Raymarch 3D node's Occlusion output carries this value for use in custom shading.</p>
+
+  <h3>Soft shadows</h3>
+  <p>Ray march a second ray from the surface toward the light. If it hits something before reaching the light, the surface is in shadow. Soft shadows penumbra by tracking the closest approach distance during the shadow ray march.</p>
+
+  <h3>Fog</h3>
+  <p>Blend the surface color with a sky/background color based on depth: <code>mix(surfaceColor, fogColor, fogFactor)</code> where <code>fogFactor = 1 - exp(-depth * density)</code>. The Fog Mask output from Raymarch 3D gives you this factor ready to use.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ VOLUMETRICS -->
+<div class="page" id="page-volumetrics">
+  <div class="page-header">
+    <h1>Volumetrics</h1>
+    <p class="lead">Rendering the space between surfaces — fog, clouds, god rays.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Standard ray marching finds the first surface a ray hits. Volumetric rendering accumulates contributions <em>along the entire ray path</em> — sampling the density of a medium at every step. This is how clouds, fog, fire, and god rays are rendered.</p>
+
+  <h3>The volumetric march</h3>
+  <pre><code>float totalDensity = 0.0;
+vec3  totalColor   = vec3(0.0);
+float stepSize     = 0.05;
+
+for (int i = 0; i < 64; i++) {
+    vec3 p = rayOrigin + rayDir * float(i) * stepSize;
+    float density = cloudDensity(p);       // sample the volume
+    totalDensity += density * stepSize;
+    totalColor   += lightColor * density * stepSize * exp(-totalDensity);
+}
+// totalColor is the accumulated in-scattered light</code></pre>
+  <p>The <code>exp(-totalDensity)</code> term is Beer's Law — it models how light is absorbed as it travels through matter. Each step contributes less color as the accumulated density grows.</p>
+
+  <h3>Cloud density function</h3>
+  <p>The shape of a volumetric cloud is defined by a scalar density function — how thick the medium is at each 3D point. A typical cloud density uses turbulent noise modulated by height:</p>
+  <pre><code>float cloudDensity(vec3 p, float coverage, float puffiness, float scale) {
+    float base = -p.y * 0.5 + coverage;   // height falloff
+    float turb = turbulence(p * scale, 4); // layered noise
+    float d = base - turb * puffiness;
+    return max(d, 0.0);                   // can't have negative density
+}</code></pre>
+
+  <h3>The Raymarch 3D node in volumetric mode</h3>
+  <p>The Raymarch 3D node includes a "clouds" scene type that runs volumetric accumulation. Select it from the Scene dropdown. Parameters include Coverage (how thick the cloud layer is), Puffiness (how much turbulence shapes the cloud), and Noise Scale (feature size). The output color includes in-scattered light.</p>
+
+  <h3>God rays / light shafts</h3>
+  <p>Volumetric light shafts are produced by ray marching toward a light source and accumulating density that hasn't been occluded. At each step, cast a shadow ray to the light — if it's not blocked, add to the accumulation. The characteristic "beams through clouds" look comes from varying density along the primary ray creating alternating lit and shadowed regions.</p>
+
+  <h3>Building volumetrics with iterated groups</h3>
+  <p>You can approximate volumetric accumulation using an iterated group. Each iteration represents one march step along the ray. Use a float carry to accumulate density and a vec3 carry to accumulate color. Connect Loop Index to compute the step position along the ray.</p>
+  <pre><code>// Per iteration inside the group:
+float t = loopIndex * stepSize;             // position along ray
+vec3  p = rayOrigin + rayDir * t;
+float density = noiseAt(p);
+colorCarry += lightColor * density * stepSize;  // accumulate
+densityCarry += density * stepSize;</code></pre>
+</div>
+
+
+<!-- ═══════════════════════════════════════════ FUNCTION BUILDER -->
+<div class="page" id="page-function-builder">
+  <div class="page-header">
+    <h1>Function Builder</h1>
+    <p class="lead">Build reusable GLSL functions visually, then call them by name from anywhere.</p>
+  </div>
+  <div class="divider"></div>
+  <p>The Function Builder is a separate canvas — accessible from the top navigation — where you define named GLSL functions. A function you build here shows up in the node palette as a Custom Function node. Wire it in like any other node.</p>
+  <p>The value here is reuse. If you have a 12-node computation you use in three different places, put it in the Function Builder once, then call it three times. Change it once, all three callers update.</p>
+
+  <h3>Building a function</h3>
+  <ol class="steps">
+    <li><strong>Open Function Builder</strong> Click the Function Builder tab in the top navigation.</li>
+    <li><strong>Name your function</strong> Give it a descriptive name — this becomes the node's label and the GLSL function name.</li>
+    <li><strong>Add inputs</strong> Click "Add Input" to declare typed parameters (float, vec2, vec3, vec4). Each becomes an input socket on the resulting node and an argument in the generated GLSL function signature.</li>
+    <li><strong>Build the computation</strong> Use any nodes in the Function Builder canvas. The inputs are available as source nodes. Connect everything to the Function Output node.</li>
+    <li><strong>Set output type</strong> On the Function Output node, select the return type of your function.</li>
+    <li><strong>Save</strong> Click Save. The function appears in the node palette under Custom Functions.</li>
+  </ol>
+
+  <h3>Using your function in the main graph</h3>
+  <p>Find it in the palette (search by name) and wire it just like any built-in node. The input sockets correspond to the arguments you declared, and the output matches the return type you set.</p>
+
+  <h3>Editing an existing function</h3>
+  <p>Open Function Builder, select the function from the list on the left, make changes, and save again. All instances of that function in the main graph automatically reflect the update on the next recompile.</p>
+
+  <h3>Practical use cases</h3>
+  <ul>
+    <li><strong>Custom SDF</strong> — build an unusual 2D shape from primitives, save it as a function, reuse it tiled with opRepeat.</li>
+    <li><strong>Palette wrapper</strong> — a function that takes a float and returns a vec3 using your specific palette parameters, so you can reuse the same color scheme in multiple places without re-specifying all 12 palette parameters.</li>
+    <li><strong>Noise composite</strong> — a function that layers FBM + Voronoi + domain warp in a specific way, accepts UV and Time as inputs, outputs a float. Call it anywhere you want that specific texture.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ GLSL / EXPR EDITOR -->
+<div class="page" id="page-glsl-editor">
+  <div class="page-header">
+    <h1>GLSL / Expression Editor</h1>
+    <p class="lead">When nodes run out — write it yourself.</p>
+  </div>
+  <div class="divider"></div>
+  <p>The Expr node is a node with a built-in GLSL code editor. You declare typed input ports, write a GLSL expression or body, and the result appears as an output socket. The node is fully wireable — it fits into any graph just like a built-in node.</p>
+
+  <h3>Adding an Expr node</h3>
+  <p>Open the node palette and search "Expr" or "Expression". Double-click the node to open its editor. You'll see:</p>
+  <ul>
+    <li>An <strong>Inputs</strong> section — declare named inputs with types</li>
+    <li>A <strong>Body</strong> area — optional intermediate computations</li>
+    <li>A <strong>Result</strong> field — the final expression to return</li>
+    <li>An <strong>Output Type</strong> selector — float, vec2, vec3, or vec4</li>
+  </ul>
+
+  <h3>Writing the expression</h3>
+  <p>The inputs you declare appear as variables in scope. Just use their names:</p>
+  <pre><code>// Inputs declared: d (float), t (float)
+// Output type: float
+// Result:
+0.01 / abs(sin(d * 8.0 + t) / 8.0)</code></pre>
+  <pre><code>// Inputs: uv (vec2), t (float)
+// Output type: vec2
+// Result:
+vec2(sin(t) * 0.5, cos(t * 1.3) * 0.4) + uv * 0.8</code></pre>
+  <pre><code>// Inputs: uv (vec2)
+// Output type: float
+// Body:
+float angle = atan(uv.y, uv.x);
+float r = length(uv);
+// Result:
+sin(angle * 6.0) * r</code></pre>
+
+  <h3>Assignment operators in the Body</h3>
+  <p>Each line in the Body section has three parts: a left-hand side variable, an operator, and a right-hand side expression. The operator dropdown offers five choices:</p>
+  <table>
+    <tr><th>Operator</th><th>Meaning</th><th>Equivalent to</th></tr>
+    <tr><td><code>=</code></td><td>Assign</td><td><code>x = expr</code> — replace x with the result</td></tr>
+    <tr><td><code>+=</code></td><td>Add and assign</td><td><code>x = x + expr</code> — add expr to x and store back</td></tr>
+    <tr><td><code>-=</code></td><td>Subtract and assign</td><td><code>x = x - expr</code> — subtract expr from x and store back</td></tr>
+    <tr><td><code>*=</code></td><td>Multiply and assign</td><td><code>x = x * expr</code> — scale x by expr and store back</td></tr>
+    <tr><td><code>/=</code></td><td>Divide and assign</td><td><code>x = x / expr</code> — divide x by expr and store back</td></tr>
+  </table>
+  <p>The compound operators (<code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code>) are only meaningful when the left-hand side is a variable you declared earlier in the Body — they read its current value, transform it, and write back. Using <code>+=</code> on an undeclared variable is a compiler error.</p>
+  <pre><code>// Example: accumulate three offsets into a position
+// Inputs: uv (vec2), t (float)
+// Body:
+vec2 p = uv;          // p = uv        (declare p)
+p += vec2(0.1, 0.0);  // p += ...      (shift right)
+p *= 1.5;             // p *= 1.5      (zoom in)
+p -= vec2(0.0, sin(t) * 0.2);  // p -= ... (oscillate vertically)
+// Result:
+p</code></pre>
+  <p>This is particularly useful for building up coordinate transforms step by step — each line applies a transformation to the running variable without needing to write the full accumulated expression in one shot.</p>
+  <p>Compound operators also apply to individual components. <code>p.x += 0.5</code> shifts only the x component of a vec2 or vec3. <code>color.rgb *= 0.8</code> darkens a vec4's color channels without touching alpha. This works anywhere GLSL swizzle assignment is valid.</p>
+
+  <h3>Available built-ins</h3>
+  <p>All standard GLSL functions are available: <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>atan</code>, <code>sqrt</code>, <code>pow</code>, <code>exp</code>, <code>log</code>, <code>abs</code>, <code>sign</code>, <code>floor</code>, <code>ceil</code>, <code>fract</code>, <code>mod</code>, <code>min</code>, <code>max</code>, <code>clamp</code>, <code>mix</code>, <code>step</code>, <code>smoothstep</code>, <code>length</code>, <code>normalize</code>, <code>dot</code>, <code>cross</code>, <code>reflect</code>.</p>
+  <p>Shader Studio also injects its built-in helpers: <code>palette()</code>, <code>sdBox()</code>, <code>sdSegment()</code>, <code>sdEllipse()</code>, <code>opRepeat()</code>, <code>opRepeatPolar()</code>, <code>rotate()</code>, <code>smin()</code>, <code>valueNoise()</code>, <code>fbm()</code>.</p>
+  <p>Uniforms like <code>u_time</code> and <code>u_resolution</code> are also available — but for clean graph design, prefer wiring Time and UV in as inputs rather than referencing uniforms directly.</p>
+
+  <h3>Common errors</h3>
+  <ul>
+    <li><strong>Type mismatch</strong> — <code>float + vec2</code> doesn't compile. Be explicit: <code>vec2(f) + v</code> or use swizzling.</li>
+    <li><strong>Integer literals</strong> — write <code>2.0</code> not <code>2</code>. <code>6.0 / 2</code> is a type error in strict GLSL.</li>
+    <li><strong>Missing semicolons</strong> — every statement in the Body section needs a <code>;</code>. The Result field is an expression (no semicolon).</li>
+    <li><strong>Undeclared variables</strong> — if you use a variable in the Result that you didn't declare in Body or Inputs, it won't compile.</li>
+  </ul>
+
+  <div class="tip">The GLSL panel (⌘\) shows how your Expr node compiles. If you're getting unexpected results, open it and find your node's output variable — see exactly what expression is being evaluated.</div>
+</div>
+
+<!-- ═════════════════════════════════════════ PREVIEW & CODE OUTPUT -->
+<div class="page" id="page-preview-code">
+  <div class="page-header">
+    <h1>Preview & Code Output</h1>
+    <p class="lead">Seeing the shader and seeing through it.</p>
+  </div>
+  <div class="divider"></div>
+
+  <h3>The preview canvas</h3>
+  <p>The live preview runs at the top-right of the interface. It renders the compiled shader in real time using WebGL. A few things to know:</p>
+  <ul>
+    <li><strong>Resolution matters</strong> — the UV node's aspect ratio correction depends on the preview's actual pixel dimensions. Resizing the preview changes the coordinate space slightly.</li>
+    <li><strong>Stateful shaders</strong> — when a Prev Frame node is present, the preview uses a double-buffer setup. The preview may need a few frames to "warm up" for feedback effects.</li>
+    <li><strong>Time pauses</strong> — the time uniform stops incrementing when the preview is not focused (background tab). This is expected behavior.</li>
+  </ul>
+
+  <h3>The GLSL code panel</h3>
+  <p>Toggle with <kbd class="key">⌘\</kbd>. This panel shows the exact fragment shader being compiled and run. It's the ground truth — if you ever doubt what your graph is doing, open this.</p>
+  <p><strong>Clicking a node</strong> in the canvas highlights the corresponding code in the GLSL panel. The highlighted lines are the exact GLSL contribution of that node — the variable names, the formula, everything. This is the fastest way to understand:</p>
+  <ul>
+    <li>What output variable name a node produces (useful for writing Expr nodes that reference its output)</li>
+    <li>Whether a node's computation is what you expected</li>
+    <li>How carry-mode nodes are declared and updated in the compiled loop</li>
+    <li>What an iterated group's for loop actually looks like in GLSL</li>
+  </ul>
+
+  <h3>Node inline preview</h3>
+  <p>Individual nodes can display a tiny live preview of their output directly on the canvas. Right-click a node and toggle "Show Preview". This runs a separate minimal shader just for that node's output. Useful for verifying what a noise or SDF node produces before wiring it into the main graph.</p>
+
+  <h3>Exporting</h3>
+  <p>Use <kbd class="key">⌘S</kbd> to export the current graph as a JSON file. This saves the full node graph — not the compiled GLSL. Use <kbd class="key">⌘O</kbd> to import a saved graph.</p>
+  <p>To export as a video, press <kbd class="key">⌘R</kbd> to open the recorder. Set duration and format, then record. The recorder captures frames from the preview at the specified resolution.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════ SHORTCUTS -->
+<div class="page" id="page-shortcuts">
+  <div class="page-header">
+    <h1>Keyboard Shortcuts</h1>
+    <p class="lead">Everything faster.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Press <kbd class="key">?</kbd> at any time to open the shortcuts panel, where all bindings are listed and can be rebound.</p>
+
+  <h4>Graph</h4>
+  <div class="shortcut-row"><div><div class="shortcut-label">Undo</div></div><div><kbd class="key">⌘Z</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Export graph</div><div class="shortcut-desc">Save as JSON file</div></div><div><kbd class="key">⌘S</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Import graph</div></div><div><kbd class="key">⌘O</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Group selected nodes</div><div class="shortcut-desc">Collapse selection into a group</div></div><div><kbd class="key">⌘G</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Wrap in loop</div><div class="shortcut-desc">Wrap selection in an iterated group</div></div><div><kbd class="key">⌘L</kbd></div></div>
+
+  <h4>View</h4>
+  <div class="shortcut-row"><div><div class="shortcut-label">Fit view</div><div class="shortcut-desc">Zoom to fit all nodes</div></div><div><kbd class="key">F</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Toggle GLSL panel</div></div><div><kbd class="key">⌘\</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Record video</div></div><div><kbd class="key">⌘R</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Keyboard shortcuts</div></div><div><kbd class="key">?</kbd></div></div>
+
+  <h4>Add Nodes (instant placement)</h4>
+  <div class="shortcut-row"><div><div class="shortcut-label">Open node palette</div></div><div><kbd class="key">A</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Add UV node</div></div><div><kbd class="key">U</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Add Time node</div></div><div><kbd class="key">T</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Add Float constant</div></div><div><kbd class="key">⇧F</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Add Output node</div></div><div><kbd class="key">O</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Add Mix node</div></div><div><kbd class="key">M</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Add Color constant</div></div><div><kbd class="key">C</kbd></div></div>
+
+  <h4>Filter / Highlight (hold to activate)</h4>
+  <div class="shortcut-row"><div><div class="shortcut-label">Highlight float nodes</div></div><div><kbd class="key">1</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Highlight vec2 nodes</div></div><div><kbd class="key">2</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Highlight vec3 nodes</div></div><div><kbd class="key">3</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Highlight UV inputs</div><div class="shortcut-desc">Nodes that accept vec2</div></div><div><kbd class="key">⇧U</kbd></div></div>
+  <div class="shortcut-row"><div><div class="shortcut-label">Show all nodes</div><div class="shortcut-desc">Clear filter</div></div><div><kbd class="key">⌘A</kbd></div></div>
+
+  <div class="note">All shortcuts can be rebound in Settings → Shortcuts (press <kbd class="key">?</kbd> to open).</div>
+</div>
+
+
+<!-- ═════════════════════════════════���═════════════ NODE REFERENCE -->
+<div class="page" id="page-node-reference">
+  <div class="page-header">
+    <h1>Node Reference</h1>
+    <p class="lead">Every node, concisely.</p>
+  </div>
+  <div class="divider"></div>
+
+  <h3>Sources</h3>
+  <ul>
+    <li><code>UV</code> <span class="badge badge-vec2">vec2</span> — Centered, aspect-corrected screen coordinate. The foundation of nearly every graph.</li>
+    <li><code>Pixel UV</code> <span class="badge badge-vec2">vec2</span> — Raw pixel UV (origin bottom-left, divided by resolution height).</li>
+    <li><code>Time</code> <span class="badge badge-float">float</span> — Elapsed seconds. Wire into anything to animate it.</li>
+    <li><code>Mouse</code> <span class="badge badge-vec2">vec2</span> — Cursor position in centered UV space. Also exposes X and Y as separate floats.</li>
+    <li><code>Loop Index</code> <span class="badge badge-float">float</span> — Current iteration number inside an iterated group. Outside a loop: always 0.0.</li>
+    <li><code>Constant</code> <span class="badge badge-float">float</span> — A fixed float with a slider. Wire input to override.</li>
+    <li><code>Prev Frame</code> <span class="badge badge-vec3">vec3</span> — Last frame's rendered output. Enables feedback/stateful effects.</li>
+    <li><code>Texture Input</code> <span class="badge badge-vec3">vec3</span> — Samples an uploaded image at the wired UV.</li>
+    <li><code>Audio Input</code> <span class="badge badge-float">float</span> — Per-band frequency amplitude from an audio file.</li>
+  </ul>
+
+  <h3>Transforms</h3>
+  <ul>
+    <li><code>Fract / Tile</code> <span class="badge badge-vec2">vec2</span> — Tiles space: <code>fract(uv * scale) - 0.5</code>.</li>
+    <li><code>Rotate 2D</code> <span class="badge badge-vec2">vec2</span> — Rotates a vec2 by an angle in radians.</li>
+    <li><code>Displace</code> <span class="badge badge-vec2">vec2</span> — Adds any vec2 offset × amount to input UV.</li>
+    <li><code>UV Warp (Jitter)</code> <span class="badge badge-vec2">vec2</span> — Hash-grid blocky displacement. Glitch / mosaic aesthetic.</li>
+    <li><code>UV Warp (Smooth)</code> <span class="badge badge-vec2">vec2</span> — Bilinear value-noise warp. Flowing, organic.</li>
+    <li><code>UV Warp (Curl)</code> <span class="badge badge-vec2">vec2</span> — Divergence-free curl noise. Fluid / smoke motion.</li>
+    <li><code>UV Warp (Swirl)</code> <span class="badge badge-vec2">vec2</span> — Rotational twist decaying from center.</li>
+    <li><code>opRepeat</code> <span class="badge badge-vec2">vec2</span> — Infinite domain repetition every S units.</li>
+    <li><code>opRepeatPolar</code> <span class="badge badge-vec2">vec2</span> — N-fold rotational symmetry.</li>
+  </ul>
+
+  <h3>2D SDFs</h3>
+  <ul>
+    <li><code>Circle SDF</code> <span class="badge badge-float">float</span> — <code>length(p) - r</code>.</li>
+    <li><code>Shape SDF</code> <span class="badge badge-float">float</span> — Dropdown of 40+ IQ 2D SDF shapes in one node.</li>
+    <li><code>sdBox</code> <span class="badge badge-float">float</span> — Axis-aligned rectangle.</li>
+    <li><code>sdSegment</code> <span class="badge badge-float">float</span> — Line segment between two points.</li>
+    <li><code>sdEllipse</code> <span class="badge badge-float">float</span> — Ellipse with independent radii.</li>
+    <li><code>opRepeat</code> / <code>opRepeatPolar</code> — Domain repetition (also listed under Transforms).</li>
+  </ul>
+
+  <h3>Noise</h3>
+  <ul>
+    <li><code>FBM</code> <span class="badge badge-float">float</span> — Fractal Brownian Motion. Octaves, lacunarity, gain, scale, anim speed.</li>
+    <li><code>Voronoi</code> <span class="badge badge-float">float</span> — Worley cell noise. Jitter, scale, anim speed.</li>
+    <li><code>Domain Warp</code> <span class="badge badge-vec2">vec2</span> — FBM-based UV displacement for organic warping.</li>
+  </ul>
+
+  <h3>Color</h3>
+  <ul>
+    <li><code>Palette</code> <span class="badge badge-vec3">vec3</span> — IQ cosine palette. Full control over all 4 vec3 parameters.</li>
+    <li><code>Palette Preset</code> <span class="badge badge-vec3">vec3</span> — 10 curated palette configurations.</li>
+    <li><code>Gradient</code> <span class="badge badge-vec3">vec3</span> — Two-color blend across UV. Five modes.</li>
+    <li><code>Mix (color)</code> <span class="badge badge-vec3">vec3</span> — Linear blend between two vec3 colors by a float T.</li>
+    <li><code>Tone Map</code> <span class="badge badge-vec3">vec3</span> — HDR → display range. ACES, Reinhard, and more.</li>
+    <li><code>HSV to RGB</code> / <code>RGB to HSV</code> — Color space conversions.</li>
+    <li><code>Posterize</code> <span class="badge badge-vec3">vec3</span> — Quantize color to N bands.</li>
+    <li><code>Invert</code> <span class="badge badge-vec3">vec3</span> — <code>1.0 - color</code>.</li>
+    <li><code>Gamma</code> <span class="badge badge-vec3">vec3</span> — Power curve correction.</li>
+  </ul>
+
+  <h3>Math</h3>
+  <ul>
+    <li><code>Add</code>, <code>Subtract</code>, <code>Multiply</code>, <code>Divide</code> — float arithmetic.</li>
+    <li><code>Add Colors</code> — add two vec3 values.</li>
+    <li><code>Scale Color</code> — multiply vec3 by float.</li>
+    <li><code>Sin</code>, <code>Cos</code> — <code>amp * sin/cos(input * freq)</code>.</li>
+    <li><code>Exp</code>, <code>Pow</code>, <code>Sqrt</code>, <code>Log</code> — standard math.</li>
+    <li><code>Abs</code>, <code>Negate</code>, <code>Sign</code> — sign operations.</li>
+    <li><code>Floor</code>, <code>Ceil</code>, <code>Fract</code>, <code>Mod</code> — decomposition.</li>
+    <li><code>Min</code>, <code>Max</code>, <code>Clamp</code> — range operations.</li>
+    <li><code>Mix</code>, <code>Step</code>, <code>Smoothstep</code> — interpolation and thresholding.</li>
+    <li><code>Remap</code> — map from one range to another.</li>
+    <li><code>Length</code> — <code>length(vec2) * scale</code>.</li>
+    <li><code>Normalize</code> — unit-length vector.</li>
+    <li><code>Dot</code> — dot product of two vectors.</li>
+    <li><code>Split</code> — separate vec2/vec3 into float components.</li>
+    <li><code>Join</code> — combine floats into vec2/vec3.</li>
+    <li><code>Swizzle</code> — reorder components.</li>
+  </ul>
+
+  <h3>Animation / LFOs</h3>
+  <ul>
+    <li><code>Sine LFO</code> — smooth oscillation between min and max.</li>
+    <li><code>Square LFO</code> — instant toggle. Duty cycle parameter.</li>
+    <li><code>Sawtooth LFO</code> — linear ramp, instant reset.</li>
+    <li><code>Triangle LFO</code> — symmetric ramp up/down.</li>
+    <li><code>BPM Sync</code> — phase locked to a BPM value.</li>
+  </ul>
+
+  <h3>Effects</h3>
+  <ul>
+    <li><code>Make Light</code> <span class="badge badge-float">float</span> — <code>brightness / abs(distance)</code>. The glow node.</li>
+    <li><code>Tone Map</code> — see Color section.</li>
+    <li><code>Chromatic Aberration</code> — RGB channel fringing, radial from center.</li>
+    <li><code>Film Grain</code> — animated noise overlay.</li>
+    <li><code>Gravitational Lens</code> — UV distortion imitating gravitational lensing.</li>
+  </ul>
+
+  <h3>Loops</h3>
+  <ul>
+    <li><strong>Carry Mode</strong> — a toggle on any node inside an iterated group. Right-click a node → enable Carry Mode. That node's output variable persists across iterations, feeding back as its own input each pass.</li>
+    <li><code>Loop Index</code> — current iteration number as a float. (Listed under Sources.)</li>
+  </ul>
+
+  <h3>3D Scene</h3>
+  <ul>
+    <li><code>Raymarch 3D</code> — full 3D raymarch renderer. Scene, camera, lighting all configurable. Outputs color, normal, depth, AO, fog.</li>
+    <li><code>Sphere SDF 3D</code>, <code>Box SDF 3D</code>, <code>Torus SDF 3D</code>, <code>Cylinder SDF 3D</code>, <code>Cone SDF 3D</code>, <code>Capsule SDF 3D</code>, <code>Octahedron SDF 3D</code>, <code>Rounded Box SDF 3D</code>, <code>Box Frame SDF 3D</code>, <code>Ellipsoid SDF 3D</code>, <code>Pyramid SDF 3D</code>, <code>Hex Prism SDF 3D</code>, <code>Tri Prism SDF 3D</code> — 3D signed distance primitives.</li>
+  </ul>
+
+  <h3>Fractals</h3>
+  <ul>
+    <li><code>Fractal Loop</code> — pre-built fractal rings effect node.</li>
+    <li><code>Mandelbrot</code> <span class="badge badge-float">float</span> — escape-time Mandelbrot set.</li>
+    <li><code>Julia</code> <span class="badge badge-float">float</span> — Julia set with parameterized complex constant.</li>
+    <li><code>Burning Ship</code> <span class="badge badge-float">float</span> — abs-variant Mandelbrot.</li>
+    <li><code>Apollonian Gasket</code> <span class="badge badge-float">float</span> — iterated circle inversions.</li>
+  </ul>
+
+  <h3>Utility</h3>
+  <ul>
+    <li><code>Output</code> — the terminal node. Whatever vec3 you wire into Color is rendered to the preview.</li>
+    <li><code>Group</code> — collapsed subgraph. Set Iterations > 1 for a loop.</li>
+    <li><code>Expr</code> — inline GLSL expression editor with declared typed inputs.</li>
+    <li><code>Custom Function</code> — a function you built in Function Builder, usable as a node.</li>
+    <li><code>Import GLSL</code> — paste raw GLSL function declarations and call them from the graph.</li>
+  </ul>
+</div>
+
+<!-- ═══════════���══════════════════════════════════════ END PAGES -->
+    </div><!-- #content-inner -->
+  </main>
+</div><!-- #app -->
+
+<script>
+// ── Router ─────────────────────────────────────────���───────────────────────
+const PAGES = {
+  'intro':              'page-intro',
+  'what-is-a-shader':   'page-what-is-a-shader',
+  'uv-space':           'page-uv-space',
+  'first-shader':       'page-first-shader',
+  'interface':          'page-interface',
+  'data-types':         'page-data-types',
+  'vectors-matrices':   'page-vectors-matrices',
+  'sources':            'page-sources',
+  'transforms':         'page-transforms',
+  'sdf':                'page-sdf',
+  'groups':             'page-groups',
+  'loops-overview':     'page-loops-overview',
+  'loops-iterated-group':'page-loops-iterated-group',
+  'loops-carry':        'page-loops-carry',
+  'loops-examples':     'page-loops-examples',
+  'noise':              'page-noise',
+  'color':              'page-color',
+  'math':               'page-math',
+  'animation':          'page-animation',
+  'effects':            'page-effects',
+  'fractals':           'page-fractals',
+  '3d-intro':           'page-3d-intro',
+  '3d-sdf':             'page-3d-sdf',
+  '3d-lighting':        'page-3d-lighting',
+  'volumetrics':        'page-volumetrics',
+  'function-builder':   'page-function-builder',
+  'glsl-editor':        'page-glsl-editor',
+  'preview-code':       'page-preview-code',
+  'shortcuts':          'page-shortcuts',
+  'node-reference':     'page-node-reference',
+};
+
+function showPage(hash) {
+  const id = hash.replace('#', '') || 'intro';
+  const pageId = PAGES[id] || 'page-intro';
+
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // Show target
+  const target = document.getElementById(pageId);
+  if (target) { target.classList.add('active'); document.getElementById('content').scrollTop = 0; }
+
+  // Update nav active state
+  document.querySelectorAll('.nav-item').forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+  });
+}
+
+// Handle nav clicks
+document.querySelectorAll('.nav-item').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const hash = a.getAttribute('href');
+    history.pushState(null, '', hash);
+    showPage(hash);
+  });
+});
+
+// Handle in-page links (e.g. href="#uv-space")
+document.addEventListener('click', e => {
+  const link = e.target.closest('a[href^="#"]');
+  if (!link || link.classList.contains('nav-item')) return;
+  const hash = link.getAttribute('href');
+  if (PAGES[hash.replace('#', '')]) {
+    e.preventDefault();
+    history.pushState(null, '', hash);
+    showPage(hash);
+  }
+});
+
+// Copy buttons
+document.querySelectorAll('pre').forEach(pre => {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'copy';
+  btn.addEventListener('click', () => {
+    const code = pre.querySelector('code');
+    navigator.clipboard.writeText(code ? code.textContent : pre.textContent).then(() => {
+      btn.textContent = '✓ copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1500);
+    });
+  });
+  pre.appendChild(btn);
+});
+
+// Initial load
+window.addEventListener('popstate', () => showPage(location.hash));
+showPage(location.hash || '#intro');
+</script>
+</body>
+</html>
