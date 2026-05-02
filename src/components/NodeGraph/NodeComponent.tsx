@@ -30,7 +30,7 @@ import { TransformVecModal } from './TransformVecModal';
 import { AudioInputModal } from './AudioInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
-import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz, SdfPreviewViz, SDF_TYPES } from './NodeInlineViz';
+import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
@@ -2946,8 +2946,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         </div>
       )}
 
-      {/* ── SDF shape preview — only when 👁 is active ── */}
-      {SDF_TYPES.has(node.type) && isPreviewActive && <SdfPreviewViz node={node} />}
 
       {/* ── LFO waveform — canvas is always in DOM for scope registry, but hidden unless 👁 active ── */}
       {LFO_TYPES.has(node.type) && (
