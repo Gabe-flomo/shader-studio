@@ -262,6 +262,7 @@ function App() {
   const [floatPos, setFloatPos]   = useState({ x: 40, y: 60 });
   const [floatSize, setFloatSize] = useState({ w: 480, h: 360 });
   const floatDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const [showToolbarMenu, setShowToolbarMenu] = useState(false);
 
   // Mobile/tablet drawer state
   const [drawerOpen, setDrawerOpen]         = useState(false);
@@ -490,20 +491,46 @@ function App() {
   ) : null;
 
   // ── Graph toolbar — shared by tablet + desktop layouts ────────────────────
-  // Collapses to icon-only on desktop-sm to avoid crowding the top strip.
   const compact = bp === 'desktop-sm';
   const graphToolbarEl = (
     <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '4px' }}>
-      <button onClick={exportGraph} style={btnStyle()} title="Export graph">
-        {compact ? '⬇' : '⬇ Export'}
-      </button>
-      <button onClick={importGraphFromFile} style={btnStyle()} title="Import graph">
-        {compact ? '⬆' : '⬆ Import'}
-      </button>
-      <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 1px' }} />
-      <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Record animation">
-        {compact ? '🎬' : '🎬 Record'}
-      </button>
+
+      {/* On compact screens, Export + Record collapse into a ··· menu */}
+      {compact ? (
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowToolbarMenu(v => !v)}
+            style={{ ...btnStyle(showToolbarMenu), minWidth: 32 }}
+            title="More actions"
+          >···</button>
+          {showToolbarMenu && (
+            <div
+              style={{
+                position: 'absolute', top: 'calc(100% + 4px)', left: 0,
+                background: '#1e1e2e', border: '1px solid #45475a',
+                borderRadius: '8px', padding: '4px',
+                display: 'flex', flexDirection: 'column', gap: '3px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
+                minWidth: '130px',
+              }}
+              onMouseLeave={() => setShowToolbarMenu(false)}
+            >
+              <button onClick={() => { exportGraph(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
+              <button onClick={() => { importGraphFromFile(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
+              <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
+              <button onClick={() => { setShowExport(true); setShowToolbarMenu(false); }} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744', textAlign: 'left', width: '100%' }}>🎬 Record</button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <button onClick={exportGraph} style={btnStyle()} title="Export graph">⬇ Export</button>
+          <button onClick={importGraphFromFile} style={btnStyle()} title="Import graph">⬆ Import</button>
+          <div style={{ width: '1px', height: '16px', background: '#45475a', margin: '0 1px' }} />
+          <button onClick={() => setShowExport(true)} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744' }} title="Record animation">🎬 Record</button>
+        </>
+      )}
+
       <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts">
         {compact ? '⌨' : '⌨ Keys'}
       </button>
@@ -511,9 +538,7 @@ function App() {
         onClick={() => loadExampleGraph('blank')}
         style={{ ...btnStyle(), color: '#f38ba8' }}
         title="Clear all nodes"
-      >
-        ✕
-      </button>
+      >✕</button>
     </div>
   );
 
