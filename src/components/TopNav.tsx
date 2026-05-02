@@ -96,12 +96,12 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         title="Raw GLSL Editor"
       />
 
-      {/* Learn tab */}
+      {/* Learn tab — opens standalone docs page */}
       <TabButton
-        active={page === 'learn'}
-        onClick={() => onPageChange('learn')}
+        active={false}
+        onClick={() => window.open('/docs.html', '_blank')}
         label={mobile ? '📖' : '📖 Learn'}
-        title="Learn GLSL"
+        title="Documentation"
       />
 
       {/* Shortcuts tab */}

@@ -4,7 +4,6 @@ import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { CodePanel } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
-import { LearnPage } from './components/LearnPage';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ShortcutsPage } from './components/ShortcutsPage';
@@ -709,14 +708,6 @@ function App() {
   // ══════════════════════════════════════════════════════════════════════════
   // MOBILE LEARN PAGE
   // ══════════════════════════════════════════════════════════════════════════
-  if (mobile && page === 'learn') {
-    return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
-        <TopNav page={page} onPageChange={setPage} />
-        <LearnPage onNavigateToStudio={() => setPage('studio')} />
-      </div>
-    );
-  }
 
   if (mobile && page === 'shortcuts') {
     return (
@@ -745,7 +736,6 @@ function App() {
       <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
         <TopNav page={page} onPageChange={setPage} />
 
-        {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
         {page === 'shortcuts' && <ShortcutsPage />}
         {page === 'glsl' && <GLSLPage />}
 
