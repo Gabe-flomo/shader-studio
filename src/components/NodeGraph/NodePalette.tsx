@@ -769,9 +769,8 @@ interface NodePaletteProps {
   onGlslInsert?: (code: string) => void;
 }
 
-let _paneCounter = 1;
 function mkPane(activeTab: TabId = 'nodes'): ContentPaneState {
-  return { id: `pane-${_paneCounter++}`, activeTab, tagFilters: [], flexGrow: 1 };
+  return { id: `pane-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, activeTab, tagFilters: [], flexGrow: 1 };
 }
 
 export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, onGlslInsert }: NodePaletteProps) {
