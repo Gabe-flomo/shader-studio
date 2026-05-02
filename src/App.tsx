@@ -859,7 +859,6 @@ function App() {
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
       <TopNav page={page} onPageChange={setPage} />
 
-      {page === 'learn' && <LearnPage onNavigateToStudio={() => setPage('studio')} />}
       {page === 'shortcuts' && <ShortcutsPage />}
       {page === 'fn' && (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
