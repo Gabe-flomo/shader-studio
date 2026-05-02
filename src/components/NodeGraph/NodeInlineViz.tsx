@@ -4354,8 +4354,8 @@ export const INLINE_VIZ_TYPES = new Set([
   'vec2Const', 'vec3Const', 'matConst',
   // Expr / custom fn
   'exprNode', 'customFn',
-  // Noise
-  'fbm', 'voronoi', 'noiseFloat',
+  // Noise — excluded: float outputs render as grayscale shader thumbnails
+  // 'fbm', 'voronoi', 'noiseFloat',
   // Space / UV warps
   'fract', 'rotate2d', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'displace',
   'domainWarp', 'flowField',

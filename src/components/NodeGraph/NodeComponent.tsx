@@ -110,6 +110,8 @@ let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
 const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
+// Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
+const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat']);
 
 const TYPE_COLORS: Record<string, string> = {
   float: '#f0a',
@@ -3004,7 +3006,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {/* Default: shader thumbnail for float-output scope or vec3 render */}
       {isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && !INLINE_VIZ_TYPES.has(node.type) && (
         <div style={{ width: '100%', borderBottom: '1px solid #313244' }}>
-          {primaryOutputIsFloat ? (
+          {primaryOutputIsFloat && !GRAYSCALE_PREVIEW_TYPES.has(node.type) ? (
             /* Float output → live waveform scope */
             <canvas
               ref={previewScopeCanvasRef}
