@@ -90,6 +90,8 @@ interface Props {
   onAltClickSocket?: (nodeId: string, key: string, dir: 'in' | 'out', type: string, e: React.MouseEvent) => void;
   /** True while the user is actively dragging a connection wire — input sockets should complete the connection rather than disconnect */
   isConnectionDragging?: boolean;
+  /** Called when the pointer enters/leaves any socket dot; used for Shift+hover connection spotlight */
+  onSocketHover?: (info: { nodeId: string; key: string; dir: 'in' | 'out' } | null) => void;
 }
 
 // Maps slider position (0–1000) to Hz using a dampened log scale (power=0.6)
@@ -344,7 +346,7 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false }: Props) {
+export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover }: Props) {
   const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
@@ -1255,8 +1257,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               <div
                 key={key}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
-                onMouseEnter={() => setHoveredOutput(key)}
-                onMouseLeave={() => setHoveredOutput(null)}
+                onMouseEnter={() => { setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
+                onMouseLeave={() => { setHoveredOutput(null); onSocketHover?.(null); }}
               >
                 <span style={{ fontSize: '10px', color: '#585b70' }}>&#128274;</span>
                 <span style={{ fontSize: '11px', color: '#a6adc8' }}>{label}</span>
@@ -1283,8 +1285,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               <div
                 key={key}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
-                onMouseEnter={() => setHoveredOutput(key)}
-                onMouseLeave={() => setHoveredOutput(null)}
+                onMouseEnter={() => { setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
+                onMouseLeave={() => { setHoveredOutput(null); onSocketHover?.(null); }}
               >
                 <button
                   onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)}
@@ -3086,8 +3088,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   transition: 'box-shadow 0.1s, opacity 0.1s',
                   touchAction: 'manipulation',
                 }}
-                onMouseEnter={() => setHoveredInput(key)}
-                onMouseLeave={() => setHoveredInput(null)}
+                onMouseEnter={() => { setHoveredInput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'in' }); }}
+                onMouseLeave={() => { setHoveredInput(null); onSocketHover?.(null); }}
                 onMouseDown={(e) => {
                   if (e.altKey && !isConnected && !isExternal) {
                     e.stopPropagation();
@@ -3933,8 +3935,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   e.preventDefault();
                   onTapOutputSocket?.(node.id, key);
                 }}
-                onMouseEnter={() => setHoveredOutput(key)}
-                onMouseLeave={() => setHoveredOutput(null)}
+                onMouseEnter={() => { setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
+                onMouseLeave={() => { setHoveredOutput(null); onSocketHover?.(null); }}
                 title={`${output.label} (${output.type})`}
                 style={{
                   width: isTouchDevice ? '22px' : '12px',

@@ -13,15 +13,16 @@ interface Props {
   dataType?: string;
   onWireEnter?: () => void;
   onWireLeave?: () => void;
+  dimmed?: boolean;
 }
 
-export function ConnectionLine({ from, to, dataType, onWireEnter, onWireLeave }: Props) {
+export function ConnectionLine({ from, to, dataType, onWireEnter, onWireLeave, dimmed = false }: Props) {
   const midX = (from.x + to.x) / 2;
   const path = `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`;
   const color = (dataType && TYPE_COLORS[dataType]) ? TYPE_COLORS[dataType] : '#666';
 
   return (
-    <g>
+    <g style={{ opacity: dimmed ? 0.08 : 1, transition: 'opacity 0.1s' }}>
       {/* Visual path */}
       <path
         d={path}

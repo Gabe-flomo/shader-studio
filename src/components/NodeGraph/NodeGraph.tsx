@@ -222,6 +222,10 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     screenX: number; screenY: number;
   } | null>(null);
 
+  // ── Shift+socket spotlight ──────────────────────────────────────────────────
+  const [hoveredSocket, setHoveredSocket] = useState<{ nodeId: string; key: string; dir: 'in' | 'out' } | null>(null);
+  const [shiftHeld, setShiftHeld] = useState(false);
+
   // ── Feature 2: Wire hover → + badge ────────────────────────────────────────
   const [hoveredWire, setHoveredWire] = useState<{
     fromNodeId: string; fromOutputKey: string;
@@ -375,6 +379,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     return () => el.removeEventListener('touchmove', onTouchMove);
   }, [setPan]);
+
+  // ── Shift key tracking for socket spotlight ──────────────────────────────
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(true); };
+    const onUp   = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(false); };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
+  }, []);
 
   // ── Wheel / trackpad handler (Ableton-style) ─────────────────────────────
   // • Two-finger scroll (no ctrl) → pan X + Y
@@ -729,8 +742,38 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     });
   }, [registerViewportCenterGetter]);
 
+  // ── Shift+socket spotlight — which edges are highlighted ─────────────────────
+  // Each entry is { fromNodeId, fromOutputKey, toNodeId, toInputKey }
+  const spotlightEdges = React.useMemo<Set<string>>(() => {
+    if (!shiftHeld || !hoveredSocket) return new Set();
+    const { nodeId, key, dir } = hoveredSocket;
+    const result = new Set<string>();
+    for (const node of displayNodes) {
+      for (const [inputKey, input] of Object.entries(node.inputs)) {
+        if (!input.connection) continue;
+        const edgeKey = `${input.connection.nodeId}:${input.connection.outputKey}→${node.id}:${inputKey}`;
+        if (dir === 'out' && input.connection.nodeId === nodeId && input.connection.outputKey === key) result.add(edgeKey);
+        if (dir === 'in'  && node.id === nodeId && inputKey === key) result.add(edgeKey);
+      }
+    }
+    return result;
+  }, [shiftHeld, hoveredSocket, displayNodes]);
+
   // ── Highlight filter — compute which node IDs match the current filter ───────
   const highlightedIds: Set<string> | null = React.useMemo(() => {
+    // Shift+socket spotlight takes priority over type filter
+    if (shiftHeld && hoveredSocket) {
+      const { nodeId, key, dir } = hoveredSocket;
+      const lit = new Set<string>([nodeId]);
+      for (const node of displayNodes) {
+        for (const [inputKey, input] of Object.entries(node.inputs)) {
+          if (!input.connection) continue;
+          if (dir === 'out' && input.connection.nodeId === nodeId && input.connection.outputKey === key) lit.add(node.id);
+          if (dir === 'in'  && node.id === nodeId && inputKey === key) lit.add(input.connection.nodeId);
+        }
+      }
+      return lit;
+    }
     if (!nodeHighlightFilter) return null;
     const matching = new Set<string>();
     for (const node of displayNodes) {
@@ -745,7 +788,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       }
     }
     return matching;
-  }, [nodeHighlightFilter, nodes]);
+  }, [nodeHighlightFilter, nodes, shiftHeld, hoveredSocket, displayNodes]);
 
   // Dot grid background size scales with zoom
   const gridSize = 24 * zoom;
@@ -1261,12 +1304,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               const fromOutputKey = input.connection.outputKey;
               const canvasRect    = canvasEl?.getBoundingClientRect();
 
+              const edgeKey = `${fromNodeId}:${fromOutputKey}→${node.id}:${inputKey}`;
               return (
                 <ConnectionLine
                   key={`${node.id}-${inputKey}`}
                   from={fromPos}
                   to={toPos}
                   dataType={lineType}
+                  dimmed={spotlightEdges.size > 0 && !spotlightEdges.has(edgeKey)}
                   onWireEnter={() => {
                     if (wireLeaveTimerRef.current) { clearTimeout(wireLeaveTimerRef.current); wireLeaveTimerRef.current = null; }
                     if (!canvasRect) return;
@@ -1365,6 +1410,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             externalParamKeys={externalParamMap?.get(node.id)}
             onAltClickSocket={handleAltClickSocket}
             isConnectionDragging={dragConnection !== null}
+            onSocketHover={setHoveredSocket}
           />
         ))}
 
