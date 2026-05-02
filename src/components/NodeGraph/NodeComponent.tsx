@@ -379,7 +379,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const selectNode         = useNodeGraphStore(s => s.selectNode);
   const selectedNodeIds    = useNodeGraphStore(s => s.selectedNodeIds);
   const isMultiSelected    = selectedNodeIds.includes(node.id);
-  const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
   const addMarchLoopInput      = useNodeGraphStore(s => s.addMarchLoopInput);
   const removeMarchLoopInput   = useNodeGraphStore(s => s.removeMarchLoopInput);
   const renameMarchLoopInput   = useNodeGraphStore(s => s.renameMarchLoopInput);
@@ -1627,34 +1626,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 transition: 'color 0.15s',
               }}
             >↓</button>
-            {/* Dissolve — only for regular groups, not scene groups */}
-            {!isSceneGroup && (
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => ungroupNode(node.id)}
-                title="Dissolve group"
-                style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-              >✕</button>
-            )}
-            {/* Delete button — only for special group types (sceneGroup, marchLoopGroup) */}
-            {(isSceneGroup || isMarchLoopGroup) && (
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={e => {
-                  e.stopPropagation();
-                  const label = isSceneGroup ? 'Scene Group' : 'March Loop Group';
-                  if (window.confirm(`Delete ${label} and all its nodes?`)) {
-                    removeNode(node.id);
-                  }
-                }}
-                title={`Delete ${isSceneGroup ? 'Scene Group' : 'March Loop Group'}`}
-                style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
-              >✕</button>
-            )}
+            {/* Delete button — all group types */}
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => {
+                e.stopPropagation();
+                const label = isSceneGroup ? 'Scene Group' : isMarchLoopGroup ? 'March Loop Group' : isSpaceWarpGroup ? 'Space Warp Group' : typeof node.params.label === 'string' && node.params.label ? node.params.label : 'Group';
+                if (window.confirm(`Delete "${label}" and all its nodes?`)) {
+                  removeNode(node.id);
+                }
+              }}
+              title="Delete group"
+              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+            >✕</button>
           </div>
         </div>
 
