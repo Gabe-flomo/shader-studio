@@ -4332,8 +4332,8 @@ export const INLINE_VIZ_TYPES = new Set([
   'multiply', 'add', 'subtract', 'divide',
   // Range mapping
   'remap',
-  // LFOs
-  'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO', 'bpmSync',
+  // LFOs — deliberately excluded: they have a live scope canvas in NodeComponent
+  // 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO', 'bpmSync',
   // Color combiners
   'combineRGB', 'blend', 'screenBlend',
   // Param display
