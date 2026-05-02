@@ -172,16 +172,21 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     camera.position.z = 1;
 
     const geometry = new THREE.PlaneGeometry(2, 2);
-    const { vertexShader: vs, fragmentShader: fs } = useNodeGraphStore.getState();
+    const { vertexShader: vs, fragmentShader: fs, rawGlslShader: rawFs, paramUniforms: pu, textureUniforms: tu, audioUniforms: au } = useNodeGraphStore.getState();
+    const activeFs = rawFs ?? fs;
+    const initialUniforms: Record<string, { value: unknown }> = {
+      u_time:       { value: 0 },
+      u_resolution: { value: new THREE.Vector2(1, 1) },
+      u_mouse:      { value: new THREE.Vector2(0, 0) },
+      u_prevFrame:  { value: null },
+    };
+    for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
+    for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
+    for (const name of Object.keys(au))              initialUniforms[name] = { value: 0 };
     const material = new THREE.ShaderMaterial({
       vertexShader: vs || FALLBACK_VERTEX,
-      fragmentShader: fs || FALLBACK_FRAGMENT,
-      uniforms: {
-        u_time:       { value: 0 },
-        u_resolution: { value: new THREE.Vector2(1, 1) },
-        u_mouse:      { value: new THREE.Vector2(0, 0) },
-        u_prevFrame:  { value: null },
-      },
+      fragmentShader: activeFs || FALLBACK_FRAGMENT,
+      uniforms: initialUniforms,
     });
     materialRef.current = material;
 

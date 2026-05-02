@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
@@ -42,7 +43,8 @@ const ZOOM_MAX = 2.5;
 
 export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const bp = useBreakpoint();
-  const compactToolbar = bp === 'desktop-sm';
+  const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
+  const compactToolbar = canvasWidth < 700;
   const nodes                 = useNodeGraphStore(s => s.nodes);
   const compilationErrors     = useNodeGraphStore(s => s.compilationErrors);
   const connectNodes          = useNodeGraphStore(s => s.connectNodes);
@@ -221,6 +223,10 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     screenX: number; screenY: number;
   } | null>(null);
 
+  // ── Shift+socket spotlight ──────────────────────────────────────────────────
+  const [hoveredSocket, setHoveredSocket] = useState<{ nodeId: string; key: string; dir: 'in' | 'out' } | null>(null);
+  const [shiftHeld, setShiftHeld] = useState(false);
+
   // ── Feature 2: Wire hover → + badge ────────────────────────────────────────
   const [hoveredWire, setHoveredWire] = useState<{
     fromNodeId: string; fromOutputKey: string;
@@ -250,7 +256,11 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   useEffect(() => {
     setCanvasEl(canvasRef.current);
     if (!canvasRef.current) return;
-    const ro = new ResizeObserver(() => setTick(t => t + 1));
+    const ro = new ResizeObserver(entries => {
+      setTick(t => t + 1);
+      const w = entries[0].contentRect.width;
+      if (w > 0) setCanvasWidth(w);
+    });
     ro.observe(canvasRef.current);
     return () => ro.disconnect();
   }, []);
@@ -355,6 +365,33 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     const prevent = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
     el.addEventListener('wheel', prevent, { passive: false });
     return () => el.removeEventListener('wheel', prevent);
+  }, []);
+
+  // ── Non-passive touchmove: must be a native listener so preventDefault works ──
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && touchPanStart.current) {
+        const t = e.touches[0];
+        setPan({
+          x: touchPanOrigin.current.x + (t.clientX - touchPanStart.current.x),
+          y: touchPanOrigin.current.y + (t.clientY - touchPanStart.current.y),
+        });
+      }
+    };
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onTouchMove);
+  }, [setPan]);
+
+  // ── Shift key tracking for socket spotlight ──────────────────────────────
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(true); };
+    const onUp   = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(false); };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
   }, []);
 
   // ── Wheel / trackpad handler (Ableton-style) ─────────────────────────────
@@ -618,18 +655,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     }
   }, []);
 
-  const handleCanvasTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (e.touches.length === 1 && touchPanStart.current) {
-      const t = e.touches[0];
-      setPan({
-        x: touchPanOrigin.current.x + (t.clientX - touchPanStart.current.x),
-        y: touchPanOrigin.current.y + (t.clientY - touchPanStart.current.y),
-      });
-    }
-  }, []);
-
-  const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
+const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     // If the touch ended on the raw canvas background (not a node/socket), cancel pending
     const target = e.target as HTMLElement;
     if (!target.closest('[data-node-id]') && !target.closest('[data-socket]')) {
@@ -721,8 +747,38 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     });
   }, [registerViewportCenterGetter]);
 
+  // ── Shift+socket spotlight — which edges are highlighted ─────────────────────
+  // Each entry is { fromNodeId, fromOutputKey, toNodeId, toInputKey }
+  const spotlightEdges = React.useMemo<Set<string>>(() => {
+    if (!shiftHeld || !hoveredSocket) return new Set();
+    const { nodeId, key, dir } = hoveredSocket;
+    const result = new Set<string>();
+    for (const node of displayNodes) {
+      for (const [inputKey, input] of Object.entries(node.inputs)) {
+        if (!input.connection) continue;
+        const edgeKey = `${input.connection.nodeId}:${input.connection.outputKey}→${node.id}:${inputKey}`;
+        if (dir === 'out' && input.connection.nodeId === nodeId && input.connection.outputKey === key) result.add(edgeKey);
+        if (dir === 'in'  && node.id === nodeId && inputKey === key) result.add(edgeKey);
+      }
+    }
+    return result;
+  }, [shiftHeld, hoveredSocket, displayNodes]);
+
   // ── Highlight filter — compute which node IDs match the current filter ───────
   const highlightedIds: Set<string> | null = React.useMemo(() => {
+    // Shift+socket spotlight takes priority over type filter
+    if (shiftHeld && hoveredSocket) {
+      const { nodeId, key, dir } = hoveredSocket;
+      const lit = new Set<string>([nodeId]);
+      for (const node of displayNodes) {
+        for (const [inputKey, input] of Object.entries(node.inputs)) {
+          if (!input.connection) continue;
+          if (dir === 'out' && input.connection.nodeId === nodeId && input.connection.outputKey === key) lit.add(node.id);
+          if (dir === 'in'  && node.id === nodeId && inputKey === key) lit.add(input.connection.nodeId);
+        }
+      }
+      return lit;
+    }
     if (!nodeHighlightFilter) return null;
     const matching = new Set<string>();
     for (const node of displayNodes) {
@@ -737,7 +793,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       }
     }
     return matching;
-  }, [nodeHighlightFilter, nodes]);
+  }, [nodeHighlightFilter, nodes, shiftHeld, hoveredSocket, displayNodes]);
 
   // Dot grid background size scales with zoom
   const gridSize = 24 * zoom;
@@ -754,7 +810,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
       onContextMenu={handleContextMenu}
       onClick={() => setContextMenu(null)}
       onTouchStart={handleCanvasTouchStart}
-      onTouchMove={handleCanvasTouchMove}
       onTouchEnd={handleCanvasTouchEnd}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
       onDrop={e => {
@@ -1006,15 +1061,15 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
         </div>
       )}
 
-      {/* Right-click context menu */}
-      {contextMenu && (
+      {/* Right-click context menu — rendered via portal so it's outside the transformed canvas tree */}
+      {contextMenu && createPortal(
         <div
           onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
           style={{
             position: 'fixed', left: contextMenu.x, top: contextMenu.y,
             background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
-            padding: '4px 0', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+            padding: '4px 0', zIndex: 10000, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
             minWidth: '160px', fontSize: '12px',
           }}
         >
@@ -1148,7 +1203,8 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               </>
             );
           })()}
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Minimap overlay — screen space, bottom-right (hidden on touch devices) */}
@@ -1253,12 +1309,14 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
               const fromOutputKey = input.connection.outputKey;
               const canvasRect    = canvasEl?.getBoundingClientRect();
 
+              const edgeKey = `${fromNodeId}:${fromOutputKey}→${node.id}:${inputKey}`;
               return (
                 <ConnectionLine
                   key={`${node.id}-${inputKey}`}
                   from={fromPos}
                   to={toPos}
                   dataType={lineType}
+                  dimmed={spotlightEdges.size > 0 && !spotlightEdges.has(edgeKey)}
                   onWireEnter={() => {
                     if (wireLeaveTimerRef.current) { clearTimeout(wireLeaveTimerRef.current); wireLeaveTimerRef.current = null; }
                     if (!canvasRect) return;
@@ -1357,6 +1415,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
             externalParamKeys={externalParamMap?.get(node.id)}
             onAltClickSocket={handleAltClickSocket}
             isConnectionDragging={dragConnection !== null}
+            onSocketHover={setHoveredSocket}
           />
         ))}
 

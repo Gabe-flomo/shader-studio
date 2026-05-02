@@ -11,7 +11,7 @@ export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNod
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 
 // Matrix
-export { Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+export { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 
 // Spaces
 export {
@@ -205,7 +205,7 @@ import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, I
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
-import { Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+import { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 import { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
@@ -252,6 +252,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   swirlWarp: SwirlWarpNode,
   displace: DisplaceNode,
   // Matrix
+  vec2Const: Vec2ConstNode,
+  vec3Const: Vec3ConstNode,
+  matConst: MatConstNode,
   mat2Construct: Mat2ConstructNode,
   mat3Construct: Mat3ConstructNode,
   mat2Inspect: Mat2InspectNode,
