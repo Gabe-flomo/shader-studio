@@ -208,6 +208,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
 
       {/* Palette panel */}
       <div
+        onWheel={e => e.stopPropagation()}
         style={{
           position: 'fixed',
           top: '50%', left: '50%',
