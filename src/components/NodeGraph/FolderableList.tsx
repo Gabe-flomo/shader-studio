@@ -10,7 +10,8 @@ import {
   moveItemsToFolder,
   removeItemsFromFolders,
 } from '../../utils/assetFolders';
-import { AssetContextMenu, ContextMenuItem } from './AssetContextMenu';
+import { AssetContextMenu } from './AssetContextMenu';
+import type { ContextMenuItem } from './AssetContextMenu';
 
 export interface FolderableItem { id: string; label: string; }
 
