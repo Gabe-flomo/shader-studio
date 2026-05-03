@@ -2133,7 +2133,7 @@ export const BlinnPhongNode: NodeDefinition = {
 export const GlassSceneNode: NodeDefinition = {
   type: 'glassScene',
   label: 'Glass Scene',
-  category: '3D Lighting',
+  category: '3D Scene',
   description: 'Glass with a real scene background. Wire two SceneGroups — one for the glass geometry and one for what is seen through and around it. Background is optional; omitting it uses a sky gradient. Exposes fresnel, refractedColor, and reflectedColor outputs compatible with glass3d.',
   inputs: {
     ro:         { type: 'vec3',    label: 'Ray Origin'  },
