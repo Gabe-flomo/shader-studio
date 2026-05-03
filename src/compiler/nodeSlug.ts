@@ -4,7 +4,7 @@ import type { GraphNode } from '../types/nodeGraph';
 const TYPE_ABBREV: Record<string, string> = {
   // Sources
   uv: 'uv', pixelUv: 'puv', time: 'time', mousePos: 'mouse',
-  constant: 'cst', textureInput: 'tex', audioInput: 'audio',
+  constant: 'cst', textureInput: 'tex', audioInput: 'audio', videoInput: 'vid',
   previousFrame: 'prev', loopIndex: 'idx',
   // Output
   output: 'out', vec4Output: 'out4',
@@ -54,6 +54,14 @@ const TYPE_ABBREV: Record<string, string> = {
   // Groups / loops
   group: 'grp', loopStart: 'lstart', loopEnd: 'lend',
   marchLoopInputs: 'mli', marchLoopOutput: 'mlo', marchSceneDist: 'msd',
+  // Halftone
+  gridUV: 'guvt', pixelate: 'pxl', dotMask: 'dot', sdfMask: 'sdmk',
+  lumaRadius: 'lrad', rgbToCMYK: 'cmyk', cmykHalftone: 'cmykht',
+  // Vertex Particles
+  vParticles: 'vpart',
+  // Particle Pipeline
+  pInit: 'pinit', pRotate: 'prot', pWave: 'pwave',
+  pColorDist: 'pcdist', pSize: 'psz', pRender: 'prend',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

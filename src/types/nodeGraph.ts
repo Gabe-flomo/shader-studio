@@ -1,5 +1,5 @@
 // Data types that flow between nodes
-export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d";
+export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d" | "particle";
 
 // Socket (connection point on a node)
 export interface Socket {
@@ -67,13 +67,13 @@ export interface GraphNode {
 // Editable parameter definition (used to render inline controls on the node card)
 export interface ParamDef {
   label: string;
-  type: 'float' | 'vec3' | 'vec3color' | 'select' | 'string' | 'bool';
+  type: 'float' | 'int' | 'vec3' | 'vec3color' | 'select' | 'string' | 'bool';
   min?: number;
   max?: number;
   step?: number;
   hint?: string;
-  // Options for 'select' type — array of { value, label } pairs
-  options?: { value: string; label: string }[];
+  // Options for 'select' type — plain string labels (index = value) or { value, label } pairs
+  options?: string[] | { value: string; label: string }[];
   // Conditionally show this param only when another param matches a value
   showWhen?: { param: string; value: string | string[] };
 }

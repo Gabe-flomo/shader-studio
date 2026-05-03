@@ -61,11 +61,12 @@ function scoreEntry(entry: SearchEntry, query: string): number {
   if (label.includes(q)) return 80;
   // Type contains query
   if (type.includes(q)) return 60;
-  // Category contains query (pulls in related nodes, e.g. "trig" or "sin" → Trig category)
-  if (cat.includes(q)) return 40;
-  // Description word starts with query (e.g. "noise" in description → score 20)
-  const desc = (def.description ?? '').toLowerCase();
-  if (desc.split(/\s+/).some(w => w.startsWith(q))) return 20;
+  // Category word starts with query (word-boundary so "sign" won't match "design")
+  if (cat.split(/[\s\/,]+/).some(w => w.startsWith(q))) return 40;
+  // Description contains query as an exact word (e.g. "noise" in "fbm noise")
+  const rawDesc = def.description;
+  const desc = (Array.isArray(rawDesc) ? rawDesc.join(' ') : (rawDesc ?? '')).toLowerCase();
+  if (desc.split(/\W+/).some(w => w === q)) return 20;
   return 0;
 }
 
