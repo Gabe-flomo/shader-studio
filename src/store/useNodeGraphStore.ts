@@ -2500,6 +2500,53 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         );
         return undefined;
       }
+      if (type === 'glass3d') {
+        const existingNodes = get().nodes;
+        const cam = existingNodes.find(n => n.type === 'marchCamera');
+        const mlg = existingNodes.find(n => n.type === 'marchLoopGroup');
+        if (cam && mlg) {
+          // Wire to existing march setup
+          pushHistory(existingNodes);
+          const def = getNodeDefinition('glass3d')!;
+          const nodeId = `node_${nodeIdCounter++}`;
+          const inputs: Record<string, InputSocket> = {};
+          for (const [key, socket] of Object.entries(def.inputs)) {
+            inputs[key] = { ...socket };
+          }
+          inputs.rayDir = { ...inputs.rayDir, connection: { nodeId: cam.id, outputKey: 'rd'     } };
+          inputs.normal = { ...inputs.normal, connection: { nodeId: mlg.id, outputKey: 'normal' } };
+          inputs.hit    = { ...inputs.hit,    connection: { nodeId: mlg.id, outputKey: 'hit'    } };
+          set(state => ({
+            nodes: [...state.nodes, {
+              id: nodeId, type: 'glass3d', position, inputs,
+              outputs: { ...def.outputs },
+              params: { ...(def.defaultParams ?? {}) },
+            }],
+          }));
+          get().compile();
+          return nodeId;
+        } else {
+          // Spawn full march + glass setup
+          get().spawnGraph(
+            position,
+            [
+              { type: 'marchCamera',    relPos: { x: -820, y: 0 } },
+              { type: 'sceneGroup',     relPos: { x: -460, y: 0 } },
+              { type: 'marchLoopGroup', relPos: { x: -200, y: 0 } },
+              { type: 'glass3d',        relPos: { x:  200, y: 0 } },
+            ],
+            [
+              { from: 0, fromKey: 'ro',     to: 2, toKey: 'ro'     },
+              { from: 0, fromKey: 'rd',     to: 2, toKey: 'rd'     },
+              { from: 1, fromKey: 'scene',  to: 2, toKey: 'scene'  },
+              { from: 0, fromKey: 'rd',     to: 3, toKey: 'rayDir' },
+              { from: 2, fromKey: 'normal', to: 3, toKey: 'normal' },
+              { from: 2, fromKey: 'hit',    to: 3, toKey: 'hit'    },
+            ],
+          );
+          return undefined;
+        }
+      }
     }
 
     pushHistory(get().nodes);

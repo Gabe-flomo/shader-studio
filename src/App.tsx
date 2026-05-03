@@ -426,6 +426,25 @@ function App() {
     return () => ro.disconnect();
   }, [previewFloated]);
 
+  // Hoisted before any early returns to keep hook call count stable across all breakpoints
+  const _paletteBaseWForHook = paletteUserW ?? getPaletteWidth(bp);
+  const handlePaletteResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    paletteResizeRef.current = { startX: e.clientX, startW: _paletteBaseWForHook };
+    const onMove = (ev: MouseEvent) => {
+      if (!paletteResizeRef.current) return;
+      const delta = ev.clientX - paletteResizeRef.current.startX;
+      setPaletteUserW(Math.max(160, Math.min(480, paletteResizeRef.current.startW + delta)));
+    };
+    const onUp = () => {
+      paletteResizeRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [_paletteBaseWForHook]);
+
   // ── Error badge ───────────────────────────────────────────────────────────
   const errorCount = compilationErrors.length + glslErrors.length;
   const errorBadge = errorCount > 0 ? (
@@ -837,23 +856,6 @@ function App() {
   const paletteW = getPaletteWidth(bp);
   const paletteBaseW = paletteUserW ?? paletteW;
   const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
-
-  const handlePaletteResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    paletteResizeRef.current = { startX: e.clientX, startW: paletteBaseW };
-    const onMove = (ev: MouseEvent) => {
-      if (!paletteResizeRef.current) return;
-      const delta = ev.clientX - paletteResizeRef.current.startX;
-      setPaletteUserW(Math.max(160, Math.min(480, paletteResizeRef.current.startW + delta)));
-    };
-    const onUp = () => {
-      paletteResizeRef.current = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [paletteBaseW]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>

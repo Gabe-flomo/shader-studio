@@ -186,6 +186,8 @@
       <a class="nav-item" href="#animation">Animation / LFOs</a>
       <a class="nav-item" href="#effects">Effects</a>
       <a class="nav-item" href="#fractals">Fractals</a>
+      <a class="nav-item" href="#halftone">Halftone <span class="nav-badge">NEW</span></a>
+      <a class="nav-item" href="#video-input">Video Input <span class="nav-badge">NEW</span></a>
 
       <div class="nav-section">Loops</div>
       <a class="nav-item" href="#loops-overview">How Loops Work</a>
@@ -197,7 +199,11 @@
       <a class="nav-item" href="#3d-intro">Ray Marching</a>
       <a class="nav-item" href="#3d-sdf">3D SDFs</a>
       <a class="nav-item" href="#3d-lighting">Lighting</a>
+      <a class="nav-item" href="#glass-refraction">Glass &amp; Refraction <span class="nav-badge">NEW</span></a>
       <a class="nav-item" href="#volumetrics">Volumetrics</a>
+
+      <div class="nav-section">Particles <span class="nav-badge">NEW</span></div>
+      <a class="nav-item" href="#gpu-particles">GPU Particle Pipeline</a>
 
       <div class="nav-section">Tools</div>
       <a class="nav-item" href="#function-builder">Function Builder</a>
@@ -1696,6 +1702,269 @@ p</code></pre>
   </ul>
 </div>
 
+<!-- ═══════════════════════════════════════════ GLASS & REFRACTION -->
+<div class="page" id="page-glass-refraction">
+  <div class="page-header">
+    <h1>Glass &amp; Refraction</h1>
+    <p class="lead">Physical glass, chromatic dispersion, and spectral color splitting — as nodes.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Three new lighting nodes handle the full repertoire of transparent material effects: <strong>Glass 3D</strong> for complete physically-based glass, <strong>Spectral Dispersion</strong> for six-band rainbow splitting, and <strong>Blinn-Phong</strong> as a standalone lighting scalar.</p>
+
+  <h2>Glass 3D</h2>
+  <p>A self-contained glass material. Give it a ray direction, a surface normal, and a hit flag — it handles Fresnel blending, multi-sample chromatic dispersion, environment sampling, and optional Blinn-Phong specular/diffuse in a single node.</p>
+
+  <h3>Inputs</h3>
+  <table>
+    <tr><th>Input</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>rayDir</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Normalized camera ray direction. Wire from <strong>March Camera → rd</strong>.</td></tr>
+    <tr><td><code>normal</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Surface normal at the hit point. Wire from <strong>March Loop Group → normal</strong>.</td></tr>
+    <tr><td><code>hit</code></td><td><span class="badge badge-float">float</span></td><td>1.0 if a surface was hit, 0.0 for background. Wire from <strong>March Loop Group → hit</strong>.</td></tr>
+    <tr><td><code>bgColor</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Background tint. Unconnected defaults to <code>vec3(0.5, 0.5, 0.5)</code> — a neutral grey.</td></tr>
+    <tr><td><code>tintColor</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Glass body tint. Unconnected defaults to <code>vec3(1, 1, 1)</code> — colourless glass.</td></tr>
+    <tr><td><code>lightDir</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Light direction for Blinn-Phong. Leave unconnected (defaults <code>vec3(0,0,0)</code>) for pure refraction with no specular/diffuse.</td></tr>
+  </table>
+
+  <h3>Parameters</h3>
+  <table>
+    <tr><th>Param</th><th>Default</th><th>Description</th></tr>
+    <tr><td>IOR</td><td>1.5</td><td>Index of refraction. Air=1.0, water=1.33, glass=1.5, diamond=2.4.</td></tr>
+    <tr><td>Fresnel</td><td>3.0</td><td>Schlick rim exponent. Higher focuses the bright rim toward the silhouette edge.</td></tr>
+    <tr><td>Dispersion</td><td>0.02</td><td>IOR spread between R and B channels. Higher values produce more rainbow fringing.</td></tr>
+    <tr><td>Samples</td><td>8</td><td>Dispersion loop iterations.</td></tr>
+    <tr><td>Shininess</td><td>64</td><td>Blinn-Phong specular exponent. Has no effect without a wired <code>lightDir</code>.</td></tr>
+    <tr><td>Diffuse</td><td>0.4</td><td>Diffuse light contribution. Has no effect without a wired <code>lightDir</code>.</td></tr>
+    <tr><td>Saturation</td><td>1.6</td><td>Color saturation of the refracted interior. Values above 1 amplify chromatic fringing.</td></tr>
+  </table>
+
+  <h3>Auto-wiring on add</h3>
+  <div class="tip">When you add a Glass 3D node from the palette, Shader Studio scans the graph for an existing March Camera and March Loop Group. If found, it automatically wires <code>rayDir ← cam.rd</code>, <code>normal ← mlg.normal</code>, and <code>hit ← mlg.hit</code>. If no march setup exists, it spawns the full set — camera, scene group, loop group, and glass node — all pre-wired.</div>
+
+  <h3>Typical wiring</h3>
+  <div class="node-diagram">
+    <span class="node-box source">UV</span><span class="arrow">→</span>
+    <span class="node-box source">March Camera</span><span class="arrow">→</span>
+    <span class="node-box loop">March Loop Group</span><span class="arrow">→</span>
+    <span class="node-box color">Glass 3D</span><span class="arrow">→</span>
+    <span class="node-box output">Tone Map → Output</span>
+  </div>
+  <p>Leave <code>lightDir</code> unconnected for pure refraction, or wire a <code>Vec3 Const</code> like <code>(0.6, 1.0, 0.4)</code> to add highlights.</p>
+
+  <h3>The environment</h3>
+  <p>Glass 3D uses a procedural dot-field environment — a two-layer grid of white dots on a tinted sky, mapped equirectangularly from the ray direction. This means refraction and reflection are visually apparent even in a completely empty scene: the dots appear distorted through the glass, and the chromatic channels shift by slightly different angles.</p>
+
+  <h2>Spectral Dispersion</h2>
+  <p>A more physically accurate dispersion model using six spectral bands: Red, Yellow, Green, Cyan, Blue, Violet (rygcbv). Each band refracts at its own IOR, and the six results are recombined via Fourier interpolation into an RGB output. This produces richer rainbow splitting than the 3-channel model in Glass 3D.</p>
+
+  <h3>Inputs &amp; Parameters</h3>
+  <p>Same <code>rayDir / normal / hit / bgColor</code> inputs as Glass 3D. Six individual IOR sliders — <code>iorR</code> through <code>iorV</code> — let you dial in exactly how much each spectral band bends. Typical glass spans roughly 1.505 (red) to 1.538 (violet).</p>
+  <div class="tip">Use Spectral Dispersion when you want rainbow-edge prismatic effects. Use Glass 3D when you want the full package — Fresnel, lighting, and dispersion — in one node.</div>
+
+  <h2>Blinn-Phong</h2>
+  <p>A standalone specular + diffuse lighting node. Outputs a single float representing the combined light value — multiply it against any surface color to shade it.</p>
+  <table>
+    <tr><th>Input</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>normal</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Surface normal. Wire from March Loop Group.</td></tr>
+    <tr><td><code>viewDir</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Camera ray direction. Wire from March Camera → rd.</td></tr>
+    <tr><td><code>lightDir</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Light direction. Wire a Vec3 Const or use the built-in fallback.</td></tr>
+  </table>
+
+  <h2>Example graphs</h2>
+  <ul>
+    <li><strong>Glass 3D: Physical</strong> — single glass orb with chromatic dispersion.</li>
+    <li><strong>Glass Metaballs</strong> — three smooth-unioned spheres forming a blobby glass shape.</li>
+    <li><strong>Glass Rounded Box</strong> — boxSDF with sdfRound corner rounding.</li>
+    <li><strong>Glass Orb Trio</strong> — three separate orbs using Spectral Dispersion for richer rainbow fringing.</li>
+    <li><strong>Glass Lava Blob</strong> — five spheres chained through sdfSmoothUnion with high k for an amorphous blob.</li>
+    <li><strong>Blinn-Phong: Lit Sphere</strong> — standalone Blinn-Phong driving a march loop group surface color.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ HALFTONE -->
+<div class="page" id="page-halftone">
+  <div class="page-header">
+    <h1>Halftone</h1>
+    <p class="lead">Print-process aesthetics — dots, rings, and CMYK screens — built from composable nodes.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Halftone effects simulate the ink-dot printing process: a continuous-tone image is broken into a grid of dots whose size encodes local brightness. In Shader Studio these are built from low-level composable nodes — so you can mix patterns, drive dot size from any signal, and layer screens at different angles.</p>
+
+  <h2>Core nodes</h2>
+
+  <h3>Grid UV</h3>
+  <p>Divides UV space into a repeating grid of cells. Outputs the UV position within the current cell (<code>cellUV</code>, 0–1) and the integer cell index (<code>cellIndex</code>). Wire <code>cellUV</code> to any SDF or mask to tile it across the canvas.</p>
+  <ul>
+    <li><strong>Scale</strong> — number of cells across the canvas.</li>
+    <li><strong>Stagger</strong> — offset every other row by half a cell (0 = square grid, 1 = hex-offset).</li>
+  </ul>
+
+  <h3>Dot Mask</h3>
+  <p>Draws a filled circle in each grid cell. The <code>radius</code> input controls per-cell dot size — wire a noise-driven <strong>Luma Radius</strong> value here for luminance-controlled halftoning.</p>
+  <ul>
+    <li><strong>cellUV</strong> — wire from Grid UV.</li>
+    <li><strong>radius</strong> — float per-cell dot radius, range 0–0.5.</li>
+    <li><strong>softness</strong> — anti-alias the dot edge.</li>
+  </ul>
+
+  <h3>Luma Radius</h3>
+  <p>Converts a vec3 color to luminance, then remaps it to a radius value. This is the bridge between an image signal and halftone dot size.</p>
+  <ul>
+    <li><strong>baseRadius</strong> — radius at 50% grey.</li>
+    <li><strong>minScale / maxScale</strong> — how much the dark and bright extremes compress or expand dot radius.</li>
+  </ul>
+
+  <h3>Ring SDF</h3>
+  <p>Outputs the signed distance to a ring (annulus) in cell UV space. Combine with <strong>SDF Mask</strong> for hollow-circle halftones.</p>
+
+  <h3>SDF Mask</h3>
+  <p>Thresholds a signed distance field into a 0/1 mask with a configurable soft edge. Use after Ring SDF, or after any custom 2D SDF.</p>
+
+  <h3>CMYK Halftone</h3>
+  <p>A complete 4-channel halftone in one node. Takes a vec3 color and UV, decomposes to CMYK, screens each channel at a different angle (classic print rosette), and composites onto a paper color. Parameters include grid size, dot radius, softness, paper color, and screen angles for each channel.</p>
+
+  <h2>Composing a halftone</h2>
+  <div class="node-diagram">
+    <span class="node-box source">UV + Time</span><span class="arrow">→</span>
+    <span class="node-box math">FBM</span><span class="arrow">→</span>
+    <span class="node-box math">Luma Radius</span><span class="arrow">→</span>
+    <span class="node-box color">Dot Mask</span><span class="arrow">→</span>
+    <span class="node-box math">Multiply</span><span class="arrow">→</span>
+    <span class="node-box output">Output</span>
+  </div>
+  <p>Wire Grid UV into Dot Mask's <code>cellUV</code>. Wire FBM → Float to Vec3 → Luma Radius → Dot Mask's <code>radius</code>. Multiply the mask by a Palette node for colored dots.</p>
+
+  <div class="tip">For animated halftones, drive the FBM with Time so the noise — and therefore the dot sizes — slowly shift over time.</div>
+
+  <h2>Example graphs</h2>
+  <ul>
+    <li><strong>Halftone Noise</strong> — FBM luminance drives dot radius; palette colors the dots.</li>
+    <li><strong>CMYK Halftone</strong> — palette noise through the full 4-channel CMYK screen node.</li>
+    <li><strong>Ring Halftone</strong> — ring SDFs + SDF Mask replace solid dots for a hollow-circle look.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════ VIDEO INPUT -->
+<div class="page" id="page-video-input">
+  <div class="page-header">
+    <h1>Video Input</h1>
+    <p class="lead">Use your webcam or a video file as a live texture in any shader.</p>
+  </div>
+  <div class="divider"></div>
+  <p>The <strong>Video Input</strong> node captures from your device camera or a video file and exposes the current frame as a vec3 color you can use anywhere in the graph. Every frame that plays updates the texture the shader sees — making it genuinely live.</p>
+
+  <h3>Outputs</h3>
+  <table>
+    <tr><th>Output</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>color</code></td><td><span class="badge badge-vec3">vec3</span></td><td>The RGB color of the video at the current UV coordinate.</td></tr>
+  </table>
+
+  <h3>Parameters</h3>
+  <table>
+    <tr><th>Param</th><th>Description</th></tr>
+    <tr><td>Source</td><td>Choose between the device camera (live webcam) or a video file.</td></tr>
+    <tr><td>UV Input</td><td>The coordinate to sample. Wire from UV for a straight video quad, or from any distorted UV for warped effects.</td></tr>
+    <tr><td>Flip X / Flip Y</td><td>Mirror the video horizontally or vertically.</td></tr>
+  </table>
+
+  <div class="tip">Wire the video output into a color input rather than directly to Output — for example into a <strong>CMYK Halftone</strong> node or a <strong>Glass 3D</strong> <code>bgColor</code> — to apply effects on top of the live feed.</div>
+
+  <h3>Privacy</h3>
+  <p>Shader Studio requests camera access only when you add a Video Input node set to webcam mode. No video data leaves your device — the frame is sampled entirely on your GPU.</p>
+
+  <h3>Example uses</h3>
+  <ul>
+    <li><strong>Live video through a glass sphere</strong> — wire Video Input into Glass 3D's <code>bgColor</code> so the glass refracts your webcam feed.</li>
+    <li><strong>Halftone video</strong> — wire into CMYK Halftone for an instant print-screen live filter.</li>
+    <li><strong>Domain-warped video</strong> — pipe the UV through noise-based warp nodes before feeding into Video Input for a liquid effect.</li>
+    <li><strong>Luma displacement</strong> — extract luminance from the video feed and use it to drive other parameters like dot radius or SDF displacement.</li>
+  </ul>
+</div>
+
+<!-- ══════════════════════════════════════════════ GPU PARTICLES -->
+<div class="page" id="page-gpu-particles">
+  <div class="page-header">
+    <h1>GPU Particle Pipeline</h1>
+    <p class="lead">Thousands of points, fully on the GPU, composed from a chain of nodes.</p>
+  </div>
+  <div class="divider"></div>
+  <p>The GPU particle system renders large point clouds — galaxies, nebulae, breathing spheres, ring vortices — without touching the fragment shader at all. Particles are simulated and drawn entirely in WebGL, driven by a linear pipeline of particle nodes that each modify the point cloud in a composable way.</p>
+
+  <h2>The pipeline model</h2>
+  <p>A particle graph is a chain. Each node receives a <span class="badge badge-vec4">particle</span> stream, transforms or colors it, and passes it on. The chain always starts with <strong>Particle Init</strong> and ends with <strong>Particle Render</strong>.</p>
+  <div class="node-diagram">
+    <span class="node-box source">pInit</span><span class="arrow">→</span>
+    <span class="node-box transform">pRotate</span><span class="arrow">→</span>
+    <span class="node-box transform">pWave</span><span class="arrow">→</span>
+    <span class="node-box color">pColorDist</span><span class="arrow">→</span>
+    <span class="node-box math">pSize</span><span class="arrow">→</span>
+    <span class="node-box output">pRender</span>
+  </div>
+  <div class="tip">You also need a standard Output node in your graph for the background. Wire a Vec3 Const (e.g. black) into Output so the canvas has a clear color for the particles to render over.</div>
+
+  <h2>Particle Init (pInit)</h2>
+  <p>Creates the initial point cloud. All particles start here.</p>
+  <table>
+    <tr><th>Param</th><th>Description</th></tr>
+    <tr><td>Shape</td><td>Starting distribution: sphere surface, sphere volume, disc, torus, spiral, ring.</td></tr>
+    <tr><td>Count</td><td>Number of particles. 1000–8000 is typical; higher counts need more GPU budget.</td></tr>
+    <tr><td>Radius</td><td>Scale of the initial distribution.</td></tr>
+  </table>
+
+  <h2>Particle Rotate (pRotate)</h2>
+  <p>Rotates particles around an axis over time, with per-particle variance for organic motion.</p>
+  <table>
+    <tr><th>Param</th><th>Description</th></tr>
+    <tr><td>Axis</td><td>0 = X, 1 = Y, 2 = Z.</td></tr>
+    <tr><td>Rot Speed</td><td>Base angular velocity.</td></tr>
+    <tr><td>Rot Variance</td><td>Per-particle speed randomisation. High values produce a spiral smear.</td></tr>
+    <tr><td>Twirl</td><td>Extra twist around the rotation axis — creates galaxy-arm spiraling.</td></tr>
+  </table>
+
+  <h2>Particle Wave (pWave)</h2>
+  <p>Adds a sinusoidal displacement along one axis, animated over time.</p>
+  <table>
+    <tr><th>Param</th><th>Description</th></tr>
+    <tr><td>Wave Amp</td><td>Displacement amplitude.</td></tr>
+    <tr><td>Wave Freq</td><td>Spatial frequency — wave cycles across the particle field.</td></tr>
+    <tr><td>Wave Speed</td><td>Animation speed.</td></tr>
+    <tr><td>Wave Axis</td><td>0/1/2 = X/Y/Z displacement direction.</td></tr>
+  </table>
+
+  <h2>Particle Color by Distance (pColorDist)</h2>
+  <p>Colors each particle based on its distance from the origin — particles near the center get one color, edge particles get another, with a power-curve blend.</p>
+  <table>
+    <tr><th>Param</th><th>Description</th></tr>
+    <tr><td>Color Center</td><td>RGB color for particles at radius ≈ 0.</td></tr>
+    <tr><td>Color Edge</td><td>RGB color for particles at maximum radius.</td></tr>
+    <tr><td>Mix Power</td><td>Blend exponent. Below 1 pushes color toward center; above 1 pushes toward edge.</td></tr>
+  </table>
+
+  <h2>Particle Size (pSize)</h2>
+  <p>Sets the point size of each particle, with optional perspective-style distance attenuation.</p>
+  <table>
+    <tr><th>Param</th><th>Description</th></tr>
+    <tr><td>Size Base</td><td>Base point size in pixels.</td></tr>
+    <tr><td>Size by Dist</td><td>How much distance reduces the size. 0 = uniform.</td></tr>
+    <tr><td>Size Attenuation</td><td>Toggle perspective falloff on/off.</td></tr>
+  </table>
+
+  <h2>Particle Render (pRender)</h2>
+  <p>The terminal node. Draws all particles to the canvas using additive blending.</p>
+  <table>
+    <tr><th>Param</th><th>Description</th></tr>
+    <tr><td>Opacity</td><td>Global alpha multiplier for all particles.</td></tr>
+    <tr><td>Softness</td><td>Gaussian softness of each point sprite. Higher values produce glowing blobs instead of sharp points.</td></tr>
+  </table>
+
+  <h2>Example graphs</h2>
+  <ul>
+    <li><strong>GPU Particles: Galaxy</strong> — 5000-particle disc with rotation variance and distance-based warm/cool coloring.</li>
+    <li><strong>GPU Particles: Breathing Ball</strong> — sphere surface particles pulsed with a wave modifier.</li>
+    <li><strong>GPU Particles: Spiral Nebula</strong> — spiral init with high twirl and multi-stage wave for an organic nebula.</li>
+    <li><strong>GPU Particles: Ring Vortex</strong> — ring-shaped init with high twirl and fast rotation for a torus vortex.</li>
+  </ul>
+</div>
+
 <!-- ═══════════���══════════════════════════════════════ END PAGES -->
     </div><!-- #content-inner -->
   </main>
@@ -1728,7 +1997,11 @@ const PAGES = {
   '3d-intro':           'page-3d-intro',
   '3d-sdf':             'page-3d-sdf',
   '3d-lighting':        'page-3d-lighting',
+  'glass-refraction':   'page-glass-refraction',
   'volumetrics':        'page-volumetrics',
+  'halftone':           'page-halftone',
+  'video-input':        'page-video-input',
+  'gpu-particles':      'page-gpu-particles',
   'function-builder':   'page-function-builder',
   'glsl-editor':        'page-glsl-editor',
   'preview-code':       'page-preview-code',

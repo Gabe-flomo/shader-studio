@@ -14,7 +14,7 @@ import type { TransformPreset } from '../../types/transformPreset';
 type ExKey = keyof typeof EXAMPLE_GRAPHS;
 
 const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
-  { label: '3D Lighting',     color: '#f9c468', keys: ['aoSphere','phaseHGForwardCloud','phaseHGBacklit','fresnelSchlickRim','fresnelSchlickTwoTone','refractDirFakeGlass','refractDirDispersion'] as ExKey[] },
+  { label: '3D Lighting',     color: '#f9c468', keys: ['aoSphere','phaseHGForwardCloud','phaseHGBacklit','fresnelSchlickRim','fresnelSchlickTwoTone','refractDirFakeGlass','refractDirDispersion','glassPhysical','spectralPrism','blinnPhongSphere','glassMetaballs','glassRoundBox','glassOrbTrio','glassLavaBlob'] as ExKey[] },
   { label: '3D SDF',          color: '#89dceb', keys: ['sdfPolarRepeat','sdfSmoothMetaballs','sdfBend3D','sdfIntersectDemo','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','mirrorFoldSpheres','mirrorFoldBoxes','domainWarpSphere','swizzle3DNormalMap','swizzle3DPosGradient'] as ExKey[] },
   { label: 'Blur & Lens',     color: '#89b4fa', keys: ['gaussianBlurDemo','motionBlurTrails','tiltShiftScene','lensBokeh','dofOrbitOrbs','dofForwardDepth','dofDepthBlur'] as ExKey[] },
   { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV'] as ExKey[] },

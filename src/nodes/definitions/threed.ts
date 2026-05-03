@@ -1698,15 +1698,36 @@ export const MaterialSelectNode: NodeDefinition = {
 // ─── Glass Node ───────────────────────────────────────────────────────────────
 
 const GLASS_GLSL = `
+vec3 glassSat(vec3 rgb, float intensity) {
+  vec3 L = vec3(0.2125, 0.7154, 0.0721);
+  vec3 grayscale = vec3(dot(rgb, L));
+  return mix(grayscale, rgb, intensity);
+}
+
+// Procedural dot-field environment — white spheres on dark tinted sky,
+// mimicking the icosahedra-grid background used in screen-space refraction demos.
+// Sampling with the refracted ray direction makes the dots visibly warp through glass.
+vec3 glassEnv(vec3 dir, vec3 tint) {
+  vec3 d = normalize(dir);
+  vec2 uv = vec2(atan(d.z, d.x) * 0.1592 + 0.5, d.y * 0.5 + 0.5);
+  vec2 g1 = fract(uv * 5.0 + 0.5) - 0.5;
+  vec2 g2 = fract(uv * 11.0 + vec2(0.37, 0.61)) - 0.5;
+  float dots = max(smoothstep(0.14, 0.09, length(g1)),
+                   smoothstep(0.10, 0.07, length(g2)) * 0.7);
+  float sky = clamp(0.5 + d.y, 0.0, 1.0);
+  return tint * mix(0.04, 0.30, sky) + vec3(dots * 0.95);
+}
+
 vec3 glassShade(
   vec3 rayDir, vec3 normal, float hit,
   vec3 bgColor, vec3 tintColor,
-  float ior, float fresnelPow, float dispersion
+  float ior, float fresnelPow, float dispersion,
+  float shininess, float diffuseness, float saturation,
+  vec3 lightDir, float samples
 ) {
-  if (hit < 0.5) return bgColor;
+  if (hit < 0.5) return glassEnv(rayDir, bgColor);
   vec3 n = normalize(normal);
   vec3 v = normalize(rayDir);
-  // Ensure we use the outward-facing normal
   if (dot(v, n) > 0.0) n = -n;
 
   // Schlick Fresnel
@@ -1715,74 +1736,99 @@ vec3 glassShade(
   f0 *= f0;
   float frs = f0 + (1.0 - f0) * pow(1.0 - cosI, fresnelPow);
 
-  // Refracted rays with chromatic dispersion
-  vec3 rfG = refract(v, n, 1.0 / ior);
-  bool tir = length(rfG) < 0.001;
-  if (tir) rfG = reflect(v, n);
-  vec3 rfR = tir ? rfG : refract(v, n, 1.0 / max(ior - dispersion, 1.001));
-  vec3 rfB = tir ? rfG : refract(v, n, 1.0 / (ior + dispersion));
-  if (length(rfR) < 0.001) rfR = rfG;
-  if (length(rfB) < 0.001) rfB = rfG;
+  // Per-channel IOR ratios
+  float iorG = 1.0 / ior;
 
-  // Fake environment: use refracted ray Y to create a sky/floor gradient
-  // brightening the bgColor toward zenith gives a convincing distortion
-  float skyR = clamp(0.5 + rfR.y, 0.0, 1.0);
-  float skyG = clamp(0.5 + rfG.y, 0.0, 1.0);
-  float skyB = clamp(0.5 + rfB.y, 0.0, 1.0);
-  vec3 interior = vec3(
-    bgColor.r * mix(0.2, 2.2, skyR),
-    bgColor.g * mix(0.2, 2.2, skyG),
-    bgColor.b * mix(0.2, 2.2, skyB)
-  ) * tintColor;
+  // Multi-sample dispersion loop
+  vec3 color = vec3(0.0);
+  for (int i = 0; i < 16; i++) {
+    if (float(i) >= samples) break;
+    float slide = float(i) / samples;
 
-  // Reflection environment (for Fresnel blend)
+    float sIorR = 1.0 / max(ior - dispersion * (1.0 + slide * 0.5), 1.001);
+    float sIorG = iorG;
+    float sIorB = 1.0 / (ior + dispersion * (1.0 + slide * 0.5));
+
+    vec3 rfR = refract(v, n, sIorR);
+    vec3 rfG = refract(v, n, sIorG);
+    vec3 rfB = refract(v, n, sIorB);
+    bool tir = length(rfG) < 0.001;
+    if (tir) { rfR = reflect(v, n); rfG = rfR; rfB = rfR; }
+    if (length(rfR) < 0.001) rfR = rfG;
+    if (length(rfB) < 0.001) rfB = rfG;
+
+    color.r += glassEnv(rfR, bgColor).r;
+    color.g += glassEnv(rfG, bgColor).g;
+    color.b += glassEnv(rfB, bgColor).b;
+  }
+  color /= samples;
+  color *= tintColor;
+  color = glassSat(color, saturation);
+
+  // Reflection
   vec3 refl = reflect(v, n);
-  float reflSky = clamp(0.5 + refl.y, 0.0, 1.0);
-  vec3 reflColor = bgColor * mix(0.3, 2.5, reflSky);
+  vec3 reflColor = glassEnv(refl, bgColor) * 1.1;
 
-  // Sharp specular highlight
-  vec3 lDir = normalize(vec3(0.6, 1.0, 0.4));
-  float spec = pow(max(dot(refl, lDir), 0.0), 96.0);
+  // Blinn-Phong specular + diffuse (only when a light is connected)
+  float spec = 0.0;
+  float diff = 0.0;
+  if (length(lightDir) > 0.001) {
+    vec3 lDir = normalize(lightDir);
+    vec3 halfVec = normalize(-v + lDir);
+    float NdotL = max(0.0, dot(n, lDir));
+    float NdotH = max(0.0, dot(n, halfVec));
+    spec = pow(NdotH * NdotH, shininess);
+    diff = NdotL * diffuseness;
+  }
 
-  // Compose: refracted interior + Fresnel reflection rim + specular
-  return mix(interior, reflColor, frs) + vec3(spec * 0.85);
+  return mix(color, reflColor, frs) + vec3(spec * 0.85) + color * diff * 0.3;
 }`;
 
 export const GlassNode: NodeDefinition = {
   type: 'glass3d',
   label: 'Glass 3D',
   category: '3D Lighting',
-  description: 'Single-refraction glass approximation with chromatic dispersion and Fresnel. Wire rayDir from MarchCamera.rd, normal + hit from MarchLoopGroup.',
+  description: 'Multi-sample glass with chromatic dispersion, Blinn-Phong lighting, and Fresnel. Wire rayDir from MarchCamera.rd, normal + hit from MarchLoopGroup.',
   inputs: {
     rayDir:    { type: 'vec3',  label: 'Ray Dir'    },
     normal:    { type: 'vec3',  label: 'Normal'     },
     hit:       { type: 'float', label: 'Hit'        },
     bgColor:   { type: 'vec3',  label: 'Background' },
     tintColor: { type: 'vec3',  label: 'Tint'       },
+    lightDir:  { type: 'vec3',  label: 'Light Dir'  },
   },
   outputs: { color: { type: 'vec3', label: 'Glass Color' } },
   glslFunction: GLASS_GLSL,
-  defaultParams: { ior: 1.5, fresnelPow: 3.0, dispersion: 0.02, tintR: 0.8, tintG: 0.95, tintB: 1.0 },
+  defaultParams: {
+    ior: 1.5, fresnelPow: 3.0, dispersion: 0.02,
+    shininess: 64.0, diffuseness: 0.4, saturation: 1.6, samples: 8.0,
+  },
   paramDefs: {
-    ior:        { label: 'IOR',        type: 'float', min: 1.0,  max: 3.0, step: 0.05, hint: 'Index of refraction. Air=1.0, water=1.33, glass=1.5, diamond=2.4.' },
-    fresnelPow: { label: 'Fresnel',    type: 'float', min: 1.0,  max: 10.0,step: 0.5,  hint: 'Fresnel rim exponent. Higher = tighter bright rim at silhouette edges.' },
-    dispersion: { label: 'Dispersion', type: 'float', min: 0.0,  max: 0.1, step: 0.005,hint: 'Chromatic aberration amount — splits RGB refraction angles like a prism.' },
-    tintR:      { label: 'Tint R',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Glass body tint red. 1.0 = neutral; lower adds color absorption like colored glass.' },
-    tintG:      { label: 'Tint G',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Glass body tint green.' },
-    tintB:      { label: 'Tint B',     type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Blue channel of the glass tint color. Combine with R and G to give the glass a colored tint.' },
+    ior:         { label: 'IOR',         type: 'float', min: 1.0,  max: 3.0,  step: 0.05,  hint: 'Index of refraction. Air=1.0, water=1.33, glass=1.5, diamond=2.4.' },
+    fresnelPow:  { label: 'Fresnel',     type: 'float', min: 1.0,  max: 10.0, step: 0.5,   hint: 'Fresnel rim exponent — higher focuses the bright rim toward the silhouette.' },
+    dispersion:  { label: 'Dispersion',  type: 'float', min: 0.0,  max: 0.15, step: 0.005, hint: 'IOR spread between R and B channels — splits light like a prism.' },
+    samples:     { label: 'Samples',     type: 'float', min: 1.0,  max: 16.0, step: 1.0,   hint: 'Dispersion loop iterations. More = smoother chromatic spread, higher cost.' },
+    shininess:   { label: 'Shininess',   type: 'float', min: 2.0,  max: 256.0,step: 2.0,   hint: 'Blinn-Phong specular exponent. Higher = tighter, sharper highlight.' },
+    diffuseness: { label: 'Diffuse',     type: 'float', min: 0.0,  max: 1.0,  step: 0.05,  hint: 'Diffuse light contribution when a Light Dir is connected.' },
+    saturation:  { label: 'Saturation',  type: 'float', min: 0.0,  max: 3.0,  step: 0.1,   hint: 'Color saturation of the refracted interior. >1 pumps up chromatic colors.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
     const rayDir    = inputVars.rayDir    || 'vec3(0.0, 0.0, -1.0)';
     const normal    = inputVars.normal    || 'vec3(0.0, 1.0, 0.0)';
     const hit       = inputVars.hit       || '0.0';
-    const bgColor   = inputVars.bgColor   || 'vec3(0.06, 0.10, 0.22)';
-    const tintColor = inputVars.tintColor || `vec3(${p(node.params.tintR, 0.8)}, ${p(node.params.tintG, 0.95)}, ${p(node.params.tintB, 1.0)})`;
-    const ior        = p(node.params.ior,        1.5);
-    const fresnelPow = p(node.params.fresnelPow, 3.0);
-    const dispersion = p(node.params.dispersion, 0.02);
+    const bgColor   = inputVars.bgColor   || 'vec3(0.5, 0.5, 0.5)';
+    const tintColor = inputVars.tintColor || 'vec3(1.0, 1.0, 1.0)';
+    const lightDir  = inputVars.lightDir  || 'vec3(0.0, 0.0, 0.0)';
+    const ior         = p(node.params.ior,         1.5);
+    const fresnelPow  = p(node.params.fresnelPow,  3.0);
+    const dispersion  = p(node.params.dispersion,  0.02);
+    const shininess   = p(node.params.shininess,   64.0);
+    const diffuseness = p(node.params.diffuseness, 0.4);
+    const saturation  = p(node.params.saturation,  1.6);
+    const samples     = p(node.params.samples,     8.0);
     return {
-      code: `    vec3 ${id}_color = glassShade(${rayDir}, ${normal}, ${hit}, ${bgColor}, ${tintColor}, ${ior}, ${fresnelPow}, ${dispersion});\n`,
+      code: `    vec3 ${id}_color = glassShade(${rayDir}, ${normal}, ${hit}, ${bgColor}, ${tintColor}, ${ior}, ${fresnelPow}, ${dispersion}, ${shininess}, ${diffuseness}, ${saturation}, ${lightDir}, ${samples});\n`,
       outputVars: { color: `${id}_color` },
     };
   },
@@ -1844,6 +1890,176 @@ export const FresnelSchlickNode: NodeDefinition = {
         `    float ${id}_refractW = 1.0 - ${id}_reflectW;\n`,
       ].join(''),
       outputVars: { reflectW: `${id}_reflectW`, refractW: `${id}_refractW` },
+    };
+  },
+};
+
+// ─── Spectral Dispersion Node (rygcbv 6-channel) ─────────────────────────────
+// Based on Ravishankar Sundararaman's Fourier interpolation technique.
+// Splits the IOR into 6 spectral bands (Red/Yellow/Green/Cyan/Blue/Violet),
+// reconstructs RGB via the rygcbv↔RGB transform for richer, artist-controllable dispersion.
+
+const SPECTRAL_DISPERSION_GLSL = `
+// Same dot-field environment as glassEnv — samples white dots on tinted sky
+// so each spectral band sees the same scene, just at a shifted angle.
+vec3 spectralEnv(vec3 dir, vec3 tint) {
+  vec3 d = normalize(dir);
+  vec2 uv = vec2(atan(d.z, d.x) * 0.1592 + 0.5, d.y * 0.5 + 0.5);
+  vec2 g1 = fract(uv * 5.0 + 0.5) - 0.5;
+  vec2 g2 = fract(uv * 11.0 + vec2(0.37, 0.61)) - 0.5;
+  float dots = max(smoothstep(0.14, 0.09, length(g1)),
+                   smoothstep(0.10, 0.07, length(g2)) * 0.7);
+  float sky = clamp(0.5 + d.y, 0.0, 1.0);
+  return tint * mix(0.04, 0.30, sky) + vec3(dots * 0.95);
+}
+
+vec3 spectralDisperse(
+  vec3 rayDir, vec3 normal, float hit, vec3 bgColor,
+  float iorR, float iorY, float iorG, float iorC, float iorB, float iorV,
+  float saturation
+) {
+  if (hit < 0.5) return spectralEnv(rayDir, bgColor);
+  vec3 n = normalize(normal);
+  vec3 v = normalize(rayDir);
+  if (dot(v, n) > 0.0) n = -n;
+
+  // Refract along 6 spectral bands
+  vec3 rfR = refract(v, n, 1.0 / iorR);
+  vec3 rfY = refract(v, n, 1.0 / iorY);
+  vec3 rfG = refract(v, n, 1.0 / iorG);
+  vec3 rfC = refract(v, n, 1.0 / iorC);
+  vec3 rfB = refract(v, n, 1.0 / iorB);
+  vec3 rfV = refract(v, n, 1.0 / iorV);
+
+  // TIR fallback
+  bool tir = length(rfG) < 0.001;
+  if (tir) {
+    vec3 rfl = reflect(v, n);
+    rfR = rfl; rfY = rfl; rfG = rfl; rfC = rfl; rfB = rfl; rfV = rfl;
+  }
+  if (length(rfR) < 0.001) rfR = rfG;
+  if (length(rfY) < 0.001) rfY = rfG;
+  if (length(rfC) < 0.001) rfC = rfG;
+  if (length(rfB) < 0.001) rfB = rfG;
+  if (length(rfV) < 0.001) rfV = rfG;
+
+  // Sample environment luminance per spectral band — dots shift by wavelength → color fringing
+  vec3 Lw = vec3(0.2126, 0.7152, 0.0722);
+  float Sr = dot(spectralEnv(rfR, bgColor), Lw);
+  float Sy = dot(spectralEnv(rfY, bgColor), Lw);
+  float Sg = dot(spectralEnv(rfG, bgColor), Lw);
+  float Sc = dot(spectralEnv(rfC, bgColor), Lw);
+  float Sb = dot(spectralEnv(rfB, bgColor), Lw);
+  float Sv = dot(spectralEnv(rfV, bgColor), Lw);
+
+  // rygcbv Fourier interpolation → reconstruct RGB
+  float cy = (2.0*Sr + 2.0*Sy - Sb) / 6.0;
+  float cc = (2.0*Sg + 2.0*Sc - Sr) / 6.0;
+  float cv = (2.0*Sb + 2.0*Sv - Sg) / 6.0;
+
+  vec3 col;
+  col.r = Sr/2.0 + (2.0*cv + 2.0*cy - cc) / 3.0;
+  col.g = Sg/2.0 + (2.0*cy + 2.0*cc - cv) / 3.0;
+  col.b = Sb/2.0 + (2.0*cc + 2.0*cv - cy) / 3.0;
+  col = max(col, vec3(0.0));
+
+  // Saturation boost
+  vec3 gray = vec3(dot(col, Lw));
+  return mix(gray, col, saturation);
+}`;
+
+export const SpectralDispersionNode: NodeDefinition = {
+  type: 'spectralDispersion',
+  label: 'Spectral Dispersion',
+  category: '3D Lighting',
+  description: '6-channel rygcbv dispersion. Splits IOR across Red/Yellow/Green/Cyan/Blue/Violet spectral bands for physically-inspired prismatic color separation. Wire rayDir, normal, hit, and bgColor from ray march nodes.',
+  inputs: {
+    rayDir:  { type: 'vec3',  label: 'Ray Dir'    },
+    normal:  { type: 'vec3',  label: 'Normal'     },
+    hit:     { type: 'float', label: 'Hit'        },
+    bgColor: { type: 'vec3',  label: 'Background' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Dispersed Color' } },
+  glslFunction: SPECTRAL_DISPERSION_GLSL,
+  defaultParams: {
+    iorR: 1.510, iorY: 1.517, iorG: 1.519,
+    iorC: 1.523, iorB: 1.528, iorV: 1.532,
+    saturation: 2.0,
+  },
+  paramDefs: {
+    iorR:       { label: 'IOR Red',    type: 'float', min: 1.0, max: 3.0, step: 0.005, hint: 'IOR for the red spectral band (~700nm). Lowest IOR = least bending.' },
+    iorY:       { label: 'IOR Yellow', type: 'float', min: 1.0, max: 3.0, step: 0.005, hint: 'IOR for the yellow band (~580nm).' },
+    iorG:       { label: 'IOR Green',  type: 'float', min: 1.0, max: 3.0, step: 0.005, hint: 'IOR for the green band (~546nm). Used as TIR reference.' },
+    iorC:       { label: 'IOR Cyan',   type: 'float', min: 1.0, max: 3.0, step: 0.005, hint: 'IOR for the cyan band (~486nm).' },
+    iorB:       { label: 'IOR Blue',   type: 'float', min: 1.0, max: 3.0, step: 0.005, hint: 'IOR for the blue band (~435nm).' },
+    iorV:       { label: 'IOR Violet', type: 'float', min: 1.0, max: 3.0, step: 0.005, hint: 'IOR for the violet band (~404nm). Highest IOR = most bending.' },
+    saturation: { label: 'Saturation', type: 'float', min: 0.0, max: 4.0, step: 0.1,   hint: 'Boost dispersion color vibrancy. >1 saturates, <1 desaturates toward grayscale.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id      = node.id;
+    const rayDir  = inputVars.rayDir  || 'vec3(0.0, 0.0, -1.0)';
+    const normal  = inputVars.normal  || 'vec3(0.0, 1.0, 0.0)';
+    const hit     = inputVars.hit     || '0.0';
+    const bgColor = inputVars.bgColor || 'vec3(0.06, 0.10, 0.22)';
+    const iorR = p(node.params.iorR, 1.510);
+    const iorY = p(node.params.iorY, 1.517);
+    const iorG = p(node.params.iorG, 1.519);
+    const iorC = p(node.params.iorC, 1.523);
+    const iorB = p(node.params.iorB, 1.528);
+    const iorV = p(node.params.iorV, 1.532);
+    const saturation = p(node.params.saturation, 2.0);
+    return {
+      code: `    vec3 ${id}_color = spectralDisperse(${rayDir}, ${normal}, ${hit}, ${bgColor}, ${iorR}, ${iorY}, ${iorG}, ${iorC}, ${iorB}, ${iorV}, ${saturation});\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ─── Blinn-Phong Node ─────────────────────────────────────────────────────────
+
+const BLINN_PHONG_GLSL = `
+float blinnPhong(vec3 normal, vec3 viewDir, vec3 lightDir, float shininess, float diffuseness) {
+  vec3 n = normalize(normal);
+  vec3 v = normalize(-viewDir);
+  vec3 l = normalize(lightDir);
+  vec3 h = normalize(v + l);
+  float NdotL = max(0.0, dot(n, l));
+  float NdotH = max(0.0, dot(n, h));
+  float kDiffuse = NdotL * diffuseness;
+  float kSpecular = pow(NdotH * NdotH, shininess);
+  return kSpecular + kDiffuse;
+}`;
+
+export const BlinnPhongNode: NodeDefinition = {
+  type: 'blinnPhong',
+  label: 'Blinn-Phong',
+  category: '3D Lighting',
+  description: 'Blinn-Phong specular + diffuse light value. Outputs a scalar you can multiply into any color. Wire viewDir from MarchCamera.rd, normal from MarchLoopGroup, lightDir from a constant vec3.',
+  inputs: {
+    normal:   { type: 'vec3', label: 'Normal'    },
+    viewDir:  { type: 'vec3', label: 'View Dir'  },
+    lightDir: { type: 'vec3', label: 'Light Dir' },
+  },
+  outputs: { light: { type: 'float', label: 'Light' } },
+  glslFunction: BLINN_PHONG_GLSL,
+  defaultParams: { shininess: 64.0, diffuseness: 0.6, lightX: 0.6, lightY: 1.0, lightZ: 0.4 },
+  paramDefs: {
+    shininess:   { label: 'Shininess',   type: 'float', min: 2.0,  max: 256.0, step: 2.0, hint: 'Specular exponent — higher gives a tighter, more mirror-like highlight.' },
+    diffuseness: { label: 'Diffuse',     type: 'float', min: 0.0,  max: 2.0,   step: 0.05, hint: 'Diffuse contribution weight. Controls how much the surface shading follows the light angle.' },
+    lightX:      { label: 'Light X',     type: 'float', min: -3.0, max: 3.0,   step: 0.1,  hint: 'Light direction X (used when no lightDir input is connected).' },
+    lightY:      { label: 'Light Y',     type: 'float', min: -3.0, max: 3.0,   step: 0.1,  hint: 'Light direction Y.' },
+    lightZ:      { label: 'Light Z',     type: 'float', min: -3.0, max: 3.0,   step: 0.1,  hint: 'Light direction Z.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const normal   = inputVars.normal   || 'vec3(0.0, 1.0, 0.0)';
+    const viewDir  = inputVars.viewDir  || 'vec3(0.0, 0.0, -1.0)';
+    const lightDir = inputVars.lightDir || `vec3(${p(node.params.lightX, 0.6)}, ${p(node.params.lightY, 1.0)}, ${p(node.params.lightZ, 0.4)})`;
+    const shininess   = p(node.params.shininess,   64.0);
+    const diffuseness = p(node.params.diffuseness, 0.6);
+    return {
+      code: `    float ${id}_light = blinnPhong(${normal}, ${viewDir}, ${lightDir}, ${shininess}, ${diffuseness});\n`,
+      outputVars: { light: `${id}_light` },
     };
   },
 };
