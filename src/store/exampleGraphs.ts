@@ -10997,6 +10997,221 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Glass 3D (upgraded) ──────────────────────────────────────────────────────
+  glassPhysical: {
+    label: 'Glass 3D: Physical',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 180 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 260 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.2, camAngle: 0.4, camElevation: 0.25, rotSpeed: 0.12, fov: 1.4, aperture: 0.0, focalDist: 3.2 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 560, y: 400 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Glass Orb',
+          subgraph: {
+            nodes: [
+              { id: 'sp', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf', type: 'sphereSDF3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.8 } },
+            ],
+            outputNodeId: 'sdf', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 820, y: 200 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV' },
+          time:  { type: 'float', label: 'Time' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' }, hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' } },
+        params: { maxSteps: 80, maxDist: 12.0, stepScale: 1.0, volumetric: false, passthrough: 0.1, jitter: 0.0, bgR: 0.04, bgG: 0.05, bgB: 0.14, albedoR: 0.2, albedoG: 0.2, albedoB: 0.3, subgraph: { nodes: [], inputPorts: [], outputPorts: [] } },
+      },
+      {
+        id: 'glass_5', type: 'glass3d', position: { x: 1100, y: 200 },
+        inputs: {
+          rayDir:    { type: 'vec3',  label: 'Ray Dir',    connection: { nodeId: 'cam_2', outputKey: 'rd'     } },
+          normal:    { type: 'vec3',  label: 'Normal',     connection: { nodeId: 'mlg_4', outputKey: 'normal' } },
+          hit:       { type: 'float', label: 'Hit',        connection: { nodeId: 'mlg_4', outputKey: 'hit'    } },
+          bgColor:   { type: 'vec3',  label: 'Background' },
+          tintColor: { type: 'vec3',  label: 'Tint'       },
+        },
+        outputs: { color: { type: 'vec3', label: 'Glass Color' } },
+        params: {
+          ior: 1.5, fresnelPow: 3.5, dispersion: 0.06,
+          samples: 8.0, shininess: 80.0, diffuseness: 0.45, saturation: 1.8,
+          lightX: 0.8, lightY: 1.2, lightZ: 0.5,
+          tintR: 0.75, tintG: 0.95, tintB: 1.0,
+        },
+      },
+      { id: 'tone_6', type: 'toneMap', position: { x: 1340, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glass_5', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'out_7', type: 'output', position: { x: 1560, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Spectral Dispersion (rygcbv 6-channel) ───────────────────────────────────
+  spectralPrism: {
+    label: 'Spectral Prism (rygcbv)',
+    counter: 8,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 180 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 260 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.3, camElevation: 0.3, rotSpeed: 0.08, fov: 1.4, aperture: 0.0, focalDist: 3.5 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 560, y: 400 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Prism Torus',
+          subgraph: {
+            nodes: [
+              { id: 'sp', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf', type: 'torusSDF3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { R: 0.55, r: 0.28 } },
+            ],
+            outputNodeId: 'sdf', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 820, y: 200 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV' },
+          time:  { type: 'float', label: 'Time' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' }, hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' } },
+        params: { maxSteps: 100, maxDist: 12.0, stepScale: 1.0, volumetric: false, passthrough: 0.1, jitter: 0.0, bgR: 0.03, bgG: 0.03, bgB: 0.08, albedoR: 0.15, albedoG: 0.15, albedoB: 0.2, subgraph: { nodes: [], inputPorts: [], outputPorts: [] } },
+      },
+      {
+        id: 'spec_5', type: 'spectralDispersion', position: { x: 1100, y: 200 },
+        inputs: {
+          rayDir:  { type: 'vec3',  label: 'Ray Dir',    connection: { nodeId: 'cam_2', outputKey: 'rd'     } },
+          normal:  { type: 'vec3',  label: 'Normal',     connection: { nodeId: 'mlg_4', outputKey: 'normal' } },
+          hit:     { type: 'float', label: 'Hit',        connection: { nodeId: 'mlg_4', outputKey: 'hit'    } },
+          bgColor: { type: 'vec3',  label: 'Background' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Dispersed Color' } },
+        params: {
+          iorR: 1.505, iorY: 1.514, iorG: 1.519,
+          iorC: 1.525, iorB: 1.531, iorV: 1.538,
+          saturation: 2.4,
+        },
+      },
+      { id: 'tone_6', type: 'toneMap', position: { x: 1340, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'spec_5', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'out_7', type: 'output', position: { x: 1560, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Blinn-Phong Lit Sphere ────────────────────────────────────────────────────
+  blinnPhongSphere: {
+    label: 'Blinn-Phong: Lit Sphere',
+    counter: 10,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 180 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 260 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.3, camElevation: 0.2, rotSpeed: 0.1, fov: 1.4, aperture: 0.0, focalDist: 3.0 },
+      },
+      {
+        id: 'scene_3', type: 'sceneGroup', position: { x: 560, y: 400 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Lit Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf', type: 'sphereSDF3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.9 } },
+            ],
+            outputNodeId: 'sdf', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'mlg_4', type: 'marchLoopGroup', position: { x: 820, y: 200 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'scene_3', outputKey: 'scene' } },
+          uv:    { type: 'vec2',  label: 'UV' },
+          time:  { type: 'float', label: 'Time' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' }, dist: { type: 'float', label: 'Distance' }, depth: { type: 'float', label: 'Depth' }, normal: { type: 'vec3', label: 'Normal' }, iter: { type: 'float', label: 'Iter' }, iterCount: { type: 'float', label: 'Iter Count' }, hit: { type: 'float', label: 'Hit' }, pos: { type: 'vec3', label: 'Hit Pos' } },
+        params: { maxSteps: 80, maxDist: 12.0, stepScale: 1.0, volumetric: false, passthrough: 0.1, jitter: 0.0, bgR: 0.02, bgG: 0.02, bgB: 0.04, albedoR: 0.3, albedoG: 0.5, albedoB: 0.9, subgraph: { nodes: [], inputPorts: [], outputPorts: [] } },
+      },
+      {
+        id: 'bp_5', type: 'blinnPhong', position: { x: 1080, y: 200 },
+        inputs: {
+          normal:   { type: 'vec3', label: 'Normal',    connection: { nodeId: 'mlg_4', outputKey: 'normal' } },
+          viewDir:  { type: 'vec3', label: 'View Dir',  connection: { nodeId: 'cam_2', outputKey: 'rd'     } },
+          lightDir: { type: 'vec3', label: 'Light Dir' },
+        },
+        outputs: { light: { type: 'float', label: 'Light' } },
+        params: { shininess: 72.0, diffuseness: 0.75, lightX: 0.8, lightY: 1.4, lightZ: 0.6 },
+      },
+      // Multiply surface albedo by Blinn-Phong light value
+      { id: 'mul_6', type: 'multiplyVec3', position: { x: 1280, y: 200 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'bp_5',  outputKey: 'light' } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 } },
+      // Mask by hit so background stays dark
+      { id: 'msk_7', type: 'multiplyVec3', position: { x: 1460, y: 200 },
+        inputs: {
+          color: { type: 'vec3',  label: 'Color', connection: { nodeId: 'mul_6', outputKey: 'result' } },
+          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'mlg_4', outputKey: 'hit'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { scale: 1.0 } },
+      { id: 'tone_8', type: 'toneMap', position: { x: 1640, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'msk_7', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'out_9', type: 'output', position: { x: 1860, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_8', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

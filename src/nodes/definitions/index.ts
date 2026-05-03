@@ -66,7 +66,7 @@ export { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
 
 // 3D Lighting
-export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode, PhaseHGNode, FresnelSchlickNode } from './threed';
+export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode, PhaseHGNode, FresnelSchlickNode, SpectralDispersionNode, BlinnPhongNode } from './threed';
 
 // 3D Fractals (additional)
 export { MandelboxDENode, KIFSTetrahedronDENode } from './threed';
@@ -177,7 +177,7 @@ import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode
 import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
-  MandelboxDENode, KIFSTetrahedronDENode, PhaseHGNode, FresnelSchlickNode,
+  MandelboxDENode, KIFSTetrahedronDENode, PhaseHGNode, FresnelSchlickNode, SpectralDispersionNode, BlinnPhongNode,
 } from './threed';
 import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import {
@@ -386,6 +386,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   glass3d: GlassNode,
   phaseHG: PhaseHGNode,
   fresnelSchlick: FresnelSchlickNode,
+  spectralDispersion: SpectralDispersionNode,
+  blinnPhong: BlinnPhongNode,
   // Patterns
   truchet: TruchetNode,
   metaballs: MetaballsNode,
