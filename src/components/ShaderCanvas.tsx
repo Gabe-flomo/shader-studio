@@ -999,6 +999,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       particleSceneRef.current = null;
       perspCameraRef.current   = null;
       sceneRef.current = null;
+      const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
+      loseCtx?.loseContext();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };

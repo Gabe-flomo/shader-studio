@@ -12362,6 +12362,309 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── GI: Sphere & Ground ───────────────────────────────────────────────────────
+  // Warm sunlight, sphere sitting on a ground plane — GI bounce visible on underside.
+  giSphereGround: {
+    label: 'GI: Sphere & Ground',
+    counter: 8,
+    nodes: [
+      { id: 'gsg_uv',   type: 'uv',   position: { x: 40,  y: 180 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'gsg_time', type: 'time', position: { x: 40,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'gsg_cam', type: 'marchCamera', position: { x: 260, y: 240 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'gsg_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'gsg_time', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.8, camElevation: 0.35, rotSpeed: 0.3, fov: 1.5, targetX: 0.0, targetY: 0.0, targetZ: 0.0 },
+      },
+      {
+        id: 'gsg_scene', type: 'sceneGroup', position: { x: 540, y: 240 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere on Ground',
+          subgraph: {
+            nodes: [
+              { id: 'gsg_sp',  type: 'scenePos',   position: { x: 60,  y: 180 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'gsg_sdf', type: 'sphereSDF3D', position: { x: 260, y: 120 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gsg_sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.72 } },
+              { id: 'gsg_pln', type: 'planeSDF3D',  position: { x: 260, y: 260 },
+                inputs: { p: { type: 'vec3', label: 'Position', connection: { nodeId: 'gsg_sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { height: -0.75 } },
+              { id: 'gsg_uni', type: 'sdfUnion',    position: { x: 480, y: 180 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'gsg_sdf', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'gsg_pln', outputKey: 'dist' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
+            ],
+            outputNodeId: 'gsg_uni', outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'gsg_gi', type: 'giLitMarchGroup', position: { x: 800, y: 180 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'gsg_cam',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'gsg_cam',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'gsg_scene', outputKey: 'scene' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: {
+          maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+          albedoR: 0.9, albedoG: 0.85, albedoB: 0.75,
+          metallic: 0.0, roughness: 0.45,
+          lightX: 2.0, lightY: 3.5, lightZ: 1.5, lightR: 1.0, lightG: 0.92, lightB: 0.78, lightStrength: 1.2,
+          skyTopR: 0.22, skyTopG: 0.42, skyTopB: 0.78, skyBotR: 0.52, skyBotG: 0.48, skyBotB: 0.35,
+          aoSteps: 5, shadowSteps: 24, giSteps: 16, giStrength: 0.45, specSteps: 24, specStrength: 0.3,
+        },
+      },
+      { id: 'gsg_tone', type: 'toneMap', position: { x: 1060, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gsg_gi', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'gsg_out',  type: 'output',  position: { x: 1280, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gsg_tone', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── GI: Gold Torus ────────────────────────────────────────────────────────────
+  // High-metallic rotating torus — specular sky-dome reflection in the ring surface.
+  giGoldTorus: {
+    label: 'GI: Gold Torus',
+    counter: 8,
+    nodes: [
+      { id: 'ggt_uv',   type: 'uv',   position: { x: 40,  y: 180 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'ggt_time', type: 'time', position: { x: 40,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'ggt_cam', type: 'marchCamera', position: { x: 260, y: 240 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'ggt_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'ggt_time', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 2.6, camAngle: 0.5, camElevation: 0.55, rotSpeed: 0.4, fov: 1.4, targetX: 0.0, targetY: 0.0, targetZ: 0.0 },
+      },
+      {
+        id: 'ggt_scene', type: 'sceneGroup', position: { x: 540, y: 240 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Rotating Torus',
+          subgraph: {
+            nodes: [
+              { id: 'ggt_sp',  type: 'scenePos', position: { x: 60,  y: 180 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'ggt_t',   type: 'time',     position: { x: 60,  y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              { id: 'ggt_rot', type: 'rotate3D',  position: { x: 260, y: 240 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'ggt_sp',  outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'ggt_t',   outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } }, params: { axis: 'y', angle: 0.0 } },
+              { id: 'ggt_sdf', type: 'torusSDF3D', position: { x: 460, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'ggt_rot', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { majorR: 0.58, minorR: 0.20 } },
+            ],
+            outputNodeId: 'ggt_sdf', outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'ggt_gi', type: 'giLitMarchGroup', position: { x: 800, y: 180 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'ggt_cam',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'ggt_cam',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'ggt_scene', outputKey: 'scene' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: {
+          maxSteps: 80, maxDist: 15.0, stepScale: 0.9,
+          albedoR: 0.95, albedoG: 0.72, albedoB: 0.22,
+          metallic: 0.95, roughness: 0.08,
+          lightX: -1.5, lightY: 3.0, lightZ: 2.0, lightR: 1.0, lightG: 0.98, lightB: 0.92, lightStrength: 1.3,
+          skyTopR: 0.12, skyTopG: 0.20, skyTopB: 0.45, skyBotR: 0.25, skyBotG: 0.18, skyBotB: 0.10,
+          aoSteps: 5, shadowSteps: 24, giSteps: 16, giStrength: 0.35, specSteps: 32, specStrength: 0.9,
+        },
+      },
+      { id: 'ggt_tone', type: 'toneMap', position: { x: 1060, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ggt_gi', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'ggt_out',  type: 'output',  position: { x: 1280, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ggt_tone', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── GI: Blob Cluster ──────────────────────────────────────────────────────────
+  // Three spheres merged with smooth union — GI color bleed visible in crevices.
+  giBlobCluster: {
+    label: 'GI: Blob Cluster',
+    counter: 8,
+    nodes: [
+      { id: 'gbc_uv',   type: 'uv',   position: { x: 40,  y: 180 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'gbc_time', type: 'time', position: { x: 40,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'gbc_cam', type: 'marchCamera', position: { x: 260, y: 240 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'gbc_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'gbc_time', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.2, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.35, fov: 1.5, targetX: 0.0, targetY: 0.0, targetZ: 0.0 },
+      },
+      {
+        id: 'gbc_scene', type: 'sceneGroup', position: { x: 540, y: 240 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Three Blobs',
+          subgraph: {
+            nodes: [
+              { id: 'gbc_sp',  type: 'scenePos',   position: { x: 60,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              // Center sphere
+              { id: 'gbc_s0',  type: 'sphereSDF3D', position: { x: 260, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gbc_sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.55 } },
+              // Left+up sphere — translate then SDF
+              { id: 'gbc_t1',  type: 'translate3D',  position: { x: 260, y: 220 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gbc_sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } }, params: { tx: -0.7, ty: 0.4, tz: 0.1 } },
+              { id: 'gbc_s1',  type: 'sphereSDF3D', position: { x: 460, y: 220 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gbc_t1', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.45 } },
+              // Right+down sphere
+              { id: 'gbc_t2',  type: 'translate3D',  position: { x: 260, y: 340 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gbc_sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Translated Pos' } }, params: { tx: 0.65, ty: -0.3, tz: -0.1 } },
+              { id: 'gbc_s2',  type: 'sphereSDF3D', position: { x: 460, y: 340 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gbc_t2', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.48 } },
+              // Blend all three with smooth union
+              { id: 'gbc_su1', type: 'sdfSmoothUnion', position: { x: 660, y: 160 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'gbc_s0', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'gbc_s1', outputKey: 'dist' } },
+                  k: { type: 'float', label: 'Blend' },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { k: 0.22 } },
+              { id: 'gbc_su2', type: 'sdfSmoothUnion', position: { x: 860, y: 240 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'gbc_su1', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'gbc_s2',  outputKey: 'dist' } },
+                  k: { type: 'float', label: 'Blend' },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { k: 0.22 } },
+            ],
+            outputNodeId: 'gbc_su2', outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'gbc_gi', type: 'giLitMarchGroup', position: { x: 800, y: 180 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'gbc_cam',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'gbc_cam',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'gbc_scene', outputKey: 'scene' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: {
+          maxSteps: 80, maxDist: 15.0, stepScale: 1.0,
+          albedoR: 0.96, albedoG: 0.72, albedoB: 0.52,
+          metallic: 0.0, roughness: 0.55,
+          lightX: 1.8, lightY: 2.8, lightZ: 1.2, lightR: 0.9, lightG: 0.95, lightB: 1.0, lightStrength: 1.1,
+          skyTopR: 0.28, skyTopG: 0.42, skyTopB: 0.72, skyBotR: 0.6, skyBotG: 0.55, skyBotB: 0.4,
+          aoSteps: 5, shadowSteps: 24, giSteps: 20, giStrength: 0.5, specSteps: 20, specStrength: 0.25,
+        },
+      },
+      { id: 'gbc_tone', type: 'toneMap', position: { x: 1060, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gbc_gi', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'gbc_out',  type: 'output',  position: { x: 1280, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gbc_tone', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── GI: Box Frame ─────────────────────────────────────────────────────────────
+  // Wire-frame box with a sphere inside — deep AO in cage corners, specular rim.
+  giBoxFrame: {
+    label: 'GI: Box Frame',
+    counter: 8,
+    nodes: [
+      { id: 'gbf_uv',   type: 'uv',   position: { x: 40,  y: 180 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'gbf_time', type: 'time', position: { x: 40,  y: 360 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'gbf_cam', type: 'marchCamera', position: { x: 260, y: 240 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'gbf_uv',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'gbf_time', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.0, camAngle: 0.7, camElevation: 0.4, rotSpeed: 0.25, fov: 1.45, targetX: 0.0, targetY: 0.0, targetZ: 0.0 },
+      },
+      {
+        id: 'gbf_scene', type: 'sceneGroup', position: { x: 540, y: 240 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Box Frame + Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'gbf_sp',  type: 'scenePos',    position: { x: 60,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'gbf_t',   type: 'time',         position: { x: 60,  y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+              { id: 'gbf_rot', type: 'rotate3D',     position: { x: 260, y: 260 },
+                inputs: {
+                  pos:   { type: 'vec3',  label: 'Position', connection: { nodeId: 'gbf_sp',  outputKey: 'pos'  } },
+                  angle: { type: 'float', label: 'Angle',    connection: { nodeId: 'gbf_t',   outputKey: 'time' } },
+                },
+                outputs: { pos: { type: 'vec3', label: 'Rotated Pos' } }, params: { axis: 'y', angle: 0.0 } },
+              { id: 'gbf_frm', type: 'boxFrameSDF3D', position: { x: 460, y: 200 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gbf_rot', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { sizeX: 0.65, sizeY: 0.65, sizeZ: 0.65, thickness: 0.04 } },
+              { id: 'gbf_sdf', type: 'sphereSDF3D',  position: { x: 460, y: 320 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'gbf_rot', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.32 } },
+              { id: 'gbf_uni', type: 'sdfUnion',     position: { x: 660, y: 260 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'gbf_frm', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'gbf_sdf', outputKey: 'dist' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
+            ],
+            outputNodeId: 'gbf_uni', outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'gbf_gi', type: 'giLitMarchGroup', position: { x: 800, y: 180 },
+        inputs: {
+          ro:    { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'gbf_cam',   outputKey: 'ro'    } },
+          rd:    { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'gbf_cam',   outputKey: 'rd'    } },
+          scene: { type: 'scene3d', label: 'Scene',      connection: { nodeId: 'gbf_scene', outputKey: 'scene' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: {
+          maxSteps: 96, maxDist: 15.0, stepScale: 0.85,
+          albedoR: 0.75, albedoG: 0.72, albedoB: 0.68,
+          metallic: 0.1, roughness: 0.65,
+          lightX: 2.2, lightY: 3.5, lightZ: 1.8, lightR: 1.0, lightG: 0.94, lightB: 0.82, lightStrength: 1.4,
+          skyTopR: 0.18, skyTopG: 0.35, skyTopB: 0.65, skyBotR: 0.45, skyBotG: 0.42, skyBotB: 0.35,
+          aoSteps: 6, shadowSteps: 28, giSteps: 16, giStrength: 0.4, specSteps: 24, specStrength: 0.35,
+        },
+      },
+      { id: 'gbf_tone', type: 'toneMap', position: { x: 1060, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gbf_gi', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'gbf_out',  type: 'output',  position: { x: 1280, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gbf_tone', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
