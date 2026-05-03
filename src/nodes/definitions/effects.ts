@@ -58,7 +58,7 @@ export const AbsNode: NodeDefinition = {
 export const ToneMapNode: NodeDefinition = {
   type: 'toneMap',
   label: 'Tone Map',
-  category: 'Effects',
+  category: 'Color Grading',
   description: 'Apply tone mapping to a vec3 color. ACES, Hable, Unreal, Tanh, Reinhard2, Lottes, Uchimura, AgX.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -151,7 +151,7 @@ vec3 toneAgX(vec3 c) {
 export const GrainNode: NodeDefinition = {
   type: 'grain',
   label: 'Grain',
-  category: 'Effects',
+  category: 'Color Grading',
   description: 'Film grain. Basic: uniform RGB noise. Luma: more grain in shadows. Temporal: pattern animates each frame (wire Time). Scale < 1 = coarser grain, Scale > 1 = finer.',
   inputs: {
     color: { type: 'vec3',  label: 'Color' },
@@ -1017,7 +1017,7 @@ export const FloatWarpNode: NodeDefinition = {
 
 // Vignette — smoothstep darkening around the edges
 export const VignetteNode: NodeDefinition = {
-  type: 'vignette', label: 'Vignette', category: 'Effects',
+  type: 'vignette', label: 'Vignette', category: 'Post Processing',
   description: 'Add a soft darkening vignette around the edges of the frame.',
   inputs: {
     color:    { type: 'vec3',  label: 'Color' },
@@ -1054,7 +1054,7 @@ export const VignetteNode: NodeDefinition = {
 
 // Scanlines — CRT-style horizontal scan lines
 export const ScanlinesNode: NodeDefinition = {
-  type: 'scanlines', label: 'Scanlines', category: 'Effects',
+  type: 'scanlines', label: 'Scanlines', category: 'Post Processing',
   description: 'Add CRT-style scanlines to a color.',
   inputs: {
     color:     { type: 'vec3',  label: 'Color' },
@@ -1092,7 +1092,7 @@ export const ScanlinesNode: NodeDefinition = {
 // Expects neighboring UV samples; for simplicity takes the color + UV and approximates
 // using fwidth (available in fragment shaders)
 export const SobelNode: NodeDefinition = {
-  type: 'sobel', label: 'Sobel Edges', category: 'Effects',
+  type: 'sobel', label: 'Sobel Edges', category: 'Post Processing',
   description: 'Sobel edge detection. Wire a float/luminance value and UV; outputs edge strength.',
   inputs: {
     value:    { type: 'float', label: 'Value' },
@@ -1732,7 +1732,7 @@ export const DepthOfFieldNode: NodeDefinition = {
 export const MotionBlurNode: NodeDefinition = {
   type: 'motionBlur',
   label: 'Motion Blur',
-  category: 'Effects',
+  category: 'Post Processing',
   description: 'Temporal EMA blur: result = scene_weight * current + history_weight * previous. XorDev defaults (0.1 / 0.9) give smooth trails; raise scene_weight for snappier response.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },

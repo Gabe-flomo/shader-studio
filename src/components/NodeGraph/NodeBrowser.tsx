@@ -27,6 +27,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Color Grading':  '#f9a86b',
   Noise:            '#74c7ec',
   Effects:          '#f38ba8',
+  'Post Processing': '#f38ba8',
   Loops:            '#89dceb',
   '2D Primitives':  '#f9e2af',
   Combiners:        '#cba6f7',
@@ -55,7 +56,7 @@ const CATEGORY_ORDER = [
   '3D Primitives', '3D Scene', '3D Transforms',
   'Animation', 'Color', 'Color Grading', 'Combiners', 'Conditionals',
   'Effects', 'Fractals', 'Halftone', 'Math', 'Matrix', 'Noise',
-  'Particles', 'Particles & Fields',
+  'Particles', 'Particles & Fields', 'Post Processing',
   'Science', 'Shapers', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
@@ -81,6 +82,29 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Seat',    types: ['doubleExpSeat', 'doubleCircleSeat'] },
     { label: 'Sigmoid', types: ['doubleExpSigmoid', 'logisticSigmoid', 'doubleCircleSigmoid', 'doubleEllipticSigmoid'] },
     { label: 'Bezier',  types: ['quadBezierShaper', 'cubicBezierShaper'] },
+  ],
+  Effects: [
+    { label: 'Blur',     types: ['gaussianBlur', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
+    { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
+    { label: 'Lighting', types: ['makeLight', 'light', 'light2d', 'radianceCascadesApprox'] },
+    { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
+    { label: 'Other',    types: ['particleEmitter'] },
+  ],
+  'Color Grading': [
+    { label: 'Tone',  types: ['liftGammaGain', 'toneCurve', 'shadowsHighlights', 'toneMap'] },
+    { label: 'Color', types: ['hueRotate', 'colorSaturation'] },
+    { label: 'Film',  types: ['grain'] },
+  ],
+  Combiners: [
+    { label: 'SDF Ops', types: ['smoothMin', 'min', 'sdfMax', 'sdfSubtract', 'smoothMax', 'smoothSubtract', 'sdfOutline', 'sdfColorize'] },
+    { label: 'Blend',   types: ['blend', 'mask', 'addColor', 'screenBlend', 'alphaBlend'] },
+    { label: 'Layer',   types: ['glowLayer'] },
+  ],
+  Spaces: [
+    { label: 'Warp',       types: ['displace', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp'] },
+    { label: 'Repeat',     types: ['fract', 'infiniteRepeatSpace', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D'] },
+    { label: 'Distort',    types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'swirlSpace', 'kaleidoSpace', 'sphericalSpace', 'rippleSpace', 'perspective2d', 'shear'] },
+    { label: 'Texture',    types: ['waveTexture', 'magicTexture', 'grid'] },
   ],
 };
 
