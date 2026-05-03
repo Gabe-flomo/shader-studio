@@ -2063,3 +2063,129 @@ export const BlinnPhongNode: NodeDefinition = {
     };
   },
 };
+
+// ── Glass Scene Node ──────────────────────────────────────────────────────────
+// Marches two separate SceneGroups: the glass geometry (foreground) and what
+// is visible through it (background). Eliminates the hardcoded dot-grid env
+// from glass3d and lets users compose any SDF scene as the background.
+
+export const GlassSceneNode: NodeDefinition = {
+  type: 'glassScene',
+  label: 'Glass Scene',
+  category: '3D Lighting',
+  description: 'Glass with a real scene background. Wire two SceneGroups — one for the glass geometry and one for what is seen through and around it. Marches both, applies IOR refraction + Fresnel at the glass surface, and shades the background geometry with your light.',
+  inputs: {
+    ro:         { type: 'vec3',    label: 'Ray Origin'  },
+    rd:         { type: 'vec3',    label: 'Ray Dir'     },
+    foreground: { type: 'scene3d', label: 'Glass Geo'   },
+    background: { type: 'scene3d', label: 'Background'  },
+    bgAlbedo:   { type: 'vec3',    label: 'BG Color'    },
+    tintColor:  { type: 'vec3',    label: 'Glass Tint'  },
+    lightDir:   { type: 'vec3',    label: 'Light Dir'   },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: {
+    ior: 1.5, fresnelPow: 3.5, dispersion: 0.04,
+    shininess: 80.0, diffuseness: 0.5, saturation: 1.6,
+  },
+  paramDefs: {
+    ior:         { label: 'IOR',        type: 'float', min: 1.0, max: 3.0,   step: 0.05,  hint: 'Index of refraction. Water=1.33, glass=1.5, diamond=2.4.' },
+    fresnelPow:  { label: 'Fresnel',    type: 'float', min: 1.0, max: 10.0,  step: 0.5,   hint: 'Fresnel rim exponent. Higher concentrates reflection toward the silhouette.' },
+    dispersion:  { label: 'Dispersion', type: 'float', min: 0.0, max: 0.15,  step: 0.005, hint: 'RGB channel shift at Fresnel rim — prismatic color separation.' },
+    shininess:   { label: 'Shininess',  type: 'float', min: 2.0, max: 256.0, step: 2.0,   hint: 'Blinn-Phong specular exponent on the glass surface.' },
+    diffuseness: { label: 'Diffuse',    type: 'float', min: 0.0, max: 1.0,   step: 0.05,  hint: 'Diffuse weight for background geometry shading.' },
+    saturation:  { label: 'Saturation', type: 'float', min: 0.0, max: 3.0,   step: 0.1,   hint: 'Color saturation boost on the background.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id         = node.id;
+    const ro         = inputVars.ro         || 'vec3(0.0, 0.8, 3.0)';
+    const rd         = inputVars.rd         || 'vec3(0.0, 0.0, -1.0)';
+    const fgFn       = inputVars.foreground || 'MISSING_SCENE';
+    const bgFn       = inputVars.background || 'MISSING_SCENE';
+    const bgAlbedo   = inputVars.bgAlbedo   || 'vec3(0.75, 0.78, 0.85)';
+    const tintColor  = inputVars.tintColor  || 'vec3(1.0, 1.0, 1.0)';
+    const lightDir   = inputVars.lightDir   || 'vec3(0.0, 0.0, 0.0)';
+    const ior         = p(node.params.ior,         1.5);
+    const fresnelPow  = p(node.params.fresnelPow,  3.5);
+    const dispersion  = p(node.params.dispersion,  0.04);
+    const shininess   = p(node.params.shininess,   80.0);
+    const diffuseness = p(node.params.diffuseness, 0.5);
+    const saturation  = p(node.params.saturation,  1.6);
+    return {
+      code: `
+    // ── GlassScene: foreground glass geometry + real background ──
+    vec3  ${id}_rv = normalize(${rd});
+    // 1. March foreground (glass geometry)
+    float ${id}_ft = 0.001; float ${id}_fhit = 0.0;
+    vec3  ${id}_fhp = vec3(0.0); vec3 ${id}_fnm = vec3(0.0, 1.0, 0.0);
+    for (int ${id}_i = 0; ${id}_i < 80; ${id}_i++) {
+      vec3  ${id}_fp = ${ro} + ${id}_ft * ${id}_rv;
+      float ${id}_fd = ${fgFn}(${id}_fp);
+      if (${id}_fd < 0.001) { ${id}_fhit = 1.0; ${id}_fhp = ${id}_fp; break; }
+      ${id}_ft += ${id}_fd; if (${id}_ft > 20.0) break;
+    }
+    if (${id}_fhit > 0.5) {
+      float ${id}_fe = 0.001;
+      ${id}_fnm = normalize(vec3(
+        ${fgFn}(${id}_fhp + vec3(${id}_fe,0,0)) - ${fgFn}(${id}_fhp - vec3(${id}_fe,0,0)),
+        ${fgFn}(${id}_fhp + vec3(0,${id}_fe,0)) - ${fgFn}(${id}_fhp - vec3(0,${id}_fe,0)),
+        ${fgFn}(${id}_fhp + vec3(0,0,${id}_fe)) - ${fgFn}(${id}_fhp - vec3(0,0,${id}_fe))));
+      if (dot(${id}_rv, ${id}_fnm) > 0.0) ${id}_fnm = -${id}_fnm;
+    }
+    // 2. Fresnel + refracted/reflected ray
+    float ${id}_cosI = clamp(-dot(${id}_rv, ${id}_fnm), 0.0, 1.0);
+    float ${id}_f0 = (${ior} - 1.0) / (${ior} + 1.0); ${id}_f0 *= ${id}_f0;
+    float ${id}_frs = ${id}_f0 + (1.0 - ${id}_f0) * pow(1.0 - ${id}_cosI, ${fresnelPow});
+    vec3  ${id}_rfDir = refract(${id}_rv, ${id}_fnm, 1.0 / ${ior});
+    vec3  ${id}_rlDir = reflect(${id}_rv, ${id}_fnm);
+    if (length(${id}_rfDir) < 0.001) ${id}_rfDir = ${id}_rlDir;
+    vec3  ${id}_bgRo = ${id}_fhit > 0.5 ? ${id}_fhp + ${id}_rfDir * 0.02 : ${ro};
+    vec3  ${id}_bgRd = ${id}_fhit > 0.5 ? ${id}_rfDir : ${id}_rv;
+    // 3. March background along refracted (or original) ray
+    float ${id}_bt = 0.001; float ${id}_bhit = 0.0;
+    vec3  ${id}_bpos = ${id}_bgRo; vec3 ${id}_bnn = vec3(0.0, 1.0, 0.0);
+    for (int ${id}_j = 0; ${id}_j < 64; ${id}_j++) {
+      vec3  ${id}_bp = ${id}_bgRo + ${id}_bt * ${id}_bgRd;
+      float ${id}_bd = ${bgFn}(${id}_bp);
+      if (${id}_bd < 0.001) { ${id}_bhit = 1.0; ${id}_bpos = ${id}_bp; break; }
+      ${id}_bt += ${id}_bd; if (${id}_bt > 20.0) break;
+    }
+    if (${id}_bhit > 0.5) {
+      float ${id}_be = 0.001;
+      ${id}_bnn = normalize(vec3(
+        ${bgFn}(${id}_bpos + vec3(${id}_be,0,0)) - ${bgFn}(${id}_bpos - vec3(${id}_be,0,0)),
+        ${bgFn}(${id}_bpos + vec3(0,${id}_be,0)) - ${bgFn}(${id}_bpos - vec3(0,${id}_be,0)),
+        ${bgFn}(${id}_bpos + vec3(0,0,${id}_be)) - ${bgFn}(${id}_bpos - vec3(0,0,${id}_be))));
+    }
+    // 4. Shade background
+    vec3  ${id}_lDir = length(${lightDir}) > 0.001 ? normalize(${lightDir}) : normalize(vec3(0.6, 1.0, 0.4));
+    float ${id}_bdif = max(0.0, dot(${id}_bnn, ${id}_lDir)) * ${diffuseness} + 0.12;
+    vec3  ${id}_bgShd = ${bgAlbedo} * ${id}_bdif;
+    vec3  ${id}_bgSky = mix(vec3(0.06, 0.09, 0.20), vec3(0.45, 0.62, 0.85),
+                            clamp(${id}_bgRd.y * 0.5 + 0.5, 0.0, 1.0));
+    vec3  ${id}_bgCol = mix(${id}_bgSky, ${id}_bgShd, ${id}_bhit) * ${tintColor};
+    vec3  ${id}_bgGray = vec3(dot(vec3(0.2126, 0.7152, 0.0722), ${id}_bgCol));
+    ${id}_bgCol = mix(${id}_bgGray, ${id}_bgCol, ${saturation});
+    // Dispersion: simple RGB channel shift proportional to Fresnel rim
+    float ${id}_dsp = ${dispersion} * ${id}_frs * ${id}_fhit;
+    ${id}_bgCol = vec3(${id}_bgCol.r * (1.0 + ${id}_dsp),
+                       ${id}_bgCol.g,
+                       ${id}_bgCol.b * (1.0 - ${id}_dsp * 0.8));
+    // 5. Specular highlight on glass surface
+    float ${id}_spec = 0.0;
+    if (${id}_fhit > 0.5) {
+      vec3  ${id}_hv = normalize(-${id}_rv + ${id}_lDir);
+      float ${id}_NH = max(0.0, dot(${id}_fnm, ${id}_hv));
+      ${id}_spec = pow(${id}_NH * ${id}_NH, ${shininess}) * 0.9;
+    }
+    // 6. Reflection (sky gradient — no extra march)
+    vec3  ${id}_rlSky = mix(vec3(0.08, 0.12, 0.26), vec3(0.60, 0.75, 0.95),
+                            clamp(${id}_rlDir.y * 0.5 + 0.5, 0.0, 1.0)) * 1.15;
+    // 7. Final composite: refracted background + Fresnel reflection + specular
+    vec3  ${id}_color = mix(${id}_bgCol, ${id}_rlSky,
+                            ${id}_fhit > 0.5 ? ${id}_frs : 0.0) + vec3(${id}_spec);
+`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};

@@ -3972,6 +3972,453 @@ function ExprBadgeViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Viz — Grid UV (gridUV) ───────────────────────────────────────────────────
+
+export function GridUVViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scale = typeof node.params.scale === 'number' ? node.params.scale : 12;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    const cells = Math.max(2, Math.min(Math.round(scale * 0.5), 8));
+    const cellW = W / cells;
+    const cellH = H / cells;
+
+    for (let row = 0; row < cells; row++) {
+      for (let col = 0; col < cells; col++) {
+        const px = col * cellW;
+        const py = row * cellH;
+        // Per-cell UV gradient: draw 4x4 sub-pixels
+        const SUB = 4;
+        for (let dy = 0; dy < SUB; dy++) {
+          for (let dx = 0; dx < SUB; dx++) {
+            const u = (dx + 0.5) / SUB;
+            const v = (dy + 0.5) / SUB;
+            const r = Math.round(u * 200 + 30);
+            const g = Math.round(v * 200 + 30);
+            const b = 100;
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(
+              px + dx * (cellW / SUB),
+              py + dy * (cellH / SUB),
+              Math.ceil(cellW / SUB) + 1,
+              Math.ceil(cellH / SUB) + 1,
+            );
+          }
+        }
+        // Cell border
+        ctx.strokeStyle = '#11111b';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px + 0.5, py + 0.5, cellW - 1, cellH - 1);
+      }
+    }
+  }, [scale]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={120} height={80}
+        style={{ display: 'block', width: '120px', height: '80px', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Dot Mask (dotMask) ─────────────────────────────────────────────────
+
+export function DotMaskViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const radius   = typeof node.params.radius   === 'number' ? node.params.radius   : 0.38;
+  const softness = typeof node.params.softness === 'number' ? node.params.softness : 0.01;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#0d0d14';
+    ctx.fillRect(0, 0, W, H);
+
+    const cells = 5;
+    const cellW = W / cells;
+    const cellH = H / cells;
+
+    for (let row = 0; row < cells; row++) {
+      for (let col = 0; col < cells; col++) {
+        const cx = (col + 0.5) * cellW;
+        const cy = (row + 0.5) * cellH;
+        const dotR = radius * Math.min(cellW, cellH);
+        const blur = Math.max(1, softness * Math.min(cellW, cellH) * 20);
+        ctx.shadowBlur = blur * 2;
+        ctx.shadowColor = '#cba6f7';
+        ctx.fillStyle = '#cdd6f4';
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(1, dotR), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.shadowBlur = 0;
+  }, [radius, softness]);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+      <canvas ref={canvasRef} width={80} height={80}
+        style={{ display: 'block', width: '80px', height: '80px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — SDF Mask (sdfMask) ─────────────────────────────────────────────────
+
+export function SdfMaskViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const threshold = typeof node.params.threshold === 'number' ? node.params.threshold : 0.07;
+  const softness  = typeof node.params.softness  === 'number' ? node.params.softness  : 0.01;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const img = ctx.createImageData(W, H);
+    const cx = W / 2, cy = H / 2, r = W * 0.38;
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const nx = (x - cx) / r;
+        const ny = (y - cy) / r;
+        // SDF of a circle: negative inside, positive outside
+        const sdf = Math.sqrt(nx * nx + ny * ny) - 1.0;
+        const lo = threshold - softness * 3;
+        const hi = threshold + softness * 3 + 0.04;
+        const t = Math.max(0, Math.min(1, (sdf - lo) / Math.max(hi - lo, 0.001)));
+        const smooth = t * t * (3 - 2 * t);
+        const mask = 1 - smooth;
+        const i = (y * W + x) * 4;
+        img.data[i    ] = Math.round(mask * 200 + 20);
+        img.data[i + 1] = Math.round(mask * 180 + 15);
+        img.data[i + 2] = Math.round(mask * 220 + 30);
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, [threshold, softness]);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+      <canvas ref={canvasRef} width={80} height={80}
+        style={{ display: 'block', width: '80px', height: '80px', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Luma Radius (lumaRadius) ──────────────────────────────────────────
+
+export function LumaRadiusViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const baseRadius = typeof node.params.baseRadius === 'number' ? node.params.baseRadius : 0.44;
+  const minScale   = typeof node.params.minScale   === 'number' ? node.params.minScale   : 0.05;
+  const maxScale   = typeof node.params.maxScale   === 'number' ? node.params.maxScale   : 0.95;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#0d0d14';
+    ctx.fillRect(0, 0, W, H);
+
+    // Brightness gradient strip at top
+    const stripH = 16;
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, '#111122');
+    grad.addColorStop(1, '#cdd6f4');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 4, W, stripH);
+    ctx.strokeStyle = '#313244';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 4, W, stripH);
+
+    // Row of dots with size proportional to brightness
+    const count = 7;
+    const dotAreaY = stripH + 12;
+    const dotAreaH = H - dotAreaY - 4;
+    const spacing = W / count;
+    for (let i = 0; i < count; i++) {
+      const luma = (i + 0.5) / count;
+      const r = baseRadius * (minScale + luma * (maxScale - minScale)) * spacing * 0.9;
+      const cx = (i + 0.5) * spacing;
+      const cy = dotAreaY + dotAreaH / 2;
+      const brightness = Math.round(luma * 160 + 60);
+      ctx.fillStyle = `rgb(${brightness},${brightness},${Math.round(brightness * 1.1)})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(1, r), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Label
+    ctx.fillStyle = '#585b70';
+    ctx.font = '8px monospace';
+    ctx.fillText('luma → radius', 4, H - 2);
+  }, [baseRadius, minScale, maxScale]);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+      <canvas ref={canvasRef} width={140} height={70}
+        style={{ display: 'block', width: '140px', height: '70px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — CMYK Halftone (cmykHalftone, rgbToCMYK) ───────────────────────────
+
+function drawHalftoneDots(
+  ctx: CanvasRenderingContext2D,
+  W: number, H: number,
+  angleDeg: number, color: string,
+  spacing: number, dotRadius: number,
+) {
+  const angle = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const diag = Math.ceil(Math.sqrt(W * W + H * H) / spacing) + 2;
+  ctx.fillStyle = color;
+  for (let i = -diag; i <= diag; i++) {
+    for (let j = -diag; j <= diag; j++) {
+      const cx = W / 2 + (i * cos - j * sin) * spacing;
+      const cy = H / 2 + (i * sin + j * cos) * spacing;
+      if (cx + dotRadius < 0 || cx - dotRadius > W) continue;
+      if (cy + dotRadius < 0 || cy - dotRadius > H) continue;
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+export function CmykHalftoneViz(_props: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#f5f0e8';
+    ctx.fillRect(0, 0, W, H);
+
+    const spacing = 11;
+    const dotR = 4.2;
+
+    ctx.globalCompositeOperation = 'multiply';
+    drawHalftoneDots(ctx, W, H, 15,  'rgba(0,183,199,0.85)',   spacing, dotR);
+    drawHalftoneDots(ctx, W, H, 75,  'rgba(210,0,110,0.85)',   spacing, dotR);
+    drawHalftoneDots(ctx, W, H, 90,  'rgba(240,200,0,0.75)',   spacing, dotR);
+    drawHalftoneDots(ctx, W, H, 45,  'rgba(20,20,20,0.80)',    spacing, dotR);
+    ctx.globalCompositeOperation = 'source-over';
+  }, []);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, background: '#f5f0e8' }}>
+      <canvas ref={canvasRef} width={120} height={80}
+        style={{ display: 'block', width: '120px', height: '80px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Blinn-Phong Lit Sphere (blinnPhong) ────────────────────────────────
+
+export function BlinnPhongViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const shininess   = typeof node.params.shininess   === 'number' ? node.params.shininess   : 64;
+  const diffuseness = typeof node.params.diffuseness === 'number' ? node.params.diffuseness : 0.6;
+  const lx = typeof node.params.lightX === 'number' ? node.params.lightX : 0.6;
+  const ly = typeof node.params.lightY === 'number' ? node.params.lightY : 1.0;
+  const lz = typeof node.params.lightZ === 'number' ? node.params.lightZ : 0.4;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const img = ctx.createImageData(W, H);
+    const cx = W / 2, cy = H / 2, sr = W * 0.38;
+
+    // Normalize light direction
+    const lLen = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1;
+    const lnx = lx / lLen, lny = -ly / lLen, lnz = lz / lLen;
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const nx = (x - cx) / sr;
+        const ny = (y - cy) / sr;
+        const r2 = nx * nx + ny * ny;
+        const i = (y * W + x) * 4;
+        if (r2 > 1) {
+          img.data[i] = 13; img.data[i+1] = 13; img.data[i+2] = 20; img.data[i+3] = 255;
+          continue;
+        }
+        const nz = Math.sqrt(1 - r2);
+        // View direction (camera at z=+inf)
+        const vz = 1.0;
+        // Half vector
+        const hx = lnx, hy = lny, hz = (lnz + vz);
+        const hLen = Math.sqrt(hx*hx + hy*hy + hz*hz) || 1;
+        const NdotL = Math.max(0, nx*lnx + ny*lny + nz*lnz);
+        const NdotH = Math.max(0, nx*(hx/hLen) + ny*(hy/hLen) + nz*(hz/hLen));
+        const diffuse = NdotL * diffuseness;
+        const specular = Math.pow(NdotH * NdotH, Math.max(1, shininess));
+        const light = Math.min(1, diffuse + specular + 0.05);
+        img.data[i    ] = Math.round(light * 220);
+        img.data[i + 1] = Math.round(light * 200);
+        img.data[i + 2] = Math.round(light * 255);
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, [shininess, diffuseness, lx, ly, lz]);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+      <canvas ref={canvasRef} width={100} height={100}
+        style={{ display: 'block', width: '100px', height: '100px', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Glass Sphere (glass3d, glassDistortion) ────────────────────────────
+
+export function GlassViz(_props: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const img = ctx.createImageData(W, H);
+    const cx = W / 2, cy = H / 2, sr = W * 0.40;
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const nx = (x - cx) / sr;
+        const ny = (y - cy) / sr;
+        const r2 = nx * nx + ny * ny;
+        const i = (y * W + x) * 4;
+        if (r2 > 1) {
+          // Background: dark dot grid for visual interest
+          const bx = Math.round((x + 5) / 10), by = Math.round((y + 5) / 10);
+          const dot = Math.exp(-((((x + 5) % 10) - 5) ** 2 + (((y + 5) % 10) - 5) ** 2) / 8);
+          const bg = 15 + Math.round(dot * 25);
+          img.data[i] = bg; img.data[i+1] = bg; img.data[i+2] = Math.round(bg * 1.4); img.data[i+3] = 255;
+          void bx; void by;
+          continue;
+        }
+        const nz = Math.sqrt(1 - r2);
+        // Fresnel: stronger at grazing angles
+        const fresnel = Math.pow(1 - nz, 3.5);
+        // Refraction interior tint: cool blue
+        const interior = 1 - fresnel;
+        // Light direction for small specular
+        const lx = 0.6, ly = -0.8, lz = 0.5;
+        const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
+        const hx = lx/lLen, hy = ly/lLen, hz = (lz/lLen + 1);
+        const hLen = Math.sqrt(hx*hx + hy*hy + hz*hz) || 1;
+        const NdotH = Math.max(0, nx*(hx/hLen) + ny*(hy/hLen) + nz*(hz/hLen));
+        const spec = Math.pow(NdotH, 40) * 0.7;
+        const fr = Math.min(1, interior * 0.10 + fresnel * 0.85 + spec);
+        const fg = Math.min(1, interior * 0.14 + fresnel * 0.92 + spec);
+        const fb = Math.min(1, interior * 0.25 + fresnel * 1.00 + spec);
+        img.data[i    ] = Math.round(fr * 255);
+        img.data[i + 1] = Math.round(fg * 255);
+        img.data[i + 2] = Math.round(fb * 255);
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, []);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+      <canvas ref={canvasRef} width={100} height={100}
+        style={{ display: 'block', width: '100px', height: '100px', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Spectral Dispersion (spectralDispersion) ──────────────────────────
+
+export function SpectralDispersionViz(_props: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const img = ctx.createImageData(W, H);
+    const cx = W / 2, cy = H / 2, sr = W * 0.40;
+
+    // HSV to RGB helper
+    function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+      const i = Math.floor(h * 6);
+      const f = h * 6 - i;
+      const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+      const idx = i % 6;
+      const [r, g, b] = idx === 0 ? [v, t, p] : idx === 1 ? [q, v, p] : idx === 2 ? [p, v, t]
+        : idx === 3 ? [p, q, v] : idx === 4 ? [t, p, v] : [v, p, q];
+      return [r, g, b];
+    }
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const nx = (x - cx) / sr;
+        const ny = (y - cy) / sr;
+        const r2 = nx * nx + ny * ny;
+        const i = (y * W + x) * 4;
+        if (r2 > 1) {
+          img.data[i] = 10; img.data[i+1] = 10; img.data[i+2] = 18; img.data[i+3] = 255;
+          continue;
+        }
+        const nz = Math.sqrt(1 - r2);
+        const fresnel = Math.pow(1 - nz, 2.5);
+        // Hue from angle around sphere (like a prism splitting light)
+        const hue = ((Math.atan2(ny, nx) / (Math.PI * 2)) + 0.5 + 0.5) % 1.0;
+        const sat = fresnel * 0.9;
+        const val = 0.12 + fresnel * 0.88;
+        const [r, g, b] = hsvToRgb(hue, sat, val);
+        img.data[i    ] = Math.round(r * 255);
+        img.data[i + 1] = Math.round(g * 255);
+        img.data[i + 2] = Math.round(b * 255);
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, []);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+      <canvas ref={canvasRef} width={100} height={100}
+        style={{ display: 'block', width: '100px', height: '100px', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -4144,6 +4591,13 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'multiplyVec2':     return <Vec2OpViz               node={node} />;
     case 'makeVec3':
     case 'floatToVec3':      return <ColorSwatchViz          node={node} />;
+    // ── Halftone nodes ────────────────────────────────────────────────────────
+    case 'gridUV':           return <GridUVViz               node={node} />;
+    case 'dotMask':          return <DotMaskViz              node={node} />;
+    case 'sdfMask':          return <SdfMaskViz              node={node} />;
+    case 'lumaRadius':       return <LumaRadiusViz           node={node} />;
+    case 'cmykHalftone':
+    case 'rgbToCMYK':        return <CmykHalftoneViz         node={node} />;
     // 2D SDF
     case 'circleSDF':
     case 'boxSDF':
@@ -4237,6 +4691,8 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'spiralWarp3D':     return <SDF3DParamViz           node={node} />;
 
     // ── Lighting ──────────────────────────────────────────────────────────────
+    case 'blinnPhong':       return <BlinnPhongViz           node={node} />;
+    case 'spectralDispersion': return <SpectralDispersionViz node={node} />;
     case 'makeLight':
     case 'light':
     case 'light2d':
@@ -4268,11 +4724,12 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'loopDomainFold':   return <SDF3DParamViz           node={node} />;
 
     // ── Volumetrics / complex effects → param display ─────────────────────────
+    case 'glass3d':
+    case 'glassScene':
+    case 'glassDistortion':  return <GlassViz               node={node} />;
     case 'fakeSSS':
     case 'volumeClouds':
     case 'volumetricFog':
-    case 'glass3d':
-    case 'glassDistortion':
     case 'orbitalVolume3d':
     case 'radianceCascadesApprox': return <SDF3DParamViz     node={node} />;
 
@@ -4296,6 +4753,11 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
 
 // Nodes whose inline viz fully replaces the shader thumbnail
 export const INLINE_VIZ_TYPES = new Set([
+  // Halftone nodes
+  'gridUV', 'dotMask', 'sdfMask', 'lumaRadius', 'cmykHalftone', 'rgbToCMYK',
+  // 3D Lighting
+  'blinnPhong', 'spectralDispersion',
+  // Glass
   'toneMap', 'palette', 'palettePreset', 'gradient',
   'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
   'hueRange', 'audioInput',
@@ -4384,7 +4846,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
   'loopStart', 'loopCarry', 'loopDomainFold',
   // Volumetrics / complex effects
-  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassDistortion',
+  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'glassDistortion',
   'orbitalVolume3d', 'radianceCascadesApprox',
   // Particle fields
   'vectorField', 'gravityField', 'spiralField',
