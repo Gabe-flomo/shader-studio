@@ -182,7 +182,6 @@ function TabSectionHeader({ label, color, action }: { label: string; color: stri
 // ── ContentPane ───────────────────────────────────────────────────────────────
 interface ContentPaneProps {
   state: ContentPaneState;
-  onStateChange: (updates: Partial<ContentPaneState>) => void;
   isFocused: boolean;
   onFocus: () => void;
   onClose?: () => void;
@@ -196,7 +195,7 @@ interface ContentPaneProps {
   onGlslInsert?: (code: string) => void;
 }
 
-function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
+function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
   const {
     addNode, saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph,
     deleteCustomFn, exportCustomFns, importCustomFnsFromFile, loadCustomFnsFromDisk,
@@ -715,7 +714,6 @@ export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, o
               )}
               <ContentPane
                 state={pane}
-                onStateChange={updates => updatePane(pane.id, updates)}
                 isFocused={pane.id === focusedPaneId}
                 onFocus={() => setFocusedPaneId(pane.id)}
                 onClose={panes.length > 1 ? () => closePane(pane.id) : undefined}
