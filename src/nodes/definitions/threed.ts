@@ -2161,16 +2161,23 @@ export const GlassSceneNode: NodeDefinition = {
     vec3  ${id}_lDir = length(${lightDir}) > 0.001 ? normalize(${lightDir}) : normalize(vec3(0.6, 1.0, 0.4));
     float ${id}_bdif = max(0.0, dot(${id}_bnn, ${id}_lDir)) * ${diffuseness} + 0.12;
     vec3  ${id}_bgShd = ${bgAlbedo} * ${id}_bdif;
-    vec3  ${id}_bgSky = mix(vec3(0.06, 0.09, 0.20), vec3(0.45, 0.62, 0.85),
-                            clamp(${id}_bgRd.y * 0.5 + 0.5, 0.0, 1.0));
-    vec3  ${id}_bgCol = mix(${id}_bgSky, ${id}_bgShd, ${id}_bhit) * ${tintColor};
+    // Dispersion: perturb R and B refracted rays by ±dispersion along surface normal
+    float ${id}_dsp = ${dispersion} * (1.0 - ${id}_cosI) * ${id}_fhit;
+    vec3  ${id}_rfR = normalize(${id}_rfDir + ${id}_fnm * ${id}_dsp);
+    vec3  ${id}_rfB = normalize(${id}_rfDir - ${id}_fnm * ${id}_dsp * 0.8);
+    vec3  ${id}_bgRdR = ${id}_fhit > 0.5 ? ${id}_rfR : ${id}_rv;
+    vec3  ${id}_bgRdB = ${id}_fhit > 0.5 ? ${id}_rfB : ${id}_rv;
+    // Sky sampled at per-channel refracted directions
+    vec3  ${id}_bgSky  = mix(vec3(0.06, 0.09, 0.20), vec3(0.45, 0.62, 0.85), clamp(${id}_bgRd.y  * 0.5 + 0.5, 0.0, 1.0));
+    float ${id}_skyR   = clamp(${id}_bgRdR.y * 0.5 + 0.5, 0.0, 1.0);
+    float ${id}_skyB   = clamp(${id}_bgRdB.y * 0.5 + 0.5, 0.0, 1.0);
+    // Background color with per-channel sky for dispersion on sky misses
+    vec3  ${id}_bgColR = mix(mix(vec3(0.06, 0.09, 0.20), vec3(0.45, 0.62, 0.85), ${id}_skyR), ${id}_bgShd, ${id}_bhit);
+    vec3  ${id}_bgColG = mix(${id}_bgSky, ${id}_bgShd, ${id}_bhit);
+    vec3  ${id}_bgColB = mix(mix(vec3(0.06, 0.09, 0.20), vec3(0.45, 0.62, 0.85), ${id}_skyB), ${id}_bgShd, ${id}_bhit);
+    vec3  ${id}_bgCol  = vec3(${id}_bgColR.r, ${id}_bgColG.g, ${id}_bgColB.b) * ${tintColor};
     vec3  ${id}_bgGray = vec3(dot(vec3(0.2126, 0.7152, 0.0722), ${id}_bgCol));
     ${id}_bgCol = mix(${id}_bgGray, ${id}_bgCol, ${saturation});
-    // Dispersion: simple RGB channel shift proportional to Fresnel rim
-    float ${id}_dsp = ${dispersion} * ${id}_frs * ${id}_fhit;
-    ${id}_bgCol = vec3(${id}_bgCol.r * (1.0 + ${id}_dsp),
-                       ${id}_bgCol.g,
-                       ${id}_bgCol.b * (1.0 - ${id}_dsp * 0.8));
     // 5. Specular highlight on glass surface
     float ${id}_spec = 0.0;
     if (${id}_fhit > 0.5) {
