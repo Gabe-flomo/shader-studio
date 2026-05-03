@@ -23,7 +23,6 @@ interface FolderableListProps<T extends FolderableItem> {
   scopeKey: string;
   color: string;
   items: T[];
-  /** Render the pill. FolderableList handles drag/selection/context-menu wrapping. */
   renderItem: (item: T, selected: boolean) => React.ReactNode;
   emptyHint?: React.ReactNode;
 }
@@ -34,6 +33,38 @@ type MenuTarget =
   | { kind: 'folder'; id: string };
 
 interface MenuState { x: number; y: number; target: MenuTarget }
+
+// ── Inline folder name input ──────────────────────────────────────────────────
+
+function NewFolderInput({ color, onConfirm, onCancel }: {
+  color: string;
+  onConfirm: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState('');
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '2px' }}>
+      <span style={{ fontSize: '11px', color: `${color}aa`, flexShrink: 0 }}>📁</span>
+      <input
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        placeholder="Folder name…"
+        onKeyDown={e => {
+          if (e.key === 'Enter' && value.trim()) { e.stopPropagation(); onConfirm(value.trim()); }
+          if (e.key === 'Escape') { e.stopPropagation(); onCancel(); }
+          e.stopPropagation();
+        }}
+        onBlur={() => { if (value.trim()) onConfirm(value.trim()); else onCancel(); }}
+        style={{
+          flex: 1, background: '#11111b', border: `1px solid ${color}`,
+          color, borderRadius: '4px', padding: '2px 7px',
+          fontSize: '11px', outline: 'none', minWidth: 0,
+        }}
+      />
+    </div>
+  );
+}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -46,6 +77,11 @@ export function FolderableList<T extends FolderableItem>({
   const [menu,        setMenu]        = useState<MenuState | null>(null);
   const [dropTargetId, setDropTarget] = useState<string | null>(null);
   const [renamingFolderId, setRenamingFolder] = useState<string | null>(null);
+  // Inline new-folder input state
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  // Pending item IDs waiting to be moved (shown in a folder-pick submenu)
+  const [pendingMoveIds, setPendingMoveIds] = useState<string[] | null>(null);
+  const [moveMenuPos, setMoveMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const refresh = useCallback(() => {
     setFolders(loadFolders(scopeKey));
@@ -58,10 +94,48 @@ export function FolderableList<T extends FolderableItem>({
   }, [refresh]);
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedIds(new Set()); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setSelectedIds(new Set()); setCreatingFolder(false); }
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);
+
+  // ── Folder creation ───────────────────────────────────────────────────────
+
+  function confirmNewFolder(name: string) {
+    createFolder(scopeKey, name);
+    setCreatingFolder(false);
+    refresh();
+  }
+
+  // ── Move-to-folder submenu ────────────────────────────────────────────────
+
+  function openMoveMenu(e: React.MouseEvent, ids: string[]) {
+    setPendingMoveIds(ids);
+    setMoveMenuPos({ x: e.clientX, y: e.clientY });
+    setMenu(null);
+  }
+
+  function buildFolderPickItems(): ContextMenuItem[] {
+    const result: ContextMenuItem[] = folders.map(f => ({
+      label: `📁  ${f.label}`,
+      action: () => {
+        if (pendingMoveIds) { moveItemsToFolder(scopeKey, pendingMoveIds, f.id); refresh(); }
+        setPendingMoveIds(null); setMoveMenuPos(null);
+      },
+    }));
+    result.push({
+      label: '＋ New folder…',
+      separator: result.length > 0,
+      action: () => {
+        setPendingMoveIds(null); setMoveMenuPos(null);
+        setCreatingFolder(true);
+        // After folder is created we'll move, but user can re-drag/move
+      },
+    });
+    return result;
+  }
 
   // ── Context menu ──────────────────────────────────────────────────────────
 
@@ -70,16 +144,18 @@ export function FolderableList<T extends FolderableItem>({
     setMenu({ x: e.clientX, y: e.clientY, target });
   }, []);
 
-  const buildMenuItems = useCallback((target: MenuTarget): ContextMenuItem[] => {
+  function buildMenuItems(target: MenuTarget): ContextMenuItem[] {
     if (target.kind === 'panel') {
-      return [{ label: '📁  New Folder', action: promptNewFolder }];
+      return [{ label: '📁  New Folder', action: () => setCreatingFolder(true) }];
     }
     if (target.kind === 'folder') {
       const fid = target.id;
       return [
         { label: 'Rename Folder', action: () => setRenamingFolder(fid) },
-        { label: 'Delete Folder', destructive: true, separator: true,
-          action: () => { deleteFolder(scopeKey, fid); refresh(); } },
+        {
+          label: 'Delete Folder', destructive: true, separator: true,
+          action: () => { deleteFolder(scopeKey, fid); refresh(); },
+        },
       ];
     }
     // item / multi-item
@@ -91,7 +167,11 @@ export function FolderableList<T extends FolderableItem>({
       {
         label: effectiveIds.length > 1
           ? `Move ${effectiveIds.length} items to Folder…` : 'Move to Folder…',
-        action: () => promptMoveToFolder(effectiveIds),
+        action: () => {
+          // We need the mouse position from the original menu click.
+          // Re-open at same position but as folder picker.
+          if (menu) openMoveMenuAt(menu.x, menu.y, effectiveIds);
+        },
       },
     ];
     if (inFolder) result.push({
@@ -100,35 +180,11 @@ export function FolderableList<T extends FolderableItem>({
       action: () => { removeItemsFromFolders(scopeKey, effectiveIds); refresh(); },
     });
     return result;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey, selectedIds, membership, folders, refresh]);
-
-  function promptNewFolder() {
-    const label = window.prompt('Folder name:');
-    if (label?.trim()) { createFolder(scopeKey, label.trim()); refresh(); }
   }
 
-  function promptMoveToFolder(ids: string[]) {
-    if (folders.length === 0) {
-      const label = window.prompt('No folders yet — enter a name to create one:');
-      if (label?.trim()) {
-        const f = createFolder(scopeKey, label.trim());
-        moveItemsToFolder(scopeKey, ids, f.id);
-        refresh();
-      }
-      return;
-    }
-    const choices = folders.map((f, i) => `${i + 1}. ${f.label}`).join('\n');
-    const input = window.prompt(
-      `Move to folder:\n${choices}\n\nEnter number — or type a name to create a new folder:`
-    );
-    if (!input?.trim()) return;
-    const n = parseInt(input.trim(), 10);
-    const target = (!isNaN(n) && n >= 1 && n <= folders.length)
-      ? folders[n - 1]
-      : createFolder(scopeKey, input.trim());
-    moveItemsToFolder(scopeKey, ids, target.id);
-    refresh();
+  function openMoveMenuAt(x: number, y: number, ids: string[]) {
+    setPendingMoveIds(ids);
+    setMoveMenuPos({ x: x + 6, y });
   }
 
   // ── Drag ──────────────────────────────────────────────────────────────────
@@ -149,7 +205,7 @@ export function FolderableList<T extends FolderableItem>({
     } catch { return null; }
   }
 
-  // ── Item wrapper (inline — NOT a component defined inside render) ─────────
+  // ── Item wrapper ──────────────────────────────────────────────────────────
 
   function renderWrappedItem(item: T) {
     const selected = selectedIds.has(item.id);
@@ -169,7 +225,10 @@ export function FolderableList<T extends FolderableItem>({
           }
         }}
         onContextMenu={e => openMenu(e, { kind: 'item', id: item.id })}
-        style={{ outline: selected ? `2px solid ${color}66` : 'none', borderRadius: '20px', cursor: 'grab' }}
+        style={{
+          outline: selected ? `2px solid ${color}66` : 'none',
+          borderRadius: '20px', cursor: 'grab',
+        }}
       >
         {renderItem(item, selected)}
       </div>
@@ -184,17 +243,20 @@ export function FolderableList<T extends FolderableItem>({
 
   return (
     <div
-      // onContextMenu on the CONTAINER fires for any right-click not already
-      // stopped by an item or folder row (they call stopPropagation).
-      onContextMenu={e => openMenu(e, { kind: 'panel' })}
-      onClick={() => setSelectedIds(new Set())}
-      style={{
-        display: 'flex', flexDirection: 'column', gap: '6px',
-        flex: 1,        // fill available panel height so the whole area is clickable
-        minHeight: '40px',
-      }}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, target: { kind: 'panel' } }); }}
+      onClick={e => { if (e.target === e.currentTarget) setSelectedIds(new Set()); }}
+      style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minHeight: '40px' }}
     >
-      {isEmpty && emptyHint}
+      {/* Inline new-folder input */}
+      {creatingFolder && (
+        <NewFolderInput
+          color={color}
+          onConfirm={confirmNewFolder}
+          onCancel={() => setCreatingFolder(false)}
+        />
+      )}
+
+      {isEmpty && !creatingFolder && emptyHint}
 
       {/* Folder sections */}
       {folders.map(folder => {
@@ -203,7 +265,6 @@ export function FolderableList<T extends FolderableItem>({
         const isRenaming = renamingFolderId === folder.id;
         return (
           <div key={folder.id}>
-            {/* Header */}
             <div
               onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDropTarget(folder.id); }}
               onDragLeave={() => setDropTarget(null)}
@@ -250,7 +311,6 @@ export function FolderableList<T extends FolderableItem>({
               <span style={{ fontSize: '9px', color: `${color}55`, flexShrink: 0 }}>{children.length}</span>
             </div>
 
-            {/* Contents */}
             {!folder.collapsed && (
               <div style={{ paddingLeft: '12px', paddingTop: '3px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                 {children.length === 0
@@ -285,7 +345,7 @@ export function FolderableList<T extends FolderableItem>({
         </div>
       )}
 
-      {/* Drop zone to remove from folder (when all items are in folders) */}
+      {/* Drop zone to un-folder */}
       {ungrouped.length === 0 && folders.length > 0 && items.length > 0 && (
         <div
           onDragOver={e => { e.preventDefault(); setDropTarget('ungrouped'); }}
@@ -305,12 +365,21 @@ export function FolderableList<T extends FolderableItem>({
         </div>
       )}
 
-      {/* Context menu */}
+      {/* Primary context menu */}
       {menu && (
         <AssetContextMenu
           x={menu.x} y={menu.y}
           items={buildMenuItems(menu.target)}
           onDismiss={() => setMenu(null)}
+        />
+      )}
+
+      {/* Folder-picker submenu (for Move to Folder) */}
+      {pendingMoveIds && moveMenuPos && (
+        <AssetContextMenu
+          x={moveMenuPos.x} y={moveMenuPos.y}
+          items={buildFolderPickItems()}
+          onDismiss={() => { setPendingMoveIds(null); setMoveMenuPos(null); }}
         />
       )}
     </div>
