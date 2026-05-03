@@ -5,6 +5,7 @@ import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
 import { pickDirectory } from '../../utils/fileIO';
 import { getAssetTags, saveAssetTags, getTagSuggestions } from '../../utils/assetTags';
+import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
@@ -599,17 +600,22 @@ function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly
                 >✓</button>
               </div>
             )}
-            {savedNames.length === 0 && !showGraphSaveInput
-              ? <EmptyHint>Click "+ Save Current" to save the active graph.</EmptyHint>
-              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {savedNames.map(name => (
-                    <TabPill key={name} label={name} color="#a6e3a1" tabId="graphs" assetId={name}
-                      onClick={() => { loadSavedGraph(name); onNodeAdded?.(); }}
-                      onDelete={() => { deleteSavedGraph(name); refreshSavedNames(); }}
-                    />
-                  ))}
-                </div>
-            }
+            <FolderableList
+              scopeKey="graphs"
+              color="#a6e3a1"
+              items={savedNames.map(name => ({ id: name, label: name }))}
+              renderItem={(item) => (
+                <TabPill
+                  label={item.label}
+                  color="#a6e3a1"
+                  tabId="graphs"
+                  assetId={item.id}
+                  onClick={() => { loadSavedGraph(item.id); onNodeAdded?.(); }}
+                  onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }}
+                />
+              )}
+              emptyHint={!showGraphSaveInput && <EmptyHint>Click "+ Save Current" to save the active graph.</EmptyHint>}
+            />
           </>
         );
 
@@ -617,36 +623,42 @@ function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly
         return (
           <>
             <TabSectionHeader label="Group Presets" color="#f9e2af" />
-            {groupPresets.length === 0
-              ? <EmptyHint>Select a group node and click ⬇ Save to create a preset.</EmptyHint>
-              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {(groupPresets as GroupPreset[]).map(p => (
-                    <TabPill key={p.id} label={p.label} color="#f9e2af" prefix="⬡" tabId="presets" assetId={p.id}
-                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; instantiateGroupPreset(p.id, {x,y}); onNodeAdded?.(); }}
-                      onDelete={() => deleteGroupPreset(p.id)}
-                    />
-                  ))}
-                </div>
-            }
+            <FolderableList
+              scopeKey="presets:group"
+              color="#f9e2af"
+              items={(groupPresets as GroupPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
+              renderItem={(item) => {
+                const p = (item as typeof item & { _preset: GroupPreset })._preset;
+                return (
+                  <TabPill label={p.label} color="#f9e2af" prefix="⬡" tabId="presets" assetId={p.id}
+                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; instantiateGroupPreset(p.id, {x,y}); onNodeAdded?.(); }}
+                    onDelete={() => deleteGroupPreset(p.id)}
+                  />
+                );
+              }}
+              emptyHint={<EmptyHint>Select a group node and click ⬇ Save to create a preset.</EmptyHint>}
+            />
             <TabSectionHeader label="Transform Vec" color="#89b4fa" />
-            {transformPresets.length === 0
-              ? <EmptyHint>Open a Transform Vec node and click "↑ Save Preset".</EmptyHint>
-              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {(transformPresets as TransformPreset[]).map(p => (
-                    renamingTransformId === p.id
-                      ? <input key={p.id} autoFocus value={renameTransformValue} onChange={e => setRenameTransformValue(e.target.value)}
-                          onBlur={() => { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
-                          onKeyDown={e => { if (e.key === 'Enter') { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); } if (e.key === 'Escape') setRenamingTransformId(null); e.stopPropagation(); }}
-                          style={{ background: '#11111b', border: '1px solid #89b4fa', color: '#89b4fa', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
-                        />
-                      : <TabPill key={p.id} label={p.label} color="#89b4fa" prefix="⊞" tabId="presets" assetId={p.id}
-                          onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('transformVec',{x,y},{outputType:p.outputType,exprX:p.exprX,exprY:p.exprY,exprZ:p.exprZ,exprW:p.exprW}); onNodeAdded?.(); }}
-                          onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
-                          onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }}
-                        />
-                  ))}
-                </div>
-            }
+            <FolderableList
+              scopeKey="presets:transform"
+              color="#89b4fa"
+              items={(transformPresets as TransformPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
+              renderItem={(item) => {
+                const p = (item as typeof item & { _preset: TransformPreset })._preset;
+                return renamingTransformId === p.id
+                  ? <input key={p.id} autoFocus value={renameTransformValue} onChange={e => setRenameTransformValue(e.target.value)}
+                      onBlur={() => { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
+                      onKeyDown={e => { if (e.key === 'Enter') { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); } if (e.key === 'Escape') setRenamingTransformId(null); e.stopPropagation(); }}
+                      style={{ background: '#11111b', border: '1px solid #89b4fa', color: '#89b4fa', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                    />
+                  : <TabPill label={p.label} color="#89b4fa" prefix="⊞" tabId="presets" assetId={p.id}
+                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('transformVec',{x,y},{outputType:p.outputType,exprX:p.exprX,exprY:p.exprY,exprZ:p.exprZ,exprW:p.exprW}); onNodeAdded?.(); }}
+                      onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
+                      onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }}
+                    />;
+              }}
+              emptyHint={<EmptyHint>Open a Transform Vec node and click "↑ Save Preset".</EmptyHint>}
+            />
           </>
         );
 
@@ -670,40 +682,47 @@ function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly
                 onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
               >↓ Import</button>
             </div>
-            {userPresets.length === 0
-              ? <EmptyHint>Open a Custom Fn node and click "↑ Save Preset".</EmptyHint>
-              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {(userPresets as CustomFnPreset[]).map(p => (
-                    <TabPill key={p.id} label={p.label} color="#89dceb" prefix="ƒ" tabId="functions" assetId={p.id}
-                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('customFn',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,body:p.body,glslFunctions:p.glslFunctions}); onNodeAdded?.(); }}
-                      onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }}
-                    />
-                  ))}
-                </div>
-            }
+            <FolderableList
+              scopeKey="functions"
+              color="#89dceb"
+              items={(userPresets as CustomFnPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
+              renderItem={(item) => {
+                const p = (item as typeof item & { _preset: CustomFnPreset })._preset;
+                return (
+                  <TabPill label={p.label} color="#89dceb" prefix="ƒ" tabId="functions" assetId={p.id}
+                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('customFn',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,body:p.body,glslFunctions:p.glslFunctions}); onNodeAdded?.(); }}
+                    onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }}
+                  />
+                );
+              }}
+              emptyHint={<EmptyHint>Open a Custom Fn node and click "↑ Save Preset".</EmptyHint>}
+            />
           </>
         );
 
       case 'expressions':
-        return exprPresets.length === 0
-          ? <EmptyHint>Open an Expr Block node and click "↑ Save Preset".</EmptyHint>
-          : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-              {(exprPresets as ExprPreset[]).map(p => (
-                renamingExprId === p.id
-                  ? <input key={p.id} autoFocus value={renameExprValue} onChange={e => setRenameExprValue(e.target.value)}
-                      onBlur={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
-                      onKeyDown={e => { if (e.key === 'Enter') { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); } if (e.key === 'Escape') setRenamingExprId(null); e.stopPropagation(); }}
-                      style={{ background: '#11111b', border: '1px solid #cba6f7', color: '#cba6f7', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
-                    />
-                  : <TabPill key={p.id} label={p.label} color="#cba6f7" prefix="⟴" tabId="expressions" assetId={p.id}
-                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('exprNode',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,lines:p.lines,result:p.result}); onNodeAdded?.(); }}
-                      onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
-                      onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }}
-                    />
-              ))}
-            </div>
-          );
+        return (
+          <FolderableList
+            scopeKey="expressions"
+            color="#cba6f7"
+            items={(exprPresets as ExprPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
+            renderItem={(item) => {
+              const p = (item as typeof item & { _preset: ExprPreset })._preset;
+              return renamingExprId === p.id
+                ? <input key={p.id} autoFocus value={renameExprValue} onChange={e => setRenameExprValue(e.target.value)}
+                    onBlur={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); } if (e.key === 'Escape') setRenamingExprId(null); e.stopPropagation(); }}
+                    style={{ background: '#11111b', border: '1px solid #cba6f7', color: '#cba6f7', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                  />
+                : <TabPill label={p.label} color="#cba6f7" prefix="⟴" tabId="expressions" assetId={p.id}
+                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('exprNode',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,lines:p.lines,result:p.result}); onNodeAdded?.(); }}
+                    onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
+                    onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }}
+                  />;
+            }}
+            emptyHint={<EmptyHint>Open an Expr Block node and click "↑ Save Preset".</EmptyHint>}
+          />
+        );
 
       default: return null;
     }
