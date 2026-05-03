@@ -27,6 +27,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Color Grading':  '#f9a86b',
   Noise:            '#74c7ec',
   Effects:          '#f38ba8',
+  'Post Processing': '#f38ba8',
   Loops:            '#89dceb',
   '2D Primitives':  '#f9e2af',
   Combiners:        '#cba6f7',
@@ -55,16 +56,44 @@ const CATEGORY_ORDER = [
   '3D Primitives', '3D Scene', '3D Transforms',
   'Animation', 'Color', 'Color Grading', 'Combiners', 'Conditionals',
   'Effects', 'Fractals', 'Halftone', 'Math', 'Matrix', 'Noise',
-  'Particles', 'Particles & Fields',
+  'Particles', 'Particles & Fields', 'Post Processing',
   'Science', 'Shapers', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
 
 // ── Sub-group definitions for categories that need them ───────────────────────
 const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>> = {
+  '2D Primitives': [
+    { label: 'SDF',      types: ['circleSDF', 'boxSDF', 'ringSDF', 'simpleSDF', 'shapeSDF', 'sdBox', 'sdSegment', 'sdEllipse'] },
+    { label: 'Patterns', types: ['truchet', 'metaballs', 'lissajous'] },
+  ],
+  '3D Primitives': [
+    { label: 'Basic',   types: ['sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D', 'coneSDF3D', 'planeSDF3D', 'octahedronSDF3D'] },
+    { label: 'Curved',  types: ['ellipsoidSDF3D', 'cappedTorusSDF3D', 'cappedConeSDF3D', 'roundedBoxSDF3D', 'roundedCylinderSDF3D', 'verticalCapsuleSDF3D'] },
+    { label: 'Complex', types: ['boxFrameSDF3D', 'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D', 'solidAngleSDF3D', 'sdCross3D'] },
+    { label: 'Fields',  types: ['gyroidField', 'schwarzPField'] },
+  ],
+  '3D Transforms': [
+    { label: 'Move',   types: ['translate3D', 'rotate3D', 'rotateAxis3D', 'scale3d'] },
+    { label: 'Repeat', types: ['repeat3D', 'limitedRepeat3D', 'polarRepeat3D', 'mirroredRepeat3D'] },
+    { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'shear3D'] },
+    { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
+  ],
+  '3D Lighting': [
+    { label: 'Shadow',  types: ['sdfAo', 'softShadow'] },
+    { label: 'Surface', types: ['blinnPhong', 'fresnel3d', 'fakeSSS', 'materialSelect', 'multiLight'] },
+    { label: 'Glass',   types: ['glass3d', 'fresnelSchlick', 'spectralDispersion'] },
+    { label: 'Volume',  types: ['volumetricFog', 'phaseHG'] },
+  ],
+  Color: [
+    { label: 'Palette', types: ['palette', 'gradient', 'palettePreset', 'colorRamp', 'blackbody'] },
+    { label: 'Adjust',  types: ['invert', 'desaturate', 'posterize', 'hueRange', 'brightnessContrast'] },
+    { label: 'Convert', types: ['hsv'] },
+    { label: 'Blend',   types: ['blendModes'] },
+  ],
   Math: [
     { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
-    { label: 'Trig',       types: ['sin', 'cos', 'atan2'] },
+    { label: 'Trig',       types: ['sin', 'cos', 'tan', 'atan2'] },
     { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
     { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
     { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod'] },
@@ -81,6 +110,29 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Seat',    types: ['doubleExpSeat', 'doubleCircleSeat'] },
     { label: 'Sigmoid', types: ['doubleExpSigmoid', 'logisticSigmoid', 'doubleCircleSigmoid', 'doubleEllipticSigmoid'] },
     { label: 'Bezier',  types: ['quadBezierShaper', 'cubicBezierShaper'] },
+  ],
+  Effects: [
+    { label: 'Blur',     types: ['gaussianBlur', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
+    { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
+    { label: 'Lighting', types: ['makeLight', 'light', 'light2d', 'radianceCascadesApprox'] },
+    { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
+    { label: 'Other',    types: ['particleEmitter'] },
+  ],
+  'Color Grading': [
+    { label: 'Tone',  types: ['liftGammaGain', 'toneCurve', 'shadowsHighlights', 'toneMap'] },
+    { label: 'Color', types: ['hueRotate', 'colorSaturation'] },
+    { label: 'Film',  types: ['grain'] },
+  ],
+  Combiners: [
+    { label: 'SDF Ops', types: ['smoothMin', 'min', 'sdfMax', 'sdfSubtract', 'smoothMax', 'smoothSubtract', 'sdfOutline', 'sdfColorize'] },
+    { label: 'Blend',   types: ['blend', 'mask', 'addColor', 'screenBlend', 'alphaBlend'] },
+    { label: 'Layer',   types: ['glowLayer'] },
+  ],
+  Spaces: [
+    { label: 'Warp',       types: ['displace', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp'] },
+    { label: 'Repeat',     types: ['fract', 'infiniteRepeatSpace', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D'] },
+    { label: 'Distort',    types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'swirlSpace', 'kaleidoSpace', 'sphericalSpace', 'rippleSpace', 'perspective2d', 'shear'] },
+    { label: 'Texture',    types: ['waveTexture', 'magicTexture', 'grid'] },
   ],
 };
 
