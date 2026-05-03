@@ -4,6 +4,7 @@ import { topologicalSort } from './topoSort';
 import type { LoopPairChain } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
+import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 
 // ── Built-in SDF helper constants ─────────────────────────────────────────────
 // These are always added to the functions Set so they are available to any node
@@ -235,7 +236,7 @@ export function generateFragmentShader(
   allNodes: GraphNode[],
   _loopInternalIds: Set<string>,
   loopPairChains: Map<string, LoopPairChain> = new Map(),
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
   const nodeMap    = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
   const functions  = new Set<string>();
@@ -250,25 +251,17 @@ export function generateFragmentShader(
   const paramUniforms: Record<string, number> = {};
   const textureUniforms: Record<string, string> = {};  // uniformName → nodeId
   const audioUniforms: Record<string, string> = {};    // uniformName → nodeId
+  const videoUniforms: Record<string, string> = {};    // uniformName → nodeId (u_vid_<id>)
   const nodeOutputs = new Map<string, Record<string, string>>();
   const mlgDynamicOutputs = new Map<string, Record<string, { type: string; label: string }>>();
   // Tracks extra parameters needed by each compiled scene function (for external var references).
   // Keys are GLSL function names; values are ordered param descriptors to add to the signature.
   const sceneFnExtraParams = new Map<string, Array<{name: string; type: string}>>();
 
-  // Pre-scan for textureInput, audioInput, and prevFrame nodes — their uniforms go in the preamble
+  // Pre-scan: stateful detection. Particle pipeline nodes are compiled separately
+  // by particleAssembler.ts and are skipped in the main GLSL loop below.
   let isStateful = false;
-  for (const node of sortedNodes) {
-    if (node.type === 'textureInput') {
-      textureUniforms[`u_tex_${node.id}`] = node.id;
-    }
-    if (node.type === 'audioInput') {
-      const rawBands = node.params._bands;
-      const bands: unknown[] = Array.isArray(rawBands) ? rawBands : [200];
-      for (let i = 0; i < bands.length; i++) {
-        audioUniforms[`u_audio_${node.id}_${i}`] = node.id;
-      }
-    }
+  for (const node of allNodes) {
     if (node.type === 'prevFrame' || node.type === 'radianceCascadesApprox' ||
         node.type === 'gaussianBlur' || node.type === 'radialBlur' ||
         node.type === 'tiltShiftBlur' || node.type === 'lensBlur' ||
@@ -281,6 +274,9 @@ export function generateFragmentShader(
   const nodeSlugMap = new Map<string, string>(); // nodeId → slug
 
   for (const node of sortedNodes) {
+    // Particle pipeline nodes are compiled by particleAssembler — skip here
+    if (PARTICLE_PIPELINE_TYPES.has(node.type)) continue;
+
     const def = getNodeDefinition(node.type);
     if (!def) continue;
 
@@ -297,6 +293,21 @@ export function generateFragmentShader(
     // Compute slug once per node for all GLSL variable naming (NOT for nodeOutputs keys)
     const nodeSlug = computeNodeSlug(node, usedSlugs);
     nodeSlugMap.set(node.id, nodeSlug);
+
+    // Register sampler uniforms using slug so GLSL name matches what generateGLSL emits
+    if (node.type === 'textureInput') {
+      textureUniforms[`u_tex_${nodeSlug}`] = node.id;
+    }
+    if (node.type === 'audioInput') {
+      const rawBands = node.params._bands;
+      const bands: unknown[] = Array.isArray(rawBands) ? rawBands : [200];
+      for (let i = 0; i < bands.length; i++) {
+        audioUniforms[`u_audio_${nodeSlug}_${i}`] = node.id;
+      }
+    }
+    if (node.type === 'videoInput') {
+      videoUniforms[`u_vid_${nodeSlug}`] = node.id;
+    }
 
     // ── Loop Start: register carry var — loopEnd owns the actual GLSL emission ─
     if (node.type === 'loopStart') {
@@ -2332,6 +2343,9 @@ export function generateFragmentShader(
   const audioUniformDecls = Object.keys(audioUniforms)
     .map(name => `uniform float ${name};`)
     .join('\n');
+  const videoUniformDecls = Object.keys(videoUniforms)
+    .map(name => `uniform sampler2D ${name};`)
+    .join('\n');
 
   const fragmentShader = `precision highp float;
 #define PI 3.1415926538
@@ -2340,7 +2354,7 @@ export function generateFragmentShader(
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
-${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}${audioUniformDecls ? audioUniformDecls + '\n' : ''}
+${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}${audioUniformDecls ? audioUniformDecls + '\n' : ''}${videoUniformDecls ? videoUniformDecls + '\n' : ''}
 varying vec2 vUv;
 
 // ── Always-available helpers (noise, rotation) ───────────────────────────────
@@ -2354,5 +2368,5 @@ void main() {
     g_uv.x *= u_resolution.x / u_resolution.y;
 ${mainCode.join('')}}`.trim();
 
-  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, audioUniforms, isStateful, nodeSlugMap, mlgDynamicOutputs };
+  return { fragmentShader, nodeOutputVars: nodeOutputs, paramUniforms, textureUniforms, audioUniforms, videoUniforms, isStateful, nodeSlugMap, mlgDynamicOutputs };
 }

@@ -45,13 +45,17 @@ const CATEGORY_COLORS: Record<string, string> = {
   Conditionals:     '#f2cdcd',
   Utility:          '#6c7086',
   Matrix:           '#f5c842',
+  Halftone:         '#a6e3d5',
+  Particles:        '#f9e2af',
+  'Particles & Fields': '#f9e2af',
 };
 
 const CATEGORY_ORDER = [
   '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
   '3D Primitives', '3D Scene', '3D Transforms',
   'Animation', 'Color', 'Color Grading', 'Combiners', 'Conditionals',
-  'Effects', 'Fractals', 'Math', 'Matrix', 'Noise',
+  'Effects', 'Fractals', 'Halftone', 'Math', 'Matrix', 'Noise',
+  'Particles', 'Particles & Fields',
   'Science', 'Shapers', 'Sources', 'Spaces', 'Transforms', 'Utility',
   'Output',
 ];
@@ -575,13 +579,25 @@ export function NodeBrowser({
 
   if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
-    const results = Object.values(NODE_REGISTRY).filter(def =>
-      !HIDDEN_NODES.has(def.type) && (
-        def.label.toLowerCase().includes(trimmed) ||
-        def.type.toLowerCase().includes(trimmed) ||
-        (def.description ?? '').toLowerCase().includes(trimmed)
-      )
-    );
+    const scoreNodeDef = (def: import('../../../types/nodeGraph').NodeDefinition): number => {
+      const label = def.label.toLowerCase();
+      if (label === trimmed) return 120;
+      if (label.startsWith(trimmed)) return 100;
+      if (label.includes(trimmed)) return 80;
+      if (def.type.toLowerCase().includes(trimmed)) return 60;
+      const cat = (def.category ?? '').toLowerCase();
+      if (cat.split(/[\s\/,]+/).some((w: string) => w.startsWith(trimmed))) return 40;
+      const rawDesc = def.description;
+      const desc = (Array.isArray(rawDesc) ? rawDesc.join(' ') : (rawDesc ?? '')).toLowerCase();
+      if (desc.split(/\W+/).some((w: string) => w === trimmed)) return 20;
+      return 0;
+    };
+    const results = Object.values(NODE_REGISTRY)
+      .filter(def => !HIDDEN_NODES.has(def.type))
+      .map(def => ({ def, score: scoreNodeDef(def) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
+      .map(({ def }) => def);
     innerContent = results.length === 0
       ? <div style={{ color: '#585b70', fontSize: '11px', paddingLeft: '4px' }}>No matches</div>
       : <div>{renderPills(results, '#89b4fa')}</div>;

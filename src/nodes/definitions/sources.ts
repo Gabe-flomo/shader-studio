@@ -209,6 +209,41 @@ export const AudioInputNode: NodeDefinition = {
   },
 };
 
+export const VideoInputNode: NodeDefinition = {
+  type: 'videoInput',
+  label: 'Video Input',
+  category: 'Sources',
+  description: 'Samples a video file frame-by-frame. Wire to UV for sampling position.',
+  inputs: {
+    uv: { type: 'vec2', label: 'UV' },
+  },
+  outputs: {
+    color: { type: 'vec3',  label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+    uv:    { type: 'vec2',  label: 'UV (pass-through)' },
+  },
+  defaultParams: {
+    _fileName: '',
+    _hasFile: false,
+    _isPlaying: false,
+    _loop: true,
+    _speed: 1.0,
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uvVar = inputVars.uv ?? 'g_uv';
+    const samplerUV = `(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
+    return {
+      code: [
+        `    vec4 ${id}_sample = texture2D(u_vid_${id}, clamp(${samplerUV}, 0.0, 1.0));\n`,
+        `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
+        `    float ${id}_alpha = ${id}_sample.a;\n`,
+      ].join(''),
+      outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar },
+    };
+  },
+};
+
 export const ConstantNode: NodeDefinition = {
   type: 'constant',
   label: 'Constant',

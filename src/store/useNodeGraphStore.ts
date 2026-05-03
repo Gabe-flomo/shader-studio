@@ -11,6 +11,7 @@ import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, 
 import { EXAMPLE_GRAPHS } from './exampleGraphs';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
+import { videoEngine } from '../lib/videoEngine';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -291,6 +292,8 @@ interface NodeGraphState {
   vertexShader: string;
   fragmentShader: string;
   compilationErrors: string[];
+  /** GPU particle systems compiled from pInit→…→pRender chains — consumed by ShaderCanvas. */
+  particleSystems: import('../compiler/types').ParticleSystemData[];
   /**
    * Uniform name → current value for all float params extracted by the compiler.
    * Updated in-place (without recompile) when sliders change eligible float params.
@@ -370,6 +373,11 @@ interface NodeGraphState {
   textureUniforms: Record<string, string>;
   // audioUniforms from last compilation: uniformName → nodeId
   audioUniforms: Record<string, string>;
+  // Video inputs — maps nodeId → VideoTexture (or null)
+  videoTextures: Record<string, import('three').VideoTexture | null>;
+  setVideoTexture: (nodeId: string, texture: import('three').VideoTexture | null) => void;
+  // videoUniforms from last compilation: uniformName → nodeId
+  videoUniforms: Record<string, string>;
   // Master audio playback volume (0–1)
   audioMasterVolume: number;
   setAudioMasterVolume: (v: number) => void;
@@ -946,6 +954,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   vertexShader: '',
   fragmentShader: '',
   compilationErrors: [],
+  particleSystems: [],
   paramUniforms: {},
   glslErrors: [],
   pixelSample: null,
@@ -967,6 +976,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodeTextures: {},
   textureUniforms: {},
   audioUniforms: {},
+  videoTextures: {},
+  videoUniforms: {},
   audioMasterVolume: 0.7,
   nodePreviews: {},
   isStateful: false,
@@ -1683,6 +1694,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setNodeTexture: (nodeId, texture) => set(state => ({
     nodeTextures: { ...state.nodeTextures, [nodeId]: texture },
   })),
+  setVideoTexture: (nodeId, texture) => set(state => ({
+    videoTextures: { ...state.videoTextures, [nodeId]: texture },
+  })),
   setNodePreview: (nodeId, dataUrl) => set(state => ({
     nodePreviews: { ...state.nodePreviews, [nodeId]: dataUrl },
   })),
@@ -2076,9 +2090,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     if (!groupNode || groupNode.type !== 'group') return;
 
-    pushHistory(nodes);
-
     const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+
+    // Iterated groups are ungrouped as a single-pass (iterations=1 equivalent).
+    // The for-loop carry logic is discarded; connections from inputPorts are still repaired correctly.
+
+    pushHistory(nodes);
 
     if (!subgraph) {
       const newWorking = workingNodes.filter(n => n.id !== groupId);
@@ -2088,14 +2105,46 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return;
     }
 
+    // Collect IDs of loopIndex nodes so we can disconnect references to `i`
+    const loopIndexIds = new Set(
+      subgraph.nodes.filter(n => n.type === 'loopIndex').map(n => n.id)
+    );
+
+    // Build a map of authoritative outer connections from the group's inputPorts.
+    // inputPorts record the ground truth: inner node X's input key Y = outer connection Z.
+    // Using this (rather than the inner node's stored connection) ensures the right wiring
+    // is restored even when the inner connection was stale (e.g. carry nodes).
+    const outerConnectionPatch = new Map<string, Record<string, { nodeId: string; outputKey: string }>>();
+    for (const port of (subgraph.inputPorts ?? [])) {
+      const outerConn = groupNode.inputs[port.key]?.connection;
+      if (!outerConn) continue;
+      const nodePatches = outerConnectionPatch.get(port.toNodeId) ?? {};
+      nodePatches[port.toInputKey] = outerConn;
+      outerConnectionPatch.set(port.toNodeId, nodePatches);
+    }
+
     // Restore subgraph nodes — exclude auto-injected sentinels (loopIndex) and
     // strip the _groupOriginal flag so nodes are editable again.
+    // Re-wire outer connections from inputPorts (authoritative) and disconnect loopIndex refs.
     const restoredNodes = subgraph.nodes
       .filter(n => n.type !== 'loopIndex')
       .map(n => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _groupOriginal, ...restParams } = n.params as Record<string, unknown>;
-        return { ...n, params: restParams };
+        const patches = outerConnectionPatch.get(n.id);
+        const cleanInputs: typeof n.inputs = {};
+        for (const [k, inp] of Object.entries(n.inputs)) {
+          if (patches?.[k]) {
+            // Re-establish the authoritative outer connection from inputPorts
+            cleanInputs[k] = { ...inp, connection: patches[k] };
+          } else if (inp.connection && loopIndexIds.has(inp.connection.nodeId)) {
+            // Disconnect dangling loopIndex reference
+            cleanInputs[k] = { ...inp, connection: undefined };
+          } else {
+            cleanInputs[k] = inp;
+          }
+        }
+        return { ...n, params: restParams, inputs: cleanInputs };
       });
 
     // Reconnect peer nodes: replace connections pointing to groupId with
@@ -2635,6 +2684,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     pushHistory(get().nodes);
     const deletedNode = nodes.find(n => n.id === nodeId);
+
+    // Clean up video resources if this was a videoInput node
+    if (deletedNode?.type === 'videoInput') {
+      videoEngine.disposeNode(nodeId);
+    }
 
     // ── Collect bridge info before removing ────────────────────────────────
     // Upstream: what was wired INTO the deleted node
@@ -3462,7 +3516,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       paramUniforms: result.paramUniforms,
       textureUniforms: result.textureUniforms,
       audioUniforms: result.audioUniforms,
+      videoUniforms: result.videoUniforms,
       isStateful: result.isStateful,
+      particleSystems: result.particleSystems ?? [],
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Clear stale probe values when graph recompiles
       nodeProbeValues: null,
