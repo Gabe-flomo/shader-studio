@@ -1769,13 +1769,17 @@ vec3 glassShade(
   vec3 refl = reflect(v, n);
   vec3 reflColor = glassEnv(refl, bgColor) * 1.1;
 
-  // Blinn-Phong specular + diffuse
-  vec3 lDir = normalize(lightDir);
-  vec3 halfVec = normalize(-v + lDir);
-  float NdotL = max(0.0, dot(n, lDir));
-  float NdotH = max(0.0, dot(n, halfVec));
-  float spec = pow(NdotH * NdotH, shininess);
-  float diff = NdotL * diffuseness;
+  // Blinn-Phong specular + diffuse (only when a light is connected)
+  float spec = 0.0;
+  float diff = 0.0;
+  if (length(lightDir) > 0.001) {
+    vec3 lDir = normalize(lightDir);
+    vec3 halfVec = normalize(-v + lDir);
+    float NdotL = max(0.0, dot(n, lDir));
+    float NdotH = max(0.0, dot(n, halfVec));
+    spec = pow(NdotH * NdotH, shininess);
+    diff = NdotL * diffuseness;
+  }
 
   return mix(color, reflColor, frs) + vec3(spec * 0.85) + color * diff * 0.3;
 }`;
@@ -1791,14 +1795,13 @@ export const GlassNode: NodeDefinition = {
     hit:       { type: 'float', label: 'Hit'        },
     bgColor:   { type: 'vec3',  label: 'Background' },
     tintColor: { type: 'vec3',  label: 'Tint'       },
+    lightDir:  { type: 'vec3',  label: 'Light Dir'  },
   },
   outputs: { color: { type: 'vec3', label: 'Glass Color' } },
   glslFunction: GLASS_GLSL,
   defaultParams: {
     ior: 1.5, fresnelPow: 3.0, dispersion: 0.02,
-    tintR: 0.8, tintG: 0.95, tintB: 1.0,
-    shininess: 64.0, diffuseness: 0.4, saturation: 1.6,
-    lightX: 0.6, lightY: 1.0, lightZ: 0.4, samples: 8.0,
+    shininess: 64.0, diffuseness: 0.4, saturation: 1.6, samples: 8.0,
   },
   paramDefs: {
     ior:         { label: 'IOR',         type: 'float', min: 1.0,  max: 3.0,  step: 0.05,  hint: 'Index of refraction. Air=1.0, water=1.33, glass=1.5, diamond=2.4.' },
@@ -1806,29 +1809,23 @@ export const GlassNode: NodeDefinition = {
     dispersion:  { label: 'Dispersion',  type: 'float', min: 0.0,  max: 0.15, step: 0.005, hint: 'IOR spread between R and B channels — splits light like a prism.' },
     samples:     { label: 'Samples',     type: 'float', min: 1.0,  max: 16.0, step: 1.0,   hint: 'Dispersion loop iterations. More = smoother chromatic spread, higher cost.' },
     shininess:   { label: 'Shininess',   type: 'float', min: 2.0,  max: 256.0,step: 2.0,   hint: 'Blinn-Phong specular exponent. Higher = tighter, sharper highlight.' },
-    diffuseness: { label: 'Diffuse',     type: 'float', min: 0.0,  max: 1.0,  step: 0.05,  hint: 'Diffuse light contribution. Adds depth and volume from the light direction.' },
+    diffuseness: { label: 'Diffuse',     type: 'float', min: 0.0,  max: 1.0,  step: 0.05,  hint: 'Diffuse light contribution when a Light Dir is connected.' },
     saturation:  { label: 'Saturation',  type: 'float', min: 0.0,  max: 3.0,  step: 0.1,   hint: 'Color saturation of the refracted interior. >1 pumps up chromatic colors.' },
-    lightX:      { label: 'Light X',     type: 'float', min: -3.0, max: 3.0,  step: 0.1,   hint: 'Light direction X component.' },
-    lightY:      { label: 'Light Y',     type: 'float', min: -3.0, max: 3.0,  step: 0.1,   hint: 'Light direction Y component.' },
-    lightZ:      { label: 'Light Z',     type: 'float', min: -3.0, max: 3.0,  step: 0.1,   hint: 'Light direction Z component.' },
-    tintR:       { label: 'Tint R',      type: 'float', min: 0.0,  max: 1.0,  step: 0.01,  hint: 'Glass body tint red channel.' },
-    tintG:       { label: 'Tint G',      type: 'float', min: 0.0,  max: 1.0,  step: 0.01,  hint: 'Glass body tint green channel.' },
-    tintB:       { label: 'Tint B',      type: 'float', min: 0.0,  max: 1.0,  step: 0.01,  hint: 'Glass body tint blue channel.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
     const rayDir    = inputVars.rayDir    || 'vec3(0.0, 0.0, -1.0)';
     const normal    = inputVars.normal    || 'vec3(0.0, 1.0, 0.0)';
     const hit       = inputVars.hit       || '0.0';
-    const bgColor   = inputVars.bgColor   || 'vec3(0.06, 0.10, 0.22)';
-    const tintColor = inputVars.tintColor || `vec3(${p(node.params.tintR, 0.8)}, ${p(node.params.tintG, 0.95)}, ${p(node.params.tintB, 1.0)})`;
+    const bgColor   = inputVars.bgColor   || 'vec3(0.5, 0.5, 0.5)';
+    const tintColor = inputVars.tintColor || 'vec3(1.0, 1.0, 1.0)';
+    const lightDir  = inputVars.lightDir  || 'vec3(0.0, 0.0, 0.0)';
     const ior         = p(node.params.ior,         1.5);
     const fresnelPow  = p(node.params.fresnelPow,  3.0);
     const dispersion  = p(node.params.dispersion,  0.02);
     const shininess   = p(node.params.shininess,   64.0);
     const diffuseness = p(node.params.diffuseness, 0.4);
     const saturation  = p(node.params.saturation,  1.6);
-    const lightDir    = `vec3(${p(node.params.lightX, 0.6)}, ${p(node.params.lightY, 1.0)}, ${p(node.params.lightZ, 0.4)})`;
     const samples     = p(node.params.samples,     8.0);
     return {
       code: `    vec3 ${id}_color = glassShade(${rayDir}, ${normal}, ${hit}, ${bgColor}, ${tintColor}, ${ior}, ${fresnelPow}, ${dispersion}, ${shininess}, ${diffuseness}, ${saturation}, ${lightDir}, ${samples});\n`,
