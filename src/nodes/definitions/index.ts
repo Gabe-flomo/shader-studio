@@ -125,7 +125,7 @@ export { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNo
 // Math
 export {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
-  SinNode, CosNode, ExpNode, PowNode, NegateNode, LengthNode,
+  SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
   MultiplyVec3Node, AddVec3Node,
   TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode,
   Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode,
@@ -220,7 +220,7 @@ import { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3Cons
 import { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
-  SinNode, CosNode, ExpNode, PowNode, NegateNode, LengthNode,
+  SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
   MultiplyVec3Node, AddVec3Node,
   TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode,
   Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode,
@@ -526,6 +526,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   divide: DivideNode,
   sin: SinNode,
   cos: CosNode,
+  tan: TanNode,
   exp: ExpNode,
   pow: PowNode,
   negate: NegateNode,

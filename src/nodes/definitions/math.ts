@@ -83,6 +83,20 @@ export const CosNode: NodeDefinition = {
   },
 };
 
+export const TanNode: NodeDefinition = {
+  type: 'tan', label: 'Tan', category: 'Math', description: 'Tangent of input: amp * tan(input * freq). Approaches ±∞ at ±π/2.',
+  inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
+  outputs: { output: { type: 'float', label: 'Output' } },
+  defaultParams: { freq: 1.0, amp: 1.0 },
+  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node), o = `${node.id}_output`;
+    const freq = inputVars.freq || p(node.params.freq, 1.0);
+    const amp  = inputVars.amp  || p(node.params.amp, 1.0);
+    return { code: `    ${t} ${o} = ${amp} * tan(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
+  },
+};
+
 export const ExpNode: NodeDefinition = {
   type: 'exp', label: 'Exp', category: 'Math', description: 'exp(input × scale).',
   inputs: { input: { type: 'float', label: 'Input' }, scale: { type: 'float', label: 'Scale' } },

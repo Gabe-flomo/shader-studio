@@ -3177,6 +3177,88 @@ export function SinCosWaveViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Viz — Tangent waveform (tan) ────────────────────────────────────────────
+
+export function TanWaveViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const freq = typeof node.params.freq === 'number' ? node.params.freq : 1;
+  const amp  = typeof node.params.amp  === 'number' ? node.params.amp  : 1;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
+    }
+
+    // Zero / center line
+    ctx.strokeStyle = '#45475a';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Display: show range -π to π (one full cycle of period π each)
+    const DISP = 3.0; // clip at ±3 so steep parts are visible
+    const xRange = Math.PI * 2;
+    const color = '#f9e2af';
+
+    // Asymptote guides at x = ±π/2
+    const numPeriods = freq;
+    ctx.strokeStyle = '#313244';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]);
+    for (let k = -Math.ceil(numPeriods); k <= Math.ceil(numPeriods); k++) {
+      const asymX = (Math.PI / 2 + k * Math.PI) / (freq === 0 ? 1 : freq);
+      const px = ((asymX + xRange / 2) / xRange) * W;
+      if (px >= 0 && px <= W) {
+        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+
+    // Waveform — lift pen near asymptotes to avoid false vertical lines
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    const ASYMPTOTE_GAP = 0.08; // radians to skip on each side of asymptote
+    let inStroke = false;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const angle = (i / W) * xRange - xRange / 2;
+      const angleScaled = angle * freq;
+      // Check distance to nearest asymptote (π/2 + kπ)
+      const nearestK = Math.round((angleScaled - Math.PI / 2) / Math.PI);
+      const distToAsym = Math.abs(angleScaled - (Math.PI / 2 + nearestK * Math.PI));
+      if (distToAsym < ASYMPTOTE_GAP) { inStroke = false; continue; }
+      const raw = amp * Math.tan(angleScaled);
+      const clamped = Math.max(-DISP, Math.min(DISP, raw));
+      const py = H / 2 - (clamped / DISP) * (H / 2 - 4);
+      if (!inStroke) { ctx.moveTo(i, py); inStroke = true; } else { ctx.lineTo(i, py); }
+    }
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.fillText(`tan  freq:${freq.toFixed(2)}  amp:${amp.toFixed(2)}`, 4, H - 4);
+  }, [freq, amp]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={56} style={{ display: 'block', width: '100%', height: '56px' }} />
+    </div>
+  );
+}
+
 // ─── Viz — Tone Curve Node (toneCurve) ───────────────────────────────────────
 
 export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
@@ -4461,6 +4543,7 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'cubicBezierShaper':  return <ShaperCurveViz    node={node} />;
     case 'sin':
     case 'cos':            return <SinCosWaveViz          node={node} />;
+    case 'tan':            return <TanWaveViz              node={node} />;
     case 'sineLFO':
     case 'squareLFO':
     case 'sawtoothLFO':
@@ -4768,7 +4851,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
   'doubleEllipticSigmoid', 'quadBezierShaper', 'cubicBezierShaper',
-  'sin', 'cos',
+  'sin', 'cos', 'tan',
   'toneCurve', 'shadowsHighlights', 'liftGammaGain', 'hueRotate', 'colorSaturation',
   'mat2Construct', 'mat2Inspect', 'mat3Construct', 'mat3Inspect',
   'mat2MulVec', 'mat3MulVec',
