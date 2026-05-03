@@ -163,7 +163,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   // These don't show the Group Input/Output port terminals — they manage their own body.
   const isInsideSceneGroup = React.useMemo(() => {
     if (!activeGroupNode) return false;
-    return activeGroupNode.type === 'sceneGroup' || activeGroupNode.type === 'spaceWarpGroup' || activeGroupNode.type === 'marchLoopGroup';
+    return activeGroupNode.type === 'sceneGroup' || activeGroupNode.type === 'spaceWarpGroup' || activeGroupNode.type === 'marchLoopGroup' || activeGroupNode.type === 'giLitMarchGroup';
   }, [activeGroupNode]);
 
   // Position the Group Output terminal to the right of all subgraph nodes
@@ -1019,7 +1019,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               const outerSg = outer?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
               gn = outerSg?.nodes.find(n => n.id === gid);
             }
-            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : 'Group';
+            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : gn?.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
             const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : defaultLbl;
             const isLast = depth === activeGroupPath.length - 1;
             return (
@@ -1076,7 +1076,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             const isGroup = clickedNode?.type === 'group';
             const isSceneGroup = clickedNode?.type === 'sceneGroup';
             const isSpaceWarpGroup = clickedNode?.type === 'spaceWarpGroup';
-            const isMarchLoopGroup = clickedNode?.type === 'marchLoopGroup';
+            const isMarchLoopGroup = clickedNode?.type === 'marchLoopGroup' || clickedNode?.type === 'giLitMarchGroup';
             const ids = useNodeGraphStore.getState().selectedNodeIds;
             const canGroup = ids.length >= 2 && activeGroupPath.length < 2;
             return (
@@ -1138,14 +1138,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Enter March Loop Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                      Enter {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'} <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
                     </button>
                     <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
                     <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Delete March Loop Group
+                      Delete {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'}
                     </button>
                   </>
                 )}

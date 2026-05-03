@@ -409,6 +409,83 @@ export const MarchLoopGroupNode: NodeDefinition = {
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };
 
+// ─── GILitMarchGroupNode ───────────────────────────────────────────────────────
+// Like MarchLoopGroup but replaces the basic Lambert shading with a single-pass
+// GI approximation: AO + soft shadows + sky dome IBL + one diffuse GI bounce +
+// one specular reflection bounce. All in a single WebGL pass — no ping-pong.
+// Wire `color` → Output and you're done. Other outputs are for custom compositing.
+
+export const GILitMarchGroupNode: NodeDefinition = {
+  type: 'giLitMarchGroup', label: 'GI Lit March Group', category: '3D Scene',
+  description: 'Ray march loop with real-time GI approximation: AO + soft shadows + sky dome IBL + one GI bounce + specular. Wire color → Output. Double-click to enter and build the loop body (same as MarchLoopGroup). Noisier than MLG but looks like GI.',
+  inputs: {
+    ro:         { type: 'vec3',    label: 'Ray Origin' },
+    rd:         { type: 'vec3',    label: 'Ray Dir' },
+    scene:      { type: 'scene3d', label: 'Scene' },
+    uv:         { type: 'vec2',    label: 'UV' },
+    time:       { type: 'float',   label: 'Time' },
+    albedo:     { type: 'vec3',    label: 'Albedo' },
+    lightDir:   { type: 'vec3',    label: 'Light Dir' },
+    lightColor: { type: 'vec3',    label: 'Light Color' },
+    skyTop:     { type: 'vec3',    label: 'Sky Top' },
+    skyBot:     { type: 'vec3',    label: 'Ground' },
+    bg:         { type: 'vec3',    label: 'Background' },
+  },
+  outputs: {
+    color:     { type: 'vec3',  label: 'Color' },
+    dist:      { type: 'float', label: 'Distance' },
+    depth:     { type: 'float', label: 'Depth' },
+    normal:    { type: 'vec3',  label: 'Normal' },
+    iter:      { type: 'float', label: 'Iter' },
+    iterCount: { type: 'float', label: 'Iter Count' },
+    hit:       { type: 'float', label: 'Hit' },
+    pos:       { type: 'vec3',  label: 'Hit Pos' },
+    ao:        { type: 'float', label: 'AO' },
+    shadow:    { type: 'float', label: 'Shadow' },
+    gi:        { type: 'vec3',  label: 'GI' },
+    diffuse:   { type: 'vec3',  label: 'Diffuse' },
+    refl:      { type: 'vec3',  label: 'Reflection' },
+  },
+  defaultParams: {
+    maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
+    volumetric: false, passthrough: 0.1, jitter: 0.0,
+    bgR: 0.0, bgG: 0.0, bgB: 0.0,
+    albedoR: 0.7, albedoG: 0.7, albedoB: 0.7,
+    metallic: 0.0,
+    roughness: 0.5,
+    lightX: 1.5, lightY: 3.0, lightZ: 1.0,
+    lightR: 1.0, lightG: 0.95, lightB: 0.85,
+    lightStrength: 1.0,
+    skyTopR: 0.2, skyTopG: 0.45, skyTopB: 0.8,
+    skyBotR: 0.55, skyBotG: 0.5, skyBotB: 0.4,
+    shadowSteps: 24,
+    aoSteps: 5,
+    giSteps: 16,
+    giStrength: 0.4,
+    specSteps: 24,
+    specStrength: 0.5,
+  },
+  paramDefs: {
+    maxSteps:    { label: 'Max Steps',    type: 'float' as const, min: 8,    max: 256,  step: 4,    hint: 'Maximum ray march iterations per pixel.' },
+    maxDist:     { label: 'Max Dist',     type: 'float' as const, min: 5.0,  max: 100,  step: 1.0,  hint: 'How far the ray travels before returning background.' },
+    stepScale:   { label: 'Step Scale',   type: 'float' as const, min: 0.3,  max: 1.0,  step: 0.05, hint: 'Fraction of SDF distance to step. Lower = safer, slower.' },
+    volumetric:  { label: 'Volumetric',   type: 'bool'  as const,                                   hint: 'Accumulate density along the ray. GI/specular are disabled in this mode.' },
+    passthrough: { label: 'Passthrough',  type: 'float' as const, min: 0.001, max: 0.5, step: 0.005, hint: 'Minimum step in volumetric mode.' },
+    jitter:      { label: 'Jitter',       type: 'float' as const, min: 0.0,  max: 1.0,  step: 0.01, hint: 'Randomise first step to remove banding. Pairs well with GI dither.' },
+    metallic:    { label: 'Metallic',      type: 'float' as const, min: 0.0,  max: 1.0,  step: 0.01, hint: 'Tints specular toward albedo. 0 = dielectric, 1 = metal.' },
+    roughness:   { label: 'Roughness',     type: 'float' as const, min: 0.0,  max: 1.0,  step: 0.01, hint: 'Lower = sharper reflection. Pure mirror at 0.' },
+    lightStrength: { label: 'Light Strength', type: 'float' as const, min: 0, max: 4,   step: 0.05 },
+    shadowSteps: { label: 'Shadow Steps',  type: 'float' as const, min: 4,    max: 48,   step: 4,    hint: 'Steps for soft shadow ray. 16 = fast, 32 = clean.' },
+    aoSteps:     { label: 'AO Steps',      type: 'float' as const, min: 3,    max: 12,   step: 1,    hint: 'Steps for ambient occlusion march along normal.' },
+    giSteps:     { label: 'GI Steps',      type: 'float' as const, min: 4,    max: 48,   step: 4,    hint: 'Steps for one-bounce hemisphere GI ray.' },
+    giStrength:  { label: 'GI Strength',   type: 'float' as const, min: 0,    max: 1,    step: 0.01 },
+    specSteps:   { label: 'Spec Steps',    type: 'float' as const, min: 4,    max: 48,   step: 4,    hint: 'Steps for specular reflection ray.' },
+    specStrength:{ label: 'Spec Strength', type: 'float' as const, min: 0,    max: 1,    step: 0.01 },
+  },
+  // Stub — real code is generated by the compiler when it encounters type === 'giLitMarchGroup'
+  generateGLSL: () => ({ code: '', outputVars: {} }),
+};
+
 // ─── SpaceWarpGroupNode ────────────────────────────────────────────────────────
 // A container node whose subgraph is compiled as a vec3→vec3 GLSL function.
 // The compiler special-cases type === 'spaceWarpGroup' and emits a named function

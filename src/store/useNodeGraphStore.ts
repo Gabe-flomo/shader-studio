@@ -1053,6 +1053,46 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             ),
           };
         }
+        if (groupNode?.type === 'giLitMarchGroup') {
+          // GILitMarchGroup — initialise with new-style marchLoopInputs + marchLoopOutput.
+          const tsGi = Date.now();
+          const giInputsNode: import('../types/nodeGraph').GraphNode = {
+            id: `mlInputs_${tsGi}`,
+            type: 'marchLoopInputs',
+            position: { x: 80, y: 180 },
+            inputs: {},
+            outputs: {
+              ro:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Origin' },
+              rd:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Dir' },
+              marchPos:  { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'March Pos' },
+              marchDist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'March Dist' },
+            },
+            params: { _groupOriginal: true, extraInputs: [] },
+          };
+          const giOutputNode: import('../types/nodeGraph').GraphNode = {
+            id: `mlOutput_${tsGi}`,
+            type: 'marchLoopOutput',
+            position: { x: 480, y: 180 },
+            inputs: {
+              pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position',
+                connection: { nodeId: `mlInputs_${tsGi}`, outputKey: 'marchPos' } },
+            },
+            outputs: {},
+            params: { _groupOriginal: true, hiddenOutputs: [] },
+          };
+          const giEmptySubgraph: import('../types/nodeGraph').SubgraphData = {
+            nodes: [giInputsNode, giOutputNode],
+            inputPorts: [],
+            outputPorts: [],
+          };
+          return {
+            activeGroupId: id,
+            activeGroupPath: [id],
+            nodes: state.nodes.map(n =>
+              n.id === id ? { ...n, params: { ...n.params, subgraph: giEmptySubgraph } } : n
+            ),
+          };
+        }
         if (groupNode?.type === 'marchLoopGroup') {
           // MarchLoopGroup — initialise with MarchPos + MarchDist + MarchOutput (pure warp chain).
           const ts3 = Date.now();
@@ -1121,7 +1161,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
 
       // For scene-style groups: skip LoopIndex migration entirely, but inject missing anchor nodes.
-      if (groupNode?.type === 'sceneGroup' || groupNode?.type === 'spaceWarpGroup' || groupNode?.type === 'marchLoopGroup') {
+      if (groupNode?.type === 'sceneGroup' || groupNode?.type === 'spaceWarpGroup' || groupNode?.type === 'marchLoopGroup' || groupNode?.type === 'giLitMarchGroup') {
         // Stamp only anchor node types as originals if not already done (legacy migration).
         // Never stamp user-added nodes — they must remain deletable.
         const SCENE_ANCHOR_TYPES = new Set(['scenePos', 'sceneOutput', 'marchPos', 'marchDist', 'marchOutput']);
@@ -1201,6 +1241,44 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               inputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
               outputs: { pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position' } },
               params: { _groupOriginal: true },
+            }];
+          }
+        }
+
+        if (groupNode.type === 'giLitMarchGroup') {
+          // Inject missing marchLoopInputs anchor (new-style only — no legacy path)
+          if (!sgNodes.some(n => n.type === 'marchLoopInputs')) {
+            const minX = sgNodes.length ? Math.min(...sgNodes.map(n => n.position.x)) : 80;
+            const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 180;
+            sgNodes = [...sgNodes, {
+              id: `mlInputs_${ts_anc}`,
+              type: 'marchLoopInputs',
+              position: { x: minX - 200, y: avgY },
+              inputs: {},
+              outputs: {
+                ro:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Origin' },
+                rd:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Dir' },
+                marchPos:  { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'March Pos' },
+                marchDist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'March Dist' },
+              },
+              params: { _groupOriginal: true, extraInputs: [] },
+            }];
+          }
+          // Inject missing marchLoopOutput anchor
+          if (!sgNodes.some(n => n.type === 'marchLoopOutput')) {
+            const maxX = sgNodes.length ? Math.max(...sgNodes.map(n => n.position.x)) : 480;
+            const avgY = sgNodes.length ? sgNodes.reduce((s, n) => s + n.position.y, 0) / sgNodes.length : 180;
+            const inputsNode = sgNodes.find(n => n.type === 'marchLoopInputs');
+            sgNodes = [...sgNodes, {
+              id: `mlOutput_${ts_anc}`,
+              type: 'marchLoopOutput',
+              position: { x: maxX + 200, y: avgY },
+              inputs: {
+                pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position',
+                  ...(inputsNode ? { connection: { nodeId: inputsNode.id, outputKey: 'marchPos' } } : {}) },
+              },
+              outputs: {},
+              params: { _groupOriginal: true, hiddenOutputs: [] },
             }];
           }
         }
@@ -1386,6 +1464,44 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }));
       return;
     }
+    if (groupNode?.type === 'giLitMarchGroup' && !groupNode.params?.subgraph) {
+      const ts = Date.now();
+      const giMlInputsNode: import('../types/nodeGraph').GraphNode = {
+        id: `mlInputs_${ts}`,
+        type: 'marchLoopInputs',
+        position: { x: 80, y: 180 },
+        inputs: {},
+        outputs: {
+          ro:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Origin' },
+          rd:        { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Ray Dir' },
+          marchPos:  { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'March Pos' },
+          marchDist: { type: 'float' as import('../types/nodeGraph').DataType, label: 'March Dist' },
+        },
+        params: { _groupOriginal: true, extraInputs: [] },
+      };
+      const giMlOutputNode: import('../types/nodeGraph').GraphNode = {
+        id: `mlOutput_${ts}`,
+        type: 'marchLoopOutput',
+        position: { x: 480, y: 180 },
+        inputs: {
+          pos: { type: 'vec3' as import('../types/nodeGraph').DataType, label: 'Position',
+            connection: { nodeId: `mlInputs_${ts}`, outputKey: 'marchPos' } },
+        },
+        outputs: {},
+        params: { _groupOriginal: true, hiddenOutputs: [] },
+      };
+      const giDefaultSubgraph: import('../types/nodeGraph').SubgraphData = {
+        nodes: [giMlInputsNode, giMlOutputNode],
+        inputPorts: [],
+        outputPorts: [],
+      };
+      set(state => ({
+        activeGroupPath: newPath,
+        activeGroupId: id,
+        nodes: updateNodeInTree(state.nodes, id, newPath, n => ({ ...n, params: { ...n.params, subgraph: giDefaultSubgraph } })),
+      }));
+      return;
+    }
 
     // ── Initialise a fresh regular group subgraph if needed ─────────────────────
     if (groupNode?.type === 'group' && !groupNode.params?.subgraph) {
@@ -1404,7 +1520,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // ── Migrate existing scene-style subgraphs: inject missing anchor nodes + stamp _groupOriginal ──
     if (
-      (groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup') &&
+      (groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup' || groupNode?.type === 'giLitMarchGroup') &&
       groupNode.params?.subgraph
     ) {
       type SG = { nodes: import('../types/nodeGraph').GraphNode[]; outputNodeId?: string; outputKey?: string; inputPorts?: unknown[]; outputPorts?: unknown[] };
@@ -1561,7 +1677,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const newPath = path.slice(0, -1);
     set(state => {
       const exitingNode = state.nodes.find(n => n.id === exitingId);
-      const isSceneStyleGroup = exitingNode?.type === 'sceneGroup' || exitingNode?.type === 'spaceWarpGroup' || exitingNode?.type === 'marchLoopGroup';
+      const isSceneStyleGroup = exitingNode?.type === 'sceneGroup' || exitingNode?.type === 'spaceWarpGroup' || exitingNode?.type === 'marchLoopGroup' || exitingNode?.type === 'giLitMarchGroup';
       if (isSceneStyleGroup) {
         const sg = exitingNode.params.subgraph as { nodes: import('../types/nodeGraph').GraphNode[] } | undefined;
         const newPsSockets: Record<string, import('../types/nodeGraph').InputSocket> = {};
@@ -2176,7 +2292,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(state => ({
       nodes: state.nodes.map(n => {
         if (n.id !== nodeId) return n;
-        if (!['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup'].includes(n.type)) return n;
+        if (!['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup'].includes(n.type)) return n;
         const subgraph = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
         if (!subgraph) return n;
         const updatedSubgraph: import('../types/nodeGraph').SubgraphData = {
@@ -2474,6 +2590,23 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             { type: 'marchCamera',    relPos: { x: -560, y: 0 } },
             { type: 'sceneGroup',     relPos: { x: -200, y: 0 } },
             { type: 'marchLoopGroup', relPos: { x: 200,  y: 0 } },
+          ],
+          [
+            { from: 0, fromKey: 'ro',    to: 2, toKey: 'ro'    },
+            { from: 0, fromKey: 'rd',    to: 2, toKey: 'rd'    },
+            { from: 1, fromKey: 'scene', to: 2, toKey: 'scene' },
+          ],
+        );
+        return undefined;
+      }
+      if (type === 'giLitMarchGroup') {
+        // Auto-spawn MarchCamera + SceneGroup + GILitMarchGroup, all pre-wired
+        get().spawnGraph(
+          position,
+          [
+            { type: 'marchCamera',      relPos: { x: -560, y: 0 } },
+            { type: 'sceneGroup',       relPos: { x: -200, y: 0 } },
+            { type: 'giLitMarchGroup',  relPos: { x: 200,  y: 0 } },
           ],
           [
             { from: 0, fromKey: 'ro',    to: 2, toKey: 'ro'    },
@@ -3564,14 +3697,32 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return changed ? { ...node, outputs: mergedOutputs } : node;
       });
     } else {
-      // No acc outputs in this compile — strip any stale acc* from MLG nodes
+      // No acc outputs in this compile — strip stale acc* from MLG nodes and
+      // disconnect any outer nodes that were wired to those now-dead outputs.
+      const strippedMlgIds = new Set<string>();
       patchedForAcc = patchedForAcc.map(node => {
-        if (node.type !== 'marchLoopGroup') return node;
+        if (node.type !== 'marchLoopGroup' && node.type !== 'giLitMarchGroup') return node;
         const hasAcc = Object.keys(node.outputs).some(k => k.startsWith('acc'));
         if (!hasAcc) return node;
+        strippedMlgIds.add(node.id);
         const mergedOutputs = Object.fromEntries(Object.entries(node.outputs).filter(([k]) => !k.startsWith('acc')));
         return { ...node, outputs: mergedOutputs };
       });
+      if (strippedMlgIds.size > 0) {
+        patchedForAcc = patchedForAcc.map(node => {
+          const newInputs = Object.fromEntries(
+            Object.entries(node.inputs).map(([k, inp]) => {
+              if (inp.connection && strippedMlgIds.has(inp.connection.nodeId) && inp.connection.outputKey.startsWith('acc')) {
+                const { connection: _removed, ...rest } = inp;
+                return [k, rest];
+              }
+              return [k, inp];
+            })
+          );
+          const changed = Object.keys(newInputs).some(k => newInputs[k] !== node.inputs[k]);
+          return changed ? { ...node, inputs: newInputs } : node;
+        });
+      }
     }
 
     set({

@@ -1380,11 +1380,16 @@ export function generateFragmentShader(
 
         // Port input overrides from the outer node's inputs (slug-keyed)
         const mlPortOverrides = new Map<string, string>();
+        const mlPortVarTypes  = new Map<string, string>(); // var name → GLSL type from outer input def
         for (const port of (subgraph.inputPorts ?? [])) {
           const outerVar = inputVars[port.key];
           if (outerVar) {
             const mappedToNodeId = mlSubSlugMap.get(port.toNodeId) ?? port.toNodeId;
             mlPortOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
+            if (isGlslVarRef(outerVar) && !outerVar.startsWith('u_')) {
+              const outerType = (node.inputs[port.key]?.type as string) ?? 'float';
+              mlPortVarTypes.set(outerVar, outerType);
+            }
           }
         }
 
@@ -1393,7 +1398,7 @@ export function generateFragmentShader(
         const mlBodyExternalVarMap = new Map<string, string>(); // varName → GLSL type
         for (const v of mlPortOverrides.values()) {
           if (isGlslVarRef(v) && !v.startsWith('u_')) {
-            if (!mlBodyExternalVarMap.has(v)) mlBodyExternalVarMap.set(v, 'float');
+            if (!mlBodyExternalVarMap.has(v)) mlBodyExternalVarMap.set(v, mlPortVarTypes.get(v) ?? 'float');
           }
         }
         for (const subNode of subgraph.nodes) {
@@ -2078,6 +2083,846 @@ export function generateFragmentShader(
         iterCount: `${nodeSlug}_iterCount`,
         hit:       `${nodeSlug}_hit`,
         pos:       `${nodeSlug}_hp`,
+        ...mlgAccOutputs,
+      });
+      continue;
+    }
+
+    // ── GI Lit March Group: same as marchLoopGroup but with full GI lighting ────
+    if (node.type === 'giLitMarchGroup') {
+      const subgraph = node.params.subgraph as SubgraphData | undefined;
+
+      // Resolve external inputs
+      const mlRo  = inputVars.ro || 'vec3(0.0, 0.0, 3.0)';
+      const mlRd  = inputVars.rd || 'vec3(0.0, 0.0, -1.0)';
+      const mlUv  = inputVars.uv || 'g_uv';
+      const mlMaxSteps = Math.max(16, Math.min(256, Number(node.params.maxSteps) || 80));
+      const fmtP = (val: unknown, fb: number): string => {
+        if (typeof val === 'string') return val;
+        const n = typeof val === 'number' ? val : fb;
+        return Number.isInteger(n) ? `${n}.0` : String(n);
+      };
+      const mlMaxDist    = fmtP(node.params.maxDist,  20.0);
+      const mlStepScale  = fmtP(node.params.stepScale,  1.0);
+      const mlVolumetric = !!node.params.volumetric;
+      const mlPassthrough = fmtP(node.params.passthrough, 0.1);
+      const mlJitter     = fmtP(node.params.jitter, 0.0);
+      const albedoVar     = inputVars.albedo     || `vec3(${fmtP(node.params.albedoR, 0.7)}, ${fmtP(node.params.albedoG, 0.7)}, ${fmtP(node.params.albedoB, 0.7)})`;
+      const lightDirVar   = inputVars.lightDir   || `vec3(${fmtP(node.params.lightX, 1.5)}, ${fmtP(node.params.lightY, 3.0)}, ${fmtP(node.params.lightZ, 1.0)})`;
+      const lightColorVar = inputVars.lightColor || `vec3(${fmtP(node.params.lightR, 1.0)}, ${fmtP(node.params.lightG, 0.95)}, ${fmtP(node.params.lightB, 0.85)})`;
+      const skyTopVar     = inputVars.skyTop     || `vec3(${fmtP(node.params.skyTopR, 0.2)}, ${fmtP(node.params.skyTopG, 0.45)}, ${fmtP(node.params.skyTopB, 0.8)})`;
+      const skyBotVar     = inputVars.skyBot     || `vec3(${fmtP(node.params.skyBotR, 0.55)}, ${fmtP(node.params.skyBotG, 0.5)}, ${fmtP(node.params.skyBotB, 0.4)})`;
+      const bgVar         = inputVars.bg         || `vec3(${fmtP(node.params.bgR, 0.0)}, ${fmtP(node.params.bgG, 0.0)}, ${fmtP(node.params.bgB, 0.0)})`;
+
+      const mlInputsNodeRaw = subgraph?.nodes.find(n => n.type === 'marchLoopInputs') ?? null;
+      const mlHasNewStyle = !!mlInputsNodeRaw;
+      const mlExtraInputs: Array<{key: string; type: string}> = mlHasNewStyle
+        ? ((mlInputsNodeRaw!.params.extraInputs ?? []) as Array<{key: string; type: string}>)
+        : [];
+
+      let warpBodyFn = '';
+      let sceneFnName = '';
+      let mlBodyExtraParams: Array<{name: string; type: string}> = [];
+      let mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string; label: string }> = [];
+
+      if (subgraph && subgraph.nodes.length > 0) {
+        const warpFnName = `marchBody_${nodeSlug}`;
+        const mlPrefix   = `${nodeSlug}_ml_`;
+        const bodyLines: string[] = [];
+
+        const mlSubSlugMap = new Map<string, string>();
+        for (const sn of subgraph.nodes) {
+          mlSubSlugMap.set(sn.id, computeNodeSlug(sn, usedSlugs));
+        }
+
+        for (const sn of subgraph.nodes) {
+          if (sn.type === 'marchPos') {
+            const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
+            nodeOutputs.set(mlPrefix + slug, { pos: `${nodeSlug}_mp` });
+          }
+          if (sn.type === 'marchDist') {
+            const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
+            nodeOutputs.set(mlPrefix + slug, { dist: `${nodeSlug}_bt`, t: `${nodeSlug}_bt` });
+          }
+          if (sn.type === 'marchLoopInputs') {
+            const slug = mlSubSlugMap.get(sn.id) ?? sn.id;
+            const extraVarMap: Record<string, string> = {};
+            for (const ex of mlExtraInputs) {
+              extraVarMap[ex.key] = `${nodeSlug}_ex_${ex.key}`;
+            }
+            nodeOutputs.set(mlPrefix + slug, {
+              ro:        `${nodeSlug}_ro`,
+              rd:        `${nodeSlug}_rd`,
+              marchPos:  `${nodeSlug}_mp`,
+              marchDist: `${nodeSlug}_bt`,
+              ...extraVarMap,
+            });
+          }
+        }
+
+        const mlPortOverrides = new Map<string, string>();
+        const mlPortVarTypes  = new Map<string, string>(); // var name → GLSL type from outer input def
+        for (const port of (subgraph.inputPorts ?? [])) {
+          const outerVar = inputVars[port.key];
+          if (outerVar) {
+            const mappedToNodeId = mlSubSlugMap.get(port.toNodeId) ?? port.toNodeId;
+            mlPortOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
+            if (isGlslVarRef(outerVar) && !outerVar.startsWith('u_')) {
+              const outerType = (node.inputs[port.key]?.type as string) ?? 'float';
+              mlPortVarTypes.set(outerVar, outerType);
+            }
+          }
+        }
+
+        const mlBodyExternalVarMap = new Map<string, string>();
+        for (const v of mlPortOverrides.values()) {
+          if (isGlslVarRef(v) && !v.startsWith('u_')) {
+            if (!mlBodyExternalVarMap.has(v)) mlBodyExternalVarMap.set(v, mlPortVarTypes.get(v) ?? 'float');
+          }
+        }
+        for (const subNode of subgraph.nodes) {
+          const snDefScan = getNodeDefinition(subNode.type);
+          if (snDefScan?.paramDefs) {
+            for (const paramKey of Object.keys(snDefScan.paramDefs)) {
+              const psKey = `ps_${subNode.id}_${paramKey}`;
+              const extVar = inputVars[psKey];
+              if (extVar && isGlslVarRef(extVar) && !extVar.startsWith('u_') && !mlBodyExternalVarMap.has(extVar))
+                mlBodyExternalVarMap.set(extVar, 'float');
+            }
+          }
+        }
+        mlBodyExtraParams = Array.from(mlBodyExternalVarMap.entries()).map(([name, type]) => ({ name, type }));
+
+        const mlPrefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
+          const subSlug = mlSubSlugMap.get(subNode.id)!;
+          const overridePrefix = `${subNode.id}::`;
+          const paramOverrides: Record<string, unknown> = {};
+          for (const [key, val] of Object.entries(node.params)) {
+            if (key.startsWith(overridePrefix)) {
+              paramOverrides[key.slice(overridePrefix.length)] = val;
+            }
+          }
+          const snDef = getNodeDefinition(subNode.type);
+          if (snDef?.paramDefs) {
+            for (const paramKey of Object.keys(snDef.paramDefs)) {
+              const psKey = `ps_${subNode.id}_${paramKey}`;
+              const externalVar = inputVars[psKey];
+              if (externalVar) paramOverrides[paramKey] = externalVar;
+            }
+          }
+          return {
+            ...subNode,
+            id: mlPrefix + subSlug,
+            params: { ...subNode.params, ...paramOverrides },
+            inputs: Object.fromEntries(
+              Object.entries(subNode.inputs).map(([k, inp]) => [
+                k,
+                inp.connection
+                  ? { ...inp, connection: {
+                      nodeId: mlPrefix + (mlSubSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId),
+                      outputKey: inp.connection.outputKey,
+                    }}
+                  : inp,
+              ]),
+            ),
+          };
+        });
+
+        for (const sn of subgraph.nodes) {
+          const op = sn.assignOp;
+          if (!op || op === '=') continue;
+          const snDefAcc = getNodeDefinition(sn.type);
+          if (!snDefAcc) continue;
+          const snSlugAcc = mlSubSlugMap.get(sn.id) ?? sn.id;
+          const isMultiplyAcc = op === '*=' || op === '/=';
+          for (const [outKey, outSock] of Object.entries(snDefAcc.outputs)) {
+            if (outSock.type !== 'float') continue;
+            const accVar = `${nodeSlug}_mlgacc_${snSlugAcc}_${outKey}`;
+            const neutral = isMultiplyAcc ? '1.0' : '0.0';
+            const initExpr = sn.assignInit?.trim() || neutral;
+            mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
+          }
+        }
+        for (const outerGrpSn of subgraph.nodes) {
+          if (outerGrpSn.type !== 'group') continue;
+          const outerSlugForAcc = mlSubSlugMap.get(outerGrpSn.id) ?? outerGrpSn.id;
+          const innerSg = outerGrpSn.params?.subgraph as SubgraphData | undefined;
+          if (!innerSg) continue;
+          for (const innerGn of innerSg.nodes) {
+            const op = innerGn.assignOp;
+            if (!op || op === '=') continue;
+            const innerDef = getNodeDefinition(innerGn.type);
+            if (!innerDef) continue;
+            const isMultiplyAcc = op === '*=' || op === '/=';
+            const safeInnerNodeId = innerGn.id.replace(/[^a-zA-Z0-9]/g, '');
+            for (const [outKey, outSock] of Object.entries(innerDef.outputs)) {
+              if (outSock.type !== 'float') continue;
+              const accVar = `${nodeSlug}_mlgacc_${outerSlugForAcc}_ng_${safeInnerNodeId}_${outKey}`;
+              const neutral = isMultiplyAcc ? '1.0' : '0.0';
+              const initExpr = innerGn.assignInit?.trim() || neutral;
+              mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
+            }
+          }
+        }
+
+        const mlSorted = topologicalSort(mlPrefixedNodes);
+        const mlProcessOrder = [
+          ...mlSorted.filter(sn => sn.type === 'sceneGroup'),
+          ...mlSorted.filter(sn => sn.type !== 'sceneGroup'),
+        ];
+        let mlLastVec3Var = `${nodeSlug}_mp`;
+
+        for (const sn of mlProcessOrder) {
+          if (nodeOutputs.has(sn.id)) continue;
+          const snDef = getNodeDefinition(sn.type);
+          if (!snDef) continue;
+
+          if (sn.type === 'time') {
+            nodeOutputs.set(sn.id, { time: 'u_time' });
+            continue;
+          }
+          if (sn.type === 'mousePos' || sn.type === 'mouse') {
+            const mId = sn.id;
+            bodyLines.push(`    vec2 ${mId}_uv = (u_mouse / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`);
+            bodyLines.push(`    float ${mId}_x = ${mId}_uv.x;\n`);
+            bodyLines.push(`    float ${mId}_y = ${mId}_uv.y;\n`);
+            nodeOutputs.set(sn.id, { mouse: `${mId}_uv`, xy: `${mId}_uv`, x: `${mId}_x`, y: `${mId}_y` });
+            continue;
+          }
+
+          if (sn.type === 'sceneGroup') {
+            const sgSubgraph = sn.params.subgraph as SubgraphData | undefined;
+            if (sgSubgraph && sgSubgraph.nodes.length > 0) {
+              const sgSlugInBody = sn.id.slice(mlPrefix.length);
+              const sceneFnNameLocal = `mapScene_${sgSlugInBody}`;
+              const sgInnerPrefix = `${sgSlugInBody}_sg_`;
+
+              const sgInnerSlugMap = new Map<string, string>();
+              for (const inn of sgSubgraph.nodes) {
+                sgInnerSlugMap.set(inn.id, computeNodeSlug(inn, usedSlugs));
+              }
+
+              for (const inn of sgSubgraph.nodes) {
+                if (inn.type === 'scenePos') {
+                  const spSlug = sgInnerSlugMap.get(inn.id) ?? inn.id;
+                  nodeOutputs.set(sgInnerPrefix + spSlug, { pos: 'p' });
+                }
+              }
+
+              const sgOuterInputVarsInline: Record<string, string> = {};
+              for (const [k, inp] of Object.entries(sn.inputs)) {
+                if (inp.connection) {
+                  const srcOut = nodeOutputs.get(inp.connection.nodeId);
+                  if (srcOut?.[inp.connection.outputKey]) sgOuterInputVarsInline[k] = srcOut[inp.connection.outputKey];
+                }
+              }
+
+              const sgPortOverridesInline = new Map<string, string>();
+              for (const port of (sgSubgraph.inputPorts ?? [])) {
+                const outerVar = sgOuterInputVarsInline[port.key];
+                if (outerVar) {
+                  const mappedToNodeId = sgInnerSlugMap.get(port.toNodeId) ?? port.toNodeId;
+                  sgPortOverridesInline.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
+                }
+              }
+
+              const sgInlineExternalVarMap = new Map<string, string>();
+              for (const [, val] of sgPortOverridesInline) {
+                if (isGlslVarRef(val)) sgInlineExternalVarMap.set(val, 'float');
+              }
+              for (const inn of sgSubgraph.nodes) {
+                const innDefScan = getNodeDefinition(inn.type);
+                if (innDefScan?.paramDefs) {
+                  for (const paramKey of Object.keys(innDefScan.paramDefs)) {
+                    const overrideKey = `${inn.id}::${paramKey}`;
+                    const overrideVal = sn.params[overrideKey];
+                    if (typeof overrideVal === 'string' && isGlslVarRef(overrideVal) && !sgInlineExternalVarMap.has(overrideVal)) {
+                      sgInlineExternalVarMap.set(overrideVal, 'float');
+                    }
+                  }
+                }
+              }
+              const sgInlineExtraParams = Array.from(sgInlineExternalVarMap.entries()).map(([name, type]) => ({ name, type }));
+
+              const sgInnerPrefixedNodes: GraphNode[] = sgSubgraph.nodes.map(inn => {
+                const innSlug = sgInnerSlugMap.get(inn.id)!;
+                const overridePrefix2 = `${inn.id}::`;
+                const innerParamOverrides: Record<string, unknown> = {};
+                for (const [k, v] of Object.entries(sn.params)) {
+                  if (typeof k === 'string' && k.startsWith(overridePrefix2)) {
+                    innerParamOverrides[k.slice(overridePrefix2.length)] = v;
+                  }
+                }
+                const innDefPs = getNodeDefinition(inn.type);
+                if (innDefPs?.paramDefs) {
+                  for (const paramKey of Object.keys(innDefPs.paramDefs)) {
+                    const psKey = `ps_${inn.id}_${paramKey}`;
+                    const extVar = inputVars[psKey];
+                    if (extVar) {
+                      innerParamOverrides[paramKey] = extVar;
+                      if (isGlslVarRef(extVar) && !sgInlineExternalVarMap.has(extVar)) {
+                        sgInlineExternalVarMap.set(extVar, 'float');
+                        sgInlineExtraParams.push({ name: extVar, type: 'float' });
+                      }
+                    }
+                  }
+                }
+                return {
+                  ...inn,
+                  id: sgInnerPrefix + innSlug,
+                  params: Object.keys(innerParamOverrides).length > 0
+                    ? { ...inn.params, ...innerParamOverrides }
+                    : inn.params,
+                  inputs: Object.fromEntries(
+                    Object.entries(inn.inputs).map(([k, inp]) => [
+                      k,
+                      inp.connection
+                        ? { ...inp, connection: {
+                            nodeId: sgInnerPrefix + (sgInnerSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId),
+                            outputKey: inp.connection.outputKey,
+                          }}
+                        : inp,
+                    ]),
+                  ),
+                };
+              });
+
+              const sgInnerSorted = topologicalSort(sgInnerPrefixedNodes);
+              let sgLastFloatVar = '100.0';
+              const sceneFnLines: string[] = [];
+
+              for (const sgn of sgInnerSorted) {
+                if (nodeOutputs.has(sgn.id)) continue;
+
+                if (sgn.type === 'group') {
+                  const igrpSub = sgn.params.subgraph as SubgraphData | undefined;
+                  if (!igrpSub || igrpSub.nodes.length === 0) { nodeOutputs.set(sgn.id, {}); continue; }
+                  const igrpSlugMap = new Map<string, string>();
+                  for (const gn of igrpSub.nodes) igrpSlugMap.set(gn.id, computeNodeSlug(gn, usedSlugs));
+                  const igrpPrefix = `${sgn.id}_g_`;
+                  const igrpPortOverrides = new Map<string, string>();
+                  for (const port of (igrpSub.inputPorts ?? [])) {
+                    const portInp = sgn.inputs[port.key];
+                    let srcVar: string | undefined;
+                    if (portInp?.connection) srcVar = nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
+                    if (!srcVar) srcVar = sgPortOverridesInline.get(`${sgn.id.slice(sgInnerPrefix.length)}:${port.key}`);
+                    if (srcVar) igrpPortOverrides.set(`${igrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+                  }
+                  const igrpPrefixed: GraphNode[] = igrpSub.nodes.map(gn => ({
+                    ...gn, id: igrpPrefix + igrpSlugMap.get(gn.id)!,
+                    inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
+                      ? { ...inp, connection: { nodeId: igrpPrefix + (igrpSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId), outputKey: inp.connection.outputKey } }
+                      : inp])),
+                  }));
+                  for (const gn of topologicalSort(igrpPrefixed)) {
+                    if (nodeOutputs.has(gn.id)) continue;
+                    const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+                    if (gDef.glslFunction) functions.add(gDef.glslFunction);
+                    gDef.glslFunctions?.forEach(h => functions.add(h));
+                    const gnOrigId2 = gn.id.slice(igrpPrefix.length);
+                    const gnInputVars2: Record<string, string> = {};
+                    for (const [k, inp] of Object.entries(gn.inputs)) {
+                      const pk = `${gnOrigId2}:${k}`;
+                      if (igrpPortOverrides.has(pk)) gnInputVars2[k] = igrpPortOverrides.get(pk)!;
+                      else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars2[k] = s[inp.connection.outputKey]; }
+                      if (!gnInputVars2[k]) {
+                        if (inp.defaultValue !== undefined) {
+                          if (typeof inp.defaultValue === 'number') gnInputVars2[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                          else if (Array.isArray(inp.defaultValue)) gnInputVars2[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                        } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars2[k] = 'u_time';
+                      }
+                    }
+                    const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
+                    sceneFnLines.push(gnResult2.code); nodeOutputs.set(gn.id, gnResult2.outputVars);
+                    for (const [ok, vn] of Object.entries(gnResult2.outputVars)) { if (gDef.outputs[ok]?.type === 'float') sgLastFloatVar = vn; }
+                  }
+                  const igrpOutVars: Record<string, string> = {};
+                  for (const port of (igrpSub.outputPorts ?? [])) {
+                    const s = nodeOutputs.get(igrpPrefix + (igrpSlugMap.get(port.fromNodeId) ?? port.fromNodeId));
+                    if (s?.[port.fromOutputKey]) { igrpOutVars[port.key] = s[port.fromOutputKey]; if (port.type === 'float') sgLastFloatVar = s[port.fromOutputKey]; }
+                  }
+                  nodeOutputs.set(sgn.id, igrpOutVars); continue;
+                }
+
+                const sgnDef = getNodeDefinition(sgn.type);
+                if (!sgnDef) continue;
+
+                if (sgnDef.glslFunction) functions.add(sgnDef.glslFunction);
+                sgnDef.glslFunctions?.forEach(h => functions.add(h));
+
+                const sgnOrigId = sgn.id.slice(sgInnerPrefix.length);
+                const sgnInputVars: Record<string, string> = {};
+                for (const [k, inp] of Object.entries(sgn.inputs)) {
+                  const portKey2 = `${sgnOrigId}:${k}`;
+                  if (sgPortOverridesInline.has(portKey2)) {
+                    sgnInputVars[k] = sgPortOverridesInline.get(portKey2)!;
+                  } else if (inp.connection) {
+                    const srcOut = nodeOutputs.get(inp.connection.nodeId);
+                    if (srcOut?.[inp.connection.outputKey]) sgnInputVars[k] = srcOut[inp.connection.outputKey];
+                  }
+                  if (!sgnInputVars[k]) {
+                    if (inp.defaultValue !== undefined) {
+                      if (typeof inp.defaultValue === 'number') {
+                        sgnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                      } else if (Array.isArray(inp.defaultValue)) {
+                        sgnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                      }
+                    } else if (inp.type === 'float' && (k === 'time' || k === 't')) {
+                      sgnInputVars[k] = 'u_time';
+                    }
+                  }
+                }
+
+                const sgnResult = sgnDef.generateGLSL(sgn, sgnInputVars);
+                sceneFnLines.push(sgnResult.code);
+                nodeOutputs.set(sgn.id, sgnResult.outputVars);
+
+                for (const [outKey, varName] of Object.entries(sgnResult.outputVars)) {
+                  if (sgnDef.outputs[outKey]?.type === 'float') sgLastFloatVar = varName;
+                }
+              }
+
+              for (const port of (sgSubgraph.outputPorts ?? [])) {
+                if (port.type === 'float') {
+                  const mappedFromId = sgInnerSlugMap.get(port.fromNodeId) ?? port.fromNodeId;
+                  const srcOut = nodeOutputs.get(sgInnerPrefix + mappedFromId);
+                  if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
+                }
+              }
+
+              const sgFnBody = sceneFnLines.join('');
+              const sgInlineExtraDecls = sgInlineExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
+              const sgFnDef = `float ${sceneFnNameLocal}(vec3 p${sgInlineExtraDecls ? ', ' + sgInlineExtraDecls : ''}) {\n${sgFnBody}    return ${sgLastFloatVar};\n}`;
+              functions.add(sgFnDef);
+              if (sgInlineExtraParams.length > 0) sceneFnExtraParams.set(sceneFnNameLocal, sgInlineExtraParams);
+              for (const ep of sgInlineExtraParams) {
+                if (!mlBodyExtraParams.some(p => p.name === ep.name)) {
+                  mlBodyExtraParams.push(ep);
+                }
+              }
+              sceneFnName = sceneFnNameLocal;
+              nodeOutputs.set(sn.id, { scene: sceneFnNameLocal });
+            }
+            continue;
+          }
+
+          if (sn.type === 'group') {
+            const mlGrpSubgraph = sn.params.subgraph as SubgraphData | undefined;
+            if (!mlGrpSubgraph || mlGrpSubgraph.nodes.length === 0) { nodeOutputs.set(sn.id, {}); continue; }
+            const mlGrpSlugMap = new Map<string, string>();
+            for (const gn of mlGrpSubgraph.nodes) mlGrpSlugMap.set(gn.id, computeNodeSlug(gn, usedSlugs));
+            const mlGrpSlugToOrigNode = new Map<string, GraphNode>();
+            for (const origGn of mlGrpSubgraph.nodes) {
+              const slug = mlGrpSlugMap.get(origGn.id);
+              if (slug) mlGrpSlugToOrigNode.set(slug, origGn);
+            }
+            const mlGrpPrefix = `${sn.id}_g_`;
+            const mlGrpPortOverrides = new Map<string, string>();
+            for (const port of (mlGrpSubgraph.inputPorts ?? [])) {
+              const portInp = sn.inputs[port.key];
+              let srcVar: string | undefined;
+              if (portInp?.connection) srcVar = nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
+              if (!srcVar) srcVar = mlPortOverrides.get(`${sn.id.slice(mlPrefix.length)}:${port.key}`);
+              if (srcVar) mlGrpPortOverrides.set(`${mlGrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+            }
+            const mlGrpPrefixed: GraphNode[] = mlGrpSubgraph.nodes.map(gn => ({
+              ...gn, id: mlGrpPrefix + mlGrpSlugMap.get(gn.id)!,
+              inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
+                ? { ...inp, connection: { nodeId: mlGrpPrefix + (mlGrpSlugMap.get(inp.connection.nodeId) ?? inp.connection.nodeId), outputKey: inp.connection.outputKey } }
+                : inp])),
+            }));
+            for (const gn of topologicalSort(mlGrpPrefixed)) {
+              if (nodeOutputs.has(gn.id)) continue;
+              const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+              if (gDef.glslFunction) functions.add(gDef.glslFunction);
+              gDef.glslFunctions?.forEach(h => functions.add(h));
+              const gnOrigId = gn.id.slice(mlGrpPrefix.length);
+              const gnInputVars: Record<string, string> = {};
+              for (const [k, inp] of Object.entries(gn.inputs)) {
+                const pk = `${gnOrigId}:${k}`;
+                if (mlGrpPortOverrides.has(pk)) gnInputVars[k] = mlGrpPortOverrides.get(pk)!;
+                else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
+                if (!gnInputVars[k]) {
+                  if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
+                  else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) gnInputVars[k] = 'g_uv';
+                  else if (inp.defaultValue !== undefined) {
+                    if (typeof inp.defaultValue === 'number') gnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                    else if (Array.isArray(inp.defaultValue)) gnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                  }
+                }
+              }
+              if (gn.type === 'marchSceneDist') {
+                const resolvedSceneFn2 = sceneFnName || inputVars.scene || '';
+                if (!resolvedSceneFn2) {
+                  const fbResult2 = gDef.generateGLSL(gn, gnInputVars);
+                  bodyLines.push(fbResult2.code);
+                  nodeOutputs.set(gn.id, fbResult2.outputVars);
+                } else {
+                  const resolvedExtraParams2 = sceneFnExtraParams.get(resolvedSceneFn2) ?? [];
+                  const resolvedExtraStr2 = resolvedExtraParams2.length > 0
+                    ? ', ' + resolvedExtraParams2.map(v => v.name).join(', ') : '';
+                  const posVar2 = gnInputVars.pos || `${nodeSlug}_mp`;
+                  const rawVar2 = `${gn.id}_sd_raw`;
+                  const outVar2 = `${gn.id}_sd`;
+                  if (mlVolumetric) {
+                    bodyLines.push(`    float ${rawVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
+                    bodyLines.push(`    float ${outVar2} = max(${rawVar2}, ${mlPassthrough});\n`);
+                    nodeOutputs.set(gn.id, { dist: outVar2, rawDist: rawVar2 });
+                  } else {
+                    bodyLines.push(`    float ${outVar2} = ${resolvedSceneFn2}(${posVar2}${resolvedExtraStr2});\n`);
+                    nodeOutputs.set(gn.id, { dist: outVar2 });
+                  }
+                }
+                continue;
+              }
+              const gnResult = gDef.generateGLSL(gn, gnInputVars);
+              bodyLines.push(gnResult.code);
+              const gnSlugKey = gn.id.slice(mlGrpPrefix.length);
+              const origGnForAcc = mlGrpSlugToOrigNode.get(gnSlugKey);
+              if (origGnForAcc?.assignOp && origGnForAcc.assignOp !== '=') {
+                const outerGroupSlug = sn.id.slice(mlPrefix.length);
+                const sanitizedOrigId = origGnForAcc.id.replace(/[^a-zA-Z0-9]/g, '');
+                const accOutVars: Record<string, string> = {};
+                for (const [outKey, tempVar] of Object.entries(gnResult.outputVars)) {
+                  const accVar = `${nodeSlug}_mlgacc_${outerGroupSlug}_ng_${sanitizedOrigId}_${outKey}`;
+                  bodyLines.push(`    ${accVar} ${origGnForAcc.assignOp} ${tempVar};\n`);
+                  accOutVars[outKey] = accVar;
+                }
+                nodeOutputs.set(gn.id, accOutVars);
+              } else {
+                nodeOutputs.set(gn.id, gnResult.outputVars);
+                for (const [ok, vn] of Object.entries(gnResult.outputVars)) { if (gDef.outputs[ok]?.type === 'vec3') mlLastVec3Var = vn; }
+              }
+            }
+            const mlGrpOutVars: Record<string, string> = {};
+            for (const port of (mlGrpSubgraph.outputPorts ?? [])) {
+              const s = nodeOutputs.get(mlGrpPrefix + (mlGrpSlugMap.get(port.fromNodeId) ?? port.fromNodeId));
+              if (s?.[port.fromOutputKey]) {
+                mlGrpOutVars[port.key] = s[port.fromOutputKey];
+                if (port.type === 'vec3') mlLastVec3Var = s[port.fromOutputKey];
+              }
+            }
+            nodeOutputs.set(sn.id, mlGrpOutVars); continue;
+          }
+
+          if (snDef.glslFunction) functions.add(snDef.glslFunction);
+          if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => functions.add(h));
+
+          const origId = sn.id.slice(mlPrefix.length);
+          const bodyParamOverrides: Record<string, unknown> = {};
+          const bodyOverridePrefix = `${origId}::`;
+          for (const [k, v] of Object.entries(node.params)) {
+            if (typeof k === 'string' && k.startsWith(bodyOverridePrefix)) {
+              bodyParamOverrides[k.slice(bodyOverridePrefix.length)] = v;
+            }
+          }
+          const snEffective = Object.keys(bodyParamOverrides).length > 0
+            ? { ...sn, params: { ...sn.params, ...bodyParamOverrides } }
+            : sn;
+
+          const snInputVars: Record<string, string> = {};
+          for (const [k, inp] of Object.entries(sn.inputs)) {
+            const portKey = `${origId}:${k}`;
+            if (mlPortOverrides.has(portKey)) {
+              snInputVars[k] = mlPortOverrides.get(portKey)!;
+            } else if (inp.connection) {
+              const srcOut = nodeOutputs.get(inp.connection.nodeId);
+              if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
+            }
+            if (!snInputVars[k]) {
+              if (inp.type === 'float' && (k === 'time' || k === 't')) snInputVars[k] = 'u_time';
+              else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) snInputVars[k] = 'g_uv';
+              else if (inp.defaultValue !== undefined) {
+                if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
+                else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+              }
+            }
+          }
+
+          if (sn.type === 'marchSceneDist') {
+            const resolvedSceneFn = sceneFnName || inputVars.scene || '';
+            if (!resolvedSceneFn) {
+              const fbResult = snDef.generateGLSL(snEffective, snInputVars);
+              bodyLines.push(fbResult.code);
+              nodeOutputs.set(sn.id, fbResult.outputVars);
+            } else {
+              const resolvedExtraParams = sceneFnExtraParams.get(resolvedSceneFn) ?? [];
+              const resolvedExtraStr = resolvedExtraParams.length > 0
+                ? ', ' + resolvedExtraParams.map(v => v.name).join(', ')
+                : '';
+              const posVar = snInputVars.pos || `${nodeSlug}_mp`;
+              const rawVar = `${sn.id}_sd_raw`;
+              const outVar = `${sn.id}_sd`;
+              if (mlVolumetric) {
+                bodyLines.push(`    float ${rawVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+                bodyLines.push(`    float ${outVar} = max(${rawVar}, ${mlPassthrough});\n`);
+                nodeOutputs.set(sn.id, { dist: outVar, rawDist: rawVar });
+              } else {
+                bodyLines.push(`    float ${outVar} = ${resolvedSceneFn}(${posVar}${resolvedExtraStr});\n`);
+                nodeOutputs.set(sn.id, { dist: outVar });
+              }
+            }
+            continue;
+          }
+
+          const snResult = snDef.generateGLSL(snEffective, snInputVars);
+
+          if (sn.assignOp && sn.assignOp !== '=') {
+            bodyLines.push(snResult.code);
+            const accOutVars: Record<string, string> = {};
+            for (const [outKey, tempVar] of Object.entries(snResult.outputVars)) {
+              const accVar = `${nodeSlug}_mlgacc_${origId}_${outKey}`;
+              bodyLines.push(`    ${accVar} ${sn.assignOp} ${tempVar};\n`);
+              accOutVars[outKey] = accVar;
+            }
+            nodeOutputs.set(sn.id, accOutVars);
+            continue;
+          }
+
+          bodyLines.push(snResult.code);
+          nodeOutputs.set(sn.id, snResult.outputVars);
+
+          for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
+            const outType = snDef.outputs[outKey]?.type;
+            if (outType === 'vec3') mlLastVec3Var = varName;
+          }
+        }
+
+        for (const [sid, sslug] of mlSubSlugMap) nodeSlugMap.set(sid, mlPrefix + sslug);
+
+        for (const port of (subgraph.outputPorts ?? [])) {
+          if (port.type === 'vec3') {
+            const mappedFromNodeId = mlSubSlugMap.get(port.fromNodeId) ?? port.fromNodeId;
+            const srcOut = nodeOutputs.get(mlPrefix + mappedFromNodeId);
+            if (srcOut?.[port.fromOutputKey]) mlLastVec3Var = srcOut[port.fromOutputKey];
+          }
+        }
+
+        const fnBody = bodyLines.join('');
+        let mlFnSig: string;
+        const mlBodyExtraDecls = mlBodyExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
+        const mlBodyAccDecls = mlBodyAccumulators.map(a => `inout ${a.type} ${a.varName}`).join(', ');
+        if (mlHasNewStyle) {
+          const extraParamDecls = mlExtraInputs.map(ex => `${ex.type} ${nodeSlug}_ex_${ex.key}`).join(', ');
+          const allExtra = [extraParamDecls, mlBodyExtraDecls, mlBodyAccDecls].filter(Boolean).join(', ');
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt, vec3 ${nodeSlug}_ro, vec3 ${nodeSlug}_rd${allExtra ? `, ${allExtra}` : ''}`;
+        } else {
+          const allBodyExtra = [mlBodyExtraDecls, mlBodyAccDecls].filter(Boolean).join(', ');
+          mlFnSig = `vec3 ${nodeSlug}_mp, float ${nodeSlug}_bt${allBodyExtra ? `, ${allBodyExtra}` : ''}`;
+        }
+        const fnDef = `vec3 ${warpFnName}(${mlFnSig}) {\n${fnBody}    return ${mlLastVec3Var};\n}`;
+        functions.add(fnDef);
+        warpBodyFn = warpFnName;
+      }
+
+      const mlSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
+      const mlHasScene = mlSceneFn !== 'MISSING_SCENE_FN';
+
+      const mlExtraArgsList = mlExtraInputs.map(ex => {
+        const v = inputVars[ex.key];
+        if (v) return v;
+        if (ex.type === 'vec2') return 'vec2(0.0)';
+        if (ex.type === 'vec3') return 'vec3(0.0)';
+        if (ex.type === 'vec4') return 'vec4(0.0)';
+        return '0.0';
+      });
+      const mlExtraArgsStr = mlExtraArgsList.length > 0 ? ', ' + mlExtraArgsList.join(', ') : '';
+      const mlBodyExtraArgsStr = mlBodyExtraParams.length > 0 ? ', ' + mlBodyExtraParams.map(v => v.name).join(', ') : '';
+      const mlBodyAccArgsStr = mlBodyAccumulators.length > 0 ? ', ' + mlBodyAccumulators.map(a => a.varName).join(', ') : '';
+      const warpPos = (expr: string, t: string): string => {
+        if (!warpBodyFn) return expr;
+        if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
+        return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
+      };
+      const mlSceneExtraParams = sceneFnExtraParams.get(mlSceneFn) ?? [];
+      const mlSceneExtraArgsStr = mlSceneExtraParams.length > 0 ? ', ' + mlSceneExtraParams.map(v => v.name).join(', ') : '';
+      const callScene = (posExpr: string): string => `${mlSceneFn}(${posExpr}${mlSceneExtraArgsStr})`;
+
+      const accumDecls = mlBodyAccumulators.map(a => `    ${a.type} ${a.varName} = ${a.initExpr};\n`).join('');
+
+      const jitterDecl = mlJitter !== '0.0'
+        ? `    float ${nodeSlug}_jh = fract(sin(dot(${mlRo}.xy + ${mlRd}.xy, vec2(127.1, 311.7))) * 43758.5453);\n`
+        + `    float ${nodeSlug}_t   = 0.001 + ${mlJitter} * ${nodeSlug}_jh * (${mlMaxDist} / float(${mlMaxSteps}));\n`
+        : `    float ${nodeSlug}_t   = 0.001;\n`;
+
+      const giMarchLoopLines = mlVolumetric ? [
+        accumDecls,
+        jitterDecl,
+        `    float ${nodeSlug}_hit = 0.0;\n`,
+        `    int   ${nodeSlug}_si  = 0;\n`,
+        `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
+        `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+        `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
+        mlHasScene
+          ? `        float ${nodeSlug}_vol = max(${callScene(`${nodeSlug}_rp`)}, ${mlPassthrough});\n`
+          : `        float ${nodeSlug}_vol = ${mlPassthrough};\n`,
+        `        ${nodeSlug}_t += ${nodeSlug}_vol;\n`,
+        `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+        `    }\n`,
+      ] : [
+        accumDecls,
+        jitterDecl,
+        `    float ${nodeSlug}_hit = 0.0;\n`,
+        `    int   ${nodeSlug}_si  = 0;\n`,
+        `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
+        `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+        `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
+        `        float ${nodeSlug}_d  = ${callScene(`${nodeSlug}_rp`)};\n`,
+        `        if (${nodeSlug}_d < 0.0005) { ${nodeSlug}_hit = 1.0; ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+        `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale};\n`,
+        `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+        `    }\n`,
+      ];
+
+      // Build GI lighting or fall back to basic diffuse when no scene or volumetric
+      const giLightingLines = mlHasScene && !mlVolumetric ? [
+        `    vec3  ${nodeSlug}_alb     = ${albedoVar};\n`,
+        `    float ${nodeSlug}_metal   = ${fmtP(node.params.metallic,   0.0)};\n`,
+        `    float ${nodeSlug}_rough   = ${fmtP(node.params.roughness,  0.5)};\n`,
+        `    vec3  ${nodeSlug}_ld      = normalize(${lightDirVar});\n`,
+        `    vec3  ${nodeSlug}_lc      = ${lightColorVar} * ${fmtP(node.params.lightStrength, 1.0)};\n`,
+        `    vec3  ${nodeSlug}_skyTopC = ${skyTopVar};\n`,
+        `    vec3  ${nodeSlug}_skyBotC = ${skyBotVar};\n`,
+        `    const int ${nodeSlug}_aoSt    = ${Math.max(3, Math.min(12, Number(node.params.aoSteps) || 5))};\n`,
+        `    const int ${nodeSlug}_shSt    = ${Math.max(4, Math.min(48, Number(node.params.shadowSteps) || 24))};\n`,
+        `    const int ${nodeSlug}_giSt    = ${Math.max(4, Math.min(48, Number(node.params.giSteps) || 16))};\n`,
+        `    const int ${nodeSlug}_spSt    = ${Math.max(4, Math.min(48, Number(node.params.specSteps) || 24))};\n`,
+        `    float ${nodeSlug}_giStr   = ${fmtP(node.params.giStrength,   0.4)};\n`,
+        `    float ${nodeSlug}_spStr   = ${fmtP(node.params.specStrength, 0.5)};\n`,
+        // AO: march along normal, measure how much geometry occludes the hemisphere
+        `    float ${nodeSlug}_ao      = 0.0;\n`,
+        `    float ${nodeSlug}_aoScl   = 1.0;\n`,
+        `    for (int ${nodeSlug}_aoi = 1; ${nodeSlug}_aoi <= ${nodeSlug}_aoSt; ${nodeSlug}_aoi++) {\n`,
+        `        float ${nodeSlug}_aod = float(${nodeSlug}_aoi) * 0.08;\n`,
+        `        float ${nodeSlug}_aos = ${nodeSlug}_aod - ${callScene(`${nodeSlug}_hp + ${nodeSlug}_n * ${nodeSlug}_aod`)};\n`,
+        `        ${nodeSlug}_ao += ${nodeSlug}_aos * ${nodeSlug}_aoScl;\n`,
+        `        ${nodeSlug}_aoScl *= 0.5;\n`,
+        `    }\n`,
+        `    ${nodeSlug}_ao = clamp(1.0 - 3.0 * ${nodeSlug}_ao, 0.0, 1.0) * ${nodeSlug}_hit;\n`,
+        // Soft shadow: IQ penumbra formula
+        `    float ${nodeSlug}_sha     = 1.0;\n`,
+        `    vec3  ${nodeSlug}_shro    = ${nodeSlug}_hp + ${nodeSlug}_n * 0.002;\n`,
+        `    float ${nodeSlug}_sht     = 0.01;\n`,
+        `    for (int ${nodeSlug}_shi = 0; ${nodeSlug}_shi < ${nodeSlug}_shSt; ${nodeSlug}_shi++) {\n`,
+        `        float ${nodeSlug}_shd = ${callScene(`${nodeSlug}_shro + ${nodeSlug}_ld * ${nodeSlug}_sht`)};\n`,
+        `        if (${nodeSlug}_shd < 0.0001) { ${nodeSlug}_sha = 0.0; break; }\n`,
+        `        ${nodeSlug}_sha = min(${nodeSlug}_sha, 8.0 * ${nodeSlug}_shd / ${nodeSlug}_sht);\n`,
+        `        ${nodeSlug}_sht += ${nodeSlug}_shd;\n`,
+        `        if (${nodeSlug}_sht > 8.0) break;\n`,
+        `    }\n`,
+        `    ${nodeSlug}_sha = clamp(${nodeSlug}_sha, 0.0, 1.0);\n`,
+        // Sky dome IBL: blend top/bottom by normal Y, gate by AO
+        `    float ${nodeSlug}_skyFac  = ${nodeSlug}_n.y * 0.5 + 0.5;\n`,
+        `    vec3  ${nodeSlug}_skyC    = mix(${nodeSlug}_skyBotC, ${nodeSlug}_skyTopC, ${nodeSlug}_skyFac);\n`,
+        `    vec3  ${nodeSlug}_ibl     = ${nodeSlug}_skyC * ${nodeSlug}_ao;\n`,
+        // Direct diffuse
+        `    float ${nodeSlug}_dif     = max(0.0, dot(${nodeSlug}_n, ${nodeSlug}_ld)) * ${nodeSlug}_sha;\n`,
+        `    vec3  ${nodeSlug}_diff    = ${nodeSlug}_alb * (${nodeSlug}_dif * ${nodeSlug}_lc + ${nodeSlug}_ibl * 0.7);\n`,
+        // One-bounce GI: hash-seeded hemisphere ray — dithered but correct in tendency
+        `    float ${nodeSlug}_gh1    = fract(sin(dot(${mlUv} + u_time * 0.17, vec2(127.1, 311.7))) * 43758.5453);\n`,
+        `    float ${nodeSlug}_gh2    = fract(sin(dot(${mlUv} + u_time * 0.13, vec2(269.5, 183.3))) * 43758.5453);\n`,
+        `    float ${nodeSlug}_gphi   = 6.28318 * ${nodeSlug}_gh1;\n`,
+        `    float ${nodeSlug}_gcosT  = ${nodeSlug}_gh2;\n`,
+        `    float ${nodeSlug}_gsinT  = sqrt(max(0.0, 1.0 - ${nodeSlug}_gcosT * ${nodeSlug}_gcosT));\n`,
+        `    vec3  ${nodeSlug}_gtx    = normalize(cross(${nodeSlug}_n, abs(${nodeSlug}_n.y) < 0.9 ? vec3(0.0,1.0,0.0) : vec3(1.0,0.0,0.0)));\n`,
+        `    vec3  ${nodeSlug}_gbt    = cross(${nodeSlug}_n, ${nodeSlug}_gtx);\n`,
+        `    vec3  ${nodeSlug}_gdir   = ${nodeSlug}_gsinT*(cos(${nodeSlug}_gphi)*${nodeSlug}_gtx + sin(${nodeSlug}_gphi)*${nodeSlug}_gbt) + ${nodeSlug}_gcosT*${nodeSlug}_n;\n`,
+        `    float ${nodeSlug}_gt     = 0.01;\n`,
+        `    float ${nodeSlug}_ghit   = 0.0;\n`,
+        `    for (int ${nodeSlug}_gii = 0; ${nodeSlug}_gii < ${nodeSlug}_giSt; ${nodeSlug}_gii++) {\n`,
+        `        float ${nodeSlug}_gd = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_gdir * ${nodeSlug}_gt + ${nodeSlug}_n * 0.003`)};\n`,
+        `        if (${nodeSlug}_gd < 0.0005) { ${nodeSlug}_ghit = 1.0; break; }\n`,
+        `        ${nodeSlug}_gt += ${nodeSlug}_gd;\n`,
+        `        if (${nodeSlug}_gt > 3.0) break;\n`,
+        `    }\n`,
+        `    vec3  ${nodeSlug}_giC    = ${nodeSlug}_ghit > 0.5 ? ${nodeSlug}_alb * 0.35 : ${nodeSlug}_skyC * 0.5;\n`,
+        `    float ${nodeSlug}_gcos   = max(0.0, dot(${nodeSlug}_n, ${nodeSlug}_gdir));\n`,
+        `    vec3  ${nodeSlug}_gi     = ${nodeSlug}_giC * ${nodeSlug}_gcos * ${nodeSlug}_giStr * ${nodeSlug}_ao;\n`,
+        // Specular: reflect primary ray, re-march, Schlick Fresnel blend
+        `    vec3  ${nodeSlug}_rv     = reflect(${mlRd}, ${nodeSlug}_n);\n`,
+        `    float ${nodeSlug}_rt     = 0.01;\n`,
+        `    float ${nodeSlug}_rhit   = 0.0;\n`,
+        `    for (int ${nodeSlug}_ri = 0; ${nodeSlug}_ri < ${nodeSlug}_spSt; ${nodeSlug}_ri++) {\n`,
+        `        float ${nodeSlug}_rd2 = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt + ${nodeSlug}_n * 0.003`)};\n`,
+        `        if (${nodeSlug}_rd2 < 0.0005) { ${nodeSlug}_rhit = 1.0; break; }\n`,
+        `        ${nodeSlug}_rt += ${nodeSlug}_rd2;\n`,
+        `        if (${nodeSlug}_rt > ${mlMaxDist} * 0.5) break;\n`,
+        `    }\n`,
+        `    vec3  ${nodeSlug}_rhp    = ${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt;\n`,
+        `    float ${nodeSlug}_re     = 0.001;\n`,
+        `    vec3  ${nodeSlug}_rn     = normalize(vec3(\n`,
+        `        ${callScene(`${nodeSlug}_rhp+vec3(${nodeSlug}_re,0.0,0.0)`)} - ${callScene(`${nodeSlug}_rhp-vec3(${nodeSlug}_re,0.0,0.0)`)},\n`,
+        `        ${callScene(`${nodeSlug}_rhp+vec3(0.0,${nodeSlug}_re,0.0)`)} - ${callScene(`${nodeSlug}_rhp-vec3(0.0,${nodeSlug}_re,0.0)`)},\n`,
+        `        ${callScene(`${nodeSlug}_rhp+vec3(0.0,0.0,${nodeSlug}_re)`)} - ${callScene(`${nodeSlug}_rhp-vec3(0.0,0.0,${nodeSlug}_re)`)}\n`,
+        `    ));\n`,
+        `    float ${nodeSlug}_rdif   = max(0.0, dot(${nodeSlug}_rn, ${nodeSlug}_ld)) * 0.8 + 0.15;\n`,
+        `    float ${nodeSlug}_rskyF  = ${nodeSlug}_rn.y * 0.5 + 0.5;\n`,
+        `    vec3  ${nodeSlug}_rskyC  = mix(${nodeSlug}_skyBotC, ${nodeSlug}_skyTopC, ${nodeSlug}_rskyF);\n`,
+        `    vec3  ${nodeSlug}_rc     = ${nodeSlug}_rhit > 0.5 ? ${nodeSlug}_alb * (${nodeSlug}_rdif * ${nodeSlug}_lc + ${nodeSlug}_rskyC * 0.4) : ${nodeSlug}_skyC;\n`,
+        `    float ${nodeSlug}_fres   = pow(clamp(1.0 - dot(-${mlRd}, ${nodeSlug}_n), 0.0, 1.0), 4.0);\n`,
+        `    vec3  ${nodeSlug}_spec0  = mix(vec3(0.04), ${nodeSlug}_alb, ${nodeSlug}_metal);\n`,
+        `    vec3  ${nodeSlug}_refl   = ${nodeSlug}_rc * (${nodeSlug}_spec0 + (1.0 - ${nodeSlug}_spec0) * ${nodeSlug}_fres) * ${nodeSlug}_spStr * (1.0 - ${nodeSlug}_rough);\n`,
+        // Composite
+        `    vec3  ${nodeSlug}_surface = ${nodeSlug}_diff + ${nodeSlug}_gi + ${nodeSlug}_refl;\n`,
+        `    vec3  ${nodeSlug}_color   = ${nodeSlug}_hit > 0.5 ? ${nodeSlug}_surface : ${nodeSlug}_bg;\n`,
+      ] : [
+        // Fallback when no scene or volumetric: basic Lambert + zero GI outputs
+        `    vec3  ${nodeSlug}_alb    = ${albedoVar};\n`,
+        `    vec3  ${nodeSlug}_ld     = normalize(vec3(1.5, 2.0, 1.0));\n`,
+        `    float ${nodeSlug}_dif    = max(0.0, dot(${nodeSlug}_n, ${nodeSlug}_ld));\n`,
+        `    float ${nodeSlug}_ao     = 1.0;\n`,
+        `    float ${nodeSlug}_sha    = 1.0;\n`,
+        `    vec3  ${nodeSlug}_diff   = ${nodeSlug}_alb * (0.15 + 0.85 * ${nodeSlug}_dif);\n`,
+        `    vec3  ${nodeSlug}_gi     = vec3(0.0);\n`,
+        `    vec3  ${nodeSlug}_refl   = vec3(0.0);\n`,
+        `    vec3  ${nodeSlug}_color  = ${nodeSlug}_hit > 0.5 ? ${nodeSlug}_diff : ${nodeSlug}_bg;\n`,
+      ];
+
+      const giMarchCode = [
+        ...giMarchLoopLines,
+        `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
+        `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
+        `    vec3  ${nodeSlug}_hp_raw  = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+        `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
+        ...(mlVolumetric || !mlHasScene ? [
+          `    vec3  ${nodeSlug}_n   = vec3(0.0, 1.0, 0.0);\n`,
+        ] : [
+          `    float ${nodeSlug}_e   = 0.001;\n`,
+          `    vec3  ${nodeSlug}_n   = normalize(vec3(\n`,
+          `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(${nodeSlug}_e,0.0,0.0)`, `${nodeSlug}_t`))},\n`,
+          `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,${nodeSlug}_e,0.0)`, `${nodeSlug}_t`))},\n`,
+          `        ${callScene(warpPos(`${nodeSlug}_hp_raw+vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))} - ${callScene(warpPos(`${nodeSlug}_hp_raw-vec3(0.0,0.0,${nodeSlug}_e)`, `${nodeSlug}_t`))}\n`,
+          `    ));\n`,
+        ]),
+        `    float ${nodeSlug}_dist   = ${nodeSlug}_t;\n`,
+        `    float ${nodeSlug}_depth  = clamp(${nodeSlug}_t / ${mlMaxDist}, 0.0, 1.0);\n`,
+        `    vec3  ${nodeSlug}_normal = ${nodeSlug}_n * ${nodeSlug}_hit;\n`,
+        `    vec3  ${nodeSlug}_bg     = ${bgVar};\n`,
+        ...giLightingLines,
+      ].join('');
+
+      mainCode.push(giMarchCode);
+      const mlgAccOutputs: Record<string, string> = {};
+      const mlgAccSockets: Record<string, { type: string; label: string }> = {};
+      mlBodyAccumulators.forEach((acc, i) => {
+        mlgAccOutputs[`acc${i}`] = acc.varName;
+        mlgAccSockets[`acc${i}`] = { type: acc.type, label: acc.label };
+      });
+      if (Object.keys(mlgAccSockets).length > 0) mlgDynamicOutputs.set(node.id, mlgAccSockets);
+      nodeOutputs.set(node.id, {
+        color:     `${nodeSlug}_color`,
+        dist:      `${nodeSlug}_dist`,
+        depth:     `${nodeSlug}_depth`,
+        normal:    `${nodeSlug}_normal`,
+        iter:      `${nodeSlug}_iter`,
+        iterCount: `${nodeSlug}_iterCount`,
+        hit:       `${nodeSlug}_hit`,
+        pos:       `${nodeSlug}_hp`,
+        ao:        `${nodeSlug}_ao`,
+        shadow:    `${nodeSlug}_sha`,
+        gi:        `${nodeSlug}_gi`,
+        diffuse:   `${nodeSlug}_diff`,
+        refl:      `${nodeSlug}_refl`,
         ...mlgAccOutputs,
       });
       continue;

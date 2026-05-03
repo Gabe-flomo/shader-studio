@@ -1703,9 +1703,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     );
   }
 
-  if (node.type === 'group' || node.type === 'sceneGroup' || node.type === 'spaceWarpGroup' || node.type === 'marchLoopGroup') {
+  if (node.type === 'group' || node.type === 'sceneGroup' || node.type === 'spaceWarpGroup' || node.type === 'marchLoopGroup' || node.type === 'giLitMarchGroup') {
     const subgraph = node.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-    const defaultLabel = node.type === 'sceneGroup' ? 'Scene Group' : node.type === 'spaceWarpGroup' ? 'Space Warp Group' : node.type === 'marchLoopGroup' ? 'March Loop Group' : 'Group';
+    const defaultLabel = node.type === 'sceneGroup' ? 'Scene Group' : node.type === 'spaceWarpGroup' ? 'Space Warp Group' : node.type === 'marchLoopGroup' ? 'March Loop Group' : node.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
     const groupLabel = typeof node.params.label === 'string' ? node.params.label : defaultLabel;
     const nodeCount = subgraph?.nodes.length ?? 0;
     const inputPorts = subgraph?.inputPorts ?? [];
@@ -1714,7 +1714,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const hasInnerGroups = subgraph?.nodes.some(n => n.type === 'group') ?? false;
     const isSceneGroup = node.type === 'sceneGroup';
     const isSpaceWarpGroup = node.type === 'spaceWarpGroup';
-    const isMarchLoopGroup = node.type === 'marchLoopGroup';
+    const isMarchLoopGroup = node.type === 'marchLoopGroup' || node.type === 'giLitMarchGroup';
     // Color per type
     const groupAccentColor = isSceneGroup ? '#cc88aa' : isSpaceWarpGroup ? '#aa88cc' : isMarchLoopGroup ? '#88aacc' : (hasInnerGroups ? '#cba6f7' : '#89b4fa');
 

@@ -1958,7 +1958,7 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 
     // Internal node dots — circles for regular nodes, diamonds for nested groups
     const DOT_R = 3;
-    const GROUP_TYPES = new Set(['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup']);
+    const GROUP_TYPES = new Set(['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup']);
     for (const n of nodes) {
       const pos = positions.get(n.id);
       if (!pos) continue;
@@ -4563,7 +4563,8 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'group':
     case 'sceneGroup':
     case 'spaceWarpGroup':
-    case 'marchLoopGroup': return <SubgraphMiniViz         node={node} />;
+    case 'marchLoopGroup':
+    case 'giLitMarchGroup': return <SubgraphMiniViz         node={node} />;
     case 'sphereSDF3D':
     case 'boxSDF3D':
     case 'torusSDF3D':
@@ -4855,7 +4856,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'toneCurve', 'shadowsHighlights', 'liftGammaGain', 'hueRotate', 'colorSaturation',
   'mat2Construct', 'mat2Inspect', 'mat3Construct', 'mat3Inspect',
   'mat2MulVec', 'mat3MulVec',
-  'group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup',
+  'group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup',
   // 3D primitives
   'sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D',
   'coneSDF3D', 'octahedronSDF3D', 'planeSDF3D',

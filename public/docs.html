@@ -199,13 +199,17 @@
       <a class="nav-item" href="#3d-intro">Ray Marching</a>
       <a class="nav-item" href="#3d-sdf">3D SDFs</a>
       <a class="nav-item" href="#3d-lighting">Lighting</a>
-      <a class="nav-item" href="#glass-refraction">Glass &amp; Refraction <span class="nav-badge">NEW</span></a>
+      <a class="nav-item" href="#glass-refraction">Glass &amp; Refraction</a>
+      <a class="nav-item" href="#glass-scene">Glass Scene</a>
+      <a class="nav-item" href="#gi-lit-march-group">GI Lit March Group</a>
       <a class="nav-item" href="#volumetrics">Volumetrics</a>
 
       <div class="nav-section">Particles <span class="nav-badge">NEW</span></div>
       <a class="nav-item" href="#gpu-particles">GPU Particle Pipeline</a>
 
       <div class="nav-section">Tools</div>
+      <a class="nav-item" href="#folder-organization">Folder Organization</a>
+      <a class="nav-item" href="#node-browser">Node Browser</a>
       <a class="nav-item" href="#function-builder">Function Builder</a>
       <a class="nav-item" href="#glsl-editor">GLSL / Expr Editor</a>
       <a class="nav-item" href="#preview-code">Preview & Code Output</a>
@@ -1847,10 +1851,10 @@ p</code></pre>
 <div class="page" id="page-video-input">
   <div class="page-header">
     <h1>Video Input</h1>
-    <p class="lead">Use your webcam or a video file as a live texture in any shader.</p>
+    <p class="lead">Use a video file as a live texture in any shader.</p>
   </div>
   <div class="divider"></div>
-  <p>The <strong>Video Input</strong> node captures from your device camera or a video file and exposes the current frame as a vec3 color you can use anywhere in the graph. Every frame that plays updates the texture the shader sees — making it genuinely live.</p>
+  <p>The <strong>Video Input</strong> node loads a video file from disk and exposes the current playback frame as a <code>vec3</code> color sampled at the current UV. As the video plays, the texture the shader sees updates every frame — making it live without any extra effort.</p>
 
   <h3>Outputs</h3>
   <table>
@@ -1861,22 +1865,19 @@ p</code></pre>
   <h3>Parameters</h3>
   <table>
     <tr><th>Param</th><th>Description</th></tr>
-    <tr><td>Source</td><td>Choose between the device camera (live webcam) or a video file.</td></tr>
+    <tr><td>File</td><td>Click to pick a video file from disk. Common formats (MP4, MOV, WebM) are supported.</td></tr>
     <tr><td>UV Input</td><td>The coordinate to sample. Wire from UV for a straight video quad, or from any distorted UV for warped effects.</td></tr>
     <tr><td>Flip X / Flip Y</td><td>Mirror the video horizontally or vertically.</td></tr>
   </table>
 
-  <div class="tip">Wire the video output into a color input rather than directly to Output — for example into a <strong>CMYK Halftone</strong> node or a <strong>Glass 3D</strong> <code>bgColor</code> — to apply effects on top of the live feed.</div>
-
-  <h3>Privacy</h3>
-  <p>Shader Studio requests camera access only when you add a Video Input node set to webcam mode. No video data leaves your device — the frame is sampled entirely on your GPU.</p>
+  <div class="tip">Wire the video output into a color input rather than directly to Output — for example into a <strong>CMYK Halftone</strong> node or a <strong>Glass 3D</strong> <code>bgColor</code> — to layer effects on top of the footage.</div>
 
   <h3>Example uses</h3>
   <ul>
-    <li><strong>Live video through a glass sphere</strong> — wire Video Input into Glass 3D's <code>bgColor</code> so the glass refracts your webcam feed.</li>
-    <li><strong>Halftone video</strong> — wire into CMYK Halftone for an instant print-screen live filter.</li>
-    <li><strong>Domain-warped video</strong> — pipe the UV through noise-based warp nodes before feeding into Video Input for a liquid effect.</li>
-    <li><strong>Luma displacement</strong> — extract luminance from the video feed and use it to drive other parameters like dot radius or SDF displacement.</li>
+    <li><strong>Video through a glass sphere</strong> — wire Video Input into Glass 3D's <code>bgColor</code> so the glass refracts your footage.</li>
+    <li><strong>Halftone video</strong> — wire into CMYK Halftone for an instant print-style live filter.</li>
+    <li><strong>Domain-warped video</strong> — pipe the UV through noise-based warp nodes before feeding into Video Input for a liquid distortion effect.</li>
+    <li><strong>Luma displacement</strong> — extract luminance from the video and use it to drive parameters like dot radius or SDF displacement.</li>
   </ul>
 </div>
 
@@ -1965,7 +1966,234 @@ p</code></pre>
   </ul>
 </div>
 
-<!-- ═══════════���══════════════════════════════════════ END PAGES -->
+<!-- ══════════════════════════════════════════ GLASS SCENE -->
+<div class="page" id="page-glass-scene">
+  <div class="page-header">
+    <h1>Glass Scene</h1>
+    <p class="lead">Glass composited over a real 3D scene — with per-channel chromatic aberration that bends geometry, not just color.</p>
+  </div>
+  <div class="divider"></div>
+  <p><strong>Glass Scene</strong> is a self-contained rendering node that marches two separate scene SDFs: one for the glass geometry (foreground) and one for what's seen through and around it (background). Unlike <code>glass3d</code>, which uses a procedural dot environment, Glass Scene renders an actual scene behind the glass.</p>
+
+  <h2>Wiring</h2>
+  <div class="node-diagram">
+    <span class="node-box source">March Camera</span><span class="arrow">→ ro / rd</span>
+    <span class="node-box loop">Scene Group A (glass geo)</span><span class="arrow">→ foreground</span>
+    <span class="node-box loop">Scene Group B (background)</span><span class="arrow">→ background</span>
+    <span class="node-box color">Glass Scene</span><span class="arrow">→</span>
+    <span class="node-box output">Output</span>
+  </div>
+  <p>The <code>background</code> input is optional. When nothing is connected, a blue-to-dark sky gradient is used — chromatic aberration still applies to the sky sampling.</p>
+
+  <h2>Inputs</h2>
+  <table>
+    <tr><th>Input</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>ro</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Ray origin — wire from March Camera.</td></tr>
+    <tr><td><code>rd</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Ray direction — wire from March Camera.</td></tr>
+    <tr><td><code>foreground</code></td><td><span class="badge" style="background:#6c7086;color:#cdd6f4">scene3d</span></td><td>Glass geometry SDF — wire from a Scene Group.</td></tr>
+    <tr><td><code>background</code></td><td><span class="badge" style="background:#6c7086;color:#cdd6f4">scene3d</span></td><td>Background scene SDF. Optional — sky gradient used if unconnected.</td></tr>
+    <tr><td><code>bgAlbedo</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Surface albedo for background geometry shading.</td></tr>
+    <tr><td><code>tintColor</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Multiply tint on the background. White = neutral.</td></tr>
+    <tr><td><code>lightDir</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Light direction for specular highlight on the glass.</td></tr>
+  </table>
+
+  <h2>Parameters</h2>
+  <table>
+    <tr><th>Param</th><th>Default</th><th>Description</th></tr>
+    <tr><td>IOR</td><td>1.5</td><td>Index of refraction. Water ≈ 1.33, glass ≈ 1.5, diamond ≈ 2.4.</td></tr>
+    <tr><td>Fresnel</td><td>3.5</td><td>Rim exponent. Higher concentrates reflection at the silhouette.</td></tr>
+    <tr><td>Dispersion</td><td>0.06</td><td>Per-channel IOR shift. Each R/G/B channel marches a slightly different refracted ray direction — dispersion shows in geometry edges, not just flat color.</td></tr>
+    <tr><td>Shininess</td><td>80</td><td>Blinn-Phong specular exponent on the glass surface.</td></tr>
+    <tr><td>Diffuse</td><td>0.5</td><td>Diffuse weight for background geometry shading.</td></tr>
+    <tr><td>Saturation</td><td>1.6</td><td>Color saturation boost on the background.</td></tr>
+  </table>
+
+  <h2>Chromatic aberration</h2>
+  <p>When <strong>Dispersion &gt; 0</strong>, three independent background marches fire — one per color channel — each with a slightly offset refracted ray direction. The R channel bends one way, B bends the other, and G stays near center. This means background geometry edges appear split by color, not just the sky. The effect scales from center to rim: the center stays clean while edges show the most splitting.</p>
+  <div class="tip">At Dispersion = 0, all three channels share one refracted ray. Zero aberration, and three fewer march loops per pixel.</div>
+
+  <h2>Outputs</h2>
+  <table>
+    <tr><th>Output</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>color</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Final composite — plug into Output or a tone mapper.</td></tr>
+    <tr><td><code>fresnel</code></td><td><span class="badge badge-float">float</span></td><td>Raw Fresnel term [0..1]; 1 at silhouettes. Compatible with <code>glass3d</code>.</td></tr>
+    <tr><td><code>refractedColor</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Background as seen through refraction. Compatible with <code>glass3d</code>.</td></tr>
+    <tr><td><code>reflectedColor</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Sky/reflected color from the glass surface. Compatible with <code>glass3d</code>.</td></tr>
+  </table>
+
+  <h2>Example graphs</h2>
+  <ul>
+    <li><strong>Glass Scene: Orb + Pillars</strong> — glass orb over a ground plane with pillar geometry behind it.</li>
+    <tr><strong>Glass Scene: Torus + Blobs</strong> — torus glass over metaball background.</tr>
+    <li><strong>Glass Scene: Lens + Void</strong> — lens-shaped glass disc over an empty sky.</li>
+    <li><strong>glassIridescentRim</strong> — high Fresnel + high Dispersion for iridescent silhouette edges.</li>
+    <li><strong>glassTintedReflection</strong> — tinted glass body with a colored background scene.</li>
+    <li><strong>glassFlatBlend</strong> — minimal setup: flat background, low dispersion, pure Fresnel blend.</li>
+  </ul>
+</div>
+
+<!-- ══════════════════════════════════════════ GI LIT MARCH GROUP -->
+<div class="page" id="page-gi-lit-march-group">
+  <div class="page-header">
+    <h1>GI Lit March Group</h1>
+    <p class="lead">A ray march container with real-time global illumination: AO, soft shadows, sky dome IBL, one diffuse GI bounce, and one specular reflection — all in a single shader pass.</p>
+  </div>
+  <div class="divider"></div>
+  <p>The <strong>GI Lit March Group</strong> works exactly like a <a href="#3d-lighting">March Loop Group</a> — same enterable subgraph, same SceneGroup-inside workflow — but replaces the basic Lambert shading with a multi-pass lighting approximation that produces results that look like path tracing at interactive frame rates.</p>
+
+  <h2>Quick start</h2>
+  <div class="node-diagram">
+    <span class="node-box source">March Camera</span><span class="arrow">→ ro / rd</span>
+    <span class="node-box loop">GI Lit March Group</span><span class="arrow">→ color</span>
+    <span class="node-box color">Tone Map</span><span class="arrow">→</span>
+    <span class="node-box output">Output</span>
+  </div>
+  <p>Double-click the node to enter its body. Inside, place your SDF primitives connected through a <strong>Scene Group</strong>, then wire <code>marchPos → [SDF / warps] → Scene Group → Group Output</code>. The GI lighting is automatic — you only build the geometry.</p>
+
+  <h2>Lighting passes</h2>
+  <table>
+    <tr><th>Pass</th><th>What it does</th><th>Controlled by</th></tr>
+    <tr><td><strong>Normal</strong></td><td>Finite-difference surface normal at the hit point.</td><td>Automatic</td></tr>
+    <tr><td><strong>AO</strong></td><td>Short ray along the normal; nearby geometry darkens the result.</td><td>AO Steps</td></tr>
+    <tr><td><strong>Soft Shadow</strong></td><td>Ray toward the light; near-misses create penumbra.</td><td>Shadow Steps</td></tr>
+    <tr><td><strong>Diffuse</strong></td><td>Lambert + sky dome IBL tinted by the normal hemisphere.</td><td>Light Dir/Color/Strength, Sky Top, Ground</td></tr>
+    <tr><td><strong>GI Bounce</strong></td><td>One ray in a random hemisphere direction; color from that hit shades the primary surface.</td><td>GI Steps, GI Strength</td></tr>
+    <tr><td><strong>Specular</strong></td><td>Reflected camera ray marched into the scene.</td><td>Spec Steps, Spec Strength, Roughness</td></tr>
+    <tr><td><strong>Metallic</strong></td><td>Tints specular toward the albedo color.</td><td>Metallic</td></tr>
+  </table>
+
+  <h2>Inputs</h2>
+  <table>
+    <tr><th>Input</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>ro</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Ray origin — wire from March Camera.</td></tr>
+    <tr><td><code>rd</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Ray direction — wire from March Camera.</td></tr>
+    <tr><td><code>scene</code></td><td><span class="badge" style="background:#6c7086;color:#cdd6f4">scene3d</span></td><td>Scene SDF — wire from a Scene Group outside the body.</td></tr>
+    <tr><td><code>albedo</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Base surface color. Overrides the Albedo sliders when wired.</td></tr>
+    <tr><td><code>lightDir</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Directional light direction. Overrides Light X/Y/Z sliders.</td></tr>
+    <tr><td><code>lightColor</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Directional light color. Overrides Light R/G/B sliders.</td></tr>
+    <tr><td><code>skyTop</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Zenith sky color for IBL dome.</td></tr>
+    <tr><td><code>skyBot</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Ground/nadir color for IBL dome.</td></tr>
+    <tr><td><code>bg</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Background color for rays that miss all geometry.</td></tr>
+  </table>
+  <div class="tip">All vec3 inputs are optional — each falls back to the corresponding parameter sliders when unconnected.</div>
+
+  <h2>Outputs</h2>
+  <table>
+    <tr><th>Output</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>color</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Final composite. Wire to Output or a tone mapper.</td></tr>
+    <tr><td><code>dist</code></td><td><span class="badge badge-float">float</span></td><td>Ray march distance to the first hit.</td></tr>
+    <tr><td><code>normal</code></td><td><span class="badge badge-vec3">vec3</span></td><td>World-space surface normal.</td></tr>
+    <tr><td><code>hit</code></td><td><span class="badge badge-float">float</span></td><td>1.0 if geometry was hit, 0.0 for background.</td></tr>
+    <tr><td><code>pos</code></td><td><span class="badge badge-vec3">vec3</span></td><td>World-space hit position.</td></tr>
+    <tr><td><code>ao</code></td><td><span class="badge badge-float">float</span></td><td>Ambient occlusion value [0..1].</td></tr>
+    <tr><td><code>shadow</code></td><td><span class="badge badge-float">float</span></td><td>Soft shadow term [0..1].</td></tr>
+    <tr><td><code>gi</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Diffuse GI bounce color.</td></tr>
+    <tr><td><code>diffuse</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Direct diffuse lighting before GI blend.</td></tr>
+    <tr><td><code>refl</code></td><td><span class="badge badge-vec3">vec3</span></td><td>Specular reflection color.</td></tr>
+  </table>
+
+  <h2>Key parameters</h2>
+  <table>
+    <tr><th>Param</th><th>Default</th><th>Description</th></tr>
+    <tr><td>Max Steps</td><td>80</td><td>Primary march iterations. Raise for deeper geometry.</td></tr>
+    <tr><td>Metallic</td><td>0.0</td><td>0 = dielectric, 1 = metallic (specular tinted by albedo).</td></tr>
+    <tr><td>Roughness</td><td>0.5</td><td>0 = mirror specular, 1 = fully diffuse.</td></tr>
+    <tr><td>Light Strength</td><td>1.0</td><td>Multiplier on the directional light.</td></tr>
+    <tr><td>AO Steps</td><td>5</td><td>Steps for the AO ray. 5 is usually sufficient.</td></tr>
+    <tr><td>Shadow Steps</td><td>24</td><td>Steps for soft shadow. 16 = fast, 32 = clean.</td></tr>
+    <tr><td>GI Steps</td><td>16</td><td>Steps for the one-bounce hemisphere ray.</td></tr>
+    <tr><td>GI Strength</td><td>0.4</td><td>GI contribution weight in the final composite.</td></tr>
+    <tr><td>Spec Steps</td><td>24</td><td>Steps for the specular reflection ray.</td></tr>
+    <tr><td>Spec Strength</td><td>0.5</td><td>Specular weight in the final composite.</td></tr>
+  </table>
+
+  <h2>Performance budget</h2>
+  <p>Each pixel runs: 1 primary march + 1 AO march + 1 shadow march + 1 GI bounce march + 1 specular march = <strong>5× the march cost</strong> of a plain MLG at equivalent step counts. Keep step counts lean and use Jitter to hide noise instead of raising steps.</p>
+  <div class="tip">Typical budget: Max Steps 64–96 · Shadow Steps 16–24 · GI Steps 12–16 · Spec Steps 16–24. Enable Jitter (0.5–1.0) to break up banding at lower step counts.</div>
+
+  <h2>Example graphs</h2>
+  <ul>
+    <li><strong>GI: Sphere &amp; Ground</strong> — minimal setup: sphere on a ground plane with AO, soft shadow, one GI bounce.</li>
+    <li><strong>GI: Gold Torus</strong> — metallic material (Metallic 0.9, Roughness 0.15) with strong specular.</li>
+    <li><strong>GI: Blob Cluster</strong> — smooth-min metaballs showing inter-object color bleeding via the GI bounce.</li>
+    <li><strong>GI: Box Frame</strong> — hard-edged geometry demonstrating shadow detail from an angled directional light.</li>
+  </ul>
+</div>
+
+<!-- ══════════════════════════════════════════ FOLDER ORGANIZATION -->
+<div class="page" id="page-folder-organization">
+  <div class="page-header">
+    <h1>Folder Organization</h1>
+    <p class="lead">All five saved-asset panels now support folders. Tags have been removed — folders are the only organization tool.</p>
+  </div>
+  <div class="divider"></div>
+  <p>Every panel — <strong>Saved Graphs</strong>, <strong>Functions</strong>, <strong>Group Presets</strong>, <strong>Transform Vecs</strong>, and <strong>Expr Blocks</strong> — shares the same folder system.</p>
+
+  <h2>Creating a folder</h2>
+  <p>Click <strong>+ Folder</strong> at the top of any panel. An inline text input appears — type a name and press <kbd class="key">Enter</kbd> to create it. Press <kbd class="key">Esc</kbd> to cancel.</p>
+
+  <h2>Moving items</h2>
+  <h3>Drag and drop</h3>
+  <p>Drag any item card onto a folder header and release. The folder highlights while the card is held over it.</p>
+
+  <h3>Cmd+click multi-select</h3>
+  <p>Hold <kbd class="key">⌘</kbd> and click multiple cards to select them. A <strong>Move N →</strong> button appears at the top of the panel. Click it and pick a folder from the dropdown to assign all selected items at once.</p>
+
+  <h2>Collapsing and expanding</h2>
+  <p>Click any folder header to collapse or expand its contents. The collapsed state persists for the current session.</p>
+
+  <h2>Renaming and deleting</h2>
+  <p><strong>Right-click</strong> a folder header to open a context menu:</p>
+  <ul>
+    <li><strong>Rename</strong> — replaces the header with an inline input. Press Enter to confirm, Esc to cancel.</li>
+    <li><strong>Delete</strong> — removes the folder. Items inside move back to the top-level unfoldered list.</li>
+  </ul>
+
+  <h2>Tags removed</h2>
+  <p>The <code>#</code> tag button that previously appeared on each card and the filter bar above the panel have been removed. Folders replace tags entirely.</p>
+</div>
+
+<!-- ══════════════════════════════════════════ NODE BROWSER -->
+<div class="page" id="page-node-browser">
+  <div class="page-header">
+    <h1>Node Browser</h1>
+    <p class="lead">Reorganized categories, new sub-groups, a dedicated Post Processing category, and the new Tan node.</p>
+  </div>
+  <div class="divider"></div>
+
+  <h2>Post Processing category</h2>
+  <p>A new <strong>Post Processing</strong> category was added for full-screen compositing effects, previously spread across Effects and Color Grading:</p>
+  <ul>
+    <li><strong>Vignette</strong> — radial edge darkening</li>
+    <li><strong>Scanlines</strong> — CRT-style horizontal lines</li>
+    <li><strong>Sobel Edges</strong> — edge detection from luminance</li>
+    <li><strong>Motion Blur</strong> — accumulation-style motion blur</li>
+  </ul>
+  <p><strong>Grain</strong> moved to Color Grading › Film. <strong>Tone Map</strong> moved to Color Grading › Tone.</p>
+
+  <h2>Sub-groups</h2>
+  <p>Clicking a category in the node browser now shows sub-group chips for filtering. Click a chip to narrow the list; click again to clear.</p>
+  <table>
+    <tr><th>Category</th><th>Sub-groups</th></tr>
+    <tr><td>2D Primitives</td><td>SDF · Patterns</td></tr>
+    <tr><td>3D Primitives</td><td>Basic · Curved · Complex · Fields</td></tr>
+    <tr><td>3D Transforms</td><td>Move · Repeat · Warp · Fold</td></tr>
+    <tr><td>3D Lighting</td><td>Shadow · Surface · Glass · Volume</td></tr>
+    <tr><td>Effects</td><td>Blur · Chroma · Lighting · Warp</td></tr>
+    <tr><td>Color Grading</td><td>Tone · Color · Film</td></tr>
+    <tr><td>Color</td><td>Palette · Adjust · Convert · Blend</td></tr>
+    <tr><td>Combiners</td><td>SDF Ops · Blend · Layer</td></tr>
+    <tr><td>Spaces</td><td>Warp · Repeat · Distort · Texture</td></tr>
+    <tr><td>Math</td><td>Arithmetic · Trig · Rounding · Algebra · Interp · Compare · Geometry · Vec2 · Vec3 · Complex · Remap</td></tr>
+  </table>
+
+  <h2>Tan node</h2>
+  <p><strong>Tan</strong> (<code>amp * tan(input * freq)</code>) was added to <strong>Math › Trig</strong> alongside Sin and Cos. It has the same signature — <code>input</code>, <code>freq</code>, <code>amp</code> — and supports float, vec2, and vec3 inputs.</p>
+  <p>The inline viz shows S-curves with dashed asymptote guides at ±π/2. The waveform pen lifts at each discontinuity so no false vertical lines are drawn at the asymptotes.</p>
+  <div class="tip">Tan grows much faster than Sin near ±π/2. Keep <strong>freq</strong> below 0.4 for smooth results; values above 0.45 will clip to the ±∞ asymptote within the visible UV range.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ END PAGES -->
     </div><!-- #content-inner -->
   </main>
 </div><!-- #app -->
@@ -1998,10 +2226,14 @@ const PAGES = {
   '3d-sdf':             'page-3d-sdf',
   '3d-lighting':        'page-3d-lighting',
   'glass-refraction':   'page-glass-refraction',
+  'glass-scene':        'page-glass-scene',
+  'gi-lit-march-group': 'page-gi-lit-march-group',
   'volumetrics':        'page-volumetrics',
   'halftone':           'page-halftone',
   'video-input':        'page-video-input',
   'gpu-particles':      'page-gpu-particles',
+  'folder-organization':'page-folder-organization',
+  'node-browser':       'page-node-browser',
   'function-builder':   'page-function-builder',
   'glsl-editor':        'page-glsl-editor',
   'preview-code':       'page-preview-code',
