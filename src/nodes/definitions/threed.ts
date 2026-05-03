@@ -1788,7 +1788,7 @@ export const GlassNode: NodeDefinition = {
   type: 'glass3d',
   label: 'Glass 3D',
   category: '3D Lighting',
-  description: 'Multi-sample glass with chromatic dispersion, Blinn-Phong lighting, and Fresnel. Wire rayDir from MarchCamera.rd, normal + hit from MarchLoopGroup.',
+  description: 'Multi-sample glass with chromatic dispersion, Blinn-Phong lighting, and Fresnel. Wire rayDir from MarchCamera.rd, normal + hit from MarchLoopGroup. Exposes fresnel, refractedColor, and reflectedColor so you can mix/tint them downstream.',
   inputs: {
     rayDir:    { type: 'vec3',  label: 'Ray Dir'    },
     normal:    { type: 'vec3',  label: 'Normal'     },
@@ -1797,7 +1797,12 @@ export const GlassNode: NodeDefinition = {
     tintColor: { type: 'vec3',  label: 'Tint'       },
     lightDir:  { type: 'vec3',  label: 'Light Dir'  },
   },
-  outputs: { color: { type: 'vec3', label: 'Glass Color' } },
+  outputs: {
+    color:          { type: 'vec3',  label: 'Glass Color'   },
+    fresnel:        { type: 'float', label: 'Fresnel'        },
+    refractedColor: { type: 'vec3',  label: 'Refracted'      },
+    reflectedColor: { type: 'vec3',  label: 'Reflected'      },
+  },
   glslFunction: GLASS_GLSL,
   defaultParams: {
     ior: 1.5, fresnelPow: 3.0, dispersion: 0.02,
@@ -1828,8 +1833,64 @@ export const GlassNode: NodeDefinition = {
     const saturation  = p(node.params.saturation,  1.6);
     const samples     = p(node.params.samples,     8.0);
     return {
-      code: `    vec3 ${id}_color = glassShade(${rayDir}, ${normal}, ${hit}, ${bgColor}, ${tintColor}, ${ior}, ${fresnelPow}, ${dispersion}, ${shininess}, ${diffuseness}, ${saturation}, ${lightDir}, ${samples});\n`,
-      outputVars: { color: `${id}_color` },
+      code: `
+    // ── Glass 3D ────────────────────────────────────────────────────────────────
+    vec3  ${id}_v   = normalize(${rayDir});
+    vec3  ${id}_n   = normalize(${normal});
+    if (dot(${id}_v, ${id}_n) > 0.0) ${id}_n = -${id}_n;
+    vec3  ${id}_env = glassEnv(${id}_v, ${bgColor});
+    // Exposed outputs — default to environment on miss
+    float ${id}_fresnel        = 0.0;
+    vec3  ${id}_refractedColor = ${id}_env;
+    vec3  ${id}_reflectedColor = ${id}_env;
+    vec3  ${id}_color          = ${id}_env;
+    if (${hit} > 0.5) {
+      // Schlick Fresnel
+      float ${id}_cosI = clamp(-dot(${id}_v, ${id}_n), 0.0, 1.0);
+      float ${id}_f0   = (${ior} - 1.0) / (${ior} + 1.0); ${id}_f0 *= ${id}_f0;
+      ${id}_fresnel = ${id}_f0 + (1.0 - ${id}_f0) * pow(1.0 - ${id}_cosI, ${fresnelPow});
+      // Multi-sample chromatic refraction
+      vec3  ${id}_rfAcc = vec3(0.0);
+      float ${id}_iorG  = 1.0 / ${ior};
+      for (int ${id}_i = 0; ${id}_i < 16; ${id}_i++) {
+        if (float(${id}_i) >= ${samples}) break;
+        float ${id}_sl    = float(${id}_i) / ${samples};
+        float ${id}_sIorR = 1.0 / max(${ior} - ${dispersion}*(1.0+${id}_sl*0.5), 1.001);
+        float ${id}_sIorB = 1.0 / (${ior} + ${dispersion}*(1.0+${id}_sl*0.5));
+        vec3 ${id}_rfR = refract(${id}_v, ${id}_n, ${id}_sIorR);
+        vec3 ${id}_rfG = refract(${id}_v, ${id}_n, ${id}_iorG);
+        vec3 ${id}_rfB = refract(${id}_v, ${id}_n, ${id}_sIorB);
+        bool ${id}_tir = length(${id}_rfG) < 0.001;
+        if (${id}_tir) { ${id}_rfR=reflect(${id}_v,${id}_n); ${id}_rfG=${id}_rfR; ${id}_rfB=${id}_rfR; }
+        if (length(${id}_rfR) < 0.001) ${id}_rfR = ${id}_rfG;
+        if (length(${id}_rfB) < 0.001) ${id}_rfB = ${id}_rfG;
+        ${id}_rfAcc.r += glassEnv(${id}_rfR, ${bgColor}).r;
+        ${id}_rfAcc.g += glassEnv(${id}_rfG, ${bgColor}).g;
+        ${id}_rfAcc.b += glassEnv(${id}_rfB, ${bgColor}).b;
+      }
+      ${id}_refractedColor = glassSat(${id}_rfAcc / ${samples} * ${tintColor}, ${saturation});
+      // Reflected color
+      ${id}_reflectedColor = glassEnv(reflect(${id}_v, ${id}_n), ${bgColor}) * 1.1;
+      // Specular + diffuse
+      float ${id}_spec = 0.0;
+      float ${id}_diff = 0.0;
+      if (length(${lightDir}) > 0.001) {
+        vec3  ${id}_lD  = normalize(${lightDir});
+        float ${id}_NdL = max(0.0, dot(${id}_n, ${id}_lD));
+        float ${id}_NdH = max(0.0, dot(${id}_n, normalize(-${id}_v + ${id}_lD)));
+        ${id}_spec = pow(${id}_NdH * ${id}_NdH, ${shininess});
+        ${id}_diff = ${id}_NdL * ${diffuseness};
+      }
+      ${id}_color = mix(${id}_refractedColor, ${id}_reflectedColor, ${id}_fresnel)
+        + vec3(${id}_spec * 0.85) + ${id}_refractedColor * ${id}_diff * 0.3;
+    }
+`,
+      outputVars: {
+        color:          `${id}_color`,
+        fresnel:        `${id}_fresnel`,
+        refractedColor: `${id}_refractedColor`,
+        reflectedColor: `${id}_reflectedColor`,
+      },
     };
   },
 };
