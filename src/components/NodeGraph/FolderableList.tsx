@@ -300,25 +300,6 @@ export function FolderableList<T extends FolderableItem>({
         </div>
       )}
 
-      {/* Un-folder drop zone */}
-      {ungrouped.length === 0 && folders.length > 0 && items.length > 0 && (
-        <div
-          onDragOver={e => { e.preventDefault(); setDropTarget('ungrouped'); }}
-          onDragLeave={() => setDropTarget(null)}
-          onDrop={e => {
-            e.preventDefault(); setDropTarget(null);
-            const ids = parseDrop(e);
-            if (ids) { removeItemsFromFolders(scopeKey, ids); setSelected(new Set()); refresh(); }
-          }}
-          style={{
-            padding: '6px', borderRadius: '5px', textAlign: 'center', fontStyle: 'italic',
-            border: `1px dashed ${dropTarget === 'ungrouped' ? `${color}88` : '#313244'}`,
-            fontSize: '10px', color: '#45475a', transition: 'border-color 0.1s',
-          }}
-        >
-          Drop here to remove from folder
-        </div>
-      )}
 
       {/* Folder right-click menu */}
       {folderMenu && (
