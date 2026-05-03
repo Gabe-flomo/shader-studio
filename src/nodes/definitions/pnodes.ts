@@ -16,7 +16,10 @@ export const PInitNode: NodeDefinition = {
   outputs: { particles: { type: 'particle', label: 'Particles' } },
   defaultParams: { shape: 0, count: 3000, radius: 1.0 },
   paramDefs: {
-    shape: { label: 'Shape', type: 'select', options: ['Sphere', 'Ball', 'Box', 'Disk', 'Ring', 'Spiral'] },
+    shape: { label: 'Shape', type: 'select', options: [
+      { value: '0', label: 'Sphere' }, { value: '1', label: 'Ball' }, { value: '2', label: 'Box' },
+      { value: '3', label: 'Disk' },   { value: '4', label: 'Ring' }, { value: '5', label: 'Spiral' },
+    ] },
     count: { label: 'Count', type: 'int', min: 100, max: 10000, step: 100 },
     radius: { label: 'Radius', type: 'float', min: 0.1, max: 4.0, step: 0.05 },
   },
@@ -33,7 +36,7 @@ export const PRotateNode: NodeDefinition = {
   outputs: { particles: { type: 'particle', label: 'Particles' } },
   defaultParams: { axis: 1, rotSpeed: 0.3, rotVariance: 2.0, twirl: 0.0 },
   paramDefs: {
-    axis:        { label: 'Axis',          type: 'select', options: ['X', 'Y', 'Z'] },
+    axis:        { label: 'Axis',          type: 'select', options: [{ value: '0', label: 'X' }, { value: '1', label: 'Y' }, { value: '2', label: 'Z' }] },
     rotSpeed:    { label: 'Speed',         type: 'float', min: -3.0, max: 3.0, step: 0.01 },
     rotVariance: { label: 'Differential',  type: 'float', min: 0.0, max: 6.0, step: 0.05 },
     twirl:       { label: 'Twirl',         type: 'float', min: -5.0, max: 5.0, step: 0.05 },
@@ -54,7 +57,7 @@ export const PWaveNode: NodeDefinition = {
     waveAmp:   { label: 'Amplitude',  type: 'float', min: 0.0, max: 1.0, step: 0.005 },
     waveFreq:  { label: 'Frequency',  type: 'float', min: 0.1, max: 20.0, step: 0.1 },
     waveSpeed: { label: 'Speed',      type: 'float', min: -5.0, max: 5.0, step: 0.1 },
-    waveAxis:  { label: 'Wave Mode',  type: 'select', options: ['Radial', 'Y-Axis', 'Tangential'] },
+    waveAxis:  { label: 'Wave Mode',  type: 'select', options: [{ value: '0', label: 'Radial' }, { value: '1', label: 'Y-Axis' }, { value: '2', label: 'Tangential' }] },
   },
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };

@@ -31,7 +31,9 @@ function walkChain(renderNode: GraphNode, nodeMap: Map<string, GraphNode>): Grap
 }
 
 function num(v: unknown, fallback: number): number {
-  return typeof v === 'number' ? v : fallback;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') { const n = Number(v); return isNaN(n) ? fallback : n; }
+  return fallback;
 }
 
 /**

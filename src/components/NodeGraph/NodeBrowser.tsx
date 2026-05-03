@@ -579,7 +579,7 @@ export function NodeBrowser({
 
   if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
-    const scoreNodeDef = (def: import('../../../types/nodeGraph').NodeDefinition): number => {
+    const scoreNodeDef = (def: import('../../types/nodeGraph').NodeDefinition): number => {
       const label = def.label.toLowerCase();
       if (label === trimmed) return 120;
       if (label.startsWith(trimmed)) return 100;

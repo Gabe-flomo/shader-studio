@@ -4051,7 +4051,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           }
 
           if (paramDef.type === 'select') {
-            const val = typeof node.params[key] === 'string' ? (node.params[key] as string) : (paramDef.options?.[0]?.value ?? '');
+            const val = node.params[key] !== undefined ? String(node.params[key]) : (paramDef.options?.[0]?.value ?? '');
             return (
               <div
                 key={key}

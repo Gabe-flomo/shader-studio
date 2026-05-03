@@ -72,8 +72,8 @@ export interface ParamDef {
   max?: number;
   step?: number;
   hint?: string;
-  // Options for 'select' type — plain string labels (index = value) or { value, label } pairs
-  options?: string[] | { value: string; label: string }[];
+  // Options for 'select' type
+  options?: { value: string; label: string }[];
   // Conditionally show this param only when another param matches a value
   showWhen?: { param: string; value: string | string[] };
 }
