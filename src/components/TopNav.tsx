@@ -99,7 +99,24 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
       {/* Learn tab — opens standalone docs page */}
       <TabButton
         active={false}
-        onClick={() => window.open(import.meta.env.BASE_URL + 'docs.html', '_blank')}
+        onClick={async () => {
+          const docsUrl = import.meta.env.BASE_URL + 'docs.html';
+          const isTauri = '__TAURI_INTERNALS__' in window;
+          if (isTauri) {
+            const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+            const existing = await WebviewWindow.getByLabel('docs');
+            if (existing) { existing.setFocus(); return; }
+            new WebviewWindow('docs', {
+              url: docsUrl,
+              title: 'Shader Studio — Documentation',
+              width: 1200,
+              height: 820,
+              resizable: true,
+            });
+          } else {
+            window.open(docsUrl, '_blank');
+          }
+        }}
         label={mobile ? '📖' : '📖 Learn'}
         title="Documentation"
       />
