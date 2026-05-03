@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import type { FolderEntry } from '../../utils/assetFolders';
 import {
-  FolderEntry,
   loadFolders,
   getMembership,
   createFolder,
