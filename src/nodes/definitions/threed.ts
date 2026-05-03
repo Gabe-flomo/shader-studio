@@ -1704,6 +1704,20 @@ vec3 glassSat(vec3 rgb, float intensity) {
   return mix(grayscale, rgb, intensity);
 }
 
+// Procedural dot-field environment — white spheres on dark tinted sky,
+// mimicking the icosahedra-grid background used in screen-space refraction demos.
+// Sampling with the refracted ray direction makes the dots visibly warp through glass.
+vec3 glassEnv(vec3 dir, vec3 tint) {
+  vec3 d = normalize(dir);
+  vec2 uv = vec2(atan(d.z, d.x) * 0.1592 + 0.5, d.y * 0.5 + 0.5);
+  vec2 g1 = fract(uv * 5.0 + 0.5) - 0.5;
+  vec2 g2 = fract(uv * 11.0 + vec2(0.37, 0.61)) - 0.5;
+  float dots = max(smoothstep(0.14, 0.09, length(g1)),
+                   smoothstep(0.10, 0.07, length(g2)) * 0.7);
+  float sky = clamp(0.5 + d.y, 0.0, 1.0);
+  return tint * mix(0.04, 0.30, sky) + vec3(dots * 0.95);
+}
+
 vec3 glassShade(
   vec3 rayDir, vec3 normal, float hit,
   vec3 bgColor, vec3 tintColor,
@@ -1711,7 +1725,7 @@ vec3 glassShade(
   float shininess, float diffuseness, float saturation,
   vec3 lightDir, float samples
 ) {
-  if (hit < 0.5) return bgColor;
+  if (hit < 0.5) return glassEnv(rayDir, bgColor);
   vec3 n = normalize(normal);
   vec3 v = normalize(rayDir);
   if (dot(v, n) > 0.0) n = -n;
@@ -1723,11 +1737,9 @@ vec3 glassShade(
   float frs = f0 + (1.0 - f0) * pow(1.0 - cosI, fresnelPow);
 
   // Per-channel IOR ratios
-  float iorR = 1.0 / max(ior - dispersion, 1.001);
   float iorG = 1.0 / ior;
-  float iorB = 1.0 / (ior + dispersion);
 
-  // Multi-sample dispersion loop — each iteration adds a slight IOR slide for smooth RGB spread
+  // Multi-sample dispersion loop
   vec3 color = vec3(0.0);
   for (int i = 0; i < 16; i++) {
     if (float(i) >= samples) break;
@@ -1745,22 +1757,17 @@ vec3 glassShade(
     if (length(rfR) < 0.001) rfR = rfG;
     if (length(rfB) < 0.001) rfB = rfG;
 
-    float skyR = clamp(0.5 + rfR.y, 0.0, 1.0);
-    float skyG = clamp(0.5 + rfG.y, 0.0, 1.0);
-    float skyB = clamp(0.5 + rfB.y, 0.0, 1.0);
-
-    color.r += bgColor.r * mix(0.2, 2.2, skyR);
-    color.g += bgColor.g * mix(0.2, 2.2, skyG);
-    color.b += bgColor.b * mix(0.2, 2.2, skyB);
+    color.r += glassEnv(rfR, bgColor).r;
+    color.g += glassEnv(rfG, bgColor).g;
+    color.b += glassEnv(rfB, bgColor).b;
   }
   color /= samples;
   color *= tintColor;
   color = glassSat(color, saturation);
 
-  // Reflection environment
+  // Reflection
   vec3 refl = reflect(v, n);
-  float reflSky = clamp(0.5 + refl.y, 0.0, 1.0);
-  vec3 reflColor = bgColor * mix(0.3, 2.5, reflSky);
+  vec3 reflColor = glassEnv(refl, bgColor) * 1.1;
 
   // Blinn-Phong specular + diffuse
   vec3 lDir = normalize(lightDir);
@@ -1896,12 +1903,25 @@ export const FresnelSchlickNode: NodeDefinition = {
 // reconstructs RGB via the rygcbv↔RGB transform for richer, artist-controllable dispersion.
 
 const SPECTRAL_DISPERSION_GLSL = `
+// Same dot-field environment as glassEnv — samples white dots on tinted sky
+// so each spectral band sees the same scene, just at a shifted angle.
+vec3 spectralEnv(vec3 dir, vec3 tint) {
+  vec3 d = normalize(dir);
+  vec2 uv = vec2(atan(d.z, d.x) * 0.1592 + 0.5, d.y * 0.5 + 0.5);
+  vec2 g1 = fract(uv * 5.0 + 0.5) - 0.5;
+  vec2 g2 = fract(uv * 11.0 + vec2(0.37, 0.61)) - 0.5;
+  float dots = max(smoothstep(0.14, 0.09, length(g1)),
+                   smoothstep(0.10, 0.07, length(g2)) * 0.7);
+  float sky = clamp(0.5 + d.y, 0.0, 1.0);
+  return tint * mix(0.04, 0.30, sky) + vec3(dots * 0.95);
+}
+
 vec3 spectralDisperse(
   vec3 rayDir, vec3 normal, float hit, vec3 bgColor,
   float iorR, float iorY, float iorG, float iorC, float iorB, float iorV,
   float saturation
 ) {
-  if (hit < 0.5) return bgColor;
+  if (hit < 0.5) return spectralEnv(rayDir, bgColor);
   vec3 n = normalize(normal);
   vec3 v = normalize(rayDir);
   if (dot(v, n) > 0.0) n = -n;
@@ -1914,7 +1934,7 @@ vec3 spectralDisperse(
   vec3 rfB = refract(v, n, 1.0 / iorB);
   vec3 rfV = refract(v, n, 1.0 / iorV);
 
-  // TIR fallback — if green channel undergoes total internal reflection, use reflection
+  // TIR fallback
   bool tir = length(rfG) < 0.001;
   if (tir) {
     vec3 rfl = reflect(v, n);
@@ -1926,28 +1946,27 @@ vec3 spectralDisperse(
   if (length(rfB) < 0.001) rfB = rfG;
   if (length(rfV) < 0.001) rfV = rfG;
 
-  // Sky-gradient brightness per spectral band (Y component of refracted ray)
-  float Sr = mix(0.2, 2.2, clamp(0.5 + rfR.y, 0.0, 1.0));
-  float Sy = mix(0.2, 2.2, clamp(0.5 + rfY.y, 0.0, 1.0));
-  float Sg = mix(0.2, 2.2, clamp(0.5 + rfG.y, 0.0, 1.0));
-  float Sc = mix(0.2, 2.2, clamp(0.5 + rfC.y, 0.0, 1.0));
-  float Sb = mix(0.2, 2.2, clamp(0.5 + rfB.y, 0.0, 1.0));
-  float Sv = mix(0.2, 2.2, clamp(0.5 + rfV.y, 0.0, 1.0));
+  // Sample environment luminance per spectral band — dots shift by wavelength → color fringing
+  vec3 Lw = vec3(0.2126, 0.7152, 0.0722);
+  float Sr = dot(spectralEnv(rfR, bgColor), Lw);
+  float Sy = dot(spectralEnv(rfY, bgColor), Lw);
+  float Sg = dot(spectralEnv(rfG, bgColor), Lw);
+  float Sc = dot(spectralEnv(rfC, bgColor), Lw);
+  float Sb = dot(spectralEnv(rfB, bgColor), Lw);
+  float Sv = dot(spectralEnv(rfV, bgColor), Lw);
 
-  // rygcbv intermediate coefficients (Fourier interpolation)
+  // rygcbv Fourier interpolation → reconstruct RGB
   float cy = (2.0*Sr + 2.0*Sy - Sb) / 6.0;
   float cc = (2.0*Sg + 2.0*Sc - Sr) / 6.0;
   float cv = (2.0*Sb + 2.0*Sv - Sg) / 6.0;
 
-  // Reconstruct RGB from rygcbv
   vec3 col;
   col.r = Sr/2.0 + (2.0*cv + 2.0*cy - cc) / 3.0;
   col.g = Sg/2.0 + (2.0*cy + 2.0*cc - cv) / 3.0;
   col.b = Sb/2.0 + (2.0*cc + 2.0*cv - cy) / 3.0;
-  col *= bgColor;
+  col = max(col, vec3(0.0));
 
-  // Saturation boost via luminance mix
-  vec3 Lw = vec3(0.2125, 0.7154, 0.0721);
+  // Saturation boost
   vec3 gray = vec3(dot(col, Lw));
   return mix(gray, col, saturation);
 }`;
