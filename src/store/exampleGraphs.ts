@@ -11827,6 +11827,273 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Glass Scene: Orb + Pillars ────────────────────────────────────────────────
+  glassSceneOrbPillars: {
+    label: 'Glass Scene: Orb + Pillars',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 180 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 260 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.5, camAngle: 0.4, camElevation: 0.25, rotSpeed: 0.07, fov: 1.4, aperture: 0.0, focalDist: 3.5 },
+      },
+      {
+        id: 'fg_3', type: 'sceneGroup', position: { x: 560, y: 160 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Glass Orb',
+          subgraph: {
+            nodes: [
+              { id: 'sp', type: 'scenePos', position: { x: 80,  y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf', type: 'sphereSDF3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.65 } },
+            ],
+            outputNodeId: 'sdf', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'bg_4', type: 'sceneGroup', position: { x: 560, y: 400 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Pillars',
+          subgraph: {
+            nodes: [
+              { id: 'sp',   type: 'scenePos',    position: { x: 80,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'tr1',  type: 'translate3D',  position: { x: 280, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Position' } }, params: { tx: -1.1, ty: 0.0, tz: 0.0 } },
+              { id: 'p1',   type: 'boxSDF3D',     position: { x: 480, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr1', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { bx: 0.18, by: 1.8, bz: 0.18 } },
+              { id: 'tr2',  type: 'translate3D',  position: { x: 280, y: 300 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Position' } }, params: { tx: 1.1, ty: 0.0, tz: 0.0 } },
+              { id: 'p2',   type: 'boxSDF3D',     position: { x: 480, y: 300 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr2', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { bx: 0.18, by: 1.8, bz: 0.18 } },
+              { id: 'u1',   type: 'sdfUnion',     position: { x: 680, y: 200 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'p1', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'p2', outputKey: 'dist' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
+            ],
+            outputNodeId: 'u1', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'gs_5', type: 'glassScene', position: { x: 900, y: 280 },
+        inputs: {
+          ro:         { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2', outputKey: 'ro'    } },
+          rd:         { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2', outputKey: 'rd'    } },
+          foreground: { type: 'scene3d', label: 'Glass Geo',  connection: { nodeId: 'fg_3',  outputKey: 'scene' } },
+          background: { type: 'scene3d', label: 'Background', connection: { nodeId: 'bg_4',  outputKey: 'scene' } },
+          bgAlbedo:   { type: 'vec3',    label: 'BG Color'   },
+          tintColor:  { type: 'vec3',    label: 'Glass Tint' },
+          lightDir:   { type: 'vec3',    label: 'Light Dir'  },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { ior: 1.5, fresnelPow: 3.5, dispersion: 0.05, shininess: 100.0, diffuseness: 0.55, saturation: 1.7 },
+      },
+      { id: 'tone_6', type: 'toneMap', position: { x: 1140, y: 280 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gs_5', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'out_7', type: 'output', position: { x: 1360, y: 280 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Glass Scene: Torus + Smooth Blobs ────────────────────────────────────────
+  glassSceneTorusBlobs: {
+    label: 'Glass Scene: Torus + Blobs',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 180 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 260 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 4.0, camAngle: 0.5, camElevation: 0.35, rotSpeed: 0.06, fov: 1.4, aperture: 0.0, focalDist: 4.0 },
+      },
+      {
+        id: 'fg_3', type: 'sceneGroup', position: { x: 560, y: 160 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Glass Torus',
+          subgraph: {
+            nodes: [
+              { id: 'sp',  type: 'scenePos',   position: { x: 80,  y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf', type: 'torusSDF3D', position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { R: 0.65, r: 0.22 } },
+            ],
+            outputNodeId: 'sdf', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'bg_4', type: 'sceneGroup', position: { x: 560, y: 400 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Smooth Blobs',
+          subgraph: {
+            nodes: [
+              { id: 'sp',  type: 'scenePos',       position: { x: 80,  y: 250 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 's1',  type: 'sphereSDF3D',     position: { x: 280, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.38 } },
+              { id: 'tr2', type: 'translate3D',     position: { x: 280, y: 250 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Position' } }, params: { tx: 0.85, ty: -0.3, tz: 0.4 } },
+              { id: 's2',  type: 'sphereSDF3D',     position: { x: 480, y: 250 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr2', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.3 } },
+              { id: 'tr3', type: 'translate3D',     position: { x: 280, y: 400 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Position' } }, params: { tx: -0.7, ty: 0.2, tz: 0.3 } },
+              { id: 's3',  type: 'sphereSDF3D',     position: { x: 480, y: 400 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr3', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.26 } },
+              { id: 'u1',  type: 'sdfSmoothUnion',  position: { x: 680, y: 175 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 's1', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 's2', outputKey: 'dist' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { k: 0.35 } },
+              { id: 'u2',  type: 'sdfSmoothUnion',  position: { x: 880, y: 290 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'u1', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 's3', outputKey: 'dist' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { k: 0.3 } },
+            ],
+            outputNodeId: 'u2', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'gs_5', type: 'glassScene', position: { x: 900, y: 280 },
+        inputs: {
+          ro:         { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2', outputKey: 'ro'    } },
+          rd:         { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2', outputKey: 'rd'    } },
+          foreground: { type: 'scene3d', label: 'Glass Geo',  connection: { nodeId: 'fg_3',  outputKey: 'scene' } },
+          background: { type: 'scene3d', label: 'Background', connection: { nodeId: 'bg_4',  outputKey: 'scene' } },
+          bgAlbedo:   { type: 'vec3',    label: 'BG Color'   },
+          tintColor:  { type: 'vec3',    label: 'Glass Tint' },
+          lightDir:   { type: 'vec3',    label: 'Light Dir'  },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { ior: 1.48, fresnelPow: 4.0, dispersion: 0.06, shininess: 90.0, diffuseness: 0.5, saturation: 1.8 },
+      },
+      { id: 'tone_6', type: 'toneMap', position: { x: 1140, y: 280 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gs_5', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'out_7', type: 'output', position: { x: 1360, y: 280 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Glass Scene: Lens Void ────────────────────────────────────────────────────
+  glassSceneLensVoid: {
+    label: 'Glass Scene: Lens + Void',
+    counter: 9,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 60,  y: 180 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 60,  y: 340 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cam_2', type: 'marchCamera', position: { x: 280, y: 260 },
+        inputs: {
+          uv:   { type: 'vec2',  label: 'UV',   connection: { nodeId: 'uv_0',   outputKey: 'uv'   } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 3.8, camAngle: 0.3, camElevation: 0.2, rotSpeed: 0.05, fov: 1.4, aperture: 0.0, focalDist: 3.8 },
+      },
+      {
+        id: 'fg_3', type: 'sceneGroup', position: { x: 560, y: 160 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Glass Lens',
+          subgraph: {
+            nodes: [
+              { id: 'sp',  type: 'scenePos',         position: { x: 80,  y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'sdf', type: 'roundedBoxSDF3D',   position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { bx: 0.9, by: 0.14, bz: 0.9, r: 0.14 } },
+            ],
+            outputNodeId: 'sdf', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'bg_4', type: 'sceneGroup', position: { x: 560, y: 400 },
+        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Torus + Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp',  type: 'scenePos',      position: { x: 80,  y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              { id: 'tr1', type: 'translate3D',   position: { x: 280, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Position' } }, params: { tx: 0.0, ty: -0.5, tz: 0.0 } },
+              { id: 'tor', type: 'torusSDF3D',    position: { x: 480, y: 100 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr1', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { R: 0.7, r: 0.18 } },
+              { id: 'tr2', type: 'translate3D',   position: { x: 280, y: 320 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { pos: { type: 'vec3', label: 'Position' } }, params: { tx: 0.0, ty: 0.5, tz: 0.0 } },
+              { id: 'sph', type: 'sphereSDF3D',   position: { x: 480, y: 320 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr2', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: { radius: 0.32 } },
+              { id: 'u1',  type: 'sdfUnion',      position: { x: 680, y: 210 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'tor', outputKey: 'dist' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'sph', outputKey: 'dist' } },
+                },
+                outputs: { dist: { type: 'float', label: 'Distance' } }, params: {} },
+            ],
+            outputNodeId: 'u1', outputKey: 'dist', inputPorts: [], outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'gs_5', type: 'glassScene', position: { x: 900, y: 280 },
+        inputs: {
+          ro:         { type: 'vec3',    label: 'Ray Origin', connection: { nodeId: 'cam_2', outputKey: 'ro'    } },
+          rd:         { type: 'vec3',    label: 'Ray Dir',    connection: { nodeId: 'cam_2', outputKey: 'rd'    } },
+          foreground: { type: 'scene3d', label: 'Glass Geo',  connection: { nodeId: 'fg_3',  outputKey: 'scene' } },
+          background: { type: 'scene3d', label: 'Background', connection: { nodeId: 'bg_4',  outputKey: 'scene' } },
+          bgAlbedo:   { type: 'vec3',    label: 'BG Color'   },
+          tintColor:  { type: 'vec3',    label: 'Glass Tint' },
+          lightDir:   { type: 'vec3',    label: 'Light Dir'  },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { ior: 1.55, fresnelPow: 3.0, dispersion: 0.08, shininess: 120.0, diffuseness: 0.45, saturation: 2.0 },
+      },
+      { id: 'tone_6', type: 'toneMap', position: { x: 1140, y: 280 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gs_5', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'aces' } },
+      { id: 'out_7', type: 'output', position: { x: 1360, y: 280 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_6', outputKey: 'color' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
 };
 
 // The default graph to load on startup

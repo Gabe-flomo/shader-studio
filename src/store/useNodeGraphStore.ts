@@ -2547,6 +2547,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           return undefined;
         }
       }
+
+      if (type === 'glassScene') {
+        // Spawn camera + two sceneGroups (foreground/background) + glassScene
+        get().spawnGraph(
+          position,
+          [
+            { type: 'marchCamera',  relPos: { x: -900, y:   0 } },
+            { type: 'sceneGroup',   relPos: { x: -480, y: -80 } },
+            { type: 'sceneGroup',   relPos: { x: -480, y:  80 } },
+            { type: 'glassScene',   relPos: { x:    0, y:   0 } },
+          ],
+          [
+            { from: 0, fromKey: 'ro', to: 3, toKey: 'ro'         },
+            { from: 0, fromKey: 'rd', to: 3, toKey: 'rd'         },
+            { from: 1, fromKey: 'scene', to: 3, toKey: 'foreground' },
+            { from: 2, fromKey: 'scene', to: 3, toKey: 'background' },
+          ],
+        );
+        return undefined;
+      }
     }
 
     pushHistory(get().nodes);
