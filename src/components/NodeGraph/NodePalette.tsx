@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, getCustomFnDir, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
-import { pickDirectory } from '../../utils/fileIO';
 import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { ExprPreset } from '../../types/exprPreset';
@@ -200,7 +199,7 @@ interface ContentPaneProps {
 function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
   const {
     addNode, saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph,
-    deleteCustomFn, exportCustomFns, importCustomFnsFromFile, setCustomFnPresetsDir, loadCustomFnsFromDisk,
+    deleteCustomFn, exportCustomFns, importCustomFnsFromFile, loadCustomFnsFromDisk,
     swapTargetNodeId, setSwapTargetNodeId, swapNode,
   } = useNodeGraphStore();
   const graphNodes        = useNodeGraphStore(s => s.nodes);
@@ -215,7 +214,6 @@ function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly
   const [graphSaveInput, setGraphSaveInput]         = useState('');
   const [showGraphSaveInput, setShowGraphSaveInput] = useState(false);
   const [userPresets, setUserPresets]               = useState<CustomFnPreset[]>(() => loadCustomFns());
-  const [presetsDir, setPresetsDir]                 = useState<string>(() => getCustomFnDir());
   const [exprPresets, setExprPresets]               = useState<ExprPreset[]>(() => loadExprPresets());
   const [transformPresets, setTransformPresets]     = useState<TransformPreset[]>(() => loadTransformPresets());
   const [renamingExprId, setRenamingExprId]         = useState<string | null>(null);
@@ -264,14 +262,6 @@ function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly
     return () => window.removeEventListener('transformpreset-changed', refreshTransformPresets);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handlePickFolder = async () => {
-    const dir = await pickDirectory();
-    if (!dir) return;
-    setCustomFnPresetsDir(dir);
-    setPresetsDir(dir);
-    await refreshPresets();
-  };
 
   const handleAdd = (type: string) => {
     if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
@@ -451,9 +441,6 @@ function ContentPane({ state, onStateChange, isFocused, onFocus, onClose, isOnly
         return (
           <>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
-              <button onClick={handlePickFolder} title={presetsDir ? `Saving to: ${presetsDir}` : 'Pick a folder to save presets on disk'}
-                style={{ background: presetsDir ? '#89dceb18' : 'none', border: `1px solid ${presetsDir ? '#89dceb55' : '#313244'}`, color: presetsDir ? '#89dceb' : '#6c7086', borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
-              >📁 {presetsDir ? presetsDir.split('/').pop() : 'Pick folder'}</button>
               {userPresets.length > 0 && (
                 <button onClick={() => exportCustomFns()} title="Export functions"
                   style={{ background: 'none', border: '1px solid #313244', color: '#6c7086', borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
