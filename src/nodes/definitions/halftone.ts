@@ -211,11 +211,7 @@ export const CMYKHalftoneNode: NodeDefinition = {
   type: 'cmykHalftone',
   label: 'CMYK Halftone',
   category: 'Halftone',
-  description: [
-    'Full CMYK halftone effect. Decomposes the input color into C, M, Y, K channels and renders',
-    'each as a rotated dot grid at the traditional screen angles (C=15°, M=75°, Y=0°, K=45°),',
-    'then composites them subtractively on a paper color.',
-  ],
+  description: 'Full CMYK halftone effect. Decomposes the input color into C, M, Y, K channels and renders each as a rotated dot grid at the traditional screen angles (C=15°, M=75°, Y=0°, K=45°), then composites them subtractively on a paper color.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
     uv:    { type: 'vec2', label: 'UV' },

@@ -1860,6 +1860,7 @@ const TYPE_COLORS: Record<DataType, string> = {
   mat3:        '#e8a020',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
+  particle:    '#f9e2af',
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {
