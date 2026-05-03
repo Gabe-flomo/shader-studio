@@ -4024,8 +4024,8 @@ export function GridUVViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={VIZ_CONTAINER}>
-      <canvas ref={canvasRef} width={120} height={80}
-        style={{ display: 'block', width: '120px', height: '80px', imageRendering: 'pixelated' }} />
+      <canvas ref={canvasRef} width={200} height={80}
+        style={{ display: 'block', width: '100%', height: '80px', imageRendering: 'pixelated' }} />
     </div>
   );
 }
@@ -4047,12 +4047,12 @@ export function DotMaskViz({ node }: { node: GraphNode }) {
     ctx.fillStyle = '#0d0d14';
     ctx.fillRect(0, 0, W, H);
 
-    const cells = 5;
-    const cellW = W / cells;
-    const cellH = H / cells;
+    const cols = 10, rows = 5;
+    const cellW = W / cols;
+    const cellH = H / rows;
 
-    for (let row = 0; row < cells; row++) {
-      for (let col = 0; col < cells; col++) {
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
         const cx = (col + 0.5) * cellW;
         const cy = (row + 0.5) * cellH;
         const dotR = radius * Math.min(cellW, cellH);
@@ -4070,8 +4070,8 @@ export function DotMaskViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
-      <canvas ref={canvasRef} width={80} height={80}
-        style={{ display: 'block', width: '80px', height: '80px' }} />
+      <canvas ref={canvasRef} width={160} height={80}
+        style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
   );
 }
@@ -4090,7 +4090,7 @@ export function SdfMaskViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
     const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, r = W * 0.38;
+    const cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.38;
 
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -4115,8 +4115,8 @@ export function SdfMaskViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
-      <canvas ref={canvasRef} width={80} height={80}
-        style={{ display: 'block', width: '80px', height: '80px', imageRendering: 'pixelated' }} />
+      <canvas ref={canvasRef} width={160} height={80}
+        style={{ display: 'block', width: '100%', height: '80px', imageRendering: 'pixelated' }} />
     </div>
   );
 }
@@ -4175,8 +4175,8 @@ export function LumaRadiusViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
-      <canvas ref={canvasRef} width={140} height={70}
-        style={{ display: 'block', width: '140px', height: '70px' }} />
+      <canvas ref={canvasRef} width={200} height={70}
+        style={{ display: 'block', width: '100%', height: '70px' }} />
     </div>
   );
 }
@@ -4232,8 +4232,8 @@ export function CmykHalftoneViz(_props: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, background: '#f5f0e8' }}>
-      <canvas ref={canvasRef} width={120} height={80}
-        style={{ display: 'block', width: '120px', height: '80px' }} />
+      <canvas ref={canvasRef} width={160} height={80}
+        style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
   );
 }
@@ -4255,7 +4255,7 @@ export function BlinnPhongViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
     const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, sr = W * 0.38;
+    const cx = W / 2, cy = H / 2, sr = Math.min(W, H) * 0.38;
 
     // Normalize light direction
     const lLen = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1;
@@ -4293,8 +4293,8 @@ export function BlinnPhongViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
-      <canvas ref={canvasRef} width={100} height={100}
-        style={{ display: 'block', width: '100px', height: '100px', imageRendering: 'pixelated' }} />
+      <canvas ref={canvasRef} width={160} height={100}
+        style={{ display: 'block', width: '100%', height: '100px', imageRendering: 'pixelated' }} />
     </div>
   );
 }
@@ -4311,7 +4311,7 @@ export function GlassViz(_props: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
     const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, sr = W * 0.40;
+    const cx = W / 2, cy = H / 2, sr = Math.min(W, H) * 0.40;
 
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -4354,8 +4354,8 @@ export function GlassViz(_props: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
-      <canvas ref={canvasRef} width={100} height={100}
-        style={{ display: 'block', width: '100px', height: '100px', imageRendering: 'pixelated' }} />
+      <canvas ref={canvasRef} width={160} height={100}
+        style={{ display: 'block', width: '100%', height: '100px', imageRendering: 'pixelated' }} />
     </div>
   );
 }
@@ -4372,7 +4372,7 @@ export function SpectralDispersionViz(_props: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
     const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, sr = W * 0.40;
+    const cx = W / 2, cy = H / 2, sr = Math.min(W, H) * 0.40;
 
     // HSV to RGB helper
     function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
@@ -4413,8 +4413,8 @@ export function SpectralDispersionViz(_props: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
-      <canvas ref={canvasRef} width={100} height={100}
-        style={{ display: 'block', width: '100px', height: '100px', imageRendering: 'pixelated' }} />
+      <canvas ref={canvasRef} width={160} height={100}
+        style={{ display: 'block', width: '100%', height: '100px', imageRendering: 'pixelated' }} />
     </div>
   );
 }
