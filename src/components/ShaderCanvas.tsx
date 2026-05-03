@@ -7,6 +7,65 @@ import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumR
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
 
+// ── GPU particle geometry initialization by shape ─────────────────────────────
+function buildParticleGeometry(count: number, shape: number): { positions: Float32Array; normDists: Float32Array } {
+  const positions = new Float32Array(count * 3);
+  const normDists = new Float32Array(count);
+
+  for (let i = 0; i < count; i++) {
+    let x = 0, y = 0, z = 0, nd = 1;
+    switch (shape) {
+      case 0: { // Sphere — on surface
+        const theta = Math.random() * Math.PI * 2;
+        const phi   = Math.acos(2 * Math.random() - 1);
+        x = Math.sin(phi) * Math.cos(theta);
+        y = Math.sin(phi) * Math.sin(theta);
+        z = Math.cos(phi);
+        nd = 1.0;
+        break;
+      }
+      case 1: { // Ball — uniform in volume
+        const theta = Math.random() * Math.PI * 2;
+        const phi   = Math.acos(2 * Math.random() - 1);
+        const r     = Math.cbrt(Math.random());
+        x = r * Math.sin(phi) * Math.cos(theta); y = r * Math.sin(phi) * Math.sin(theta); z = r * Math.cos(phi);
+        nd = r;
+        break;
+      }
+      case 2: { // Box — uniform in [-1,1]³
+        x = Math.random() * 2 - 1; y = Math.random() * 2 - 1; z = Math.random() * 2 - 1;
+        nd = Math.min(1, Math.sqrt(x * x + y * y + z * z) / Math.sqrt(3));
+        break;
+      }
+      case 3: { // Disk — flat in XZ, uniform area
+        const angle = Math.random() * Math.PI * 2;
+        const r     = Math.sqrt(Math.random());
+        x = r * Math.cos(angle); z = r * Math.sin(angle); y = 0;
+        nd = r;
+        break;
+      }
+      case 4: { // Ring — thin ring in XZ at radius ≈1
+        const angle = Math.random() * Math.PI * 2;
+        const r     = 0.85 + Math.random() * 0.3;
+        x = r * Math.cos(angle); z = r * Math.sin(angle); y = (Math.random() - 0.5) * 0.1;
+        nd = Math.min(r, 1);
+        break;
+      }
+      case 5: { // Spiral — Archimedean spiral in XZ
+        const t     = i / count;
+        const angle = t * Math.PI * 2 * 4;
+        x = t * Math.cos(angle); z = t * Math.sin(angle); y = (t - 0.5) * 0.3;
+        nd = t;
+        break;
+      }
+    }
+    positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
+    normDists[i] = nd;
+  }
+
+  return { positions, normDists };
+}
+
 /** Handle returned to ExportModal for offline frame rendering + pixel readback */
 export interface OfflineRenderHandle {
   /** Render the shader at an exact time value into the dedicated export RT */
@@ -93,6 +152,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   const canvasRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const particleSceneRef  = useRef<THREE.Scene | null>(null);
+  const perspCameraRef    = useRef<THREE.PerspectiveCamera | null>(null);
+  const gpuParticlesRef   = useRef<Map<string, THREE.Points>>(new Map());
   const animFrameRef = useRef<number>(0);
   const rtRef = useRef<THREE.WebGLRenderTarget | null>(null);
   // Ping-pong render targets for stateful shaders (PrevFrame node)
@@ -116,7 +179,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   const paramUniforms      = useNodeGraphStore((state) => state.paramUniforms);
   const textureUniforms    = useNodeGraphStore((state) => state.textureUniforms);
   const nodeTextures       = useNodeGraphStore((state) => state.nodeTextures);
+  const videoUniforms      = useNodeGraphStore((state) => state.videoUniforms);
+  const videoTextures      = useNodeGraphStore((state) => state.videoTextures);
   const isStateful         = useNodeGraphStore((state) => state.isStateful);
+  const particleSystems    = useNodeGraphStore((state) => state.particleSystems);
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
@@ -172,7 +238,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     camera.position.z = 1;
 
     const geometry = new THREE.PlaneGeometry(2, 2);
-    const { vertexShader: vs, fragmentShader: fs, rawGlslShader: rawFs, paramUniforms: pu, textureUniforms: tu, audioUniforms: au } = useNodeGraphStore.getState();
+    const { vertexShader: vs, fragmentShader: fs, rawGlslShader: rawFs, paramUniforms: pu, textureUniforms: tu, audioUniforms: au, videoUniforms: vu } = useNodeGraphStore.getState();
     const activeFs = rawFs ?? fs;
     const initialUniforms: Record<string, { value: unknown }> = {
       u_time:       { value: 0 },
@@ -183,6 +249,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
     for (const name of Object.keys(au))              initialUniforms[name] = { value: 0 };
+    for (const name of Object.keys(vu))              initialUniforms[name] = { value: null };
     const material = new THREE.ShaderMaterial({
       vertexShader: vs || FALLBACK_VERTEX,
       fragmentShader: activeFs || FALLBACK_FRAGMENT,
@@ -192,6 +259,14 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
 
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
+    sceneRef.current = scene;
+
+    // ── 3D particle scene + perspective camera ────────────────────────────────
+    const particleScene = new THREE.Scene();
+    particleSceneRef.current = particleScene;
+    const perspCamera = new THREE.PerspectiveCamera(60, 1, 0.01, 100);
+    perspCamera.position.z = 3;
+    perspCameraRef.current = perspCamera;
 
     // Register offline render handle for FFmpeg export.
     // Uses a dedicated WebGLRenderTarget — completely isolated from the live
@@ -347,6 +422,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       material.uniforms.u_resolution.value.set(width, height);
       rt.setSize(width, height);
       floatRt.setSize(width, height);
+      perspCamera.aspect = width / height;
+      perspCamera.updateProjectionMatrix();
       // Resize ping-pong RTs and reset state
       if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
@@ -396,7 +473,14 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         fpsLastTime = now;
       }
 
-      material.uniforms.u_time.value = clock.getElapsedTime();
+      const elapsed = clock.getElapsedTime();
+      material.uniforms.u_time.value = elapsed;
+
+      // ── GPU particle tick: just keep u_time in sync ────────────────────────
+      for (const [, points] of gpuParticlesRef.current) {
+        const psMat = points.material as THREE.ShaderMaterial;
+        if (psMat.uniforms.u_time) psMat.uniforms.u_time.value = elapsed;
+      }
 
       // ── Audio engine tick: push amplitude uniforms + draw live spectrum ──
       const audioAmps = audioEngine.tick();
@@ -447,6 +531,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         blitMat.uniforms.u_seed.value = frameCount * 1.618;
         renderer.setRenderTarget(null);
         renderer.render(blitScene, camera);
+      }
+
+      // ── GPU particles: render additively on top of the blitted background ──
+      if (gpuParticlesRef.current.size > 0) {
+        renderer.autoClear = false;
+        renderer.render(particleScene, perspCamera);
+        renderer.autoClear = true;
       }
 
       // Check for GLSL errors after first few renders
@@ -898,6 +989,16 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       previewScopeMatCache.forEach(m => m.dispose());
       pingPongA.current?.dispose();
       pingPongB.current?.dispose();
+      // Dispose all GPU particle systems
+      for (const [, points] of gpuParticlesRef.current) {
+        points.geometry.dispose();
+        (points.material as THREE.ShaderMaterial).dispose();
+        particleScene.remove(points);
+      }
+      gpuParticlesRef.current.clear();
+      particleSceneRef.current = null;
+      perspCameraRef.current   = null;
+      sceneRef.current = null;
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
@@ -966,6 +1067,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         mat.uniforms[uniformName] = { value: 0 };
       }
     }
+    // Register sampler2D video uniforms (initial value null — filled by video effect)
+    const currentVideoUniforms = useNodeGraphStore.getState().videoUniforms;
+    for (const uniformName of Object.keys(currentVideoUniforms)) {
+      if (!mat.uniforms[uniformName]) {
+        mat.uniforms[uniformName] = { value: null };
+      }
+    }
     mat.needsUpdate = true;
     // On structural recompile, reset ping-pong state to prevent stale frame bleed
     if (pingPongA.current && pingPongB.current) {
@@ -993,17 +1101,93 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     }
   }, [textureUniforms, nodeTextures]);
 
-  // Hot-update param uniform values without recompiling — runs only when paramUniforms
-  // changes but fragmentShader has NOT changed (slider fast-path).
+  // Bind VideoTexture uniforms — runs when videoUniforms or videoTextures change.
   useEffect(() => {
     const mat = materialRef.current;
     if (!mat) return;
-    for (const [name, value] of Object.entries(paramUniforms)) {
-      if (mat.uniforms[name]) {
-        mat.uniforms[name].value = value;
+    for (const [uniformName, nodeId] of Object.entries(videoUniforms)) {
+      const tex = videoTextures[nodeId] ?? null;
+      if (mat.uniforms[uniformName]) {
+        mat.uniforms[uniformName].value = tex;
+      } else {
+        mat.uniforms[uniformName] = { value: tex };
       }
-      // If the uniform isn't registered yet (e.g. shader just compiled), ignore —
-      // the fragmentShader effect above handles registration.
+    }
+  }, [videoUniforms, videoTextures]);
+
+  // Sync GPU particle systems: create/remove THREE.Points whenever store.particleSystems changes.
+  // Geometry is rebuilt from shape each time (shapes/counts only change on recompile, not slider moves).
+  useEffect(() => {
+    const pScene = particleSceneRef.current;
+    if (!pScene) return;
+
+    const existing = gpuParticlesRef.current;
+    const incoming = new Set(particleSystems.map(p => p.nodeId));
+
+    // Remove stale particle systems
+    for (const [nodeId, points] of existing) {
+      if (!incoming.has(nodeId)) {
+        pScene.remove(points);
+        points.geometry.dispose();
+        (points.material as THREE.ShaderMaterial).dispose();
+        existing.delete(nodeId);
+      }
+    }
+
+    for (const psData of particleSystems) {
+      const { nodeId, vertexShader, fragmentShader, count, shape, paramUniforms: pUniforms } = psData;
+
+      // Always recreate on topology change (new shaders, possibly different count/shape)
+      if (existing.has(nodeId)) {
+        const old = existing.get(nodeId)!;
+        pScene.remove(old);
+        old.geometry.dispose();
+        (old.material as THREE.ShaderMaterial).dispose();
+        existing.delete(nodeId);
+      }
+
+      const { positions, normDists } = buildParticleGeometry(count, shape);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position',    new THREE.BufferAttribute(positions, 3, false));
+      geo.setAttribute('a_normDist',  new THREE.BufferAttribute(normDists, 1, false));
+
+      // Build initial uniforms from paramUniforms + u_time
+      const uniforms: Record<string, { value: number }> = { u_time: { value: 0 } };
+      for (const [name, value] of Object.entries(pUniforms)) {
+        uniforms[name] = { value };
+      }
+
+      const mat = new THREE.ShaderMaterial({
+        vertexShader,
+        fragmentShader,
+        uniforms,
+        transparent: true,
+        depthTest:   false,
+        depthWrite:  false,
+        blending:    THREE.AdditiveBlending,
+      });
+
+      const points = new THREE.Points(geo, mat);
+      pScene.add(points);
+      existing.set(nodeId, points);
+    }
+  }, [particleSystems]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hot-update param uniform values without recompiling — runs only when paramUniforms
+  // changes but fragmentShader has NOT changed (slider fast-path).
+  // Also syncs particle material uniforms since particle paramUniforms are merged in.
+  useEffect(() => {
+    const mat = materialRef.current;
+    if (mat) {
+      for (const [name, value] of Object.entries(paramUniforms)) {
+        if (mat.uniforms[name]) mat.uniforms[name].value = value;
+      }
+    }
+    for (const [, points] of gpuParticlesRef.current) {
+      const pMat = points.material as THREE.ShaderMaterial;
+      for (const [name, value] of Object.entries(paramUniforms)) {
+        if (pMat.uniforms[name]) pMat.uniforms[name].value = value;
+      }
     }
   }, [paramUniforms]);
 

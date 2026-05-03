@@ -3,6 +3,8 @@
 // builds the unified NODE_REGISTRY consumed by the rest of the app.
 
 import type { NodeDefinition } from '../../types/nodeGraph';
+import { VideoInputNode } from './sources';
+export { VideoInputNode };
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
@@ -110,6 +112,15 @@ export { ScopeNode } from './utility';
 
 // Animation
 export { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
+
+// Halftone
+export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
+
+// Vertex Particles (deprecated)
+export { VertexParticleSystemNode } from './vparticles';
+
+// Particle Pipeline Nodes
+export { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
 
 // Math
 export {
@@ -231,6 +242,9 @@ import {
   DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode,
   QuadBezierShaperNode, CubicBezierShaperNode,
 } from './shapers';
+import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
+import { VertexParticleSystemNode } from './vparticles';
+import { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
@@ -243,6 +257,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   prevFrame: PrevFrameNode,
   loopIndex: LoopIndexNode,
   audioInput: AudioInputNode,
+  videoInput: VideoInputNode,
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,
@@ -368,6 +383,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   vectorField:     VectorFieldNode,
   gravityField:    GravityFieldNode,
   spiralField:     SpiralFieldNode,
+  vParticles:      VertexParticleSystemNode,
+  // Particle Pipeline
+  pInit:      PInitNode,
+  pRotate:    PRotateNode,
+  pWave:      PWaveNode,
+  pColorDist: PColorDistNode,
+  pSize:      PSizeNode,
+  pRender:    PRenderNode,
   // 3D / Volumetric
   raymarch3d: RaymarchNode,
   volumeClouds: VolumeCloudsNode,
@@ -563,6 +586,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   select: SelectNode,
   vec2Swizzle: Vec2SwizzleNode,
   vec3Swizzle: Vec3SwizzleNode,
+  // Halftone
+  gridUV:       GridUVNode,
+  pixelate:     PixelateNode,
+  dotMask:      DotMaskNode,
+  sdfMask:      SdfMaskNode,
+  lumaRadius:   LumaRadiusNode,
+  rgbToCMYK:    RGBToCMYKNode,
+  cmykHalftone: CMYKHalftoneNode,
   // Animation
   sineLFO: SineLFONode,
   squareLFO: SquareLFONode,

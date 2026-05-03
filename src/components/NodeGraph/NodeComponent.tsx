@@ -28,6 +28,7 @@ import { ExprBlockModal } from './ExprBlockModal';
 import { BezierEditorModal } from './BezierEditorModal';
 import { TransformVecModal } from './TransformVecModal';
 import { AudioInputModal } from './AudioInputModal';
+import { VideoInputModal } from './VideoInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
@@ -35,6 +36,7 @@ import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
+import { videoEngine } from '../../lib/videoEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 
@@ -105,7 +107,7 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput', 'transformVec']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
@@ -396,6 +398,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const renameGroupPort    = useNodeGraphStore(s => s.renameGroupPort);
   const saveGroupPreset    = useNodeGraphStore(s => s.saveGroupPreset);
   const duplicateGroup     = useNodeGraphStore(s => s.duplicateGroup);
+  const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
 
   // Swap mode
   const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
@@ -406,6 +409,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   // Texture input
   const setNodeTexture     = useNodeGraphStore(s => s.setNodeTexture);
   const nodeTexture        = useNodeGraphStore(s => node.type === 'textureInput' ? s.nodeTextures[node.id] : null);
+  // Video input
+  const setVideoTexture    = useNodeGraphStore(s => s.setVideoTexture);
 
   // Node preview thumbnail — rendered at 200×200 when the 👁 preview mode is active
   const setNodePreview  = useNodeGraphStore(s => s.setNodePreview);
@@ -460,12 +465,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showExprModal, setShowExprModal] = useState(false);
   const [showExprBlockModal, setShowExprBlockModal] = useState(false);
   const [showBezierModal, setShowBezierModal] = useState(false);
   const [showTransformVecModal, setShowTransformVecModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
+  const [showVideoInputModal, setShowVideoInputModal] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -965,6 +973,176 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {/* Audio Input Modal (portal) */}
         {showAudioInputModal && (
           <AudioInputModal node={node} onClose={() => setShowAudioInputModal(false)} />
+        )}
+      </>
+    );
+  }
+
+  // ── Video Input node special card ────────────────────────────────────────────
+  if (node.type === 'videoInput') {
+    const thumbnailUrl = node.params._thumbnailUrl as string | undefined;
+    const hasFile      = !!(node.params._hasFile);
+    const isPlaying    = !!(node.params._isPlaying);
+    const fileName     = (node.params._fileName as string) || '';
+    const videoFileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const loadVideoFile = async (file: File) => {
+      if (!file.name.match(/\.(mp4|webm|mov|ogg|mkv)$/i)) return;
+      await videoEngine.loadVideo(node.id, file);
+      const tex = videoEngine.getTexture(node.id);
+      setVideoTexture(node.id, tex);
+      videoEngine.play(node.id);
+      const thumbUrl = URL.createObjectURL(file);
+      updateNodeParams(node.id, {
+        _fileName: file.name, _hasFile: true, _isPlaying: true,
+        _thumbnailUrl: thumbUrl,
+      }, { immediate: true });
+    };
+
+    const handleVideoDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const f = e.dataTransfer.files[0];
+      if (f) loadVideoFile(f);
+    };
+
+    const handleVideoFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0];
+      if (f) loadVideoFile(f);
+      e.target.value = '';
+    };
+
+    const toggleVideoPlay = () => {
+      if (isPlaying) {
+        videoEngine.pause(node.id);
+        updateNodeParams(node.id, { _isPlaying: false }, { immediate: true });
+      } else {
+        videoEngine.play(node.id);
+        updateNodeParams(node.id, { _isPlaying: true }, { immediate: true });
+      }
+    };
+
+    return (
+      <>
+        <div
+          data-node-id={node.id}
+          style={{
+            position: 'absolute', left: node.position.x, top: node.position.y,
+            background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
+            borderRadius: '8px', width: '220px', color: '#cdd6f4', fontSize: '12px',
+            userSelect: 'none', opacity: dimmed ? 0.2 : 1,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          }}
+        >
+          {/* Header */}
+          <div
+            onMouseDown={(e) => {
+              if (e.button === 2) return;
+              e.stopPropagation();
+              dragOffset.current = { x: e.clientX / zoom - node.position.x, y: e.clientY / zoom - node.position.y };
+              const onMove = (ev: MouseEvent) => {
+                if (!dragOffset.current) return;
+                updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
+              };
+              const onUp = () => {
+                dragOffset.current = null;
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+                setSelectedNodeId(isSelected ? null : node.id);
+              };
+              window.addEventListener('mousemove', onMove);
+              window.addEventListener('mouseup', onUp);
+            }}
+            style={{ background: '#313244', borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={toggleVideoPlay}
+                title={isPlaying ? 'Pause' : 'Play'}
+                disabled={!hasFile}
+                style={{ background: 'none', border: 'none', color: !hasFile ? '#45475a' : isPlaying ? '#a6e3a1' : '#cba6f7', cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
+              >{isPlaying ? '⏸' : '▶'}</button>
+              <span style={{ fontWeight: 600, fontSize: '11px', color: '#cba6f7' }}>Video Input</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => setShowVideoInputModal(v => !v)}
+                title="Open video settings"
+                style={{ background: 'none', border: 'none', color: showVideoInputModal ? '#cba6f7' : '#585b70', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+              >◉</button>
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+            </div>
+          </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={videoFileInputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/ogg,video/quicktime,.mkv"
+            style={{ display: 'none' }}
+            onChange={handleVideoFileInput}
+          />
+
+          {/* Drop zone / thumbnail */}
+          <div
+            onDrop={handleVideoDrop}
+            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => videoFileInputRef.current?.click()}
+            style={{
+              margin: '6px 8px',
+              border: '1px dashed #45475a',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              background: '#181825',
+              overflow: 'hidden',
+              minHeight: '48px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {thumbnailUrl ? (
+              <video
+                src={thumbnailUrl}
+                style={{ width: '100%', maxHeight: '100px', objectFit: 'cover', display: 'block' }}
+                muted
+                playsInline
+              />
+            ) : (
+              <span style={{ fontSize: '10px', color: '#585b70', padding: '10px' }}>Click or drop MP4 / WebM / MOV</span>
+            )}
+          </div>
+
+          {/* File name */}
+          {hasFile && (
+            <div style={{ padding: '2px 10px 4px', overflow: 'hidden' }} onMouseDown={e => e.stopPropagation()}>
+              <span style={{ fontSize: '10px', color: '#cba6f7', fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                ▶ {fileName}
+              </span>
+            </div>
+          )}
+
+          {/* Output sockets */}
+          <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+            {Object.entries(node.outputs).map(([key, out]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                <div
+                  data-socket="out"
+                  ref={el => { registerSocket(node.id, 'out', key, el); }}
+                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
+                  style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        {showVideoInputModal && (
+          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} />
         )}
       </>
     );
@@ -1607,7 +1785,35 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           {/* Label + count */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
             <span style={{ fontSize: '13px', flexShrink: 0 }}>{isSceneGroup ? '◉' : isSpaceWarpGroup ? '⟳' : isMarchLoopGroup ? '⟲' : '⬡'}</span>
-            <span style={{ fontWeight: 600, color: groupAccentColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{groupLabel}</span>
+            {isEditingTitle ? (
+              <input
+                autoFocus
+                value={editingTitleValue}
+                onChange={e => setEditingTitleValue(e.target.value)}
+                onMouseDown={e => e.stopPropagation()}
+                onBlur={() => {
+                  const trimmed = editingTitleValue.trim();
+                  updateNodeParams(node.id, { label: trimmed || groupLabel });
+                  setIsEditingTitle(false);
+                }}
+                onKeyDown={e => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') setIsEditingTitle(false);
+                }}
+                style={{ background: '#1e1e2e', border: `1px solid ${groupAccentColor}`, color: groupAccentColor, borderRadius: '3px', padding: '0 4px', fontSize: '12px', fontWeight: 600, width: `${Math.max(60, editingTitleValue.length * 8)}px`, outline: 'none' }}
+              />
+            ) : (
+              <span
+                onDoubleClick={e => {
+                  e.stopPropagation();
+                  setEditingTitleValue(groupLabel);
+                  setIsEditingTitle(true);
+                }}
+                title="Double-click to rename"
+                style={{ fontWeight: 600, color: groupAccentColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
+              >{groupLabel}</span>
+            )}
             <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0 }}>({nodeCount})</span>
           </div>
           {/* Action icons */}
@@ -1641,17 +1847,25 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 transition: 'color 0.15s',
               }}
             >↓</button>
+            {/* Ungroup button — regular groups only */}
+            {node.type === 'group' && (
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); ungroupNode(node.id); }}
+                title={groupIters > 1 ? 'Ungroup (iterations will be flattened to a single pass)' : 'Ungroup (restore nodes to parent)'}
+                style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a6e3a1'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+              >⤴</button>
+            )}
             {/* Delete button — all group types */}
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={e => {
                 e.stopPropagation();
-                const label = isSceneGroup ? 'Scene Group' : isMarchLoopGroup ? 'March Loop Group' : isSpaceWarpGroup ? 'Space Warp Group' : typeof node.params.label === 'string' && node.params.label ? node.params.label : 'Group';
-                if (window.confirm(`Delete "${label}" and all its nodes?`)) {
-                  removeNode(node.id);
-                }
+                removeNode(node.id);
               }}
-              title="Delete group"
+              title="Delete group and all its nodes"
               style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
               onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
               onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
@@ -2620,11 +2834,40 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               setCollapsed(v => !v);
             }
           }}
-          title={node.type === 'sceneGroup' ? 'Double-click to enter scene' : collapsed ? 'Double-click to expand' : 'Double-click to collapse'}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', userSelect: 'none' }}
         >
           <span style={{ fontSize: '9px', opacity: 0.5, lineHeight: 1 }}>{collapsed ? '▶' : '▼'}</span>
-          {node.type === 'customFn' && typeof node.params.label === 'string' ? node.params.label || def.label : def.label}
+          {isEditingTitle ? (
+            <input
+              autoFocus
+              value={editingTitleValue}
+              onChange={e => setEditingTitleValue(e.target.value)}
+              onMouseDown={e => e.stopPropagation()}
+              onBlur={() => {
+                updateNodeParams(node.id, { label: editingTitleValue.trim() });
+                setIsEditingTitle(false);
+              }}
+              onKeyDown={e => {
+                e.stopPropagation();
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                if (e.key === 'Escape') { setIsEditingTitle(false); }
+              }}
+              style={{ background: '#1e1e2e', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '3px', padding: '0 4px', fontSize: '12px', fontWeight: 600, width: `${Math.max(60, editingTitleValue.length * 8)}px`, outline: 'none' }}
+            />
+          ) : (
+            <span
+              onDoubleClick={e => {
+                e.stopPropagation();
+                const current = typeof node.params.label === 'string' && node.params.label ? node.params.label : def.label;
+                setEditingTitleValue(current);
+                setIsEditingTitle(true);
+              }}
+              title="Double-click to rename"
+              style={{ cursor: 'text' }}
+            >
+              {typeof node.params.label === 'string' && node.params.label ? node.params.label : def.label}
+            </span>
+          )}
           {!!node.params._groupOriginal && def.anchored && (
             <span title="Anchored — cannot be deleted" style={{ fontSize: '9px', opacity: 0.45, lineHeight: 1 }}>🔒</span>
           )}
@@ -3808,7 +4051,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           }
 
           if (paramDef.type === 'select') {
-            const val = typeof node.params[key] === 'string' ? (node.params[key] as string) : (paramDef.options?.[0]?.value ?? '');
+            const val = node.params[key] !== undefined ? String(node.params[key]) : (paramDef.options?.[0]?.value ?? '');
             return (
               <div
                 key={key}
