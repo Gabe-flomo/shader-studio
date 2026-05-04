@@ -51,15 +51,16 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Particles & Fields': '#f9e2af',
 };
 
-const CATEGORY_ORDER = [
-  '2D Primitives', '3D Boolean Ops', '3D Fractals', '3D Lighting',
-  '3D Primitives', '3D Scene', '3D Transforms',
-  'Animation', 'Color', 'Color Grading', 'Combiners', 'Conditionals',
-  'Effects', 'Fractals', 'Halftone', 'Math', 'Matrix', 'Noise',
-  'Particles', 'Particles & Fields', 'Post Processing',
-  'Science', 'Shapers', 'Sources', 'Spaces', 'Transforms', 'Utility',
-  'Output',
+const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
+  { label: 'Shapes',       categories: ['2D Primitives', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
+  { label: '3D',           categories: ['3D Scene', '3D Lighting', '3D Fractals', 'Loops'] },
+  { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
+  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces'] },
+  { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Transforms', 'Conditionals'] },
+  { label: 'Utility',      categories: ['Utility', 'Output'] },
 ];
+
+const CATEGORY_ORDER = CATEGORY_SECTIONS.flatMap(s => s.categories);
 
 // ── Sub-group definitions for categories that need them ───────────────────────
 const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>> = {
@@ -667,7 +668,39 @@ export function NodeBrowser({
             onClick={() => { setPath(['__favorites__']); setPreviewType(null); }}
           />
         )}
-        {categories.map(cat => {
+        {CATEGORY_SECTIONS.map(section => {
+          const sectionCats = section.categories.filter(cat => {
+            const nodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
+            return nodes.length > 0;
+          });
+          if (sectionCats.length === 0) return null;
+          return (
+            <div key={section.label}>
+              <div style={{
+                fontSize: '8px', fontWeight: 700, letterSpacing: '0.12em',
+                textTransform: 'uppercase', color: '#45475a',
+                padding: '8px 4px 4px',
+              }}>
+                {section.label}
+              </div>
+              {sectionCats.map(cat => {
+                const color = CATEGORY_COLORS[cat] ?? '#888';
+                const nodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
+                return (
+                  <CategoryRow
+                    key={cat}
+                    cat={cat}
+                    color={color}
+                    count={nodes.length}
+                    onClick={() => { setPath([cat]); setPreviewType(null); }}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
+        {/* Any categories not covered by sections */}
+        {categories.filter(cat => !CATEGORY_ORDER.includes(cat)).map(cat => {
           const color = CATEGORY_COLORS[cat] ?? '#888';
           const nodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
           if (nodes.length === 0) return null;
