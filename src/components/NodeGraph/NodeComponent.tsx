@@ -694,20 +694,43 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           </label>
         </div>
 
-        {/* Output sockets */}
-        <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-          {Object.entries(node.outputs).map(([key, out]) => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-              <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
-              <div
-                data-socket="out"
-                ref={el => { registerSocket(node.id, 'out', key, el); }}
-                onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
-                style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation', boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key ? `0 0 0 3px ${TYPE_COLORS[out.type] ?? '#888'}, 0 0 12px ${TYPE_COLORS[out.type] ?? '#888'}` : undefined }}
-              />
-            </div>
-          ))}
+        {/* Sockets row: UV input on left, outputs on right */}
+        <div style={{ padding: '3px 0 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          {/* UV input socket */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
+            <div
+              data-socket="in"
+              ref={el => { registerSocket(node.id, 'in', 'uv', el); }}
+              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, 'uv'); }}
+              onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapInputSocket?.(node.id, 'uv'); }}
+              style={{
+                width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12,
+                borderRadius: '50%',
+                background: node.inputs.uv?.connection ? TYPE_COLORS['vec2'] : '#333',
+                border: `2px solid ${TYPE_COLORS['vec2']}`,
+                cursor: 'pointer',
+                marginLeft: isTouchDevice ? '-11px' : '-6px',
+                flexShrink: 0,
+                touchAction: 'manipulation',
+              }}
+            />
+            <span style={{ fontSize: '10px', color: '#a6adc8' }}>UV</span>
+          </div>
+          {/* Output sockets */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+            {Object.entries(node.outputs).map(([key, out]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                <div
+                  data-socket="out"
+                  ref={el => { registerSocket(node.id, 'out', key, el); }}
+                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
+                  style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation', boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key ? `0 0 0 3px ${TYPE_COLORS[out.type] ?? '#888'}, 0 0 12px ${TYPE_COLORS[out.type] ?? '#888'}` : undefined }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -1125,20 +1148,43 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             </div>
           )}
 
-          {/* Output sockets */}
-          <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-            {Object.entries(node.outputs).map(([key, out]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
-                <div
-                  data-socket="out"
-                  ref={el => { registerSocket(node.id, 'out', key, el); }}
-                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
-                  style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation' }}
-                />
-              </div>
-            ))}
+          {/* Sockets row: UV input on left, outputs on right */}
+          <div style={{ padding: '3px 0 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            {/* UV input socket */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
+              <div
+                data-socket="in"
+                ref={el => { registerSocket(node.id, 'in', 'uv', el); }}
+                onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, 'uv'); }}
+                onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapInputSocket?.(node.id, 'uv'); }}
+                style={{
+                  width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12,
+                  borderRadius: '50%',
+                  background: node.inputs.uv?.connection ? TYPE_COLORS['vec2'] : '#333',
+                  border: `2px solid ${TYPE_COLORS['vec2']}`,
+                  cursor: 'pointer',
+                  marginLeft: isTouchDevice ? '-11px' : '-6px',
+                  flexShrink: 0,
+                  touchAction: 'manipulation',
+                }}
+              />
+              <span style={{ fontSize: '10px', color: '#a6adc8' }}>UV</span>
+            </div>
+            {/* Output sockets */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+              {Object.entries(node.outputs).map(([key, out]) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                  <div
+                    data-socket="out"
+                    ref={el => { registerSocket(node.id, 'out', key, el); }}
+                    onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                    onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
+                    style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation' }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         {showVideoInputModal && (
