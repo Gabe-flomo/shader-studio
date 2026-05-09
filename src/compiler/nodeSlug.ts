@@ -52,7 +52,7 @@ const TYPE_ABBREV: Record<string, string> = {
   mirroredRepeat3D: 'mrep3',
   sdCross3D: 'xcross', mengerSponge: 'menger',
   // Groups / loops
-  group: 'grp', loopStart: 'lstart', loopEnd: 'lend',
+  group: 'grp',
   marchLoopInputs: 'mli', marchLoopOutput: 'mlo', marchSceneDist: 'msd',
   // Halftone
   gridUV: 'guvt', pixelate: 'pxl', dotMask: 'dot', sdfMask: 'sdmk',

@@ -8,7 +8,7 @@ import type { GraphNode, NodeDefinition, DataType } from '../types/nodeGraph';
  * always trigger a full shader recompile on change instead of a uniform update.
  */
 export const SKIP_UNIFORM_TYPES = new Set([
-  'loopStart', 'loopEnd', 'loop', 'forLoop',
+  'loop', 'forLoop',
   // loopCarry is handled specially by the compiler; no params to uniform-patch
   'loopCarry',
   // Mandelbrot/Julia: zoom, max_iter, center_x/y, precision all affect code structure

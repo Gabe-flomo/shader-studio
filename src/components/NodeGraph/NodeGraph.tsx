@@ -7,7 +7,6 @@ import { ConnectionLine } from './ConnectionLine';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
-import { collectLoopPairChains } from '../../compiler/topoSort';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 240;
@@ -185,17 +184,6 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: minX, y: midY };
   }, [activeGroupId, displayNodes]);
-
-  // Compute loop regions for the visual overlay (dashed bounding boxes behind body nodes)
-  const loopRegions = useMemo(() => {
-    const chains = collectLoopPairChains(displayNodes);
-    return Array.from(chains.entries()).map(([endId, chain]) => ({
-      endId,
-      bodyIds:    chain.bodyIds,
-      iterations: chain.iterations,
-      carryType:  chain.carryType,
-    })).filter(r => r.bodyIds.length > 0);
-  }, [displayNodes]);
 
   const errorNodeIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1247,46 +1235,6 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             overflow: 'visible',
           }}
         >
-          {/* Loop region overlays — drawn behind connection lines */}
-          {loopRegions.map(({ endId, bodyIds, iterations, carryType }) => {
-            const bodyNodes = displayNodes.filter(n => bodyIds.includes(n.id));
-            if (bodyNodes.length === 0) return null;
-            const pad = 20;
-            const nodeH = 180; // approximate node card height
-            const xs = bodyNodes.map(n => n.position.x);
-            const ys = bodyNodes.map(n => n.position.y);
-            const rx = Math.min(...xs) - pad;
-            const ry = Math.min(...ys) - pad;
-            const rw = Math.max(...xs) + NODE_WIDTH + pad - rx;
-            const rh = Math.max(...ys) + nodeH + pad - ry;
-            const color =
-              carryType === 'vec3' ? '#cba6f7' :
-              carryType === 'float' ? '#f9e2af' :
-              carryType === 'vec4' ? '#a6e3a1' :
-              '#89b4fa'; // vec2
-            return (
-              <g key={endId}>
-                <rect
-                  x={rx} y={ry} width={rw} height={rh}
-                  rx={10}
-                  fill={color + '0d'}
-                  stroke={color + '55'}
-                  strokeWidth={1.5}
-                  strokeDasharray="6 3"
-                />
-                <text
-                  x={rx + 10} y={ry + 16}
-                  fontSize={10}
-                  fill={color + 'aa'}
-                  fontFamily="monospace"
-                  style={{ pointerEvents: 'none', userSelect: 'none' }}
-                >
-                  loop × {iterations}
-                </text>
-              </g>
-            );
-          })}
-
           {displayNodes.map(node =>
             Object.entries(node.inputs).map(([inputKey, input]) => {
               if (!input.connection) return null;

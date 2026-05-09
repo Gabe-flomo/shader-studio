@@ -107,7 +107,7 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
