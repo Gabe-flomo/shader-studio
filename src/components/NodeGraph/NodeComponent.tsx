@@ -395,10 +395,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     s.nodes.find(n => n.id === s.activeGroupId)?.params?.hiddenOutputs as string[] | undefined
   );
   const mlGroupHiddenOutputs = _mlGroupHiddenOutputsRaw ?? [];
-  const renameGroupPort    = useNodeGraphStore(s => s.renameGroupPort);
-  const saveGroupPreset    = useNodeGraphStore(s => s.saveGroupPreset);
-  const duplicateGroup     = useNodeGraphStore(s => s.duplicateGroup);
-  const ungroupNode        = useNodeGraphStore(s => s.ungroupNode);
+  const renameGroupPort        = useNodeGraphStore(s => s.renameGroupPort);
+  const removeGroupInputPort   = useNodeGraphStore(s => s.removeGroupInputPort);
+  const activeGroupId          = useNodeGraphStore(s => s.activeGroupId);
+  const saveGroupPreset        = useNodeGraphStore(s => s.saveGroupPreset);
+  const duplicateGroup         = useNodeGraphStore(s => s.duplicateGroup);
+  const ungroupNode            = useNodeGraphStore(s => s.ungroupNode);
 
   // Swap mode
   const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
@@ -2046,6 +2048,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 {/* Socket dot */}
                 <div
                   ref={el => { registerSocket(node.id, 'in', port.key, el); }}
+                  onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'in' })}
+                  onMouseLeave={() => onSocketHover?.(null)}
                   onMouseUp={e => {
                     e.stopPropagation();
                     if (node.inputs[port.key]?.connection && !isConnectionDragging) {
@@ -2186,6 +2190,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 <div
                   data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', port.key, el); }}
+                  onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'out' })}
+                  onMouseLeave={() => onSocketHover?.(null)}
                   onMouseDown={e => onStartConnection(node.id, port.key, e)}
                   onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, port.key); }}
                   style={{
@@ -3343,10 +3349,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const slotName = input.label;
 
           // Drag-highlight: compatible = glow, incompatible = dim
-          // External sockets block new connections entirely
-          let socketOpacity = isExternal ? 0.45 : 1;
+          let socketOpacity = 1;
           let socketGlow: string | undefined;
-          if (!isExternal && draggingType) {
+          if (draggingType) {
             const compat = typesCompatible(draggingType, input.type as DataType);
             socketOpacity = compat ? 1 : 0.25;
             socketGlow = compat ? `0 0 8px ${TYPE_COLORS[input.type] || '#888'}` : undefined;
@@ -3355,7 +3360,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const pendingCompat = pendingMobileType
             ? typesCompatible(pendingMobileType as DataType, input.type as DataType)
             : false;
-          if (!isExternal && pendingMobileConnection && !draggingType) {
+          if (pendingMobileConnection && !draggingType) {
             socketOpacity = pendingCompat ? 1 : 0.25;
             socketGlow = pendingCompat ? `0 0 10px ${TYPE_COLORS[input.type] || '#888'}` : undefined;
           }
@@ -3380,20 +3385,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   height: socketSize,
                   borderRadius: '50%',
                   background: isConnected ? (TYPE_COLORS[input.type] || '#888') : '#333',
-                  border: `2px solid ${isExternal ? '#585b70' : (TYPE_COLORS[input.type] || '#888')}`,
+                  border: `2px solid ${TYPE_COLORS[input.type] || '#888'}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
                   marginLeft: socketMarginLeft,
-                  cursor: isExternal ? 'not-allowed' : 'pointer',
+                  cursor: 'pointer',
                   opacity: socketOpacity,
-                  boxShadow: isExternal ? 'none' : socketGlow,
+                  boxShadow: socketGlow,
                   transition: 'box-shadow 0.1s, opacity 0.1s',
                   touchAction: 'manipulation',
                 }}
                 onMouseEnter={() => { setHoveredInput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'in' }); }}
                 onMouseLeave={() => { setHoveredInput(null); onSocketHover?.(null); }}
                 onMouseDown={(e) => {
-                  if (e.altKey && !isConnected && !isExternal) {
+                  if (e.altKey && !isConnected) {
                     e.stopPropagation();
                     e.preventDefault();
                     onAltClickSocket?.(node.id, key, 'in', input.type, e);
@@ -3401,26 +3406,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }}
                 onMouseUp={(e) => {
                   e.stopPropagation();
-                  if (e.altKey && !isConnected && !isExternal) return; // handled by onMouseDown
-                  // When a connection wire is being dragged, accept drop only on non-external sockets
+                  if (e.altKey && !isConnected) return; // handled by onMouseDown
                   if (isConnectionDragging) {
-                    if (!isExternal) onEndConnection(node.id, key);
+                    if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
+                    onEndConnection(node.id, key);
                     return;
                   }
-                  // Allow disconnecting the local wire even on external-locked sockets
                   if (isConnected) {
+                    if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
                     disconnectInput(node.id, key);
-                  } else if (!isExternal) {
+                  } else {
                     onEndConnection(node.id, key);
                   }
                 }}
                 onTouchEnd={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  if (isExternal) return;
                   if (pendingMobileConnection) {
                     onTapInputSocket?.(node.id, key);
                   } else if (isConnected) {
+                    if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
                     disconnectInput(node.id, key);
                   }
                 }}

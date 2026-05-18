@@ -111,7 +111,7 @@ export const MouseNode: NodeDefinition = {
 export const PrevFrameNode: NodeDefinition = {
   type: 'prevFrame',
   label: 'Prev Frame',
-  category: 'Sources',
+  category: 'Post Processing',
   description: 'Samples the previous frame\'s rendered output. Enables stateful effects like trails, reaction-diffusion, and fluid simulation.',
   inputs: {
     uv: { type: 'vec2', label: 'UV' },

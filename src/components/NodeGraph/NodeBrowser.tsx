@@ -57,6 +57,7 @@ const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
   { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Transforms', 'Conditionals'] },
+  { label: 'Functions',    categories: ['Functions'] },
   { label: 'Utility',      categories: ['Utility', 'Output'] },
 ];
 

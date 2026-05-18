@@ -654,7 +654,7 @@ export const ForLoopNode: NodeDefinition = {
 export const ExprBlockNode: NodeDefinition = {
   type: 'exprNode',
   label: 'Expr Block',
-  category: 'Sources',
+  category: 'Functions',
   description: [
     'Generalized multi-statement GLSL warp block.',
     'Click ⟴ to open the editor and define any inputs (with optional sliders).',
@@ -789,7 +789,7 @@ export const ExprBlockNode: NodeDefinition = {
 export const CustomFnNode: NodeDefinition = {
   type: 'customFn',
   label: 'Custom Fn',
-  category: 'Sources',
+  category: 'Functions',
   description: 'User-defined GLSL function. Define input sockets, output type, and write the GLSL body.',
   inputs: {},
   outputs: { result: { type: 'float', label: 'Result' } },
