@@ -8,7 +8,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { compileGraph } from '../compiler/graphCompiler';
 
-const SKIP_TYPES = new Set(['output', 'vec4Output', 'loopStart', 'loopEnd', 'scope']);
+const SKIP_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
 export function compileNodePreviewShader(
   nodeId: string,

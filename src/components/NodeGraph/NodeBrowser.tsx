@@ -7,7 +7,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
-  'output', 'vec4Output', 'loopIndex', 'loopStart', 'loopEnd',
+  'output', 'vec4Output', 'loopIndex',
   'groupOutput', 'groupInput', 'marchLoopInputs', 'marchLoopOutput', 'scope',
   'forLoop', 'loopRippleStep', 'loopRotateStep', 'loopDomainFold',
   'loopFloatAccumulate', 'loopColorRingStep', 'loopRingStep',

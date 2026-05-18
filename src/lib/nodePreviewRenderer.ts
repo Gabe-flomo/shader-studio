@@ -8,6 +8,12 @@
 
 import * as THREE from 'three';
 
+function djb2(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
+  return h >>> 0;
+}
+
 const PREVIEW_VERTEX = `
 varying vec2 vUv;
 void main() {
@@ -80,7 +86,7 @@ export async function renderNodePreview(
   size = 80,
 ): Promise<string> {
   const cacheKey = `${nodeId}@${size}`;
-  const sourceHash = fragmentShader.slice(0, 200) + Object.keys(uniforms).join(',');
+  const sourceHash = djb2(fragmentShader) + '|' + Object.entries(uniforms).map(([k, v]) => `${k}:${v.value}`).join(',');
   const cached = cache.get(cacheKey);
   if (cached?.sourceHash === sourceHash) return cached.dataUrl;
 

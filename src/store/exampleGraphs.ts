@@ -872,62 +872,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Fractal Rings (Wired Loop) — domain fold iterated via LoopStart/End ──────
-  // LoopStart/End carry a vec2 UV. Each iteration applies a domain fold (abs+scale),
-  // producing a folded fractal space. The final UV's length drives the palette.
-  fractalRingsWired: {
-    label: 'Fractal Rings (Wired)',
-    counter: 6,
-    nodes: [
-      {
-        id: 'uv_0', type: 'uv', position: { x: 40, y: 240 },
-        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {},
-      },
-      {
-        id: 'time_1', type: 'time', position: { x: 40, y: 420 },
-        inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {},
-      },
-      {
-        id: 'start_2', type: 'loopStart', position: { x: 220, y: 220 },
-        inputs: { carry: { type: 'vec2', label: 'Initial value', connection: { nodeId: 'uv_0', outputKey: 'uv' } } },
-        outputs: { carry: { type: 'vec2', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
-        params: { iterations: 7, carryType: 'vec2' },
-      },
-      {
-        id: 'fold_3', type: 'loopDomainFold', position: { x: 420, y: 200 },
-        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'start_2', outputKey: 'carry' } } },
-        outputs: { uv: { type: 'vec2', label: 'UV out' } },
-        params: { scale: 1.8, offsetX: 0.5, offsetY: 0.3 },
-      },
-      {
-        id: 'end_4', type: 'loopEnd', position: { x: 620, y: 220 },
-        inputs: { carry: { type: 'vec2', label: '← Carry in', connection: { nodeId: 'fold_3', outputKey: 'uv' } } },
-        outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: {},
-      },
-      // length of folded UV → ring SDF pattern
-      {
-        id: 'len_5', type: 'length', position: { x: 800, y: 240 },
-        inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'end_4', outputKey: 'result' } } },
-        outputs: { output: { type: 'float', label: 'Output' } },
-        params: { scale: 1.0 },
-      },
-      {
-        id: 'pal_6', type: 'palettePreset', position: { x: 980, y: 200 },
-        inputs: {
-          t: { type: 'float', label: 'T', connection: { nodeId: 'len_5', outputKey: 'output' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '2' },
-      },
-      {
-        id: 'out_7', type: 'output', position: { x: 1160, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_6', outputKey: 'color' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
-
   // ── UV Warp — organic jitter on a specific element ────────────────────────
   // Shows how UV Warp adds grain-like turbulence to just one shape's edges,
   // while a second clean circle remains unaffected.
@@ -1327,37 +1271,6 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-
-  // ── Sine LFO — oscillating FBM scale driven by a Sine LFO ─────────────────
-  fractalRingsNewWired: {
-    label: 'Fractal Rings (New Loop)',
-    counter: 4,
-    nodes: [
-      {
-        id: 'start_0', type: 'loopStart', position: { x: 80, y: 220 },
-        inputs: { carry: { type: 'vec3', label: 'Initial value' } },
-        outputs: { carry: { type: 'vec3', label: 'Carry →' }, iter_index: { type: 'float', label: 'Iter Index' } },
-        params: { iterations: 8, carryType: 'vec3' },
-      },
-      {
-        id: 'step_1', type: 'loopColorRingStep', position: { x: 320, y: 200 },
-        inputs:  { color: { type: 'vec3', label: 'Color in', connection: { nodeId: 'start_0', outputKey: 'carry' } } },
-        outputs: { color: { type: 'vec3', label: 'Color out' } },
-        params: { scale: 1.5, freq: 8.0, glow: 0.01, timeScale: 0.4, phaseStep: 0.4 },
-      },
-      {
-        id: 'end_2', type: 'loopEnd', position: { x: 560, y: 220 },
-        inputs:  { carry: { type: 'vec3', label: '← Carry in', connection: { nodeId: 'step_1', outputKey: 'color' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
-      },
-      {
-        id: 'out_3', type: 'output', position: { x: 780, y: 220 },
-        inputs:  { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'end_2', outputKey: 'result' } } },
-        outputs: {}, params: {},
-      },
-    ],
-  },
 
   // ── Loop: Zoom Tunnel — pure domain-fold zoom, no warp ───────────────────────
   // Each iteration applies fract(uv * 1.8 + offset) - 0.5, doubling spatial

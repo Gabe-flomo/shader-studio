@@ -4803,7 +4803,6 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'rotatingLinesLoop':
     case 'accumulateLoop':
     case 'forLoop':
-    case 'loopStart':
     case 'loopCarry':
     case 'loopDomainFold':   return <SDF3DParamViz           node={node} />;
 
@@ -4928,7 +4927,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'chladni', 'chladni3d', 'chladni3dParticles',
   // Loop / Effect nodes
   'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
-  'loopStart', 'loopCarry', 'loopDomainFold',
+  'loopCarry', 'loopDomainFold',
   // Volumetrics / complex effects
   'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'glassDistortion',
   'orbitalVolume3d', 'radianceCascadesApprox',

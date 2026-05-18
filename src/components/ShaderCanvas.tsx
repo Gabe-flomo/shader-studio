@@ -196,6 +196,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   const previewNodeIdRef    = useRef<string | null>(null);
   const nodeOutputVarMapRef = useRef<Map<string, Record<string, string>>>(new Map());
   const nodesRef            = useRef<import('../types/nodeGraph').GraphNode[]>([]);
+  // O(1) node lookup — kept in sync with nodesRef
+  const nodeMapRef          = useRef<Map<string, import('../types/nodeGraph').GraphNode>>(new Map());
+  // Scope node IDs — avoids O(n) filter every frame
+  const scopeIdsRef         = useRef<Set<string>>(new Set());
+  // Ref-mirrored shaders so the rAF loop sees updates without re-running effects
+  const fragmentShaderRef   = useRef<string>('');
+  const vertexShaderRef     = useRef<string>('');
 
   // Boot Three.js once
   useEffect(() => {
@@ -603,10 +610,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         const selId = selectedNodeIdRef.current;
         if (selId) {
           const outputVars = nodeOutputVarMapRef.current.get(selId);
-          const selNode    = nodesRef.current.find(n => n.id === selId);
-          const _curFs     = useNodeGraphStore.getState().fragmentShader;
-          const curFs      = useNodeGraphStore.getState().rawGlslShader ?? _curFs;
-          const curVs      = useNodeGraphStore.getState().vertexShader;
+          const selNode    = nodeMapRef.current.get(selId);
+          const curFs      = fragmentShaderRef.current;
+          const curVs      = vertexShaderRef.current;
 
           if (outputVars && selNode && curFs && curVs) {
             // If shader recompiled since last probe, stale materials must be rebuilt
@@ -677,19 +683,19 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       }
 
       // ── Scope + LFO nodes: sample every frame, draw waveform directly to canvas ──
-      const SCOPE_LIKE_TYPES = new Set(['scope', 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
-      const scopeNodes = nodesRef.current.filter(n => SCOPE_LIKE_TYPES.has(n.type));
-      if (scopeNodes.length > 0) {
-        const _curScopeFs = useNodeGraphStore.getState().fragmentShader;
-        const curScopeFs = useNodeGraphStore.getState().rawGlslShader ?? _curScopeFs;
-        const curScopeVs = useNodeGraphStore.getState().vertexShader;
+      const scopeIds = scopeIdsRef.current;
+      if (scopeIds.size > 0) {
+        const curScopeFs = fragmentShaderRef.current;
+        const curScopeVs = vertexShaderRef.current;
         if (curScopeFs && curScopeVs) {
           if (lastScopeFs !== curScopeFs) {
             scopeMatCache.forEach(m => m.dispose());
             scopeMatCache.clear();
             lastScopeFs = curScopeFs;
           }
-          for (const scopeNode of scopeNodes) {
+          for (const scopeId of scopeIds) {
+            const scopeNode = nodeMapRef.current.get(scopeId);
+            if (!scopeNode) continue;
             const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
             if (!outputVars?.value) continue;
             const varName = outputVars.value;
@@ -739,11 +745,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       // ── Preview scope: waveform + upstream probes when 👁 is active ──
       const previewId = previewNodeIdRef.current;
       if (previewId) {
-        const previewNode = nodesRef.current.find(n => n.id === previewId);
+        const previewNode = nodeMapRef.current.get(previewId);
         if (previewNode) {
-          const _curFs2 = useNodeGraphStore.getState().fragmentShader;
-          const curFs = useNodeGraphStore.getState().rawGlslShader ?? _curFs2;
-          const curVs = useNodeGraphStore.getState().vertexShader;
+          const curFs = fragmentShaderRef.current;
+          const curVs = vertexShaderRef.current;
           if (curFs && curVs) {
             if (lastPreviewScopeFs !== curFs) {
               previewScopeMatCache.forEach(m => m.dispose());
@@ -806,7 +811,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
             for (const inputSocket of Object.values(previewNode.inputs)) {
               if (!inputSocket.connection) continue;
               const { nodeId: upId, outputKey: upKey } = inputSocket.connection;
-              const upNode = nodesRef.current.find(n => n.id === upId);
+              const upNode = nodeMapRef.current.get(upId);
               if (!upNode) continue;
               const upType = upNode.outputs[upKey]?.type;
               if (!upType) continue;
@@ -1024,18 +1029,24 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
 
   // Sync probe refs from store so the rAF loop sees updates without re-running the effect
   useEffect(() => {
+    const SCOPE_LIKE = new Set(['scope', 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
+    const syncNodes = (nodes: import('../types/nodeGraph').GraphNode[]) => {
+      nodesRef.current  = nodes;
+      nodeMapRef.current = new Map(nodes.map(n => [n.id, n]));
+      scopeIdsRef.current = new Set(nodes.filter(n => SCOPE_LIKE.has(n.type)).map(n => n.id));
+    };
     const unsub = useNodeGraphStore.subscribe(state => {
       selectedNodeIdRef.current   = state.selectedNodeId;
       previewNodeIdRef.current    = state.previewNodeId;
       nodeOutputVarMapRef.current = state.nodeOutputVarMap;
-      nodesRef.current            = state.nodes;
+      syncNodes(state.nodes);
     });
     // Initialize immediately
     const s = useNodeGraphStore.getState();
     selectedNodeIdRef.current   = s.selectedNodeId;
     previewNodeIdRef.current    = s.previewNodeId;
     nodeOutputVarMapRef.current = s.nodeOutputVarMap;
-    nodesRef.current            = s.nodes;
+    syncNodes(s.nodes);
     return unsub;
   }, []);
 
@@ -1044,6 +1055,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   useEffect(() => {
     if (!materialRef.current || !vertexShader || !activeFragmentShader) return;
     setGlslErrors([]);
+    fragmentShaderRef.current = activeFragmentShader;
+    vertexShaderRef.current = vertexShader;
     materialRef.current.vertexShader = vertexShader;
     materialRef.current.fragmentShader = activeFragmentShader;
     // Register param uniforms on the material (initial values from compilation)
