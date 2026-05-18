@@ -49,7 +49,7 @@ export {
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
   ChromaShiftNode,
 } from './effects';
-export { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
+export { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 export { LoopCarryNode } from './loop';
 
 // Noise
@@ -180,7 +180,7 @@ import {
   GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
   ChromaShiftNode,
 } from './effects';
-import { LoopStartNode, LoopEndNode, LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
+import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
@@ -349,10 +349,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   motionBlur: MotionBlurNode,
   depthOfField: DepthOfFieldNode,
   chromaShift: ChromaShiftNode,
-  // Loops (wired pair system)
+  // Loops
   loopCarry:             LoopCarryNode,
-  loopStart:             LoopStartNode,
-  loopEnd:               LoopEndNode,
   loopRippleStep:        LoopRippleStepNode,
   loopRotateStep:        LoopRotateStepNode,
   loopDomainFold:        LoopDomainFoldNode,

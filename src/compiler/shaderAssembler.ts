@@ -1,7 +1,6 @@
 import type { GraphNode, DataType, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { topologicalSort } from './topoSort';
-import type { LoopPairChain } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
@@ -93,6 +92,17 @@ function getNodeOutputType(node: GraphNode, defType: DataType): DataType {
   return defType;
 }
 
+// ── Shared literal formatter ──────────────────────────────────────────────────
+
+/**
+ * Convert a JS number or number[] into a GLSL literal string.
+ * Ensures integers are emitted as "N.0" so GLSL sees them as floats.
+ */
+export function formatGlslLiteral(val: number | number[], type: string): string {
+  if (typeof val === 'number') return Number.isInteger(val) ? `${val}.0` : `${val}`;
+  return `${type}(${val.map(v => v.toFixed(1)).join(', ')})`;
+}
+
 // ── Input-variable resolution ─────────────────────────────────────────────────
 
 /**
@@ -134,17 +144,10 @@ export function resolveInputVars(
       const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
       const cfInp = cfInputs.find(c => c.name === inputKey);
       if (cfInp?.slider != null) {
-        const v = node.params[inputKey] as number;
-        inputVars[inputKey] = Number.isInteger(v) ? `${v}.0` : `${v}`;
+        inputVars[inputKey] = formatGlslLiteral(node.params[inputKey] as number, 'float');
       }
     } else if (input.defaultValue !== undefined) {
-      if (typeof input.defaultValue === 'number') {
-        const n = input.defaultValue;
-        inputVars[inputKey] = Number.isInteger(n) ? `${n}.0` : `${n}`;
-      } else if (Array.isArray(input.defaultValue)) {
-        const vals = input.defaultValue.map((v: number) => v.toFixed(1)).join(', ');
-        inputVars[inputKey] = `${input.type}(${vals})`;
-      }
+      inputVars[inputKey] = formatGlslLiteral(input.defaultValue as number | number[], input.type);
     } else if (input.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) {
       inputVars[inputKey] = 'g_uv';
     } else if (input.type === 'float' && (inputKey === 'time' || inputKey === 't')) {
@@ -153,70 +156,6 @@ export function resolveInputVars(
   }
 
   return inputVars;
-}
-
-// ── Loop helpers ──────────────────────────────────────────────────────────────
-
-/** Resolve input vars for a node inside a loop body (modal or wired pair). */
-function resolveLoopBodyInputVars(
-  bodyNode: GraphNode,
-  _carryType: DataType,
-  iterCarry: string,
-  nodeOutputs: Map<string, Record<string, string>>,
-  chainNodeIds: Set<string>,
-): Record<string, string> {
-  const inputVars: Record<string, string> = {};
-  for (const [k, sock] of Object.entries(bodyNode.inputs)) {
-    // Only inject the carry for sockets explicitly wired to a chain node.
-    // Type-match inference was removed: it would falsely inject carry into float
-    // param sockets on nodes that use a float carry type.
-    const isCarryConn = sock.connection && chainNodeIds.has(sock.connection.nodeId);
-    if (isCarryConn) {
-      inputVars[k] = iterCarry;
-    } else if (sock.connection) {
-      const src = nodeOutputs.get(sock.connection.nodeId);
-      inputVars[k] = src?.[sock.connection.outputKey] ?? defaultGlslVal(sock.type);
-    } else if ((bodyNode.type === 'customFn' || bodyNode.type === 'exprNode') && typeof bodyNode.params[k] === 'number') {
-      const cfInputs = (bodyNode.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
-      const cfInp = cfInputs.find(c => c.name === k);
-      if (cfInp?.slider != null) {
-        const v = bodyNode.params[k] as number;
-        inputVars[k] = Number.isInteger(v) ? `${v}.0` : `${v}`;
-      }
-    } else if (sock.defaultValue !== undefined) {
-      if (typeof sock.defaultValue === 'number') {
-        const sv = sock.defaultValue;
-        inputVars[k] = Number.isInteger(sv) ? `${sv}.0` : `${sv}`;
-      } else if (Array.isArray(sock.defaultValue)) {
-        const vals = sock.defaultValue.map((v: number) => v.toFixed(1)).join(', ');
-        inputVars[k] = `${sock.type}(${vals})`;
-      }
-    } else if (sock.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) {
-      inputVars[k] = 'g_uv';
-    } else if (sock.type === 'float' && (k === 'time' || k === 't')) {
-      inputVars[k] = 'u_time';
-    }
-  }
-  return inputVars;
-}
-
-/** Collect glslFunction strings from a list of node IDs. */
-function collectFunctions(
-  nodeIds: string[],
-  allNodeMap: Map<string, GraphNode>,
-  functions: Set<string>,
-) {
-  for (const id of nodeIds) {
-    const n = allNodeMap.get(id);
-    if (!n) continue;
-    const def = getNodeDefinition(n.type);
-    if (def?.glslFunction) functions.add(def.glslFunction);
-    def?.glslFunctions?.forEach(f => functions.add(f));
-    if (n.type === 'customFn' && typeof n.params.glslFunctions === 'string') {
-      const h = (n.params.glslFunctions as string).trim();
-      if (h) functions.add(h);
-    }
-  }
 }
 
 /** Returns true if `v` is a GLSL variable reference rather than a literal value.
@@ -234,8 +173,6 @@ function isGlslVarRef(v: string): boolean {
 export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
-  _loopInternalIds: Set<string>,
-  loopPairChains: Map<string, LoopPairChain> = new Map(),
 ): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
   const nodeMap    = new Map(sortedNodes.map(n => [n.id, n]));
   const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
@@ -307,92 +244,6 @@ export function generateFragmentShader(
     }
     if (node.type === 'videoInput') {
       videoUniforms[`u_vid_${nodeSlug}`] = node.id;
-    }
-
-    // ── Loop Start: register carry var — loopEnd owns the actual GLSL emission ─
-    if (node.type === 'loopStart') {
-      // Resolve the correct carryType: prefer chain lookup, then node's own
-      // carryType param.  The param fallback is needed when the paired loopEnd
-      // is absent from the subgraph (e.g. node-preview compilation).
-      let startCarryType: DataType = 'vec2';
-      for (const chain of loopPairChains.values()) {
-        if (chain.startNodeId === node.id) { startCarryType = chain.carryType; break; }
-      }
-      const cp = node.params.carryType;
-      if (cp === 'float' || cp === 'vec3' || cp === 'vec4') startCarryType = cp as DataType;
-      const carryVar = inputVars['carry'] ?? defaultGlslVal(startCarryType);
-      nodeOutputs.set(node.id, { carry: carryVar, iter_index: '0.0' });
-      continue;
-    }
-
-    // ── Loop End: emit a real GLSL for loop over the body chain ─────────────
-    if (node.type === 'loopEnd') {
-      const chain = loopPairChains.get(node.id);
-      if (!chain) {
-        nodeOutputs.set(node.id, { result: 'vec2(0.0)' });
-        continue;
-      }
-
-      const { bodyIds, startNodeId, carryType, iterations: iters } = chain;
-      const id = node.id;
-
-      // Initial carry value comes from the loopStart's registered carry var
-      const initialCarry = startNodeId
-        ? (nodeOutputs.get(startNodeId)?.['carry'] ?? defaultGlslVal(carryType))
-        : (inputVars['carry'] ?? defaultGlslVal(carryType));
-
-      collectFunctions(bodyIds, allNodeMap, functions);
-
-      const carryVar  = `${id}_val`;
-      const indexVar  = `${id}_i`;
-      const chainNodeIds = new Set<string>(bodyIds);
-      if (startNodeId) chainNodeIds.add(startNodeId);
-
-      let code = '';
-
-      // Declare and initialise the carry accumulator outside the loop
-      code += `    ${carryType} ${carryVar} = ${initialCarry};\n`;
-
-      // Emit a real GLSL for loop — one copy of the body, GPU iterates
-      code += `    for (int ${indexVar} = 0; ${indexVar} < ${iters}; ${indexVar}++) {\n`;
-
-      for (const bodyId of bodyIds) {
-        const bodyNode = allNodeMap.get(bodyId);
-        if (!bodyNode) continue;
-        const bodyDef = getNodeDefinition(bodyNode.type);
-        if (!bodyDef) continue;
-
-        const bodyInputVars = resolveLoopBodyInputVars(
-          bodyNode, carryType, carryVar, nodeOutputs, chainNodeIds,
-        );
-        // Inject the iteration index so body nodes can use it via a float input
-        bodyInputVars['iter_index'] = `float(${indexVar})`;
-
-        const bodyResult = bodyDef.generateGLSL(bodyNode, bodyInputVars);
-
-        // Prefix all vars with loop ID to avoid collisions with the outer scope
-        const prefixed = bodyResult.code.replace(
-          new RegExp(`\\b${bodyId}_`, 'g'),
-          `${id}_b_${bodyId}_`,
-        );
-        code += prefixed;
-
-        // Update the carry accumulator from this body node's first output
-        const firstOutKey = Object.keys(bodyResult.outputVars)[0];
-        if (firstOutKey) {
-          const rawVar = bodyResult.outputVars[firstOutKey];
-          const prefixedVar = rawVar.replace(
-            new RegExp(`\\b${bodyId}_`, 'g'),
-            `${id}_b_${bodyId}_`,
-          );
-          code += `        ${carryVar} = ${prefixedVar};\n`;
-        }
-      }
-
-      code += `    }\n`;
-      mainCode.push(code);
-      nodeOutputs.set(node.id, { result: carryVar });
-      continue;
     }
 
     // ── Group: compile the subgraph inline (with optional iteration unrolling) ─

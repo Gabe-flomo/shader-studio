@@ -6,20 +6,9 @@ export interface ValidationResult {
   errors?: string[];
 }
 
-/**
- * Validate that the graph has exactly one output node, all node types are
- * registered, and all connections are type-compatible.
- *
- * `loopInternalIds` are excluded from the main-pass checks because they are
- * compiled inside loop bodies and are intentionally disconnected from the
- * outer graph's output path.
- */
-export function validateGraph(
-  nodes: GraphNode[],
-  loopInternalIds = new Set<string>(),
-): ValidationResult {
+export function validateGraph(nodes: GraphNode[]): ValidationResult {
   const errors: string[] = [];
-  const visibleNodes = nodes.filter(n => !loopInternalIds.has(n.id));
+  const visibleNodes = nodes;
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
 
   // Exactly one output node
@@ -48,9 +37,8 @@ export function validateGraph(
         continue;
       }
 
-      // customFn and loopStart/loopEnd have dynamic / inferred types — skip
+      // customFn has dynamic / inferred types — skip
       if (node.type === 'customFn') continue;
-      if (node.type === 'loopStart' || node.type === 'loopEnd') continue;
 
       const sourceDef = getNodeDefinition(sourceNode.type);
       // exprNode/expr/customFn store actual output type in params.outputType —

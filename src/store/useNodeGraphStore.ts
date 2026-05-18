@@ -280,7 +280,7 @@ const _history: GraphNode[][] = [];
 
 /** Push a deep-clone of the current node list onto the undo stack. */
 function pushHistory(nodes: GraphNode[]) {
-  _history.push(JSON.parse(JSON.stringify(nodes)));
+  _history.push(structuredClone(nodes));
   if (_history.length > MAX_HISTORY) _history.shift();
 }
 
@@ -483,12 +483,6 @@ interface NodeGraphState {
   ungroupNode: (groupId: string) => void;
   /** Rename an input or output port label on a group node. */
   renameGroupPort: (nodeId: string, portKey: string, dir: 'in' | 'out', newLabel: string) => void;
-  /**
-   * Wrap selected nodes in a LoopStart / LoopEnd pair.
-   * Carry type is inferred from the wire entering the first body node.
-   * Returns { startId, endId } or null if the selection is invalid.
-   */
-  wrapInLoop: (nodeIds: string[]) => { startId: string; endId: string } | null;
   undo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => void;
@@ -2053,139 +2047,6 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     get().compile();
     return groupId;
-  },
-
-  wrapInLoop: (nodeIds) => {
-    const { nodes } = get();
-    if (nodeIds.length < 1) return null;
-
-    const selectedSet  = new Set(nodeIds);
-    const selectedNodes = nodes.filter(n => selectedSet.has(n.id));
-
-    // Reject nodes that shouldn't be wrapped
-    const forbidden = ['output', 'vec4Output', 'loopStart', 'loopEnd'];
-    if (selectedNodes.some(n => forbidden.includes(n.type))) return null;
-
-    pushHistory(nodes);
-
-    // ── Find entry: first body node (no inputs from within selection) ──────────
-    const entryNode = selectedNodes.find(n =>
-      Object.values(n.inputs).every(
-        inp => !inp.connection || !selectedSet.has(inp.connection.nodeId),
-      ),
-    ) ?? selectedNodes[0];
-
-    // Discover external connection feeding into entry node → carry source + type
-    let externalSource: { nodeId: string; outputKey: string } | undefined;
-    let entryInputKey: string | undefined;
-    let carryType: import('../types/nodeGraph').DataType = 'vec2';
-
-    for (const [key, inp] of Object.entries(entryNode.inputs)) {
-      if (inp.connection && !selectedSet.has(inp.connection.nodeId)) {
-        externalSource  = { ...inp.connection };
-        entryInputKey   = key;
-        const srcNode   = nodes.find(n => n.id === inp.connection!.nodeId);
-        const srcDef    = srcNode ? getNodeDefinition(srcNode.type) : undefined;
-        const wireType  =
-          srcNode?.outputs[inp.connection.outputKey]?.type ??
-          srcDef?.outputs[inp.connection.outputKey]?.type;
-        if (wireType === 'float' || wireType === 'vec2' || wireType === 'vec3' || wireType === 'vec4') {
-          carryType = wireType;
-        }
-        break;
-      }
-    }
-
-    // ── Find exit: last body node (output wired to non-selected node) ─────────
-    let exitNodeId: string | undefined;
-    let exitOutputKey: string | undefined;
-    const downstreamEdges: Array<{ nodeId: string; inputKey: string }> = [];
-
-    for (const n of nodes) {
-      if (selectedSet.has(n.id)) continue;
-      for (const [key, inp] of Object.entries(n.inputs)) {
-        if (inp.connection && selectedSet.has(inp.connection.nodeId)) {
-          exitNodeId    = inp.connection.nodeId;
-          exitOutputKey = inp.connection.outputKey;
-          downstreamEdges.push({ nodeId: n.id, inputKey: key });
-        }
-      }
-    }
-    // Fallback: last node with no internal downstream
-    if (!exitNodeId) {
-      const candidate = [...selectedNodes].reverse().find(n =>
-        !nodes.some(other =>
-          !selectedSet.has(other.id) &&
-          Object.values(other.inputs).some(inp => inp.connection?.nodeId === n.id),
-        ),
-      );
-      if (candidate) {
-        exitNodeId    = candidate.id;
-        exitOutputKey = Object.keys(candidate.outputs)[0] ?? 'out';
-      }
-    }
-
-    const exitNode = selectedNodes.find(n => n.id === exitNodeId) ?? selectedNodes[selectedNodes.length - 1];
-
-    const now     = Date.now();
-    const startId = `loopStart_${now}`;
-    const endId   = `loopEnd_${now + 1}`;
-
-    const loopStartNode: import('../types/nodeGraph').GraphNode = {
-      id: startId,
-      type: 'loopStart',
-      position: { x: entryNode.position.x - 240, y: entryNode.position.y },
-      inputs:  { carry: { type: carryType, label: 'Initial value', connection: externalSource } },
-      outputs: {
-        carry:      { type: carryType, label: 'Carry →'    },
-        iter_index: { type: 'float',   label: 'Iter Index' },
-      },
-      params: { iterations: 4, carryType },
-    };
-
-    const loopEndNode: import('../types/nodeGraph').GraphNode = {
-      id: endId,
-      type: 'loopEnd',
-      position: { x: exitNode.position.x + 280, y: exitNode.position.y },
-      inputs:  {
-        carry: {
-          type: carryType,
-          label: '← Carry in',
-          connection: exitNodeId && exitOutputKey
-            ? { nodeId: exitNodeId, outputKey: exitOutputKey }
-            : undefined,
-        },
-      },
-      outputs: { result: { type: carryType, label: 'Result' } },
-      params:  {},
-    };
-
-    // Re-wire entry node's external input → LoopStart.carry
-    // Re-wire downstream nodes → LoopEnd.result
-    const updatedNodes = nodes.map(n => {
-      if (n.id === entryNode.id && entryInputKey) {
-        return {
-          ...n,
-          inputs: {
-            ...n.inputs,
-            [entryInputKey]: { ...n.inputs[entryInputKey], connection: { nodeId: startId, outputKey: 'carry' } },
-          },
-        };
-      }
-      const replacements = downstreamEdges.filter(r => r.nodeId === n.id);
-      if (replacements.length > 0) {
-        const newInputs = { ...n.inputs };
-        for (const r of replacements) {
-          newInputs[r.inputKey] = { ...newInputs[r.inputKey], connection: { nodeId: endId, outputKey: 'result' } };
-        }
-        return { ...n, inputs: newInputs };
-      }
-      return n;
-    });
-
-    set({ nodes: [...updatedNodes, loopStartNode, loopEndNode] });
-    get().compile();
-    return { startId, endId };
   },
 
   ungroupNode: (groupId) => {

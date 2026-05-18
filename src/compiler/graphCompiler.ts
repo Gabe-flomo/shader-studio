@@ -1,15 +1,14 @@
 /**
  * graphCompiler.ts — orchestrator
  *
- * Coordinates the five compilation steps and re-exports CompilationResult so
+ * Coordinates the four compilation steps and re-exports CompilationResult so
  * consumers only need to import from this one file.
  *
  * Step order:
- *   1. Collect loop-internal node IDs (excluded from the main pass)
- *   2. Validate the graph (type checks, output-node existence)
- *   3. Topological sort the main-pass nodes
- *   4. Assemble the fragment shader (resolves vars, patches uniforms, emits GLSL)
- *   5. Return CompilationResult
+ *   1. Validate the graph (type checks, output-node existence)
+ *   2. Topological sort
+ *   3. Assemble the fragment shader (resolves vars, patches uniforms, emits GLSL)
+ *   4. Return CompilationResult
  */
 
 export type { CompilationResult } from './types';
@@ -18,11 +17,7 @@ export { VERTEX_SHADER } from './types';
 import type { NodeGraph } from '../types/nodeGraph';
 import type { CompilationResult } from './types';
 import { VERTEX_SHADER } from './types';
-import {
-  collectLoopPairChains,
-  collectLoopPairInternalIds,
-  topologicalSort,
-} from './topoSort';
+import { topologicalSort } from './topoSort';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
 import { compileParticleChains } from './particleAssembler';
@@ -33,12 +28,8 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
   try {
     const { nodes } = graph;
 
-    // 1. Determine which node IDs are loop-internal (excluded from main pass)
-    const loopPairChains   = collectLoopPairChains(nodes);
-    const allInternalIds   = collectLoopPairInternalIds(loopPairChains);
-
-    // 2. Validate
-    const validation = validateGraph(nodes, allInternalIds);
+    // 1. Validate
+    const validation = validateGraph(nodes);
     if (!validation.valid) {
       return {
         vertexShader: '',
@@ -54,15 +45,14 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       };
     }
 
-    // 3. Topological sort (main-pass nodes only)
-    // Pass loopPairChains so loopStart is always ordered before its loopEnd.
-    const sortedNodes = topologicalSort(nodes, allInternalIds, loopPairChains);
+    // 2. Topological sort
+    const sortedNodes = topologicalSort(nodes);
 
-    // 4. Assemble fragment shader
+    // 3. Assemble fragment shader
     const { fragmentShader, nodeOutputVars, paramUniforms, textureUniforms, audioUniforms, videoUniforms, isStateful, nodeSlugMap, mlgDynamicOutputs } =
-      generateFragmentShader(sortedNodes, nodes, allInternalIds, loopPairChains);
+      generateFragmentShader(sortedNodes, nodes);
 
-    // 5. Compile GPU particle chains (pInit → … → pRender)
+    // 4. Compile GPU particle chains (pInit → … → pRender)
     const { systems: particleSystems } = compileParticleChains(nodes);
 
     // Merge particle param uniforms into the main paramUniforms so sliders work
