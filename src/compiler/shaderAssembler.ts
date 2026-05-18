@@ -174,9 +174,8 @@ export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
 ): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
-  const nodeMap    = new Map(sortedNodes.map(n => [n.id, n]));
-  const allNodeMap = new Map(allNodes.map(n => [n.id, n]));
-  const functions  = new Set<string>();
+  const nodeMap   = new Map(sortedNodes.map(n => [n.id, n]));
+  const functions = new Set<string>();
   // Seed with SDF built-ins so they're always available and deduplicated
   functions.add(GLSL_SMIN);
   functions.add(GLSL_SD_BOX);
