@@ -140,6 +140,13 @@ export interface NodeDefinition {
     params: Record<string, unknown>,
     fromVersion: number,
   ) => Record<string, unknown>;
+
+  /**
+   * Rename stale input socket keys from old definitions.
+   * Keys are `{ oldKey: newKey }` pairs applied unconditionally on every load.
+   * Use this when an input is renamed so that saved connections survive the rename.
+   */
+  migrateInputKeys?: Record<string, string>;
 }
 
 // ── Helper: run migrations on a node's params ─────────────────────────────────
@@ -156,20 +163,36 @@ export function migrateNodeParams(
   const def = getDef(node.type);
   if (!def) return node;
 
-  const currentVersion  = def.version ?? 1;
-  const savedVersion    = (node.params._schemaVersion as number | undefined) ?? 0;
+  let result = node;
 
-  if (!def.migrateParams || savedVersion >= currentVersion) {
-    // Stamp the current version so it's always present in saved graphs
-    if (savedVersion !== currentVersion) {
-      return { ...node, params: { ...node.params, _schemaVersion: currentVersion } };
+  // Rename stale input socket keys (e.g. 't' → 'value' on palette nodes)
+  if (def.migrateInputKeys) {
+    const renames = def.migrateInputKeys;
+    const newInputs = { ...result.inputs };
+    let changed = false;
+    for (const [oldKey, newKey] of Object.entries(renames)) {
+      if (oldKey in newInputs && !(newKey in newInputs)) {
+        newInputs[newKey] = newInputs[oldKey];
+        delete newInputs[oldKey];
+        changed = true;
+      }
     }
-    return node;
+    if (changed) result = { ...result, inputs: newInputs };
   }
 
-  const migratedParams = def.migrateParams({ ...node.params }, savedVersion);
+  const currentVersion = def.version ?? 1;
+  const savedVersion   = (result.params._schemaVersion as number | undefined) ?? 0;
+
+  if (!def.migrateParams || savedVersion >= currentVersion) {
+    if (savedVersion !== currentVersion) {
+      return { ...result, params: { ...result.params, _schemaVersion: currentVersion } };
+    }
+    return result;
+  }
+
+  const migratedParams = def.migrateParams({ ...result.params }, savedVersion);
   migratedParams._schemaVersion = currentVersion;
-  return { ...node, params: migratedParams };
+  return { ...result, params: migratedParams };
 }
 
 // The entire graph
