@@ -12,9 +12,10 @@ export const PaletteNode: NodeDefinition = {
   type: 'palette',
   label: 'Palette',
   category: 'Color',
-  description: 'Cosine-based color palette. Wire float nodes to offset_r/offset_g/offset_b etc. to animate palette coefficients, or use the vec3 sliders as static fallbacks.',
+  description: 'Cosine-based color palette. Wire a float to Value to pick a position on the palette, and optionally wire Time to animate it.',
   inputs: {
-    t:           { type: 'float', label: 'T', defaultValue: 0 },
+    value:       { type: 'float', label: 'Value', defaultValue: 0 },
+    time:        { type: 'float', label: 'Time',  defaultValue: 0 },
     offset_r:    { type: 'float', label: 'offset.r' },
     offset_g:    { type: 'float', label: 'offset.g' },
     offset_b:    { type: 'float', label: 'offset.b' },
@@ -46,7 +47,9 @@ export const PaletteNode: NodeDefinition = {
   glslFunction: PALETTE_GLSL_FN,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
-    const tVar = inputVars.t || '0.0';
+    const valVar  = inputVars.value || '0.0';
+    const timeVar = inputVars.time  || '0.0';
+    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     const oV = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
     const aV = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
     const fV = Array.isArray(node.params.freq)      ? node.params.freq      as number[] : [1.0, 1.0, 1.0];
@@ -156,9 +159,10 @@ export const PalettePresetNode: NodeDefinition = {
   type: 'palettePreset',
   label: 'Palette Preset',
   category: 'Color',
-  description: 'Cosine palette with named presets. Wire a float to T, pick a preset from the dropdown.',
+  description: 'Cosine palette with named presets. Wire a float to Value to pick a position, and optionally wire Time to animate it.',
   inputs: {
-    t: { type: 'float', label: 'T', defaultValue: 0 },
+    value: { type: 'float', label: 'Value', defaultValue: 0 },
+    time:  { type: 'float', label: 'Time',  defaultValue: 0 },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -169,7 +173,9 @@ export const PalettePresetNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
-    const tVar = inputVars.t || '0.0';
+    const valVar  = inputVars.value || '0.0';
+    const timeVar = inputVars.time  || '0.0';
+    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     const idx = parseInt((node.params.preset as string) ?? '1', 10);
     const preset = PALETTE_PRESETS[Math.min(idx, PALETTE_PRESETS.length - 1)] ?? PALETTE_PRESETS[1];
     const fv = (v: number) => v.toFixed(6);
