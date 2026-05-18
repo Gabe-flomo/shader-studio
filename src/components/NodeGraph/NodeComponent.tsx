@@ -3955,7 +3955,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     step={adaptiveStep(val, step)}
                     value={Math.max(effMin, Math.min(effMax, val))}
                     onChange={e => setFloat(key, e.target.value)}
-                    onDoubleClick={() => setFloat(key, String((effMin + effMax) / 2))}
+                    onDoubleClick={() => {
+                      const defVal = def?.defaultParams?.[key];
+                      setFloat(key, typeof defVal === 'number' ? String(defVal) : String((effMin + effMax) / 2));
+                    }}
                   />
                   {editingSliderKey === key ? (
                     <input
@@ -4063,7 +4066,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 style={{ padding: '3px 10px 5px', display: 'flex', flexDirection: 'column', gap: '3px' }}
                 onMouseDown={e => e.stopPropagation()}
               >
-                <span style={{ color: '#6c7086', fontSize: '11px' }}>{paramDef.label}</span>
+                <span
+                  style={{ color: '#6c7086', fontSize: '11px', cursor: 'default', userSelect: 'none' }}
+                  title="Double-click to reset to default"
+                  onDoubleClick={() => {
+                    const defVal = def?.defaultParams?.[key];
+                    if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
+                  }}
+                >{paramDef.label}</span>
                 {[0, 1, 2].map(idx => {
                   const compConnected = node.inputs[compKeys[idx]]?.connection != null;
                   if (compConnected) {
@@ -4084,6 +4094,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         step={step}
                         value={vals[idx] ?? 0}
                         onChange={e => setVec3Component(key, idx, e.target.value)}
+                        onDoubleClick={() => {
+                          const defVal = def?.defaultParams?.[key];
+                          if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
+                        }}
                       />
                       {/* No min/max on number input — allows typing values beyond the slider range */}
                       <input
