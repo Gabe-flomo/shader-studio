@@ -417,6 +417,8 @@ interface NodeGraphState {
   addGroupInput: (groupId: string, type: import('../types/nodeGraph').DataType, label: string) => void;
   /** Reroute an existing group input port to a different inner node socket */
   rerouteGroupInput: (groupId: string, portKey: string, toNodeId: string, toInputKey: string) => void;
+  /** Remove a group input port and its external connection (called when disconnecting an external socket from inside a group) */
+  removeGroupInputPort: (groupId: string, portKey: string) => void;
   /**
    * Set the assignOp on a node (works for both top-level and subgraph nodes).
    * Controls how its outputs accumulate across iterations in a loop group.
@@ -3420,6 +3422,30 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
           if (!sg) return n;
           return { ...n, params: { ...n.params, subgraph: { ...sg, inputPorts: sg.inputPorts.map(p => p.key === portKey ? { ...p, toNodeId, toInputKey } : p) } } };
+        }),
+      };
+    });
+    get().compile();
+  },
+
+  removeGroupInputPort: (groupId, portKey) => {
+    pushHistory(get().nodes);
+    const { activeGroupPath } = get();
+    set(state => {
+      return {
+        nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+          if (!sg) return n;
+          const newInputs = { ...n.inputs };
+          const inputSlot = newInputs[portKey];
+          if (inputSlot) {
+            newInputs[portKey] = { type: inputSlot.type, label: inputSlot.label };
+          }
+          return {
+            ...n,
+            inputs: newInputs,
+            params: { ...n.params, subgraph: { ...sg, inputPorts: sg.inputPorts.filter(p => p.key !== portKey) } },
+          };
         }),
       };
     });
