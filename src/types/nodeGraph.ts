@@ -165,6 +165,15 @@ export function migrateNodeParams(
 
   let result = node;
 
+  // Recurse into group subgraphs so nodes at any nesting depth are migrated
+  if (result.params?.subgraph) {
+    const sg = result.params.subgraph as { nodes?: GraphNode[] };
+    if (Array.isArray(sg.nodes)) {
+      const migratedInner = sg.nodes.map(n => migrateNodeParams(n, getDef));
+      result = { ...result, params: { ...result.params, subgraph: { ...sg, nodes: migratedInner } } };
+    }
+  }
+
   // Rename stale input socket keys (e.g. 't' → 'value' on palette nodes)
   if (def.migrateInputKeys) {
     const renames = def.migrateInputKeys;
