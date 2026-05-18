@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 
 // ── Token colour palette (Catppuccin Mocha) ───────────────────────────────────
 const C = {
@@ -207,7 +207,17 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
     preRef.current.scrollLeft = textareaRef.current.scrollLeft;
   }, []);
 
-  const rows = Math.max(2, value.split('\n').length);
+  // Auto-resize: set textarea height to its exact scroll height so the
+  // highlight <pre> layer and the textarea's character positions never drift.
+  // The `rows` attribute uses font-size (not line-height) for row height,
+  // causing a growing pixel offset between the two layers on large pastes.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [value]);
+
   const html = buildHighlightedHtml(value);
 
   return (
@@ -233,7 +243,6 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
       <textarea
         ref={textareaRef}
         value={value}
-        rows={rows}
         spellCheck={false}
         onChange={e => onChange(e.target.value)}
         onKeyDown={onKeyDown}
@@ -248,6 +257,7 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
           caretColor:  hasError ? '#f38ba8' : '#cdd6f4',
           resize:      'none',
           display:     'block',
+          overflow:    'hidden',
         }}
       />
     </div>

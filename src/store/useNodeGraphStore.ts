@@ -483,7 +483,6 @@ interface NodeGraphState {
   ungroupNode: (groupId: string) => void;
   /** Rename an input or output port label on a group node. */
   renameGroupPort: (nodeId: string, portKey: string, dir: 'in' | 'out', newLabel: string) => void;
-  /**
   undo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => void;
