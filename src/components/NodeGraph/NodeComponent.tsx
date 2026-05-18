@@ -397,7 +397,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const mlGroupHiddenOutputs = _mlGroupHiddenOutputsRaw ?? [];
   const renameGroupPort        = useNodeGraphStore(s => s.renameGroupPort);
   const removeGroupInputPort   = useNodeGraphStore(s => s.removeGroupInputPort);
-  const activeGroupId          = useNodeGraphStore(s => s.activeGroupId);
   const saveGroupPreset        = useNodeGraphStore(s => s.saveGroupPreset);
   const duplicateGroup         = useNodeGraphStore(s => s.duplicateGroup);
   const ungroupNode            = useNodeGraphStore(s => s.ungroupNode);
