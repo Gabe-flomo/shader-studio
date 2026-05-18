@@ -3521,30 +3521,6 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   compile: () => {
-    // Patch any nodes that are missing input sockets added by a definition update
-    const rawNodes = get().nodes;
-    let inputsPatched = false;
-    const patchedNodes = rawNodes.map(node => {
-      const def = getNodeDefinition(node.type);
-      if (!def) return node;
-      let changed = false;
-      const mergedInputs: Record<string, InputSocket> = { ...node.inputs };
-      for (const [key, socket] of Object.entries(def.inputs)) {
-        if (!mergedInputs[key]) {
-          mergedInputs[key] = {
-            ...socket,
-            defaultValue: def.paramDefs?.[key]
-              ? undefined
-              : def.defaultParams?.[key] as number | number[] | undefined,
-          };
-          changed = true;
-        }
-      }
-      if (changed) { inputsPatched = true; return { ...node, inputs: mergedInputs }; }
-      return node;
-    });
-    if (inputsPatched) set({ nodes: patchedNodes });
-
     const { nodes, previewNodeId, activeGroupId } = get();
     let graphNodes: GraphNode[];
     if (previewNodeId) {
@@ -3752,6 +3728,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   loadExampleGraph: (name?: string) => {
+    _history.length = 0;
     const example = name ?? 'fractalRings';
     const { nodes: rawNodes } = EXAMPLE_GRAPHS[example] ?? EXAMPLE_GRAPHS['fractalRings'];
 
@@ -3817,6 +3794,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       .sort(),
 
   loadSavedGraph: (name) => {
+    _history.length = 0;
     const raw = localStorage.getItem(`shader-studio:${name}`);
     if (!raw) return;
     try {
@@ -3853,6 +3831,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   importGraph: (json: string) => {
+    _history.length = 0;
     try {
       const { nodes: rawNodes } = JSON.parse(json) as { nodes: GraphNode[] };
       if (Array.isArray(rawNodes)) {
