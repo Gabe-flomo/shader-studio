@@ -180,6 +180,24 @@ export function migrateNodeParams(
     if (changed) result = { ...result, inputs: newInputs };
   }
 
+  // Backfill any input sockets that exist in the definition but are missing
+  // from the saved node (e.g. when a new input is added to an existing node type)
+  {
+    const newInputs = { ...result.inputs };
+    let changed = false;
+    for (const [key, socketDef] of Object.entries(def.inputs)) {
+      if (!(key in newInputs)) {
+        newInputs[key] = {
+          type: socketDef.type,
+          label: socketDef.label,
+          ...(socketDef.defaultValue !== undefined ? { defaultValue: socketDef.defaultValue } : {}),
+        };
+        changed = true;
+      }
+    }
+    if (changed) result = { ...result, inputs: newInputs };
+  }
+
   const currentVersion = def.version ?? 1;
   const savedVersion   = (result.params._schemaVersion as number | undefined) ?? 0;
 
