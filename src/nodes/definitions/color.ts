@@ -44,6 +44,7 @@ export const PaletteNode: NodeDefinition = {
     freq:      { label: 'Freq',      type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
     phase:     { label: 'Phase',     type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
   },
+  migrateInputKeys: { t: 'value' },
   glslFunction: PALETTE_GLSL_FN,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
@@ -171,6 +172,7 @@ export const PalettePresetNode: NodeDefinition = {
   paramDefs: {
     preset: { label: 'Preset', type: 'select', options: PALETTE_PRESET_OPTIONS },
   },
+  migrateInputKeys: { t: 'value' },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
     const valVar  = inputVars.value || '0.0';

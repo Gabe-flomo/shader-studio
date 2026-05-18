@@ -3333,7 +3333,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
       <div style={{ padding: '6px 0 4px' }}>
         {/* ── Inputs (always visible) ── */}
-        {Object.entries(node.inputs).map(([key, input]) => {
+        {Object.entries(node.inputs).filter(([key]) => key in def.inputs).map(([key, input]) => {
           const isConnected = !!input.connection;
           const isExternal = externalInputKeys?.has(key) ?? false;
 
