@@ -3755,25 +3755,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const example = name ?? 'fractalRings';
     const { nodes: rawNodes } = EXAMPLE_GRAPHS[example] ?? EXAMPLE_GRAPHS['fractalRings'];
 
-    // Backfill any input sockets that exist in the live NodeDefinition but are
-    // missing from the serialized graph (handles schema evolution across iterations).
-    const nodes = upgradeExprNodes(rawNodes).map(rawNode => {
-      const node = rawNode.params ? rawNode : { ...rawNode, params: {} };
-      const def = getNodeDefinition(node.type);
-      if (!def) return node;
-      const mergedInputs: Record<string, InputSocket> = { ...node.inputs };
-      for (const [key, socket] of Object.entries(def.inputs)) {
-        if (!mergedInputs[key]) {
-          mergedInputs[key] = {
-            ...socket,
-            defaultValue: def.paramDefs?.[key]
-              ? undefined
-              : def.defaultParams?.[key] as number | number[] | undefined,
-          };
-        }
-      }
-      return { ...node, inputs: mergedInputs };
-    });
+    const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(
+      n.params ? n : { ...n, params: {} },
+      getNodeDefinition,
+    ));
 
     syncCounterFromNodes(nodes);
     set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
