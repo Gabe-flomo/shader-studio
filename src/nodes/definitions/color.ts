@@ -15,7 +15,7 @@ export const PaletteNode: NodeDefinition = {
   description: 'Cosine-based color palette. Wire a float to Value to pick a position on the palette, and optionally wire Time to animate it.',
   inputs: {
     value:       { type: 'float', label: 'Value', defaultValue: 0 },
-    time:        { type: 'float', label: 'Time',  defaultValue: 0 },
+    anim:        { type: 'float', label: 'Time',  defaultValue: 0 },
     offset_r:    { type: 'float', label: 'offset.r' },
     offset_g:    { type: 'float', label: 'offset.g' },
     offset_b:    { type: 'float', label: 'offset.b' },
@@ -48,7 +48,7 @@ export const PaletteNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
     const valVar  = inputVars.value || '0.0';
-    const timeVar = inputVars.time  || '0.0';
+    const timeVar = inputVars.anim  || '0.0';
     const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     const oV = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
     const aV = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
@@ -162,7 +162,7 @@ export const PalettePresetNode: NodeDefinition = {
   description: 'Cosine palette with named presets. Wire a float to Value to pick a position, and optionally wire Time to animate it.',
   inputs: {
     value: { type: 'float', label: 'Value', defaultValue: 0 },
-    time:  { type: 'float', label: 'Time',  defaultValue: 0 },
+    anim:  { type: 'float', label: 'Time',  defaultValue: 0 },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -174,7 +174,7 @@ export const PalettePresetNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
     const valVar  = inputVars.value || '0.0';
-    const timeVar = inputVars.time  || '0.0';
+    const timeVar = inputVars.anim  || '0.0';
     const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     const idx = parseInt((node.params.preset as string) ?? '1', 10);
     const preset = PALETTE_PRESETS[Math.min(idx, PALETTE_PRESETS.length - 1)] ?? PALETTE_PRESETS[1];
