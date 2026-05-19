@@ -547,7 +547,7 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
 
   const [chosenKey, chosenSocket] = chosen;
   const outType = (chosenSocket as { type: string }).type as import('../types/nodeGraph').DataType;
-  const previewPortKey = '__preview_port__';
+  const previewPortKey = 'xpreviewport';
 
   // Patch the group: add a synthetic output port routing the inner node's chosen output.
   // Expose ONLY that port so buildPreviewGraph picks it and applies the correct type
