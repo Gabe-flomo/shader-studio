@@ -158,6 +158,29 @@ export function resolveInputVars(
   return inputVars;
 }
 
+/**
+ * Resolve the fallback GLSL literal for an unconnected input socket, checking:
+ * 1. exprNode / customFn slider value stored in node.params
+ * 2. socket defaultValue
+ * 3. standard auto-fills (uv → g_uv, time/t → u_time)
+ * Returns undefined if no fallback is available.
+ */
+function resolveInputFallback(
+  node: GraphNode,
+  inputKey: string,
+  inp: { type: string; defaultValue?: number | number[] },
+): string | undefined {
+  if ((node.type === 'exprNode' || node.type === 'customFn') && typeof node.params[inputKey] === 'number') {
+    const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
+    const cfInp = cfInputs.find(c => c.name === inputKey);
+    if (cfInp?.slider != null) return formatGlslLiteral(node.params[inputKey] as number, 'float');
+  }
+  if (inp.defaultValue !== undefined) return formatGlslLiteral(inp.defaultValue as number | number[], inp.type);
+  if (inp.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) return 'g_uv';
+  if (inp.type === 'float' && (inputKey === 'time' || inputKey === 't')) return 'u_time';
+  return undefined;
+}
+
 /** Returns true if `v` is a GLSL variable reference rather than a literal value.
  *  Used to detect when an external variable is embedded in a scene function body
  *  and needs to become a function parameter instead. */
@@ -345,12 +368,8 @@ export function generateFragmentShader(
                 if (srcOutputs?.[inp.connection.outputKey]) nestedInputVars[k] = srcOutputs[inp.connection.outputKey];
               }
               if (!nestedInputVars[k]) {
-                if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) nestedInputVars[k] = 'g_uv';
-                else if (inp.type === 'float' && (k === 'time' || k === 't')) nestedInputVars[k] = 'u_time';
-                else if (inp.defaultValue !== undefined) {
-                  if (typeof inp.defaultValue === 'number') nestedInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                  else if (Array.isArray(inp.defaultValue)) nestedInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                }
+                const fb = resolveInputFallback(subNode, k, inp);
+                if (fb) nestedInputVars[k] = fb;
               }
             }
             // Build inner port overrides from the nested group's resolved input vars (slug-keyed)
@@ -443,12 +462,8 @@ export function generateFragmentShader(
                   if (srcOut?.[inp.connection.outputKey]) innInputVars[k] = srcOut[inp.connection.outputKey];
                 }
                 if (!innInputVars[k]) {
-                  if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) innInputVars[k] = 'g_uv';
-                  else if (inp.type === 'float' && (k === 'time' || k === 't')) innInputVars[k] = 'u_time';
-                  else if (inp.defaultValue !== undefined) {
-                    if (typeof inp.defaultValue === 'number') innInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                    else if (Array.isArray(inp.defaultValue)) innInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                  }
+                  const fb = resolveInputFallback(inn, k, inp);
+                  if (fb) innInputVars[k] = fb;
                 }
               }
               const { patchedNode: patchedInn, uniforms: innUniforms } = patchNodeParamsForUniforms(inn, innDef);
@@ -484,12 +499,8 @@ export function generateFragmentShader(
               if (srcOutputs?.[inp.connection.outputKey]) subInputVars[k] = srcOutputs[inp.connection.outputKey];
             }
             if (!subInputVars[k]) {
-              if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) subInputVars[k] = 'g_uv';
-              else if (inp.type === 'float' && (k === 'time' || k === 't')) subInputVars[k] = 'u_time';
-              else if (inp.defaultValue !== undefined) {
-                if (typeof inp.defaultValue === 'number') subInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                else if (Array.isArray(inp.defaultValue)) subInputVars[k] = `${inp.type}(${inp.defaultValue.map((v: number) => v.toFixed(1)).join(', ')})`;
-              }
+              const fb = resolveInputFallback(subNode, k, inp);
+              if (fb) subInputVars[k] = fb;
             }
           }
           // Apply __param_X input connections as param overrides (string GLSL vars skip uniform patching)
@@ -1046,11 +1057,10 @@ export function generateFragmentShader(
               if (grpPortOverrides.has(portKey)) gnInputVars[k] = grpPortOverrides.get(portKey)!;
               else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
               if (!gnInputVars[k]) {
-                // Skip defaultValue for param-backed sockets — generateGLSL reads node.params directly
                 const isParamBacked = !!gDef.paramDefs?.[k];
-                if (!isParamBacked && inp.defaultValue !== undefined) {
-                  if (typeof inp.defaultValue === 'number') gnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                  else if (Array.isArray(inp.defaultValue)) gnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
+                if (!isParamBacked) {
+                  const fb = resolveInputFallback(gn, k, inp);
+                  if (fb) gnInputVars[k] = fb;
                 } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
               }
             }
@@ -1092,11 +1102,9 @@ export function generateFragmentShader(
             if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
           }
           // Fallbacks — skip defaultValue for param-backed sockets (generateGLSL reads node.params)
-          if (!snInputVars[k]) {
-            if (!snDef.paramDefs?.[k] && inp.defaultValue !== undefined) {
-              if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-              else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-            }
+          if (!snInputVars[k] && !snDef.paramDefs?.[k]) {
+            const fb = resolveInputFallback(sn, k, inp);
+            if (fb) snInputVars[k] = fb;
           }
         }
 
@@ -1516,10 +1524,8 @@ export function generateFragmentShader(
                       if (igrpPortOverrides.has(pk)) gnInputVars2[k] = igrpPortOverrides.get(pk)!;
                       else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars2[k] = s[inp.connection.outputKey]; }
                       if (!gnInputVars2[k]) {
-                        if (inp.defaultValue !== undefined) {
-                          if (typeof inp.defaultValue === 'number') gnInputVars2[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                          else if (Array.isArray(inp.defaultValue)) gnInputVars2[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                        } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars2[k] = 'u_time';
+                        const fb = resolveInputFallback(gn, k, inp);
+                        if (fb) gnInputVars2[k] = fb;
                       }
                     }
                     const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
@@ -1551,15 +1557,8 @@ export function generateFragmentShader(
                     if (srcOut?.[inp.connection.outputKey]) sgnInputVars[k] = srcOut[inp.connection.outputKey];
                   }
                   if (!sgnInputVars[k]) {
-                    if (inp.defaultValue !== undefined) {
-                      if (typeof inp.defaultValue === 'number') {
-                        sgnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                      } else if (Array.isArray(inp.defaultValue)) {
-                        sgnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                      }
-                    } else if (inp.type === 'float' && (k === 'time' || k === 't')) {
-                      sgnInputVars[k] = 'u_time';
-                    }
+                    const fb = resolveInputFallback(sgn, k, inp);
+                    if (fb) sgnInputVars[k] = fb;
                   }
                 }
 
@@ -1639,12 +1638,8 @@ export function generateFragmentShader(
                 if (mlGrpPortOverrides.has(pk)) gnInputVars[k] = mlGrpPortOverrides.get(pk)!;
                 else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
                 if (!gnInputVars[k]) {
-                  if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
-                  else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) gnInputVars[k] = 'g_uv';
-                  else if (inp.defaultValue !== undefined) {
-                    if (typeof inp.defaultValue === 'number') gnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                    else if (Array.isArray(inp.defaultValue)) gnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                  }
+                  const fb = resolveInputFallback(gn, k, inp);
+                  if (fb) gnInputVars[k] = fb;
                 }
               }
               // Special case: marchSceneDist inside inline group → emit real scene function call
@@ -1730,13 +1725,8 @@ export function generateFragmentShader(
               if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
             }
             if (!snInputVars[k]) {
-              // Uniform passthrough nodes inside the body helper emit globals directly
-              if (inp.type === 'float' && (k === 'time' || k === 't')) snInputVars[k] = 'u_time';
-              else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) snInputVars[k] = 'g_uv';
-              else if (inp.defaultValue !== undefined) {
-                if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-              }
+              const fb = resolveInputFallback(sn, k, inp);
+              if (fb) snInputVars[k] = fb;
             }
           }
 
@@ -2276,10 +2266,8 @@ export function generateFragmentShader(
                       if (igrpPortOverrides.has(pk)) gnInputVars2[k] = igrpPortOverrides.get(pk)!;
                       else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars2[k] = s[inp.connection.outputKey]; }
                       if (!gnInputVars2[k]) {
-                        if (inp.defaultValue !== undefined) {
-                          if (typeof inp.defaultValue === 'number') gnInputVars2[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                          else if (Array.isArray(inp.defaultValue)) gnInputVars2[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                        } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars2[k] = 'u_time';
+                        const fb = resolveInputFallback(gn, k, inp);
+                        if (fb) gnInputVars2[k] = fb;
                       }
                     }
                     const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
@@ -2311,15 +2299,8 @@ export function generateFragmentShader(
                     if (srcOut?.[inp.connection.outputKey]) sgnInputVars[k] = srcOut[inp.connection.outputKey];
                   }
                   if (!sgnInputVars[k]) {
-                    if (inp.defaultValue !== undefined) {
-                      if (typeof inp.defaultValue === 'number') {
-                        sgnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                      } else if (Array.isArray(inp.defaultValue)) {
-                        sgnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                      }
-                    } else if (inp.type === 'float' && (k === 'time' || k === 't')) {
-                      sgnInputVars[k] = 'u_time';
-                    }
+                    const fb = resolveInputFallback(sgn, k, inp);
+                    if (fb) sgnInputVars[k] = fb;
                   }
                 }
 
@@ -2393,12 +2374,8 @@ export function generateFragmentShader(
                 if (mlGrpPortOverrides.has(pk)) gnInputVars[k] = mlGrpPortOverrides.get(pk)!;
                 else if (inp.connection) { const s = nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
                 if (!gnInputVars[k]) {
-                  if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
-                  else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) gnInputVars[k] = 'g_uv';
-                  else if (inp.defaultValue !== undefined) {
-                    if (typeof inp.defaultValue === 'number') gnInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                    else if (Array.isArray(inp.defaultValue)) gnInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-                  }
+                  const fb = resolveInputFallback(gn, k, inp);
+                  if (fb) gnInputVars[k] = fb;
                 }
               }
               if (gn.type === 'marchSceneDist') {
@@ -2480,12 +2457,8 @@ export function generateFragmentShader(
               if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
             }
             if (!snInputVars[k]) {
-              if (inp.type === 'float' && (k === 'time' || k === 't')) snInputVars[k] = 'u_time';
-              else if (inp.type === 'vec2' && (k === 'uv' || k === 'p' || k === 'uv2')) snInputVars[k] = 'g_uv';
-              else if (inp.defaultValue !== undefined) {
-                if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-                else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-              }
+              const fb = resolveInputFallback(sn, k, inp);
+              if (fb) snInputVars[k] = fb;
             }
           }
 
@@ -2873,10 +2846,8 @@ export function generateFragmentShader(
             if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
           }
           if (!snInputVars[k]) {
-            if (inp.defaultValue !== undefined) {
-              if (typeof inp.defaultValue === 'number') snInputVars[k] = Number.isInteger(inp.defaultValue) ? `${inp.defaultValue}.0` : `${inp.defaultValue}`;
-              else if (Array.isArray(inp.defaultValue)) snInputVars[k] = `${inp.type}(${(inp.defaultValue as number[]).map((v: number) => v.toFixed(1)).join(', ')})`;
-            }
+            const fb = resolveInputFallback(sn, k, inp);
+            if (fb) snInputVars[k] = fb;
           }
         }
 
