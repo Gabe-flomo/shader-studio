@@ -418,14 +418,21 @@ export function generateFragmentShader(
                   innOverrides[k.slice(override2Prefix.length)] = v;
                 }
               }
-              // Check for 2-level ps_ socket wiring: if outer group's ps_innerGroupId_innId_paramKey is wired,
-              // inject the GLSL var string as the param override (passes through p() as-is)
+              // Check for ps_ socket wiring at two levels:
+              // 1. 2-level: outer group's ps_innerGroupId_innId_paramKey wired from the main graph
+              // 2. 1-level: a node inside the outer group wired directly to the inner group's ps_ port
               const innDef = getNodeDefinition(inn.type);
               if (innDef?.paramDefs) {
                 for (const paramKey of Object.keys(innDef.paramDefs)) {
                   const psKey2 = `ps_${nestedOrigId}_${inn.id}_${paramKey}`;
                   const externalVar = inputVars[psKey2];
                   if (externalVar) innOverrides[paramKey] = externalVar;
+                  // Also check nestedInputVars: float wired from inside the outer group
+                  if (!innOverrides[paramKey]) {
+                    const directPsKey = `ps_${inn.id}_${paramKey}`;
+                    const directVar = nestedInputVars[directPsKey];
+                    if (directVar) innOverrides[paramKey] = directVar;
+                  }
                 }
               }
               return {
@@ -503,6 +510,44 @@ export function generateFragmentShader(
               if (fb) subInputVars[k] = fb;
             }
           }
+          // ── Bypass: pass first input through to all outputs ─────────────────
+          if (subNode.bypassed) {
+            const bypassInputEntries = Object.entries(subInputVars);
+            const bypassOutVars: Record<string, string> = {};
+            let bypassCode = '';
+            if (bypassInputEntries.length > 0) {
+              const [, passthroughVar] = bypassInputEntries[0];
+              const srcType = (Object.values(subDef.inputs)[0]?.type ?? 'float');
+              const outputDefs = Object.entries(subDef.outputs);
+              for (const [outKey, outSocket] of outputDefs) {
+                const varName = `${subNode.id}_${outKey}`;
+                let coerced = passthroughVar;
+                if (srcType !== outSocket.type) {
+                  if (outSocket.type === 'float' && (srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4')) coerced = `${passthroughVar}.x`;
+                  else if (outSocket.type === 'vec2' && srcType === 'float') coerced = `vec2(${passthroughVar})`;
+                  else if (outSocket.type === 'vec3' && srcType === 'float') coerced = `vec3(${passthroughVar})`;
+                  else if (outSocket.type === 'vec3' && srcType === 'vec2') coerced = `vec3(${passthroughVar}, 0.0)`;
+                  else if (outSocket.type === 'vec4' && srcType === 'float') coerced = `vec4(${passthroughVar})`;
+                  else if (outSocket.type === 'vec4' && srcType === 'vec3') coerced = `vec4(${passthroughVar}, 1.0)`;
+                }
+                bypassCode += `    ${outSocket.type} ${varName} = ${coerced};\n`;
+                bypassOutVars[outKey] = varName;
+              }
+              if (outputDefs.length === 0) {
+                const r = subDef.generateGLSL(subNode, subInputVars);
+                bypassCode = r.code;
+                Object.assign(bypassOutVars, r.outputVars);
+              }
+            } else {
+              const r = subDef.generateGLSL(subNode, subInputVars);
+              bypassCode = r.code;
+              Object.assign(bypassOutVars, r.outputVars);
+            }
+            mainCode.push(bypassCode);
+            nodeOutputs.set(subNode.id, bypassOutVars);
+            continue;
+          }
+
           // Apply __param_X input connections as param overrides (string GLSL vars skip uniform patching)
           let effectiveSubNode = subNode;
           for (const [k, v] of Object.entries(subInputVars)) {

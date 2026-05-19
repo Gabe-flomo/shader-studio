@@ -536,20 +536,22 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
   const innerNode = subgraph.nodes.find(n => n.id === innerNodeId);
   if (!innerNode) return nodes;
 
-  // Pick the best output to preview — prefer vec3, then vec4, then any
+  // Pick the best output to preview — prefer vec3, then vec4, then vec2, then float, then any
   const outputEntries = Object.entries(innerNode.outputs);
-  const vec3Entry = outputEntries.find(([, s]) => s.type === 'vec3');
-  const vec4Entry = outputEntries.find(([, s]) => s.type === 'vec4');
-  const chosen = vec3Entry ?? vec4Entry ?? outputEntries[0];
+  const vec3Entry  = outputEntries.find(([, s]) => s.type === 'vec3');
+  const vec4Entry  = outputEntries.find(([, s]) => s.type === 'vec4');
+  const vec2Entry  = outputEntries.find(([, s]) => s.type === 'vec2');
+  const floatEntry = outputEntries.find(([, s]) => s.type === 'float');
+  const chosen = vec3Entry ?? vec4Entry ?? vec2Entry ?? floatEntry ?? outputEntries[0];
   if (!chosen) return nodes;
 
   const [chosenKey, chosenSocket] = chosen;
   const outType = (chosenSocket as { type: string }).type as import('../types/nodeGraph').DataType;
-  const isVec4 = outType === 'vec4';
   const previewPortKey = '__preview_port__';
 
-  // Clone the group node with a patched subgraph: add a synthetic output port
-  // that routes the inner node's chosen output to the group's outputs.
+  // Patch the group: add a synthetic output port routing the inner node's chosen output.
+  // Expose ONLY that port so buildPreviewGraph picks it and applies the correct type
+  // promotions (float→grayscale, vec2→vec3, vec3/vec4 direct).
   const patchedGroupNode: GraphNode = {
     ...groupNode,
     params: {
@@ -568,48 +570,13 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
         ],
       },
     },
-    outputs: {
-      ...groupNode.outputs,
-      [previewPortKey]: { type: outType, label: '__preview__' },
-    },
+    outputs: { [previewPortKey]: { type: outType, label: '__preview__' } },
   };
 
-  // Replace the original group node with the patched one; keep all other top-level nodes
   const patchedNodes = nodes.map(n => n.id === groupId ? patchedGroupNode : n);
 
-  // Now use buildPreviewGraph on the patched top-level nodes, treating the group as the target.
-  // We need a synthetic output node that reads the preview port from the group.
-  const syntheticOutput: GraphNode = {
-    id: '__preview_output__',
-    type: isVec4 ? 'vec4Output' : 'output',
-    position: { x: 0, y: 0 },
-    params: {},
-    inputs: {
-      color: {
-        type: isVec4 ? 'vec4' : 'vec3',
-        label: 'Color',
-        connection: { nodeId: groupId, outputKey: previewPortKey },
-      },
-    },
-    outputs: {},
-  };
-
-  // BFS from the group node to collect all its transitive dependencies
-  const included = new Set<string>();
-  const queue = [groupId];
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    if (included.has(id)) continue;
-    included.add(id);
-    const node = patchedNodes.find(n => n.id === id);
-    if (!node) continue;
-    for (const input of Object.values(node.inputs)) {
-      if (input.connection) queue.push(input.connection.nodeId);
-    }
-  }
-
-  const filteredNodes = patchedNodes.filter(n => included.has(n.id));
-  return [...filteredNodes, syntheticOutput];
+  // Delegate to buildPreviewGraph which handles all output types (float, vec2, vec3, vec4)
+  return buildPreviewGraph(patchedNodes, groupId);
 }
 
 // Builds a minimal graph containing the target node + all its transitive
