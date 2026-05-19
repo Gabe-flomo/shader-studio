@@ -503,6 +503,44 @@ export function generateFragmentShader(
               if (fb) subInputVars[k] = fb;
             }
           }
+          // ── Bypass: pass first input through to all outputs ─────────────────
+          if (subNode.bypassed) {
+            const bypassInputEntries = Object.entries(subInputVars);
+            const bypassOutVars: Record<string, string> = {};
+            let bypassCode = '';
+            if (bypassInputEntries.length > 0) {
+              const [, passthroughVar] = bypassInputEntries[0];
+              const srcType = (Object.values(subDef.inputs)[0]?.type ?? 'float');
+              const outputDefs = Object.entries(subDef.outputs);
+              for (const [outKey, outSocket] of outputDefs) {
+                const varName = `${subNode.id}_${outKey}`;
+                let coerced = passthroughVar;
+                if (srcType !== outSocket.type) {
+                  if (outSocket.type === 'float' && (srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4')) coerced = `${passthroughVar}.x`;
+                  else if (outSocket.type === 'vec2' && srcType === 'float') coerced = `vec2(${passthroughVar})`;
+                  else if (outSocket.type === 'vec3' && srcType === 'float') coerced = `vec3(${passthroughVar})`;
+                  else if (outSocket.type === 'vec3' && srcType === 'vec2') coerced = `vec3(${passthroughVar}, 0.0)`;
+                  else if (outSocket.type === 'vec4' && srcType === 'float') coerced = `vec4(${passthroughVar})`;
+                  else if (outSocket.type === 'vec4' && srcType === 'vec3') coerced = `vec4(${passthroughVar}, 1.0)`;
+                }
+                bypassCode += `    ${outSocket.type} ${varName} = ${coerced};\n`;
+                bypassOutVars[outKey] = varName;
+              }
+              if (outputDefs.length === 0) {
+                const r = subDef.generateGLSL(subNode, subInputVars);
+                bypassCode = r.code;
+                Object.assign(bypassOutVars, r.outputVars);
+              }
+            } else {
+              const r = subDef.generateGLSL(subNode, subInputVars);
+              bypassCode = r.code;
+              Object.assign(bypassOutVars, r.outputVars);
+            }
+            mainCode.push(bypassCode);
+            nodeOutputs.set(subNode.id, bypassOutVars);
+            continue;
+          }
+
           // Apply __param_X input connections as param overrides (string GLSL vars skip uniform patching)
           let effectiveSubNode = subNode;
           for (const [k, v] of Object.entries(subInputVars)) {
