@@ -418,14 +418,21 @@ export function generateFragmentShader(
                   innOverrides[k.slice(override2Prefix.length)] = v;
                 }
               }
-              // Check for 2-level ps_ socket wiring: if outer group's ps_innerGroupId_innId_paramKey is wired,
-              // inject the GLSL var string as the param override (passes through p() as-is)
+              // Check for ps_ socket wiring at two levels:
+              // 1. 2-level: outer group's ps_innerGroupId_innId_paramKey wired from the main graph
+              // 2. 1-level: a node inside the outer group wired directly to the inner group's ps_ port
               const innDef = getNodeDefinition(inn.type);
               if (innDef?.paramDefs) {
                 for (const paramKey of Object.keys(innDef.paramDefs)) {
                   const psKey2 = `ps_${nestedOrigId}_${inn.id}_${paramKey}`;
                   const externalVar = inputVars[psKey2];
                   if (externalVar) innOverrides[paramKey] = externalVar;
+                  // Also check nestedInputVars: float wired from inside the outer group
+                  if (!innOverrides[paramKey]) {
+                    const directPsKey = `ps_${inn.id}_${paramKey}`;
+                    const directVar = nestedInputVars[directPsKey];
+                    if (directVar) innOverrides[paramKey] = directVar;
+                  }
                 }
               }
               return {
