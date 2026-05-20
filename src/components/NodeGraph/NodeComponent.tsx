@@ -3603,7 +3603,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   const active = type === t;
                   return (
                     <button key={t}
-                      onClick={() => changeNodeVectorType(node.id, 'v', 'result', t)}
+                      onClick={() => changeNodeVectorType(node.id, 'uv', 'result', t)}
                       style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
                         background: active ? '#89b4fa22' : 'none',
                         border: `1px solid ${active ? '#89b4fa' : '#45475a44'}`,

@@ -973,7 +973,7 @@ export const TransformVecNode: NodeDefinition = {
   label: 'Transform Vec',
   category: 'Math',
   description: 'Split a vector into components, apply per-component GLSL expressions, reassemble.',
-  inputs:  { v: { type: 'vec2', label: 'Vec' } },
+  inputs:  { uv: { type: 'vec2', label: 'Vec' } },
   outputs: {
     x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' },
     z: { type: 'float', label: 'Z' }, w: { type: 'float', label: 'W' },
@@ -981,11 +981,12 @@ export const TransformVecNode: NodeDefinition = {
   },
   defaultParams: { outputType: 'vec2', exprX: 'x', exprY: 'y', exprZ: 'z', exprW: 'w' },
   paramDefs: {},
+  migrateInputKeys: { v: 'uv' },
   generateGLSL: (node: GraphNode, inputVars) => {
     const type = (node.params.outputType as string) || 'vec2';
     const dims = type === 'vec4' ? 4 : type === 'vec3' ? 3 : 2;
     const id   = node.id;
-    const v    = inputVars.v || `${type}(0.0)`;
+    const v    = inputVars.uv || 'g_uv';
     const active = TRANSFORM_COMPS.slice(0, dims);
 
     let code = '';
