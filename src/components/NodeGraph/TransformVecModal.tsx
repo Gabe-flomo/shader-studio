@@ -281,7 +281,7 @@ export function TransformVecModal({ node, onClose }: Props) {
               const active = type === t;
               return (
                 <button key={t}
-                  onClick={() => changeNodeVectorType(node.id, 'v', 'result', t)}
+                  onClick={() => changeNodeVectorType(node.id, 'uv', 'result', t)}
                   style={{ fontSize: '11px', padding: '3px 12px', borderRadius: '4px', cursor: 'pointer',
                     background: active ? '#89b4fa22' : 'none',
                     border: `1px solid ${active ? '#89b4fa' : '#45475a55'}`,
