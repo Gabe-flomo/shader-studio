@@ -16,40 +16,40 @@ float ssChar(float localU, float localV, float id) {
 export const PRINT_FLOAT_GLSL = BITMAP_FONT_GLSL;
 
 // ─── Procedural digit font ────────────────────────────────────────────────────
-// 3-wide × 5-tall pixel grid per character, no texture required.
-// Encoding: bit (row*3 + col) of the integer pattern is 1 if that pixel is lit.
+// 4-wide × 5-tall pixel grid per character, no texture required.
+// Encoding: bit (row*4 + col) of the integer pattern is 1 if that pixel is lit.
 // col 0 = left, row 0 = bottom.
 //
 // Digit patterns (verified):
-//   0=31599  1=9879   2=31183  3=31143  4=23524
-//   5=29671  6=29679  7=30866  8=31727  9=31719
-//   10=448 (minus)   11=2 (decimal point)
+//   0=432534   1=143918   2=427551   3=953998   4=352068
+//   5=989063   6=399254   7=1016866  8=431766   9=433798
+//   10=1536 (minus)   11=2 (decimal point)
 export const PROC_FLOAT_GLSL = `
 float procDigitPat(float d) {
-    if (d < 0.5)  return 31599.0;
-    if (d < 1.5)  return  9879.0;
-    if (d < 2.5)  return 31183.0;
-    if (d < 3.5)  return 31143.0;
-    if (d < 4.5)  return 23524.0;
-    if (d < 5.5)  return 29671.0;
-    if (d < 6.5)  return 29679.0;
-    if (d < 7.5)  return 30866.0;
-    if (d < 8.5)  return 31727.0;
-    if (d < 9.5)  return 31719.0;
-    if (d < 10.5) return   448.0;
+    if (d < 0.5)  return 432534.0;
+    if (d < 1.5)  return 143918.0;
+    if (d < 2.5)  return 427551.0;
+    if (d < 3.5)  return 953998.0;
+    if (d < 4.5)  return 352068.0;
+    if (d < 5.5)  return 989063.0;
+    if (d < 6.5)  return 399254.0;
+    if (d < 7.5)  return 1016866.0;
+    if (d < 8.5)  return 431766.0;
+    if (d < 9.5)  return 433798.0;
+    if (d < 10.5) return   1536.0;
     return 2.0;
 }
 
 float procCharPx(vec2 uv, float pat) {
-    vec2 g = floor(vec2(uv.x * 3.0, uv.y * 5.0));
-    if (g.x < 0.0 || g.x > 2.0 || g.y < 0.0 || g.y > 4.0) return 0.0;
-    float bit = g.y * 3.0 + g.x;
+    vec2 g = floor(vec2(uv.x * 4.0, uv.y * 5.0));
+    if (g.x < 0.0 || g.x > 3.0 || g.y < 0.0 || g.y > 4.0) return 0.0;
+    float bit = g.y * 4.0 + g.x;
     return mod(floor(pat / pow(2.0, bit)), 2.0);
 }
 
 float procPrintFloat(vec2 uv, vec2 origin, float charH, float value, int decimals) {
-    float charW = charH * 0.6;
-    float adv   = charH * 0.76;
+    float charW = charH * 0.8;
+    float adv   = charH * 0.95;
     float py    = (uv.y - origin.y) / charH;
     if (py < 0.0 || py >= 1.0) return 0.0;
     float xOff  = uv.x - origin.x;
