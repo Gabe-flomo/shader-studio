@@ -86,44 +86,67 @@ export const WaveRadiusNode: NodeDefinition = {
 
 // Neighbor Dist — minimum distance to the nearest dot center across a 3×3 (or 5×5)
 // neighborhood of cells. Solves boundary clipping when a dot's radius or displacement
-// pushes it past ±0.5 from the cell center. Use in place of length(cellUV) whenever
-// per-cell displacement is involved.
+// pushes it past ±0.5 from the cell center.
+//
+// Two modes:
+//   • cellID connected  — per-neighbor hash displacement (correct for scattered dots)
+//   • displacement only — uniform displacement for all neighbors (legacy / uniform shift)
 export const NeighborDistNode: NodeDefinition = {
   type: 'neighborDist',
   label: 'Neighbor Dist',
   category: 'Grid',
-  description: 'Minimum distance to the nearest dot center across a 3×3 neighborhood. Fixes boundary clipping when dot radius or displacement exceeds the cell edge.',
+  description: 'Minimum distance to the nearest dot center across a 3×3 neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift.',
   inputs: {
     cellUV:       { type: 'vec2', label: 'Cell UV' },
+    cellID:       { type: 'vec2', label: 'Cell ID' },
     displacement: { type: 'vec2', label: 'Displacement' },
   },
   outputs: {
     minDist: { type: 'float', label: 'Min Dist' },
   },
-  defaultParams: { neighborhood_size: 1, initial_dist: 999.0 },
+  defaultParams: { neighborhood_size: 1, initial_dist: 999.0, dispScale: 0.35 },
   paramDefs: {
     neighborhood_size: { label: 'Neighborhood Size', type: 'float', min: 1, max: 2, step: 1 },
     initial_dist:      { label: 'Initial Dist',      type: 'float', min: 10, max: 9999, step: 1 },
+    dispScale:         { label: 'Disp Scale',        type: 'float', min: 0, max: 0.5, step: 0.005 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    const cuv  = inputVars.cellUV       || 'vec2(0.0)';
-    const disp = inputVars.displacement || 'vec2(0.0)';
-    const init = p(node.params.initial_dist, 999.0);
-    const n    = typeof node.params.neighborhood_size === 'number'
+    const id    = node.id;
+    const cuv   = inputVars.cellUV       || 'vec2(0.0)';
+    const cid   = inputVars.cellID;
+    const disp  = inputVars.displacement || 'vec2(0.0)';
+    const init  = p(node.params.initial_dist, 999.0);
+    const scale = p(node.params.dispScale, 0.35);
+    const n     = typeof node.params.neighborhood_size === 'number'
       ? Math.round(node.params.neighborhood_size as number)
       : 1;
     const fv = (v: number) => v >= 0 ? `${v}.0` : `-${Math.abs(v)}.0`;
 
-    const lines: string[] = [
-      `    vec2  ${id}_sh = ${cuv} - (${disp});\n`,
-      `    float ${id}_md = ${init};\n`,
-    ];
-    for (let dy = -n; dy <= n; dy++) {
-      for (let dx = -n; dx <= n; dx++) {
-        lines.push(`    ${id}_md = min(${id}_md, length(${id}_sh - vec2(${fv(dx)}, ${fv(dy)})));\n`);
+    const lines: string[] = [`    float ${id}_md = ${init};\n`];
+
+    if (cid) {
+      // Per-neighbor hash mode: compute each cell's displacement independently
+      for (let dy = -n; dy <= n; dy++) {
+        for (let dx = -n; dx <= n; dx++) {
+          const off = `vec2(${fv(dx)}, ${fv(dy)})`;
+          lines.push(
+            `    { vec2 ${id}_nc = ${cid} + ${off};` +
+            ` vec2 ${id}_nh = sin(vec2(dot(${id}_nc, vec2(127.1,311.7)), dot(${id}_nc, vec2(269.5,183.3)))) * 43758.5453;` +
+            ` vec2 ${id}_nd = (fract(${id}_nh) - 0.5) * ${scale};` +
+            ` ${id}_md = min(${id}_md, length(${cuv} - ${off} - ${id}_nd)); }\n`
+          );
+        }
+      }
+    } else {
+      // Uniform displacement mode (original behaviour)
+      lines.push(`    vec2 ${id}_sh = ${cuv} - (${disp});\n`);
+      for (let dy = -n; dy <= n; dy++) {
+        for (let dx = -n; dx <= n; dx++) {
+          lines.push(`    ${id}_md = min(${id}_md, length(${id}_sh - vec2(${fv(dx)}, ${fv(dy)})));\n`);
+        }
       }
     }
+
     return {
       code: lines.join(''),
       outputVars: { minDist: `${id}_md` },
