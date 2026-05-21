@@ -13229,16 +13229,21 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
-  // ── Wave Grid: Grid compound only — visualise all grid outputs ──────────────
-  waveGridGrid: {
-    label: 'Wave Grid: Grid',
+  // ── Grid examples ─────────────────────────────────────────────────────────────
+  // Shared Grid compound subgraph: columns constant → aspect ratio → cell size
+  // → grid_pos → floor (cellID) → fract-0.5 (cellUV) → cellCenter → dist_to_center
+  // Outputs: cellUV [-0.5,0.5], dist_to_center, cellID, grid_pos, cell_size, aspect_ratio
+
+  // Grid: Distance Field — visualise dist_to_center as grayscale concentric rings
+  gridBasic: {
+    label: 'Grid: Distance Field',
     counter: 4,
     nodes: [
-      { id: 'wgg_uv0', type: 'uv', position: { x: 60, y: 200 },
+      { id: 'gb_uv0', type: 'uv', position: { x: 60, y: 200 },
         inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'wgg_grid1', type: 'group', position: { x: 300, y: 120 },
+      { id: 'gb_grid1', type: 'group', position: { x: 300, y: 120 },
         inputs: {
-          in0: { type: 'vec2', label: 'uv', connection: { nodeId: 'wgg_uv0', outputKey: 'uv' } },
+          in0: { type: 'vec2', label: 'uv', connection: { nodeId: 'gb_uv0', outputKey: 'uv' } },
         },
         outputs: {
           out1: { type: 'vec2',  label: 'cellUV' },
@@ -13317,27 +13322,134 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           },
         },
       },
-      { id: 'wgg_f2v2', type: 'floatToVec3', position: { x: 640, y: 200 },
-        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'wgg_grid1', outputKey: 'out2' } } },
+      { id: 'gb_f2v2', type: 'floatToVec3', position: { x: 640, y: 200 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'gb_grid1', outputKey: 'out2' } } },
         outputs: { rgb: { type: 'vec3', label: 'Color' } }, params: {} },
-      { id: 'wgg_out3', type: 'output', position: { x: 860, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'wgg_f2v2', outputKey: 'rgb' } } },
+      { id: 'gb_out3', type: 'output', position: { x: 860, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gb_f2v2', outputKey: 'rgb' } } },
         outputs: {}, params: {} },
     ],
   },
 
-  // ── Wave Grid Pattern — Grid compound + WaveRadius compound → circleSDF ────
-  waveGridPattern: {
-    label: 'Wave Grid Pattern',
-    counter: 6,
+  // ── Grid: Circles — Grid compound → step circle mask → output ───────────────
+  gridCircles: {
+    label: 'Grid: Circles',
+    counter: 5,
     nodes: [
-      { id: 'wgp_uv0', type: 'uv', position: { x: 60, y: 200 },
+      { id: 'gc_uv0', type: 'uv', position: { x: 60, y: 200 },
         inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
 
       // ── Grid compound ───────────────────────────────────────────────────────
-      { id: 'wgp_grid1', type: 'group', position: { x: 300, y: 120 },
+      { id: 'gc_grid1', type: 'group', position: { x: 300, y: 120 },
         inputs: {
-          in0: { type: 'vec2', label: 'uv', connection: { nodeId: 'wgp_uv0', outputKey: 'uv' } },
+          in0: { type: 'vec2', label: 'uv', connection: { nodeId: 'gc_uv0', outputKey: 'uv' } },
+        },
+        outputs: {
+          out1: { type: 'vec2',  label: 'cellUV' },
+          out2: { type: 'float', label: 'dist_to_center' },
+          out3: { type: 'vec2',  label: 'cellID' },
+          out4: { type: 'vec2',  label: 'grid_pos' },
+          out5: { type: 'float', label: 'cell_size' },
+          out6: { type: 'float', label: 'aspect_ratio' },
+        },
+        params: {
+          label: 'Grid',
+          iterations: 1,
+          'node_0::value': 10,
+          'node_2::b': 1.0,
+          subgraph: {
+            nodes: [
+              { id: 'node_0', type: 'constant', position: { x: 40, y: 60 },
+                inputs: { value: { type: 'float', label: 'Value' } },
+                outputs: { value: { type: 'float', label: 'Value' } },
+                params: { value: 10, label: 'columns', _groupOriginal: true } },
+              { id: 'node_1', type: 'exprNode', position: { x: 40, y: 200 },
+                inputs: {},
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { inputs: [], outputType: 'float',
+                  lines: [{ lhs: 'float asp', op: '=', rhs: 'u_resolution.x / u_resolution.y' }],
+                  result: 'asp', expr: 'a', label: 'aspect ratio', _groupOriginal: true } },
+              { id: 'node_2', type: 'divide', position: { x: 380, y: 180 },
+                inputs: {
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'node_1', outputKey: 'result' } },
+                  b: { type: 'float', label: 'B', connection: { nodeId: 'node_0', outputKey: 'value' } },
+                },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { b: 1, label: 'Cellsize', _groupOriginal: true } },
+              { id: 'node_3', type: 'exprNode', position: { x: 720, y: 60 },
+                inputs: {
+                  uv:       { type: 'vec2',  label: 'uv' },
+                  cellSize: { type: 'float', label: 'cellSize', connection: { nodeId: 'node_2', outputKey: 'result' } },
+                },
+                outputs: { result: { type: 'vec2', label: 'Result' } },
+                params: { inputs: [{ name: 'uv', type: 'vec2', slider: null }, { name: 'cellSize', type: 'float', slider: null }],
+                  outputType: 'vec2', lines: [{ lhs: 'vec2 gp', op: '=', rhs: 'uv / cellSize' }],
+                  result: 'gp', expr: 'a', label: 'Grid pos', _groupOriginal: true } },
+              { id: 'node_5', type: 'floor', position: { x: 1060, y: 60 },
+                inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'node_3', outputKey: 'result' } } },
+                outputs: { output: { type: 'vec2', label: 'Output' } },
+                params: { outputType: 'vec2', label: 'CellID', _groupOriginal: true } },
+              { id: 'node_7', type: 'exprNode', position: { x: 1060, y: 200 },
+                inputs: { gp: { type: 'vec2', label: 'gp', connection: { nodeId: 'node_3', outputKey: 'result' } } },
+                outputs: { result: { type: 'vec2', label: 'Result' } },
+                params: { inputs: [{ name: 'gp', type: 'vec2', slider: null }],
+                  outputType: 'vec2', lines: [{ lhs: 'vec2 cellUv', op: '=', rhs: 'fract(gp) - 0.5' }],
+                  result: 'cellUv', expr: 'a', label: 'CellUV', _groupOriginal: true } },
+              { id: 'node_11', type: 'exprNode', position: { x: 1400, y: 60 },
+                inputs: { cellId: { type: 'vec2', label: 'cellId', connection: { nodeId: 'node_5', outputKey: 'output' } } },
+                outputs: { result: { type: 'vec2', label: 'Result' } },
+                params: { inputs: [{ name: 'cellId', type: 'vec2', slider: null }],
+                  outputType: 'vec2', lines: [], result: 'cellId + 0.5', expr: 'a',
+                  label: 'cellCenter', _groupOriginal: true } },
+              { id: 'node_15', type: 'exprNode', position: { x: 1740, y: 60 },
+                inputs: { cellCenter: { type: 'vec2', label: 'cellCenter', connection: { nodeId: 'node_11', outputKey: 'result' } } },
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { inputs: [{ name: 'cellCenter', type: 'vec2', slider: null }],
+                  outputType: 'float', lines: [], result: 'length(cellCenter)', expr: 'a', _groupOriginal: true } },
+            ],
+            inputPorts: [
+              { key: 'in0', type: 'vec2', label: 'uv', toNodeId: 'node_3', toInputKey: 'uv' },
+            ],
+            outputPorts: [
+              { key: 'out1', type: 'vec2',  label: 'cellUV',         fromNodeId: 'node_7',  fromOutputKey: 'result' },
+              { key: 'out2', type: 'float', label: 'dist_to_center', fromNodeId: 'node_15', fromOutputKey: 'result' },
+              { key: 'out3', type: 'vec2',  label: 'cellID',         fromNodeId: 'node_5',  fromOutputKey: 'output' },
+              { key: 'out4', type: 'vec2',  label: 'grid_pos',       fromNodeId: 'node_3',  fromOutputKey: 'result' },
+              { key: 'out5', type: 'float', label: 'cell_size',      fromNodeId: 'node_2',  fromOutputKey: 'result' },
+              { key: 'out6', type: 'float', label: 'aspect_ratio',   fromNodeId: 'node_1',  fromOutputKey: 'result' },
+            ],
+          },
+        },
+      },
+
+      // ── Circle mask → floatToVec3 → output ─────────────────────────────────
+      { id: 'gc_mask2', type: 'exprNode', position: { x: 640, y: 200 },
+        inputs: { cellUV: { type: 'vec2', label: 'cellUV', connection: { nodeId: 'gc_grid1', outputKey: 'out1' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { inputs: [{ name: 'cellUV', type: 'vec2', slider: null }],
+          outputType: 'float', lines: [], result: '1.0 - step(0.38, length(cellUV))',
+          expr: 'a', label: 'circle mask' } },
+      { id: 'gc_f2v3', type: 'floatToVec3', position: { x: 860, y: 200 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'gc_mask2', outputKey: 'result' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } }, params: {} },
+      { id: 'gc_out4', type: 'output', position: { x: 1080, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gc_f2v3', outputKey: 'rgb' } } },
+        outputs: {}, params: {} },
+    ],
+  },
+
+  // ── Grid: Wave — Grid compound + WaveRadius compound → circleSDF ────────────
+  gridWave: {
+    label: 'Grid: Wave',
+    counter: 6,
+    nodes: [
+      { id: 'gw_uv0', type: 'uv', position: { x: 60, y: 200 },
+        inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+
+      // ── Grid compound ───────────────────────────────────────────────────────
+      { id: 'gw_grid1', type: 'group', position: { x: 300, y: 120 },
+        inputs: {
+          in0: { type: 'vec2', label: 'uv', connection: { nodeId: 'gw_uv0', outputKey: 'uv' } },
         },
         outputs: {
           out1: { type: 'vec2',  label: 'cellUV' },
@@ -13418,9 +13530,9 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       },
 
       // ── WaveRadius compound ─────────────────────────────────────────────────
-      { id: 'wgp_wave2', type: 'group', position: { x: 680, y: 200 },
+      { id: 'gw_wave2', type: 'group', position: { x: 680, y: 200 },
         inputs: {
-          in0: { type: 'float', label: 'distance', connection: { nodeId: 'wgp_grid1', outputKey: 'out2' } },
+          in0: { type: 'float', label: 'distance', connection: { nodeId: 'gw_grid1', outputKey: 'out2' } },
         },
         outputs: {
           out1: { type: 'float', label: 'wave_radius' },
@@ -13470,18 +13582,18 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       },
 
       // ── CircleSDF → output ──────────────────────────────────────────────────
-      { id: 'wgp_circ3', type: 'circleSDF', position: { x: 1020, y: 200 },
+      { id: 'gw_circ3', type: 'circleSDF', position: { x: 1020, y: 200 },
         inputs: {
-          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'wgp_grid1', outputKey: 'out1' } },
-          radius:   { type: 'float', label: 'Radius',   connection: { nodeId: 'wgp_wave2', outputKey: 'out1' } },
+          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'gw_grid1', outputKey: 'out1' } },
+          radius:   { type: 'float', label: 'Radius',   connection: { nodeId: 'gw_wave2', outputKey: 'out1' } },
         },
         outputs: { distance: { type: 'float', label: 'Distance' } },
         params: { radius: 0.21 } },
-      { id: 'wgp_f2v4', type: 'floatToVec3', position: { x: 1240, y: 200 },
-        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'wgp_circ3', outputKey: 'distance' } } },
+      { id: 'gw_f2v4', type: 'floatToVec3', position: { x: 1240, y: 200 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'gw_circ3', outputKey: 'distance' } } },
         outputs: { rgb: { type: 'vec3', label: 'Color' } }, params: {} },
-      { id: 'wgp_out5', type: 'output', position: { x: 1460, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'wgp_f2v4', outputKey: 'rgb' } } },
+      { id: 'gw_out5', type: 'output', position: { x: 1460, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gw_f2v4', outputKey: 'rgb' } } },
         outputs: {}, params: {} },
     ],
   },
