@@ -77,21 +77,21 @@ export interface OfflineRenderHandle {
   height: number;
 }
 
-// Font texture: 16×16 grid of ASCII chars (codes 0-255), 32×32 px per cell.
+// Font texture: 16×16 grid of ASCII chars (codes 0-255), 64×64 px per cell.
 // Built once at module load and shared across all ShaderCanvas instances.
 function buildFontTexture(): THREE.CanvasTexture {
-  const GRID = 16, CELL = 32, SIZE = GRID * CELL;
+  const GRID = 16, CELL = 64, SIZE = GRID * CELL;
   const canvas = document.createElement('canvas');
   canvas.width = SIZE; canvas.height = SIZE;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, SIZE, SIZE);
   ctx.fillStyle = '#fff';
-  ctx.font = `bold 24px monospace`;
+  ctx.font = `bold 52px monospace`;
   ctx.textBaseline = 'top';
   for (let code = 32; code < 127; code++) {
     const col = code % GRID, row = Math.floor(code / GRID);
-    ctx.fillText(String.fromCharCode(code), col * CELL + 3, row * CELL + 3);
+    ctx.fillText(String.fromCharCode(code), col * CELL + 6, row * CELL + 6);
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.minFilter = THREE.LinearFilter;
