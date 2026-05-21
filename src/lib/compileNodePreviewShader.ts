@@ -10,12 +10,67 @@ import { compileGraph } from '../compiler/graphCompiler';
 
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
+// NeighborDist preview: displaced dots rendered with 3×3 min-distance loop,
+// colored per-cell so the grid structure and displacement are both visible.
+const NEIGHBOR_DIST_PREVIEW = `
+precision mediump float;
+uniform vec2 u_resolution;
+uniform float u_time;
+varying vec2 vUv;
+void main() {
+  float cols = 7.0;
+  float asp  = u_resolution.x / u_resolution.y;
+  float cell = asp / cols;
+  vec2 uv    = vUv * vec2(asp, 1.0);
+  vec2 gp    = uv / cell;
+  vec2 cid   = floor(gp);
+  vec2 cuv   = fract(gp) - 0.5;
+  vec2 h     = sin(cid * vec2(127.1, 311.7) + cid.yx * vec2(269.5, 183.3));
+  vec2 disp  = (fract(h * 43758.5453) - 0.5) * 0.38;
+  vec2 sh    = cuv - disp;
+  float md   = 999.0;
+  for (int dy = -1; dy <= 1; dy++)
+    for (int dx = -1; dx <= 1; dx++)
+      md = min(md, length(sh - vec2(float(dx), float(dy))));
+  float r    = 0.32;
+  float mask = 1.0 - smoothstep(r - 0.025, r + 0.025, md);
+  float hue  = fract(dot(cid, vec2(0.618, 0.381)));
+  vec3 col   = 0.5 + 0.5 * cos(6.28318 * (hue + vec3(0.0, 0.33, 0.67)));
+  gl_FragColor = vec4(mix(vec3(0.08), col * 0.85 + 0.08, mask), 1.0);
+}`.trim();
+
+function buildGridPreviewShader(cols: number): string {
+  return `
+precision mediump float;
+uniform vec2 u_resolution;
+uniform float u_time;
+varying vec2 vUv;
+void main() {
+  float c = ${cols.toFixed(1)};
+  float asp = u_resolution.x / u_resolution.y;
+  float rows = c / asp;
+  vec2 g = vec2(vUv.x * c, vUv.y * rows);
+  vec2 f = fract(g);
+  float lw = 0.05;
+  float onLine = 1.0 - step(lw, min(f.x, f.y));
+  vec3 bg   = vec3(0.1);
+  vec3 line = vec3(0.45, 0.65, 0.85);
+  gl_FragColor = vec4(mix(bg, line, onLine), 1.0);
+}`.trim();
+}
+
 export function compileNodePreviewShader(
   nodeId: string,
   nodes: GraphNode[],
 ): string | null {
   const targetNode = nodes.find(n => n.id === nodeId);
   if (!targetNode || SKIP_TYPES.has(targetNode.type)) return null;
+
+  if (targetNode.type === 'gridLayout') {
+    const cols = typeof targetNode.params.columns === 'number' ? targetNode.params.columns : 10;
+    return buildGridPreviewShader(cols);
+  }
+  if (targetNode.type === 'neighborDist') return NEIGHBOR_DIST_PREVIEW;
 
   // BFS: collect all transitive dependencies of targetNode
   const included = new Set<string>();

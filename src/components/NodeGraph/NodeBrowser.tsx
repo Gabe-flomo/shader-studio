@@ -16,6 +16,7 @@ const HIDDEN_NODES = new Set([
   'scenePos', 'sceneOutput', 'spaceWarpGroup',
   'rotatingLinesLoop', 'accumulateLoop', 'flowField', 'circlePack',
   'raymarch3d', 'volumeClouds', 'rayMarch', 'loopCarry', 'loop',
+  'grid',
 ]);
 
 // ── Category colors ───────────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   '2D Primitives':  '#f9e2af',
   Combiners:        '#cba6f7',
   Spaces:           '#f2cdcd',
+  Grid:             '#89dceb',
   Shapers:          '#f9e2af',
   Science:          '#94e2d5',
   Fractals:         '#cba6f7',
@@ -55,7 +57,7 @@ const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Shapes',       categories: ['2D Primitives', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
   { label: '3D',           categories: ['3D Scene', '3D Lighting', '3D Fractals', 'Loops'] },
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
-  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces'] },
+  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces', 'Grid'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Transforms', 'Conditionals'] },
   { label: 'Functions',    categories: ['Functions'] },
   { label: 'Utility',      categories: ['Utility', 'Output'] },
@@ -96,11 +98,11 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Math: [
     { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
     { label: 'Trig',       types: ['sin', 'cos', 'tan', 'atan2'] },
-    { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
+    { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract', 'fractRaw'] },
     { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
     { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod'] },
     { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
-    { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'luminance'] },
+    { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'refractDir', 'luminance'] },
     { label: 'Vec2',       types: ['vec2Const', 'makeVec2', 'splitVec2', 'transformVec', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
     { label: 'Vec3',       types: ['vec3Const', 'makeVec3', 'splitVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
     { label: 'Vec4',       types: ['splitVec4'] },
@@ -134,7 +136,11 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Warp',       types: ['displace', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp'] },
     { label: 'Repeat',     types: ['fract', 'infiniteRepeatSpace', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D'] },
     { label: 'Distort',    types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'swirlSpace', 'kaleidoSpace', 'sphericalSpace', 'rippleSpace', 'perspective2d', 'shear'] },
-    { label: 'Texture',    types: ['waveTexture', 'magicTexture', 'grid'] },
+    { label: 'Texture',    types: ['waveTexture', 'magicTexture'] },
+  ],
+  Grid: [
+    { label: 'Space',    types: ['gridLayout'] },
+    { label: 'Effects',  types: ['waveRadius', 'neighborDist'] },
   ],
 };
 

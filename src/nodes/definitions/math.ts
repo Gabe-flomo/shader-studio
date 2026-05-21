@@ -205,16 +205,17 @@ export const MaxNode: NodeDefinition = {
 };
 
 export const ClampNode: NodeDefinition = {
-  type: 'clamp', label: 'Clamp', category: 'Math', description: 'Clamp a value between min and max.',
+  type: 'clamp', label: 'Clamp', category: 'Math', description: 'Clamp a value between min and max. Use the type picker (f/v2/v3) to clamp vectors component-wise.',
   inputs: { input: { type: 'float', label: 'Input' }, lo: { type: 'float', label: 'Min' }, hi: { type: 'float', label: 'Max' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { lo: 0.0, hi: 1.0 },
   paramDefs: { lo: { label: 'Min', type: 'float', min: -10, max: 10, step: 0.01 }, hi: { label: 'Max', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
+    const t  = ot(node);
+    const o  = `${node.id}_result`;
     const lo = inputVars.lo || p(node.params.lo, 0.0);
     const hi = inputVars.hi || p(node.params.hi, 1.0);
-    return { code: `    float ${o} = clamp(${inputVars.input || '0.0'}, ${lo}, ${hi});\n`, outputVars: { result: o } };
+    return { code: `    ${t} ${o} = clamp(${inputVars.input || zeroFor(t)}, ${lo}, ${hi});\n`, outputVars: { result: o } };
   },
 };
 
@@ -246,15 +247,16 @@ export const MixVec3Node: NodeDefinition = {
 };
 
 export const ModNode: NodeDefinition = {
-  type: 'mod', label: 'Mod', category: 'Math', description: 'Modulo: mod(x, period).',
+  type: 'mod', label: 'Mod', category: 'Math', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
   inputs: { input: { type: 'float', label: 'Input' }, period: { type: 'float', label: 'Period' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { period: 1.0 },
   paramDefs: { period: { label: 'Period', type: 'float', min: 0.001, max: 10, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node);
     const o = `${node.id}_output`;
     const period = inputVars.period || p(node.params.period, 1.0);
-    return { code: `    float ${o} = mod(${inputVars.input || '0.0'}, ${period});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = mod(${inputVars.input || zeroFor(t)}, ${period});\n`, outputVars: { output: o } };
   },
 };
 
@@ -422,16 +424,17 @@ export const FractRawNode: NodeDefinition = {
 };
 
 export const SmoothstepNode: NodeDefinition = {
-  type: 'smoothstep', label: 'Smoothstep', category: 'Math', description: 'smoothstep(edge0, edge1, x).',
+  type: 'smoothstep', label: 'Smoothstep', category: 'Math', description: 'smoothstep(edge0, edge1, x). Use the type picker (f/v2/v3) to smoothstep vectors component-wise.',
   inputs: { value: { type: 'float', label: 'Value' }, edge0: { type: 'float', label: 'Edge 0' }, edge1: { type: 'float', label: 'Edge 1' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { edge0: 0.0, edge1: 1.0 },
   paramDefs: { edge0: { label: 'Edge 0', type: 'float', min: -2, max: 2, step: 0.001 }, edge1: { label: 'Edge 1', type: 'float', min: -2, max: 2, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
+    const t  = ot(node);
+    const o  = `${node.id}_result`;
     const e0 = inputVars.edge0 || p(node.params.edge0, 0.0);
     const e1 = inputVars.edge1 || p(node.params.edge1, 1.0);
-    return { code: `    float ${o} = smoothstep(${e0}, ${e1}, ${inputVars.value || '0.0'});\n`, outputVars: { result: o } };
+    return { code: `    ${t} ${o} = smoothstep(${e0}, ${e1}, ${inputVars.value || zeroFor(t)});\n`, outputVars: { result: o } };
   },
 };
 
@@ -1025,6 +1028,9 @@ export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryO
   floor:    { primaryInput: 'input', primaryOutput: 'output' },
   sqrt:     { primaryInput: 'input', primaryOutput: 'output' },
   round:    { primaryInput: 'input', primaryOutput: 'output' },
-  fractRaw: { primaryInput: 'input', primaryOutput: 'output' },
-  sign:     { primaryInput: 'value', primaryOutput: 'result' },
+  fractRaw:   { primaryInput: 'input', primaryOutput: 'output' },
+  sign:       { primaryInput: 'value', primaryOutput: 'result' },
+  smoothstep: { primaryInput: 'value', primaryOutput: 'result' },
+  clamp:      { primaryInput: 'input', primaryOutput: 'result' },
+  mod:        { primaryInput: 'input', primaryOutput: 'output' },
 };
