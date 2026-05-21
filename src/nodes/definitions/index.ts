@@ -7,7 +7,7 @@ import { VideoInputNode } from './sources';
 export { VideoInputNode };
 
 // Sources
-export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
+export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
@@ -153,7 +153,7 @@ export {
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
+import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -252,6 +252,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
   uv: UVNode,
   pixelUV: PixelUVNode,
+  fragCoord: FragCoordNode,
+  resolution: ResolutionNode,
   time: TimeNode,
   constant: ConstantNode,
   mouse: MouseNode,
