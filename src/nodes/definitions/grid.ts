@@ -97,9 +97,10 @@ export const NeighborDistNode: NodeDefinition = {
   category: 'Grid',
   description: 'Minimum distance to the nearest dot center across a 3×3 neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift.',
   inputs: {
-    cellUV:       { type: 'vec2', label: 'Cell UV' },
-    cellID:       { type: 'vec2', label: 'Cell ID' },
-    displacement: { type: 'vec2', label: 'Displacement' },
+    cellUV:       { type: 'vec2',  label: 'Cell UV' },
+    cellID:       { type: 'vec2',  label: 'Cell ID' },
+    displacement: { type: 'vec2',  label: 'Displacement' },
+    dispScale:    { type: 'float', label: 'Disp Scale' },
   },
   outputs: {
     minDist: { type: 'float', label: 'Min Dist' },
@@ -116,7 +117,7 @@ export const NeighborDistNode: NodeDefinition = {
     const cid   = inputVars.cellID;
     const disp  = inputVars.displacement || 'vec2(0.0)';
     const init  = p(node.params.initial_dist, 999.0);
-    const scale = p(node.params.dispScale, 0.35);
+    const scale = inputVars.dispScale || p(node.params.dispScale, 0.35);
     const n     = typeof node.params.neighborhood_size === 'number'
       ? Math.round(node.params.neighborhood_size as number)
       : 1;
