@@ -122,10 +122,14 @@ export const NeighborDistNode: NodeDefinition = {
       : 1;
     const fv = (v: number) => v >= 0 ? `${v}.0` : `-${Math.abs(v)}.0`;
 
+    // Displacement connected → uniform mode (explicit always wins).
+    // Only cellID connected, no displacement → per-neighbor hash mode.
+    const useHash = cid && !inputVars.displacement;
+
     const lines: string[] = [`    float ${id}_md = ${init};\n`];
 
-    if (cid) {
-      // Per-neighbor hash mode: compute each cell's displacement independently
+    if (useHash) {
+      // Per-neighbor hash: each cell gets its own displacement from its cell ID
       for (let dy = -n; dy <= n; dy++) {
         for (let dx = -n; dx <= n; dx++) {
           const off = `vec2(${fv(dx)}, ${fv(dy)})`;
@@ -138,7 +142,7 @@ export const NeighborDistNode: NodeDefinition = {
         }
       }
     } else {
-      // Uniform displacement mode (original behaviour)
+      // Uniform displacement: same shift applied when checking all neighbors
       lines.push(`    vec2 ${id}_sh = ${cuv} - (${disp});\n`);
       for (let dy = -n; dy <= n; dy++) {
         for (let dx = -n; dx <= n; dx++) {

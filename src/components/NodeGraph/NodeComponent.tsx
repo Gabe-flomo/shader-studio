@@ -2570,7 +2570,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   );
                 }
                 const rawVal = node.params[paramKey];
-                const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
+                const currentVal = typeof rawVal === 'number' ? rawVal
+                  : typeof (def.defaultParams as Record<string, unknown> | undefined)?.[paramKey] === 'number'
+                    ? (def.defaultParams as Record<string, number>)[paramKey]
+                    : (typeof paramDef.min === 'number' ? paramDef.min : 0);
                 const step = paramDef.step ?? 1;
                 const effMin = paramDef.min ?? 0;
                 const effMax = paramDef.max ?? 256;
