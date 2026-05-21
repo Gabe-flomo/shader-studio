@@ -20,7 +20,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV'] as ExKey[] },
   { label: 'Color Grading',   color: '#f9a86b', keys: ['cgHueRotate','cgLiftGammaGain','cgChain'] as ExKey[] },
   { label: 'Effects & Spaces',color: '#f2cdcd', keys: ['retroTunnel','barrelChroma','crtScreen','mirrorTunnel','glitchEffect'] as ExKey[] },
-  { label: 'Grid',            color: '#89dceb', keys: ['gridBasic','gridCircles','gridWave','gridNeighborDots','gridNeighborDisplaced','grid3dSpheres','grid3dWave','grid3dNeighbor'] as ExKey[] },
+  { label: 'Grid',            color: '#89dceb', keys: ['gridBasic','gridCircles','gridWave','gridNeighborDots','gridNeighborDisplaced'] as ExKey[] },
   { label: 'Halftone',        color: '#a6e3d5', keys: ['halftoneNoise','cmykNoise','ringHalftone'] as ExKey[] },
   { label: 'Fractals',        color: '#cba6f7', keys: ['domainWarpFractal'] as ExKey[] },
   { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupAdditiveRings','groupProductRings','groupCarryRotate','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },

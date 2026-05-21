@@ -63,11 +63,12 @@ export function validateGraph(nodes: GraphNode[]): ValidationResult {
       const targetType = liveInput?.type ?? def.inputs[inputKey]?.type;
       if (!targetType) continue; // dynamic socket not in def — skip
 
-      // Allow float → vec2/vec3 broadcast coercion (GLSL fract/mix/etc work on any numeric type)
+      // Match assembler coercions: float broadcasts to any vector; vec2↔vec3 pad/truncate
       const compatible =
         sourceOutputType === targetType ||
-        (sourceOutputType === 'float' && targetType === 'vec3') ||
-        (sourceOutputType === 'float' && targetType === 'vec2');
+        (sourceOutputType === 'float' && (targetType === 'vec2' || targetType === 'vec3' || targetType === 'vec4')) ||
+        (sourceOutputType === 'vec2'  && targetType === 'vec3') ||
+        (sourceOutputType === 'vec3'  && targetType === 'vec2');
 
       if (!compatible) {
         errors.push(

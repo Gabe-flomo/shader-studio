@@ -3616,60 +3616,34 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   );
                 })}
               </div>
-              {/* Per-component expression inputs with optional warp lines */}
+              {/* Per-component expression inputs with inline operator dropdown */}
               {comps.map(c => {
-                const pk   = `expr${c.toUpperCase()}`;
-                const lk   = `expr${c.toUpperCase()}Lines`;
-                const val  = typeof node.params[pk] === 'string' ? (node.params[pk] as string) : c;
-                const warpLines = (node.params[lk] as Array<{ lhs: string; op: string; rhs: string }> | undefined) ?? [];
+                const pk  = `expr${c.toUpperCase()}`;
+                const opk = `expr${c.toUpperCase()}Op`;
+                const val = typeof node.params[pk]  === 'string' ? (node.params[pk]  as string) : c;
+                const op  = typeof node.params[opk] === 'string' ? (node.params[opk] as string) : '=';
                 const compColor = ({ x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#fab387' } as Record<string, string>)[c];
-                const inStyle: React.CSSProperties = {
-                  background: '#11111b', border: '1px solid #31324488',
-                  borderRadius: '3px', padding: '2px 5px',
-                  fontSize: '10px', fontFamily: 'monospace', outline: 'none',
-                };
-                const updateLines = (next: Array<{ lhs: string; op: string; rhs: string }>) =>
-                  updateNodeParams(node.id, { [lk]: next });
-                const OPS = ['=', '+=', '-=', '*=', '/='];
                 return (
-                  <div key={c} style={{ padding: '1px 10px 1px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {/* Warp lines */}
-                    {warpLines.map((line, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <span style={{ fontSize: '10px', color: '#45475a', width: '8px', flexShrink: 0 }} />
-                        <input type="text" value={line.lhs} spellCheck={false} placeholder="float d"
-                          onChange={e => updateLines(warpLines.map((l, j) => j === i ? { ...l, lhs: e.target.value } : l))}
-                          style={{ ...inStyle, color: '#cdd6f4', width: '60px' }}
-                        />
-                        <select value={line.op}
-                          onChange={e => updateLines(warpLines.map((l, j) => j === i ? { ...l, op: e.target.value } : l))}
-                          style={{ background: '#11111b', border: '1px solid #31324488', color: '#89b4fa', fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none' }}
-                        >
-                          {OPS.map(op => <option key={op} value={op}>{op}</option>)}
-                        </select>
-                        <input type="text" value={line.rhs} spellCheck={false} placeholder="expr…"
-                          onChange={e => updateLines(warpLines.map((l, j) => j === i ? { ...l, rhs: e.target.value } : l))}
-                          style={{ ...inStyle, color: '#a6e3a1', flex: 1 }}
-                        />
-                        <button onMouseDown={e => e.stopPropagation()}
-                          onClick={() => updateLines(warpLines.filter((_, j) => j !== i))}
-                          style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', padding: '0 2px', fontSize: '12px', lineHeight: 1, flexShrink: 0 }}
-                        >×</button>
-                      </div>
-                    ))}
-                    {/* Return expression row */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ fontSize: '10px', color: compColor, width: '8px', flexShrink: 0, fontFamily: 'monospace' }}>{c}</span>
-                      <input type="text" value={val} spellCheck={false}
-                        onChange={e => updateNodeParams(node.id, { [pk]: e.target.value })}
-                        style={{ ...inStyle, color: '#a6e3a1', flex: 1 }}
-                      />
-                      <button onMouseDown={e => e.stopPropagation()}
-                        onClick={() => updateLines([...warpLines, { lhs: '', op: '=', rhs: '' }])}
-                        title="Add warp line"
-                        style={{ background: '#313244', border: 'none', color: '#6c7086', cursor: 'pointer', fontSize: '10px', padding: '1px 5px', borderRadius: '3px', flexShrink: 0 }}
-                      >+</button>
-                    </div>
+                  <div key={c} style={{ padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '10px', color: compColor, width: '8px', flexShrink: 0, fontFamily: 'monospace' }}>{c}</span>
+                    <select value={op}
+                      onChange={e => updateNodeParams(node.id, { [opk]: e.target.value })}
+                      onMouseDown={e => e.stopPropagation()}
+                      style={{ background: '#11111b', border: '1px solid #31324488', color: '#89b4fa', fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none', flexShrink: 0 }}
+                    >
+                      {(['=', '+=', '-=', '*=', '/='] as const).map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      value={val}
+                      spellCheck={false}
+                      onChange={e => updateNodeParams(node.id, { [pk]: e.target.value })}
+                      style={{
+                        flex: 1, background: '#11111b', border: '1px solid #31324488',
+                        color: '#a6e3a1', borderRadius: '3px', padding: '2px 6px',
+                        fontSize: '10px', fontFamily: 'monospace', outline: 'none',
+                      }}
+                    />
                   </div>
                 );
               })}
