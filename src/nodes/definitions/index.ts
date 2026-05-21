@@ -109,6 +109,7 @@ export { OutputNode, Vec4OutputNode } from './output';
 
 // Utility
 export { ScopeNode } from './utility';
+export { PrintFloatNode } from './text';
 
 // Animation
 export { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
@@ -216,6 +217,7 @@ import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, I
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
+import { PrintFloatNode } from './text';
 import { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 import { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
 import {
@@ -518,6 +520,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Utility
   group: GroupNode,
   scope: ScopeNode,
+  printFloat: PrintFloatNode,
   // Math
   add: AddNode,
   subtract: SubtractNode,
