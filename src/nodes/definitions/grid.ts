@@ -97,7 +97,7 @@ export const NeighborDistNode: NodeDefinition = {
   category: 'Grid',
   description: 'Minimum distance to the nearest dot center across a 3×3 neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift.',
   inputs: {
-    cellUV:       { type: 'vec2',  label: 'Cell UV' },
+    uv:           { type: 'vec2',  label: 'UV' },
     cellID:       { type: 'vec2',  label: 'Cell ID' },
     displacement: { type: 'vec2',  label: 'Displacement' },
     dispScale:    { type: 'float', label: 'Disp Scale' },
@@ -111,7 +111,7 @@ export const NeighborDistNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
-    const cuv   = inputVars.cellUV       || 'vec2(0.0)';
+    const cuv   = inputVars.uv           || 'vec2(0.0)';
     const cid   = inputVars.cellID;
     const disp  = inputVars.displacement || 'vec2(0.0)';
     const init  = '9.0'; // anything > max neighbor distance (~2.8 for 5×5) works

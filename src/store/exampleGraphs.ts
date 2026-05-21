@@ -13328,7 +13328,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         outputs: { wave_radius: { type: 'float', label: 'Wave Radius' } },
         params: { speed: 1.2, freq: 2.8, amp: 0.18, base: 0.26 } },
       { id: 'gw_nd3', type: 'neighborDist', position: { x: 520, y: 160 },
-        inputs: { cellUV: { type: 'vec2', label: 'Cell UV', connection: { nodeId: 'gw_grid1', outputKey: 'cellUV' } } },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'gw_grid1', outputKey: 'cellUV' } } },
         outputs: { minDist: { type: 'float', label: 'Min Dist' } },
         params: { neighborhood_size: 1 } },
       { id: 'gw_draw4', type: 'exprNode', position: { x: 760, y: 200 },
@@ -13373,7 +13373,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
         outputs: { wave_radius: { type: 'float', label: 'Wave Radius' } },
         params: { speed: 1.8, freq: 1.0, amp: 0.22, base: 0.3 } },
       { id: 'nd1_nd3', type: 'neighborDist', position: { x: 520, y: 140 },
-        inputs: { cellUV: { type: 'vec2', label: 'Cell UV', connection: { nodeId: 'nd1_grid1', outputKey: 'cellUV' } } },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'nd1_grid1', outputKey: 'cellUV' } } },
         outputs: { minDist: { type: 'float', label: 'Min Dist' } },
         params: { neighborhood_size: 1 } },
       { id: 'nd1_draw4', type: 'exprNode', position: { x: 760, y: 200 },
@@ -13415,7 +13415,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       // NeighborDist with cellID connected — computes per-neighbor hash displacement internally
       { id: 'nd2_nd2', type: 'neighborDist', position: { x: 520, y: 200 },
         inputs: {
-          cellUV: { type: 'vec2', label: 'Cell UV', connection: { nodeId: 'nd2_grid1', outputKey: 'cellUV' } },
+          uv:     { type: 'vec2', label: 'UV',      connection: { nodeId: 'nd2_grid1', outputKey: 'cellUV' } },
           cellID: { type: 'vec2', label: 'Cell ID', connection: { nodeId: 'nd2_grid1', outputKey: 'cellID' } },
         },
         outputs: { minDist: { type: 'float', label: 'Min Dist' } },
