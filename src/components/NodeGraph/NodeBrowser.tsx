@@ -98,11 +98,11 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Math: [
     { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
     { label: 'Trig',       types: ['sin', 'cos', 'tan', 'atan2'] },
-    { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract'] },
+    { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract', 'fractRaw'] },
     { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
     { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod'] },
     { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
-    { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'luminance'] },
+    { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'refractDir', 'luminance'] },
     { label: 'Vec2',       types: ['vec2Const', 'makeVec2', 'splitVec2', 'transformVec', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
     { label: 'Vec3',       types: ['vec3Const', 'makeVec3', 'splitVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
     { label: 'Vec4',       types: ['splitVec4'] },

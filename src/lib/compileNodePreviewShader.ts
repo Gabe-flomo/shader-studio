@@ -10,6 +10,35 @@ import { compileGraph } from '../compiler/graphCompiler';
 
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
+// NeighborDist preview: displaced dots rendered with 3×3 min-distance loop,
+// colored per-cell so the grid structure and displacement are both visible.
+const NEIGHBOR_DIST_PREVIEW = `
+precision mediump float;
+uniform vec2 u_resolution;
+uniform float u_time;
+varying vec2 vUv;
+void main() {
+  float cols = 7.0;
+  float asp  = u_resolution.x / u_resolution.y;
+  float cell = asp / cols;
+  vec2 uv    = vUv * vec2(asp, 1.0);
+  vec2 gp    = uv / cell;
+  vec2 cid   = floor(gp);
+  vec2 cuv   = fract(gp) - 0.5;
+  vec2 h     = sin(cid * vec2(127.1, 311.7) + cid.yx * vec2(269.5, 183.3));
+  vec2 disp  = (fract(h * 43758.5453) - 0.5) * 0.38;
+  vec2 sh    = cuv - disp;
+  float md   = 999.0;
+  for (int dy = -1; dy <= 1; dy++)
+    for (int dx = -1; dx <= 1; dx++)
+      md = min(md, length(sh - vec2(float(dx), float(dy))));
+  float r    = 0.32;
+  float mask = 1.0 - smoothstep(r - 0.025, r + 0.025, md);
+  float hue  = fract(dot(cid, vec2(0.618, 0.381)));
+  vec3 col   = 0.5 + 0.5 * cos(6.28318 * (hue + vec3(0.0, 0.33, 0.67)));
+  gl_FragColor = vec4(mix(vec3(0.08), col * 0.85 + 0.08, mask), 1.0);
+}`.trim();
+
 function buildGridPreviewShader(cols: number): string {
   return `
 precision mediump float;
@@ -41,6 +70,7 @@ export function compileNodePreviewShader(
     const cols = typeof targetNode.params.columns === 'number' ? targetNode.params.columns : 10;
     return buildGridPreviewShader(cols);
   }
+  if (targetNode.type === 'neighborDist') return NEIGHBOR_DIST_PREVIEW;
 
   // BFS: collect all transitive dependencies of targetNode
   const included = new Set<string>();
