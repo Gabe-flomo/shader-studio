@@ -10,7 +10,7 @@ export { VideoInputNode };
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 
 // Grid
-export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, Grid3DNode, NeighborDist3DNode } from './grid';
+export { GridLayoutNode, WaveRadiusNode, NeighborDistNode } from './grid';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
@@ -157,7 +157,7 @@ export {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
-import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, Grid3DNode, NeighborDist3DNode } from './grid';
+import { GridLayoutNode, WaveRadiusNode, NeighborDistNode } from './grid';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -301,8 +301,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridLayout: GridLayoutNode,
   waveRadius: WaveRadiusNode,
   neighborDist: NeighborDistNode,
-  grid3d: Grid3DNode,
-  neighborDist3d: NeighborDist3DNode,
   shear: ShearNode,
   perspective2d: Perspective2DNode,
   mirroredRepeat2D: MirroredRepeat2DNode,

@@ -84,57 +84,6 @@ export const WaveRadiusNode: NodeDefinition = {
   },
 };
 
-// Grid 3D — uniform cubic lattice. Same outputs as the 2D grid but in three dimensions.
-// Intended for raymarching: pos is the current ray position p.
-// cellUV is world-space (not normalized), so sphereSDF3D/neighborDist3D work correctly.
-export const Grid3DNode: NodeDefinition = {
-  type: 'grid3d',
-  label: 'Grid 3D',
-  category: 'Grid',
-  description: 'Divides 3D space into a cubic lattice. cellUV is in world-space units (wire directly to sphereSDF3D.pos or neighborDist3d.uv). cellSize = scale / columns.',
-  inputs: {
-    pos:     { type: 'vec3',  label: 'Pos' },
-    columns: { type: 'float', label: 'Columns' },
-  },
-  outputs: {
-    cellUV:       { type: 'vec3',  label: 'Cell UV' },
-    cellID:       { type: 'vec3',  label: 'Cell ID' },
-    cellCenter:   { type: 'vec3',  label: 'Cell Center' },
-    cellSize:     { type: 'float', label: 'Cell Size' },
-    gridPos:      { type: 'vec3',  label: 'Grid Pos' },
-    distToOrigin: { type: 'float', label: 'Dist to Origin' },
-  },
-  defaultParams: { columns: 4.0, uniform_scale: 2.0 },
-  paramDefs: {
-    columns:       { label: 'Columns', type: 'float', min: 1.0, max: 100.0, step: 1.0 },
-    uniform_scale: { label: 'Scale',   type: 'float', min: 0.1, max: 20.0,  step: 0.1 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id    = node.id;
-    const pos   = inputVars.pos     || 'vec3(0.0)';
-    const cols  = inputVars.columns || p(node.params.columns, 4.0);
-    const scale = p(node.params.uniform_scale, 2.0);
-    return {
-      code: [
-        `    float ${id}_cell = ${scale} / max(${cols}, 0.0001);\n`,
-        `    vec3  ${id}_gp   = (${pos}) / ${id}_cell;\n`,
-        `    vec3  ${id}_cid  = floor(${id}_gp);\n`,
-        `    vec3  ${id}_cuv  = (fract(${id}_gp) - 0.5) * ${id}_cell;\n`,
-        `    vec3  ${id}_ctr  = ${id}_cid + 0.5;\n`,
-        `    float ${id}_dto  = length(${id}_ctr);\n`,
-      ].join(''),
-      outputVars: {
-        cellUV:       `${id}_cuv`,
-        cellID:       `${id}_cid`,
-        cellCenter:   `${id}_ctr`,
-        cellSize:     `${id}_cell`,
-        gridPos:      `${id}_gp`,
-        distToOrigin: `${id}_dto`,
-      },
-    };
-  },
-};
-
 // Neighbor Dist — minimum distance to the nearest dot center across a 3×3 (or 5×5)
 // neighborhood of cells. Solves boundary clipping when a dot's radius or displacement
 // pushes it past ±0.5 from the cell center.
@@ -165,21 +114,18 @@ export const NeighborDistNode: NodeDefinition = {
     const cuv   = inputVars.uv           || 'vec2(0.0)';
     const cid   = inputVars.cellID;
     const disp  = inputVars.displacement || 'vec2(0.0)';
-    const init  = '9.0'; // anything > max neighbor distance (~2.8 for 5×5) works
+    const init  = '9.0';
     const scale = inputVars.dispScale || p(node.params.dispScale, 0.35);
     const n     = typeof node.params.neighborhood_size === 'number'
       ? Math.round(node.params.neighborhood_size as number)
       : 1;
     const fv = (v: number) => v >= 0 ? `${v}.0` : `-${Math.abs(v)}.0`;
 
-    // Displacement connected → uniform mode (explicit always wins).
-    // Only cellID connected, no displacement → per-neighbor hash mode.
     const useHash = cid && !inputVars.displacement;
 
     const lines: string[] = [`    float ${id}_md = ${init};\n`];
 
     if (useHash) {
-      // Per-neighbor hash: each cell gets its own displacement from its cell ID
       for (let dy = -n; dy <= n; dy++) {
         for (let dx = -n; dx <= n; dx++) {
           const off = `vec2(${fv(dx)}, ${fv(dy)})`;
@@ -192,7 +138,6 @@ export const NeighborDistNode: NodeDefinition = {
         }
       }
     } else {
-      // Uniform displacement: same shift applied when checking all neighbors
       lines.push(`    vec2 ${id}_sh = ${cuv} - (${disp});\n`);
       for (let dy = -n; dy <= n; dy++) {
         for (let dx = -n; dx <= n; dx++) {
@@ -205,73 +150,5 @@ export const NeighborDistNode: NodeDefinition = {
       code: lines.join(''),
       outputVars: { minDist: `${id}_md` },
     };
-  },
-};
-
-// Neighbor Dist 3D — minimum distance to the nearest shape center across a 3×3×3 (or 5×5×5)
-// neighborhood of cells. 3D equivalent of NeighborDistNode — prevents clipping when a 3D SDF
-// primitive extends past its cell boundary into adjacent cells.
-// Connect cellID for per-cell hash displacement (matches 2D NeighborDist behavior).
-// cellSize must come from Grid 3D so neighbor offsets are in world-space.
-export const NeighborDist3DNode: NodeDefinition = {
-  type: 'neighborDist3d',
-  label: 'Neighbor Dist 3D',
-  category: 'Grid',
-  description: 'Minimum distance to nearest shape center across a 3×3×3 neighborhood. Wire cellUV + cellSize from Grid 3D. Connect cellID for per-cell hash displacement (prevents clipping on scattered shapes).',
-  inputs: {
-    uv:           { type: 'vec3',  label: 'UV' },
-    cellID:       { type: 'vec3',  label: 'Cell ID' },
-    cellSize:     { type: 'float', label: 'Cell Size' },
-    displacement: { type: 'vec3',  label: 'Displacement' },
-    dispScale:    { type: 'float', label: 'Disp Scale' },
-  },
-  outputs: {
-    minDist: { type: 'float', label: 'Min Dist' },
-  },
-  defaultParams: { neighborhood_size: 1, dispScale: 0.35 },
-  paramDefs: {
-    neighborhood_size: { label: 'Neighborhood', type: 'float', min: 1, max: 2, step: 1 },
-    dispScale:         { label: 'Disp Scale',   type: 'float', min: 0, max: 0.5, step: 0.005 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id    = node.id;
-    const cuv   = inputVars.uv           || inputVars.cellUV || 'vec3(0.0)';
-    const cid   = inputVars.cellID;
-    const csize = inputVars.cellSize     || '1.0';
-    const disp  = inputVars.displacement || 'vec3(0.0)';
-    const scale = inputVars.dispScale    || p(node.params.dispScale, 0.35);
-    const n     = typeof node.params.neighborhood_size === 'number'
-      ? Math.round(node.params.neighborhood_size as number) : 1;
-    const fv = (v: number) => v >= 0 ? `${v}.0` : `-${Math.abs(v)}.0`;
-
-    const useHash = cid && !inputVars.displacement;
-    const lines: string[] = [`    float ${id}_md = 9.0;\n`];
-
-    if (useHash) {
-      for (let dz = -n; dz <= n; dz++) {
-        for (let dy = -n; dy <= n; dy++) {
-          for (let dx = -n; dx <= n; dx++) {
-            const off = `vec3(${fv(dx)}, ${fv(dy)}, ${fv(dz)})`;
-            lines.push(
-              `    { vec3 ${id}_nc = ${cid} + ${off};` +
-              ` vec3 ${id}_nh = sin(vec3(dot(${id}_nc,vec3(127.1,311.7,74.7)),dot(${id}_nc,vec3(269.5,183.3,246.1)),dot(${id}_nc,vec3(113.5,271.9,124.6)))) * 43758.5453;` +
-              ` vec3 ${id}_nd = (fract(${id}_nh) - 0.5) * ${scale} * ${csize};` +
-              ` ${id}_md = min(${id}_md, length(${cuv} - ${off} * ${csize} - ${id}_nd)); }\n`
-            );
-          }
-        }
-      }
-    } else {
-      lines.push(`    vec3 ${id}_sh = (${cuv}) - (${disp});\n`);
-      for (let dz = -n; dz <= n; dz++) {
-        for (let dy = -n; dy <= n; dy++) {
-          for (let dx = -n; dx <= n; dx++) {
-            lines.push(`    ${id}_md = min(${id}_md, length(${id}_sh - vec3(${fv(dx)}, ${fv(dy)}, ${fv(dz)}) * ${csize}));\n`);
-          }
-        }
-      }
-    }
-
-    return { code: lines.join(''), outputVars: { minDist: `${id}_md` } };
   },
 };
