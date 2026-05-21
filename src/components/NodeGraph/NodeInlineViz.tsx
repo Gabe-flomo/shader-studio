@@ -4628,6 +4628,98 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
   );
 }
 
+// ─── Viz — Print Float (printFloat) ──────────────────────────────────────────
+
+export function PrintFloatViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const decimals  = typeof node.params.decimals === 'number' ? Math.round(node.params.decimals) : 2;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    const placeholder = decimals > 0 ? '0.' + '0'.repeat(Math.min(decimals, 4)) : '0';
+    ctx.font = 'bold 22px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#cdd6f4';
+    ctx.fillText(placeholder, W / 2, H / 2);
+
+    ctx.font = '8px monospace';
+    ctx.fillStyle = '#585b70';
+    ctx.fillText(`float · ${decimals} dec`, W / 2, H - 6);
+  }, [decimals]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={160} height={60}
+        style={{ display: 'block', width: '100%', height: '60px' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Print Text (printText) ────────────────────────────────────────────
+
+export function PrintTextViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const text      = typeof node.params.text === 'string' && node.params.text.length > 0 ? node.params.text : 'hello';
+  const decimals  = typeof node.params.decimals === 'number' ? Math.round(node.params.decimals) : 2;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Build display: text + placeholder number
+    const numPlaceholder = decimals > 0 ? ' 0.' + '0'.repeat(Math.min(decimals, 4)) : ' 0';
+    const display = text + numPlaceholder;
+
+    // Shrink font until it fits
+    let fontSize = 18;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    do {
+      ctx.font = `bold ${fontSize}px monospace`;
+      fontSize -= 1;
+    } while (ctx.measureText(display).width > W - 12 && fontSize > 8);
+
+    // Draw text portion in light color, number in accent
+    const textPx   = ctx.measureText(text).width;
+    const numPx    = ctx.measureText(numPlaceholder).width;
+    const totalPx  = textPx + numPx;
+    const startX   = (W - totalPx) / 2;
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#cdd6f4';
+    ctx.fillText(text, startX, H / 2 - 4);
+    ctx.fillStyle = '#a6e3a1';
+    ctx.fillText(numPlaceholder, startX + textPx, H / 2 - 4);
+
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#585b70';
+    ctx.fillText(`"${text.slice(0, 12)}"  +  float`, W / 2, H - 6);
+  }, [text, decimals]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={160} height={60}
+        style={{ display: 'block', width: '100%', height: '60px' }} />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -4649,6 +4741,8 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'grid':           return <GridViz                node={node} />;
     case 'gridLayout':     return <GridLayoutViz          node={node} />;
     case 'neighborDist':   return <NeighborDistViz        node={node} />;
+    case 'printFloat':     return <PrintFloatViz          node={node} />;
+    case 'printText':      return <PrintTextViz           node={node} />;
     case 'waveTexture':    return <WaveTextureViz         node={node} />;
     case 'smoothstep':     return <SmoothstepViz          node={node} />;
     case 'clamp':          return <ClampViz               node={node} />;
@@ -4973,7 +5067,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'toneMap', 'palette', 'palettePreset', 'gradient',
   'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
   'hueRange', 'audioInput',
-  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'waveTexture',
+  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'printFloat', 'printText', 'waveTexture',
   'smoothstep', 'clamp', 'mix', 'mixVec3', 'mapRange',
   'multiplyVec3', 'addVec3', 'addColor',
   'particleEmitter',
