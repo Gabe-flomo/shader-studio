@@ -3065,6 +3065,7 @@ export function generateFragmentShader(
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
 ${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}${audioUniformDecls ? audioUniformDecls + '\n' : ''}${videoUniformDecls ? videoUniformDecls + '\n' : ''}
 varying vec2 vUv;
 
