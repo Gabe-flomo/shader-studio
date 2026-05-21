@@ -2,10 +2,21 @@ import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p } from './helpers';
 
 export const PRINT_FLOAT_GLSL = `
+float ssBit(float enc, float cx, float cy) {
+    if (cx < 0.0 || cx >= 4.0 || cy < 0.0 || cy >= 5.0) return 0.0;
+    return floor(mod(enc / pow(2.0, cx + cy * 4.0), 2.0));
+}
+
 float ssChar(float enc, vec2 p) {
     if (p.x < 0.0 || p.x >= 4.0 || p.y < 0.0 || p.y >= 5.0) return 0.0;
-    float bit = floor(p.x) + floor(p.y) * 4.0;
-    return floor(mod(enc / pow(2.0, bit), 2.0));
+    vec2 pi = floor(p);
+    vec2 pf = fract(p);
+    float b00 = ssBit(enc, pi.x,       pi.y      );
+    float b10 = ssBit(enc, pi.x + 1.0, pi.y      );
+    float b01 = ssBit(enc, pi.x,       pi.y + 1.0);
+    float b11 = ssBit(enc, pi.x + 1.0, pi.y + 1.0);
+    vec2 t = smoothstep(0.1, 0.9, pf);
+    return mix(mix(b00, b10, t.x), mix(b01, b11, t.x), t.y);
 }
 
 float ssEncoding(int ch) {
