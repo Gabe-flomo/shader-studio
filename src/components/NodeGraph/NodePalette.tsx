@@ -20,7 +20,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV'] as ExKey[] },
   { label: 'Color Grading',   color: '#f9a86b', keys: ['cgHueRotate','cgLiftGammaGain','cgChain'] as ExKey[] },
   { label: 'Effects & Spaces',color: '#f2cdcd', keys: ['retroTunnel','barrelChroma','crtScreen','mirrorTunnel','glitchEffect'] as ExKey[] },
-  { label: 'Halftone',        color: '#a6e3d5', keys: ['halftoneNoise','cmykNoise','ringHalftone'] as ExKey[] },
+  { label: 'Halftone',        color: '#a6e3d5', keys: ['halftoneNoise','cmykNoise','ringHalftone','waveGridGrid','waveGridPattern'] as ExKey[] },
   { label: 'Fractals',        color: '#cba6f7', keys: ['domainWarpFractal'] as ExKey[] },
   { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupAdditiveRings','groupProductRings','groupCarryRotate','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
   { label: 'March Loop',      color: '#88aacc', keys: ['mlgRepeatGrid','mlgWiggleTunnel','mlgTwistSpace','mlgSpiralDepth','mlgFoldMirror','mlgRepeatSpace','mlgTwistFold','mlgSpiralFold','mlgDeepTunnel','sphereInversion3D','kaleidoscopeBox3D','icoKaleidoscope3D','mobiusWarp3D','logPolarZoom3D','helixWarp3D','shearKaleidoscope3D','mobiusInversionStack3D'] as ExKey[] },
