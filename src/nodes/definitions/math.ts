@@ -247,15 +247,16 @@ export const MixVec3Node: NodeDefinition = {
 };
 
 export const ModNode: NodeDefinition = {
-  type: 'mod', label: 'Mod', category: 'Math', description: 'Modulo: mod(x, period).',
+  type: 'mod', label: 'Mod', category: 'Math', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
   inputs: { input: { type: 'float', label: 'Input' }, period: { type: 'float', label: 'Period' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { period: 1.0 },
   paramDefs: { period: { label: 'Period', type: 'float', min: 0.001, max: 10, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node);
     const o = `${node.id}_output`;
     const period = inputVars.period || p(node.params.period, 1.0);
-    return { code: `    float ${o} = mod(${inputVars.input || '0.0'}, ${period});\n`, outputVars: { output: o } };
+    return { code: `    ${t} ${o} = mod(${inputVars.input || zeroFor(t)}, ${period});\n`, outputVars: { output: o } };
   },
 };
 
@@ -1031,4 +1032,5 @@ export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryO
   sign:       { primaryInput: 'value', primaryOutput: 'result' },
   smoothstep: { primaryInput: 'value', primaryOutput: 'result' },
   clamp:      { primaryInput: 'input', primaryOutput: 'result' },
+  mod:        { primaryInput: 'input', primaryOutput: 'output' },
 };
