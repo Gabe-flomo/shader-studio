@@ -50,6 +50,40 @@ export const GridLayoutNode: NodeDefinition = {
   },
 };
 
+// Wave Radius — animates a radius value with a sine wave driven by distance + time.
+// Pairs with Grid and NeighborDist to create pulsing, radial, or wave dot patterns.
+export const WaveRadiusNode: NodeDefinition = {
+  type: 'waveRadius',
+  label: 'Wave Radius',
+  category: 'Grid',
+  description: 'Outputs a time-animated radius: sin((distance − time) × speed × freq) × amp + base. Wire dist_to_center from Grid for a radial wave, or leave distance unconnected for uniform pulsing.',
+  inputs: {
+    distance: { type: 'float', label: 'Distance' },
+  },
+  outputs: {
+    wave_radius: { type: 'float', label: 'Wave Radius' },
+  },
+  defaultParams: { speed: 0.52, freq: 3.24, amp: 0.19, base: 0.25 },
+  paramDefs: {
+    speed: { label: 'Speed',     type: 'float', min: 0.0,  max: 5.0,  step: 0.01 },
+    freq:  { label: 'Frequency', type: 'float', min: 0.1,  max: 20.0, step: 0.01 },
+    amp:   { label: 'Amplitude', type: 'float', min: 0.0,  max: 0.5,  step: 0.005 },
+    base:  { label: 'Base',      type: 'float', min: 0.0,  max: 1.0,  step: 0.005 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const dist = inputVars.distance || '0.0';
+    const spd  = p(node.params.speed, 0.52);
+    const frq  = p(node.params.freq,  3.24);
+    const amp  = p(node.params.amp,   0.19);
+    const base = p(node.params.base,  0.25);
+    return {
+      code: `    float ${id}_wr = sin((${dist} - u_time * ${spd}) * ${frq}) * ${amp} + ${base};\n`,
+      outputVars: { wave_radius: `${id}_wr` },
+    };
+  },
+};
+
 // Neighbor Dist — minimum distance to the nearest dot center across a 3×3 (or 5×5)
 // neighborhood of cells. Solves boundary clipping when a dot's radius or displacement
 // pushes it past ±0.5 from the cell center. Use in place of length(cellUV) whenever

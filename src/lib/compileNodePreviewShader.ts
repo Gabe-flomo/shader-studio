@@ -10,12 +10,37 @@ import { compileGraph } from '../compiler/graphCompiler';
 
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
+function buildGridPreviewShader(cols: number): string {
+  return `
+precision mediump float;
+uniform vec2 u_resolution;
+uniform float u_time;
+varying vec2 vUv;
+void main() {
+  float c = ${cols.toFixed(1)};
+  float asp = u_resolution.x / u_resolution.y;
+  float rows = c / asp;
+  vec2 g = vec2(vUv.x * c, vUv.y * rows);
+  vec2 f = fract(g);
+  float lw = 0.05;
+  float onLine = 1.0 - step(lw, min(f.x, f.y));
+  vec3 bg   = vec3(0.1);
+  vec3 line = vec3(0.45, 0.65, 0.85);
+  gl_FragColor = vec4(mix(bg, line, onLine), 1.0);
+}`.trim();
+}
+
 export function compileNodePreviewShader(
   nodeId: string,
   nodes: GraphNode[],
 ): string | null {
   const targetNode = nodes.find(n => n.id === nodeId);
   if (!targetNode || SKIP_TYPES.has(targetNode.type)) return null;
+
+  if (targetNode.type === 'gridLayout') {
+    const cols = typeof targetNode.params.columns === 'number' ? targetNode.params.columns : 10;
+    return buildGridPreviewShader(cols);
+  }
 
   // BFS: collect all transitive dependencies of targetNode
   const included = new Set<string>();
