@@ -493,6 +493,7 @@ export const MagicTextureNode: NodeDefinition = {
 // Grid — outputs a grid/checkerboard mask + cell ID
 export const GridNode: NodeDefinition = {
   type: 'grid', label: 'Grid', category: 'Spaces',
+  deprecated: true,
   description: 'Grid lines + checkerboard mask with configurable cell size and line width.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV' },
