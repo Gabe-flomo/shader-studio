@@ -105,18 +105,16 @@ export const NeighborDistNode: NodeDefinition = {
   outputs: {
     minDist: { type: 'float', label: 'Min Dist' },
   },
-  defaultParams: { neighborhood_size: 1, initial_dist: 999.0, dispScale: 0.35 },
+  defaultParams: { neighborhood_size: 1, dispScale: 0.35 },
   paramDefs: {
-    neighborhood_size: { label: 'Neighborhood Size', type: 'float', min: 1, max: 2, step: 1 },
-    initial_dist:      { label: 'Initial Dist',      type: 'float', min: 10, max: 9999, step: 1 },
-    dispScale:         { label: 'Disp Scale',        type: 'float', min: 0, max: 0.5, step: 0.005 },
+    dispScale: { label: 'Disp Scale', type: 'float', min: 0, max: 0.5, step: 0.005 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const cuv   = inputVars.cellUV       || 'vec2(0.0)';
     const cid   = inputVars.cellID;
     const disp  = inputVars.displacement || 'vec2(0.0)';
-    const init  = p(node.params.initial_dist, 999.0);
+    const init  = '9.0'; // anything > max neighbor distance (~2.8 for 5×5) works
     const scale = inputVars.dispScale || p(node.params.dispScale, 0.35);
     const n     = typeof node.params.neighborhood_size === 'number'
       ? Math.round(node.params.neighborhood_size as number)

@@ -13330,7 +13330,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       { id: 'gw_nd3', type: 'neighborDist', position: { x: 520, y: 160 },
         inputs: { cellUV: { type: 'vec2', label: 'Cell UV', connection: { nodeId: 'gw_grid1', outputKey: 'cellUV' } } },
         outputs: { minDist: { type: 'float', label: 'Min Dist' } },
-        params: { neighborhood_size: 1, initial_dist: 999.0 } },
+        params: { neighborhood_size: 1 } },
       { id: 'gw_draw4', type: 'exprNode', position: { x: 760, y: 200 },
         inputs: {
           d:  { type: 'float', label: 'd',  connection: { nodeId: 'gw_nd3',   outputKey: 'minDist'     } },
@@ -13375,7 +13375,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
       { id: 'nd1_nd3', type: 'neighborDist', position: { x: 520, y: 140 },
         inputs: { cellUV: { type: 'vec2', label: 'Cell UV', connection: { nodeId: 'nd1_grid1', outputKey: 'cellUV' } } },
         outputs: { minDist: { type: 'float', label: 'Min Dist' } },
-        params: { neighborhood_size: 1, initial_dist: 999.0 } },
+        params: { neighborhood_size: 1 } },
       { id: 'nd1_draw4', type: 'exprNode', position: { x: 760, y: 200 },
         inputs: {
           d:  { type: 'float', label: 'd',  connection: { nodeId: 'nd1_nd3',   outputKey: 'minDist'     } },
@@ -13419,7 +13419,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
           cellID: { type: 'vec2', label: 'Cell ID', connection: { nodeId: 'nd2_grid1', outputKey: 'cellID' } },
         },
         outputs: { minDist: { type: 'float', label: 'Min Dist' } },
-        params: { neighborhood_size: 1, initial_dist: 999.0, dispScale: 0.38 } },
+        params: { neighborhood_size: 1, dispScale: 0.38 } },
       { id: 'nd2_mask3', type: 'exprNode', position: { x: 760, y: 140 },
         inputs: { d: { type: 'float', label: 'd', connection: { nodeId: 'nd2_nd2', outputKey: 'minDist' } } },
         outputs: { result: { type: 'float', label: 'Result' } },
