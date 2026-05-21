@@ -13099,6 +13099,136 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Print Text: Grid coordinates ─────────────────────────────────────────────
+  pfGrid: {
+    label: 'Debug: Grid Coordinates',
+    counter: 15,
+    nodes: [
+      // UV source
+      { id: 'pg_uv1', type: 'uv', position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // Scale UV by grid count to create 4×4 cells
+      {
+        id: 'pg_scale2', type: 'multiplyVec2', position: { x: 240, y: 300 },
+        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'pg_uv1', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: { scale: 4.0 },
+      },
+      // fract(scaled * 1) - 0.5 → local cell UV centered at origin
+      {
+        id: 'pg_fract3', type: 'fract', position: { x: 480, y: 200 },
+        inputs: {
+          input: { type: 'vec2', label: 'Input', connection: { nodeId: 'pg_scale2', outputKey: 'result' } },
+          scale: { type: 'float', label: 'Scale' },
+        },
+        outputs: { output: { type: 'vec2', label: 'Output' } },
+        params: { scale: 1.0 },
+      },
+      // Split scaled UV to get x and y floats for flooring
+      {
+        id: 'pg_split4', type: 'splitVec2', position: { x: 480, y: 420 },
+        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'pg_scale2', outputKey: 'result' } } },
+        outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
+        params: {},
+      },
+      // floor x → column index
+      {
+        id: 'pg_colx5', type: 'floor', position: { x: 680, y: 400 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'pg_split4', outputKey: 'x' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: {},
+      },
+      // floor y → row index
+      {
+        id: 'pg_rowy6', type: 'floor', position: { x: 680, y: 480 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'pg_split4', outputKey: 'y' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: {},
+      },
+      // "col:" static label per cell
+      {
+        id: 'pg_lbcol7', type: 'printText', position: { x: 880, y: 160 },
+        inputs: {
+          uv:  { type: 'vec2', label: 'UV',       connection: { nodeId: 'pg_fract3', outputKey: 'output' } },
+          pos: { type: 'vec2', label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { text: 'col:', posX: -0.35, posY: 0.09, charSize: 0.07 },
+      },
+      // column index value
+      {
+        id: 'pg_valcol8', type: 'printFloat', position: { x: 880, y: 270 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',       connection: { nodeId: 'pg_fract3', outputKey: 'output' } },
+          value: { type: 'float', label: 'Value',    connection: { nodeId: 'pg_colx5',  outputKey: 'output' } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.04, posY: 0.09, charSize: 0.07, decimals: 0 },
+      },
+      // "row:" static label per cell
+      {
+        id: 'pg_lbrow9', type: 'printText', position: { x: 880, y: 380 },
+        inputs: {
+          uv:  { type: 'vec2', label: 'UV',       connection: { nodeId: 'pg_fract3', outputKey: 'output' } },
+          pos: { type: 'vec2', label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { text: 'row:', posX: -0.35, posY: -0.12, charSize: 0.07 },
+      },
+      // row index value
+      {
+        id: 'pg_valrow10', type: 'printFloat', position: { x: 880, y: 490 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',       connection: { nodeId: 'pg_fract3',  outputKey: 'output' } },
+          value: { type: 'float', label: 'Value',    connection: { nodeId: 'pg_rowy6',   outputKey: 'output' } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.04, posY: -0.12, charSize: 0.07, decimals: 0 },
+      },
+      // Combine all four masks
+      {
+        id: 'pg_add11', type: 'add', position: { x: 1100, y: 210 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pg_lbcol7',   outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pg_valcol8',  outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pg_add12', type: 'add', position: { x: 1100, y: 410 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pg_lbrow9',   outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pg_valrow10', outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pg_add13', type: 'add', position: { x: 1300, y: 310 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pg_add11', outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pg_add12', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      // White text over black background
+      {
+        id: 'pg_f2v14', type: 'floatToVec3', position: { x: 1480, y: 310 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'pg_add13', outputKey: 'result' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      {
+        id: 'pg_out15', type: 'output', position: { x: 1680, y: 310 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pg_f2v14', outputKey: 'rgb' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
