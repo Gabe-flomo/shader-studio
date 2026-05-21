@@ -7,7 +7,7 @@ import { VideoInputNode } from './sources';
 export { VideoInputNode };
 
 // Sources
-export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
+export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
@@ -109,6 +109,7 @@ export { OutputNode, Vec4OutputNode } from './output';
 
 // Utility
 export { ScopeNode } from './utility';
+export { PrintFloatNode, PrintTextNode } from './text';
 
 // Animation
 export { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
@@ -152,7 +153,7 @@ export {
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode } from './sources';
+import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -216,6 +217,7 @@ import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, I
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
+import { PrintFloatNode, PrintTextNode } from './text';
 import { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 import { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
 import {
@@ -250,6 +252,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
   uv: UVNode,
   pixelUV: PixelUVNode,
+  fragCoord: FragCoordNode,
+  resolution: ResolutionNode,
   time: TimeNode,
   constant: ConstantNode,
   mouse: MouseNode,
@@ -518,6 +522,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Utility
   group: GroupNode,
   scope: ScopeNode,
+  printFloat: PrintFloatNode,
+  printText: PrintTextNode,
   // Math
   add: AddNode,
   subtract: SubtractNode,

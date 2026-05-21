@@ -35,6 +35,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid'] as ExKey[] },
   { label: 'Volumetric',      color: '#f5a97f', keys: ['glowMarcher','volHollowShell','volTorus','volRepeatLattice','volOctahedron','volAnimatedRepeat','jitterFogSphere','jitterTorusCloud'] as ExKey[] },
   { label: 'Warping Space',   color: '#f2cdcd', keys: ['displaceDemo'] as ExKey[] },
+  { label: 'Debug / Print',   color: '#94e2d5', keys: ['pfMouseXY', 'pfVec2', 'pfSdfDebug', 'pfMatrix', 'pfRGB', 'pfGrid'] as ExKey[] },
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────

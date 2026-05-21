@@ -108,6 +108,48 @@ export const MouseNode: NodeDefinition = {
   },
 };
 
+export const FragCoordNode: NodeDefinition = {
+  type: 'fragCoord',
+  label: 'Frag Coord',
+  category: 'Sources',
+  description: 'Raw fragment pixel coordinates (gl_FragCoord.xy). Origin at bottom-left corner, in pixels.',
+  inputs: {},
+  outputs: {
+    coord: { type: 'vec2', label: 'Coord' },
+  },
+  generateGLSL: (node: GraphNode) => {
+    const outVar = `${node.id}_coord`;
+    return {
+      code: `    vec2 ${outVar} = gl_FragCoord.xy;\n`,
+      outputVars: { coord: outVar },
+    };
+  },
+};
+
+export const ResolutionNode: NodeDefinition = {
+  type: 'resolution',
+  label: 'Resolution',
+  category: 'Sources',
+  description: 'Canvas resolution in pixels (width, height).',
+  inputs: {},
+  outputs: {
+    res:    { type: 'vec2',  label: 'Resolution' },
+    width:  { type: 'float', label: 'Width'      },
+    height: { type: 'float', label: 'Height'     },
+  },
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    return {
+      code: [
+        `    vec2  ${id}_res    = u_resolution;\n`,
+        `    float ${id}_width  = u_resolution.x;\n`,
+        `    float ${id}_height = u_resolution.y;\n`,
+      ].join(''),
+      outputVars: { res: `${id}_res`, width: `${id}_width`, height: `${id}_height` },
+    };
+  },
+};
+
 export const PrevFrameNode: NodeDefinition = {
   type: 'prevFrame',
   label: 'Prev Frame',

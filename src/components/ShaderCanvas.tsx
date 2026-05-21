@@ -77,6 +77,30 @@ export interface OfflineRenderHandle {
   height: number;
 }
 
+// Font texture: 16×16 grid of ASCII chars (codes 0-255), 32×32 px per cell.
+// Built once at module load and shared across all ShaderCanvas instances.
+function buildFontTexture(): THREE.CanvasTexture {
+  const GRID = 16, CELL = 32, SIZE = GRID * CELL;
+  const canvas = document.createElement('canvas');
+  canvas.width = SIZE; canvas.height = SIZE;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold 24px monospace`;
+  ctx.textBaseline = 'top';
+  for (let code = 32; code < 127; code++) {
+    const col = code % GRID, row = Math.floor(code / GRID);
+    ctx.fillText(String.fromCharCode(code), col * CELL + 3, row * CELL + 3);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+const FONT_TEXTURE = buildFontTexture();
+
 // Minimal fallback shaders so Three.js doesn't throw on first render
 const FALLBACK_VERTEX = `
 varying vec2 vUv;
@@ -248,10 +272,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     const { vertexShader: vs, fragmentShader: fs, rawGlslShader: rawFs, paramUniforms: pu, textureUniforms: tu, audioUniforms: au, videoUniforms: vu } = useNodeGraphStore.getState();
     const activeFs = rawFs ?? fs;
     const initialUniforms: Record<string, { value: unknown }> = {
-      u_time:       { value: 0 },
-      u_resolution: { value: new THREE.Vector2(1, 1) },
-      u_mouse:      { value: new THREE.Vector2(0, 0) },
-      u_prevFrame:  { value: null },
+      u_time:        { value: 0 },
+      u_resolution:  { value: new THREE.Vector2(1, 1) },
+      u_mouse:       { value: new THREE.Vector2(0, 0) },
+      u_prevFrame:   { value: null },
+      u_fontTexture: { value: FONT_TEXTURE },
     };
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
@@ -1068,6 +1093,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         mat.uniforms[name] = { value };
       }
     }
+    // Always keep the font texture bound after recompile
+    if (!mat.uniforms.u_fontTexture) mat.uniforms.u_fontTexture = { value: FONT_TEXTURE };
+    else mat.uniforms.u_fontTexture.value = FONT_TEXTURE;
     // Register sampler2D texture uniforms (initial value null — filled by texture effect)
     const currentTextureUniforms = useNodeGraphStore.getState().textureUniforms;
     for (const uniformName of Object.keys(currentTextureUniforms)) {

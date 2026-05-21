@@ -12578,6 +12578,657 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+
+  // ── Print Float: Mouse XY ────────────────────────────────────────────────────
+  pfMouseXY: {
+    label: 'Debug: Mouse XY',
+    counter: 9,
+    nodes: [
+      { id: 'pf_uv1',    type: 'uv',    position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'pf_mouse2', type: 'mouse', position: { x: 40,  y: 380 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'Mouse UV' }, x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } }, params: {} },
+      {
+        id: 'pf_pfx3', type: 'printFloat', position: { x: 320, y: 200 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'pf_uv1',    outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'pf_mouse2', outputKey: 'x'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: 0.1, charSize: 0.065, decimals: 3 },
+      },
+      {
+        id: 'pf_pfy4', type: 'printFloat', position: { x: 320, y: 380 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'pf_uv1',    outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'pf_mouse2', outputKey: 'y'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: -0.1, charSize: 0.065, decimals: 3 },
+      },
+      {
+        id: 'pf_add5', type: 'add', position: { x: 560, y: 290 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pf_pfx3', outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pf_pfy4', outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      // Dot at cursor: circleSDF centered on mouse position
+      {
+        id: 'pf_dot6', type: 'circleSDF', position: { x: 320, y: 540 },
+        inputs: {
+          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'pf_uv1',    outputKey: 'uv' } },
+          radius:   { type: 'float', label: 'Radius' },
+          offset:   { type: 'vec2',  label: 'Offset',   connection: { nodeId: 'pf_mouse2', outputKey: 'uv' } },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.012, posX: 0.0, posY: 0.0 },
+      },
+      {
+        id: 'pf_glow7', type: 'makeLight', position: { x: 560, y: 520 },
+        inputs: {
+          distance:   { type: 'float', label: 'Distance',   connection: { nodeId: 'pf_dot6', outputKey: 'distance' } },
+          brightness: { type: 'float', label: 'Brightness' },
+        },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params: { brightness: 30.0 },
+      },
+      {
+        id: 'pf_addg8', type: 'add', position: { x: 760, y: 380 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pf_add5',  outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pf_glow7', outputKey: 'glow'   } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pf_f2v9', type: 'floatToVec3', position: { x: 960, y: 380 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'pf_addg8', outputKey: 'result' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      {
+        id: 'pf_out10', type: 'output', position: { x: 1160, y: 390 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pf_f2v9', outputKey: 'rgb' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Print Float: Vec2 components (split + print) ─────────────────────────────
+  pfVec2: {
+    label: 'Debug: Print Vec2',
+    counter: 10,
+    nodes: [
+      { id: 'pv_uv1',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'pv_time2', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Animated UV warp (something interesting to inspect)
+      {
+        id: 'pv_sin3', type: 'sin', position: { x: 240, y: 360 },
+        inputs: { x: { type: 'float', label: 'X', connection: { nodeId: 'pv_time2', outputKey: 'time' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { scale: 1.0 },
+      },
+      {
+        id: 'pv_polar4', type: 'polarSpace', position: { x: 240, y: 200 },
+        inputs: { input: { type: 'vec2', label: 'UV', connection: { nodeId: 'pv_uv1', outputKey: 'uv' } } },
+        outputs: { output: { type: 'vec2', label: 'Polar UV' }, radius: { type: 'float', label: 'Radius' }, angle: { type: 'float', label: 'Angle' } },
+        params: {},
+      },
+      // Split the polar UV into x (radius) and y (angle)
+      {
+        id: 'pv_split5', type: 'splitVec2', position: { x: 460, y: 200 },
+        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'pv_polar4', outputKey: 'output' } } },
+        outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
+        params: {},
+      },
+      // Print x component (radius)
+      {
+        id: 'pv_pfx6', type: 'printFloat', position: { x: 680, y: 140 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'pv_uv1',    outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'pv_split5', outputKey: 'x'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: 0.1, charSize: 0.065, decimals: 3 },
+      },
+      // Print y component (theta / angle)
+      {
+        id: 'pv_pfy7', type: 'printFloat', position: { x: 680, y: 320 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'pv_uv1',    outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'pv_split5', outputKey: 'y'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: -0.1, charSize: 0.065, decimals: 3 },
+      },
+      // Background: polar ripple visualization
+      {
+        id: 'pv_expr8', type: 'exprNode', position: { x: 460, y: 420 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pv_polar4', outputKey: 'radius' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pv_sin3',   outputKey: 'result'} },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { expr: 'sin(a * 12.0 + b * 3.0) * 0.5 + 0.5', outputType: 'float' },
+      },
+      {
+        id: 'pv_pal9', type: 'palettePreset', position: { x: 680, y: 500 },
+        inputs: { value: { type: 'float', label: 'T', connection: { nodeId: 'pv_expr8', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '2' },
+      },
+      // Combine: additive text overlay on colored background
+      {
+        id: 'pv_addm10', type: 'add', position: { x: 920, y: 230 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pv_pfx6', outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pv_pfy7', outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pv_f2v11', type: 'floatToVec3', position: { x: 1100, y: 230 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'pv_addm10', outputKey: 'result' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      {
+        id: 'pv_addv12', type: 'addVec3', position: { x: 1100, y: 420 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'pv_pal9',  outputKey: 'color'  } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'pv_f2v11', outputKey: 'rgb'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pv_out13', type: 'output', position: { x: 1320, y: 380 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pv_addv12', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Print Float: SDF distance debug ─────────────────────────────────────────
+  pfSdfDebug: {
+    label: 'Debug: SDF Distance',
+    counter: 10,
+    nodes: [
+      { id: 'sd_uv1',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'sd_time2', type: 'time', position: { x: 40,  y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Circle SDF
+      {
+        id: 'sd_circ3', type: 'circleSDF', position: { x: 280, y: 200 },
+        inputs: {
+          position: { type: 'vec2',  label: 'Position', connection: { nodeId: 'sd_uv1', outputKey: 'uv' } },
+          radius:   { type: 'float', label: 'Radius' },
+          offset:   { type: 'vec2',  label: 'Offset' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.3, posX: 0.0, posY: 0.0 },
+      },
+      // Visualize SDF as field: smoothstep bands
+      {
+        id: 'sd_expr4', type: 'exprNode', position: { x: 500, y: 200 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'sd_circ3', outputKey: 'distance' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'sd_time2', outputKey: 'time'     } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { expr: 'sin(a * 20.0 - b) * 0.5 + 0.5', outputType: 'float' },
+      },
+      {
+        id: 'sd_pal5', type: 'palettePreset', position: { x: 700, y: 200 },
+        inputs: { value: { type: 'float', label: 'T', connection: { nodeId: 'sd_expr4', outputKey: 'result' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '5' },
+      },
+      // Circle outline on top of field
+      {
+        id: 'sd_outline6', type: 'sdfOutline', position: { x: 700, y: 360 },
+        inputs: {
+          d:         { type: 'float', label: 'SDF',   connection: { nodeId: 'sd_circ3', outputKey: 'distance' } },
+          fillColor: { type: 'vec3',  label: 'Fill',  connection: { nodeId: 'sd_pal5',  outputKey: 'color'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { strokeWidth: 0.004, antialias: 0.002 },
+      },
+      // Print the raw SDF distance value in the top-left corner
+      {
+        id: 'sd_pf7', type: 'printFloat', position: { x: 280, y: 450 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'sd_uv1',   outputKey: 'uv'      } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'sd_circ3', outputKey: 'distance'} },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: 0.75, charSize: 0.07, decimals: 3 },
+      },
+      {
+        id: 'sd_f2v8', type: 'floatToVec3', position: { x: 500, y: 500 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'sd_pf7', outputKey: 'mask' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      {
+        id: 'sd_addv9', type: 'addVec3', position: { x: 940, y: 380 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'sd_outline6', outputKey: 'result' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'sd_f2v8',    outputKey: 'rgb'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'sd_out10', type: 'output', position: { x: 1160, y: 390 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sd_addv9', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Print Float: Matrix components ───────────────────────────────────────────
+  pfMatrix: {
+    label: 'Debug: Matrix Components',
+    counter: 15,
+    nodes: [
+      { id: 'mx_uv1',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'mx_time2', type: 'time', position: { x: 40,  y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Build a rotation matrix from time
+      {
+        id: 'mx_sin3', type: 'sin', position: { x: 240, y: 400 },
+        inputs: { x: { type: 'float', label: 'X', connection: { nodeId: 'mx_time2', outputKey: 'time' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { scale: 1.0 },
+      },
+      {
+        id: 'mx_cos4', type: 'cos', position: { x: 240, y: 540 },
+        inputs: { x: { type: 'float', label: 'X', connection: { nodeId: 'mx_time2', outputKey: 'time' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: { scale: 1.0 },
+      },
+      {
+        id: 'mx_neg5', type: 'negate', position: { x: 440, y: 540 },
+        inputs: { x: { type: 'float', label: 'X', connection: { nodeId: 'mx_sin3', outputKey: 'result' } } },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      // Assemble rotation matrix: col0=(cos, sin), col1=(-sin, cos)
+      {
+        id: 'mx_mkv6', type: 'makeVec2', position: { x: 640, y: 400 },
+        inputs: {
+          x: { type: 'float', label: 'X', connection: { nodeId: 'mx_cos4', outputKey: 'result' } },
+          y: { type: 'float', label: 'Y', connection: { nodeId: 'mx_sin3', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'mx_mkv7', type: 'makeVec2', position: { x: 640, y: 540 },
+        inputs: {
+          x: { type: 'float', label: 'X', connection: { nodeId: 'mx_neg5', outputKey: 'result' } },
+          y: { type: 'float', label: 'Y', connection: { nodeId: 'mx_cos4', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'mx_mat8', type: 'mat2Construct', position: { x: 860, y: 460 },
+        inputs: {
+          v0: { type: 'vec2', label: 'Vec 0', connection: { nodeId: 'mx_mkv6', outputKey: 'result' } },
+          v1: { type: 'vec2', label: 'Vec 1', connection: { nodeId: 'mx_mkv7', outputKey: 'result' } },
+        },
+        outputs: { mat: { type: 'mat2', label: 'Mat2' } },
+        params: { mode: 'cols' },
+      },
+      // Inspect: break mat2 into its two vec2 columns
+      {
+        id: 'mx_insp9', type: 'mat2Inspect', position: { x: 1060, y: 460 },
+        inputs: { mat: { type: 'mat2', label: 'Mat2', connection: { nodeId: 'mx_mat8', outputKey: 'mat' } } },
+        outputs: { mat: { type: 'mat2', label: 'Mat2' }, vec0: { type: 'vec2', label: 'Vec 0' }, vec1: { type: 'vec2', label: 'Vec 1' } },
+        params: { mode: 'cols' },
+      },
+      // Split column vectors into scalars
+      {
+        id: 'mx_sp10', type: 'splitVec2', position: { x: 1280, y: 400 },
+        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'mx_insp9', outputKey: 'vec0' } } },
+        outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
+        params: {},
+      },
+      {
+        id: 'mx_sp11', type: 'splitVec2', position: { x: 1280, y: 560 },
+        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'mx_insp9', outputKey: 'vec1' } } },
+        outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
+        params: {},
+      },
+      // Print all 4 matrix components as a column
+      {
+        id: 'mx_pf00', type: 'printFloat', position: { x: 1500, y: 200 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'mx_uv1',  outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'mx_sp10', outputKey: 'x'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: 0.3,  charSize: 0.055, decimals: 2 },
+      },
+      {
+        id: 'mx_pf01', type: 'printFloat', position: { x: 1500, y: 320 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'mx_uv1',  outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'mx_sp10', outputKey: 'y'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: 0.1,  charSize: 0.055, decimals: 2 },
+      },
+      {
+        id: 'mx_pf10', type: 'printFloat', position: { x: 1500, y: 440 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'mx_uv1',  outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'mx_sp11', outputKey: 'x'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: -0.1, charSize: 0.055, decimals: 2 },
+      },
+      {
+        id: 'mx_pf11', type: 'printFloat', position: { x: 1500, y: 560 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'mx_uv1',  outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'mx_sp11', outputKey: 'y'  } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: -0.3, charSize: 0.055, decimals: 2 },
+      },
+      // Combine all 4 masks
+      {
+        id: 'mx_add12', type: 'add', position: { x: 1720, y: 380 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'mx_pf00', outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'mx_pf01', outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'mx_add13', type: 'add', position: { x: 1720, y: 500 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'mx_pf10', outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'mx_pf11', outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'mx_add14', type: 'add', position: { x: 1920, y: 440 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'mx_add12', outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'mx_add13', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'mx_f2v15', type: 'floatToVec3', position: { x: 2100, y: 440 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'mx_add14', outputKey: 'result' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      {
+        id: 'mx_out16', type: 'output', position: { x: 2300, y: 440 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mx_f2v15', outputKey: 'rgb' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Print Float: RGB channels of a color ─────────────────────────────────────
+  pfRGB: {
+    label: 'Debug: RGB Channels',
+    counter: 11,
+    nodes: [
+      { id: 'rgb_uv1',   type: 'uv',   position: { x: 40,  y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'rgb_time2', type: 'time', position: { x: 40,  y: 380 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      // Colorful source: animated palette driven by FBM
+      {
+        id: 'rgb_fbm3', type: 'fbm', position: { x: 260, y: 200 },
+        inputs: {
+          uv:         { type: 'vec2',  label: 'UV',         connection: { nodeId: 'rgb_uv1',   outputKey: 'uv'   } },
+          time:       { type: 'float', label: 'Time',       connection: { nodeId: 'rgb_time2', outputKey: 'time' } },
+          scale:      { type: 'float', label: 'Scale' },
+          time_scale: { type: 'float', label: 'Time Scale' },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 2.0, time_scale: 0.2 },
+      },
+      {
+        id: 'rgb_pal4', type: 'palettePreset', position: { x: 500, y: 200 },
+        inputs: { value: { type: 'float', label: 'T', connection: { nodeId: 'rgb_fbm3', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '3' },
+      },
+      // Split color into R, G, B
+      {
+        id: 'rgb_split5', type: 'splitVec3', position: { x: 720, y: 200 },
+        inputs: { v: { type: 'vec3', label: 'Vec3', connection: { nodeId: 'rgb_pal4', outputKey: 'color' } } },
+        outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' } },
+        params: {},
+      },
+      // Print R in the corner
+      {
+        id: 'rgb_pfr6', type: 'printFloat', position: { x: 960, y: 140 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'rgb_uv1',   outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'rgb_split5', outputKey: 'x' } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: 0.2, charSize: 0.06, decimals: 2 },
+      },
+      // Print G
+      {
+        id: 'rgb_pfg7', type: 'printFloat', position: { x: 960, y: 260 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'rgb_uv1',    outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'rgb_split5', outputKey: 'y' } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: 0.0, charSize: 0.06, decimals: 2 },
+      },
+      // Print B
+      {
+        id: 'rgb_pfb8', type: 'printFloat', position: { x: 960, y: 380 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',    connection: { nodeId: 'rgb_uv1',    outputKey: 'uv' } },
+          value: { type: 'float', label: 'Value', connection: { nodeId: 'rgb_split5', outputKey: 'z' } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.45, posY: -0.2, charSize: 0.06, decimals: 2 },
+      },
+      // Combine the 3 masks
+      {
+        id: 'rgb_add9', type: 'add', position: { x: 1180, y: 200 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'rgb_pfr6', outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'rgb_pfg7', outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'rgb_add10', type: 'add', position: { x: 1180, y: 360 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'rgb_add9', outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'rgb_pfb8', outputKey: 'mask'   } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'rgb_f2v11', type: 'floatToVec3', position: { x: 1380, y: 360 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'rgb_add10', outputKey: 'result' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      // Overlay white text on the color field
+      {
+        id: 'rgb_addv12', type: 'addVec3', position: { x: 1580, y: 300 },
+        inputs: {
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'rgb_pal4',  outputKey: 'color'  } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'rgb_f2v11', outputKey: 'rgb'    } },
+        },
+        outputs: { result: { type: 'vec3', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'rgb_out13', type: 'output', position: { x: 1800, y: 300 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'rgb_addv12', outputKey: 'result' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Print Text: Grid coordinates ─────────────────────────────────────────────
+  pfGrid: {
+    label: 'Debug: Grid Coordinates',
+    counter: 15,
+    nodes: [
+      // UV source
+      { id: 'pg_uv1', type: 'uv', position: { x: 40, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      // Scale UV by grid count to create 4×4 cells
+      {
+        id: 'pg_scale2', type: 'multiplyVec2', position: { x: 240, y: 300 },
+        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'pg_uv1', outputKey: 'uv' } } },
+        outputs: { result: { type: 'vec2', label: 'Result' } },
+        params: { scale: 4.0 },
+      },
+      // fract(scaled * 1) - 0.5 → local cell UV centered at origin
+      {
+        id: 'pg_fract3', type: 'fract', position: { x: 480, y: 200 },
+        inputs: {
+          input: { type: 'vec2', label: 'Input', connection: { nodeId: 'pg_scale2', outputKey: 'result' } },
+          scale: { type: 'float', label: 'Scale' },
+        },
+        outputs: { output: { type: 'vec2', label: 'Output' } },
+        params: { scale: 1.0 },
+      },
+      // Split scaled UV to get x and y floats for flooring
+      {
+        id: 'pg_split4', type: 'splitVec2', position: { x: 480, y: 420 },
+        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: 'pg_scale2', outputKey: 'result' } } },
+        outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
+        params: {},
+      },
+      // floor x → column index
+      {
+        id: 'pg_colx5', type: 'floor', position: { x: 680, y: 400 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'pg_split4', outputKey: 'x' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: {},
+      },
+      // floor y → row index
+      {
+        id: 'pg_rowy6', type: 'floor', position: { x: 680, y: 480 },
+        inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'pg_split4', outputKey: 'y' } } },
+        outputs: { output: { type: 'float', label: 'Output' } },
+        params: {},
+      },
+      // "col:" static label per cell
+      {
+        id: 'pg_lbcol7', type: 'printText', position: { x: 880, y: 160 },
+        inputs: {
+          uv:  { type: 'vec2', label: 'UV',       connection: { nodeId: 'pg_fract3', outputKey: 'output' } },
+          pos: { type: 'vec2', label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { text: 'col:', posX: -0.35, posY: 0.09, charSize: 0.07 },
+      },
+      // column index value
+      {
+        id: 'pg_valcol8', type: 'printFloat', position: { x: 880, y: 270 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',       connection: { nodeId: 'pg_fract3', outputKey: 'output' } },
+          value: { type: 'float', label: 'Value',    connection: { nodeId: 'pg_colx5',  outputKey: 'output' } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.04, posY: 0.09, charSize: 0.07, decimals: 0 },
+      },
+      // "row:" static label per cell
+      {
+        id: 'pg_lbrow9', type: 'printText', position: { x: 880, y: 380 },
+        inputs: {
+          uv:  { type: 'vec2', label: 'UV',       connection: { nodeId: 'pg_fract3', outputKey: 'output' } },
+          pos: { type: 'vec2', label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { text: 'row:', posX: -0.35, posY: -0.12, charSize: 0.07 },
+      },
+      // row index value
+      {
+        id: 'pg_valrow10', type: 'printFloat', position: { x: 880, y: 490 },
+        inputs: {
+          uv:    { type: 'vec2',  label: 'UV',       connection: { nodeId: 'pg_fract3',  outputKey: 'output' } },
+          value: { type: 'float', label: 'Value',    connection: { nodeId: 'pg_rowy6',   outputKey: 'output' } },
+          pos:   { type: 'vec2',  label: 'Position' },
+        },
+        outputs: { mask: { type: 'float', label: 'Text Mask' } },
+        params: { posX: -0.04, posY: -0.12, charSize: 0.07, decimals: 0 },
+      },
+      // Combine all four masks
+      {
+        id: 'pg_add11', type: 'add', position: { x: 1100, y: 210 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pg_lbcol7',   outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pg_valcol8',  outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pg_add12', type: 'add', position: { x: 1100, y: 410 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pg_lbrow9',   outputKey: 'mask' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pg_valrow10', outputKey: 'mask' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      {
+        id: 'pg_add13', type: 'add', position: { x: 1300, y: 310 },
+        inputs: {
+          a: { type: 'float', label: 'A', connection: { nodeId: 'pg_add11', outputKey: 'result' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'pg_add12', outputKey: 'result' } },
+        },
+        outputs: { result: { type: 'float', label: 'Result' } },
+        params: {},
+      },
+      // White text over black background
+      {
+        id: 'pg_f2v14', type: 'floatToVec3', position: { x: 1480, y: 310 },
+        inputs: { input: { type: 'float', label: 'Float', connection: { nodeId: 'pg_add13', outputKey: 'result' } } },
+        outputs: { rgb: { type: 'vec3', label: 'Color' } },
+        params: {},
+      },
+      {
+        id: 'pg_out15', type: 'output', position: { x: 1680, y: 310 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pg_f2v14', outputKey: 'rgb' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
 };
 
 // The default graph to load on startup
