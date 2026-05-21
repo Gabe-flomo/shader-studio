@@ -2,17 +2,17 @@ import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p } from './helpers';
 
 // Shared GLSL helpers for texture-based bitmap font rendering.
-// u_fontTexture is a 512×512 canvas texture with a 16×16 grid of ASCII chars
-// (32px×32px per cell), generated at startup and always available as a uniform.
+// u_fontTexture is a 1024×1024 canvas texture with a 16×16 grid of ASCII chars
+// (64px×64px per cell), generated at startup and always available as a uniform.
 //
 // ssChar(localU, localV, id):
 //   localU ∈ [0,1] left→right within the character cell
 //   localV ∈ [0,1] bottom→top within the character cell
-//   id     = ASCII code (32-126)
+//   id     = ASCII code as float (32.0-126.0)
 // Returns a [0,1] coverage value sampled from u_fontTexture.
 export const PRINT_FLOAT_GLSL = `
-float ssChar(float localU, float localV, int id) {
-    vec2 cell = vec2(float(id % 16), 15.0 - float(id / 16));
+float ssChar(float localU, float localV, float id) {
+    vec2 cell = vec2(mod(id, 16.0), 15.0 - floor(id / 16.0));
     vec2 uv   = (vec2(localU, localV) + cell) / 16.0;
     vec2 b    = step(0.0, vec2(localU, localV)) * (1.0 - step(1.0, vec2(localU, localV)));
     return texture2D(u_fontTexture, uv).r * b.x * b.y;
@@ -34,7 +34,7 @@ float ssPrintFloat(vec2 uv, vec2 origin, float charH, float value, int decimals)
     float absVal   = abs(value);
 
     if (negative) {
-        result = max(result, ssChar((xOff - cursor * adv) / charW, py, 45));
+        result = max(result, ssChar((xOff - cursor * adv) / charW, py, 45.0));
         cursor += 1.0;
     }
 
@@ -43,21 +43,21 @@ float ssPrintFloat(vec2 uv, vec2 origin, float charH, float value, int decimals)
     for (int d = 0; d < 6; d++) {
         if (d >= nInt) break;
         float place = pow(10.0, float(nInt - 1 - d));
-        int   digit = int(mod(floor(absVal / place), 10.0));
-        result = max(result, ssChar((xOff - (cursor + float(d)) * adv) / charW, py, 48 + digit));
+        float digit = mod(floor(absVal / place), 10.0);
+        result = max(result, ssChar((xOff - (cursor + float(d)) * adv) / charW, py, 48.0 + digit));
     }
     cursor += float(nInt);
 
     if (decimals > 0) {
-        result = max(result, ssChar((xOff - cursor * adv) / charW, py, 46));
+        result = max(result, ssChar((xOff - cursor * adv) / charW, py, 46.0));
         cursor += 1.0;
 
         float fpart = absVal - ipart;
         for (int d = 0; d < 4; d++) {
             if (d >= decimals) break;
             fpart *= 10.0;
-            int   digit = int(mod(floor(fpart), 10.0));
-            result = max(result, ssChar((xOff - (cursor + float(d)) * adv) / charW, py, 48 + digit));
+            float digit = mod(floor(fpart), 10.0);
+            result = max(result, ssChar((xOff - (cursor + float(d)) * adv) / charW, py, 48.0 + digit));
         }
     }
 
@@ -163,7 +163,7 @@ export const PrintTextNode: NodeDefinition = {
     const charLines = text.split('').map((ch, i) => {
       const code = ch.charCodeAt(0);
       if (code < 32 || code > 126) return '';
-      return `        ${outVar} = max(${outVar}, ssChar((${xOff} - ${i}.0 * ${adv}) / ${charW}, ${rowV}, ${code}));`;
+      return `        ${outVar} = max(${outVar}, ssChar((${xOff} - ${i}.0 * ${adv}) / ${charW}, ${rowV}, ${code}.0));`;
     }).filter(Boolean).join('\n');
 
     return {

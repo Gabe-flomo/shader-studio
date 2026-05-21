@@ -139,8 +139,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Texture',    types: ['waveTexture', 'magicTexture'] },
   ],
   Grid: [
-    { label: 'Space',    types: ['gridLayout'] },
-    { label: 'Effects',  types: ['waveRadius', 'neighborDist'] },
+    { label: 'Space',    types: ['gridLayout', 'grid3d'] },
+    { label: 'Effects',  types: ['waveRadius', 'neighborDist', 'neighborDist3d'] },
   ],
 };
 

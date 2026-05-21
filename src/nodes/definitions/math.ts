@@ -997,11 +997,23 @@ export const TransformVecNode: NodeDefinition = {
     for (const c of active) {
       code += `    float ${id}_${c}_raw = (${v}).${c};\n`;
     }
-    // Per-component expressions
+    // Per-component expressions (with optional per-component warp lines)
     for (const c of active) {
-      const paramKey = `expr${c.toUpperCase()}`;
-      const raw = typeof node.params[paramKey] === 'string' ? (node.params[paramKey] as string) : c;
-      code += `    float ${id}_${c} = ${substituteComps(raw, id, dims)};\n`;
+      const paramKey  = `expr${c.toUpperCase()}`;
+      const linesKey  = `expr${c.toUpperCase()}Lines`;
+      const raw       = typeof node.params[paramKey] === 'string' ? (node.params[paramKey] as string) : c;
+      const warpLines = (node.params[linesKey] as Array<{ lhs: string; op: string; rhs: string }> | undefined) ?? [];
+      if (warpLines.length > 0) {
+        code += `    float ${id}_${c};\n    {\n`;
+        for (const line of warpLines) {
+          if (line.lhs && line.rhs) {
+            code += `        ${line.lhs} ${line.op || '='} ${substituteComps(line.rhs, id, dims)};\n`;
+          }
+        }
+        code += `        ${id}_${c} = ${substituteComps(raw, id, dims)};\n    }\n`;
+      } else {
+        code += `    float ${id}_${c} = ${substituteComps(raw, id, dims)};\n`;
+      }
     }
     // Unused components default to 0.0 so their output vars are always declared
     for (const c of TRANSFORM_COMPS.slice(dims)) {

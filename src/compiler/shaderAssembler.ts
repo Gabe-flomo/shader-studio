@@ -133,9 +133,18 @@ export function resolveInputVars(
       const sourceOutputs = nodeOutputs.get(input.connection.nodeId);
       if (sourceOutputs) {
         const rawVar = sourceOutputs[input.connection.outputKey];
-        // Auto-coerce float → vec3 when the target socket expects vec3
-        if (sourceOutputType === 'float' && input.type === 'vec3') {
+        const src = sourceOutputType as string;
+        const tgt = input.type as string;
+        if (src === tgt) {
+          inputVars[inputKey] = rawVar;
+        } else if (src === 'float' && tgt === 'vec2') {
+          inputVars[inputKey] = `vec2(${rawVar})`;
+        } else if (src === 'float' && tgt === 'vec3') {
           inputVars[inputKey] = `vec3(${rawVar})`;
+        } else if (src === 'vec2' && tgt === 'vec3') {
+          inputVars[inputKey] = `vec3(${rawVar}, 0.0)`;
+        } else if (src === 'vec3' && tgt === 'vec2') {
+          inputVars[inputKey] = `(${rawVar}).xy`;
         } else {
           inputVars[inputKey] = rawVar;
         }
