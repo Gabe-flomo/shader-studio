@@ -4501,6 +4501,133 @@ export function SpectralDispersionViz(_props: { node: GraphNode }) {
   );
 }
 
+// ─── Viz — Grid Layout (gridLayout) ──────────────────────────────────────────
+
+export function GridLayoutViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const columns   = typeof node.params.columns === 'number' ? node.params.columns : 10;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Display up to 20 cols; derive rows to keep cells square-ish (aspect ~1.6)
+    const cols = Math.max(1, Math.min(Math.round(columns), 20));
+    const rows = Math.max(1, Math.round(cols / 1.6));
+    const cellW = W / cols;
+    const cellH = H / rows;
+    const pad   = Math.max(1, Math.min(2, cellW * 0.08));
+
+    // Cell interiors
+    ctx.fillStyle = '#1e1e2e';
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        ctx.fillRect(
+          col * cellW + pad,
+          row * cellH + pad,
+          cellW - pad * 2,
+          cellH - pad * 2,
+        );
+      }
+    }
+
+    // Grid lines
+    ctx.strokeStyle = '#585b70';
+    ctx.lineWidth = 0.75;
+    for (let i = 0; i <= cols; i++) {
+      const x = i * cellW;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let j = 0; j <= rows; j++) {
+      const y = j * cellH;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    // Column count label
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '9px monospace';
+    ctx.fillText(`${cols} cols`, 3, H - 3);
+  }, [columns]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={160} height={80}
+        style={{ display: 'block', width: '100%', height: '80px', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+// ─── Viz — Neighbor Dist (neighborDist) ───────────────────────────────────────
+
+export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw a 3×3 neighborhood grid; center cell highlighted
+    const cols = 3, rows = 3;
+    const pad  = 10;
+    const cellW = (W - pad * 2) / cols;
+    const cellH = (H - pad * 2) / rows;
+    const gap   = 3;
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const isCenter = col === 1 && row === 1;
+        const x = pad + col * cellW + gap / 2;
+        const y = pad + row * cellH + gap / 2;
+        const w = cellW - gap;
+        const h = cellH - gap;
+
+        ctx.fillStyle = isCenter ? '#89b4fa' : '#313244';
+        ctx.fillRect(x, y, w, h);
+
+        // Distance line from neighbor to center
+        if (!isCenter) {
+          const cx = pad + 1.5 * cellW;
+          const cy = pad + 1.5 * cellH;
+          const nx = x + w / 2;
+          const ny = y + h / 2;
+          ctx.strokeStyle = 'rgba(137, 180, 250, 0.25)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.beginPath();
+          ctx.moveTo(nx, ny);
+          ctx.lineTo(cx, cy);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
+    // Label
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '8px monospace';
+    ctx.fillText('3×3 neighborhood', 3, H - 3);
+  }, []);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={120} height={100}
+        style={{ display: 'block', width: '120px', height: '100px', margin: '0 auto', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -4520,6 +4647,8 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'blackbody':      return <BlackbodyViz           node={node} />;
     case 'brightnessContrast': return <BrightnessContrastViz node={node} />;
     case 'grid':           return <GridViz                node={node} />;
+    case 'gridLayout':     return <GridLayoutViz          node={node} />;
+    case 'neighborDist':   return <NeighborDistViz        node={node} />;
     case 'waveTexture':    return <WaveTextureViz         node={node} />;
     case 'smoothstep':     return <SmoothstepViz          node={node} />;
     case 'clamp':          return <ClampViz               node={node} />;
@@ -4844,7 +4973,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'toneMap', 'palette', 'palettePreset', 'gradient',
   'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
   'hueRange', 'audioInput',
-  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'waveTexture',
+  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'waveTexture',
   'smoothstep', 'clamp', 'mix', 'mixVec3', 'mapRange',
   'multiplyVec3', 'addVec3', 'addColor',
   'particleEmitter',
