@@ -727,3 +727,56 @@ vec3 blackbodyColor(float kelvin) {
     };
   },
 };
+
+// ─── Blend Mode ───────────────────────────────────────────────────────────────
+// Combines two colors via a named blend mode with a mask and strength control.
+export const BlendModeNode: NodeDefinition = {
+  type: 'blendMode',
+  label: 'Blend Mode',
+  category: 'Color',
+  description: 'Combines two colors via a named blend mode. mask controls how much blending is applied. Use additive for glow accumulation, multiply for darkening, screen for brightening.',
+  inputs: {
+    colorA: { type: 'vec3',  label: 'Color A' },
+    colorB: { type: 'vec3',  label: 'Color B' },
+    mask:   { type: 'float', label: 'Mask'    },
+  },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { mode: 'additive', strength: 1.0 },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: 'multiply',  label: 'Multiply'  },
+      { value: 'additive',  label: 'Additive'  },
+      { value: 'screen',    label: 'Screen'    },
+      { value: 'overlay',   label: 'Overlay'   },
+      { value: 'subtract',  label: 'Subtract'  },
+    ]},
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const a        = inputVars.colorA ?? 'vec3(0.0)';
+    const b        = inputVars.colorB ?? 'vec3(0.0)';
+    const mask     = inputVars.mask   ?? '1.0';
+    const strength = p(node.params.strength, 1.0);
+    const mode     = String(node.params.mode ?? 'additive');
+    const s        = `${id}_s`;
+    let blendExpr: string;
+    if (mode === 'multiply') {
+      blendExpr = `${a} * ${s}`;
+    } else if (mode === 'screen') {
+      blendExpr = `1.0 - (1.0 - ${a}) * (1.0 - ${s})`;
+    } else if (mode === 'overlay') {
+      blendExpr = `mix(2.0*${a}*${s}, 1.0 - 2.0*(1.0-${a})*(1.0-${s}), step(0.5, ${a}))`;
+    } else if (mode === 'subtract') {
+      blendExpr = `${a} - ${s}`;
+    } else {
+      blendExpr = `${a} + ${s}`;
+    }
+    return {
+      code: `    vec3 ${s} = ${b} * ${strength};\n` +
+            `    vec3 ${id}_blended = ${blendExpr};\n` +
+            `    vec3 ${id}_result  = mix(${a}, ${id}_blended, clamp(${mask}, 0.0, 1.0));\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
