@@ -236,3 +236,88 @@ export const GlowFalloffNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Noisy Grid SDF ───────────────────────────────────────────────────────────
+// Smooth-min of noise-displaced circle SDFs over a grid neighborhood.
+// Circles merge organically when noise brings them close together.
+// Works in grid-pos space (0..columns). Connect sdf → smoothstep to visualize.
+
+const SMIN_POLY_FN = `float sminPolyFn(float a, float b, float k) {
+    float h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * k * 0.25;
+}`;
+
+const NOISY_GRID_SDF_3X3 = `float noisyGridSDF3x3Fn(vec2 gpos, vec2 cid, float time, float radius, float noiseAmt, float speed, float smoothK) {
+    float result = 1e5;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            vec2 nid = cid + vec2(float(dx), float(dy));
+            float ph = nid.x * 1.618034 + nid.y * 2.618034;
+            vec2 offs = noiseHash2(nid) * (noiseAmt + 0.06 * sin(time * speed + ph));
+            vec2 center = nid + 0.5 + offs;
+            float sdf = length(gpos - center) - radius;
+            result = sminPolyFn(result, sdf, smoothK);
+        }
+    }
+    return result;
+}`;
+
+const NOISY_GRID_SDF_5X5 = `float noisyGridSDF5x5Fn(vec2 gpos, vec2 cid, float time, float radius, float noiseAmt, float speed, float smoothK) {
+    float result = 1e5;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            vec2 nid = cid + vec2(float(dx), float(dy));
+            float ph = nid.x * 1.618034 + nid.y * 2.618034;
+            vec2 offs = noiseHash2(nid) * (noiseAmt + 0.06 * sin(time * speed + ph));
+            vec2 center = nid + 0.5 + offs;
+            float sdf = length(gpos - center) - radius;
+            result = sminPolyFn(result, sdf, smoothK);
+        }
+    }
+    return result;
+}`;
+
+export const NoisyGridSDFNode: NodeDefinition = {
+  type: 'noisyGridSDF',
+  label: 'Noisy Grid SDF',
+  category: 'Field',
+  description: 'Smooth-min of noise-displaced circle SDFs over a 3×3 or 5×5 neighborhood. SDF is negative inside circles, zero at edges. Circles merge organically when noise brings them close. Connect sdf → smoothstep for fill; smoothstep(0.5,−0.3,sdf) → palette for inner glow.',
+  inputs: {
+    gridPos: { type: 'vec2',  label: 'Grid Pos' },
+    cellID:  { type: 'vec2',  label: 'Cell ID'  },
+    time:    { type: 'float', label: 'Time'     },
+  },
+  outputs: {
+    sdf: { type: 'float', label: 'SDF' },
+  },
+  defaultParams: { radius: 0.30, noiseAmt: 0.28, speed: 0.4, smoothK: 0.20, neighborRadius: 2 },
+  paramDefs: {
+    radius:         { label: 'Radius',    type: 'float', min: 0.05, max: 0.49, step: 0.01  },
+    noiseAmt:       { label: 'Noise Amt', type: 'float', min: 0.0,  max: 0.5,  step: 0.01  },
+    speed:          { label: 'Speed',     type: 'float', min: 0.0,  max: 2.0,  step: 0.05  },
+    smoothK:        { label: 'Merge K',   type: 'float', min: 0.01, max: 0.5,  step: 0.01  },
+    neighborRadius: { label: 'Neighbors', type: 'select', options: [
+      { value: '1', label: '1 (3×3)' },
+      { value: '2', label: '2 (5×5)' },
+    ]},
+  },
+  glslFunctions: [SMIN_POLY_FN, NOISY_GRID_SDF_3X3, NOISY_GRID_SDF_5X5],
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const gp  = inputVars.gridPos ?? 'g_uv';
+    const cid = inputVars.cellID  ?? 'vec2(0.0)';
+    const t   = inputVars.time    ?? 'u_time';
+    const r   = p(node.params.radius,   0.30);
+    const na  = p(node.params.noiseAmt, 0.28);
+    const sp  = p(node.params.speed,    0.4);
+    const sk  = p(node.params.smoothK,  0.20);
+    const nr  = typeof node.params.neighborRadius === 'number'
+      ? node.params.neighborRadius
+      : parseFloat(String(node.params.neighborRadius ?? '2'));
+    const fnName = nr > 1 ? 'noisyGridSDF5x5Fn' : 'noisyGridSDF3x3Fn';
+    return {
+      code: `    float ${id}_sdf = ${fnName}(${gp}, ${cid}, ${t}, ${r}, ${na}, ${sp}, ${sk});\n`,
+      outputVars: { sdf: `${id}_sdf` },
+    };
+  },
+};

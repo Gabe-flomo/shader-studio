@@ -10,10 +10,10 @@ export { VideoInputNode };
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 
 // Grid
-export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode } from './grid';
+export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 
 // Grid Field
-export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode } from './gridField';
+export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
@@ -134,7 +134,7 @@ export {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
   MultiplyVec3Node, AddVec3Node,
-  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode,
+  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode, ModSelectNode,
   Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode,
   MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
@@ -160,8 +160,8 @@ export {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
-import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode } from './grid';
-import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode } from './gridField';
+import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
+import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -232,7 +232,7 @@ import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
   MultiplyVec3Node, AddVec3Node,
-  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode,
+  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode, ModSelectNode,
   Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode,
   MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
@@ -312,12 +312,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridDensityWarp: GridDensityWarpNode,
   neighborOffset2d: NeighborOffset2dNode,
   animatedCellCenter: AnimatedCellCenterNode,
+  neighborAttractCircles: NeighborAttractCirclesNode,
   // Field / Metaball
   gaussianField: GaussianFieldNode,
   fieldAccumulate: FieldAccumulateNode,
   metaballThreshold: MetaballThresholdNode,
   distanceFalloff: DistanceFalloffNode,
   glowFalloff: GlowFalloffNode,
+  noisyGridSDF: NoisyGridSDFNode,
   shear: ShearNode,
   perspective2d: Perspective2DNode,
   mirroredRepeat2D: MirroredRepeat2DNode,
@@ -575,6 +577,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mix: MixNode,
   mixVec3: MixVec3Node,
   mod: ModNode,
+  modSelect: ModSelectNode,
   atan2: Atan2Node,
   ceil: CeilNode,
   floor: FloorNode,

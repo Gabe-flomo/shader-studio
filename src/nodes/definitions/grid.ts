@@ -244,42 +244,59 @@ export const GridDensityWarpNode: NodeDefinition = {
   type: 'gridDensityWarp',
   label: 'Grid Density Warp',
   category: 'Grid',
-  description: 'Applies a sin-wave warp to UV before grid or Fract, producing non-uniform cell density. Keep amplitude < 1/(2*gridSize) to avoid cell folding.',
+  description: 'Applies a wave warp to UV before grid or Fract, producing non-uniform cell density. Connect a Time node to animate. Keep amplitude < 1/(2*gridSize) to avoid cell folding.',
   inputs: {
-    uv: { type: 'vec2', label: 'UV' },
+    uv:   { type: 'vec2',  label: 'UV'   },
+    time: { type: 'float', label: 'Time' },
   },
   outputs: {
     warpedUV: { type: 'vec2', label: 'Warped UV' },
   },
-  defaultParams: { amplitude: 0.06, frequency: 2.0, axis: '0.0', animated: false },
+  defaultParams: { amplitude: 0.06, frequency: 2.0, phase: 0.0, axis: '0.0', shape: '0.0' },
   paramDefs: {
-    amplitude: { label: 'Amplitude', type: 'float', min: 0.0, max: 0.15, step: 0.001 },
-    frequency: { label: 'Frequency', type: 'float', min: 0.5, max: 6.0,  step: 0.1  },
+    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,   max: 0.15,  step: 0.001 },
+    frequency: { label: 'Frequency', type: 'float', min: 0.5,   max: 12.0,  step: 0.1   },
+    phase:     { label: 'Phase',     type: 'float', min: -3.14, max: 3.14,  step: 0.05  },
     axis: { label: 'Axis', type: 'select', options: [
       { value: '0.0', label: 'X' },
       { value: '1.0', label: 'Y' },
       { value: '2.0', label: 'Both' },
     ]},
-    animated: { label: 'Animated', type: 'bool' },
+    shape: { label: 'Shape', type: 'select', options: [
+      { value: '0.0', label: 'Sine'     },
+      { value: '1.0', label: 'Triangle' },
+      { value: '2.0', label: 'Sawtooth' },
+    ]},
   },
-  glslFunction: `vec2 gridDensityWarpFn(vec2 uv, float amp, float freq, float axis, float t) {
+  glslFunction: `vec2 gridDensityWarpFn(vec2 uv, float amp, float freq, float phase, float axis, float shape, float t) {
     vec2 warped = uv;
-    if (axis < 0.5 || axis > 1.5)
-        warped.x += sin(uv.y * freq + t) * amp;
-    if (axis > 0.5)
-        warped.y += sin(uv.x * freq + t * 0.71) * amp;
+    float px = uv.y * freq + t + phase;
+    float py = uv.x * freq + t * 0.71 + phase;
+    float wx, wy;
+    if (shape < 0.5) {
+        wx = sin(px); wy = sin(py);
+    } else if (shape < 1.5) {
+        wx = 1.0 - 4.0 * abs(fract(px * 0.15915 + 0.25) - 0.5);
+        wy = 1.0 - 4.0 * abs(fract(py * 0.15915 + 0.25) - 0.5);
+    } else {
+        wx = fract(px * 0.15915) * 2.0 - 1.0;
+        wy = fract(py * 0.15915) * 2.0 - 1.0;
+    }
+    if (axis < 0.5 || axis > 1.5) warped.x += wx * amp;
+    if (axis > 0.5) warped.y += wy * amp;
     return warped;
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const uv       = inputVars.uv ?? 'g_uv';
-    const amp      = p(node.params.amplitude, 0.06);
-    const freq     = p(node.params.frequency, 2.0);
-    const axis     = p(node.params.axis, 0.0);
-    const animated = Boolean(node.params.animated ?? false);
-    const t        = animated ? 'u_time' : '0.0';
+    const id    = node.id;
+    const uv    = inputVars.uv    ?? 'g_uv';
+    const t     = inputVars.time  ?? '0.0';
+    const amp   = p(node.params.amplitude, 0.06);
+    const freq  = p(node.params.frequency, 2.0);
+    const phase = p(node.params.phase, 0.0);
+    const axis  = p(node.params.axis, 0.0);
+    const shape = p(node.params.shape, 0.0);
     return {
-      code: `    vec2 ${id}_wuv = gridDensityWarpFn(${uv}, ${amp}, ${freq}, ${axis}, ${t});\n`,
+      code: `    vec2 ${id}_wuv = gridDensityWarpFn(${uv}, ${amp}, ${freq}, ${phase}, ${axis}, ${shape}, ${t});\n`,
       outputVars: { warpedUV: `${id}_wuv` },
     };
   },
@@ -356,6 +373,72 @@ export const AnimatedCellCenterNode: NodeDefinition = {
     return {
       code: `    vec2 ${id}_center = animatedCellCenterFn(${cid}, ${gs}, u_time, ${spd}, ${amp});\n`,
       outputVars: { center: `${id}_center` },
+    };
+  },
+};
+
+// ─── Neighbor Attract Circles ─────────────────────────────────────────────────
+// Min-SDF of attractor-displaced circles over a 3×3 neighborhood.
+// Circles are drawn in grid-pos space so they render across cell boundaries
+// without clipping. attractAmount drives coloring (e.g., palette node).
+
+export const NeighborAttractCirclesNode: NodeDefinition = {
+  type: 'neighborAttractCircles',
+  label: 'Attract Circles',
+  category: 'Grid',
+  description: 'Min-SDF of attractor-displaced circles over a 3×3 neighborhood. Circles follow the attractor without clipping at cell boundaries. Connect sdf → smoothstep for fill; attractAmount → palette for color.',
+  inputs: {
+    gridPos:      { type: 'vec2',  label: 'Grid Pos'  },
+    cellID:       { type: 'vec2',  label: 'Cell ID'   },
+    attractorPos: { type: 'vec2',  label: 'Attractor' },
+    cellSize:     { type: 'float', label: 'Cell Size' },
+  },
+  outputs: {
+    sdf:          { type: 'float', label: 'SDF'         },
+    attractAmount:{ type: 'float', label: 'Attract Amt' },
+  },
+  defaultParams: { circleRadius: 0.28, maxDisplace: 0.42, influenceRadius: 2.5 },
+  paramDefs: {
+    circleRadius:    { label: 'Radius',     type: 'float', min: 0.05, max: 0.49, step: 0.01  },
+    maxDisplace:     { label: 'Max Displace', type: 'float', min: 0.0, max: 0.48, step: 0.005 },
+    influenceRadius: { label: 'Influence',  type: 'float', min: 0.1,  max: 5.0,  step: 0.05  },
+  },
+  glslFunction: `vec2 neighborAttractCirclesFn(vec2 gridPos, vec2 cellID, vec2 attractorPos, float cellSize, float circleRadius, float maxDisplace, float influenceRadius) {
+    // attractAmount for current cell only (for consistent color gradient)
+    vec2 curCenter = (cellID + 0.5) * cellSize;
+    float attractAmt0 = smoothstep(influenceRadius, 0.0, length(attractorPos - curCenter));
+    float minSDF = 1e5;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            vec2 nid = cellID + vec2(float(dx), float(dy));
+            vec2 nCenter = (nid + 0.5) * cellSize;
+            vec2 delta = attractorPos - nCenter;
+            float dist = length(delta);
+            float attAmt = smoothstep(influenceRadius, 0.0, dist);
+            vec2 dir = dist > 0.0001 ? delta / dist : vec2(0.0);
+            // cellUV_n in [-0.5, 0.5]: same formula as gridLayout (fract(gp)-0.5) but for neighbor
+            vec2 cellUV_n = gridPos - nid - 0.5;
+            vec2 dispUV = cellUV_n + dir * attAmt * maxDisplace;
+            float sdf_n = length(dispUV) - circleRadius;
+            minSDF = min(minSDF, sdf_n);
+        }
+    }
+    return vec2(minSDF, attractAmt0);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const gp  = inputVars.gridPos      ?? 'vec2(0.0)';
+    const cid = inputVars.cellID       ?? 'vec2(0.0)';
+    const att = inputVars.attractorPos ?? 'vec2(0.5)';
+    const cs  = inputVars.cellSize     ?? '0.1';
+    const cr  = p(node.params.circleRadius,    0.28);
+    const md  = p(node.params.maxDisplace,     0.42);
+    const ir  = p(node.params.influenceRadius, 2.5);
+    return {
+      code: `    vec2 ${id}_v = neighborAttractCirclesFn(${gp}, ${cid}, ${att}, ${cs}, ${cr}, ${md}, ${ir});\n` +
+            `    float ${id}_sdf     = ${id}_v.x;\n` +
+            `    float ${id}_attract = ${id}_v.y;\n`,
+      outputVars: { sdf: `${id}_sdf`, attractAmount: `${id}_attract` },
     };
   },
 };

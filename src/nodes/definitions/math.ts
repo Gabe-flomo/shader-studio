@@ -260,6 +260,45 @@ export const ModNode: NodeDefinition = {
   },
 };
 
+// ModSelectNode — mod-based 0/1 mask for even/odd/every-Nth selection.
+export const ModSelectNode: NodeDefinition = {
+  type: 'modSelect',
+  label: 'Mod Select',
+  category: 'Math',
+  description: 'Outputs a mask when mod(value, period) < threshold*period. Use for even/odd rows, every-Nth column, or any periodic selection. Also outputs raw mod value and normalized phase 0–1.',
+  inputs: {
+    value:  { type: 'float', label: 'Value'  },
+    period: { type: 'float', label: 'Period' },
+  },
+  outputs: {
+    mask:     { type: 'float', label: 'Mask'      },
+    modValue: { type: 'float', label: 'Mod Value'  },
+    phase:    { type: 'float', label: 'Phase 0–1'  },
+  },
+  defaultParams: { period: 2.0, threshold: 0.5, softness: 0.0 },
+  paramDefs: {
+    period:    { label: 'Period',    type: 'float', min: 0.001, max: 32.0, step: 0.5   },
+    threshold: { label: 'Threshold', type: 'float', min: 0.0,  max: 1.0,  step: 0.01  },
+    softness:  { label: 'Softness',  type: 'float', min: 0.0,  max: 0.5,  step: 0.005 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const val = inputVars.value  ?? '0.0';
+    const per = inputVars.period ?? p(node.params.period, 2.0);
+    const thr = p(node.params.threshold, 0.5);
+    const sft = p(node.params.softness,  0.0);
+    return {
+      code: `    float ${id}_per  = max(${per}, 0.001);\n` +
+            `    float ${id}_mv   = mod(${val}, ${id}_per);\n` +
+            `    float ${id}_ph   = ${id}_mv / ${id}_per;\n` +
+            `    float ${id}_win  = ${id}_per * ${thr};\n` +
+            `    float ${id}_sft  = max(${sft}, 0.001);\n` +
+            `    float ${id}_mask = smoothstep(${id}_win + ${id}_sft, ${id}_win - ${id}_sft, ${id}_mv);\n`,
+      outputVars: { mask: `${id}_mask`, modValue: `${id}_mv`, phase: `${id}_ph` },
+    };
+  },
+};
+
 export const Atan2Node: NodeDefinition = {
   type: 'atan2', label: 'Atan2', category: 'Math', description: 'Polar angle: atan(y, x).',
   inputs: { y: { type: 'float', label: 'Y' }, x: { type: 'float', label: 'X' } },
