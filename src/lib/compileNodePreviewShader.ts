@@ -39,6 +39,57 @@ void main() {
   gl_FragColor = vec4(mix(vec3(0.08), col * 0.85 + 0.08, mask), 1.0);
 }`.trim();
 
+function buildDensityWarpPreviewShader(node: GraphNode): string {
+  const amp   = Number(node.params.amplitude ?? 0.06);
+  const freq  = Number(node.params.frequency ?? 2.0);
+  const phase = Number(node.params.phase     ?? 0.0);
+  const axis  = Number(node.params.axis      ?? 0.0);
+  const shape = Number(node.params.shape     ?? 0.0);
+
+  const axisX = axis < 0.5 || axis > 1.5;
+  const axisY = axis > 0.5;
+  const fr    = freq.toFixed(3);
+  const ph    = phase.toFixed(3);
+  const ap    = amp.toFixed(4);
+
+  const px = `(uv.y * ${fr} + ${ph})`;
+  const py = `(uv.x * ${fr} * 0.71 + ${ph})`;
+
+  let waveX: string, waveY: string;
+  if (shape < 0.5) {
+    waveX = `sin(${px})`;
+    waveY = `sin(${py})`;
+  } else if (shape < 1.5) {
+    waveX = `(1.0 - 4.0 * abs(fract(${px} * 0.15915 + 0.25) - 0.5))`;
+    waveY = `(1.0 - 4.0 * abs(fract(${py} * 0.15915 + 0.25) - 0.5))`;
+  } else {
+    waveX = `(fract(${px} * 0.15915) * 2.0 - 1.0)`;
+    waveY = `(fract(${py} * 0.15915) * 2.0 - 1.0)`;
+  }
+
+  const warpLines: string[] = ['  vec2 warped = uv;'];
+  if (axisX) warpLines.push(`  warped.x += ${waveX} * ${ap};`);
+  if (axisY) warpLines.push(`  warped.y += ${waveY} * ${ap};`);
+
+  return `precision mediump float;
+uniform vec2 u_resolution;
+uniform float u_time;
+varying vec2 vUv;
+void main() {
+  float asp = u_resolution.x / u_resolution.y;
+  vec2 uv = vUv * vec2(asp, 1.0);
+${warpLines.join('\n')}
+  float cols = 7.0;
+  vec2 g = warped * vec2(cols / asp, cols);
+  vec2 f = fract(g);
+  float lw = 0.05;
+  float onLine = 1.0 - step(lw, min(f.x, f.y));
+  vec3 bg   = vec3(0.07, 0.07, 0.10);
+  vec3 line = mix(vec3(0.3, 0.65, 0.85), vec3(0.5, 0.85, 0.65), vUv.y);
+  gl_FragColor = vec4(mix(bg, line, onLine), 1.0);
+}`.trim();
+}
+
 function buildGridPreviewShader(cols: number): string {
   return `
 precision mediump float;
@@ -71,6 +122,7 @@ export function compileNodePreviewShader(
     return buildGridPreviewShader(cols);
   }
   if (targetNode.type === 'neighborDist') return NEIGHBOR_DIST_PREVIEW;
+  if (targetNode.type === 'gridDensityWarp') return buildDensityWarpPreviewShader(targetNode);
 
   // BFS: collect all transitive dependencies of targetNode
   const included = new Set<string>();
