@@ -10,10 +10,13 @@ export { VideoInputNode };
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 
 // Grid
-export { GridLayoutNode, WaveRadiusNode, NeighborDistNode } from './grid';
+export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode } from './grid';
+
+// Grid Field
+export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode } from './gridField';
 
 // Transforms
-export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
+export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 
 // Matrix
 export { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
@@ -31,7 +34,7 @@ export {
 export { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 
 // SDF (IQ)
-export { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
+export { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode, SdfOffsetNode, SdfSharpenNode, Sdf2dSmoothUnionNode, Sdf2dOnionNode } from './sdf';
 
 // Combiners
 export {
@@ -105,7 +108,7 @@ export { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayR
 // Color
 export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
-  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, BlendModeNode } from './color';
 
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
@@ -157,8 +160,9 @@ export {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
-import { GridLayoutNode, WaveRadiusNode, NeighborDistNode } from './grid';
-import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode } from './transforms';
+import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode } from './grid';
+import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode } from './gridField';
+import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
   MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
@@ -168,7 +172,7 @@ import {
   MirroredRepeat2DNode, LimitedRepeat2DNode, AngularRepeat2DNode,
 } from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
-import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode } from './sdf';
+import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode, SdfOffsetNode, SdfSharpenNode, Sdf2dSmoothUnionNode, Sdf2dOnionNode } from './sdf';
 import {
   SmoothMinNode, MinNode, MaxNode2,
   SmoothMaxNode, SmoothSubtractNode,
@@ -217,7 +221,7 @@ import {
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode } from './scene3d';
 import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
-  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, BlendModeNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
@@ -274,6 +278,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   curlWarp: CurlWarpNode,
   swirlWarp: SwirlWarpNode,
   displace: DisplaceNode,
+  uvTransform2d: UvTransform2dNode,
+  uvReciprocal: UvReciprocalNode,
   // Matrix
   vec2Const: Vec2ConstNode,
   vec3Const: Vec3ConstNode,
@@ -301,6 +307,17 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridLayout: GridLayoutNode,
   waveRadius: WaveRadiusNode,
   neighborDist: NeighborDistNode,
+  cellFilter: CellFilterNode,
+  cellDisplace: CellDisplaceNode,
+  gridDensityWarp: GridDensityWarpNode,
+  neighborOffset2d: NeighborOffset2dNode,
+  animatedCellCenter: AnimatedCellCenterNode,
+  // Field / Metaball
+  gaussianField: GaussianFieldNode,
+  fieldAccumulate: FieldAccumulateNode,
+  metaballThreshold: MetaballThresholdNode,
+  distanceFalloff: DistanceFalloffNode,
+  glowFalloff: GlowFalloffNode,
   shear: ShearNode,
   perspective2d: Perspective2DNode,
   mirroredRepeat2D: MirroredRepeat2DNode,
@@ -318,6 +335,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sdEllipse: SdEllipseNode,
   opRepeat: OpRepeatNode,
   opRepeatPolar: OpRepeatPolarNode,
+  // SDF 2D Ops
+  sdfOffset: SdfOffsetNode,
+  sdfSharpen: SdfSharpenNode,
+  sdf2dSmoothUnion: Sdf2dSmoothUnionNode,
+  sdf2dOnion: Sdf2dOnionNode,
   // Combiners
   smoothMin: SmoothMinNode,
   min: MinNode,
@@ -506,6 +528,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   marchSceneDist: MarchSceneDistNode,
   giLitMarchGroup: GILitMarchGroupNode,
   // Color
+  blendMode: BlendModeNode,
   palette: PaletteNode,
   palettePreset: PalettePresetNode,
   gradient: GradientNode,

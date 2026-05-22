@@ -285,3 +285,89 @@ export const Rotate2DNode: NodeDefinition = {
     };
   },
 };
+
+// ─── UV Transform 2D ──────────────────────────────────────────────────────────
+// Full affine transform (translate + rotate + scale) in one mat2 multiply.
+export const UvTransform2dNode: NodeDefinition = {
+  type: 'uvTransform2d',
+  label: 'UV Transform 2D',
+  category: 'Transforms',
+  description: 'Full 2D affine transform: translate + rotate + scale composed as a single mat2 multiply. More efficient than chaining three separate nodes. Rotation and scale apply relative to pivot.',
+  inputs: {
+    uv:        { type: 'vec2',  label: 'UV'        },
+    translate: { type: 'vec2',  label: 'Translate' },
+    angle:     { type: 'float', label: 'Angle'     },
+    scale:     { type: 'vec2',  label: 'Scale'     },
+  },
+  outputs: { result: { type: 'vec2', label: 'Result' } },
+  defaultParams: { tx: 0.0, ty: 0.0, angle: 0.0, sx: 1.0, sy: 1.0, pivotX: 0.0, pivotY: 0.0 },
+  paramDefs: {
+    tx:     { label: 'Translate X', type: 'float', min: -2.0,    max: 2.0,    step: 0.01 },
+    ty:     { label: 'Translate Y', type: 'float', min: -2.0,    max: 2.0,    step: 0.01 },
+    angle:  { label: 'Angle',       type: 'float', min: -3.14159, max: 3.14159, step: 0.01 },
+    sx:     { label: 'Scale X',     type: 'float', min: 0.01,    max: 8.0,    step: 0.01 },
+    sy:     { label: 'Scale Y',     type: 'float', min: 0.01,    max: 8.0,    step: 0.01 },
+    pivotX: { label: 'Pivot X',     type: 'float', min: -1.0,    max: 1.0,    step: 0.01 },
+    pivotY: { label: 'Pivot Y',     type: 'float', min: -1.0,    max: 1.0,    step: 0.01 },
+  },
+  glslFunction: `vec2 uvTransform2dFn(vec2 uv, vec2 translate, float angle, vec2 scale, vec2 pivot) {
+    uv -= pivot;
+    float c = cos(angle), s = sin(angle);
+    uv = mat2(c * scale.x, s * scale.x, -s * scale.y, c * scale.y) * uv;
+    uv += pivot + translate;
+    return uv;
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id  = node.id;
+    const uv  = inputVars.uv        ?? 'g_uv';
+    const tr  = inputVars.translate ?? `vec2(${p(node.params.tx, 0.0)}, ${p(node.params.ty, 0.0)})`;
+    const ang = inputVars.angle     ?? p(node.params.angle, 0.0);
+    const sc  = inputVars.scale     ?? `vec2(${p(node.params.sx, 1.0)}, ${p(node.params.sy, 1.0)})`;
+    const piv = `vec2(${p(node.params.pivotX, 0.0)}, ${p(node.params.pivotY, 0.0)})`;
+    return {
+      code: `    vec2 ${id}_result = uvTransform2dFn(${uv}, ${tr}, ${ang}, ${sc}, ${piv});\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+// ─── UV Reciprocal ────────────────────────────────────────────────────────────
+// N/x family transforms: bounded lens, raw hyperbolic, Möbius-like circle inversion.
+export const UvReciprocalNode: NodeDefinition = {
+  type: 'uvReciprocal',
+  label: 'UV Reciprocal',
+  category: 'Transforms',
+  description: 'Applies N/x family transforms to UV. Bounded = smooth lens distortion. Raw = hyperbolic (interesting with fract). Circle inversion = Möbius-like, foundation for inversion fractal patterns.',
+  inputs: { uv: { type: 'vec2', label: 'UV' } },
+  outputs: { result: { type: 'vec2', label: 'Result' } },
+  defaultParams: { mode: '0.0', k: 1.0 },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', options: [
+      { value: '0.0', label: 'Bounded'          },
+      { value: '1.0', label: 'Raw'               },
+      { value: '2.0', label: 'Circle Inversion'  },
+    ]},
+    k: { label: 'k', type: 'float', min: 0.1, max: 20.0, step: 0.1 },
+  },
+  glslFunction: `vec2 uvReciprocalFn(vec2 uv, float mode, float k) {
+    if (mode < 0.5) {
+        return uv / (1.0 + length(uv) * k);
+    } else if (mode < 1.5) {
+        vec2 safe = sign(uv) * max(abs(uv), vec2(0.001));
+        return 1.0 / (safe * k);
+    } else {
+        float d2 = max(dot(uv, uv), 0.0001);
+        return uv * k / d2;
+    }
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const uv   = inputVars.uv ?? 'g_uv';
+    const mode = p(node.params.mode, 0.0);
+    const k    = p(node.params.k, 1.0);
+    return {
+      code: `    vec2 ${id}_result = uvReciprocalFn(${uv}, ${mode}, ${k});\n`,
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
