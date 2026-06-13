@@ -156,47 +156,40 @@ export const NeighborDistNode: NodeDefinition = {
   },
 };
 
-// Cell Filter — 0/1 mask based on row or column index matching a rule.
+// Cell Filter — 0/1 mask selecting a single cell by x/y index.
 export const CellFilterNode: NodeDefinition = {
   type: 'cellFilter',
   label: 'Cell Filter',
   category: 'Grid',
-  description: 'Produces a 0/1 mask based on whether the cell row or column matches a rule. Multiply against SDF fill or color to selectively activate cells.',
+  description: 'Produces a 0/1 mask for a specific grid cell. Set X and Y independently via sliders or input ports. Mode controls exact match vs modulo repeat.',
   inputs: {
     cellID: { type: 'vec2',  label: 'Cell ID' },
-    value:  { type: 'float', label: 'Value' },
+    x:      { type: 'float', label: 'X' },
+    y:      { type: 'float', label: 'Y' },
   },
   outputs: {
     mask:         { type: 'float', label: 'Mask' },
     invertedMask: { type: 'float', label: 'Inv Mask' },
   },
-  defaultParams: { axis: '0.0', mode: '1.0', value: 2.0 },
+  defaultParams: { mode: '0.0', x: 0.0, y: 0.0 },
   paramDefs: {
-    axis:  { label: 'Axis',  type: 'select', options: [{ value: '0.0', label: 'Row (Y)' }, { value: '1.0', label: 'Col (X)' }, { value: '2.0', label: 'XY' }] },
-    mode:  { label: 'Mode',  type: 'select', options: [{ value: '0.0', label: 'Exact'   }, { value: '1.0', label: 'Modulo'  }] },
-    value: { label: 'Value', type: 'float', min: 0, max: 32, step: 1 },
+    mode: { label: 'Mode', type: 'select', options: [{ value: '0.0', label: 'Exact' }, { value: '1.0', label: 'Modulo' }] },
+    x:    { label: 'X', type: 'float', min: 0, max: 32, step: 1 },
+    y:    { label: 'Y', type: 'float', min: 0, max: 32, step: 1 },
   },
-  glslFunction: `float cellFilterFn(vec2 cellID, float axis, float mode, float val) {
-    if (axis > 1.5) {
-        float mx = mode < 0.5 ? step(0.5, 1.0 - abs(cellID.x - val)) : step(0.5, 1.0 - abs(mod(cellID.x, max(val, 1.0))));
-        float my = mode < 0.5 ? step(0.5, 1.0 - abs(cellID.y - val)) : step(0.5, 1.0 - abs(mod(cellID.y, max(val, 1.0))));
-        return mx * my;
-    }
-    float idx = axis < 0.5 ? cellID.y : cellID.x;
-    if (mode < 0.5) {
-        return step(0.5, 1.0 - abs(idx - val));
-    } else {
-        return step(0.5, 1.0 - abs(mod(idx, max(val, 1.0))));
-    }
+  glslFunction: `float cellFilterFn(vec2 cellID, float mode, float cx, float cy) {
+    float mx = mode < 0.5 ? step(0.5, 1.0 - abs(cellID.x - cx)) : step(0.5, 1.0 - abs(mod(cellID.x, max(cx, 1.0))));
+    float my = mode < 0.5 ? step(0.5, 1.0 - abs(cellID.y - cy)) : step(0.5, 1.0 - abs(mod(cellID.y, max(cy, 1.0))));
+    return mx * my;
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
     const cid  = inputVars.cellID ?? 'vec2(0.0)';
-    const axis = p(node.params.axis, 0.0);
-    const mode = p(node.params.mode, 1.0);
-    const val  = inputVars.value ?? p(node.params.value, 2.0);
+    const mode = p(node.params.mode, 0.0);
+    const cx   = inputVars.x ?? p(node.params.x, 0.0);
+    const cy   = inputVars.y ?? p(node.params.y, 0.0);
     return {
-      code: `    float ${id}_mask = cellFilterFn(${cid}, ${axis}, ${mode}, ${val});\n` +
+      code: `    float ${id}_mask = cellFilterFn(${cid}, ${mode}, ${cx}, ${cy});\n` +
             `    float ${id}_inv  = 1.0 - ${id}_mask;\n`,
       outputVars: { mask: `${id}_mask`, invertedMask: `${id}_inv` },
     };
