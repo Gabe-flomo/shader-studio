@@ -163,7 +163,8 @@ export const CellFilterNode: NodeDefinition = {
   category: 'Grid',
   description: 'Produces a 0/1 mask based on whether the cell row or column matches a rule. Multiply against SDF fill or color to selectively activate cells.',
   inputs: {
-    cellID: { type: 'vec2', label: 'Cell ID' },
+    cellID: { type: 'vec2',  label: 'Cell ID' },
+    value:  { type: 'float', label: 'Value' },
   },
   outputs: {
     mask:         { type: 'float', label: 'Mask' },
@@ -171,11 +172,16 @@ export const CellFilterNode: NodeDefinition = {
   },
   defaultParams: { axis: '0.0', mode: '1.0', value: 2.0 },
   paramDefs: {
-    axis:  { label: 'Axis',  type: 'select', options: [{ value: '0.0', label: 'Row (Y)' }, { value: '1.0', label: 'Col (X)' }] },
+    axis:  { label: 'Axis',  type: 'select', options: [{ value: '0.0', label: 'Row (Y)' }, { value: '1.0', label: 'Col (X)' }, { value: '2.0', label: 'XY' }] },
     mode:  { label: 'Mode',  type: 'select', options: [{ value: '0.0', label: 'Exact'   }, { value: '1.0', label: 'Modulo'  }] },
     value: { label: 'Value', type: 'float', min: 0, max: 32, step: 1 },
   },
   glslFunction: `float cellFilterFn(vec2 cellID, float axis, float mode, float val) {
+    if (axis > 1.5) {
+        float mx = mode < 0.5 ? step(0.5, 1.0 - abs(cellID.x - val)) : step(0.5, 1.0 - abs(mod(cellID.x, max(val, 1.0))));
+        float my = mode < 0.5 ? step(0.5, 1.0 - abs(cellID.y - val)) : step(0.5, 1.0 - abs(mod(cellID.y, max(val, 1.0))));
+        return mx * my;
+    }
     float idx = axis < 0.5 ? cellID.y : cellID.x;
     if (mode < 0.5) {
         return step(0.5, 1.0 - abs(idx - val));
@@ -188,7 +194,7 @@ export const CellFilterNode: NodeDefinition = {
     const cid  = inputVars.cellID ?? 'vec2(0.0)';
     const axis = p(node.params.axis, 0.0);
     const mode = p(node.params.mode, 1.0);
-    const val  = p(node.params.value, 2.0);
+    const val  = inputVars.value ?? p(node.params.value, 2.0);
     return {
       code: `    float ${id}_mask = cellFilterFn(${cid}, ${axis}, ${mode}, ${val});\n` +
             `    float ${id}_inv  = 1.0 - ${id}_mask;\n`,
