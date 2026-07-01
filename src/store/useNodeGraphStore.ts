@@ -15,6 +15,7 @@ import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
 import { UndoManager } from './managers/UndoManager';
 import { PresetManager } from './managers/PresetManager';
+import { CompilationService } from './managers/CompilationService';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -205,9 +206,9 @@ function loadGroupPresets(): GroupPreset[] {
     .sort((a, b) => b.savedAt - a.savedAt);
 }
 
-// Module-level debounce timer for recompilation triggered by param edits.
+// Debounce timer for recompilation triggered by param edits.
 // Structure changes (connect/disconnect/add/remove) still compile immediately.
-let _compileTimer: ReturnType<typeof setTimeout> | null = null;
+const compilationService = new CompilationService();
 // Debounce timer for history pushes during param edits (sliders/text) — we
 // push once at the START of an edit burst, not on every keystroke/tick.
 let _historyParamTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2868,12 +2869,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return;
       }
       // Slow path: structural change or non-uniform param — full recompile
-      if (_compileTimer) { clearTimeout(_compileTimer); _compileTimer = null; }
+      compilationService.cancelPending();
       get().compile();
     } else {
       // String fields (GLSL body, expr formula): debounce to avoid compile-on-every-keystroke
-      if (_compileTimer) clearTimeout(_compileTimer);
-      _compileTimer = setTimeout(() => { get().compile(); }, 500);
+      compilationService.scheduleCompile(() => get().compile(), 500);
     }
   },
 
@@ -2883,7 +2883,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         n.id === nodeId ? { ...n, outputs } : n
       ),
     }));
-    if (_compileTimer) { clearTimeout(_compileTimer); _compileTimer = null; }
+    compilationService.cancelPending();
     get().compile();
   },
 
