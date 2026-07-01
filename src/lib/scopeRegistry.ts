@@ -6,7 +6,9 @@
  * NodeComponent registers its canvas element on mount and removes it on unmount.
  */
 
-export const scopeCanvasRegistry = new Map<string, HTMLCanvasElement>();
+import { CanvasProbeRegistry } from './canvasProbeRegistry';
+
+export const scopeCanvasRegistry = new CanvasProbeRegistry();
 
 // Rolling 200-sample buffer per scope node (stores raw normalised 0-1 probe values)
 export const scopeBufferRegistry = new Map<string, number[]>();

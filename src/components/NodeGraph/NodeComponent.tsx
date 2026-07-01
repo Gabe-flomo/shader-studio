@@ -502,9 +502,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   React.useEffect(() => {
     if (node.type !== 'scope' && !LFO_TYPES.has(node.type)) return;
     const canvas = scopeCanvasRef.current;
-    if (canvas) scopeCanvasRegistry.set(node.id, canvas);
+    if (canvas) scopeCanvasRegistry.register(node.id, canvas);
     return () => {
-      scopeCanvasRegistry.delete(node.id);
+      scopeCanvasRegistry.unregister(node.id);
       scopeBufferRegistry.delete(node.id);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -521,9 +521,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     if (!isPreviewActive || !primaryOutputIsFloat) return;
     const canvas = previewScopeCanvasRef.current;
     const key = `__preview__${node.id}`;
-    if (canvas) scopeCanvasRegistry.set(key, canvas);
+    if (canvas) scopeCanvasRegistry.register(key, canvas);
     return () => {
-      scopeCanvasRegistry.delete(key);
+      scopeCanvasRegistry.unregister(key);
       scopeBufferRegistry.delete(key);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
