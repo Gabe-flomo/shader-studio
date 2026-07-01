@@ -14,6 +14,7 @@ import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
 import { UndoManager } from './managers/UndoManager';
+import { PresetManager } from './managers/PresetManager';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -76,10 +77,14 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
   });
 }
 
+/** Convert a label to a filesystem-safe slug. Used by the generic graph-save
+ *  feature below; each PresetManager instance has its own copy for presets. */
+function labelToSlug(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'fn';
+}
+
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX  = 'shader-studio:cfp:';
-const EP_PREFIX   = 'shader-studio:ep:';
-const TP_PREFIX   = 'shader-studio:tp:';
 const CFP_DIR_KEY  = 'shader-studio:settings:customFnDir';
 const EXPR_DIR_KEY = 'shader-studio:settings:exprDir';
 const GRAPH_DIR_KEY = 'shader-studio:settings:graphDir';
@@ -120,10 +125,10 @@ export function setGroupPresetDir(path: string): void {
   else localStorage.removeItem(GP_DIR_KEY);
 }
 
-/** Convert a label to a filesystem-safe slug. */
-function labelToSlug(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'fn';
-}
+const customFnPresetManager  = new PresetManager<CustomFnPreset>({ localStoragePrefix: CFP_PREFIX, eventName: 'customfn-changed', diskDir: getCustomFnDir });
+const exprPresetManager      = new PresetManager<ExprPreset>({ localStoragePrefix: 'shader-studio:ep:', eventName: 'exprpreset-changed', diskDir: getExprDir });
+const transformPresetManager = new PresetManager<TransformPreset>({ localStoragePrefix: 'shader-studio:tp:', eventName: 'transformpreset-changed' });
+const groupPresetManager     = new PresetManager<GroupPreset>({ localStoragePrefix: 'shader-studio:gp:', diskDir: getGroupPresetDir });
 
 /**
  * Directly save a CustomFnPreset from caller-supplied data.
@@ -142,28 +147,12 @@ export function saveCustomFnPreset(
     glslFunctions: data.glslFunctions ?? '',
     savedAt: Date.now(),
   };
-  localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
-  window.dispatchEvent(new CustomEvent('customfn-changed'));
-  const dir = getCustomFnDir();
-  if (dir) {
-    const slug = labelToSlug(preset.label);
-    const filename = `${slug}_${preset.id}.json`;
-    writeTextFileAtPath(`${dir}/${filename}`, JSON.stringify(preset, null, 2));
-  }
+  customFnPresetManager.save(preset);
 }
 
 /** Read all saved custom-fn presets from localStorage. */
 export function loadCustomFns(): CustomFnPreset[] {
-  const out: CustomFnPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k?.startsWith(CFP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(k)!) as CustomFnPreset;
-      if (p?.id) out.push(p);
-    } catch {}
-  }
-  return out.sort((a, b) => a.savedAt - b.savedAt);
+  return customFnPresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
 }
 
 // ── Expr preset helpers ────────────────────────────────────────────────────────
@@ -174,97 +163,46 @@ export function saveExprPreset(data: Omit<ExprPreset, 'id' | 'savedAt'>): void {
     ...data,
     savedAt: Date.now(),
   };
-  localStorage.setItem(`${EP_PREFIX}${preset.id}`, JSON.stringify(preset));
-  window.dispatchEvent(new CustomEvent('exprpreset-changed'));
-  const dir = getExprDir();
-  if (dir) {
-    const slug = labelToSlug(preset.label ?? 'expr');
-    writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
-  }
+  exprPresetManager.save(preset);
 }
 
 export function loadExprPresets(): ExprPreset[] {
-  const out: ExprPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k?.startsWith(EP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(k)!) as ExprPreset;
-      if (p?.id) out.push(p);
-    } catch {}
-  }
-  return out.sort((a, b) => a.savedAt - b.savedAt);
+  return exprPresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
 }
 
 export function deleteExprPreset(id: string): void {
-  localStorage.removeItem(`${EP_PREFIX}${id}`);
-  window.dispatchEvent(new CustomEvent('exprpreset-changed'));
+  exprPresetManager.delete(id);
 }
 
 export function renameExprPreset(id: string, newLabel: string): void {
-  const key = `${EP_PREFIX}${id}`;
-  const raw = localStorage.getItem(key);
-  if (!raw) return;
-  try {
-    const preset = JSON.parse(raw) as ExprPreset;
-    preset.label = newLabel.trim() || preset.label;
-    localStorage.setItem(key, JSON.stringify(preset));
-    window.dispatchEvent(new CustomEvent('exprpreset-changed'));
-  } catch {}
+  exprPresetManager.rename(id, newLabel);
 }
 
 // ── Transform Vec preset helpers ──────────────────────────────────────────────
 
 export function saveTransformPreset(data: Omit<TransformPreset, 'id' | 'savedAt'>): void {
   const preset: TransformPreset = { id: `tp_${Date.now()}`, ...data, savedAt: Date.now() };
-  localStorage.setItem(`${TP_PREFIX}${preset.id}`, JSON.stringify(preset));
-  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+  transformPresetManager.save(preset);
 }
 
 export function loadTransformPresets(): TransformPreset[] {
-  const out: TransformPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k?.startsWith(TP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(k)!) as TransformPreset;
-      if (p?.id) out.push(p);
-    } catch {}
-  }
-  return out.sort((a, b) => a.savedAt - b.savedAt);
+  return transformPresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
 }
 
 export function deleteTransformPreset(id: string): void {
-  localStorage.removeItem(`${TP_PREFIX}${id}`);
-  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+  transformPresetManager.delete(id);
 }
 
 export function renameTransformPreset(id: string, newLabel: string): void {
-  const key = `${TP_PREFIX}${id}`;
-  const raw = localStorage.getItem(key);
-  if (!raw) return;
-  try {
-    const preset = JSON.parse(raw) as TransformPreset;
-    preset.label = newLabel.trim() || preset.label;
-    localStorage.setItem(key, JSON.stringify(preset));
-    window.dispatchEvent(new CustomEvent('transformpreset-changed'));
-  } catch {}
+  transformPresetManager.rename(id, newLabel);
 }
 
 // ── Group preset helpers ───────────────────────────────────────────────────────
-const GP_PREFIX = 'shader-studio:gp:';
 
 function loadGroupPresets(): GroupPreset[] {
-  const presets: GroupPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key?.startsWith(GP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(key)!) as GroupPreset;
-      if (p?.id && p?.subgraph) presets.push(p);
-    } catch {}
-  }
-  return presets.sort((a, b) => b.savedAt - a.savedAt);
+  return groupPresetManager.load()
+    .filter(p => !!p.subgraph)
+    .sort((a, b) => b.savedAt - a.savedAt);
 }
 
 // Module-level debounce timer for recompilation triggered by param edits.
@@ -2141,17 +2079,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       subgraph,
       savedAt: Date.now(),
     };
-    localStorage.setItem(`${GP_PREFIX}${preset.id}`, JSON.stringify(preset));
+    groupPresetManager.save(preset);
     set({ groupPresets: loadGroupPresets() });
-    const dir = getGroupPresetDir();
-    if (dir) {
-      const slug = labelToSlug(preset.label);
-      writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
-    }
   },
 
   deleteGroupPreset: (presetId) => {
-    localStorage.removeItem(`${GP_PREFIX}${presetId}`);
+    groupPresetManager.delete(presetId);
     set({ groupPresets: loadGroupPresets() });
   },
 
@@ -3821,22 +3754,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       glslFunctions: (node.params.glslFunctions as string) ?? '',
       savedAt: Date.now(),
     };
-    // Always save to localStorage (belt-and-suspenders)
-    localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
-    window.dispatchEvent(new CustomEvent('customfn-changed'));
-    // Also write to disk if a folder is configured
-    const dir = getCustomFnDir();
-    if (dir) {
-      const slug = labelToSlug(preset.label);
-      const filename = `${slug}_${preset.id}.json`;
-      writeTextFileAtPath(`${dir}/${filename}`, JSON.stringify(preset, null, 2));
-    }
+    // Always save to localStorage (belt-and-suspenders), and to disk if configured
+    customFnPresetManager.save(preset);
   },
 
   deleteCustomFn: (id) => {
-    // Remove from localStorage
-    localStorage.removeItem(`${CFP_PREFIX}${id}`);
-    window.dispatchEvent(new CustomEvent('customfn-changed'));
+    customFnPresetManager.delete(id);
     // Remove from disk if folder is set — find by matching id in filename
     const dir = getCustomFnDir();
     if (dir) {
