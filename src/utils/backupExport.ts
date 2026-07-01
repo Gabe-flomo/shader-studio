@@ -172,7 +172,7 @@ export async function exportBackupZip(): Promise<number> {
   }
 
   const zipped = zipSync(zipInput, { level: 6 });
-  const blob = new Blob([zipped], { type: 'application/zip' });
+  const blob = new Blob([zipped.slice().buffer], { type: 'application/zip' });
   const zipName = `shader-studio-backup_${dateStr}.zip`;
 
   const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
