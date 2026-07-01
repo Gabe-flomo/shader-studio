@@ -18,7 +18,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   document.head.appendChild(s);
 }
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
-import { renderNodePreview } from '../../lib/nodePreviewRenderer';
+import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -441,7 +441,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const fs = compileNodePreviewShader(node.id, currentNodes);
     if (!fs) return;
     setPreviewLoading(true);
-    renderNodePreview(node.id, fs, { u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } }, 200)
+    nodePreviewRenderer.renderNodePreview(node.id, fs, { u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } }, 200)
       .then(url => { if (!cancelled) { setNodePreview(node.id, url); setPreviewLoading(false); } })
       .catch(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
