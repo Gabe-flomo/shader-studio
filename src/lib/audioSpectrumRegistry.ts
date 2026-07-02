@@ -6,7 +6,9 @@
  * ShaderCanvas.animate() calls drawSpectrumCanvas() each frame.
  */
 
-export const audioSpectrumRegistry = new Map<string, HTMLCanvasElement>();
+import { CanvasProbeRegistry } from './canvasProbeRegistry';
+
+export const audioSpectrumRegistry = new CanvasProbeRegistry();
 
 /**
  * Draw a bar-graph FFT spectrum into the registered canvas for the given nodeId.

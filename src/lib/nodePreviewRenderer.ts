@@ -27,124 +27,131 @@ interface CacheEntry {
   sourceHash: string;
 }
 
-let renderer: THREE.WebGLRenderer | null = null;
-let renderTarget: THREE.WebGLRenderTarget | null = null;
-const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-camera.position.z = 1;
-const geometry = new THREE.PlaneGeometry(2, 2);
-const cache = new Map<string, CacheEntry>();
+class NodePreviewRenderer {
+  private renderer: THREE.WebGLRenderer | null = null;
+  private renderTarget: THREE.WebGLRenderTarget | null = null;
+  private scene = new THREE.Scene();
+  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+  private geometry = new THREE.PlaneGeometry(2, 2);
+  private cache = new Map<string, CacheEntry>();
 
-// Cap concurrent renders (shared semaphore across all callers)
-let inFlight = 0;
-const MAX_CONCURRENT = 3;
-const queue: Array<() => void> = [];
+  // Cap concurrent renders (shared semaphore across all callers)
+  private inFlight = 0;
+  private readonly MAX_CONCURRENT = 3;
+  private queue: Array<() => void> = [];
 
-function getRenderer(size: number): THREE.WebGLRenderer {
-  if (!renderer) {
-    renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
-    renderTarget = new THREE.WebGLRenderTarget(size, size, {
-      type: THREE.UnsignedByteType,
-      format: THREE.RGBAFormat,
-      depthBuffer: false,
-    });
+  constructor() {
+    this.camera.position.z = 1;
   }
-  // Resize if needed (renders are serialised by the semaphore, so this is safe)
-  const currentSize = renderer.getSize(new THREE.Vector2());
-  if (currentSize.x !== size) {
-    renderer.setSize(size, size);
-    renderTarget!.setSize(size, size);
-  }
-  return renderer;
-}
 
-function acquireSlot(): Promise<void> {
-  if (inFlight < MAX_CONCURRENT) {
-    inFlight++;
-    return Promise.resolve();
-  }
-  return new Promise(resolve => queue.push(resolve));
-}
-
-function releaseSlot() {
-  const next = queue.shift();
-  if (next) {
-    next();
-  } else {
-    inFlight--;
-  }
-}
-
-/**
- * Render the given fragment shader into an 80×80 offscreen canvas and return
- * a data URL. Results are cached by nodeId + sourceHash.
- */
-export async function renderNodePreview(
-  nodeId: string,
-  fragmentShader: string,
-  uniforms: Record<string, THREE.IUniform>,
-  size = 80,
-): Promise<string> {
-  const cacheKey = `${nodeId}@${size}`;
-  const sourceHash = djb2(fragmentShader) + '|' + Object.entries(uniforms).map(([k, v]) => `${k}:${v.value}`).join(',');
-  const cached = cache.get(cacheKey);
-  if (cached?.sourceHash === sourceHash) return cached.dataUrl;
-
-  await acquireSlot();
-  try {
-    const r = getRenderer(size);
-    const rt = renderTarget!;
-
-    const material = new THREE.ShaderMaterial({
-      vertexShader: PREVIEW_VERTEX,
-      fragmentShader,
-      uniforms: {
-        u_time:       { value: uniforms.u_time?.value ?? 0 },
-        u_resolution: { value: new THREE.Vector2(size, size) },
-        u_mouse:      { value: new THREE.Vector2(0, 0) },
-        ...uniforms,
-      },
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-
-    r.setRenderTarget(rt);
-    r.render(scene, camera);
-    r.setRenderTarget(null);
-
-    scene.remove(mesh);
-    material.dispose();
-
-    // Read pixels → offscreen canvas → data URL
-    const buf = new Uint8Array(size * size * 4);
-    r.readRenderTargetPixels(rt, 0, 0, size, size, buf);
-
-    const offscreen = document.createElement('canvas');
-    offscreen.width  = size;
-    offscreen.height = size;
-    const ctx = offscreen.getContext('2d')!;
-    const imgData = ctx.createImageData(size, size);
-
-    // WebGL is bottom-up; flip vertically
-    for (let y = 0; y < size; y++) {
-      const srcRow = (size - 1 - y) * size * 4;
-      const dstRow = y * size * 4;
-      imgData.data.set(buf.subarray(srcRow, srcRow + size * 4), dstRow);
+  private getRenderer(size: number): THREE.WebGLRenderer {
+    if (!this.renderer) {
+      this.renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+      this.renderTarget = new THREE.WebGLRenderTarget(size, size, {
+        type: THREE.UnsignedByteType,
+        format: THREE.RGBAFormat,
+        depthBuffer: false,
+      });
     }
-    ctx.putImageData(imgData, 0, 0);
+    // Resize if needed (renders are serialised by the semaphore, so this is safe)
+    const currentSize = this.renderer.getSize(new THREE.Vector2());
+    if (currentSize.x !== size) {
+      this.renderer.setSize(size, size);
+      this.renderTarget!.setSize(size, size);
+    }
+    return this.renderer;
+  }
 
-    const dataUrl = offscreen.toDataURL('image/jpeg', 0.85);
-    cache.set(cacheKey, { dataUrl, sourceHash });
-    return dataUrl;
-  } finally {
-    releaseSlot();
+  private acquireSlot(): Promise<void> {
+    if (this.inFlight < this.MAX_CONCURRENT) {
+      this.inFlight++;
+      return Promise.resolve();
+    }
+    return new Promise(resolve => this.queue.push(resolve));
+  }
+
+  private releaseSlot() {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+    } else {
+      this.inFlight--;
+    }
+  }
+
+  /**
+   * Render the given fragment shader into an 80×80 offscreen canvas and return
+   * a data URL. Results are cached by nodeId + sourceHash.
+   */
+  async renderNodePreview(
+    nodeId: string,
+    fragmentShader: string,
+    uniforms: Record<string, THREE.IUniform>,
+    size = 80,
+  ): Promise<string> {
+    const cacheKey = `${nodeId}@${size}`;
+    const sourceHash = djb2(fragmentShader) + '|' + Object.entries(uniforms).map(([k, v]) => `${k}:${v.value}`).join(',');
+    const cached = this.cache.get(cacheKey);
+    if (cached?.sourceHash === sourceHash) return cached.dataUrl;
+
+    await this.acquireSlot();
+    try {
+      const r = this.getRenderer(size);
+      const rt = this.renderTarget!;
+
+      const material = new THREE.ShaderMaterial({
+        vertexShader: PREVIEW_VERTEX,
+        fragmentShader,
+        uniforms: {
+          u_time:       { value: uniforms.u_time?.value ?? 0 },
+          u_resolution: { value: new THREE.Vector2(size, size) },
+          u_mouse:      { value: new THREE.Vector2(0, 0) },
+          ...uniforms,
+        },
+      });
+
+      const mesh = new THREE.Mesh(this.geometry, material);
+      this.scene.add(mesh);
+
+      r.setRenderTarget(rt);
+      r.render(this.scene, this.camera);
+      r.setRenderTarget(null);
+
+      this.scene.remove(mesh);
+      material.dispose();
+
+      // Read pixels → offscreen canvas → data URL
+      const buf = new Uint8Array(size * size * 4);
+      r.readRenderTargetPixels(rt, 0, 0, size, size, buf);
+
+      const offscreen = document.createElement('canvas');
+      offscreen.width  = size;
+      offscreen.height = size;
+      const ctx = offscreen.getContext('2d')!;
+      const imgData = ctx.createImageData(size, size);
+
+      // WebGL is bottom-up; flip vertically
+      for (let y = 0; y < size; y++) {
+        const srcRow = (size - 1 - y) * size * 4;
+        const dstRow = y * size * 4;
+        imgData.data.set(buf.subarray(srcRow, srcRow + size * 4), dstRow);
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      const dataUrl = offscreen.toDataURL('image/jpeg', 0.85);
+      this.cache.set(cacheKey, { dataUrl, sourceHash });
+      return dataUrl;
+    } finally {
+      this.releaseSlot();
+    }
+  }
+
+  /** Invalidate all cached previews for a node (call when its connections change). */
+  invalidatePreview(nodeId: string) {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(`${nodeId}@`)) this.cache.delete(key);
+    }
   }
 }
 
-/** Invalidate all cached previews for a node (call when its connections change). */
-export function invalidatePreview(nodeId: string) {
-  for (const key of cache.keys()) {
-    if (key.startsWith(`${nodeId}@`)) cache.delete(key);
-  }
-}
+export const nodePreviewRenderer = new NodePreviewRenderer();

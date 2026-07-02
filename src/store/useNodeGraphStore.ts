@@ -12,6 +12,10 @@ import { EXAMPLE_GRAPHS } from './exampleGraphs';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
+import { IdGenerator } from './managers/IdGenerator';
+import { UndoManager } from './managers/UndoManager';
+import { PresetManager } from './managers/PresetManager';
+import { CompilationService } from './managers/CompilationService';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -74,10 +78,14 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
   });
 }
 
+/** Convert a label to a filesystem-safe slug. Used by the generic graph-save
+ *  feature below; each PresetManager instance has its own copy for presets. */
+function labelToSlug(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'fn';
+}
+
 // ── Custom-fn preset helpers ───────────────────────────────────────────────────
 const CFP_PREFIX  = 'shader-studio:cfp:';
-const EP_PREFIX   = 'shader-studio:ep:';
-const TP_PREFIX   = 'shader-studio:tp:';
 const CFP_DIR_KEY  = 'shader-studio:settings:customFnDir';
 const EXPR_DIR_KEY = 'shader-studio:settings:exprDir';
 const GRAPH_DIR_KEY = 'shader-studio:settings:graphDir';
@@ -118,10 +126,10 @@ export function setGroupPresetDir(path: string): void {
   else localStorage.removeItem(GP_DIR_KEY);
 }
 
-/** Convert a label to a filesystem-safe slug. */
-function labelToSlug(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'fn';
-}
+const customFnPresetManager  = new PresetManager<CustomFnPreset>({ localStoragePrefix: CFP_PREFIX, eventName: 'customfn-changed', diskDir: getCustomFnDir });
+const exprPresetManager      = new PresetManager<ExprPreset>({ localStoragePrefix: 'shader-studio:ep:', eventName: 'exprpreset-changed', diskDir: getExprDir });
+const transformPresetManager = new PresetManager<TransformPreset>({ localStoragePrefix: 'shader-studio:tp:', eventName: 'transformpreset-changed' });
+const groupPresetManager     = new PresetManager<GroupPreset>({ localStoragePrefix: 'shader-studio:gp:', diskDir: getGroupPresetDir });
 
 /**
  * Directly save a CustomFnPreset from caller-supplied data.
@@ -140,28 +148,12 @@ export function saveCustomFnPreset(
     glslFunctions: data.glslFunctions ?? '',
     savedAt: Date.now(),
   };
-  localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
-  window.dispatchEvent(new CustomEvent('customfn-changed'));
-  const dir = getCustomFnDir();
-  if (dir) {
-    const slug = labelToSlug(preset.label);
-    const filename = `${slug}_${preset.id}.json`;
-    writeTextFileAtPath(`${dir}/${filename}`, JSON.stringify(preset, null, 2));
-  }
+  customFnPresetManager.save(preset);
 }
 
 /** Read all saved custom-fn presets from localStorage. */
 export function loadCustomFns(): CustomFnPreset[] {
-  const out: CustomFnPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k?.startsWith(CFP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(k)!) as CustomFnPreset;
-      if (p?.id) out.push(p);
-    } catch {}
-  }
-  return out.sort((a, b) => a.savedAt - b.savedAt);
+  return customFnPresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
 }
 
 // ── Expr preset helpers ────────────────────────────────────────────────────────
@@ -172,102 +164,51 @@ export function saveExprPreset(data: Omit<ExprPreset, 'id' | 'savedAt'>): void {
     ...data,
     savedAt: Date.now(),
   };
-  localStorage.setItem(`${EP_PREFIX}${preset.id}`, JSON.stringify(preset));
-  window.dispatchEvent(new CustomEvent('exprpreset-changed'));
-  const dir = getExprDir();
-  if (dir) {
-    const slug = labelToSlug(preset.label ?? 'expr');
-    writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
-  }
+  exprPresetManager.save(preset);
 }
 
 export function loadExprPresets(): ExprPreset[] {
-  const out: ExprPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k?.startsWith(EP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(k)!) as ExprPreset;
-      if (p?.id) out.push(p);
-    } catch {}
-  }
-  return out.sort((a, b) => a.savedAt - b.savedAt);
+  return exprPresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
 }
 
 export function deleteExprPreset(id: string): void {
-  localStorage.removeItem(`${EP_PREFIX}${id}`);
-  window.dispatchEvent(new CustomEvent('exprpreset-changed'));
+  exprPresetManager.delete(id);
 }
 
 export function renameExprPreset(id: string, newLabel: string): void {
-  const key = `${EP_PREFIX}${id}`;
-  const raw = localStorage.getItem(key);
-  if (!raw) return;
-  try {
-    const preset = JSON.parse(raw) as ExprPreset;
-    preset.label = newLabel.trim() || preset.label;
-    localStorage.setItem(key, JSON.stringify(preset));
-    window.dispatchEvent(new CustomEvent('exprpreset-changed'));
-  } catch {}
+  exprPresetManager.rename(id, newLabel);
 }
 
 // ── Transform Vec preset helpers ──────────────────────────────────────────────
 
 export function saveTransformPreset(data: Omit<TransformPreset, 'id' | 'savedAt'>): void {
   const preset: TransformPreset = { id: `tp_${Date.now()}`, ...data, savedAt: Date.now() };
-  localStorage.setItem(`${TP_PREFIX}${preset.id}`, JSON.stringify(preset));
-  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+  transformPresetManager.save(preset);
 }
 
 export function loadTransformPresets(): TransformPreset[] {
-  const out: TransformPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k?.startsWith(TP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(k)!) as TransformPreset;
-      if (p?.id) out.push(p);
-    } catch {}
-  }
-  return out.sort((a, b) => a.savedAt - b.savedAt);
+  return transformPresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
 }
 
 export function deleteTransformPreset(id: string): void {
-  localStorage.removeItem(`${TP_PREFIX}${id}`);
-  window.dispatchEvent(new CustomEvent('transformpreset-changed'));
+  transformPresetManager.delete(id);
 }
 
 export function renameTransformPreset(id: string, newLabel: string): void {
-  const key = `${TP_PREFIX}${id}`;
-  const raw = localStorage.getItem(key);
-  if (!raw) return;
-  try {
-    const preset = JSON.parse(raw) as TransformPreset;
-    preset.label = newLabel.trim() || preset.label;
-    localStorage.setItem(key, JSON.stringify(preset));
-    window.dispatchEvent(new CustomEvent('transformpreset-changed'));
-  } catch {}
+  transformPresetManager.rename(id, newLabel);
 }
 
 // ── Group preset helpers ───────────────────────────────────────────────────────
-const GP_PREFIX = 'shader-studio:gp:';
 
 function loadGroupPresets(): GroupPreset[] {
-  const presets: GroupPreset[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key?.startsWith(GP_PREFIX)) continue;
-    try {
-      const p = JSON.parse(localStorage.getItem(key)!) as GroupPreset;
-      if (p?.id && p?.subgraph) presets.push(p);
-    } catch {}
-  }
-  return presets.sort((a, b) => b.savedAt - a.savedAt);
+  return groupPresetManager.load()
+    .filter(p => !!p.subgraph)
+    .sort((a, b) => b.savedAt - a.savedAt);
 }
 
-// Module-level debounce timer for recompilation triggered by param edits.
+// Debounce timer for recompilation triggered by param edits.
 // Structure changes (connect/disconnect/add/remove) still compile immediately.
-let _compileTimer: ReturnType<typeof setTimeout> | null = null;
+const compilationService = new CompilationService();
 // Debounce timer for history pushes during param edits (sliders/text) — we
 // push once at the START of an edit burst, not on every keystroke/tick.
 let _historyParamTimer: ReturnType<typeof setTimeout> | null = null;
@@ -275,14 +216,7 @@ let _historyParamPending = false;
 
 // ── Undo history ──────────────────────────────────────────────────────────────
 // Stored outside Zustand state so pushing snapshots never triggers a re-render.
-const MAX_HISTORY = 50;
-const _history: GraphNode[][] = [];
-
-/** Push a deep-clone of the current node list onto the undo stack. */
-function pushHistory(nodes: GraphNode[]) {
-  _history.push(structuredClone(nodes));
-  if (_history.length > MAX_HISTORY) _history.shift();
-}
+const undoManager = new UndoManager();
 
 interface NodeGraphState {
   // Graph data
@@ -704,22 +638,7 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
   return nodes;
 }
 
-let nodeIdCounter = 0;
-
-/** Advance nodeIdCounter past the highest node_N index in a loaded node list
- *  so newly-added nodes never collide with existing IDs. Recursively scans
- *  all nested subgraphs so IDs inside groups are also accounted for. */
-function syncCounterFromNodes(nodes: GraphNode[]) {
-  for (const node of nodes) {
-    const m = node.id.match(/^node_(\d+)$/);
-    if (m) {
-      const n = parseInt(m[1], 10) + 1;
-      if (n > nodeIdCounter) nodeIdCounter = n;
-    }
-    const subgraph = node.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-    if (subgraph?.nodes?.length) syncCounterFromNodes(subgraph.nodes);
-  }
-}
+const idGenerator = new IdGenerator();
 
 function estimateNodeHeight(node: GraphNode): number {
   const def = getNodeDefinition(node.type);
@@ -806,12 +725,12 @@ function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[])
  */
 function deepCloneGroupNode(groupNode: GraphNode): GraphNode {
   const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-  const newGroupId = `node_${nodeIdCounter++}`;
+  const newGroupId = idGenerator.next();
   if (!subgraph) return { ...groupNode, id: newGroupId };
 
   const idMap = new Map<string, string>();
   for (const sn of subgraph.nodes) {
-    idMap.set(sn.id, `node_${nodeIdCounter++}`);
+    idMap.set(sn.id, idGenerator.next());
   }
   const newSubNodes = subgraph.nodes.map(sn => {
     const newId = idMap.get(sn.id)!;
@@ -1704,7 +1623,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   duplicateGroup: (groupId) => {
     const { nodes, activeGroupPath } = get();
-    pushHistory(nodes);
+    undoManager.push(nodes);
     const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const groupNode = activeNodes.find(n => n.id === groupId);
     if (!groupNode || groupNode.type !== 'group') return null;
@@ -1727,11 +1646,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   duplicateNode: (nodeId) => {
     const { nodes, activeGroupPath } = get();
-    pushHistory(nodes);
+    undoManager.push(nodes);
     const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const node = activeNodes.find(n => n.id === nodeId);
     if (!node) return null;
-    const newId = `node_${nodeIdCounter++}`;
+    const newId = idGenerator.next();
     const clearedInputs = Object.fromEntries(
       Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])
     );
@@ -1749,12 +1668,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   duplicateNodes: (nodeIds) => {
     const { nodes, activeGroupPath } = get();
-    pushHistory(nodes);
+    undoManager.push(nodes);
     const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const newNodes = nodeIds.flatMap(nodeId => {
       const node = activeNodes.find(n => n.id === nodeId);
       if (!node) return [];
-      const newId = `node_${nodeIdCounter++}`;
+      const newId = idGenerator.next();
       const clearedInputs = Object.fromEntries(
         Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])
       );
@@ -1808,7 +1727,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Reject if any output nodes are in the selection
     if (selectedNodes.some(n => n.type === 'output' || n.type === 'vec4Output')) return null;
 
-    pushHistory(nodes);
+    undoManager.push(nodes);
 
     // ── Discover dangling connections ────────────────────────────────────────
     const inputPorts: import('../types/nodeGraph').GroupInputPort[] = [];
@@ -1943,7 +1862,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Auto-inject a LoopIndex node so iteration counter `i` is always accessible
     const loopIndexNode: import('../types/nodeGraph').GraphNode = {
-      id: `node_${nodeIdCounter++}`,
+      id: idGenerator.next(),
       type: 'loopIndex',
       position: { x: Math.min(...xs) - 220, y: Math.min(...ys) },
       inputs: {},
@@ -1951,7 +1870,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       params: { _groupOriginal: true },
     };
 
-    const groupId = `node_${nodeIdCounter++}`;
+    const groupId = idGenerator.next();
     const subgraph: import('../types/nodeGraph').SubgraphData = {
       nodes: [...originalNodes, loopIndexNode],
       inputPorts,
@@ -2041,7 +1960,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Iterated groups are ungrouped as a single-pass (iterations=1 equivalent).
     // The for-loop carry logic is discarded; connections from inputPorts are still repaired correctly.
 
-    pushHistory(nodes);
+    undoManager.push(nodes);
 
     if (!subgraph) {
       const newWorking = workingNodes.filter(n => n.id !== groupId);
@@ -2161,17 +2080,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       subgraph,
       savedAt: Date.now(),
     };
-    localStorage.setItem(`${GP_PREFIX}${preset.id}`, JSON.stringify(preset));
+    groupPresetManager.save(preset);
     set({ groupPresets: loadGroupPresets() });
-    const dir = getGroupPresetDir();
-    if (dir) {
-      const slug = labelToSlug(preset.label);
-      writeTextFileAtPath(`${dir}/${slug}_${preset.id}.json`, JSON.stringify(preset, null, 2));
-    }
   },
 
   deleteGroupPreset: (presetId) => {
-    localStorage.removeItem(`${GP_PREFIX}${presetId}`);
+    groupPresetManager.delete(presetId);
     set({ groupPresets: loadGroupPresets() });
   },
 
@@ -2179,12 +2093,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const { nodes } = get();
     const preset = get().groupPresets.find(p => p.id === presetId);
     if (!preset) return null;
-    pushHistory(nodes);
+    undoManager.push(nodes);
 
     // Re-ID all subgraph nodes to avoid collisions
     const idMap = new Map<string, string>();
     const newSubNodes = preset.subgraph.nodes.map(n => {
-      const newId = `node_${nodeIdCounter++}`;
+      const newId = idGenerator.next();
       idMap.set(n.id, newId);
       return { ...n, id: newId };
     });
@@ -2225,7 +2139,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       groupOutputSockets[p.key] = { type: p.type, label: p.label };
     }
 
-    const groupId = `node_${nodeIdCounter++}`;
+    const groupId = idGenerator.next();
     const pos = position ?? { x: 200 + Math.random() * 100, y: 200 + Math.random() * 100 };
     const { activeGroupPath } = get();
 
@@ -2275,8 +2189,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const def = getNodeDefinition(newType);
     if (!def) return;
 
-    pushHistory(nodes);
-    const newId = `node_${nodeIdCounter++}`;
+    undoManager.push(nodes);
+    const newId = idGenerator.next();
 
     // Build new inputs, carrying over connections where types are compatible
     const newInputs: Record<string, InputSocket> = {};
@@ -2370,10 +2284,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   undo: () => {
-    const prev = _history.pop();
+    const prev = undoManager.pop();
     if (!prev) return;
     // Restore counter so new nodes after undo don't collide
-    syncCounterFromNodes(prev);
+    idGenerator.syncFromGraph(prev);
     set({ nodes: prev, nodeProbeValues: null });
     get().compile();
   },
@@ -2469,9 +2383,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const mlg = existingNodes.find(n => n.type === 'marchLoopGroup');
         if (cam && mlg) {
           // Wire to existing march setup
-          pushHistory(existingNodes);
+          undoManager.push(existingNodes);
           const def = getNodeDefinition('glass3d')!;
-          const nodeId = `node_${nodeIdCounter++}`;
+          const nodeId = idGenerator.next();
           const inputs: Record<string, InputSocket> = {};
           for (const [key, socket] of Object.entries(def.inputs)) {
             inputs[key] = { ...socket };
@@ -2532,14 +2446,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
     }
 
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const def = getNodeDefinition(type);
     if (!def) {
       console.error(`Unknown node type: ${type}`);
       return;
     }
 
-    const nodeId = `node_${nodeIdCounter++}`;
+    const nodeId = idGenerator.next();
 
     // Merge overrideParams with defaults
     const mergedParams = { ...(def.defaultParams ?? {}), ...(overrideParams ?? {}) };
@@ -2618,7 +2532,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   spawnGraph: (origin, nodeSpecs, edges) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const assignedIds: string[] = [];
     const newNodes: GraphNode[] = [];
 
@@ -2627,7 +2541,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const def = getNodeDefinition(spec.type);
       if (!def) { console.error(`spawnGraph: Unknown node type: ${spec.type}`); continue; }
 
-      const nodeId = `node_${nodeIdCounter++}`;
+      const nodeId = idGenerator.next();
       assignedIds.push(nodeId);
 
       const mergedParams = { ...(def.defaultParams ?? {}), ...(spec.params ?? {}) };
@@ -2689,7 +2603,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         // Block deletion of original (creation-time) nodes
         if (sgNode?.params?._groupOriginal) return;
         if (sgNode) {
-          pushHistory(nodes);
+          undoManager.push(nodes);
           // Remove from subgraph and clear connections pointing to it
           const newSgNodes = activeNodes
             .filter(n => n.id !== nodeId)
@@ -2712,7 +2626,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
     }
 
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const deletedNode = nodes.find(n => n.id === nodeId);
 
     // Clean up video resources if this was a videoInput node
@@ -2818,7 +2732,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   updateNodeParams: (nodeId, params, options?) => {
     // Push history once at the start of an edit burst (debounced — not on every keystroke/tick)
     if (!_historyParamPending) {
-      pushHistory(get().nodes);
+      undoManager.push(get().nodes);
       _historyParamPending = true;
     }
     if (_historyParamTimer) clearTimeout(_historyParamTimer);
@@ -2955,12 +2869,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return;
       }
       // Slow path: structural change or non-uniform param — full recompile
-      if (_compileTimer) { clearTimeout(_compileTimer); _compileTimer = null; }
+      compilationService.cancelPending();
       get().compile();
     } else {
       // String fields (GLSL body, expr formula): debounce to avoid compile-on-every-keystroke
-      if (_compileTimer) clearTimeout(_compileTimer);
-      _compileTimer = setTimeout(() => { get().compile(); }, 500);
+      compilationService.scheduleCompile(() => get().compile(), 500);
     }
   },
 
@@ -2970,7 +2883,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         n.id === nodeId ? { ...n, outputs } : n
       ),
     }));
-    if (_compileTimer) { clearTimeout(_compileTimer); _compileTimer = null; }
+    compilationService.cancelPending();
     get().compile();
   },
 
@@ -2983,7 +2896,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     set(state => {
       // Top-level connection
       if (state.nodes.some(n => n.id === targetNodeId)) {
@@ -3040,7 +2953,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   disconnectInput: (nodeId, inputKey) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     set(state => {
       // Top-level
       if (state.nodes.some(n => n.id === nodeId)) {
@@ -3073,7 +2986,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   clearDisconnectedNotice: () => set({ disconnectedNotice: null }),
 
   setGroupOutput: (groupId, outputPortKey, fromNodeId, fromOutputKey) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const { activeGroupPath } = get();
     set(state => {
       // Find the group node at any depth
@@ -3140,7 +3053,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addMarchLoopInput: (groupNodeId, key, type, label) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     set(state => {
       const nodes = state.nodes.map(n => {
         if (n.id !== groupNodeId) return n;
@@ -3167,7 +3080,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeMarchLoopInput: (groupNodeId, key) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     set(state => {
       const nodes = state.nodes.map(n => {
         if (n.id !== groupNodeId) return n;
@@ -3223,7 +3136,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addGroupInput: (groupId, type, label) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const { activeGroupPath } = get();
     set(state => {
       return {
@@ -3257,7 +3170,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeGroupInputPort: (groupId, portKey) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const { activeGroupPath } = get();
     set(state => {
       return {
@@ -3281,7 +3194,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addGroupOutput: (groupId, type = 'float', label) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const { activeGroupPath } = get();
     set(state => {
       return {
@@ -3302,7 +3215,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeGroupOutput: (groupId, portKey) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     const { activeGroupPath } = get();
     set(state => {
       const newNodes = updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
@@ -3379,7 +3292,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   toggleBypass: (nodeId) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
     set(state => {
       const path = state.activeGroupPath;
       if (path.length > 0) {
@@ -3395,7 +3308,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   updateNodeSockets: (nodeId, inputDefs, outputType) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
 
     const buildUpdatedNode = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
       const newInputs: Record<string, InputSocket> = {};
@@ -3452,7 +3365,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   changeNodeVectorType: (nodeId, primaryInputKey, primaryOutputKey, outputType) => {
-    pushHistory(get().nodes);
+    undoManager.push(get().nodes);
 
     const updater = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
       const newInputs = { ...n.inputs };
@@ -3695,7 +3608,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   loadExampleGraph: (name?: string) => {
-    _history.length = 0;
+    undoManager.clear();
     const example = name ?? 'fractalRings';
     const { nodes: rawNodes } = EXAMPLE_GRAPHS[example] ?? EXAMPLE_GRAPHS['fractalRings'];
 
@@ -3704,7 +3617,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       getNodeDefinition,
     ));
 
-    syncCounterFromNodes(nodes);
+    idGenerator.syncFromGraph(nodes);
     set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
   },
@@ -3761,7 +3674,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       .sort(),
 
   loadSavedGraph: (name) => {
-    _history.length = 0;
+    undoManager.clear();
     const raw = localStorage.getItem(`shader-studio:${name}`);
     if (!raw) return;
     try {
@@ -3776,7 +3689,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           return n;
         });
         const nodes = upgradeExprNodes(sanitized).map(n => migrateNodeParams(n, getNodeDefinition));
-        syncCounterFromNodes(nodes);
+        idGenerator.syncFromGraph(nodes);
         // Reset group navigation so a saved graph that was captured inside a
         // subgraph doesn't leave the editor stranded in a non-existent group.
         set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
@@ -3798,12 +3711,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   importGraph: (json: string) => {
-    _history.length = 0;
+    undoManager.clear();
     try {
       const { nodes: rawNodes } = JSON.parse(json) as { nodes: GraphNode[] };
       if (Array.isArray(rawNodes)) {
         const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(n, getNodeDefinition));
-        syncCounterFromNodes(nodes);
+        idGenerator.syncFromGraph(nodes);
         set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
         get().compile();
       }
@@ -3841,22 +3754,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       glslFunctions: (node.params.glslFunctions as string) ?? '',
       savedAt: Date.now(),
     };
-    // Always save to localStorage (belt-and-suspenders)
-    localStorage.setItem(`${CFP_PREFIX}${preset.id}`, JSON.stringify(preset));
-    window.dispatchEvent(new CustomEvent('customfn-changed'));
-    // Also write to disk if a folder is configured
-    const dir = getCustomFnDir();
-    if (dir) {
-      const slug = labelToSlug(preset.label);
-      const filename = `${slug}_${preset.id}.json`;
-      writeTextFileAtPath(`${dir}/${filename}`, JSON.stringify(preset, null, 2));
-    }
+    // Always save to localStorage (belt-and-suspenders), and to disk if configured
+    customFnPresetManager.save(preset);
   },
 
   deleteCustomFn: (id) => {
-    // Remove from localStorage
-    localStorage.removeItem(`${CFP_PREFIX}${id}`);
-    window.dispatchEvent(new CustomEvent('customfn-changed'));
+    customFnPresetManager.delete(id);
     // Remove from disk if folder is set — find by matching id in filename
     const dir = getCustomFnDir();
     if (dir) {

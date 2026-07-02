@@ -18,7 +18,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   document.head.appendChild(s);
 }
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
-import { renderNodePreview } from '../../lib/nodePreviewRenderer';
+import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -441,7 +441,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const fs = compileNodePreviewShader(node.id, currentNodes);
     if (!fs) return;
     setPreviewLoading(true);
-    renderNodePreview(node.id, fs, { u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } }, 200)
+    nodePreviewRenderer.renderNodePreview(node.id, fs, { u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } }, 200)
       .then(url => { if (!cancelled) { setNodePreview(node.id, url); setPreviewLoading(false); } })
       .catch(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
@@ -502,9 +502,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   React.useEffect(() => {
     if (node.type !== 'scope' && !LFO_TYPES.has(node.type)) return;
     const canvas = scopeCanvasRef.current;
-    if (canvas) scopeCanvasRegistry.set(node.id, canvas);
+    if (canvas) scopeCanvasRegistry.register(node.id, canvas);
     return () => {
-      scopeCanvasRegistry.delete(node.id);
+      scopeCanvasRegistry.unregister(node.id);
       scopeBufferRegistry.delete(node.id);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -521,9 +521,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     if (!isPreviewActive || !primaryOutputIsFloat) return;
     const canvas = previewScopeCanvasRef.current;
     const key = `__preview__${node.id}`;
-    if (canvas) scopeCanvasRegistry.set(key, canvas);
+    if (canvas) scopeCanvasRegistry.register(key, canvas);
     return () => {
-      scopeCanvasRegistry.delete(key);
+      scopeCanvasRegistry.unregister(key);
       scopeBufferRegistry.delete(key);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

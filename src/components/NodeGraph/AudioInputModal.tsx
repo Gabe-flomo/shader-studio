@@ -63,8 +63,8 @@ export function AudioInputModal({ node, onClose }: Props) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    audioSpectrumRegistry.set(node.id, canvas);
-    return () => { audioSpectrumRegistry.delete(node.id); };
+    audioSpectrumRegistry.register(node.id, canvas);
+    return () => { audioSpectrumRegistry.unregister(node.id); };
   }, [node.id]);
 
   // Escape key
