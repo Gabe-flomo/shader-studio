@@ -532,21 +532,26 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     // NodeGraph's own onWheel and pans/zooms the graph canvas underneath.
     e.stopPropagation();
     const xy = getLocalXY(e);
-    if (e.deltaX !== 0) {
-      setView(v => ({ ...v, viewT0: Math.max(0, v.viewT0 + e.deltaX / v.pxPerSec) }));
-    }
-    if (e.deltaY !== 0) {
-      if (e.shiftKey) {
-        setView(v => ({ ...v, viewT0: Math.max(0, v.viewT0 + e.deltaY / v.pxPerSec) }));
-      } else if (xy) {
+    if (e.ctrlKey) {
+      // Pinch-to-zoom (trackpad) or ctrl+scroll (mouse wheel) — zoom the
+      // value axis, matching the main node graph's own pinch-to-zoom.
+      if (xy) {
         const cursorValue = fromY(xy.py);
-        const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        const delta = -e.deltaY * (e.deltaMode === 0 ? 0.008 : 0.3);
         setView(v => {
-          const newP = Math.max(4, Math.min(800, v.pxPerUnit * factor));
+          const newP = Math.max(4, Math.min(800, v.pxPerUnit * (1 + delta)));
           const newCenter = cursorValue - (canvasSizeRef.current.h / 2 - xy.py) / newP;
           return { ...v, pxPerUnit: newP, valueCenter: newCenter };
         });
       }
+    } else {
+      // Plain scroll (no modifier) → pan both axes, matching the main node
+      // graph's convention where scrolling never zooms on its own.
+      setView(v => ({
+        ...v,
+        viewT0: Math.max(0, v.viewT0 + e.deltaX / v.pxPerSec),
+        valueCenter: v.valueCenter - e.deltaY / v.pxPerUnit,
+      }));
     }
   }, [getLocalXY, fromY]);
 
@@ -665,7 +670,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           <span>
             {toolMode === 'add' && 'click empty space: add keyframe · drag point: move'}
             {toolMode === 'delete' && 'click a point: delete it'}
-            {toolMode === 'select' && 'click point: select (shows ease handles) · drag: move · dbl-click: delete · scroll: zoom value · shift+scroll: pan time · hold shift while dragging to invert snap'}
+            {toolMode === 'select' && 'click point: select (shows ease handles) · drag: move · dbl-click: delete · scroll: pan · pinch/ctrl+scroll: zoom value · hold shift while dragging to invert snap'}
           </span>
           <span style={{ color: '#89b4fa', fontFamily: 'monospace' }}>{hoverInfo ? `t=${fmt(hoverInfo.t)}  v=${fmt(hoverInfo.v)}` : ''}</span>
         </div>

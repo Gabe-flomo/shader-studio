@@ -14,6 +14,17 @@ export interface InputSocket extends Socket {
     outputKey: string;
   };
   defaultValue?: number | number[];
+  /**
+   * For a vec2/vec3 socket whose unconnected fallback is built from separate
+   * float params (e.g. UvTransform2D's `translate` from `tx`/`ty`) rather
+   * than a single vector value: the param name backing each axis, in order
+   * (['tx','ty'] or ['x','y','z']). Opts the socket into per-axis vector
+   * keyframing — resolveInputVars uses it to find each axis's static
+   * fallback, and the keyframe editor uses it to seed each axis's starting
+   * value. Sockets without this (most vec2/vec3 sockets, meant to be wired
+   * from another node — UV, SDF positions, etc.) are not keyframe-eligible.
+   */
+  axisParams?: string[];
 }
 
 // Output socket
