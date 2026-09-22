@@ -12,9 +12,17 @@
 import { useMemo, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
-import type { GraphNode, DataType } from '../../types/nodeGraph';
+import type { GraphNode } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
+import { typesCompatible } from '../../lib/typesCompatible';
+import { groupNodesByRank } from '../../store/graphLayout';
+
+function nodeDotColor(n: GraphNode): string {
+  if (n.type === 'output') return '#a6e3a1';
+  const outType = Object.values(n.outputs)[0]?.type;
+  return TYPE_COLORS[outType ?? 'float'] ?? '#888';
+}
 
 // ── Cycle safety ──────────────────────────────────────────────────────────────
 // Adding a connection sourceId.output -> targetId.input is only valid if
@@ -39,24 +47,15 @@ function wouldCreateCycle(nodes: GraphNode[], sourceId: string, targetId: string
   return false;
 }
 
-function typesCompatible(a: DataType | string, b: DataType | string): boolean {
-  if (a === b) return true;
-  // float is universally compatible as either a source or a sink, matching
-  // resolveInputVars' implicit float->vecN promotion.
-  if (a === 'float' || b === 'float') return true;
-  // vec2<->vec3 are mutually convertible too (promote with z=0, or truncate
-  // .xy) — resolveInputVars handles both directions, just with different
-  // emitted GLSL.
-  const pair = new Set([a, b]);
-  if (pair.has('vec2') && pair.has('vec3')) return true;
-  return false;
+// `sourceType` finds a compatible INPUT on `node` — node.inputs are the sink,
+// so the wire runs sourceType -> inp.type.
+function firstCompatibleInputKey(node: GraphNode, sourceType: string): string | undefined {
+  return Object.entries(node.inputs).find(([, inp]) => typesCompatible(sourceType, inp.type))?.[0];
 }
-
-function firstCompatibleInputKey(node: GraphNode, type: string): string | undefined {
-  return Object.entries(node.inputs).find(([, inp]) => typesCompatible(inp.type, type))?.[0];
-}
-function firstCompatibleOutputKey(node: GraphNode, type: string): string | undefined {
-  return Object.entries(node.outputs).find(([, out]) => typesCompatible(out.type, type))?.[0];
+// `targetType` finds a compatible OUTPUT on `node` — node.outputs are the
+// source, so the wire runs out.type -> targetType.
+function firstCompatibleOutputKey(node: GraphNode, targetType: string): string | undefined {
+  return Object.entries(node.outputs).find(([, out]) => typesCompatible(out.type, targetType))?.[0];
 }
 
 type PendingSocket =
@@ -92,8 +91,10 @@ export function MobileGraphBrowser() {
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
 
-  const sources = useMemo(() => nodes.filter(n => Object.keys(n.inputs).length === 0), [nodes]);
-  const outputNode = useMemo(() => nodes.find(n => n.type === 'output'), [nodes]);
+  // Same rank assignment the desktop "Auto Layout" button uses for spatial
+  // x position — reused here as row index, so a node's row in this grid
+  // always matches the column it would land in on the canvas.
+  const rankedRows = useMemo(() => groupNodesByRank(nodes), [nodes]);
 
   const pushFocus = (id: string) => setFocusStack(stack => [...stack, id]);
   const jumpTo = (index: number) => setFocusStack(stack => stack.slice(0, index + 1));
@@ -134,7 +135,7 @@ export function MobileGraphBrowser() {
     // picking a node whose INPUT will consume this output
     return nodes.filter(n =>
       n.id !== connectPicker.nodeId &&
-      Object.values(n.inputs).some(i => typesCompatible(i.type, connectPicker.type)) &&
+      Object.values(n.inputs).some(i => typesCompatible(connectPicker.type, i.type)) &&
       !wouldCreateCycle(nodes, connectPicker.nodeId, n.id),
     );
   }, [connectPicker, nodes]);
@@ -305,30 +306,38 @@ export function MobileGraphBrowser() {
     );
   }
 
-  // ── Home view ─────────────────────────────────────────────────────────────
+  // ── Home view: graph-shape grid ──────────────────────────────────────────
+  // Rows = rank (left-to-right depth in the node editor, top-to-bottom
+  // here); cells within a row = sibling nodes at that same depth. Same
+  // ranking the desktop "Auto Layout" button uses, so this grid always
+  // matches that arrangement.
   function renderHome() {
+    if (nodes.length === 0) {
+      return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>No nodes yet.</div>;
+    }
     return (
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ padding: '8px 12px 4px', fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em' }}>SOURCES</div>
-        {sources.map(n => (
-          <div key={n.id} style={rowStyle} onClick={() => pushFocus(n.id)}>
-            <div style={dotStyle(TYPE_COLORS[Object.values(n.outputs)[0]?.type ?? 'float'] ?? '#888')} />
-            <div style={{ fontSize: '13px', color: '#cdd6f4', flex: 1 }}>{labelFor(n)}</div>
-            <div style={{ color: '#585b70' }}>›</div>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        {rankedRows.map(({ rank, nodes: rowNodes }) => (
+          <div key={rank} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
+            <div style={{ width: '14px', flexShrink: 0, fontSize: '10px', color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{rank}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+              {rowNodes.map(n => (
+                <button
+                  key={n.id}
+                  onClick={() => pushFocus(n.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                    padding: '8px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                >
+                  <div style={dotStyle(nodeDotColor(n))} />
+                  {labelFor(n)}
+                </button>
+              ))}
+            </div>
           </div>
         ))}
-        {sources.length === 0 && <div style={{ padding: '10px 12px', fontSize: '12px', color: '#585b70' }}>No source nodes yet.</div>}
-
-        <div style={{ padding: '12px 12px 4px', fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em' }}>OUTPUT</div>
-        {outputNode ? (
-          <div style={rowStyle} onClick={() => pushFocus(outputNode.id)}>
-            <div style={dotStyle('#a6e3a1')} />
-            <div style={{ fontSize: '13px', color: '#cdd6f4', flex: 1 }}>{labelFor(outputNode)}</div>
-            <div style={{ color: '#585b70' }}>›</div>
-          </div>
-        ) : (
-          <div style={{ padding: '10px 12px', fontSize: '12px', color: '#585b70' }}>No Output node found.</div>
-        )}
       </div>
     );
   }
