@@ -251,6 +251,15 @@ interface AnchorRect { left: number; top: number; width: number; height: number 
 
 export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
+
+  // Jump the render preview to a specific moment and pause there — so
+  // selecting/dragging/placing a keyframe shows exactly what it produces,
+  // instead of the live time immediately drifting past it.
+  const seekToTime = useCallback((t: number) => {
+    setTimePlaying(false);
+    window.dispatchEvent(new CustomEvent('seek-time', { detail: { time: t } }));
+  }, [setTimePlaying]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Position/dim over the node-graph canvas only, not the whole viewport, so
@@ -312,6 +321,23 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
 
   const canvasSizeRef = useRef({ w: 800, h: 420 });
 
+  // Fit the view to show every current keyframe, with some breathing room —
+  // mirrors the main node graph's own "Fit" button.
+  const centerOnKeyframes = useCallback(() => {
+    const kfs = keyframesRef.current;
+    if (kfs.length === 0) return;
+    const ts = kfs.map(k => k.t), vs = kfs.map(k => k.v);
+    const tMin = Math.min(...ts), tMax = Math.max(...ts);
+    const vMin = Math.min(...vs), vMax = Math.max(...vs);
+    const tPad = Math.max((tMax - tMin) * 0.15, 0.3);
+    const vPad = Math.max((vMax - vMin) * 0.25, 0.5);
+    const tSpan = Math.max(tMax - tMin + tPad * 2, 0.0001);
+    const vSpan = Math.max(vMax - vMin + vPad * 2, 0.0001);
+    const newPxPerSec = Math.max(4, Math.min(800, canvasSizeRef.current.w / tSpan));
+    const newPxPerUnit = Math.max(4, Math.min(800, canvasSizeRef.current.h / vSpan));
+    setView(v => ({ ...v, viewT0: Math.max(0, tMin - tPad), valueCenter: (vMin + vMax) / 2, pxPerSec: newPxPerSec, pxPerUnit: newPxPerUnit }));
+  }, []);
+
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf);
@@ -365,7 +391,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     const sorted = [...keyframesRef.current, snapped].sort((a, b) => a.t - b.t);
     writeKeyframes(sorted);
     setSelectedKf(sorted.indexOf(snapped));
-  }, [writeKeyframes, effectiveSnap]);
+    seekToTime(snapped.t);
+  }, [writeKeyframes, effectiveSnap, seekToTime]);
 
   const removeKeyframeAt = useCallback((index: number) => {
     writeKeyframes(keyframesRef.current.filter((_, i) => i !== index));
@@ -416,6 +443,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       const next = keyframesRef.current.map((k, i) => (i === drag.index ? { ...k, t: newT, v: newV } : k));
       setHoverInfo({ t: newT, v: newV });
       writeKeyframes(next);
+      seekToTime(newT);
     } else if (drag.kind === 'handle') {
       const segs = buildSegments(keyframesRef.current, mode, loopBack);
       const seg = segs[drag.segIndex];
@@ -431,7 +459,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       });
       writeKeyframes(next);
     }
-  }, [getLocalXY, hitTestKeyframe, fromX, fromY, writeKeyframes, mode, loopBack, effectiveSnap]);
+  }, [getLocalXY, hitTestKeyframe, fromX, fromY, writeKeyframes, mode, loopBack, effectiveSnap, seekToTime]);
 
   // A plain click on empty canvas (mousedown+mouseup with no drag in between)
   // adds a keyframe there while in 'add' mode, or just deselects in 'select'
@@ -448,7 +476,10 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       }
     } else if (drag?.kind === 'keyframe') {
       if (!drag.moved) {
-        if (toolModeRef.current === 'select') setSelectedKf(drag.index);
+        if (toolModeRef.current === 'select') {
+          setSelectedKf(drag.index);
+          seekToTime(keyframesRef.current[drag.index].t);
+        }
       } else {
         // Re-sort only now the drag is finished, not on every mousemove —
         // sorting mid-drag would invalidate drag.index (it's fixed for the
@@ -462,7 +493,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       }
     }
     dragRef.current = null;
-  }, [addKeyframeAt, fromX, fromY, writeKeyframes]);
+  }, [addKeyframeAt, fromX, fromY, writeKeyframes, seekToTime]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
@@ -487,11 +518,19 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     const xy = getLocalXY(e);
     if (!xy) return;
     const kfHit = hitTestKeyframe(xy.px, xy.py);
-    if (kfHit !== null) setSelectedKf(prev => (prev === kfHit ? null : kfHit));
-  }, [getLocalXY, hitTestKeyframe]);
+    if (kfHit !== null) {
+      setSelectedKf(prev => (prev === kfHit ? null : kfHit));
+      seekToTime(keyframesRef.current[kfHit].t);
+    }
+  }, [getLocalXY, hitTestKeyframe, seekToTime]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
+    // This modal is a React portal — its events still bubble through the
+    // React *component* tree (NodeGraph is a logical ancestor), not the DOM
+    // tree, so without stopPropagation() a wheel gesture here also reaches
+    // NodeGraph's own onWheel and pans/zooms the graph canvas underneath.
+    e.stopPropagation();
     const xy = getLocalXY(e);
     if (e.deltaX !== 0) {
       setView(v => ({ ...v, viewT0: Math.max(0, v.viewT0 + e.deltaX / v.pxPerSec) }));
@@ -560,7 +599,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: '14px', color: '#f9e2af' }}>◆ Keyframes — {socketKey}</span>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '10px', color: '#6c7086' }}>
-            <TimeControlsStrip layout="horizontal" />
+            <TimeControlsStrip />
             <span>{keyframes.length}/{MAX_KEYFRAMES}</span>
             <button onClick={onClose} style={{ background: 'none', border: '1px solid #f38ba855', color: '#f38ba8', cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
           </div>
@@ -587,16 +626,27 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setBypassed(!bypassed)}
-            title={bypassed ? 'Bypassed — using the static value instead of these keyframes' : 'Bypass these keyframes (keeps the data, ignores it when rendering)'}
-            style={{
-              background: bypassed ? '#f38ba822' : 'none',
-              border: `1px solid ${bypassed ? '#f38ba8' : '#45475a'}`,
-              color: bypassed ? '#f38ba8' : '#a6adc8',
-              cursor: 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
-            }}
-          >⏭ {bypassed ? 'Bypassed' : 'Bypass'}</button>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={centerOnKeyframes}
+              disabled={keyframes.length === 0}
+              title="Fit view to all keyframes"
+              style={{
+                background: 'none', border: '1px solid #45475a', color: keyframes.length === 0 ? '#45475a' : '#a6adc8',
+                cursor: keyframes.length === 0 ? 'default' : 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
+              }}
+            >⊡ Fit</button>
+            <button
+              onClick={() => setBypassed(!bypassed)}
+              title={bypassed ? 'Bypassed — using the static value instead of these keyframes' : 'Bypass these keyframes (keeps the data, ignores it when rendering)'}
+              style={{
+                background: bypassed ? '#f38ba822' : 'none',
+                border: `1px solid ${bypassed ? '#f38ba8' : '#45475a'}`,
+                color: bypassed ? '#f38ba8' : '#a6adc8',
+                cursor: 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
+              }}
+            >⏭ {bypassed ? 'Bypassed' : 'Bypass'}</button>
+          </div>
         </div>
 
         {/* Timeline canvas */}

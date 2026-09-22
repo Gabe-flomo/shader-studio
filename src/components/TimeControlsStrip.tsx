@@ -18,27 +18,17 @@ const btnStyle: CSSProperties = {
 };
 
 /**
- * Global play/pause/reset for u_time animation. Vertical icon strip meant to
- * sit absolutely-positioned along the left edge of a render preview; also
- * reused inline (horizontal) inside the keyframe editor modal.
+ * Global play/pause/reset for u_time animation. Always rendered inline
+ * (a horizontal row) — sits in a header/status bar next to the render
+ * preview or inside the keyframe editor's header, never overlaid on the
+ * rendered canvas itself.
  */
-export function TimeControlsStrip({ layout = 'vertical' }: { layout?: 'vertical' | 'horizontal' }) {
+export function TimeControlsStrip() {
   const timePlaying = useNodeGraphStore(s => s.timePlaying);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
 
   return (
-    <div
-      style={{
-        position: layout === 'vertical' ? 'absolute' : 'static',
-        left: layout === 'vertical' ? 8 : undefined,
-        top: layout === 'vertical' ? '50%' : undefined,
-        transform: layout === 'vertical' ? 'translateY(-50%)' : undefined,
-        zIndex: layout === 'vertical' ? 10 : undefined,
-        display: 'flex',
-        flexDirection: layout === 'vertical' ? 'column' : 'row',
-        gap: '4px',
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'row', gap: '4px' }}>
       <button
         onClick={() => setTimePlaying(!timePlaying)}
         title={timePlaying ? 'Pause' : 'Play'}

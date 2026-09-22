@@ -815,7 +815,10 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /><TimeControlsStrip /></div>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: '#181825', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+              <TimeControlsStrip />
+            </div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -943,10 +946,13 @@ function App() {
         {/* Right: Shader Preview — hidden when floated */}
         {!previewFloated && (
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Time controls live outside the canvas, not overlaid on it */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: '#181825', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+              <TimeControlsStrip />
+            </div>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
               {showHistogram && histData && <HistogramOverlay data={histData} />}
-              <TimeControlsStrip />
               {/* Overlay controls: histogram toggle + float */}
               <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: '4px' }}>
                 <button
@@ -1031,6 +1037,7 @@ function App() {
             }}
           >
             <span style={{ fontSize: '10px', color: '#585b70', letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
+            <span onMouseDown={e => e.stopPropagation()}><TimeControlsStrip /></span>
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setShowHistogram(v => !v)}
@@ -1053,7 +1060,6 @@ function App() {
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
             <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
             {showHistogram && histData && <HistogramOverlay data={histData} />}
-            <TimeControlsStrip />
           </div>
 
           {/* Status bar */}

@@ -1014,12 +1014,24 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     };
     window.addEventListener('reset-time', handleResetTime);
 
+    // Seek to an arbitrary time when 'seek-time' is fired (e.g. from the
+    // keyframe editor jumping the preview to the selected keyframe's moment).
+    const handleSeekTime = (e: Event) => {
+      const t = (e as CustomEvent<{ time: number }>).detail?.time;
+      if (typeof t !== 'number') return;
+      virtualTime = t;
+      lastRafTime = null;
+      material.uniforms.u_time.value = t;
+    };
+    window.addEventListener('seek-time', handleSeekTime);
+
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       ro.disconnect();
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('reset-time', handleResetTime);
+      window.removeEventListener('seek-time', handleSeekTime);
       rt.dispose();
       floatRt.dispose();
       histRt.dispose();
