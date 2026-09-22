@@ -10,11 +10,12 @@ const HANDLE_R = 6;
 const KF_R = 6;
 const HIT_R = 9;
 
-type ToolMode = 'select' | 'add' | 'delete';
+type ToolMode = 'select' | 'add' | 'delete' | 'draw';
 const TOOL_MODES: { id: ToolMode; label: string; key: string; icon: string }[] = [
   { id: 'select', label: 'Select', key: 'V', icon: '↖' },
   { id: 'add', label: 'Add', key: 'C', icon: '✏' },
   { id: 'delete', label: 'Delete', key: 'X', icon: '✕' },
+  { id: 'draw', label: 'Draw', key: 'D', icon: '∿' },
 ];
 
 // Per-axis color, matching the classic X/Y/Z = red/green/blue convention.
@@ -107,6 +108,39 @@ function snapVal(v: number, step: number, enabled: boolean): number {
 }
 function fmt(v: number): string { return Math.round(v * 100) / 100 + ''; }
 
+/**
+ * Serum-style freehand draw: reduces a raw, continuously-recorded mouse path
+ * down to at most maxPoints keyframes, evenly spaced in time across the
+ * path's span, taking each one's value by linearly interpolating the
+ * recorded path at that time. Linear easing between them keeps the result
+ * close to the literal drawn shape rather than warping it with a curve.
+ * Assumes path is already sorted by ascending t (drawPathRef is built that
+ * way — see handleMouseMove's 'draw' branch).
+ */
+function downsamplePath(path: { t: number; v: number }[], maxPoints: number): Keyframe[] {
+  if (path.length === 0) return [];
+  const tMin = path[0].t, tMax = path[path.length - 1].t;
+  if (tMax - tMin < 1e-6) {
+    return [{ t: Math.max(0, tMin), v: path[path.length - 1].v, ease: EASING_PRESETS.linear }];
+  }
+  const n = Math.min(maxPoints, path.length);
+  const result: Keyframe[] = [];
+  for (let i = 0; i < n; i++) {
+    const targetT = tMin + (i / (n - 1)) * (tMax - tMin);
+    let v = path[path.length - 1].v;
+    for (let j = 0; j < path.length - 1; j++) {
+      if (path[j].t <= targetT && path[j + 1].t >= targetT) {
+        const span = path[j + 1].t - path[j].t;
+        const frac = span > 1e-9 ? (targetT - path[j].t) / span : 0;
+        v = path[j].v + (path[j + 1].v - path[j].v) * frac;
+        break;
+      }
+    }
+    result.push({ t: Math.max(0, targetT), v, ease: EASING_PRESETS.linear });
+  }
+  return result;
+}
+
 // ── View / drag state ────────────────────────────────────────────────────────
 
 interface ViewState {
@@ -122,7 +156,8 @@ interface ViewState {
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; startViewT0: number; startValueCenter: number; moved: boolean }
   | { kind: 'keyframe'; index: number; moved: boolean }
-  | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' };
+  | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' }
+  | { kind: 'draw'; moved: boolean };
 
 interface OtherAxisTrack { label: string; color: string; keyframes: Keyframe[] }
 
@@ -140,6 +175,7 @@ function draw(
   activeColor: string,
   otherAxes: OtherAxisTrack[],
   hoverInfo: { t: number; v: number } | null,
+  drawPreview: { t: number; v: number }[] | null,
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -214,12 +250,27 @@ function draw(
     ctx.setLineDash([]);
   }
 
-  if (keyframes.length === 0) {
+  // Live freehand-draw preview — the raw recorded path, before it gets
+  // downsampled to keyframes on mouseup.
+  if (drawPreview && drawPreview.length > 1) {
+    ctx.strokeStyle = '#f9e2af';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    drawPreview.forEach((p, i) => {
+      const cx = toX(p.t), cy = toY(p.v);
+      if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+  }
+
+  if (keyframes.length === 0 && !drawPreview) {
     ctx.fillStyle = '#45475a';
     ctx.font = '11px monospace';
     ctx.fillText('click to place a keyframe', 12, 20);
     return;
   }
+  if (keyframes.length === 0) return;
 
   const segs = buildSegments(keyframes, mode, loopBack);
   const firstT = keyframes[0].t;
@@ -380,7 +431,12 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const toolModeRef = useRef(toolMode);
   toolModeRef.current = toolMode;
   const [selectedKf, setSelectedKf] = useState<number | null>(null);
-  const setToolMode = useCallback((m: ToolMode) => { setToolModeState(m); setSelectedKf(null); }, []);
+  const setToolMode = useCallback((m: ToolMode) => {
+    setToolModeState(m);
+    setSelectedKf(null);
+    drawPathRef.current = [];
+    setDrawPreview(null);
+  }, []);
   const changeAxis = useCallback((a: string) => { setActiveAxis(a); setSelectedKf(null); }, []);
 
   // Derived: which segment (if any) the current selection's bezier handles belong to.
@@ -406,6 +462,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const [hoverKf, setHoverKf] = useState<number | null>(null);
   const [hoverInfo, setHoverInfo] = useState<{ t: number; v: number } | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const drawPathRef = useRef<{ t: number; v: number }[]>([]);
+  const [drawPreview, setDrawPreview] = useState<{ t: number; v: number }[] | null>(null);
 
   const canvasSizeRef = useRef({ w: 800, h: 420 });
 
@@ -428,8 +486,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo);
-  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo]);
+    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview);
+  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview]);
 
   // `anchor` is in the deps because it drives canvasW/canvasH below: a canvas
   // element clears its drawn content the instant its width/height attributes
@@ -497,6 +555,11 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const xy = getLocalXY(e);
     if (!xy) return;
+    if (toolModeRef.current === 'draw') {
+      drawPathRef.current = [{ t: Math.max(0, fromX(xy.px)), v: fromY(xy.py) }];
+      dragRef.current = { kind: 'draw', moved: false };
+      return;
+    }
     if (easeEditSeg !== null) {
       const h = hitTestHandle(xy.px, xy.py, easeEditSeg);
       if (h) { dragRef.current = { kind: 'handle', segIndex: easeEditSeg, which: h }; return; }
@@ -511,7 +574,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       return;
     }
     dragRef.current = { kind: 'pan', startX: xy.px, startY: xy.py, startViewT0: viewRef.current.viewT0, startValueCenter: viewRef.current.valueCenter, moved: false };
-  }, [getLocalXY, hitTestKeyframe, hitTestHandle, easeEditSeg, removeKeyframeAt]);
+  }, [getLocalXY, hitTestKeyframe, hitTestHandle, easeEditSeg, removeKeyframeAt, fromX, fromY]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     const xy = getLocalXY(e);
@@ -553,6 +616,12 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
         return { ...k, ease };
       });
       writeKeyframes(next);
+    } else if (drag.kind === 'draw') {
+      drag.moved = true;
+      const t = Math.max(0, fromX(xy.px)), v = fromY(xy.py);
+      drawPathRef.current = [...drawPathRef.current, { t, v }].sort((a, b) => a.t - b.t);
+      setDrawPreview(drawPathRef.current);
+      setHoverInfo({ t, v });
     }
   }, [getLocalXY, hitTestKeyframe, fromX, fromY, writeKeyframes, mode, loopBack, effectiveSnap, seekToTime]);
 
@@ -586,6 +655,16 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
         writeKeyframes(sorted);
         if (toolModeRef.current === 'select') setSelectedKf(sorted.indexOf(draggedObj));
       }
+    } else if (drag?.kind === 'draw') {
+      if (!drag.moved) {
+        // A plain click with no drag in draw mode just drops a single point,
+        // same as Add mode — there's no "shape" to sample from one sample.
+        addKeyframeAt(drawPathRef.current[0].t, drawPathRef.current[0].v, e.shiftKey);
+      } else {
+        writeKeyframes(downsamplePath(drawPathRef.current, MAX_KEYFRAMES));
+      }
+      drawPathRef.current = [];
+      setDrawPreview(null);
     }
     dragRef.current = null;
   }, [addKeyframeAt, fromX, fromY, writeKeyframes, seekToTime]);
@@ -650,7 +729,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     }
   }, [getLocalXY, fromY]);
 
-  // ── Tool-mode hotkeys (V/C/X) — scoped to while this modal is mounted,
+  // ── Tool-mode hotkeys (V/C/X/D) — scoped to while this modal is mounted,
   // ignored while typing in one of the grid/loop-back number inputs. ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -660,6 +739,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       if (key === 'v') setToolMode('select');
       else if (key === 'c') setToolMode('add');
       else if (key === 'x') setToolMode('delete');
+      else if (key === 'd') setToolMode('draw');
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -680,7 +760,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     ? { position: 'fixed', left: anchor.left, top: anchor.top, width: anchor.width, height: anchor.height, zIndex: 1000, background: 'rgba(0,0,0,0.6)' }
     : { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
-  const cursorForMode = toolMode === 'add' ? 'crosshair' : toolMode === 'delete' ? 'not-allowed' : 'default';
+  const cursorForMode = toolMode === 'add' || toolMode === 'draw' ? 'crosshair' : toolMode === 'delete' ? 'not-allowed' : 'default';
 
   return createPortal(
     <div style={overlayStyle} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -803,6 +883,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
         <div style={{ fontSize: '10px', color: '#45475a' }}>
           {toolMode === 'add' && 'click empty space: add keyframe · drag point: move'}
           {toolMode === 'delete' && 'click a point: delete it'}
+          {toolMode === 'draw' && `drag to freehand-draw a curve (replaces this axis's keyframes, sampled down to ${MAX_KEYFRAMES} points) · click: drop one point`}
           {toolMode === 'select' && 'click point: select (shows ease handles) · drag: move · dbl-click: delete · scroll: pan · pinch/ctrl+scroll: zoom value · hold shift while dragging to invert snap'}
         </div>
 
