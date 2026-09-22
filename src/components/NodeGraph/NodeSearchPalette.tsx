@@ -85,7 +85,16 @@ function outputMatchesFilter(nodeType: string, filterOutputType: string): boolea
   });
 }
 
+// Expr Block / Custom Fn declare their real sockets dynamically (from
+// params.inputs, rebuilt by updateNodeSockets) — the static NodeDefinition
+// always shows `inputs: {}`. A fresh instance already ships with default
+// inputs of assorted types (and the user can add any type afterward), so
+// treat them as always able to consume whatever's being wired in, rather
+// than filtering them out for having no *static* input to match against.
+const DYNAMIC_INPUT_NODE_TYPES = new Set(['exprNode', 'customFn']);
+
 function inputMatchesFilter(nodeType: string, filterInputType: string): boolean {
+  if (DYNAMIC_INPUT_NODE_TYPES.has(nodeType)) return true;
   const def = getNodeDefinition(nodeType);
   if (!def) return false;
   return Object.values(def.inputs).some(i => {
