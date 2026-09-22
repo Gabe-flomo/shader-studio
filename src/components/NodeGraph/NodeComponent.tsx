@@ -35,6 +35,7 @@ import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
+import { moveItem } from '../../lib/reorder';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
@@ -3581,6 +3582,23 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                  {/* Reorder */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
+                    <button
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i - 1) })}
+                      disabled={i === 0}
+                      style={{ background: 'none', border: 'none', color: i === 0 ? '#313244' : '#6c7086', cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
+                      title="Move up"
+                    >▲</button>
+                    <button
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i + 1) })}
+                      disabled={i === lines.length - 1}
+                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? '#313244' : '#6c7086', cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
+                      title="Move down"
+                    >▼</button>
+                  </div>
                   {/* LHS */}
                   <input
                     type="text"

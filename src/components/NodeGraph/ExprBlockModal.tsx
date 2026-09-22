@@ -4,6 +4,7 @@ import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
 import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
 import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
+import { moveItem } from '../../lib/reorder';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -275,6 +276,10 @@ export function ExprBlockModal({ node, onClose }: Props) {
 
   const removeLine = (idx: number) => {
     updateNodeParams(node.id, { lines: lines.filter((_, i) => i !== idx) });
+  };
+
+  const moveLine = (idx: number, to: number) => {
+    updateNodeParams(node.id, { lines: moveItem(lines, idx, to) });
   };
 
   const updateLine = (idx: number, field: keyof WarpLine, value: string) => {
@@ -647,6 +652,21 @@ export function ExprBlockModal({ node, onClose }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  {/* Reorder */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => moveLine(i, i - 1)}
+                      disabled={i === 0}
+                      style={{ background: 'none', border: 'none', color: i === 0 ? '#313244' : '#6c7086', cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
+                      title="Move up"
+                    >▲</button>
+                    <button
+                      onClick={() => moveLine(i, i + 1)}
+                      disabled={i === lines.length - 1}
+                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? '#313244' : '#6c7086', cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
+                      title="Move down"
+                    >▼</button>
+                  </div>
                   {/* LHS */}
                   <input
                     type="text"

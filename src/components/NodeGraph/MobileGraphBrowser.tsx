@@ -12,11 +12,12 @@
 import { useMemo, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
-import type { GraphNode } from '../../types/nodeGraph';
+import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank } from '../../store/graphLayout';
+import { moveItem } from '../../lib/reorder';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -161,20 +162,50 @@ const addBtnStyle: React.CSSProperties = {
   fontSize: '18px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
 };
 
+// ── Expr Block editor (mobile) ──────────────────────────────────────────────
+const EXPR_TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
+const EXPR_OPS = ['=', '+=', '-=', '*=', '/='];
+const exprTextInputStyle: React.CSSProperties = {
+  background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
+  borderRadius: '6px', padding: '8px 10px', fontSize: '13px', fontFamily: 'monospace', outline: 'none', minWidth: 0,
+};
+const exprSelectStyle: React.CSSProperties = {
+  background: '#11111b', border: '1px solid #45475a', color: '#89b4fa',
+  borderRadius: '6px', padding: '8px 6px', fontSize: '13px', cursor: 'pointer', outline: 'none',
+};
+const reorderBtnStyle = (disabled: boolean): React.CSSProperties => ({
+  background: 'none', border: 'none', color: disabled ? '#313244' : '#6c7086',
+  cursor: disabled ? 'default' : 'pointer', padding: '2px', fontSize: '11px', lineHeight: 1, touchAction: 'manipulation',
+});
+type ExprInputDef = { name: string; type: DataType; slider: { min: number; max: number } | null; carry?: boolean };
+type ExprLine = { lhs: string; op: string; rhs: string };
+
 export function MobileGraphBrowser() {
   const nodes = useNodeGraphStore(s => s.nodes);
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
   const removeNode = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
 
   const [focusStack, setFocusStack] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSocket | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
+  // Expr Block nodes have their own two-mode editor (Inputs / Output); it
+  // always opens on Inputs, the same as a freshly-added block would. Reset
+  // during render (not an effect) when focus moves to a different node —
+  // React's documented pattern for "adjust state when a prop changes".
+  const [exprMode, setExprMode] = useState<'inputs' | 'output'>('inputs');
+  const [exprModeFor, setExprModeFor] = useState<string | undefined>(undefined);
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
+
+  if (exprModeFor !== focusedId) {
+    setExprModeFor(focusedId);
+    setExprMode('inputs');
+  }
 
   // Same rank assignment the desktop "Auto Layout" button uses for spatial
   // x position — reused here as row index, so a node's row in this grid
@@ -339,6 +370,18 @@ export function MobileGraphBrowser() {
           )}
         </div>
 
+        {renderSocketOverlays(node)}
+      </div>
+    );
+  }
+
+  // ── Socket-wiring overlays shared by every node detail view (generic and
+  // Expr Block alike) — the "feed this input / consume this output" action
+  // sheet, the "Add New Node" search palette, and the tap-to-connect graph
+  // picker. Each is keyed off `pending`/`connectPicker.nodeId === node.id`.
+  function renderSocketOverlays(node: GraphNode) {
+    return (
+      <>
         {/* Add New / Connect Existing action sheet */}
         {pending && pending.nodeId === node.id && (
           <div
@@ -404,6 +447,203 @@ export function MobileGraphBrowser() {
             {renderConnectGraphPicker()}
           </div>
         )}
+      </>
+    );
+  }
+
+  // ── Expr Block detail view ───────────────────────────────────────────────
+  // Two modes instead of the generic input/output list: "Inputs" (add/remove
+  // inputs and wire them — no inline sliders, connections only) and "Output"
+  // (the GLSL line editor, reorderable, plus the result expression and the
+  // node's single `result` output socket). A freshly-added block opens on
+  // Inputs, matching how you'd build one up: declare what feeds in, then
+  // write the code that uses it.
+  function renderExprBlockDetail(node: GraphNode) {
+    const customInputs = (node.params.inputs as ExprInputDef[] | undefined) ?? [];
+    const lines = (node.params.lines as ExprLine[] | undefined) ?? [];
+    const result = (node.params.result as string | undefined) ?? 'p';
+    const outputType = (node.params.outputType as DataType | undefined) ?? 'vec3';
+    const outSocket = node.outputs.result;
+    const outType: DataType = outSocket?.type ?? outputType;
+    const consumers = downstreamConsumers(node.id, 'result');
+
+    const setInputs = (next: ExprInputDef[]) => {
+      updateNodeParams(node.id, { inputs: next });
+      updateNodeSockets(node.id, next, outputType);
+    };
+    const addInput = () => setInputs([...customInputs, { name: `in${customInputs.length}`, type: 'float', slider: null }]);
+    const removeInput = (idx: number) => setInputs(customInputs.filter((_, i) => i !== idx));
+    const renameInput = (idx: number, name: string) => setInputs(customInputs.map((c, i) => i === idx ? { ...c, name } : c));
+    const retypeInput = (idx: number, type: DataType) => setInputs(customInputs.map((c, i) => i === idx ? { ...c, type } : c));
+    const changeOutputType = (type: DataType) => {
+      updateNodeParams(node.id, { outputType: type });
+      updateNodeSockets(node.id, customInputs, type);
+    };
+
+    const addLine = () => updateNodeParams(node.id, { lines: [...lines, { lhs: 'p', op: '=', rhs: '' }] });
+    const removeLine = (idx: number) => updateNodeParams(node.id, { lines: lines.filter((_, i) => i !== idx) });
+    const updateLine = (idx: number, field: keyof ExprLine, value: string) =>
+      updateNodeParams(node.id, { lines: lines.map((l, i) => i === idx ? { ...l, [field]: value } : l) });
+    const moveLine = (idx: number, to: number) => updateNodeParams(node.id, { lines: moveItem(lines, idx, to) });
+    const updateResult = (value: string) => updateNodeParams(node.id, { result: value });
+
+    return (
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ fontWeight: 700, fontSize: '15px', color: '#cdd6f4', flex: 1 }}>{labelFor(node)}</div>
+          <button
+            onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
+            style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+          >
+            Remove
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+          {(['inputs', 'output'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setExprMode(mode)}
+              style={{
+                flex: 1, padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700,
+                background: exprMode === mode ? '#313244' : 'none',
+                border: exprMode === mode ? '1px solid #89b4fa' : '1px solid #45475a',
+                color: exprMode === mode ? '#89b4fa' : '#6c7086',
+                cursor: 'pointer', touchAction: 'manipulation',
+              }}
+            >
+              {mode === 'inputs' ? 'Inputs' : 'Output'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {exprMode === 'inputs' ? (
+            <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {customInputs.length === 0 && (
+                <div style={{ fontSize: '12px', color: '#585b70' }}>No inputs yet — add one below.</div>
+              )}
+              {customInputs.map((inp, idx) => {
+                const socket = node.inputs[inp.name];
+                const upstream = socket?.connection ? nodes.find(n => n.id === socket.connection!.nodeId) : undefined;
+                return (
+                  <div key={idx} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
+                      <input
+                        type="text"
+                        value={inp.name}
+                        onChange={e => renameInput(idx, e.target.value)}
+                        placeholder="name"
+                        style={{ ...exprTextInputStyle, flex: 1 }}
+                      />
+                      <select value={inp.type} onChange={e => retypeInput(idx, e.target.value as DataType)} style={exprSelectStyle}>
+                        {EXPR_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <button
+                        onClick={() => removeInput(idx)}
+                        title="Remove input"
+                        style={{ background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                      >🗑</button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '18px' }}>
+                      {upstream ? (
+                        <>
+                          <button style={chipStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+                          <button
+                            onClick={() => disconnectInput(node.id, inp.name)}
+                            style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                            title="Disconnect"
+                          >✕</button>
+                        </>
+                      ) : (
+                        <button style={addBtnStyle} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key: inp.name, type: inp.type })}>+</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              <button
+                onClick={addInput}
+                style={{ alignSelf: 'flex-start', background: '#a6e3a111', border: '1px solid #a6e3a133', color: '#a6e3a1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+              >
+                + Add Input
+              </button>
+            </div>
+          ) : (
+            <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>OUTPUT TYPE</div>
+                <select value={outputType} onChange={e => changeOutputType(e.target.value as DataType)} style={{ ...exprSelectStyle, width: '100%' }}>
+                  {EXPR_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>LINES</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {lines.map((line, i) => (
+                    <div key={i} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <button onClick={() => moveLine(i, i - 1)} disabled={i === 0} style={reorderBtnStyle(i === 0)} title="Move up">▲</button>
+                          <button onClick={() => moveLine(i, i + 1)} disabled={i === lines.length - 1} style={reorderBtnStyle(i === lines.length - 1)} title="Move down">▼</button>
+                        </div>
+                        <span style={{ fontSize: '10px', color: '#585b70', flex: 1 }}>Line {i + 1}</span>
+                        <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }} title="Remove line">✕</button>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <input type="text" value={line.lhs} onChange={e => updateLine(i, 'lhs', e.target.value)} placeholder="p.xy" style={{ ...exprTextInputStyle, width: '64px' }} />
+                        <select value={line.op} onChange={e => updateLine(i, 'op', e.target.value)} style={exprSelectStyle}>
+                          {EXPR_OPS.map(op => <option key={op} value={op}>{op}</option>)}
+                        </select>
+                        <input type="text" value={line.rhs} onChange={e => updateLine(i, 'rhs', e.target.value)} placeholder="expression…" style={{ ...exprTextInputStyle, flex: 1, color: '#a6e3a1' }} />
+                      </div>
+                    </div>
+                  ))}
+                  {lines.length === 0 && (
+                    <div style={{ fontSize: '11px', color: '#45475a', fontFamily: 'monospace' }}>No lines yet.</div>
+                  )}
+                  <button
+                    onClick={addLine}
+                    style={{ alignSelf: 'flex-start', background: '#a6e3a111', border: '1px solid #a6e3a133', color: '#a6e3a1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                  >
+                    + Add Line
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>RESULT</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', color: '#6c7086', fontFamily: 'monospace' }}>return</span>
+                  <input type="text" value={result} onChange={e => updateResult(e.target.value)} placeholder="p" style={{ ...exprTextInputStyle, flex: 1, color: '#89b4fa' }} />
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid #313244', paddingTop: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>OUTPUT</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <div style={dotStyle(TYPE_COLORS[outType] ?? '#888')} />
+                  <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', color: '#cdd6f4' }}>Result</div>
+                    <div style={{ fontSize: '10px', color: '#585b70' }}>{outType}</div>
+                  </div>
+                  <button style={addBtnStyle} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key: 'result', type: outType })}>+</button>
+                  {consumers.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', width: '100%', paddingLeft: '18px' }}>
+                      {consumers.map(c => (
+                        <button key={c.id} style={chipStyle} onClick={() => pushFocus(c.id)}>{labelFor(c)} ›</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {renderSocketOverlays(node)}
       </div>
     );
   }
@@ -568,7 +808,9 @@ export function MobileGraphBrowser() {
         )}
       </div>
 
-      {focusedNode ? renderNodeDetail(focusedNode) : (homeGraphView ? renderHomeGraph() : renderHome())}
+      {focusedNode
+        ? (focusedNode.type === 'exprNode' ? renderExprBlockDetail(focusedNode) : renderNodeDetail(focusedNode))
+        : (homeGraphView ? renderHomeGraph() : renderHome())}
     </div>
   );
 }
