@@ -13,6 +13,8 @@ import type { GraphNode } from '../types/nodeGraph';
 // __kfMode_<socketKey>         : 'once' | 'loop' | 'interpolate'      (default 'once', shared across axes)
 // __kfLoopBack_<socketKey>     : number seconds                      (default 1, 'interpolate' only, shared across axes)
 // __kfBypass_<socketKey>       : boolean                             (default false — data stays, compiler ignores it)
+// __kfOffset_<socketKey>       : number seconds                      (default 0 — global-time delay before this track starts)
+// __kfLoopCount_<socketKey>    : number | undefined                  (default undefined = loop forever; 'loop'/'interpolate' only)
 //
 // Vector (vec2/vec3) keyframing only applies to a socket whose InputSocket
 // declares `axisParams` — the float param names backing each axis's static
@@ -44,6 +46,12 @@ export interface KeyframeConfig {
   keyframes: Keyframe[];
   mode: KeyframeLoopMode;
   loopBack: number;
+  /** Global-time delay before this track starts playing — shifts the whole
+   *  track without moving any keyframe. */
+  offset: number;
+  /** For 'loop'/'interpolate': stop after this many cycles and hold the
+   *  final value, instead of looping forever. null = loop forever. */
+  loopCount: number | null;
 }
 
 export const EASING_PRESETS: Record<string, KeyframeEasing> = {
@@ -75,27 +83,32 @@ function parseKeyframeArray(raw: unknown): Keyframe[] {
     .sort((a, b) => a.t - b.t);
 }
 
-function readModeAndLoopBack(node: GraphNode, socketKey: string): { mode: KeyframeLoopMode; loopBack: number } {
+function readSharedSettings(node: GraphNode, socketKey: string): { mode: KeyframeLoopMode; loopBack: number; offset: number; loopCount: number | null } {
   const modeRaw = node.params[`__kfMode_${socketKey}`];
   const mode: KeyframeLoopMode = modeRaw === 'loop' || modeRaw === 'interpolate' ? modeRaw : 'once';
   const loopBackRaw = node.params[`__kfLoopBack_${socketKey}`];
   const loopBack = typeof loopBackRaw === 'number' && loopBackRaw > 0 ? loopBackRaw : 1.0;
-  return { mode, loopBack };
+  const offsetRaw = node.params[`__kfOffset_${socketKey}`];
+  const offset = typeof offsetRaw === 'number' ? offsetRaw : 0;
+  const loopCountRaw = node.params[`__kfLoopCount_${socketKey}`];
+  const loopCount = typeof loopCountRaw === 'number' && loopCountRaw > 0 ? loopCountRaw : null;
+  return { mode, loopBack, offset, loopCount };
 }
 
 export function getKeyframeConfig(node: GraphNode, socketKey: string): KeyframeConfig | null {
   const keyframes = parseKeyframeArray(node.params[`__keyframes_${socketKey}`]);
   if (keyframes.length === 0) return null;
-  return { keyframes, ...readModeAndLoopBack(node, socketKey) };
+  return { keyframes, ...readSharedSettings(node, socketKey) };
 }
 
 /** Same as getKeyframeConfig, but for one axis of a vec2/vec3 socket —
  *  keyframes are read per-axis (`__keyframes_<socketKey>_<axis>`) while
- *  mode/loopBack are read from the socket itself (shared across axes). */
+ *  mode/loopBack/offset/loopCount are read from the socket itself (shared
+ *  across axes). */
 export function getAxisKeyframeConfig(node: GraphNode, socketKey: string, axis: string): KeyframeConfig | null {
   const keyframes = parseKeyframeArray(node.params[`__keyframes_${socketKey}_${axis}`]);
   if (keyframes.length === 0) return null;
-  return { keyframes, ...readModeAndLoopBack(node, socketKey) };
+  return { keyframes, ...readSharedSettings(node, socketKey) };
 }
 
 export function socketHasVectorKeyframes(node: GraphNode, socketKey: string, axes: readonly string[]): boolean {
@@ -145,9 +158,12 @@ export function generateKeyframeGLSL(
   fnName: string,
   cfg: KeyframeConfig,
 ): { glslFunction: string; sharedFunction: string; expr: string } {
-  const { keyframes, mode, loopBack } = cfg;
-  const t0 = keyframes[0].t;
-  const duration = Math.max(keyframes[keyframes.length - 1].t - t0, 0.0001);
+  const { keyframes, mode, loopBack, offset, loopCount } = cfg;
+  // offset shifts the whole track in global time without moving any
+  // keyframe: t0 is "when local time 0 happens", so the track's first
+  // keyframe plays at global time (t0 + offset), not just t0.
+  const t0 = keyframes[0].t + offset;
+  const duration = Math.max(keyframes[keyframes.length - 1].t - keyframes[0].t, 0.0001);
 
   // Segments: consecutive keyframe pairs, plus (for 'interpolate') a synthetic
   // final segment easing from the last keyframe's value back to the first's,
@@ -157,7 +173,7 @@ export function generateKeyframeGLSL(
   const segs: Seg[] = [];
   for (let i = 0; i < keyframes.length - 1; i++) {
     const a = keyframes[i], b = keyframes[i + 1];
-    segs.push({ start: a.t - t0, end: b.t - t0, v0: a.v, v1: b.v, ease: a.ease });
+    segs.push({ start: a.t - keyframes[0].t, end: b.t - keyframes[0].t, v0: a.v, v1: b.v, ease: a.ease });
   }
   if (mode === 'interpolate') {
     const last = keyframes[keyframes.length - 1];
@@ -168,7 +184,9 @@ export function generateKeyframeGLSL(
   const localTimeExpr =
     mode === 'once'
       ? `clamp(t - ${fnum(t0)}, 0.0, ${fnum(duration)})`
-      : `mod(t - ${fnum(t0)}, ${fnum(loopSpan)})`;
+      : loopCount != null
+        ? `((t - ${fnum(t0)}) >= ${fnum(loopCount * loopSpan)} ? ${fnum(loopSpan)} : mod(t - ${fnum(t0)}, ${fnum(loopSpan)}))`
+        : `mod(t - ${fnum(t0)}, ${fnum(loopSpan)})`;
 
   const lines: string[] = [`float ${fnName}(float t) {`, `    float lt = ${localTimeExpr};`];
   if (segs.length === 0) {

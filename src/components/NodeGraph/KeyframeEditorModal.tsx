@@ -43,6 +43,14 @@ function readLoopBack(node: GraphNode, socketKey: string): number {
   const raw = node.params[`__kfLoopBack_${socketKey}`];
   return typeof raw === 'number' && raw > 0 ? raw : 1.0;
 }
+function readOffset(node: GraphNode, socketKey: string): number {
+  const raw = node.params[`__kfOffset_${socketKey}`];
+  return typeof raw === 'number' ? raw : 0;
+}
+function readLoopCount(node: GraphNode, socketKey: string): number | null {
+  const raw = node.params[`__kfLoopCount_${socketKey}`];
+  return typeof raw === 'number' && raw > 0 ? raw : null;
+}
 
 // Mirrors kfCubicBezier in src/compiler/keyframes.ts.
 function evalCubicBezier(a: number, b: number, c: number, d: number) {
@@ -157,7 +165,8 @@ type DragState =
   | { kind: 'pan'; startX: number; startY: number; startViewT0: number; startValueCenter: number; moved: boolean }
   | { kind: 'keyframe'; index: number; moved: boolean }
   | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' }
-  | { kind: 'draw'; moved: boolean };
+  | { kind: 'draw'; moved: boolean }
+  | { kind: 'scrub' };
 
 interface OtherAxisTrack { label: string; color: string; keyframes: Keyframe[] }
 
@@ -176,6 +185,7 @@ function draw(
   otherAxes: OtherAxisTrack[],
   hoverInfo: { t: number; v: number } | null,
   drawPreview: { t: number; v: number }[] | null,
+  playheadT: number | null,
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -337,6 +347,23 @@ function draw(
     }
   });
 
+  // Playhead — where global time (minus this track's offset) currently sits,
+  // kept live via the 'time-tick' broadcast from ShaderCanvas. Drawn on top
+  // of everything else so it's always visible.
+  if (playheadT !== null) {
+    const px = toX(playheadT);
+    if (px >= -2 && px <= W + 2) {
+      ctx.strokeStyle = '#f9e2af';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+      ctx.fillStyle = '#f9e2af';
+      ctx.beginPath();
+      ctx.moveTo(px - 5, 0); ctx.lineTo(px + 5, 0); ctx.lineTo(px, 8); ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   // Floating t/v readout above whichever point is live right now — the
   // hovered one, or the one currently being dragged (hoverInfo tracks
   // both cases; see handleMouseMove).
@@ -369,13 +396,35 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
 
+  const offset = readOffset(node, socketKey);
+  const loopCount = readLoopCount(node, socketKey);
+  const setOffset = useCallback((v: number) => updateNodeParams(node.id, { [`__kfOffset_${socketKey}`]: v }), [node.id, socketKey, updateNodeParams]);
+  const setLoopCount = useCallback((v: number | null) => updateNodeParams(node.id, { [`__kfLoopCount_${socketKey}`]: v }), [node.id, socketKey, updateNodeParams]);
+
   // Jump the render preview to a specific moment and pause there — so
   // selecting/dragging/placing a keyframe shows exactly what it produces,
-  // instead of the live time immediately drifting past it.
-  const seekToTime = useCallback((t: number) => {
+  // instead of the live time immediately drifting past it. `editorT` is in
+  // this editor's own time space (what you see on the canvas); offset shifts
+  // it into the global time the curve actually plays at.
+  const seekToTime = useCallback((editorT: number) => {
     setTimePlaying(false);
-    window.dispatchEvent(new CustomEvent('seek-time', { detail: { time: t } }));
-  }, [setTimePlaying]);
+    window.dispatchEvent(new CustomEvent('seek-time', { detail: { time: editorT + offset } }));
+  }, [setTimePlaying, offset]);
+
+  // Live global time, tracked purely for the playhead — a lightweight DOM
+  // event (see ShaderCanvas's 'time-tick' dispatch) rather than the store,
+  // so this doesn't add a re-render dependency for every other component.
+  const [currentGlobalTime, setCurrentGlobalTime] = useState<number | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const t = (e as CustomEvent<{ time: number }>).detail?.time;
+      if (typeof t === 'number') setCurrentGlobalTime(t);
+    };
+    window.addEventListener('time-tick', handler);
+    return () => window.removeEventListener('time-tick', handler);
+  }, []);
+  const playheadT = currentGlobalTime !== null ? currentGlobalTime - offset : null;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Position/dim over the node-graph canvas only, not the whole viewport, so
@@ -514,8 +563,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview);
-  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview]);
+    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview, playheadT);
+  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview, playheadT]);
 
   // `anchor` is in the deps because it drives canvasW/canvasH below: a canvas
   // element clears its drawn content the instant its width/height attributes
@@ -580,7 +629,67 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     setSelectedKf(null);
   }, [writeKeyframes]);
 
+  // ── Scrubber — a ruler strip above the canvas; dragging it seeks global
+  // time live, exactly like an After Effects/video-editor scrubber. ──
+  const handleScrubberMouseDown = useCallback((e: React.MouseEvent) => {
+    stopKfPlaybackRef.current();
+    const xy = getLocalXY(e);
+    if (!xy) return;
+    dragRef.current = { kind: 'scrub' };
+    seekToTime(Math.max(0, fromX(xy.px)));
+  }, [getLocalXY, fromX, seekToTime]);
+
+  // ── Scoped "Play" — pressing Play from inside the editor plays *this*
+  // track according to its own end behavior (Once/Loop/Interpolate),
+  // instead of the global clock running free. Implemented as a local rAF
+  // loop that repeatedly calls seekToTime — it never touches the global
+  // play/pause flag, so it can't fight the free-running clock. ──
+  const [kfPlaying, setKfPlaying] = useState(false);
+  const kfPlayRafRef = useRef<number | null>(null);
+  const stopKfPlayback = useCallback(() => {
+    if (kfPlayRafRef.current != null) cancelAnimationFrame(kfPlayRafRef.current);
+    kfPlayRafRef.current = null;
+    setKfPlaying(false);
+  }, []);
+  const stopKfPlaybackRef = useRef(stopKfPlayback);
+  stopKfPlaybackRef.current = stopKfPlayback;
+
+  const startKfPlayback = useCallback(() => {
+    const kfs = keyframesRef.current;
+    if (kfs.length === 0) return;
+    if (kfs.length === 1) { seekToTime(kfs[0].t); return; }
+    const localT0 = kfs[0].t;
+    const duration = Math.max(kfs[kfs.length - 1].t - localT0, 0.0001);
+    const loopSpan = mode === 'interpolate' ? duration + loopBack : duration;
+    const startWall = performance.now();
+    setKfPlaying(true);
+    const tick = (now: number) => {
+      const elapsed = (now - startWall) / 1000;
+      let lt: number, done: boolean;
+      if (mode === 'once') {
+        lt = Math.min(elapsed, duration);
+        done = elapsed >= duration;
+      } else if (loopCount != null) {
+        const total = loopCount * loopSpan;
+        done = elapsed >= total;
+        lt = done ? loopSpan : elapsed % loopSpan;
+      } else {
+        lt = elapsed % loopSpan;
+        done = false;
+      }
+      seekToTime(localT0 + lt);
+      if (done) { kfPlayRafRef.current = null; setKfPlaying(false); return; }
+      kfPlayRafRef.current = requestAnimationFrame(tick);
+    };
+    kfPlayRafRef.current = requestAnimationFrame(tick);
+  }, [mode, loopBack, loopCount, seekToTime]);
+
+  useEffect(() => () => stopKfPlaybackRef.current(), []);
+  // Stop scoped playback if the user switches axis/mode/tool while it's running.
+  useEffect(() => { stopKfPlayback(); }, [activeAxis, mode, toolMode, stopKfPlayback]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    stopKfPlaybackRef.current();
     const xy = getLocalXY(e);
     if (!xy) return;
     if (toolModeRef.current === 'draw') {
@@ -650,6 +759,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       drawPathRef.current = [...drawPathRef.current, { t, v }].sort((a, b) => a.t - b.t);
       setDrawPreview(drawPathRef.current);
       setHoverInfo({ t, v });
+    } else if (drag.kind === 'scrub') {
+      seekToTime(Math.max(0, fromX(xy.px)));
     }
   }, [getLocalXY, hitTestKeyframe, fromX, fromY, writeKeyframes, mode, loopBack, effectiveSnap, seekToTime]);
 
@@ -924,6 +1035,20 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           </div>
         </div>
 
+        {/* Scrubber — drag to seek global time live, After-Effects style */}
+        <div
+          onMouseDown={handleScrubberMouseDown}
+          title="Drag to scrub global time"
+          style={{
+            height: '16px', background: '#11111b', borderRadius: '6px 6px 0 0',
+            border: '1px solid #31324488', borderBottom: 'none', position: 'relative', cursor: 'ew-resize',
+          }}
+        >
+          {playheadT !== null && toX(playheadT) >= 0 && toX(playheadT) <= canvasW && (
+            <div style={{ position: 'absolute', left: `${toX(playheadT) - 5}px`, top: '2px', width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '8px solid #f9e2af' }} />
+          )}
+        </div>
+
         {/* Timeline canvas */}
         <canvas
           ref={canvasRef}
@@ -934,7 +1059,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           onContextMenu={handleContextMenu}
           onWheel={handleWheel}
           onMouseLeave={() => { setHoverKf(null); setHoverInfo(null); }}
-          style={{ display: 'block', width: '100%', height: `${canvasH}px`, borderRadius: '6px', border: '1px solid #31324488', cursor: cursorForMode, opacity: bypassed ? 0.5 : 1 }}
+          style={{ display: 'block', width: '100%', height: `${canvasH}px`, borderRadius: '0 0 6px 6px', border: '1px solid #31324488', borderTop: 'none', cursor: cursorForMode, opacity: bypassed ? 0.5 : 1 }}
         />
         <div style={{ fontSize: '10px', color: '#45475a' }}>
           {toolMode === 'add' && 'click empty space: add keyframe · drag point: move'}
@@ -963,7 +1088,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
         </div>
 
         {/* Loop mode */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ color: '#6c7086', fontSize: '11px' }}>End behavior</span>
           <select value={mode} style={{ ...inputStyle, width: 'auto' }} onChange={e => setMode(e.target.value as KeyframeLoopMode)}>
             <option value="once">Play Once</option>
@@ -977,6 +1102,34 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
                 onChange={e => setLoopBack(parseFloat(e.target.value) || 1)} />
             </>
           )}
+          {(mode === 'loop' || mode === 'interpolate') && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={loopCount === null} onChange={e => setLoopCount(e.target.checked ? null : 3)} />
+              <span style={{ color: '#6c7086', fontSize: '10px' }}>Loop forever</span>
+            </label>
+          )}
+          {(mode === 'loop' || mode === 'interpolate') && loopCount !== null && (
+            <>
+              <span style={{ color: '#6c7086', fontSize: '11px' }}>× times</span>
+              <input type="number" step={1} min={1} value={loopCount} style={inputStyle}
+                onChange={e => setLoopCount(Math.max(1, Math.round(parseFloat(e.target.value) || 1)))} />
+            </>
+          )}
+          <span style={{ color: '#6c7086', fontSize: '11px' }}>Offset (s)</span>
+          <input type="number" step={0.1} value={offset} style={inputStyle}
+            title="Delay before this track starts playing, in global time — shifts the whole track without moving any keyframe"
+            onChange={e => setOffset(parseFloat(e.target.value) || 0)} />
+          <button
+            onClick={() => (kfPlaying ? stopKfPlayback() : startKfPlayback())}
+            disabled={keyframes.length === 0}
+            title={kfPlaying ? 'Stop' : "Play this track's curve, respecting its End behavior"}
+            style={{
+              background: kfPlaying ? '#f38ba822' : 'none',
+              border: `1px solid ${keyframes.length === 0 ? '#45475a' : kfPlaying ? '#f38ba8' : '#a6e3a155'}`,
+              color: keyframes.length === 0 ? '#45475a' : kfPlaying ? '#f38ba8' : '#a6e3a1',
+              cursor: keyframes.length === 0 ? 'default' : 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px', marginLeft: 'auto',
+            }}
+          >{kfPlaying ? '⏸ Stop' : '▶ Play'}</button>
         </div>
       </div>
     </div>,

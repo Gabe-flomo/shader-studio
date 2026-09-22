@@ -594,10 +594,15 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       // Throttled updates every N frames
       frameCount++;
       if (frameCount % SAMPLE_EVERY === 0) {
-        // Only broadcast time when the graph actually has a Time node
+        // Only broadcast time to the store (triggers a re-render in every
+        // NodeComponent) when the graph actually has a Time node. The
+        // keyframe editor's scrubber/playhead needs current time regardless
+        // of that, so it also gets a cheap DOM CustomEvent — no store
+        // update, so no wasted re-renders on graphs that don't listen.
         if (hasTimeNodeRef.current) {
           setCurrentTime(material.uniforms.u_time.value);
         }
+        window.dispatchEvent(new CustomEvent('time-tick', { detail: { time: material.uniforms.u_time.value } }));
         const mp = mousePosRef.current;
         if (mp === null) {
           // Mouse not over canvas — hide the overlay
