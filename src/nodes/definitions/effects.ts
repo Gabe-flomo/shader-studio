@@ -1445,13 +1445,21 @@ float gaussBlurWeight(float x, float y, float sigma) {
         const w = `gaussBlurWeight(${f(gx)}, ${f(gy)}, ${sigma})`;
         lines.push(
           `    { float ${id}_w = ${w}; ` +
-          `vec3 ${id}_tap = texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(gx)}, ${f(gy)}) * ${id}_px * ${radius}, 0.0, 1.0)).rgb; ` +
+          // Clamp each tap before thresholding — u_prevFrame is a half-float
+          // target, and Bloom reads its OWN previous output back every frame,
+          // so an unbounded upstream HDR value (e.g. a raw Glow Layer, which
+          // is deliberately unclamped) would otherwise compound frame over
+          // frame into a runaway feedback loop that saturates to solid white.
+          `vec3 ${id}_tap = min(texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(gx)}, ${f(gy)}) * ${id}_px * ${radius}, 0.0, 1.0)).rgb, vec3(4.0)); ` +
           `${id}_acc += max(${id}_tap - vec3(${threshold}), 0.0) * ${id}_w; ${id}_wsum += ${id}_w; }\n`,
         );
       }
     }
-    lines.push(`    vec3 ${id}_glow   = ${id}_acc / max(${id}_wsum, 0.0001);\n`);
-    lines.push(`    vec3 ${id}_result = ${col} + ${id}_glow * ${intensity};\n`);
+    lines.push(`    vec3 ${id}_glow = ${id}_acc / max(${id}_wsum, 0.0001);\n`);
+    lines.push(`    vec3 ${id}_hdr    = ${col} + ${id}_glow * ${intensity};\n`);
+    // Reinhard tonemap — without this the feedback loop above has no ceiling
+    // and visibly converges to flat white within a few frames.
+    lines.push(`    vec3 ${id}_result = ${id}_hdr / (${id}_hdr + vec3(1.0));\n`);
 
     return { code: lines.join(''), outputVars: { result: `${id}_result` } };
   },
