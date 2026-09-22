@@ -210,6 +210,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
+  const timePlaying        = useNodeGraphStore((state) => state.timePlaying);
+  // Ref mirror so the rAF loop sees the latest play/pause state without re-boot
+  const timePlayingRef = useRef(true);
+  useEffect(() => { timePlayingRef.current = timePlaying; }, [timePlaying]);
   const setNodeProbeValues = useNodeGraphStore((state) => state.setNodeProbeValues);
   // (scope probe values are written directly to canvas via scopeRegistry — no React state)
   // Only broadcast currentTime when a Time node is in the graph — avoids 10fps
@@ -479,7 +483,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       }
     };
 
-    const clock = new THREE.Clock();
+    // Manual virtual-time accumulator (replaces THREE.Clock) so playback can be
+    // paused without resetting to 0 — THREE.Clock.start() always zeroes
+    // elapsedTime, so there's no clean way to "resume" with it.
+    let virtualTime = 0;
+    let lastRafTime: number | null = null;
     let frameCount = 0;
     const SAMPLE_EVERY = 6; // sample every 6 frames (~10fps if running at 60fps)
     // FPS tracking for histogram overlay
@@ -492,8 +500,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     function animate(now: number = 0) {
       animFrameRef.current = requestAnimationFrame(animate);
 
-      // Skip entirely when the browser tab is not visible
-      if (document.hidden) return;
+      // Skip entirely when the browser tab is not visible. Still track
+      // lastRafTime so the next visible frame doesn't see a huge dt jump.
+      if (document.hidden) { lastRafTime = now; return; }
 
       // FPS counter — updated every second
       fpsFrameCount++;
@@ -505,7 +514,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         fpsLastTime = now;
       }
 
-      const elapsed = clock.getElapsedTime();
+      if (lastRafTime === null) lastRafTime = now;
+      const dt = Math.max(0, (now - lastRafTime) / 1000);
+      lastRafTime = now;
+      if (timePlayingRef.current) virtualTime += dt;
+      const elapsed = virtualTime;
       material.uniforms.u_time.value = elapsed;
 
       // ── GPU particle tick: just keep u_time in sync ────────────────────────
@@ -581,10 +594,15 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       // Throttled updates every N frames
       frameCount++;
       if (frameCount % SAMPLE_EVERY === 0) {
-        // Only broadcast time when the graph actually has a Time node
+        // Only broadcast time to the store (triggers a re-render in every
+        // NodeComponent) when the graph actually has a Time node. The
+        // keyframe editor's scrubber/playhead needs current time regardless
+        // of that, so it also gets a cheap DOM CustomEvent — no store
+        // update, so no wasted re-renders on graphs that don't listen.
         if (hasTimeNodeRef.current) {
           setCurrentTime(material.uniforms.u_time.value);
         }
+        window.dispatchEvent(new CustomEvent('time-tick', { detail: { time: material.uniforms.u_time.value } }));
         const mp = mousePosRef.current;
         if (mp === null) {
           // Mouse not over canvas — hide the overlay
@@ -995,10 +1013,34 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
 
     // Reset time to 0 when 'reset-time' is fired (e.g. from Time node button)
     const handleResetTime = () => {
-      clock.start();
+      virtualTime = 0;
+      lastRafTime = null;
       material.uniforms.u_time.value = 0;
     };
     window.addEventListener('reset-time', handleResetTime);
+
+    // Seek to an arbitrary time when 'seek-time' is fired (e.g. from the
+    // keyframe editor jumping the preview to the selected keyframe's moment).
+    const handleSeekTime = (e: Event) => {
+      const t = (e as CustomEvent<{ time: number }>).detail?.time;
+      if (typeof t !== 'number') return;
+      virtualTime = t;
+      lastRafTime = null;
+      material.uniforms.u_time.value = t;
+    };
+    window.addEventListener('seek-time', handleSeekTime);
+
+    // Nudge time by a relative amount when 'step-time' is fired (the global
+    // Left/Right-arrow hotkeys) — clamped at 0 so "step backward" can't go
+    // negative.
+    const handleStepTime = (e: Event) => {
+      const delta = (e as CustomEvent<{ delta: number }>).detail?.delta;
+      if (typeof delta !== 'number') return;
+      virtualTime = Math.max(0, virtualTime + delta);
+      lastRafTime = null;
+      material.uniforms.u_time.value = virtualTime;
+    };
+    window.addEventListener('step-time', handleStepTime);
 
     return () => {
       cancelAnimationFrame(animFrameRef.current);
@@ -1006,6 +1048,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('reset-time', handleResetTime);
+      window.removeEventListener('seek-time', handleSeekTime);
+      window.removeEventListener('step-time', handleStepTime);
       rt.dispose();
       floatRt.dispose();
       histRt.dispose();

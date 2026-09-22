@@ -295,9 +295,9 @@ export const UvTransform2dNode: NodeDefinition = {
   description: 'Full 2D affine transform: translate + rotate + scale composed as a single mat2 multiply. More efficient than chaining three separate nodes. Rotation and scale apply relative to pivot.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
-    translate: { type: 'vec2',  label: 'Translate' },
+    translate: { type: 'vec2',  label: 'Translate', axisParams: ['tx', 'ty'] },
     angle:     { type: 'float', label: 'Angle'     },
-    scale:     { type: 'vec2',  label: 'Scale'     },
+    scale:     { type: 'vec2',  label: 'Scale',     axisParams: ['sx', 'sy'] },
   },
   outputs: { result: { type: 'vec2', label: 'Result' } },
   defaultParams: { tx: 0.0, ty: 0.0, angle: 0.0, sx: 1.0, sy: 1.0, pivotX: 0.0, pivotY: 0.0 },

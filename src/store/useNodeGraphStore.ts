@@ -5,6 +5,7 @@ import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPres
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
+import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
@@ -130,6 +131,7 @@ const customFnPresetManager  = new PresetManager<CustomFnPreset>({ localStorageP
 const exprPresetManager      = new PresetManager<ExprPreset>({ localStoragePrefix: 'shader-studio:ep:', eventName: 'exprpreset-changed', diskDir: getExprDir });
 const transformPresetManager = new PresetManager<TransformPreset>({ localStoragePrefix: 'shader-studio:tp:', eventName: 'transformpreset-changed' });
 const groupPresetManager     = new PresetManager<GroupPreset>({ localStoragePrefix: 'shader-studio:gp:', diskDir: getGroupPresetDir });
+const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStoragePrefix: 'shader-studio:kfp:', eventName: 'keyframepreset-changed' });
 
 /**
  * Directly save a CustomFnPreset from caller-supplied data.
@@ -177,6 +179,29 @@ export function deleteExprPreset(id: string): void {
 
 export function renameExprPreset(id: string, newLabel: string): void {
   exprPresetManager.rename(id, newLabel);
+}
+
+// ── Keyframe preset helpers ─────────────────────────────────────────────────
+
+export function saveKeyframePreset(data: Omit<KeyframePreset, 'id' | 'savedAt'>): void {
+  const preset: KeyframePreset = {
+    id: `kfp_${Date.now()}`,
+    ...data,
+    savedAt: Date.now(),
+  };
+  keyframePresetManager.save(preset);
+}
+
+export function loadKeyframePresets(): KeyframePreset[] {
+  return keyframePresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
+}
+
+export function deleteKeyframePreset(id: string): void {
+  keyframePresetManager.delete(id);
+}
+
+export function renameKeyframePreset(id: string, newLabel: string): void {
+  keyframePresetManager.rename(id, newLabel);
 }
 
 // ── Transform Vec preset helpers ──────────────────────────────────────────────
@@ -241,6 +266,7 @@ interface NodeGraphState {
   pixelSample: [number, number, number, number] | null;  // mouse pixel RGBA 0-255
   hoveredParamHint: string | null;  // param hint shown in status bar on hover
   currentTime: number;            // current u_time uniform value (seconds)
+  timePlaying: boolean;           // global play/pause for u_time animation
 
   // Node probe — click a node to see its live output values in the status bar
   selectedNodeId: string | null;
@@ -425,6 +451,7 @@ interface NodeGraphState {
   setPixelSample: (sample: [number, number, number, number] | null) => void;
   setHoveredParamHint: (hint: string | null) => void;
   setCurrentTime: (t: number) => void;
+  setTimePlaying: (playing: boolean) => void;
   toggleBypass: (nodeId: string) => void;
 
   // Save / Load
@@ -842,6 +869,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   pixelSample: null,
   hoveredParamHint: null,
   currentTime: 0,
+  timePlaying: true,
   selectedNodeId: null,
   selectedNodeIds: [],
   nodeOutputVarMap: new Map(),
@@ -3631,6 +3659,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setPixelSample: (sample) => set({ pixelSample: sample }),
   setHoveredParamHint: (hint) => set({ hoveredParamHint: hint }),
   setCurrentTime: (t) => set({ currentTime: t }),
+  setTimePlaying: (playing) => set({ timePlaying: playing }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
   setNodeProbeValues: (values) => set({ nodeProbeValues: values }),
   setScopeProbeValues: (vals) => set({ scopeProbeValues: vals }),

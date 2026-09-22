@@ -4,6 +4,10 @@ import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
+import {
+  getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
+  getAxisKeyframeConfig, generateVectorKeyframeGLSL, socketHasVectorKeyframes, VECTOR_AXES,
+} from './keyframes';
 
 // ── Built-in SDF helper constants ─────────────────────────────────────────────
 // These are always added to the functions Set so they are available to any node
@@ -120,10 +124,20 @@ export function resolveInputVars(
   nodeOutputs: Map<string, Record<string, string>>,
   /** Full node map (used for type look-ups across the graph) */
   nodeMap: Map<string, GraphNode>,
+  /** Called with any extra GLSL function bodies a resolved input needs
+   *  registered (currently: keyframe curve evaluators). Optional so existing
+   *  callers (resolveInputFallback's non-keyframe-aware callers) don't break. */
+  registerFn?: (glsl: string) => void,
 ): Record<string, string> {
   const inputVars: Record<string, string> = {};
 
   for (const [inputKey, input] of Object.entries(node.inputs)) {
+    const kfCfg = input.type === 'float' && !input.connection && !isKeyframeBypassed(node, inputKey) ? getKeyframeConfig(node, inputKey) : null;
+    const isVectorKfType = input.type === 'vec2' || input.type === 'vec3';
+    const vectorAxes = isVectorKfType ? VECTOR_AXES[input.type as 'vec2' | 'vec3'] : null;
+    const vectorKfEligible =
+      isVectorKfType && !input.connection && !!input.axisParams && !isKeyframeBypassed(node, inputKey) &&
+      vectorAxes !== null && socketHasVectorKeyframes(node, inputKey, vectorAxes);
     if (input.connection) {
       const sourceNode = nodeMap.get(input.connection.nodeId);
       const sourceDef = sourceNode ? getNodeDefinition(sourceNode.type) : undefined;
@@ -149,6 +163,20 @@ export function resolveInputVars(
           inputVars[inputKey] = rawVar;
         }
       }
+    } else if (kfCfg && registerFn) {
+      const fnName = `kf_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}_${inputKey}`;
+      const { glslFunction, sharedFunction, expr } = generateKeyframeGLSL(fnName, kfCfg);
+      registerFn(sharedFunction);
+      registerFn(glslFunction);
+      inputVars[inputKey] = expr;
+    } else if (vectorKfEligible && registerFn && vectorAxes) {
+      const fnPrefix = `kf_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}_${inputKey}`;
+      const axisConfigs = vectorAxes.map(axis => getAxisKeyframeConfig(node, inputKey, axis));
+      const staticFallbacks = (input.axisParams as string[]).map(p => (typeof node.params[p] === 'number' ? node.params[p] as number : 0));
+      const { glslFunctions, sharedFunction, expr } = generateVectorKeyframeGLSL(fnPrefix, axisConfigs, staticFallbacks, input.type as 'vec2' | 'vec3');
+      if (sharedFunction) registerFn(sharedFunction);
+      glslFunctions.forEach(fn => registerFn(fn));
+      inputVars[inputKey] = expr;
     } else if ((node.type === 'customFn' || node.type === 'exprNode') && typeof node.params[inputKey] === 'number') {
       const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
       const cfInp = cfInputs.find(c => c.name === inputKey);
@@ -267,7 +295,7 @@ export class ShaderAssembler {
           if (h) this.functions.add(h);
         }
 
-        const inputVars = resolveInputVars(node, this.nodeOutputs, this.nodeMap);
+        const inputVars = resolveInputVars(node, this.nodeOutputs, this.nodeMap, fn => this.functions.add(fn));
 
         // Compute slug once per node for all GLSL variable naming (NOT for this.nodeOutputs keys)
         const nodeSlug = computeNodeSlug(node, this.usedSlugs);

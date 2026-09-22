@@ -8,6 +8,7 @@ import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ShortcutsPage } from './components/ShortcutsPage';
 import { GLSLPage } from './components/GLSLPage';
+import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { FunctionBuilder } from './components/FunctionBuilder';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/TopNav';
@@ -16,6 +17,7 @@ import { useNodeGraphStore } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
+import { useTimeHotkeys } from './hooks/useTimeHotkeys';
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -338,6 +340,7 @@ function App() {
   }), [HOLD_FILTER_IDS, setNodeHighlightFilter]);
 
   useShortcuts(shortcutHandlers, holdHandlers);
+  useTimeHotkeys();
 
   const handleSave = () => {
     const name = saveNameInput.trim();
@@ -803,6 +806,12 @@ function App() {
 
             <NodeGraph />
             {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
+            {/* Time controls: floating dock on the node-graph side of the
+                divider, vertically centered — never overlapping the render
+                canvas on the other side of it. */}
+            <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
+              <TimeControlsStrip direction="column" />
+            </div>
           </div>
 
           {/* Divider — wider touch target for tablet */}
@@ -923,6 +932,14 @@ function App() {
 
               <NodeGraph />
               {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
+              {/* Time controls: floating dock on the node-graph side of the
+                  divider, vertically centered — never overlapping the
+                  render canvas on the other side of it. */}
+              {!previewFloated && (
+                <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
+                  <TimeControlsStrip direction="column" />
+                </div>
+              )}
             </>
           )}
           {page === 'glsl' && <GLSLPage />}
@@ -1029,6 +1046,7 @@ function App() {
             }}
           >
             <span style={{ fontSize: '10px', color: '#585b70', letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
+            <span onMouseDown={e => e.stopPropagation()}><TimeControlsStrip /></span>
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setShowHistogram(v => !v)}
