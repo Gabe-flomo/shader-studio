@@ -1,6 +1,19 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { f, p } from './helpers';
 
+// Deterministic per-node offset for "off the plate" sentinel values. Using a
+// shared constant (e.g. plain 4.0) for every masked node is dangerous: if two
+// masked outputs are later combined (Subtract, Weighted Average — the exact
+// manual-composition path this file encourages), identical sentinels cancel
+// to exactly 0 outside the plate, which Field to Lines reads as "on the
+// line" — a spurious line traced around the whole boundary. Hashing the
+// node's id into the sentinel keeps every instance's off-plate value unique.
+function plateMaskSentinel(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return f(4.0 + (h % 1000) / 100);
+}
+
 // ─── Chladni Node ─────────────────────────────────────────────────────────────
 //
 // Renders Chladni plate nodal lines as a smooth density field.
@@ -204,20 +217,21 @@ export const WaveTermNode: NodeDefinition = {
   category: 'Science',
   description: 'A single 2D standing-wave interference term: cos(n·π·x)·cos(m·π·y). The building block behind Chladni patterns — combine several (Subtract for the classic 2-term mix, Weighted Average for multi-term superposition) then feed the result into Field to Lines. Also useful on its own for moiré and plasma-style textures.',
   inputs: {
-    uv: { type: 'vec2',  label: 'UV' },
-    n:  { type: 'float', label: 'n'  },
-    m:  { type: 'float', label: 'm'  },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    n:     { type: 'float', label: 'n'     },
+    m:     { type: 'float', label: 'm'     },
+    scale: { type: 'float', label: 'Scale' },
   },
   outputs: {
     value: { type: 'float', label: 'Value' },
     uv:    { type: 'vec2',  label: 'UV (scaled)' },
   },
   glslFunction: WAVE_TERM_GLSL,
-  defaultParams: { n: 3.0, m: 4.0, scale: 1.0, aspect: 'square' },
+  defaultParams: { n: 3.0, m: 4.0, scale: 1.0, aspect: 'square', bounded: 'plate' },
   paramDefs: {
     n:     { label: 'n',     type: 'float', min: -2,  max: 2,   step: 0.01 },
     m:     { label: 'm',     type: 'float', min: -2,  max: 2,   step: 0.01 },
-    scale: { label: 'Scale', type: 'float', min: 0.1, max: 4.0, step: 0.01 },
+    scale: { label: 'Scale', type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the term\'s physical size (bigger scale = smaller patch on screen). n/m only change the pattern inside that fixed edge, not the edge itself.' },
     aspect: {
       label: 'Aspect', type: 'select',
       hint: 'Square: n and m always mean the same number of repetitions per axis, so changing them reads as a uniform zoom. Fill: uses the raw viewport-stretched UV.',
@@ -226,14 +240,23 @@ export const WaveTermNode: NodeDefinition = {
         { value: 'fill',   label: 'Fill viewport (stretches)' },
       ],
     },
+    bounded: {
+      label: 'Bounded', type: 'select',
+      hint: 'Plate: masks everything outside a fixed-size edge (set by Scale), so changing n/m only reorganizes the pattern inside that fixed boundary instead of reading as a zoom. Infinite: no edge, tiles forever (the old behavior).',
+      options: [
+        { value: 'plate',    label: 'Plate (fixed edge)' },
+        { value: 'infinite', label: 'Infinite (tiles forever)' },
+      ],
+    },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id    = node.id;
-    const uvVar = inputVars.uv ?? 'vec2(0.0)';
-    const nVal  = inputVars.n  ?? p(node.params.n, 3.0);
-    const mVal  = inputVars.m  ?? p(node.params.m, 4.0);
-    const scale = p(node.params.scale, 1.0);
+    const id      = node.id;
+    const uvVar   = inputVars.uv    ?? 'vec2(0.0)';
+    const nVal    = inputVars.n     ?? p(node.params.n, 3.0);
+    const mVal    = inputVars.m     ?? p(node.params.m, 4.0);
+    const scale   = inputVars.scale ?? p(node.params.scale, 1.0);
     const aspectMode = typeof node.params.aspect === 'string' ? node.params.aspect : 'square';
+    const bounded = typeof node.params.bounded === 'string' ? node.params.bounded : 'plate';
 
     // Same fix as Chladni Field: undo the global aspect-correct x-stretch so
     // n/m always mean "repeats per axis" regardless of viewport shape.
@@ -246,10 +269,16 @@ export const WaveTermNode: NodeDefinition = {
       `    float ${id}_n     = ${nVal};\n`,
       `    float ${id}_m     = ${mVal};\n`,
       `    float ${id}_value = waveTerm(${id}_p, ${id}_n, ${id}_m);\n`,
-    ].join('');
+    ];
+    if (bounded === 'plate') {
+      // Same fixed-edge idea as Chladni Field: |p|>1 is off the plate, masked
+      // out — so n/m only reorganize the pattern inside a boundary that stays
+      // put, instead of reading as the camera zooming.
+      code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_value = ${plateMaskSentinel(id)}; }\n`);
+    }
 
     return {
-      code,
+      code: code.join(''),
       outputVars: { value: `${id}_value`, uv: `${id}_p` },
     };
   },
@@ -273,10 +302,11 @@ export const ChladniFieldNode: NodeDefinition = {
   category: 'Science',
   description: 'One-node Chladni pattern generator: n, m, and a Mix knob for the classic two-mode blend, plus a Square/Circular geometry switch. n/m/mix are wirable — animate them with a Sine LFO, or wire through a Quantize node for discrete stepped jumps. Outputs a raw scalar field — pipe into Field to Lines to draw it. The fast path for a good-looking pattern in one node; use Chladni Superposition when you want more than two modes stacked.',
   inputs: {
-    uv:  { type: 'vec2',  label: 'UV'  },
-    n:   { type: 'float', label: 'n'   },
-    m:   { type: 'float', label: 'm'   },
-    mix: { type: 'float', label: 'Mix' },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    n:     { type: 'float', label: 'n'     },
+    m:     { type: 'float', label: 'm'     },
+    mix:   { type: 'float', label: 'Mix'   },
+    scale: { type: 'float', label: 'Scale' },
   },
   outputs: {
     field: { type: 'float', label: 'Field' },
@@ -319,7 +349,7 @@ export const ChladniFieldNode: NodeDefinition = {
     const nVal     = inputVars.n    ?? p(node.params.n, 6.0);
     const mVal     = inputVars.m    ?? p(node.params.m, 4.0);
     const mixVal   = inputVars.mix  ?? p(node.params.mix, 1.0);
-    const scale    = p(node.params.scale, 1.0);
+    const scale    = inputVars.scale ?? p(node.params.scale, 1.0);
     const geometry = typeof node.params.geometry === 'string' ? node.params.geometry : 'square';
     const aspectMode = typeof node.params.aspect === 'string' ? node.params.aspect : 'square';
     const bounded  = typeof node.params.bounded === 'string' ? node.params.bounded : 'plate';
@@ -347,7 +377,7 @@ export const ChladniFieldNode: NodeDefinition = {
         // Because the edge sits at a constant r=1 regardless of n/m, raising
         // n/m visibly reorganizes the pattern *inside* it instead of reading
         // as the camera zooming.
-        code.push(`    if (${id}_r > 1.0) { ${id}_field = 4.0; }\n`);
+        code.push(`    if (${id}_r > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
       }
     } else {
       code.push(
@@ -355,7 +385,7 @@ export const ChladniFieldNode: NodeDefinition = {
       );
       if (bounded === 'plate') {
         // Same idea, square edge: |p.x|>1 or |p.y|>1 is off the plate.
-        code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = 4.0; }\n`);
+        code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
       }
     }
 
@@ -392,9 +422,10 @@ export const ChladniSuperpositionNode: NodeDefinition = {
   category: 'Science',
   description: 'Self-contained multi-term Chladni field. Starts as a single mode (n1,m1) — wirable, so you can animate or Quantize-snap it; raise Terms to progressively add more (n,m,weight) modes stacked on top — the "Add Term" workflow without wiring separate Wave Term nodes by hand. Outputs a raw field; pipe into Field to Lines to draw it.',
   inputs: {
-    uv: { type: 'vec2',  label: 'UV' },
-    n1: { type: 'float', label: 'n1' },
-    m1: { type: 'float', label: 'm1' },
+    uv:    { type: 'vec2',  label: 'UV'    },
+    n1:    { type: 'float', label: 'n1'    },
+    m1:    { type: 'float', label: 'm1'    },
+    scale: { type: 'float', label: 'Scale' },
   },
   outputs: {
     field: { type: 'float', label: 'Field' },
@@ -467,7 +498,7 @@ export const ChladniSuperpositionNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
     const uvVar    = inputVars.uv ?? 'vec2(0.0)';
-    const scale    = p(node.params.scale, 1.0);
+    const scale    = inputVars.scale ?? p(node.params.scale, 1.0);
     const geometry = typeof node.params.geometry === 'string' ? node.params.geometry : 'square';
     const aspectMode = typeof node.params.aspect === 'string' ? node.params.aspect : 'square';
     const bounded  = typeof node.params.bounded === 'string' ? node.params.bounded : 'plate';
@@ -502,7 +533,7 @@ export const ChladniSuperpositionNode: NodeDefinition = {
       }
       code.push(`    float ${id}_field = ${sumExpr};\n`);
       if (bounded === 'plate') {
-        code.push(`    if (${id}_r > 1.0) { ${id}_field = 4.0; }\n`);
+        code.push(`    if (${id}_r > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
       }
     } else {
       sumExpr = `waveTerm(${id}_p, ${n1}, ${m1})`;
@@ -515,7 +546,7 @@ export const ChladniSuperpositionNode: NodeDefinition = {
       }
       code.push(`    float ${id}_field = ${sumExpr};\n`);
       if (bounded === 'plate') {
-        code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = 4.0; }\n`);
+        code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
       }
     }
 
