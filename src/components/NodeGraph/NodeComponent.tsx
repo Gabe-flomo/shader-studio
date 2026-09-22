@@ -39,6 +39,9 @@ import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
+import { AssetContextMenu } from './AssetContextMenu';
+import { KeyframeEditorModal } from './KeyframeEditorModal';
+import { socketHasKeyframes } from '../../compiler/keyframes';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -483,6 +486,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
+  const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
+  const [kfModalKey, setKfModalKey] = useState<string | null>(null);
   const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -3376,6 +3381,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const socketMarginRight = isTouchDevice ? '8px' : '8px';
 
           const isHovered = hoveredInput === key;
+          // Keyframes are a third input mode (alongside "wired" and "static
+          // value") — only meaningful for a float socket that isn't wired.
+          const kfEligible = !isConnected && !isExternal && input.type === 'float';
+          const isKeyframed = kfEligible && socketHasKeyframes(node, key);
 
           return (
             <div
@@ -3386,12 +3395,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               <div
                 data-socket="in"
                 ref={el => registerSocket(node.id, 'in', key, el)}
+                title={isKeyframed ? 'Keyframed — right-click to edit' : undefined}
                 style={{
                   width: socketSize,
                   height: socketSize,
-                  borderRadius: '50%',
-                  background: isConnected ? (TYPE_COLORS[input.type] || '#888') : '#333',
-                  border: `2px solid ${TYPE_COLORS[input.type] || '#888'}`,
+                  borderRadius: isKeyframed ? '3px' : '50%',
+                  transform: isKeyframed ? 'rotate(45deg)' : undefined,
+                  background: isKeyframed ? '#f9e2af' : isConnected ? (TYPE_COLORS[input.type] || '#888') : '#333',
+                  border: `2px solid ${isKeyframed ? '#f9e2af' : (TYPE_COLORS[input.type] || '#888')}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
                   marginLeft: socketMarginLeft,
@@ -3403,6 +3414,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }}
                 onMouseEnter={() => { setHoveredInput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'in' }); }}
                 onMouseLeave={() => { setHoveredInput(null); onSocketHover?.(null); }}
+                onContextMenu={(e) => {
+                  if (!kfEligible) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setKfMenu({ x: e.clientX, y: e.clientY, key });
+                }}
                 onMouseDown={(e) => {
                   if (e.altKey && !isConnected) {
                     e.stopPropagation();
@@ -4366,6 +4383,35 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {/* ── Bezier editor modal ── */}
       {showBezierModal && (node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
         <BezierEditorModal node={node} onClose={() => setShowBezierModal(false)} />
+      )}
+
+      {/* ── Keyframe context menu + editor ── */}
+      {kfMenu && (
+        <AssetContextMenu
+          x={kfMenu.x}
+          y={kfMenu.y}
+          onDismiss={() => setKfMenu(null)}
+          items={[
+            {
+              label: socketHasKeyframes(node, kfMenu.key) ? 'Edit Keyframes…' : 'Add Keyframes…',
+              action: () => setKfModalKey(kfMenu.key),
+            },
+            ...(socketHasKeyframes(node, kfMenu.key)
+              ? [{
+                  label: 'Remove Keyframes',
+                  destructive: true,
+                  action: () => updateNodeParams(node.id, {
+                    [`__keyframes_${kfMenu.key}`]: undefined,
+                    [`__kfMode_${kfMenu.key}`]: undefined,
+                    [`__kfLoopBack_${kfMenu.key}`]: undefined,
+                  }),
+                }]
+              : []),
+          ]}
+        />
+      )}
+      {kfModalKey && (
+        <KeyframeEditorModal node={node} socketKey={kfModalKey} onClose={() => setKfModalKey(null)} />
       )}
 
       {/* ── TransformVec modal ── */}
