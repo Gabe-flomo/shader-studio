@@ -106,7 +106,7 @@ function fnum(n: number): string {
 export function generateKeyframeGLSL(
   fnName: string,
   cfg: KeyframeConfig,
-): { glslFunction: string; expr: string } {
+): { glslFunction: string; sharedFunction: string; expr: string } {
   const { keyframes, mode, loopBack } = cfg;
   const t0 = keyframes[0].t;
   const duration = Math.max(keyframes[keyframes.length - 1].t - t0, 0.0001);
@@ -149,7 +149,14 @@ export function generateKeyframeGLSL(
   lines.push(`}`);
 
   return {
-    glslFunction: KF_BEZIER_GLSL + '\n' + lines.join('\n'),
+    // Kept separate from the shared bezier-solve helper below so multiple
+    // keyframed sockets — each with their own uniquely-named wrapper here —
+    // don't cause that shared helper to be registered under several different
+    // (prefix+wrapper) strings; this.functions dedupes by exact string match,
+    // so baking it into every wrapper made the helper's own function
+    // definitions collide the moment two sockets were both keyframed.
+    glslFunction: lines.join('\n'),
+    sharedFunction: KF_BEZIER_GLSL,
     expr: `${fnName}(u_time)`,
   };
 }

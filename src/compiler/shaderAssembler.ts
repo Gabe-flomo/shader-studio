@@ -157,7 +157,8 @@ export function resolveInputVars(
       }
     } else if (kfCfg && registerFn) {
       const fnName = `kf_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}_${inputKey}`;
-      const { glslFunction, expr } = generateKeyframeGLSL(fnName, kfCfg);
+      const { glslFunction, sharedFunction, expr } = generateKeyframeGLSL(fnName, kfCfg);
+      registerFn(sharedFunction);
       registerFn(glslFunction);
       inputVars[inputKey] = expr;
     } else if ((node.type === 'customFn' || node.type === 'exprNode') && typeof node.params[inputKey] === 'number') {
