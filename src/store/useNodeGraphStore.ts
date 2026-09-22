@@ -241,6 +241,7 @@ interface NodeGraphState {
   pixelSample: [number, number, number, number] | null;  // mouse pixel RGBA 0-255
   hoveredParamHint: string | null;  // param hint shown in status bar on hover
   currentTime: number;            // current u_time uniform value (seconds)
+  timePlaying: boolean;           // global play/pause for u_time animation
 
   // Node probe — click a node to see its live output values in the status bar
   selectedNodeId: string | null;
@@ -425,6 +426,7 @@ interface NodeGraphState {
   setPixelSample: (sample: [number, number, number, number] | null) => void;
   setHoveredParamHint: (hint: string | null) => void;
   setCurrentTime: (t: number) => void;
+  setTimePlaying: (playing: boolean) => void;
   toggleBypass: (nodeId: string) => void;
 
   // Save / Load
@@ -842,6 +844,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   pixelSample: null,
   hoveredParamHint: null,
   currentTime: 0,
+  timePlaying: true,
   selectedNodeId: null,
   selectedNodeIds: [],
   nodeOutputVarMap: new Map(),
@@ -3631,6 +3634,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setPixelSample: (sample) => set({ pixelSample: sample }),
   setHoveredParamHint: (hint) => set({ hoveredParamHint: hint }),
   setCurrentTime: (t) => set({ currentTime: t }),
+  setTimePlaying: (playing) => set({ timePlaying: playing }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
   setNodeProbeValues: (values) => set({ nodeProbeValues: values }),
   setScopeProbeValues: (vals) => set({ scopeProbeValues: vals }),

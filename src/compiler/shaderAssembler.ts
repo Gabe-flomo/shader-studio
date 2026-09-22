@@ -4,7 +4,7 @@ import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
-import { getKeyframeConfig, generateKeyframeGLSL } from './keyframes';
+import { getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed } from './keyframes';
 
 // ── Built-in SDF helper constants ─────────────────────────────────────────────
 // These are always added to the functions Set so they are available to any node
@@ -129,7 +129,7 @@ export function resolveInputVars(
   const inputVars: Record<string, string> = {};
 
   for (const [inputKey, input] of Object.entries(node.inputs)) {
-    const kfCfg = input.type === 'float' && !input.connection ? getKeyframeConfig(node, inputKey) : null;
+    const kfCfg = input.type === 'float' && !input.connection && !isKeyframeBypassed(node, inputKey) ? getKeyframeConfig(node, inputKey) : null;
     if (input.connection) {
       const sourceNode = nodeMap.get(input.connection.nodeId);
       const sourceDef = sourceNode ? getNodeDefinition(sourceNode.type) : undefined;

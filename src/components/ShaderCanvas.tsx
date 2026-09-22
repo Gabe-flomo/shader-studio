@@ -210,6 +210,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
+  const timePlaying        = useNodeGraphStore((state) => state.timePlaying);
+  // Ref mirror so the rAF loop sees the latest play/pause state without re-boot
+  const timePlayingRef = useRef(true);
+  useEffect(() => { timePlayingRef.current = timePlaying; }, [timePlaying]);
   const setNodeProbeValues = useNodeGraphStore((state) => state.setNodeProbeValues);
   // (scope probe values are written directly to canvas via scopeRegistry — no React state)
   // Only broadcast currentTime when a Time node is in the graph — avoids 10fps
@@ -479,7 +483,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       }
     };
 
-    const clock = new THREE.Clock();
+    // Manual virtual-time accumulator (replaces THREE.Clock) so playback can be
+    // paused without resetting to 0 — THREE.Clock.start() always zeroes
+    // elapsedTime, so there's no clean way to "resume" with it.
+    let virtualTime = 0;
+    let lastRafTime: number | null = null;
     let frameCount = 0;
     const SAMPLE_EVERY = 6; // sample every 6 frames (~10fps if running at 60fps)
     // FPS tracking for histogram overlay
@@ -492,8 +500,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     function animate(now: number = 0) {
       animFrameRef.current = requestAnimationFrame(animate);
 
-      // Skip entirely when the browser tab is not visible
-      if (document.hidden) return;
+      // Skip entirely when the browser tab is not visible. Still track
+      // lastRafTime so the next visible frame doesn't see a huge dt jump.
+      if (document.hidden) { lastRafTime = now; return; }
 
       // FPS counter — updated every second
       fpsFrameCount++;
@@ -505,7 +514,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         fpsLastTime = now;
       }
 
-      const elapsed = clock.getElapsedTime();
+      if (lastRafTime === null) lastRafTime = now;
+      const dt = Math.max(0, (now - lastRafTime) / 1000);
+      lastRafTime = now;
+      if (timePlayingRef.current) virtualTime += dt;
+      const elapsed = virtualTime;
       material.uniforms.u_time.value = elapsed;
 
       // ── GPU particle tick: just keep u_time in sync ────────────────────────
@@ -995,7 +1008,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
 
     // Reset time to 0 when 'reset-time' is fired (e.g. from Time node button)
     const handleResetTime = () => {
-      clock.start();
+      virtualTime = 0;
+      lastRafTime = null;
       material.uniforms.u_time.value = 0;
     };
     window.addEventListener('reset-time', handleResetTime);

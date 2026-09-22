@@ -11,6 +11,7 @@ import type { GraphNode } from '../types/nodeGraph';
 // __keyframes_<socketKey> : Keyframe[]
 // __kfMode_<socketKey>    : 'once' | 'loop' | 'interpolate'   (default 'once')
 // __kfLoopBack_<socketKey>: number seconds                     (default 1, 'interpolate' only)
+// __kfBypass_<socketKey>  : boolean                             (default false — data stays, compiler ignores it)
 
 export interface KeyframeEasing {
   a: number; b: number; c: number; d: number; // CSS cubic-bezier() convention
@@ -44,6 +45,10 @@ export const EASING_PRESETS: Record<string, KeyframeEasing> = {
 export function socketHasKeyframes(node: GraphNode, socketKey: string): boolean {
   const kf = node.params[`__keyframes_${socketKey}`];
   return Array.isArray(kf) && kf.length > 0;
+}
+
+export function isKeyframeBypassed(node: GraphNode, socketKey: string): boolean {
+  return node.params[`__kfBypass_${socketKey}`] === true;
 }
 
 export function getKeyframeConfig(node: GraphNode, socketKey: string): KeyframeConfig | null {

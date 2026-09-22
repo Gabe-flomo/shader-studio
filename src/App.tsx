@@ -8,6 +8,7 @@ import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ShortcutsPage } from './components/ShortcutsPage';
 import { GLSLPage } from './components/GLSLPage';
+import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { FunctionBuilder } from './components/FunctionBuilder';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/TopNav';
@@ -814,7 +815,7 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /><TimeControlsStrip /></div>
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -945,6 +946,7 @@ function App() {
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
               {showHistogram && histData && <HistogramOverlay data={histData} />}
+              <TimeControlsStrip />
               {/* Overlay controls: histogram toggle + float */}
               <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: '4px' }}>
                 <button
@@ -1051,6 +1053,7 @@ function App() {
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
             <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
             {showHistogram && histData && <HistogramOverlay data={histData} />}
+            <TimeControlsStrip />
           </div>
 
           {/* Status bar */}

@@ -3460,6 +3460,33 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   side="left"
                 />
               )}
+              {/* Discoverability hint: unconnected float sockets can be keyframed —
+                  surface that on hover instead of requiring right-click to find it.
+                  Only float, unconnected, non-external sockets are kfEligible, so a
+                  wired input never shows this (you'd delete the connection first). */}
+              {isHovered && !draggingType && kfEligible && !isKeyframed && (
+                <button
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); setKfModalKey(key); }}
+                  title="Add keyframes to this input"
+                  style={{
+                    position: 'absolute',
+                    left: socketMarginLeft,
+                    top: '-8px',
+                    zIndex: 200,
+                    background: '#1e1e2e',
+                    border: '1px solid #f9e2af',
+                    color: '#f9e2af',
+                    borderRadius: '4px',
+                    padding: '1px 5px',
+                    fontSize: '8px',
+                    lineHeight: 1.4,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                  }}
+                >◆ Keyframe</button>
+              )}
               {/* When dragging: show a drop-here indicator on compatible sockets (not external) */}
               {!isExternal && draggingType && typesCompatible(draggingType, input.type as DataType) && (
                 <div style={{
