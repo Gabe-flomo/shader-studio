@@ -138,7 +138,13 @@ float kfCubicBezier(float x,float a,float b,float c,float d){
     t=clamp(t,0.0,1.0);
   }
   float E=1.0-3.0*d+3.0*b,F=3.0*d-6.0*b,G=3.0*b;
-  return clamp(kfBezXfromT(t,E,F,G,0.0),0.0,1.0);
+  // NOT clamped to [0,1] — an ease handle dragged past the segment's normal
+  // value range (b/d unbounded, unlike a/c) is how you author a bounce/
+  // overshoot effect; clamping here would silently discard exactly that,
+  // playing back a flattened curve while the editor's own JS preview
+  // (evalCubicBezier in KeyframeEditorModal.tsx, deliberately unclamped to
+  // match) kept showing the real, unflattened shape.
+  return kfBezXfromT(t,E,F,G,0.0);
 }`;
 
 export function fnum(n: number): string {

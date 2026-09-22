@@ -407,8 +407,15 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   // instead of the live time immediately drifting past it. `editorT` is in
   // this editor's own time space (what you see on the canvas); offset shifts
   // it into the global time the curve actually plays at.
+  //
+  // Guarded on the *current* store value (read directly, not subscribed —
+  // this fires on every mousemove during a drag and every rAF tick during
+  // scoped Play, and an unconditional setTimePlaying(false) would re-dispatch
+  // an identical value to Zustand dozens of times a second, cascading a
+  // React re-render through every TimeControlsStrip instance each time and
+  // showing up as visible frame jank during playback/dragging.
   const seekToTime = useCallback((editorT: number) => {
-    setTimePlaying(false);
+    if (useNodeGraphStore.getState().timePlaying) setTimePlaying(false);
     window.dispatchEvent(new CustomEvent('seek-time', { detail: { time: editorT + offset } }));
   }, [setTimePlaying, offset]);
 
@@ -675,6 +682,11 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   // ── Scrubber — a ruler strip above the canvas; dragging it seeks global
   // time live, exactly like an After Effects/video-editor scrubber. ──
   const handleScrubberMouseDown = useCallback((e: React.MouseEvent) => {
+    // Without this, a fast drag can get hijacked into the browser's native
+    // text-selection/drag-and-drop (it shows its own drag cursor and stops
+    // delivering mousemove/mouseup here at all until a fresh click resets
+    // the gesture) instead of driving our own drag state.
+    e.preventDefault();
     stopKfPlaybackRef.current();
     const xy = getLocalXY(e);
     if (!xy) return;
@@ -732,6 +744,9 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   useEffect(() => { stopKfPlayback(); }, [activeAxis, mode, toolMode, stopKfPlayback]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Same as the scrubber — stop the browser from hijacking a fast drag
+    // into native text-selection/drag-and-drop.
+    e.preventDefault();
     stopKfPlaybackRef.current();
     const xy = getLocalXY(e);
     if (!xy) return;
@@ -954,6 +969,11 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '10px',
           width: `${modalW}px`, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.65)', color: '#cdd6f4', fontSize: '12px',
+          // Belt-and-suspenders alongside preventDefault() on the drag
+          // handlers: a fast drag shouldn't be able to select nearby text
+          // (header, button labels, hint row) and trigger a native
+          // text-drag instead of our own canvas/scrubber drag.
+          userSelect: 'none', WebkitUserSelect: 'none',
         }}
         onMouseDown={e => {
           e.stopPropagation();
