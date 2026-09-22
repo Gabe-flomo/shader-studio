@@ -52,7 +52,7 @@ export {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
+  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
   ChromaShiftNode,
 } from './effects';
 export { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
@@ -186,7 +186,7 @@ import {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
+  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
   ChromaShiftNode,
 } from './effects';
 import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
@@ -380,6 +380,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sobel: SobelNode,
   radianceCascadesApprox: RadianceCascadesApproxNode,
   gaussianBlur: GaussianBlurNode,
+  bloom: BloomNode,
   radialBlur: RadialBlurNode,
   tiltShiftBlur: TiltShiftBlurNode,
   lensBlur: LensBlurNode,

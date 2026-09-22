@@ -1388,6 +1388,75 @@ float gaussBlurWeight(float x, float y, float sigma) {
   },
 };
 
+// ─── Bloom ──────────────────────────────────────────────────────────────────
+// True screen-space bloom: thresholds the bright pixels of ANY rendered color
+// (not an SDF — this is the piece Deep Glow can't do, since Deep Glow only
+// knows how to spread light using an actual distance value, not by looking at
+// neighboring pixels) and blurs that bright-pass outward using the same
+// u_prevFrame multi-tap trick as Gaussian Blur, then adds it back on top of
+// the original color. Wire final scene color + UV, right before Output.
+
+export const BloomNode: NodeDefinition = {
+  type: 'bloom',
+  label: 'Bloom',
+  category: 'Effects',
+  description: 'Real screen-space bloom — thresholds the bright areas of any rendered color and blurs them outward into neighboring pixels, so light actually bleeds into dark gaps (halftone dots, noise fields, anything). This is what Deep Glow can\'t do without an SDF: Deep Glow computes its spread from a distance value, Bloom computes it by sampling neighboring pixels (same u_prevFrame trick as Gaussian Blur — converges within 1-2 frames for static content). Wire your final scene color + UV, generally right before Output.',
+  inputs: {
+    color:     { type: 'vec3',  label: 'Color' },
+    uv:        { type: 'vec2',  label: 'UV' },
+    threshold: { type: 'float', label: 'Threshold' },
+    intensity: { type: 'float', label: 'Intensity' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { threshold: 0.4, intensity: 1.5, radius: 8.0, quality: 'standard' },
+  paramDefs: {
+    threshold: { label: 'Threshold', type: 'float', min: 0.0, max: 2.0,  step: 0.01, hint: 'Brightness cutoff before a pixel contributes to the bloom — raise it so only the brightest highlights glow, lower it toward 0 to bloom almost everything.' },
+    intensity: { label: 'Intensity', type: 'float', min: 0.0, max: 5.0,  step: 0.05 },
+    radius:    { label: 'Radius (px)', type: 'float', min: 1.0, max: 40.0, step: 0.5 },
+    quality:   { label: 'Quality', type: 'select', options: [
+      { value: 'fast',     label: 'Fast (3×3)'     },
+      { value: 'standard', label: 'Standard (5×5)' },
+      { value: 'high',     label: 'High (7×7)'     },
+    ]},
+  },
+  glslFunction: `
+float gaussBlurWeight(float x, float y, float sigma) {
+  return exp(-0.5 * (x*x + y*y) / (sigma*sigma));
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id        = node.id;
+    const col       = inputVars.color     || 'vec3(0.0)';
+    const uvVar     = inputVars.uv        || 'g_uv';
+    const threshold = inputVars.threshold || p(node.params.threshold, 0.4);
+    const intensity = inputVars.intensity || p(node.params.intensity, 1.5);
+    const radius    = p(node.params.radius, 8.0);
+    const quality   = (node.params.quality as string) ?? 'standard';
+    const half_n    = quality === 'fast' ? 1 : quality === 'high' ? 3 : 2;
+    const sigma     = half_n === 1 ? '1.0' : half_n === 3 ? '2.0' : '1.5';
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
+      `    vec3  ${id}_acc  = vec3(0.0);\n`,
+      `    float ${id}_wsum = 0.0;\n`,
+    ];
+    for (let gx = -half_n; gx <= half_n; gx++) {
+      for (let gy = -half_n; gy <= half_n; gy++) {
+        const w = `gaussBlurWeight(${f(gx)}, ${f(gy)}, ${sigma})`;
+        lines.push(
+          `    { float ${id}_w = ${w}; ` +
+          `vec3 ${id}_tap = texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(gx)}, ${f(gy)}) * ${id}_px * ${radius}, 0.0, 1.0)).rgb; ` +
+          `${id}_acc += max(${id}_tap - vec3(${threshold}), 0.0) * ${id}_w; ${id}_wsum += ${id}_w; }\n`,
+        );
+      }
+    }
+    lines.push(`    vec3 ${id}_glow   = ${id}_acc / max(${id}_wsum, 0.0001);\n`);
+    lines.push(`    vec3 ${id}_result = ${col} + ${id}_glow * ${intensity};\n`);
+
+    return { code: lines.join(''), outputVars: { result: `${id}_result` } };
+  },
+};
+
 // ─── Radial Blur ──────────────────────────────────────────────────────────────
 // Samples u_prevFrame along the radial direction from a center point, creating
 // a zoom/spin blur effect. Center tap = color input.
