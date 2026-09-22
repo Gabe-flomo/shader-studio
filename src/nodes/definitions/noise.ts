@@ -599,3 +599,149 @@ export const NoiseFloatNode: NodeDefinition = {
   },
 };
 
+// ─── Scatter ──────────────────────────────────────────────────────────────────
+//
+// Generic organic jitter. Perturbs a float value and/or a vec2 field with
+// time-varying noise. This is the same mechanism the Chladni-family nodes use
+// internally for "turbulence" (see physics.ts), pulled out as a standalone,
+// reusable node instead of being duplicated per-node.
+//
+// Two knobs, matching how the user described it:
+//   Frequency — how fast the scatter evolves per second (was "turb_speed")
+//   Amplitude — how far it displaces the value/field (was "turbulence")
+//
+// `field` defaults to `uv` when unwired, so the common case — "scatter my UV" —
+// only needs uv+time wired, same as the old inline turbulence.
+
+const SCATTER_GLSL = `
+float scatterHash1(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p.yx + 19.19);
+    return fract((p.x + p.y) * p.x);
+}
+float scatterValueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(
+        mix(scatterHash1(i+vec2(0,0)), scatterHash1(i+vec2(1,0)), u.x),
+        mix(scatterHash1(i+vec2(0,1)), scatterHash1(i+vec2(1,1)), u.x),
+        u.y);
+}
+float scatterVoronoi(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    float minD = 10.0;
+    for (int sc_y = -1; sc_y <= 1; sc_y++) {
+        for (int sc_x = -1; sc_x <= 1; sc_x++) {
+            vec2 nb = vec2(float(sc_x), float(sc_y));
+            vec2 pt = vec2(scatterHash1(i+nb), scatterHash1(i+nb+0.1));
+            vec2 df = nb + pt - f;
+            float d = dot(df, df);
+            if (d < minD) minD = d;
+        }
+    }
+    return sqrt(minD);
+}
+float scatterFbm(vec2 p) {
+    float v = 0.0; float a = 0.5;
+    for (int sc_i = 0; sc_i < 4; sc_i++) {
+        v += a * scatterValueNoise(p);
+        p = p * 2.1 + vec2(5.2, 1.3); a *= 0.5;
+    }
+    return v;
+}
+// Returns a 2D noise offset in [-1,1]. mode: 0=hash, 1=value, 2=voronoi, 3=fbm, 4=swirl, 5=jump
+vec2 scatterNoise2(vec2 p, float t, float freq, int mode) {
+    if (mode == 1) {
+        return vec2(scatterValueNoise(p*3.0+t*freq), scatterValueNoise(p*3.0+t*freq+vec2(7.3,2.1)))*2.0-1.0;
+    }
+    if (mode == 2) {
+        return vec2(scatterVoronoi(p*3.0+t*freq), scatterVoronoi(p*3.0+t*freq+vec2(4.1,1.7)))*2.0-1.0;
+    }
+    if (mode == 3) {
+        return vec2(scatterFbm(p*3.0+t*freq), scatterFbm(p*3.0+t*freq+vec2(5.2,1.3)))*2.0-1.0;
+    }
+    if (mode == 4) {
+        float eps = 0.08;
+        vec2 q = p * 3.0 + t * freq;
+        float dy = scatterValueNoise(q + vec2(eps, 0.0)) - scatterValueNoise(q - vec2(eps, 0.0));
+        float dx = scatterValueNoise(q + vec2(0.0, eps)) - scatterValueNoise(q - vec2(0.0, eps));
+        return vec2(dy, -dx) * (1.0 / eps) * 0.5;
+    }
+    if (mode == 5) {
+        float qt = floor(t*freq) / max(freq, 0.0001);
+        float nx = fract(sin(dot(p*4.0+qt, vec2(127.1,311.7)))*43758.5453);
+        float ny = fract(sin(dot(p*4.0+qt+vec2(5.2,1.3), vec2(269.5,183.3)))*43758.5453);
+        return (vec2(nx,ny)*2.0-1.0);
+    }
+    // mode 0: per-pixel hash — grainy drift
+    vec2 q = p * 8.0 + t * freq;
+    float hx = fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
+    float hy = fract(sin(dot(q, vec2(269.5, 183.3))) * 43758.5453);
+    return vec2(hx, hy) * 2.0 - 1.0;
+}`;
+
+export const ScatterNode: NodeDefinition = {
+  type: 'scatter',
+  label: 'Scatter',
+  category: 'Noise',
+  description: 'Generic organic jitter — perturbs a float Value and/or a vec2 Field with time-varying noise. Frequency is how fast the scatter evolves per second; Amplitude is how far it displaces things (raise it to exaggerate a small scatter). Field defaults to UV when unwired, so wiring just UV+Time reproduces the old inline turbulence look. Note: perturbing a POSITION that feeds a high-frequency function (like Chladni\'s n/m) with the Grainy/Jump modes will alias into full-frame static at almost any amplitude — that\'s not a bug to tune away, it\'s what per-pixel-incoherent noise does to a fast-oscillating function. For a literal sand-grain texture, apply Grain or Luma Grain to the final density/color instead of scattering the input position.',
+  inputs: {
+    uv:    { type: 'vec2',  label: 'UV'    },
+    time:  { type: 'float', label: 'Time'  },
+    value: { type: 'float', label: 'Value' },
+    field: { type: 'vec2',  label: 'Field' },
+  },
+  outputs: {
+    value: { type: 'float', label: 'Scattered Value' },
+    field: { type: 'vec2',  label: 'Scattered Field' },
+    uv:    { type: 'vec2',  label: 'UV (pass-through)' },
+  },
+  glslFunction: SCATTER_GLSL,
+  defaultParams: {
+    frequency:  0.4,
+    amplitude:  0.06,
+    noise_mode: 'value',
+  },
+  paramDefs: {
+    frequency: { label: 'Frequency', type: 'float', min: 0.0, max: 5.0, step: 0.01,  hint: 'How fast the scatter drifts, CC Scatter-style — higher moves faster. Only reads as continuous "speed" in Smooth/Fractal/Swirl modes; Grainy and Jump reshuffle per-frame/per-step by design, so frequency mostly changes how often they reshuffle rather than how fast they glide.' },
+    amplitude: { label: 'Amplitude', type: 'float', min: 0.0, max: 2.0, step: 0.001, hint: 'How far the scatter displaces Value/Field — exaggerates the effect.' },
+    noise_mode: {
+      label: 'Noise Mode', type: 'select',
+      options: [
+        { value: 'value',   label: 'Smooth (organic drift)' },
+        { value: 'fbm',     label: 'Fractal (detailed drift)' },
+        { value: 'swirl',   label: 'Swirl (curl)'          },
+        { value: 'voronoi', label: 'Clumpy (cells)'        },
+        { value: 'hash',    label: 'Grainy (stepped, non-continuous)' },
+        { value: 'jump',    label: 'Jump (stutter, non-continuous)'  },
+      ],
+    },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const uvVar    = inputVars.uv    ?? 'vec2(0.0)';
+    const timeVar  = inputVars.time  ?? '0.0';
+    const valueVar = inputVars.value ?? '0.0';
+    const fieldVar = inputVars.field ?? uvVar;
+    const freq     = p(node.params.frequency, 0.4);
+    const amp      = p(node.params.amplitude, 0.06);
+    const noiseMode = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'value';
+    const modeInt = noiseMode === 'value' ? 1 : noiseMode === 'voronoi' ? 2 : noiseMode === 'fbm' ? 3 : noiseMode === 'swirl' ? 4 : noiseMode === 'jump' ? 5 : 0;
+
+    const code = [
+      `    vec2  ${id}_off   = scatterNoise2(${uvVar}, ${timeVar}, ${freq}, ${modeInt});\n`,
+      `    float ${id}_value = ${valueVar} + ${id}_off.x * ${amp};\n`,
+      `    vec2  ${id}_field = ${fieldVar} + ${id}_off * ${amp};\n`,
+    ].join('');
+
+    return {
+      code,
+      outputVars: {
+        value: `${id}_value`,
+        field: `${id}_field`,
+        uv:    uvVar,
+      },
+    };
+  },
+};
+

@@ -13,7 +13,7 @@ export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNod
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 
 // Grid Field
-export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
+export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
@@ -59,13 +59,13 @@ export { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAc
 export { LoopCarryNode } from './loop';
 
 // Noise
-export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
+export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
 
 // Fractals
 export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 
 // Physics
-export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
+export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
 
 // Particles & Fields
 export { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
@@ -135,7 +135,7 @@ export {
   SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
   MultiplyVec3Node, AddVec3Node,
   TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode, ModSelectNode,
-  Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode,
+  Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode, QuantizeNode,
   MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
@@ -161,7 +161,7 @@ export {
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
-import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
+import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -191,9 +191,9 @@ import {
 } from './effects';
 import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
-import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode } from './noise';
+import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
-import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode } from './physics';
+import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
 import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
@@ -233,7 +233,7 @@ import {
   SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
   MultiplyVec3Node, AddVec3Node,
   TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode, ModSelectNode,
-  Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode,
+  Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode, QuantizeNode,
   MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
   AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
@@ -317,6 +317,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gaussianField: GaussianFieldNode,
   fieldAccumulate: FieldAccumulateNode,
   metaballThreshold: MetaballThresholdNode,
+  fieldToLines: FieldToLinesNode,
   distanceFalloff: DistanceFalloffNode,
   glowFalloff: GlowFalloffNode,
   noisyGridSDF: NoisyGridSDFNode,
@@ -399,6 +400,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   flowField: FlowFieldNode,
   circlePack: CirclePackNode,
   noiseFloat: NoiseFloatNode,
+  scatter: ScatterNode,
   // Fractals
   mandelbrot: MandelbrotNode,
   ifs: IFSNode,
@@ -411,6 +413,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   chladni3d: Chladni3DNode,
   chladni3dParticles: Chladni3DParticlesNode,
   electronOrbital: ElectronOrbitalNode,
+  waveTerm: WaveTermNode,
+  chladniField: ChladniFieldNode,
+  chladniSuperposition: ChladniSuperpositionNode,
+  chladniModeFreq: ChladniModeFreqNode,
   // Particles & Fields
   particleEmitter: ParticleEmitterNode,
   vectorField:     VectorFieldNode,
@@ -584,6 +590,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sqrt: SqrtNode,
   round: RoundNode,
   dot: DotNode,
+  quantize: QuantizeNode,
   makeVec2: MakeVec2Node,
   extractX: ExtractXNode,
   extractY: ExtractYNode,

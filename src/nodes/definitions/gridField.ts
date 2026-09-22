@@ -151,6 +151,88 @@ export const MetaballThresholdNode: NodeDefinition = {
   },
 };
 
+// ─── Field to Lines ───────────────────────────────────────────────────────────
+// Draws the zero-crossing of any scalar field as an anti-aliased line, using
+// the fwidth()+smoothstep trick the Chladni node has always used internally
+// (see physics.ts). Pulled out here as a generic node — works on any float
+// field: a Weighted Average of Wave Terms, a noise field, an SDF, a math
+// expression. Not Chladni-specific.
+
+export const FieldToLinesNode: NodeDefinition = {
+  type: 'fieldToLines',
+  label: 'Field to Lines',
+  category: 'Field',
+  description: 'Draws the zero-crossing of any scalar field as an anti-aliased nodal line (fwidth-based). This is the exact technique the Chladni node uses internally — generalized so it works on any float field, not just Chladni sums. Width Jitter + Grain give it a scattered, hand-drawn/sand-like texture — crank Width Jitter well past 1 for a fully dust-like edge. Grain alone controls both how much and how sporadically it reshuffles: 0 is fully static/off, and raising it makes the grain both more visible and more restless. Grain is multiplied onto the already-computed density, so it can only ever appear where the line already is — the "mask" is automatic.',
+  inputs: {
+    field:        { type: 'float', label: 'Field' },
+    uv:           { type: 'vec2',  label: 'UV (for texture)' },
+    time:         { type: 'float', label: 'Time (for grain animation)' },
+    line_width:   { type: 'float', label: 'Line Width' },
+    aa:           { type: 'float', label: 'AA Smooth' },
+    brightness:   { type: 'float', label: 'Brightness' },
+    width_jitter: { type: 'float', label: 'Width Jitter' },
+    jitter_scale: { type: 'float', label: 'Jitter Scale' },
+    grain:        { type: 'float', label: 'Grain' },
+  },
+  outputs: {
+    density: { type: 'float', label: 'Density' },
+    color:   { type: 'vec3',  label: 'Color'   },
+  },
+  defaultParams: {
+    line_width:   1.5,
+    aa:           1.0,
+    brightness:   1.0,
+    width_jitter: 0.0,
+    jitter_scale: 6.0,
+    grain:        0.0,
+  },
+  paramDefs: {
+    line_width:   { label: 'Line Width',   type: 'float', min: 0.1, max: 8.0,  step: 0.05 },
+    aa:           { label: 'AA Smooth',    type: 'float', min: 0.0, max: 4.0,  step: 0.1  },
+    brightness:   { label: 'Brightness',   type: 'float', min: 0.1, max: 5.0,  step: 0.05 },
+    width_jitter: { label: 'Width Jitter', type: 'float', min: 0.0, max: 20.0, step: 0.05, hint: 'Organic line-thickness wobble via coherent noise sampled at UV. Push well past 1 for a scattered, dust-like edge rather than a clean line. Needs UV wired.' },
+    jitter_scale: { label: 'Jitter Scale', type: 'float', min: 0.5, max: 30.0, step: 0.5,  hint: 'Spatial frequency of the width-jitter noise.' },
+    grain:        { label: 'Grain',        type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Sand-like dropout on the finished density. 0 = off/static; raising it makes the grain both more visible AND more sporadic — it reshuffles faster as you turn it up. Needs UV+Time wired for real animated per-pixel grain.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id          = node.id;
+    const fieldVar    = inputVars.field ?? '0.0';
+    const lineWidth   = inputVars.line_width   ?? p(node.params.line_width, 1.5);
+    const aa          = inputVars.aa           ?? p(node.params.aa, 1.0);
+    const brightness  = inputVars.brightness   ?? p(node.params.brightness, 1.0);
+    const widthJitter = inputVars.width_jitter ?? p(node.params.width_jitter, 0.0);
+    const jitterScale = inputVars.jitter_scale ?? p(node.params.jitter_scale, 6.0);
+    const grain       = inputVars.grain        ?? p(node.params.grain, 0.0);
+    const timeVar     = inputVars.time ?? '0.0';
+    // Falls back to a field-derived pseudo-position when UV isn't wired — keeps
+    // Width Jitter/Grain usable (if less spatially coherent) without a forced input.
+    const texUv       = inputVars.uv ?? `vec2(${fieldVar} * 3.7, ${fieldVar} * 1.9)`;
+
+    const code = [
+      `    vec2  ${id}_texUv  = ${texUv};\n`,
+      `    float ${id}_wjN    = valueNoise(${id}_texUv * ${jitterScale}) * 2.0 - 1.0;\n`,
+      `    float ${id}_fw     = fwidth(${fieldVar});\n`,
+      `    float ${id}_thresh = max(${id}_fw * max(${aa}, 0.01) * (1.0 + ${id}_wjN * ${widthJitter}), 0.0001);\n`,
+      `    float ${id}_density = 1.0 - smoothstep(0.0, ${id}_thresh * ${lineWidth}, abs(${fieldVar}));\n`,
+      // noiseHash1 has zero temporal coherence — any change to its input fully
+      // decorrelates the output, every single render frame, regardless of how
+      // that change is scaled. So there's no such thing as a "slow" flicker
+      // here: it's either static (grain=0, time term has no visible effect
+      // since it's multiplied by 0 below) or shimmering at full frame rate —
+      // which reads as smooth, like real TV static/sand vibration. Grain
+      // controls how much of that shimmer shows through, not its rate.
+      `    float ${id}_grainN  = noiseHash1(${id}_texUv * 45.0 + vec2(1.0, 1.37) * ${timeVar});\n`,
+      `    ${id}_density *= mix(1.0, ${id}_grainN, ${grain});\n`,
+      `    vec3  ${id}_color   = vec3(${id}_density * ${brightness});\n`,
+    ].join('');
+
+    return {
+      code,
+      outputVars: { density: `${id}_density`, color: `${id}_color` },
+    };
+  },
+};
+
 // ─── Distance Falloff ─────────────────────────────────────────────────────────
 // Converts distance to smooth falloff using one of four physically-motivated curves.
 

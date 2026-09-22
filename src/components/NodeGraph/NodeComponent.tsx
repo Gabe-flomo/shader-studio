@@ -448,9 +448,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPreviewActive, node.id, node.type]);
 
-  // Placeholder handlers so we don't break the existing onMouseEnter/Leave wiring
-  const handleCardMouseEnter = useCallback(() => {}, []);
-  const handleCardMouseLeave = useCallback(() => {}, []);
+  // Comment preview — brief hover delay (not the old 1200ms tooltip delay,
+  // just enough to avoid flicker while panning/passing over the card).
+  const commentHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showCommentPreview, setShowCommentPreview] = useState(false);
+  const handleCardMouseEnter = useCallback(() => {
+    commentHoverTimerRef.current = setTimeout(() => setShowCommentPreview(true), 200);
+  }, []);
+  const handleCardMouseLeave = useCallback(() => {
+    if (commentHoverTimerRef.current) { clearTimeout(commentHoverTimerRef.current); commentHoverTimerRef.current = null; }
+    setShowCommentPreview(false);
+  }, []);
 
   // Memoize the shader line split so getSourceExpr / extractNodeCodeFromShader
   // don't re-split the full shader string on every render for every wired input.
@@ -479,8 +487,27 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
-  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showCommentEditor, setShowCommentEditor] = useState(false);
   const [zIndex, setZIndex] = useState(1);
+  // Info tooltip: close on any click outside the tooltip itself or the info
+  // button that opened it (button is excluded so its own onClick toggle isn't
+  // immediately undone by this — mousedown fires before click).
+  const infoButtonRef = useRef<HTMLButtonElement>(null);
+  const nodeTooltipRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showNodeTooltip) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (infoButtonRef.current?.contains(target)) return;
+      if (nodeTooltipRef.current?.contains(target)) return;
+      setShowNodeTooltip(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNodeTooltip]);
+  // Comment text lives in node.params.__comment — same "__-prefixed metadata,
+  // not a real shader param" convention already used by __codeOverride.
+  const nodeComment = typeof node.params.__comment === 'string' ? (node.params.__comment as string) : '';
 
   // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
   const scopeCanvasRef        = useRef<HTMLCanvasElement>(null);
@@ -2834,7 +2861,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         background: '#1e1e2e',
         border: isBypassed ? '1px solid #f9e2af55' : isSwapTarget ? '2px solid #f9e2af' : isPreviewActive ? '1px solid #a6e3a1' : hasError ? '1px solid #f38ba8' : isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
         borderRadius: '8px',
-        minWidth: '240px',
+        minWidth: '270px',
         color: '#cdd6f4',
         fontSize: '12px',
         userSelect: 'none',
@@ -2853,17 +2880,36 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           : '0 4px 12px rgba(0,0,0,0.4)',
       }}
     >
+      {/* Comment preview — grayed, appears above the card on hover; click to open the full editor */}
+      {showCommentPreview && nodeComment && !showCommentEditor && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); setShowCommentEditor(true); setShowCommentPreview(false); }}
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            marginBottom: '6px',
+            maxWidth: '320px',
+            background: '#181825ee',
+            border: '1px solid #45475a',
+            borderRadius: '6px',
+            padding: '6px 9px',
+            fontSize: '11px',
+            lineHeight: 1.4,
+            color: '#a6adc899',
+            whiteSpace: 'pre-wrap',
+            cursor: 'pointer',
+            zIndex: 50,
+          }}
+        >
+          {nodeComment}
+        </div>
+      )}
       {/* Header */}
       <div
         onMouseDown={handleHeaderMouseDown}
         onTouchStart={handleHeaderTouchStart}
-        onMouseEnter={() => {
-          tooltipTimerRef.current = setTimeout(() => setShowNodeTooltip(true), 1200);
-        }}
-        onMouseLeave={() => {
-          if (tooltipTimerRef.current) { clearTimeout(tooltipTimerRef.current); tooltipTimerRef.current = null; }
-          setShowNodeTooltip(false);
-        }}
         style={{
           background: '#313244',
           borderRadius: showCode ? '8px 8px 0 0' : '8px 8px 0 0',
@@ -2932,27 +2978,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <span style={{ fontSize: '8px', color: '#f9e2af', letterSpacing: '0.06em', opacity: 0.9, fontWeight: 400 }}>BYPASS</span>
           )}
         </span>
-        {showNodeTooltip && <NodeTooltip def={def} node={node} allNodes={nodes} />}
+        {showNodeTooltip && <div ref={nodeTooltipRef}><NodeTooltip def={def} node={node} allNodes={nodes} /></div>}
         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-          {/* Code toggle button */}
-          <button
-            onMouseDown={e => e.stopPropagation()}
-            onClick={() => setShowCode(v => !v)}
-            title={showCode ? 'Hide generated GLSL' : 'Show generated GLSL'}
-            style={{
-              background: showCode ? '#89b4fa22' : 'none',
-              border: showCode ? '1px solid #89b4fa55' : 'none',
-              color: showCode ? '#89b4fa' : '#585b70',
-              cursor: 'pointer',
-              fontSize: '11px',
-              lineHeight: 1,
-              padding: '1px 4px',
-              borderRadius: '3px',
-              fontFamily: 'monospace',
-            }}
-          >
-            {'</>'}
-          </button>
           {/* Preview toggle — isolates this node's output on the canvas */}
           {!['output', 'vec4Output', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
             <button
@@ -3065,29 +3092,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               }}
             >
               ƒ
-            </button>
-          )}
-          {/* Reset params button — only shown if node has paramDefs */}
-          {Object.keys(def.paramDefs ?? {}).length > 0 && (
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => {
-                if (def.defaultParams) {
-                  updateNodeParams(node.id, def.defaultParams as Record<string, unknown>, { immediate: true });
-                }
-              }}
-              title="Reset parameters to defaults"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#585b70',
-                cursor: 'pointer',
-                fontSize: '13px',
-                lineHeight: 1,
-                padding: '0 2px',
-              }}
-            >
-              ↺
             </button>
           )}
           {/* Divider before loop/assign controls */}
@@ -4374,6 +4378,45 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         <CustomFnModal node={node} onClose={() => setShowCustomFnModal(false)} />
       )}
 
+      {/* ── Comment editor (hidden when collapsed) ── */}
+      {showCommentEditor && !collapsed && (
+        <div
+          style={{
+            background: '#181825',
+            borderTop: '1px solid #313244',
+            borderRadius: '0 0 8px 8px',
+            padding: '8px',
+          }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <textarea
+            autoFocus
+            value={nodeComment}
+            placeholder="Describe what this node does…"
+            onChange={e => updateNodeParams(node.id, { __comment: e.target.value })}
+            onKeyDown={e => {
+              e.stopPropagation();
+              if (e.key === 'Escape') setShowCommentEditor(false);
+            }}
+            style={{
+              width: '100%',
+              minHeight: '54px',
+              resize: 'vertical',
+              background: '#11111b',
+              border: '1px solid #313244',
+              borderRadius: '4px',
+              color: '#cdd6f4',
+              fontSize: '11px',
+              lineHeight: 1.4,
+              padding: '6px 8px',
+              fontFamily: 'inherit',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+      )}
+
       {/* ── Generated GLSL code (editable, hidden when collapsed) ── */}
       {showCode && !collapsed && (
         <div
@@ -4480,6 +4523,92 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           )}
         </div>
       )}
+
+      {/* ── Footer — Info/Comment/Code/Reset live here instead of the header, so the
+          title doesn't get crowded as a node gains more of these toggles ── */}
+      <div
+        onMouseDown={e => e.stopPropagation()}
+        style={{
+          display: 'flex',
+          gap: '2px',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          padding: '3px 6px',
+          borderTop: '1px solid #313244',
+          borderRadius: '0 0 8px 8px',
+        }}
+      >
+        <button
+          onClick={e => { e.stopPropagation(); setShowNodeTooltip(v => !v); }}
+          title={showNodeTooltip ? 'Hide node info' : 'Show node info'}
+          style={{
+            background: showNodeTooltip ? '#89b4fa22' : 'none',
+            border: showNodeTooltip ? '1px solid #89b4fa55' : 'none',
+            color: showNodeTooltip ? '#89b4fa' : '#585b70',
+            cursor: 'pointer',
+            fontSize: '11px',
+            lineHeight: 1,
+            padding: '1px 4px',
+            borderRadius: '3px',
+          }}
+        >
+          ⓘ
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); setShowCommentEditor(v => !v); setShowCommentPreview(false); }}
+          title={nodeComment ? 'Edit comment' : 'Add comment'}
+          style={{
+            background: showCommentEditor ? '#a6e3a122' : nodeComment ? '#a6e3a115' : 'none',
+            border: showCommentEditor ? '1px solid #a6e3a155' : 'none',
+            color: showCommentEditor || nodeComment ? '#a6e3a1' : '#585b70',
+            cursor: 'pointer',
+            fontSize: '11px',
+            lineHeight: 1,
+            padding: '1px 4px',
+            borderRadius: '3px',
+          }}
+        >
+          💬
+        </button>
+        <button
+          onClick={() => setShowCode(v => !v)}
+          title={showCode ? 'Hide generated GLSL' : 'Show generated GLSL'}
+          style={{
+            background: showCode ? '#89b4fa22' : 'none',
+            border: showCode ? '1px solid #89b4fa55' : 'none',
+            color: showCode ? '#89b4fa' : '#585b70',
+            cursor: 'pointer',
+            fontSize: '11px',
+            lineHeight: 1,
+            padding: '1px 4px',
+            borderRadius: '3px',
+            fontFamily: 'monospace',
+          }}
+        >
+          {'</>'}
+        </button>
+        {Object.keys(def.paramDefs ?? {}).length > 0 && (
+          <button
+            onClick={() => {
+              if (def.defaultParams) {
+                updateNodeParams(node.id, def.defaultParams as Record<string, unknown>, { immediate: true });
+              }
+            }}
+            title="Reset parameters to defaults"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#585b70',
+              cursor: 'pointer',
+              fontSize: '13px',
+              lineHeight: 1,
+              padding: '0 4px',
+            }}
+          >
+            ↺
+          </button>
+        )}
+      </div>
     </div>
   );
 }

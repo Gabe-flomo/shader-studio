@@ -345,6 +345,34 @@ export const RoundNode: NodeDefinition = {
   },
 };
 
+export const QuantizeNode: NodeDefinition = {
+  type: 'quantize',
+  label: 'Quantize',
+  category: 'Math',
+  description: 'Snaps a float to the nearest multiple of Step. Wire this upstream of any continuous input — like Wave Term or Chladni Field\'s n/m sockets — to get discrete stepped jumps instead of a smooth continuous sweep, without baking a fixed step size into the node itself.',
+  inputs: {
+    input: { type: 'float', label: 'Input' },
+    step:  { type: 'float', label: 'Step'  },
+  },
+  outputs: {
+    output: { type: 'float', label: 'Output' },
+  },
+  defaultParams: { step: 1.0 },
+  paramDefs: {
+    step: { label: 'Step', type: 'float', min: 0.001, max: 10.0, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const inputVar = inputVars.input ?? '0.0';
+    const stepVar  = inputVars.step  ?? p(node.params.step, 1.0);
+    const code = [
+      `    float ${id}_step   = max(${stepVar}, 0.0001);\n`,
+      `    float ${id}_output = floor(${inputVar} / ${id}_step + 0.5) * ${id}_step;\n`,
+    ].join('');
+    return { code, outputVars: { output: `${id}_output` } };
+  },
+};
+
 export const DotNode: NodeDefinition = {
   type: 'dot', label: 'Dot', category: 'Math', description: 'Dot product of two vec2 inputs.',
   inputs: { a: { type: 'vec2', label: 'A' }, b: { type: 'vec2', label: 'B' } },
