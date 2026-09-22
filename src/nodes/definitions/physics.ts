@@ -283,12 +283,12 @@ export const ChladniFieldNode: NodeDefinition = {
     uv:    { type: 'vec2',  label: 'UV (scaled)' },
   },
   glslFunction: WAVE_TERM_GLSL,
-  defaultParams: { n: 6.0, m: 4.0, mix: 1.0, scale: 1.0, geometry: 'square', aspect: 'square' },
+  defaultParams: { n: 6.0, m: 4.0, mix: 1.0, scale: 1.0, geometry: 'square', aspect: 'square', bounded: 'plate' },
   paramDefs: {
     n:        { label: 'n',        type: 'float', min: -2,  max: 2,   step: 0.01 },
     m:        { label: 'm',        type: 'float', min: -2,  max: 2,   step: 0.01 },
     mix:      { label: 'Mix',      type: 'float', min: -2,  max: 2,   step: 0.01, hint: 'Square plate: weight of the swapped (m,n) mode relative to the primary (n,m) mode — 0 = pure grid, ±1 = classic X/diamond. Circular plate: phase rotation between the two degenerate rotational modes.' },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01 },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the plate\'s physical size (bigger scale = smaller plate on screen). n/m only change the pattern inside that fixed edge, not the edge itself.' },
     geometry: {
       label: 'Geometry', type: 'select',
       options: [
@@ -304,6 +304,14 @@ export const ChladniFieldNode: NodeDefinition = {
         { value: 'fill',   label: 'Fill viewport (stretches)' },
       ],
     },
+    bounded: {
+      label: 'Bounded', type: 'select',
+      hint: 'Plate: draws a fixed-size edge (set by Scale) and masks everything outside it, so changing n/m only reorganizes the pattern inside that fixed boundary — like a real plate at a fixed size being driven at different frequencies, not a camera zooming. Infinite: no edge, the pattern tiles forever (the old behavior).',
+      options: [
+        { value: 'plate',    label: 'Plate (fixed edge)' },
+        { value: 'infinite', label: 'Infinite (tiles forever)' },
+      ],
+    },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -314,6 +322,7 @@ export const ChladniFieldNode: NodeDefinition = {
     const scale    = p(node.params.scale, 1.0);
     const geometry = typeof node.params.geometry === 'string' ? node.params.geometry : 'square';
     const aspectMode = typeof node.params.aspect === 'string' ? node.params.aspect : 'square';
+    const bounded  = typeof node.params.bounded === 'string' ? node.params.bounded : 'plate';
 
     // The global UV is aspect-corrected (x *= resolution.x/resolution.y) so
     // shapes don't skew on a non-square canvas — but for a periodic pattern
@@ -327,18 +336,27 @@ export const ChladniFieldNode: NodeDefinition = {
     const code: string[] = [`    vec2  ${id}_p = ${baseUv} * ${scale};\n`];
 
     if (geometry === 'circular') {
-      // Matches the validated reference: f(r,θ) = cos(n·θ + mix·π)·cos(m·π·r),
-      // masked to the unit disc (r>1 is off the plate — no pattern drawn there).
+      // Matches the validated reference: f(r,θ) = cos(n·θ + mix·π)·cos(m·π·r).
       code.push(
         `    float ${id}_r     = length(${id}_p);\n`,
         `    float ${id}_theta = atan(${id}_p.y, ${id}_p.x);\n`,
         `    float ${id}_field = cos(${nVal} * ${id}_theta + ${mixVal} * PI) * cos(${mVal} * PI * ${id}_r);\n`,
-        `    if (${id}_r > 1.0) { ${id}_field = 4.0; }\n`,
       );
+      if (bounded === 'plate') {
+        // Fixed disc edge — r>1 is off the plate, no pattern drawn there.
+        // Because the edge sits at a constant r=1 regardless of n/m, raising
+        // n/m visibly reorganizes the pattern *inside* it instead of reading
+        // as the camera zooming.
+        code.push(`    if (${id}_r > 1.0) { ${id}_field = 4.0; }\n`);
+      }
     } else {
       code.push(
         `    float ${id}_field = waveTerm(${id}_p, ${nVal}, ${mVal}) + ${mixVal} * waveTerm(${id}_p, ${mVal}, ${nVal});\n`,
       );
+      if (bounded === 'plate') {
+        // Same idea, square edge: |p.x|>1 or |p.y|>1 is off the plate.
+        code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = 4.0; }\n`);
+      }
     }
 
     return {
@@ -387,6 +405,7 @@ export const ChladniSuperpositionNode: NodeDefinition = {
     scale: 1.0,
     geometry: 'square',
     aspect: 'square',
+    bounded: 'plate',
     terms: '1',
     n1: 6.0, m1: 4.0,
     n2: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[2].n, m2: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[2].m, w2: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[2].w,
@@ -396,7 +415,7 @@ export const ChladniSuperpositionNode: NodeDefinition = {
     n6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].n, m6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].m, w6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].w,
   },
   paramDefs: {
-    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01 },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the plate\'s physical size (bigger scale = smaller plate on screen). Mode numbers only change the pattern inside that fixed edge, not the edge itself.' },
     geometry: {
       label: 'Geometry', type: 'select',
       options: [
@@ -410,6 +429,14 @@ export const ChladniSuperpositionNode: NodeDefinition = {
       options: [
         { value: 'square', label: 'Square (uniform zoom)' },
         { value: 'fill',   label: 'Fill viewport (stretches)' },
+      ],
+    },
+    bounded: {
+      label: 'Bounded', type: 'select',
+      hint: 'Plate: draws a fixed-size edge (set by Scale) and masks everything outside it, so raising Terms/mode numbers only reorganizes the pattern inside that fixed boundary — like a real plate at a fixed size, not a camera zooming. Infinite: no edge, tiles forever (the old behavior).',
+      options: [
+        { value: 'plate',    label: 'Plate (fixed edge)' },
+        { value: 'infinite', label: 'Infinite (tiles forever)' },
       ],
     },
     terms: {
@@ -443,6 +470,7 @@ export const ChladniSuperpositionNode: NodeDefinition = {
     const scale    = p(node.params.scale, 1.0);
     const geometry = typeof node.params.geometry === 'string' ? node.params.geometry : 'square';
     const aspectMode = typeof node.params.aspect === 'string' ? node.params.aspect : 'square';
+    const bounded  = typeof node.params.bounded === 'string' ? node.params.bounded : 'plate';
     const termsRaw = parseInt(typeof node.params.terms === 'string' ? node.params.terms : '1', 10);
     const termsCount = Math.max(1, Math.min(6, Number.isFinite(termsRaw) ? termsRaw : 1));
 
@@ -473,7 +501,9 @@ export const ChladniSuperpositionNode: NodeDefinition = {
         sumExpr += ` + ${wVal} * cos(${nVal} * ${id}_theta) * cos(${mVal} * PI * ${id}_r)`;
       }
       code.push(`    float ${id}_field = ${sumExpr};\n`);
-      code.push(`    if (${id}_r > 1.0) { ${id}_field = 4.0; }\n`);
+      if (bounded === 'plate') {
+        code.push(`    if (${id}_r > 1.0) { ${id}_field = 4.0; }\n`);
+      }
     } else {
       sumExpr = `waveTerm(${id}_p, ${n1}, ${m1})`;
       for (let i = 2; i <= termsCount; i++) {
@@ -484,6 +514,9 @@ export const ChladniSuperpositionNode: NodeDefinition = {
         sumExpr += ` + ${wVal} * waveTerm(${id}_p, ${nVal}, ${mVal})`;
       }
       code.push(`    float ${id}_field = ${sumExpr};\n`);
+      if (bounded === 'plate') {
+        code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = 4.0; }\n`);
+      }
     }
 
     return {
