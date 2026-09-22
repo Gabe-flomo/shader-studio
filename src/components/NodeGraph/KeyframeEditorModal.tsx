@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
-import { EASING_PRESETS, isKeyframeBypassed, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
+import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
 import { TimeControlsStrip } from '../TimeControlsStrip';
 
 const MAX_KEYFRAMES = 8;
@@ -17,10 +17,17 @@ const TOOL_MODES: { id: ToolMode; label: string; key: string; icon: string }[] =
   { id: 'delete', label: 'Delete', key: 'X', icon: '✕' },
 ];
 
-// ── Data read/write helpers ──────────────────────────────────────────────────
+// Per-axis color, matching the classic X/Y/Z = red/green/blue convention.
+const AXIS_COLORS: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa' };
+const DEFAULT_AXIS_COLOR = '#89b4fa'; // plain float sockets (single axis, no letter)
+const FLOAT_AXIS: readonly string[] = ['']; // stable reference — a fresh [''] literal every render would churn useMemo deps below
 
-function readKeyframes(node: GraphNode, socketKey: string): Keyframe[] {
-  const raw = node.params[`__keyframes_${socketKey}`];
+// ── Data read/write helpers ──────────────────────────────────────────────────
+// `storageKey` is the socket key for a plain float socket, or `${socketKey}_x`
+// / `_y` / `_z` for one axis of a vec2/vec3 socket — see VECTOR_AXES.
+
+function readKeyframes(node: GraphNode, storageKey: string): Keyframe[] {
+  const raw = node.params[`__keyframes_${storageKey}`];
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((k): k is Keyframe => k && typeof k === 'object' && typeof (k as Keyframe).t === 'number' && typeof (k as Keyframe).v === 'number')
@@ -117,6 +124,8 @@ type DragState =
   | { kind: 'keyframe'; index: number; moved: boolean }
   | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' };
 
+interface OtherAxisTrack { label: string; color: string; keyframes: Keyframe[] }
+
 // ── Drawing ──────────────────────────────────────────────────────────────────
 
 function draw(
@@ -128,6 +137,8 @@ function draw(
   easeEditSeg: number | null,
   hoverKf: number | null,
   selectedKf: number | null,
+  activeColor: string,
+  otherAxes: OtherAxisTrack[],
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -170,6 +181,26 @@ function draw(
     ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
   }
 
+  // Reference curves for the other axes of a vec2/vec3 socket — thin, dimmed,
+  // no markers, purely for visual context while editing the active axis.
+  const steps = Math.max(2, Math.round(W / 3));
+  for (const other of otherAxes) {
+    if (other.keyframes.length === 0) continue;
+    ctx.strokeStyle = other.color + '55';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    const oFirstT = other.keyframes[0].t, oLastT = other.keyframes[other.keyframes.length - 1].t;
+    for (let i = 0; i <= steps; i++) {
+      const t = oFirstT + (i / steps) * (oLastT - oFirstT);
+      const v = evalCurveAt(other.keyframes, mode, loopBack, t);
+      const cx = toX(t), cy = toY(v);
+      if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   if (keyframes.length === 0) {
     ctx.fillStyle = '#45475a';
     ctx.font = '11px monospace';
@@ -185,9 +216,8 @@ function draw(
   // keyframe markers below, so the line always passes exactly through them.
   if (segs.length > 0) {
     ctx.lineWidth = 2;
-    const steps = Math.max(2, Math.round(W / 3));
     const drawRange = (fromT: number, toT: number, dashed: boolean) => {
-      ctx.strokeStyle = dashed ? '#f9e2af' : '#89b4fa';
+      ctx.strokeStyle = dashed ? '#f9e2af' : activeColor;
       if (dashed) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
       ctx.beginPath();
       for (let i = 0; i <= steps; i++) {
@@ -203,7 +233,7 @@ function draw(
     if (mode === 'interpolate') drawRange(lastT, lastT + loopBack, true);
   } else {
     // single keyframe: flat line at its value
-    ctx.strokeStyle = '#89b4fa';
+    ctx.strokeStyle = activeColor;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(0, toY(keyframes[0].v)); ctx.lineTo(W, toY(keyframes[0].v)); ctx.stroke();
   }
@@ -232,12 +262,12 @@ function draw(
     const cx = toX(k.t), cy = toY(k.v);
     const isHover = hoverKf === i;
     const isSelected = selectedKf === i;
-    ctx.fillStyle = isHover ? '#ffffff' : '#f9e2af';
+    ctx.fillStyle = isHover ? '#ffffff' : activeColor;
     ctx.strokeStyle = '#11111b';
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(cx, cy, isHover ? KF_R + 1.5 : KF_R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     if (isSelected) {
-      ctx.strokeStyle = '#89b4fa';
+      ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(cx, cy, KF_R + 4, 0, Math.PI * 2); ctx.stroke();
     }
@@ -274,19 +304,41 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     }
   }, []);
 
-  const keyframes = useMemo(() => readKeyframes(node, socketKey), [node, socketKey]);
+  // ── Vector (vec2/vec3) axis support ──
+  // A plain float socket has one axis (''), meaning storageKey === socketKey,
+  // preserving every existing __keyframes_<socketKey> key exactly as-is.
+  const inputType = node.inputs[socketKey]?.type;
+  const axisLetters = inputType === 'vec3' ? VECTOR_AXES.vec3 : inputType === 'vec2' ? VECTOR_AXES.vec2 : FLOAT_AXIS;
+  const isVector = axisLetters[0] !== '';
+  const [activeAxis, setActiveAxis] = useState<string>(axisLetters[0]);
+  useEffect(() => { setActiveAxis(axisLetters[0]); }, [socketKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const storageKey = activeAxis ? `${socketKey}_${activeAxis}` : socketKey;
+  const activeColor = isVector ? (AXIS_COLORS[activeAxis] ?? DEFAULT_AXIS_COLOR) : DEFAULT_AXIS_COLOR;
+
+  const keyframes = useMemo(() => readKeyframes(node, storageKey), [node, storageKey]);
   const mode = readMode(node, socketKey);
   const loopBack = readLoopBack(node, socketKey);
   const bypassed = isKeyframeBypassed(node, socketKey);
   const keyframesRef = useRef(keyframes);
   keyframesRef.current = keyframes;
 
+  // Other axes' keyframes, drawn as dim reference curves behind the active one.
+  const otherAxes = useMemo<OtherAxisTrack[]>(() => {
+    if (!isVector) return [];
+    return axisLetters
+      .filter(a => a !== activeAxis)
+      .map(a => ({ label: a.toUpperCase(), color: AXIS_COLORS[a] ?? DEFAULT_AXIS_COLOR, keyframes: readKeyframes(node, `${socketKey}_${a}`) }));
+  }, [isVector, axisLetters, activeAxis, node, socketKey]);
+
   const writeKeyframes = useCallback((next: Keyframe[]) => {
-    updateNodeParams(node.id, { [`__keyframes_${socketKey}`]: next });
-  }, [node.id, socketKey, updateNodeParams]);
+    updateNodeParams(node.id, { [`__keyframes_${storageKey}`]: next });
+  }, [node.id, storageKey, updateNodeParams]);
   const setMode = useCallback((m: KeyframeLoopMode) => updateNodeParams(node.id, { [`__kfMode_${socketKey}`]: m }), [node.id, socketKey, updateNodeParams]);
   const setLoopBack = useCallback((v: number) => updateNodeParams(node.id, { [`__kfLoopBack_${socketKey}`]: Math.max(0.01, v) }), [node.id, socketKey, updateNodeParams]);
   const setBypassed = useCallback((b: boolean) => updateNodeParams(node.id, { [`__kfBypass_${socketKey}`]: b }), [node.id, socketKey, updateNodeParams]);
+  const copyActiveAxisTo = useCallback((targetAxis: string) => {
+    updateNodeParams(node.id, { [`__keyframes_${socketKey}_${targetAxis}`]: keyframesRef.current.map(k => ({ ...k, ease: { ...k.ease } })) });
+  }, [node.id, socketKey, updateNodeParams]);
 
   // ── Tool mode (select / add / delete) ──
   const [toolMode, setToolModeState] = useState<ToolMode>('select');
@@ -294,6 +346,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   toolModeRef.current = toolMode;
   const [selectedKf, setSelectedKf] = useState<number | null>(null);
   const setToolMode = useCallback((m: ToolMode) => { setToolModeState(m); setSelectedKf(null); }, []);
+  const changeAxis = useCallback((a: string) => { setActiveAxis(a); setSelectedKf(null); }, []);
 
   // Derived: which segment (if any) the current selection's bezier handles belong to.
   const easeEditSeg = useMemo(() => {
@@ -340,8 +393,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf);
-  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf]);
+    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes);
+  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes]);
 
   useEffect(() => { redraw(); }, [keyframes, view, redraw]);
 
@@ -602,13 +655,52 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: '#f9e2af' }}>◆ Keyframes — {socketKey}</span>
+          <span style={{ fontWeight: 700, fontSize: '14px', color: activeColor }}>
+            ◆ Keyframes — {socketKey}{isVector && <span style={{ opacity: 0.7 }}>.{activeAxis}</span>}
+          </span>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '10px', color: '#6c7086' }}>
             <TimeControlsStrip />
             <span>{keyframes.length}/{MAX_KEYFRAMES}</span>
             <button onClick={onClose} style={{ background: 'none', border: '1px solid #f38ba855', color: '#f38ba8', cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
           </div>
         </div>
+
+        {/* Axis selector — vec2/vec3 sockets only */}
+        {isVector && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: '#6c7086', fontSize: '11px' }}>Axis</span>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {axisLetters.map(a => (
+                <button
+                  key={a}
+                  onClick={() => changeAxis(a)}
+                  title={`Edit the ${a.toUpperCase()} axis`}
+                  style={{
+                    background: activeAxis === a ? `${AXIS_COLORS[a]}22` : 'none',
+                    border: `1px solid ${activeAxis === a ? AXIS_COLORS[a] : '#45475a'}`,
+                    color: activeAxis === a ? AXIS_COLORS[a] : '#a6adc8',
+                    cursor: 'pointer', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px',
+                  }}
+                >{a.toUpperCase()}</button>
+              ))}
+            </div>
+            {keyframes.length > 0 && axisLetters.length > 1 && (
+              <>
+                <span style={{ color: '#45475a', fontSize: '10px' }}>copy to</span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {axisLetters.filter(a => a !== activeAxis).map(a => (
+                    <button
+                      key={a}
+                      onClick={() => copyActiveAxisTo(a)}
+                      title={`Copy the ${activeAxis.toUpperCase()} axis's keyframes onto ${a.toUpperCase()} (overwrites it)`}
+                      style={{ background: 'none', border: `1px solid ${AXIS_COLORS[a]}55`, color: AXIS_COLORS[a], cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '4px' }}
+                    >→ {a.toUpperCase()}</button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Tool modes + bypass */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
@@ -672,7 +764,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
             {toolMode === 'delete' && 'click a point: delete it'}
             {toolMode === 'select' && 'click point: select (shows ease handles) · drag: move · dbl-click: delete · scroll: pan · pinch/ctrl+scroll: zoom value · hold shift while dragging to invert snap'}
           </span>
-          <span style={{ color: '#89b4fa', fontFamily: 'monospace' }}>{hoverInfo ? `t=${fmt(hoverInfo.t)}  v=${fmt(hoverInfo.v)}` : ''}</span>
+          <span style={{ color: activeColor, fontFamily: 'monospace' }}>{hoverInfo ? `t=${fmt(hoverInfo.t)}  v=${fmt(hoverInfo.v)}` : ''}</span>
         </div>
 
         {/* Grid + snap controls */}

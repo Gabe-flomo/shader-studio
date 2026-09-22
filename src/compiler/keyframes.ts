@@ -8,10 +8,22 @@ import type { GraphNode } from '../types/nodeGraph';
 // survives save/export/import/undo for free (params is a plain unvalidated
 // Record<string, unknown> everywhere it's persisted).
 //
-// __keyframes_<socketKey> : Keyframe[]
-// __kfMode_<socketKey>    : 'once' | 'loop' | 'interpolate'   (default 'once')
-// __kfLoopBack_<socketKey>: number seconds                     (default 1, 'interpolate' only)
-// __kfBypass_<socketKey>  : boolean                             (default false — data stays, compiler ignores it)
+// __keyframes_<socketKey>      : Keyframe[]                          (float sockets)
+// __keyframes_<socketKey>_x/y/z: Keyframe[]                          (vec2/vec3 sockets, per axis)
+// __kfMode_<socketKey>         : 'once' | 'loop' | 'interpolate'      (default 'once', shared across axes)
+// __kfLoopBack_<socketKey>     : number seconds                      (default 1, 'interpolate' only, shared across axes)
+// __kfBypass_<socketKey>       : boolean                             (default false — data stays, compiler ignores it)
+//
+// Vector (vec2/vec3) keyframing only applies to a socket whose InputSocket
+// declares `axisParams` — the float param names backing each axis's static
+// fallback (e.g. UvTransform2D's `translate` socket, axisParams: ['tx','ty']).
+// Each axis is otherwise an independent float keyframe track reusing every
+// helper below; mode/loopBack/bypass are shared per-socket, not per-axis.
+
+export const VECTOR_AXES: Record<'vec2' | 'vec3', readonly string[]> = {
+  vec2: ['x', 'y'],
+  vec3: ['x', 'y', 'z'],
+};
 
 export interface KeyframeEasing {
   a: number; b: number; c: number; d: number; // CSS cubic-bezier() convention
@@ -51,10 +63,9 @@ export function isKeyframeBypassed(node: GraphNode, socketKey: string): boolean 
   return node.params[`__kfBypass_${socketKey}`] === true;
 }
 
-export function getKeyframeConfig(node: GraphNode, socketKey: string): KeyframeConfig | null {
-  const raw = node.params[`__keyframes_${socketKey}`];
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  const keyframes: Keyframe[] = raw
+function parseKeyframeArray(raw: unknown): Keyframe[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
     .filter((k): k is Keyframe => k && typeof k === 'object' && typeof (k as Keyframe).t === 'number' && typeof (k as Keyframe).v === 'number')
     .map(k => ({
       t: k.t,
@@ -62,14 +73,36 @@ export function getKeyframeConfig(node: GraphNode, socketKey: string): KeyframeC
       ease: k.ease && typeof k.ease === 'object' ? k.ease : EASING_PRESETS.ease,
     }))
     .sort((a, b) => a.t - b.t);
-  if (keyframes.length === 0) return null;
+}
 
+function readModeAndLoopBack(node: GraphNode, socketKey: string): { mode: KeyframeLoopMode; loopBack: number } {
   const modeRaw = node.params[`__kfMode_${socketKey}`];
   const mode: KeyframeLoopMode = modeRaw === 'loop' || modeRaw === 'interpolate' ? modeRaw : 'once';
   const loopBackRaw = node.params[`__kfLoopBack_${socketKey}`];
   const loopBack = typeof loopBackRaw === 'number' && loopBackRaw > 0 ? loopBackRaw : 1.0;
+  return { mode, loopBack };
+}
 
-  return { keyframes, mode, loopBack };
+export function getKeyframeConfig(node: GraphNode, socketKey: string): KeyframeConfig | null {
+  const keyframes = parseKeyframeArray(node.params[`__keyframes_${socketKey}`]);
+  if (keyframes.length === 0) return null;
+  return { keyframes, ...readModeAndLoopBack(node, socketKey) };
+}
+
+/** Same as getKeyframeConfig, but for one axis of a vec2/vec3 socket —
+ *  keyframes are read per-axis (`__keyframes_<socketKey>_<axis>`) while
+ *  mode/loopBack are read from the socket itself (shared across axes). */
+export function getAxisKeyframeConfig(node: GraphNode, socketKey: string, axis: string): KeyframeConfig | null {
+  const keyframes = parseKeyframeArray(node.params[`__keyframes_${socketKey}_${axis}`]);
+  if (keyframes.length === 0) return null;
+  return { keyframes, ...readModeAndLoopBack(node, socketKey) };
+}
+
+export function socketHasVectorKeyframes(node: GraphNode, socketKey: string, axes: readonly string[]): boolean {
+  return axes.some(axis => {
+    const kf = node.params[`__keyframes_${socketKey}_${axis}`];
+    return Array.isArray(kf) && kf.length > 0;
+  });
 }
 
 // ─── GLSL codegen ────────────────────────────────────────────────────────────
@@ -95,7 +128,7 @@ float kfCubicBezier(float x,float a,float b,float c,float d){
   return clamp(kfBezXfromT(t,E,F,G,0.0),0.0,1.0);
 }`;
 
-function fnum(n: number): string {
+export function fnum(n: number): string {
   return Number.isInteger(n) ? `${n}.0` : `${n}`;
 }
 
@@ -164,4 +197,30 @@ export function generateKeyframeGLSL(
     sharedFunction: KF_BEZIER_GLSL,
     expr: `${fnName}(u_time)`,
   };
+}
+
+/**
+ * vec2/vec3 counterpart to generateKeyframeGLSL — one axis at a time reuses
+ * that same per-axis function, then combines the per-axis expressions (or,
+ * for an axis with no keyframes, its current static value) into a single
+ * vecN(...) constructor expression.
+ */
+export function generateVectorKeyframeGLSL(
+  fnPrefix: string,
+  axisConfigs: (KeyframeConfig | null)[],
+  staticFallbacks: number[],
+  vecType: 'vec2' | 'vec3',
+): { glslFunctions: string[]; sharedFunction: string | null; expr: string } {
+  const glslFunctions: string[] = [];
+  let sharedFunction: string | null = null;
+  const axes = VECTOR_AXES[vecType];
+  const parts = axes.map((axis, i) => {
+    const cfg = axisConfigs[i];
+    if (!cfg) return fnum(staticFallbacks[i] ?? 0);
+    const { glslFunction, sharedFunction: shared, expr } = generateKeyframeGLSL(`${fnPrefix}_${axis}`, cfg);
+    glslFunctions.push(glslFunction);
+    sharedFunction = shared;
+    return expr;
+  });
+  return { glslFunctions, sharedFunction, expr: `${vecType}(${parts.join(', ')})` };
 }

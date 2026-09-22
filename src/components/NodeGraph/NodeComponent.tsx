@@ -41,7 +41,7 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { AssetContextMenu } from './AssetContextMenu';
 import { KeyframeEditorModal } from './KeyframeEditorModal';
-import { socketHasKeyframes } from '../../compiler/keyframes';
+import { socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -3382,9 +3382,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
           const isHovered = hoveredInput === key;
           // Keyframes are a third input mode (alongside "wired" and "static
-          // value") — only meaningful for a float socket that isn't wired.
-          const kfEligible = !isConnected && !isExternal && input.type === 'float';
-          const isKeyframed = kfEligible && socketHasKeyframes(node, key);
+          // value") — meaningful for an unwired float socket, or an unwired
+          // vec2/vec3 socket that declares which params back each axis
+          // (most vec2/vec3 sockets are meant to be wired — UV, positions —
+          // and don't declare this, so they stay ineligible).
+          const isVectorKfType = input.type === 'vec2' || input.type === 'vec3';
+          const vectorAxes = isVectorKfType ? VECTOR_AXES[input.type as 'vec2' | 'vec3'] : null;
+          const kfEligible = !isConnected && !isExternal && (
+            input.type === 'float' || (isVectorKfType && !!input.axisParams)
+          );
+          const isKeyframed = kfEligible && (
+            input.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, vectorAxes ?? [])
+          );
 
           return (
             <div
@@ -4413,30 +4422,39 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       )}
 
       {/* ── Keyframe context menu + editor ── */}
-      {kfMenu && (
-        <AssetContextMenu
-          x={kfMenu.x}
-          y={kfMenu.y}
-          onDismiss={() => setKfMenu(null)}
-          items={[
-            {
-              label: socketHasKeyframes(node, kfMenu.key) ? 'Edit Keyframes…' : 'Add Keyframes…',
-              action: () => setKfModalKey(kfMenu.key),
-            },
-            ...(socketHasKeyframes(node, kfMenu.key)
-              ? [{
-                  label: 'Remove Keyframes',
-                  destructive: true,
-                  action: () => updateNodeParams(node.id, {
-                    [`__keyframes_${kfMenu.key}`]: undefined,
-                    [`__kfMode_${kfMenu.key}`]: undefined,
-                    [`__kfLoopBack_${kfMenu.key}`]: undefined,
-                  }),
-                }]
-              : []),
-          ]}
-        />
-      )}
+      {kfMenu && (() => {
+        const kfInput = node.inputs[kfMenu.key];
+        const isVec = kfInput && (kfInput.type === 'vec2' || kfInput.type === 'vec3');
+        const axes = isVec ? VECTOR_AXES[kfInput.type as 'vec2' | 'vec3'] : null;
+        const hasKf = isVec ? socketHasVectorKeyframes(node, kfMenu.key, axes ?? []) : socketHasKeyframes(node, kfMenu.key);
+        const clearParams: Record<string, unknown> = {
+          [`__kfMode_${kfMenu.key}`]: undefined,
+          [`__kfLoopBack_${kfMenu.key}`]: undefined,
+          [`__kfBypass_${kfMenu.key}`]: undefined,
+        };
+        if (isVec && axes) axes.forEach(axis => { clearParams[`__keyframes_${kfMenu.key}_${axis}`] = undefined; });
+        else clearParams[`__keyframes_${kfMenu.key}`] = undefined;
+        return (
+          <AssetContextMenu
+            x={kfMenu.x}
+            y={kfMenu.y}
+            onDismiss={() => setKfMenu(null)}
+            items={[
+              {
+                label: hasKf ? 'Edit Keyframes…' : 'Add Keyframes…',
+                action: () => setKfModalKey(kfMenu.key),
+              },
+              ...(hasKf
+                ? [{
+                    label: 'Remove Keyframes',
+                    destructive: true,
+                    action: () => updateNodeParams(node.id, clearParams),
+                  }]
+                : []),
+            ]}
+          />
+        );
+      })()}
       {kfModalKey && (
         <KeyframeEditorModal node={node} socketKey={kfModalKey} onClose={() => setKfModalKey(null)} />
       )}
