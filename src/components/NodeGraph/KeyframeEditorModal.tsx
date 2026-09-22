@@ -466,9 +466,34 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       .map(a => ({ label: a.toUpperCase(), color: AXIS_COLORS[a] ?? DEFAULT_AXIS_COLOR, keyframes: readKeyframes(node, `${socketKey}_${a}`) }));
   }, [isVector, axisLetters, activeAxis, node, socketKey]);
 
+  // Invariant: the earliest keyframe always sits at t=0 — any "start later"
+  // intent goes through Offset instead, so there's exactly one way to shift
+  // a track in time, not two competing ones (moving keyframe 0 vs. Offset).
+  // Enforced here, centrally, for every mutation path (add/drag/delete/draw/
+  // load-preset all funnel through writeKeyframes): if the write would leave
+  // the first keyframe off zero, shift the whole set back to zero and add
+  // that same amount onto Offset instead — so the curve doesn't move at all,
+  // only its representation does.
   const writeKeyframes = useCallback((next: Keyframe[]) => {
-    updateNodeParams(node.id, { [`__keyframes_${storageKey}`]: next });
-  }, [node.id, storageKey, updateNodeParams]);
+    const shift = next.length > 0 ? next[0].t : 0;
+    if (Math.abs(shift) < 1e-9) {
+      updateNodeParams(node.id, { [`__keyframes_${storageKey}`]: next });
+    } else {
+      updateNodeParams(node.id, {
+        [`__keyframes_${storageKey}`]: next.map(k => ({ ...k, t: k.t - shift })),
+        [`__kfOffset_${socketKey}`]: offset + shift,
+      });
+    }
+  }, [node.id, storageKey, socketKey, offset, updateNodeParams]);
+  // Migrate data saved before this invariant existed (or loaded from an old
+  // preset/import) — re-running it through writeKeyframes normalizes it and
+  // folds the difference into Offset, exactly like any other write, so a
+  // graph someone already had open keeps rendering identically.
+  useEffect(() => {
+    if (keyframes.length > 0 && Math.abs(keyframes[0].t) > 1e-9) writeKeyframes(keyframes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyframes, storageKey]);
+
   const setMode = useCallback((m: KeyframeLoopMode) => updateNodeParams(node.id, { [`__kfMode_${socketKey}`]: m }), [node.id, socketKey, updateNodeParams]);
   const setLoopBack = useCallback((v: number) => updateNodeParams(node.id, { [`__kfLoopBack_${socketKey}`]: Math.max(0.01, v) }), [node.id, socketKey, updateNodeParams]);
   const setBypassed = useCallback((b: boolean) => updateNodeParams(node.id, { [`__kfBypass_${socketKey}`]: b }), [node.id, socketKey, updateNodeParams]);
