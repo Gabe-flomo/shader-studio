@@ -1030,6 +1030,18 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     };
     window.addEventListener('seek-time', handleSeekTime);
 
+    // Nudge time by a relative amount when 'step-time' is fired (the global
+    // Left/Right-arrow hotkeys) — clamped at 0 so "step backward" can't go
+    // negative.
+    const handleStepTime = (e: Event) => {
+      const delta = (e as CustomEvent<{ delta: number }>).detail?.delta;
+      if (typeof delta !== 'number') return;
+      virtualTime = Math.max(0, virtualTime + delta);
+      lastRafTime = null;
+      material.uniforms.u_time.value = virtualTime;
+    };
+    window.addEventListener('step-time', handleStepTime);
+
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       ro.disconnect();
@@ -1037,6 +1049,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('reset-time', handleResetTime);
       window.removeEventListener('seek-time', handleSeekTime);
+      window.removeEventListener('step-time', handleStepTime);
       rt.dispose();
       floatRt.dispose();
       histRt.dispose();

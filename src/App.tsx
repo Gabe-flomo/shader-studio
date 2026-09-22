@@ -17,6 +17,7 @@ import { useNodeGraphStore } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
+import { useTimeHotkeys } from './hooks/useTimeHotkeys';
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -339,6 +340,7 @@ function App() {
   }), [HOLD_FILTER_IDS, setNodeHighlightFilter]);
 
   useShortcuts(shortcutHandlers, holdHandlers);
+  useTimeHotkeys();
 
   const handleSave = () => {
     const name = saveNameInput.trim();
