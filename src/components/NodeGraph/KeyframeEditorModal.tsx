@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, saveKeyframePreset } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
 import { TimeControlsStrip } from '../TimeControlsStrip';
@@ -425,6 +425,34 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const copyActiveAxisTo = useCallback((targetAxis: string) => {
     updateNodeParams(node.id, { [`__keyframes_${socketKey}_${targetAxis}`]: keyframesRef.current.map(k => ({ ...k, ease: { ...k.ease } })) });
   }, [node.id, socketKey, updateNodeParams]);
+
+  // ── Saved keyframe presets — save the active axis's curve to the palette's
+  // "Saved Keyframes" tab, or apply one back onto this axis. Applying is a
+  // window CustomEvent (mirroring reset-time/seek-time) so the sidebar tab
+  // can reach whichever editor happens to be open without holding a direct
+  // reference to it. ──
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [savePresetName, setSavePresetName] = useState('');
+  const handleSavePreset = useCallback((name: string) => {
+    if (keyframesRef.current.length === 0) return;
+    saveKeyframePreset({
+      label: name.trim() || `${socketKey}${isVector ? `.${activeAxis}` : ''}`,
+      keyframes: keyframesRef.current.map(k => ({ ...k, ease: { ...k.ease } })),
+    });
+    setShowSaveInput(false);
+    setSavePresetName('');
+  }, [socketKey, isVector, activeAxis]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ keyframes: Keyframe[] }>).detail;
+      if (!detail?.keyframes) return;
+      writeKeyframes(detail.keyframes.slice(0, MAX_KEYFRAMES).map(k => ({ ...k, ease: { ...k.ease } })));
+      setSelectedKf(null);
+    };
+    window.addEventListener('apply-keyframe-preset', handler);
+    return () => window.removeEventListener('apply-keyframe-preset', handler);
+  }, [writeKeyframes]);
 
   // ── Tool mode (select / add / delete) ──
   const [toolMode, setToolModeState] = useState<ToolMode>('select');
@@ -865,6 +893,34 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
                 cursor: 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
               }}
             >⏭ {bypassed ? 'Bypassed' : 'Bypass'}</button>
+            {showSaveInput ? (
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder={`${socketKey}${isVector ? `.${activeAxis}` : ''}`}
+                  value={savePresetName}
+                  onChange={e => setSavePresetName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleSavePreset(savePresetName);
+                    if (e.key === 'Escape') { setShowSaveInput(false); setSavePresetName(''); }
+                  }}
+                  style={{ width: '110px', padding: '3px 6px', fontSize: '11px', background: '#11111b', color: '#cdd6f4', border: '1px solid #a6e3a1', borderRadius: '4px', outline: 'none' }}
+                />
+                <button onClick={() => handleSavePreset(savePresetName)} style={{ background: '#a6e3a111', border: '1px solid #a6e3a155', color: '#a6e3a1', cursor: 'pointer', fontSize: '11px', padding: '3px 8px', borderRadius: '4px' }}>↑</button>
+                <button onClick={() => { setShowSaveInput(false); setSavePresetName(''); }} style={{ background: 'none', border: '1px solid #6c708655', color: '#6c7086', cursor: 'pointer', fontSize: '11px', padding: '3px 6px', borderRadius: '4px' }}>✕</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setSavePresetName(''); setShowSaveInput(true); }}
+                disabled={keyframes.length === 0}
+                title="Save this curve as a reusable preset in the Saved Keyframes palette tab"
+                style={{
+                  background: 'none', border: `1px solid ${keyframes.length === 0 ? '#45475a' : '#a6e3a155'}`, color: keyframes.length === 0 ? '#45475a' : '#a6e3a1',
+                  cursor: keyframes.length === 0 ? 'default' : 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
+                }}
+              >↑ Save Preset</button>
+            )}
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, EXAMPLE_GRAPHS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
@@ -8,6 +8,7 @@ import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
 import type { TransformPreset } from '../../types/transformPreset';
+import type { KeyframePreset } from '../../types/keyframePreset';
 
 // ── Example folders ───────────────────────────────────────────────────────────
 type ExKey = keyof typeof EXAMPLE_GRAPHS;
@@ -31,7 +32,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions';
+type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions' | 'keyframes';
 
 interface ContentPaneState {
   id: string;
@@ -84,6 +85,13 @@ const ExpressionsIcon = () => (
     <text x="0.5" y="13" fontSize="12" fontFamily="'Courier New', Courier, monospace">{'{}'}</text>
   </svg>
 );
+const KeyframesIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M1.5 12 L5 5 L9 9 L14.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    <rect x="3.4" y="3.4" width="3.2" height="3.2" transform="rotate(45 5 5)" fill="currentColor"/>
+    <rect x="7.4" y="7.4" width="3.2" height="3.2" transform="rotate(45 9 9)" fill="currentColor"/>
+  </svg>
+);
 
 const SIDEBAR_TABS: Array<{ id: TabId; label: string; color: string; Icon: () => React.ReactElement }> = [
   { id: 'nodes',       label: 'Nodes',        color: '#89b4fa', Icon: NodesIcon },
@@ -92,6 +100,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; color: string; Icon: () =>
   { id: 'presets',     label: 'Presets',      color: '#f9e2af', Icon: PresetsIcon },
   { id: 'functions',   label: 'Functions',    color: '#89dceb', Icon: FunctionsIcon },
   { id: 'expressions', label: 'Expr Blocks',  color: '#cba6f7', Icon: ExpressionsIcon },
+  { id: 'keyframes',   label: 'Saved Keyframes', color: '#f9e2af', Icon: KeyframesIcon },
 ];
 
 // ── TabPill ───────────────────────────────────────────────────────────────────
@@ -213,6 +222,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const [renameExprValue, setRenameExprValue]       = useState('');
   const [renamingTransformId, setRenamingTransformId] = useState<string | null>(null);
   const [renameTransformValue, setRenameTransformValue] = useState('');
+  const [keyframePresets, setKeyframePresets]       = useState<KeyframePreset[]>(() => loadKeyframePresets());
+  const [renamingKeyframeId, setRenamingKeyframeId] = useState<string | null>(null);
+  const [renameKeyframeValue, setRenameKeyframeValue] = useState('');
   const [examplesExpanded, setExamplesExpanded]     = useState(false);
   const [openFolders, setOpenFolders]               = useState<Set<string>>(new Set());
   const [showImport, setShowImport]                 = useState(false);
@@ -222,6 +234,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const refreshSavedNames     = () => setSavedNames(getSavedGraphNames());
   const refreshExprPresets    = () => setExprPresets(loadExprPresets());
   const refreshTransformPresets = () => setTransformPresets(loadTransformPresets());
+  const refreshKeyframePresets = () => setKeyframePresets(loadKeyframePresets());
 
   const refreshPresets = useCallback(async () => {
     const local = loadCustomFns();
@@ -253,6 +266,13 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
     refreshTransformPresets();
     window.addEventListener('transformpreset-changed', refreshTransformPresets);
     return () => window.removeEventListener('transformpreset-changed', refreshTransformPresets);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    refreshKeyframePresets();
+    window.addEventListener('keyframepreset-changed', refreshKeyframePresets);
+    return () => window.removeEventListener('keyframepreset-changed', refreshKeyframePresets);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -486,6 +506,30 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   />;
             }}
             emptyHint={<EmptyHint>Open an Expr Block node and click "↑ Save Preset".</EmptyHint>}
+          />
+        );
+
+      case 'keyframes':
+        return (
+          <FolderableList
+            scopeKey="keyframes"
+            color="#f9e2af"
+            items={(keyframePresets as KeyframePreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
+            renderItem={(item) => {
+              const p = (item as typeof item & { _preset: KeyframePreset })._preset;
+              return renamingKeyframeId === p.id
+                ? <input key={p.id} autoFocus value={renameKeyframeValue} onChange={e => setRenameKeyframeValue(e.target.value)}
+                    onBlur={() => { renameKeyframePreset(p.id, renameKeyframeValue); setRenamingKeyframeId(null); refreshKeyframePresets(); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { renameKeyframePreset(p.id, renameKeyframeValue); setRenamingKeyframeId(null); refreshKeyframePresets(); } if (e.key === 'Escape') setRenamingKeyframeId(null); e.stopPropagation(); }}
+                    style={{ background: '#11111b', border: '1px solid #f9e2af', color: '#f9e2af', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                  />
+                : <TabPill label={p.label} color="#f9e2af" prefix="◆"
+                    onClick={() => window.dispatchEvent(new CustomEvent('apply-keyframe-preset', { detail: { keyframes: p.keyframes } }))}
+                    onDelete={() => { deleteKeyframePreset(p.id); refreshKeyframePresets(); }}
+                    onRename={() => { setRenameKeyframeValue(p.label); setRenamingKeyframeId(p.id); }}
+                  />;
+            }}
+            emptyHint={<EmptyHint>Open a keyframe editor (right-click an input socket) and click "↑ Save Preset". Click a saved curve here to apply it to whichever editor is currently open.</EmptyHint>}
           />
         );
 

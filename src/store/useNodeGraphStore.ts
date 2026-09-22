@@ -5,6 +5,7 @@ import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPres
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
+import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
@@ -130,6 +131,7 @@ const customFnPresetManager  = new PresetManager<CustomFnPreset>({ localStorageP
 const exprPresetManager      = new PresetManager<ExprPreset>({ localStoragePrefix: 'shader-studio:ep:', eventName: 'exprpreset-changed', diskDir: getExprDir });
 const transformPresetManager = new PresetManager<TransformPreset>({ localStoragePrefix: 'shader-studio:tp:', eventName: 'transformpreset-changed' });
 const groupPresetManager     = new PresetManager<GroupPreset>({ localStoragePrefix: 'shader-studio:gp:', diskDir: getGroupPresetDir });
+const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStoragePrefix: 'shader-studio:kfp:', eventName: 'keyframepreset-changed' });
 
 /**
  * Directly save a CustomFnPreset from caller-supplied data.
@@ -177,6 +179,29 @@ export function deleteExprPreset(id: string): void {
 
 export function renameExprPreset(id: string, newLabel: string): void {
   exprPresetManager.rename(id, newLabel);
+}
+
+// ── Keyframe preset helpers ─────────────────────────────────────────────────
+
+export function saveKeyframePreset(data: Omit<KeyframePreset, 'id' | 'savedAt'>): void {
+  const preset: KeyframePreset = {
+    id: `kfp_${Date.now()}`,
+    ...data,
+    savedAt: Date.now(),
+  };
+  keyframePresetManager.save(preset);
+}
+
+export function loadKeyframePresets(): KeyframePreset[] {
+  return keyframePresetManager.load().sort((a, b) => a.savedAt - b.savedAt);
+}
+
+export function deleteKeyframePreset(id: string): void {
+  keyframePresetManager.delete(id);
+}
+
+export function renameKeyframePreset(id: string, newLabel: string): void {
+  keyframePresetManager.rename(id, newLabel);
 }
 
 // ── Transform Vec preset helpers ──────────────────────────────────────────────
