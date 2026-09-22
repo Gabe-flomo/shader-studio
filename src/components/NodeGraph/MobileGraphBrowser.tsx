@@ -24,6 +24,38 @@ function nodeDotColor(n: GraphNode): string {
   return TYPE_COLORS[outType ?? 'float'] ?? '#888';
 }
 
+// ── Inline param sliders (unconnected float/int inputs only) ──────────────────
+// Mirrors the desktop card's paramDefs-driven slider: same key convention
+// (a scalar input socket's key matches its paramDef key 1:1, e.g. Simple
+// SDF's `r` input <-> `r` paramDef), same min/max/step, same showWhen
+// conditional visibility — just without desktop's bidirectional-range /
+// custom-max power-user controls.
+function paramVisible(node: GraphNode, paramDef: { showWhen?: { param: string; value: string | string[] } }): boolean {
+  if (!paramDef.showWhen) return true;
+  const val = node.params[paramDef.showWhen.param];
+  const want = paramDef.showWhen.value;
+  return Array.isArray(want) ? want.includes(val as string) : val === want;
+}
+function sliderableParam(node: GraphNode, key: string) {
+  const def = getNodeDefinition(node.type);
+  const pd = def?.paramDefs?.[key];
+  if (!pd || (pd.type !== 'float' && pd.type !== 'int')) return undefined;
+  if (!paramVisible(node, pd)) return undefined;
+  return pd;
+}
+function currentSliderValue(node: GraphNode, key: string, pd: { min?: number }): number {
+  if (typeof node.params[key] === 'number') return node.params[key] as number;
+  const def = getNodeDefinition(node.type);
+  const dv = def?.defaultParams?.[key];
+  return typeof dv === 'number' ? dv : (pd.min ?? 0);
+}
+function formatSliderValue(v: number, step?: number): string {
+  if (!step || step >= 1) return v.toFixed(0);
+  if (step >= 0.1) return v.toFixed(1);
+  if (step >= 0.01) return v.toFixed(2);
+  return v.toFixed(3);
+}
+
 // ── Cycle safety ──────────────────────────────────────────────────────────────
 // Adding a connection sourceId.output -> targetId.input is only valid if
 // sourceId isn't already downstream of targetId (i.e. targetId doesn't
@@ -62,6 +94,56 @@ type PendingSocket =
   | { dir: 'input'; nodeId: string; key: string; type: string }
   | { dir: 'output'; nodeId: string; key: string; type: string };
 
+// ── Shared graph-diagram layout ─────────────────────────────────────────────
+// Positions every node by (rank, index-within-rank) and collects the bezier
+// edges for its existing connections. Used by both the read-only Home graph
+// view and the "tap a node to connect" picker, so they always agree on where
+// a node sits.
+const GRAPH_ROW_H = 68, GRAPH_CELL_W = 104, GRAPH_NODE_W = 88, GRAPH_NODE_H = 34, GRAPH_PAD = 16;
+function computeGraphLayout(nodes: GraphNode[], rankedRows: Array<{ rank: number; nodes: GraphNode[] }>) {
+  const pos = new Map<string, { x: number; y: number }>();
+  let maxCols = 1;
+  rankedRows.forEach(({ nodes: rowNodes }, rowIdx) => {
+    maxCols = Math.max(maxCols, rowNodes.length);
+    rowNodes.forEach((n, i) => pos.set(n.id, { x: GRAPH_PAD + i * GRAPH_CELL_W, y: GRAPH_PAD + rowIdx * GRAPH_ROW_H }));
+  });
+  const width = GRAPH_PAD * 2 + maxCols * GRAPH_CELL_W;
+  const height = GRAPH_PAD * 2 + rankedRows.length * GRAPH_ROW_H;
+
+  const edges: Array<{ x1: number; y1: number; x2: number; y2: number; key: string }> = [];
+  for (const n of nodes) {
+    const to = pos.get(n.id);
+    if (!to) continue;
+    for (const [key, inp] of Object.entries(n.inputs)) {
+      if (!inp.connection) continue;
+      const from = pos.get(inp.connection.nodeId);
+      if (!from) continue;
+      edges.push({
+        x1: from.x + GRAPH_NODE_W / 2, y1: from.y + GRAPH_NODE_H,
+        x2: to.x + GRAPH_NODE_W / 2, y2: to.y,
+        key: `${inp.connection.nodeId}:${inp.connection.outputKey}->${n.id}:${key}`,
+      });
+    }
+  }
+  return { pos, width, height, edges };
+}
+function GraphEdges({ edges }: { edges: ReturnType<typeof computeGraphLayout>['edges'] }) {
+  return (
+    <>
+      {edges.map(e => {
+        const midY = (e.y1 + e.y2) / 2;
+        return (
+          <path
+            key={e.key}
+            d={`M ${e.x1} ${e.y1} C ${e.x1} ${midY}, ${e.x2} ${midY}, ${e.x2} ${e.y2}`}
+            stroke="#585b70" strokeWidth={1.5} fill="none"
+          />
+        );
+      })}
+    </>
+  );
+}
+
 const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '10px',
   padding: '10px 12px', borderBottom: '1px solid #313244',
@@ -74,8 +156,9 @@ const chipStyle: React.CSSProperties = {
   padding: '4px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
 };
 const addBtnStyle: React.CSSProperties = {
-  marginLeft: 'auto', background: '#313244', border: '1px solid #89b4fa66', color: '#89b4fa',
-  borderRadius: '6px', padding: '6px 10px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation',
+  marginLeft: 'auto', flexShrink: 0, background: '#313244', border: '1px solid #89b4fa66', color: '#89b4fa',
+  borderRadius: '6px', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '18px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
 };
 
 export function MobileGraphBrowser() {
@@ -83,10 +166,12 @@ export function MobileGraphBrowser() {
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
   const removeNode = useNodeGraphStore(s => s.removeNode);
+  const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
 
   const [focusStack, setFocusStack] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSocket | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
+  const [homeGraphView, setHomeGraphView] = useState(false);
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
@@ -178,24 +263,44 @@ export function MobileGraphBrowser() {
               <div style={{ padding: '8px 12px 4px', fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em' }}>INPUTS</div>
               {Object.entries(node.inputs).map(([key, inp]) => {
                 const upstream = inp.connection ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+                const pd = upstream ? undefined : sliderableParam(node, key);
+                const val = pd ? currentSliderValue(node, key, pd) : 0;
                 return (
-                  <div key={key} style={rowStyle}>
-                    <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', color: '#cdd6f4' }}>{inp.label}</div>
-                      <div style={{ fontSize: '10px', color: '#585b70' }}>{inp.type}</div>
+                  <div key={key} style={{ ...rowStyle, flexDirection: 'column', alignItems: 'stretch', gap: pd ? '8px' : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', color: '#cdd6f4' }}>{inp.label}</div>
+                        <div style={{ fontSize: '10px', color: '#585b70' }}>{inp.type}</div>
+                      </div>
+                      {upstream ? (
+                        <>
+                          <button style={chipStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+                          <button
+                            onClick={() => disconnectInput(node.id, key)}
+                            style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                            title="Disconnect"
+                          >✕</button>
+                        </>
+                      ) : (
+                        <button style={addBtnStyle} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
+                      )}
                     </div>
-                    {upstream ? (
-                      <>
-                        <button style={chipStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
-                        <button
-                          onClick={() => disconnectInput(node.id, key)}
-                          style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
-                          title="Disconnect"
-                        >✕</button>
-                      </>
-                    ) : (
-                      <button style={addBtnStyle} onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+ Add</button>
+                    {pd && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '20px' }}>
+                        <input
+                          type="range"
+                          min={pd.min ?? 0}
+                          max={pd.max ?? 1}
+                          step={pd.step ?? 0.01}
+                          value={val}
+                          onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) })}
+                          style={{ flex: 1 }}
+                        />
+                        <span style={{ fontSize: '11px', color: '#a6adc8', minWidth: '44px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {formatSliderValue(val, pd.step)}
+                        </span>
+                      </div>
                     )}
                   </div>
                 );
@@ -215,7 +320,7 @@ export function MobileGraphBrowser() {
                       <div style={{ fontSize: '13px', color: '#cdd6f4' }}>{out.label}</div>
                       <div style={{ fontSize: '10px', color: '#585b70' }}>{out.type}</div>
                     </div>
-                    <button style={addBtnStyle} onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+ Add consumer</button>
+                    <button style={addBtnStyle} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
                     {consumers.length > 0 && (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', width: '100%', paddingLeft: '20px' }}>
                         {consumers.map(c => (
@@ -279,29 +384,71 @@ export function MobileGraphBrowser() {
           />
         )}
 
-        {/* Connect Existing picker */}
+        {/* Connect Existing picker — the graph diagram with the current node
+            highlighted; tap any highlighted (compatible) node to wire it up. */}
         {connectPicker && connectPicker.nodeId === node.id && (
-          <div
-            onClick={() => setConnectPicker(null)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40, display: 'flex', alignItems: 'flex-end' }}
-          >
-            <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '70vh', overflowY: 'auto', background: '#1e1e2e', borderRadius: '16px 16px 0 0', border: '1px solid #45475a', padding: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa', marginBottom: '12px' }}>Choose a node to connect</div>
-              {connectCandidates.length === 0 && (
-                <div style={{ fontSize: '12px', color: '#585b70' }}>No compatible nodes yet — try "Add New Node" instead.</div>
-              )}
-              {connectCandidates.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => commitConnectExisting(c.id)}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', marginBottom: '6px', background: '#313244', border: '1px solid #45475a', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
-                >
-                  {labelFor(c)}
-                </button>
-              ))}
+          <div style={{ position: 'absolute', inset: 0, background: '#181825', zIndex: 40, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa' }}>Tap a node to connect</div>
+                {connectCandidates.length === 0 && (
+                  <div style={{ fontSize: '11px', color: '#585b70', marginTop: '2px' }}>No compatible nodes yet — try "Add New Node" instead.</div>
+                )}
+              </div>
+              <button
+                onClick={() => setConnectPicker(null)}
+                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                title="Cancel"
+              >✕</button>
             </div>
+            {renderConnectGraphPicker()}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // ── Connect-existing graph picker ────────────────────────────────────────
+  // Same node positions as the Home graph view, but every node is shown (not
+  // just candidates) so the current node's highlight makes sense in context;
+  // compatible nodes are tappable and outlined, everything else is dimmed.
+  function renderConnectGraphPicker() {
+    if (!connectPicker) return null;
+    const layout = computeGraphLayout(nodes, rankedRows);
+    const candidateIds = new Set(connectCandidates.map(c => c.id));
+    return (
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
+          <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+            <GraphEdges edges={layout.edges} />
+          </svg>
+          {nodes.map(n => {
+            const p = layout.pos.get(n.id);
+            if (!p) return null;
+            const isCurrent = n.id === connectPicker.nodeId;
+            const isCandidate = candidateIds.has(n.id);
+            return (
+              <button
+                key={n.id}
+                disabled={!isCandidate}
+                onClick={() => commitConnectExisting(n.id)}
+                style={{
+                  position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
+                  display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
+                  background: isCurrent ? '#313244' : '#1e1e2e',
+                  border: isCurrent ? '2px solid #89b4fa' : isCandidate ? '1px solid #a6e3a1' : '1px solid #313244',
+                  borderRadius: '6px', padding: '0 8px', fontSize: '11px',
+                  color: isCandidate || isCurrent ? '#cdd6f4' : '#45475a',
+                  opacity: isCandidate || isCurrent ? 1 : 0.4,
+                  cursor: isCandidate ? 'pointer' : 'default', touchAction: 'manipulation',
+                }}
+              >
+                <div style={dotStyle(nodeDotColor(n))} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -342,6 +489,48 @@ export function MobileGraphBrowser() {
     );
   }
 
+  // ── Home view: graph diagram ─────────────────────────────────────────────
+  // Same rank/row data as the grid above, laid out as fixed-position chips
+  // with actual connector lines drawn between them — a read-only "see the
+  // flow" view, not a spatial editor (tap a chip to drill in, same as the
+  // grid; no dragging). Source rank is always strictly less than target rank
+  // (that's what the BFS rank assignment guarantees), so every edge flows
+  // top-to-bottom or skips rows entirely — never sideways or backwards.
+  function renderHomeGraph() {
+    if (nodes.length === 0) {
+      return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>No nodes yet.</div>;
+    }
+    const layout = computeGraphLayout(nodes, rankedRows);
+    return (
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
+          <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+            <GraphEdges edges={layout.edges} />
+          </svg>
+          {nodes.map(n => {
+            const p = layout.pos.get(n.id);
+            if (!p) return null;
+            return (
+              <button
+                key={n.id}
+                onClick={() => pushFocus(n.id)}
+                style={{
+                  position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
+                  display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
+                  background: '#1e1e2e', border: '1px solid #313244', borderRadius: '6px',
+                  padding: '0 8px', fontSize: '11px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
+                }}
+              >
+                <div style={dotStyle(nodeDotColor(n))} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: '#181825', color: '#cdd6f4', fontFamily: 'system-ui, sans-serif' }}>
       {/* Breadcrumb */}
@@ -364,9 +553,22 @@ export function MobileGraphBrowser() {
             </span>
           );
         })}
+        {!focusedNode && (
+          <button
+            onClick={() => setHomeGraphView(v => !v)}
+            style={{
+              marginLeft: 'auto', flexShrink: 0,
+              background: homeGraphView ? '#313244' : 'none', border: '1px solid #45475a', color: '#89b4fa',
+              borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
+            }}
+            title="See the flow as a connected graph instead of a plain list"
+          >
+            {homeGraphView ? '☰ List' : '⋈ Graph'}
+          </button>
+        )}
       </div>
 
-      {focusedNode ? renderNodeDetail(focusedNode) : renderHome()}
+      {focusedNode ? renderNodeDetail(focusedNode) : (homeGraphView ? renderHomeGraph() : renderHome())}
     </div>
   );
 }
