@@ -41,7 +41,7 @@ export {
   SmoothMinNode, MinNode, MaxNode2, SubtractNode2,
   SmoothMaxNode, SmoothSubtractNode,
   BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
-  GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
+  GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 
@@ -177,7 +177,7 @@ import {
   SmoothMinNode, MinNode, MaxNode2,
   SmoothMaxNode, SmoothSubtractNode,
   BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
-  GlowLayerNode, SDFOutlineNode, SDFColorizeNode,
+  GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 import {
@@ -354,6 +354,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   addColor: AddColorNode,
   screenBlend: ScreenBlendNode,
   glowLayer: GlowLayerNode,
+  deepGlow: DeepGlowNode,
   sdfOutline: SDFOutlineNode,
   sdfColorize: SDFColorizeNode,
   alphaBlend: AlphaBlendNode,

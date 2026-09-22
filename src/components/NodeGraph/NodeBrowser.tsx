@@ -131,7 +131,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Combiners: [
     { label: 'SDF Ops', types: ['smoothMin', 'min', 'sdfMax', 'sdfSubtract', 'smoothMax', 'smoothSubtract', 'sdfOutline', 'sdfColorize'] },
     { label: 'Blend',   types: ['blend', 'mask', 'addColor', 'screenBlend', 'alphaBlend'] },
-    { label: 'Layer',   types: ['glowLayer'] },
+    { label: 'Layer',   types: ['glowLayer', 'deepGlow'] },
   ],
   Spaces: [
     { label: 'Warp',       types: ['displace', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp'] },
