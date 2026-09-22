@@ -24,7 +24,7 @@ const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = 
   { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
   { label: 'Matrix',          color: '#f5c842', keys: ['matrixAnisotropicScale','matrixShear','matrixXZYZ','matrixColorGrade'] as ExKey[] },
   { label: 'Patterns',        color: '#a6e3a1', keys: ['angularFlowerRepeat','angularGearRepeat','ringGlow','sphereFaceLight'] as ExKey[] },
-  { label: 'Physics',         color: '#94e2d5', keys: ['chladniFieldQuickDemo','chladniFieldCircularDemo','chladniComposableDemo','waveTermManualMixDemo','quantizeChladniDemo'] as ExKey[] },
+  { label: 'Physics',         color: '#94e2d5', keys: ['chladniFieldQuickDemo','chladniFieldCircularDemo','chladniComposableDemo','waveTermManualMixDemo','quantizeChladniDemo','chladniModeFreqDemo'] as ExKey[] },
   { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','exprRings','fractalRingsGroup','exprOrbit'] as ExKey[] },
   { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid','mlgWiggleTunnel'] as ExKey[] },
   { label: 'Volumetric',      color: '#f5a97f', keys: ['glowMarcher','volHollowShell','volTorus','volRepeatLattice','volOctahedron','volAnimatedRepeat','jitterFogSphere','jitterTorusCloud'] as ExKey[] },

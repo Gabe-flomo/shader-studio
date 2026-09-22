@@ -810,6 +810,52 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
     ],
   },
 
+  // ── Chladni Mode Frequency — single-knob sweep ────────────────────────────
+  // A slow Sine LFO drives Frequency directly; n = Frequency, m = Frequency ×
+  // an irrational ratio, so the pattern keeps evolving through a rich,
+  // non-repeating family as it sweeps — no separate n/m dials needed.
+  chladniModeFreqDemo: {
+    label: 'Chladni Mode Frequency',
+    counter: 6,
+    nodes: [
+      { id: 'uv_0',   type: 'uv',   position: { x: 40,  y: 260 }, inputs: {}, outputs: { uv:   { type: 'vec2',  label: 'UV'   } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40,  y: 440 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'lfo_2', type: 'sineLFO', position: { x: 260, y: 380 },
+        inputs: { time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        outputs: { value: { type: 'float', label: 'Value' } },
+        params: { freq: 0.08, phase: 0.0, amplitude: 6.0, offset: 7.0 },
+      },
+      {
+        id: 'modefreq_3', type: 'chladniModeFreq', position: { x: 500, y: 380 },
+        inputs: { frequency: { type: 'float', label: 'Frequency', connection: { nodeId: 'lfo_2', outputKey: 'value' } } },
+        outputs: { n: { type: 'float', label: 'n' }, m: { type: 'float', label: 'm' } },
+        params: { frequency: 5.0, seed: 3.0 },
+      },
+      {
+        id: 'field_4', type: 'chladniField', position: { x: 740, y: 260 },
+        inputs: {
+          uv: { type: 'vec2',  label: 'UV', connection: { nodeId: 'uv_0',      outputKey: 'uv' } },
+          n:  { type: 'float', label: 'n',  connection: { nodeId: 'modefreq_3', outputKey: 'n'  } },
+          m:  { type: 'float', label: 'm',  connection: { nodeId: 'modefreq_3', outputKey: 'm'  } },
+        },
+        outputs: { field: { type: 'float', label: 'Field' }, uv: { type: 'vec2', label: 'UV (scaled)' } },
+        params: { n: 6.0, m: 4.0, mix: 1.0, scale: 1.0, geometry: 'square', aspect: 'square' },
+      },
+      {
+        id: 'lines_5', type: 'fieldToLines', position: { x: 1000, y: 260 },
+        inputs: { field: { type: 'float', label: 'Field', connection: { nodeId: 'field_4', outputKey: 'field' } } },
+        outputs: { density: { type: 'float', label: 'Density' }, color: { type: 'vec3', label: 'Color' } },
+        params: { line_width: 1.5, aa: 1.0, brightness: 1.2 },
+      },
+      {
+        id: 'output_6', type: 'output', position: { x: 1240, y: 260 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'lines_5', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
   // ── Electron Orbital demo ─────────────────────────────────────────────────
 
   // ── Kaleidoscope Noise — KaleidoSpace + FBM ────────────────────────────────
