@@ -18,6 +18,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   document.head.appendChild(s);
 }
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
+import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinition } from '../../nodes/definitions';
@@ -118,16 +119,6 @@ const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
 const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat']);
 
-const TYPE_COLORS: Record<string, string> = {
-  float: '#f0a',
-  vec2: '#0af',
-  vec3: '#0fa',
-  vec4: '#fa0',
-  mat2:        '#f5c842',  // golden yellow for 2×2 matrix wires
-  mat3:        '#e8a020',  // amber for 3×3 matrix wires
-  scene3d:     '#cc88aa',  // pastel pink for 3D scene wires
-  spacewarp3d: '#aa88cc',  // pastel purple for space warp wires
-};
 
 const INPUT_STYLE: React.CSSProperties = {
   background: 'transparent',

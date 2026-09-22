@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
+import { MobileGraphBrowser } from './components/NodeGraph/MobileGraphBrowser';
 import { CodePanel } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
@@ -266,10 +267,8 @@ function App() {
   const floatContainerRef = useRef<HTMLDivElement>(null);
   const [showToolbarMenu, setShowToolbarMenu] = useState(false);
 
-  // Mobile/tablet drawer state
-  const [drawerOpen, setDrawerOpen]         = useState(false);
-  // Mobile: show node graph as overlay on top of preview
-  const [showMobileGraph, setShowMobileGraph] = useState(false);
+  // Mobile: canvas-only / split / graph-only layout mode
+  const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph'>('split');
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -572,67 +571,69 @@ function App() {
   // Preview fills entire screen, floating nav + bottom action bar
   // ══════════════════════════════════════════════════════════════════════════
   if (mobile && page === 'studio') {
+    const showCanvasPane = mobileLayout !== 'graph';
+    const showGraphPane  = mobileLayout !== 'canvas';
     return (
-      <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none' }}>
-
-        {/* Full-screen shader preview as background */}
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
-          <AudioMasterVolumeWidget />
-        </div>
+      <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         {/* Floating TopNav */}
         <TopNav page={page} onPageChange={setPage} floating />
 
-        {/* Bottom action bar */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 25,
-          background: 'rgba(24,24,37,0.90)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          borderTop: '1px solid #313244',
-          padding: '8px 12px',
-          display: 'flex', alignItems: 'center', gap: '8px',
-          minHeight: '56px',
-        }}>
-          {/* Graph overlay toggle */}
-          <button
-            onClick={() => setShowMobileGraph(v => !v)}
-            style={{
-              ...btnStyle(showMobileGraph),
-              padding: '8px 12px',
-              fontSize: '13px',
-              flexShrink: 0,
-            }}
-            title={showMobileGraph ? 'Hide node graph' : 'Show node graph'}
-          >
-            {showMobileGraph ? '✕ Graph' : '◈ Graph'}
-          </button>
+        {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: '44px' }}>
+          {showCanvasPane && (
+            <div style={{
+              position: 'relative',
+              flex: mobileLayout === 'canvas' ? 1 : '0 0 auto',
+              height: mobileLayout === 'canvas' ? undefined : '42vh',
+              minHeight: 0,
+              background: '#000',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                position: 'relative',
+                width: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
+                height: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
+              }}>
+                <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+                <AudioMasterVolumeWidget />
+              </div>
 
-          {/* Nodes drawer toggle */}
-          <button
-            onClick={() => setDrawerOpen(v => !v)}
-            style={{
-              ...btnStyle(drawerOpen),
-              padding: '8px 12px',
-              fontSize: '13px',
-              flexShrink: 0,
-            }}
-          >
-            ⬡ Nodes
-          </button>
+              {/* Pixel color info / param hint, pinned to the canvas pane */}
+              {(hoveredParamHint || pixelSample) && (
+                <div style={{
+                  position: 'absolute', top: 8, right: 8, zIndex: 22,
+                  background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
+                  borderRadius: '6px', padding: '4px 8px',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontSize: '10px', fontFamily: 'monospace', color: '#585b70',
+                  border: '1px solid #313244',
+                  maxWidth: '320px',
+                }}>
+                  {hoveredParamHint ? (
+                    <>
+                      <span style={{ color: '#cba6f7', fontSize: '11px', flexShrink: 0 }}>?</span>
+                      <span style={{ color: '#cdd6f4', whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
+                    </>
+                  ) : pixelSample ? (
+                    <>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
+                      <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
+                      <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
+                      <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Error badge */}
-          {errorBadge}
-
-          {/* Record button */}
-          <button
-            onClick={() => setShowExport(true)}
-            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744' }}
-            title="Export animation"
-          >
-            🎬
-          </button>
+          {showGraphPane && (
+            <div style={{ flex: 1, minHeight: 0, borderTop: showCanvasPane ? '1px solid #313244' : undefined }}>
+              <MobileGraphBrowser />
+            </div>
+          )}
         </div>
 
         {/* Error popup — sits above bottom bar */}
@@ -642,75 +643,47 @@ function App() {
           </div>
         )}
 
-        {/* Pixel color info / param hint (top-right, non-intrusive) */}
-        {(hoveredParamHint || pixelSample) && (
-          <div style={{
-            position: 'absolute', top: 52, right: 10, zIndex: 22,
-            background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
-            borderRadius: '6px', padding: '4px 8px',
-            display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '10px', fontFamily: 'monospace', color: '#585b70',
-            border: '1px solid #313244',
-            maxWidth: '320px',
-          }}>
-            {hoveredParamHint ? (
-              <>
-                <span style={{ color: '#cba6f7', fontSize: '11px', flexShrink: 0 }}>?</span>
-                <span style={{ color: '#cdd6f4', whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
-              </>
-            ) : pixelSample ? (
-              <>
-                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
-                <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
-                <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
-                <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
-              </>
-            ) : null}
-          </div>
-        )}
-
-        {/* Node graph overlay — fills entire screen, nav + bar float above */}
-        {showMobileGraph && (
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 20,
-          }}>
-            <NodeGraph transparent />
-          </div>
-        )}
-
-        {/* Bottom sheet drawer backdrop */}
-        {drawerOpen && (
-          <div
-            onClick={() => setDrawerOpen(false)}
-            style={{ position: 'absolute', inset: 0, zIndex: 28, background: 'rgba(0,0,0,0.5)' }}
-          />
-        )}
-
-        {/* Bottom sheet drawer */}
+        {/* Bottom action bar */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 29,
-          height: '72vh',
-          background: '#1e1e2e',
-          borderRadius: '16px 16px 0 0',
-          borderTop: '1px solid #45475a',
-          display: 'flex', flexDirection: 'column',
-          transform: drawerOpen ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.5)',
+          flexShrink: 0, zIndex: 25,
+          background: 'rgba(24,24,37,0.90)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderTop: '1px solid #313244',
+          padding: '8px 12px',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          minHeight: '56px',
         }}>
-          {/* Drag handle + header */}
-          <div style={{ padding: '12px 16px 8px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#45475a', margin: '0 auto 0 auto', position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '8px' }} />
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa', paddingTop: '4px' }}>Add Node</span>
+          {/* Layout mode: canvas-only / split / graph-only */}
+          <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
             <button
-              onClick={() => setDrawerOpen(false)}
-              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '16px', padding: '0 4px', touchAction: 'manipulation' }}
-            >✕</button>
+              onClick={() => setMobileLayout('canvas')}
+              style={{ ...btnStyle(mobileLayout === 'canvas'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              title="Canvas fullscreen"
+            >▣</button>
+            <button
+              onClick={() => setMobileLayout('split')}
+              style={{ ...btnStyle(mobileLayout === 'split'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderLeft: '1px solid #45475a', borderRight: '1px solid #45475a' }}
+              title="Split view"
+            >▥</button>
+            <button
+              onClick={() => setMobileLayout('graph')}
+              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              title="Graph fullscreen"
+            >☰</button>
           </div>
-          {/* Palette fills rest of drawer */}
-          <NodePalette mode="drawer" onNodeAdded={() => setDrawerOpen(false)} />
+
+          {/* Error badge */}
+          {errorBadge}
+
+          {/* Record button */}
+          <button
+            onClick={() => setShowExport(true)}
+            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744', marginLeft: 'auto' }}
+            title="Export animation"
+          >
+            🎬
+          </button>
         </div>
 
         {/* Export modal */}
