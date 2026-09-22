@@ -789,6 +789,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   return (
     <div
       ref={canvasRef}
+      data-node-canvas="true"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseDown={handleCanvasMouseDown}
