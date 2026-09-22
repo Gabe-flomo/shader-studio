@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useNodeGraphStore, saveKeyframePreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, saveKeyframePreset, loadKeyframePresets } from '../../store/useNodeGraphStore';
+import type { KeyframePreset } from '../../types/keyframePreset';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
 import { TimeControlsStrip } from '../TimeControlsStrip';
@@ -503,6 +504,23 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     return () => window.removeEventListener('apply-keyframe-preset', handler);
   }, [writeKeyframes]);
 
+  // Loading a preset right here — not just from the sidebar tab — so you
+  // don't have to leave the modal (switch the palette away from whatever
+  // it's showing) just to apply a saved curve.
+  const [showLoadDropdown, setShowLoadDropdown] = useState(false);
+  const [keyframePresets, setKeyframePresets] = useState<KeyframePreset[]>(() => loadKeyframePresets());
+  useEffect(() => {
+    const refresh = () => setKeyframePresets(loadKeyframePresets());
+    window.addEventListener('keyframepreset-changed', refresh);
+    return () => window.removeEventListener('keyframepreset-changed', refresh);
+  }, []);
+  const handleLoadPreset = useCallback((preset: KeyframePreset) => {
+    writeKeyframes(preset.keyframes.slice(0, MAX_KEYFRAMES).map(k => ({ ...k, ease: { ...k.ease } })));
+    setSelectedKf(null);
+    setShowLoadDropdown(false);
+  }, [writeKeyframes]);
+  const loadDropdownRef = useRef<HTMLDivElement>(null);
+
   // ── Tool mode (select / add / delete) ──
   const [toolMode, setToolModeState] = useState<ToolMode>('select');
   const toolModeRef = useRef(toolMode);
@@ -912,7 +930,12 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           width: `${modalW}px`, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.65)', color: '#cdd6f4', fontSize: '12px',
         }}
-        onMouseDown={e => e.stopPropagation()}
+        onMouseDown={e => {
+          e.stopPropagation();
+          if (showLoadDropdown && loadDropdownRef.current && !loadDropdownRef.current.contains(e.target as Node)) {
+            setShowLoadDropdown(false);
+          }
+        }}
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1032,6 +1055,45 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
                 }}
               >↑ Save Preset</button>
             )}
+            <div ref={loadDropdownRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowLoadDropdown(v => !v)}
+                title="Load a saved preset onto this axis"
+                style={{
+                  background: showLoadDropdown ? '#89b4fa22' : 'none',
+                  border: `1px solid ${showLoadDropdown ? '#89b4fa' : '#45475a'}`,
+                  color: showLoadDropdown ? '#89b4fa' : '#a6adc8',
+                  cursor: 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
+                }}
+              >↓ Load Preset</button>
+              {showLoadDropdown && (
+                <div
+                  style={{
+                    position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 20,
+                    background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.5)', minWidth: '160px', maxHeight: '220px', overflowY: 'auto',
+                    padding: '4px',
+                  }}
+                >
+                  {keyframePresets.length === 0 ? (
+                    <div style={{ fontSize: '10px', color: '#45475a', padding: '6px 8px', fontStyle: 'italic' }}>No saved presets yet</div>
+                  ) : (
+                    keyframePresets.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleLoadPreset(p)}
+                        style={{
+                          display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                          color: '#cdd6f4', fontSize: '11px', padding: '5px 8px', cursor: 'pointer', borderRadius: '4px',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#313244'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                      >◆ {p.label} <span style={{ opacity: 0.5 }}>({p.keyframes.length})</span></button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
