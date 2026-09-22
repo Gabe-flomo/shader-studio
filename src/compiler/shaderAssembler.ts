@@ -1,4 +1,4 @@
-import type { GraphNode, DataType, SubgraphData } from '../types/nodeGraph';
+import type { GraphNode, DataType, InputSocket, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
@@ -196,17 +196,63 @@ export function resolveInputVars(
 }
 
 /**
+ * True if an unconnected socket has keyframe data that should be used instead
+ * of a static/param-backed value. Used by compileSceneGroupNode's param-backed
+ * shortcut (which otherwise skips resolveInputFallback entirely, relying on
+ * generateGLSL to read node.params directly) so a keyframed param-backed
+ * socket still gets its kf_ expression instead of always reading the static
+ * value.
+ */
+function hasKeyframeData(node: GraphNode, inputKey: string, inp: InputSocket): boolean {
+  if (inp.connection || isKeyframeBypassed(node, inputKey)) return false;
+  if (inp.type === 'float') return !!getKeyframeConfig(node, inputKey);
+  if ((inp.type === 'vec2' || inp.type === 'vec3') && inp.axisParams) {
+    return socketHasVectorKeyframes(node, inputKey, VECTOR_AXES[inp.type]);
+  }
+  return false;
+}
+
+/**
  * Resolve the fallback GLSL literal for an unconnected input socket, checking:
- * 1. exprNode / customFn slider value stored in node.params
- * 2. socket defaultValue
- * 3. standard auto-fills (uv → g_uv, time/t → u_time)
+ * 1. keyframes (if registerFn is given — the caller has this.functions in scope)
+ * 2. exprNode / customFn slider value stored in node.params
+ * 3. socket defaultValue
+ * 4. standard auto-fills (uv → g_uv, time/t → u_time)
  * Returns undefined if no fallback is available.
+ *
+ * `registerFn` is optional so callers without a GLSL-function sink can still
+ * use this for the non-keyframe fallbacks; every call site inside this class
+ * has `this.functions` in scope and should pass `fn => this.functions.add(fn)`.
  */
 function resolveInputFallback(
   node: GraphNode,
   inputKey: string,
-  inp: { type: string; defaultValue?: number | number[] },
+  inp: InputSocket,
+  registerFn?: (glsl: string) => void,
 ): string | undefined {
+  if (!inp.connection && registerFn) {
+    if (inp.type === 'float' && !isKeyframeBypassed(node, inputKey)) {
+      const kfCfg = getKeyframeConfig(node, inputKey);
+      if (kfCfg) {
+        const fnName = `kf_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}_${inputKey}`;
+        const { glslFunction, sharedFunction, expr } = generateKeyframeGLSL(fnName, kfCfg);
+        registerFn(sharedFunction);
+        registerFn(glslFunction);
+        return expr;
+      }
+    } else if ((inp.type === 'vec2' || inp.type === 'vec3') && inp.axisParams && !isKeyframeBypassed(node, inputKey)) {
+      const vectorAxes = VECTOR_AXES[inp.type];
+      if (socketHasVectorKeyframes(node, inputKey, vectorAxes)) {
+        const fnPrefix = `kf_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}_${inputKey}`;
+        const axisConfigs = vectorAxes.map(axis => getAxisKeyframeConfig(node, inputKey, axis));
+        const staticFallbacks = inp.axisParams.map(p => (typeof node.params[p] === 'number' ? node.params[p] as number : 0));
+        const { glslFunctions, sharedFunction, expr } = generateVectorKeyframeGLSL(fnPrefix, axisConfigs, staticFallbacks, inp.type);
+        if (sharedFunction) registerFn(sharedFunction);
+        glslFunctions.forEach(fn => registerFn(fn));
+        return expr;
+      }
+    }
+  }
   if ((node.type === 'exprNode' || node.type === 'customFn') && typeof node.params[inputKey] === 'number') {
     const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
     const cfInp = cfInputs.find(c => c.name === inputKey);
@@ -425,7 +471,7 @@ export class ShaderAssembler {
                     if (srcOutputs?.[inp.connection.outputKey]) nestedInputVars[k] = srcOutputs[inp.connection.outputKey];
                   }
                   if (!nestedInputVars[k]) {
-                    const fb = resolveInputFallback(subNode, k, inp);
+                    const fb = resolveInputFallback(subNode, k, inp, fn => this.functions.add(fn));
                     if (fb) nestedInputVars[k] = fb;
                   }
                 }
@@ -526,7 +572,7 @@ export class ShaderAssembler {
                       if (srcOut?.[inp.connection.outputKey]) innInputVars[k] = srcOut[inp.connection.outputKey];
                     }
                     if (!innInputVars[k]) {
-                      const fb = resolveInputFallback(inn, k, inp);
+                      const fb = resolveInputFallback(inn, k, inp, fn => this.functions.add(fn));
                       if (fb) innInputVars[k] = fb;
                     }
                   }
@@ -563,7 +609,7 @@ export class ShaderAssembler {
                   if (srcOutputs?.[inp.connection.outputKey]) subInputVars[k] = srcOutputs[inp.connection.outputKey];
                 }
                 if (!subInputVars[k]) {
-                  const fb = resolveInputFallback(subNode, k, inp);
+                  const fb = resolveInputFallback(subNode, k, inp, fn => this.functions.add(fn));
                   if (fb) subInputVars[k] = fb;
                 }
               }
@@ -1160,8 +1206,8 @@ export class ShaderAssembler {
                   else if (inp.connection) { const s = this.nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
                   if (!gnInputVars[k]) {
                     const isParamBacked = !!gDef.paramDefs?.[k];
-                    if (!isParamBacked) {
-                      const fb = resolveInputFallback(gn, k, inp);
+                    if (!isParamBacked || hasKeyframeData(gn, k, inp)) {
+                      const fb = resolveInputFallback(gn, k, inp, fn => this.functions.add(fn));
                       if (fb) gnInputVars[k] = fb;
                     } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
                   }
@@ -1203,9 +1249,10 @@ export class ShaderAssembler {
                 const srcOut = this.nodeOutputs.get(inp.connection.nodeId);
                 if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
               }
-              // Fallbacks — skip defaultValue for param-backed sockets (generateGLSL reads node.params)
-              if (!snInputVars[k] && !snDef.paramDefs?.[k]) {
-                const fb = resolveInputFallback(sn, k, inp);
+              // Fallbacks — skip defaultValue for param-backed sockets (generateGLSL reads node.params),
+              // unless the socket has keyframe data, which must still flow through as a kf_ expression.
+              if (!snInputVars[k] && (!snDef.paramDefs?.[k] || hasKeyframeData(sn, k, inp))) {
+                const fb = resolveInputFallback(sn, k, inp, fn => this.functions.add(fn));
                 if (fb) snInputVars[k] = fb;
               }
             }
@@ -1626,7 +1673,7 @@ export class ShaderAssembler {
                           if (igrpPortOverrides.has(pk)) gnInputVars2[k] = igrpPortOverrides.get(pk)!;
                           else if (inp.connection) { const s = this.nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars2[k] = s[inp.connection.outputKey]; }
                           if (!gnInputVars2[k]) {
-                            const fb = resolveInputFallback(gn, k, inp);
+                            const fb = resolveInputFallback(gn, k, inp, fn => this.functions.add(fn));
                             if (fb) gnInputVars2[k] = fb;
                           }
                         }
@@ -1659,7 +1706,7 @@ export class ShaderAssembler {
                         if (srcOut?.[inp.connection.outputKey]) sgnInputVars[k] = srcOut[inp.connection.outputKey];
                       }
                       if (!sgnInputVars[k]) {
-                        const fb = resolveInputFallback(sgn, k, inp);
+                        const fb = resolveInputFallback(sgn, k, inp, fn => this.functions.add(fn));
                         if (fb) sgnInputVars[k] = fb;
                       }
                     }
@@ -1740,7 +1787,7 @@ export class ShaderAssembler {
                     if (mlGrpPortOverrides.has(pk)) gnInputVars[k] = mlGrpPortOverrides.get(pk)!;
                     else if (inp.connection) { const s = this.nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
                     if (!gnInputVars[k]) {
-                      const fb = resolveInputFallback(gn, k, inp);
+                      const fb = resolveInputFallback(gn, k, inp, fn => this.functions.add(fn));
                       if (fb) gnInputVars[k] = fb;
                     }
                   }
@@ -1827,7 +1874,7 @@ export class ShaderAssembler {
                   if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
                 }
                 if (!snInputVars[k]) {
-                  const fb = resolveInputFallback(sn, k, inp);
+                  const fb = resolveInputFallback(sn, k, inp, fn => this.functions.add(fn));
                   if (fb) snInputVars[k] = fb;
                 }
               }
@@ -2368,7 +2415,7 @@ export class ShaderAssembler {
                           if (igrpPortOverrides.has(pk)) gnInputVars2[k] = igrpPortOverrides.get(pk)!;
                           else if (inp.connection) { const s = this.nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars2[k] = s[inp.connection.outputKey]; }
                           if (!gnInputVars2[k]) {
-                            const fb = resolveInputFallback(gn, k, inp);
+                            const fb = resolveInputFallback(gn, k, inp, fn => this.functions.add(fn));
                             if (fb) gnInputVars2[k] = fb;
                           }
                         }
@@ -2401,7 +2448,7 @@ export class ShaderAssembler {
                         if (srcOut?.[inp.connection.outputKey]) sgnInputVars[k] = srcOut[inp.connection.outputKey];
                       }
                       if (!sgnInputVars[k]) {
-                        const fb = resolveInputFallback(sgn, k, inp);
+                        const fb = resolveInputFallback(sgn, k, inp, fn => this.functions.add(fn));
                         if (fb) sgnInputVars[k] = fb;
                       }
                     }
@@ -2476,7 +2523,7 @@ export class ShaderAssembler {
                     if (mlGrpPortOverrides.has(pk)) gnInputVars[k] = mlGrpPortOverrides.get(pk)!;
                     else if (inp.connection) { const s = this.nodeOutputs.get(inp.connection.nodeId); if (s?.[inp.connection.outputKey]) gnInputVars[k] = s[inp.connection.outputKey]; }
                     if (!gnInputVars[k]) {
-                      const fb = resolveInputFallback(gn, k, inp);
+                      const fb = resolveInputFallback(gn, k, inp, fn => this.functions.add(fn));
                       if (fb) gnInputVars[k] = fb;
                     }
                   }
@@ -2559,7 +2606,7 @@ export class ShaderAssembler {
                   if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
                 }
                 if (!snInputVars[k]) {
-                  const fb = resolveInputFallback(sn, k, inp);
+                  const fb = resolveInputFallback(sn, k, inp, fn => this.functions.add(fn));
                   if (fb) snInputVars[k] = fb;
                 }
               }
@@ -2948,7 +2995,7 @@ export class ShaderAssembler {
                 if (srcOut?.[inp.connection.outputKey]) snInputVars[k] = srcOut[inp.connection.outputKey];
               }
               if (!snInputVars[k]) {
-                const fb = resolveInputFallback(sn, k, inp);
+                const fb = resolveInputFallback(sn, k, inp, fn => this.functions.add(fn));
                 if (fb) snInputVars[k] = fb;
               }
             }
