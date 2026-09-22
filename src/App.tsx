@@ -804,6 +804,12 @@ function App() {
 
             <NodeGraph />
             {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
+            {/* Time controls: floating dock on the node-graph side of the
+                divider, vertically centered — never overlapping the render
+                canvas on the other side of it. */}
+            <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
+              <TimeControlsStrip direction="column" />
+            </div>
           </div>
 
           {/* Divider — wider touch target for tablet */}
@@ -815,9 +821,6 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: '#181825', borderBottom: '1px solid #313244', flexShrink: 0 }}>
-              <TimeControlsStrip />
-            </div>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
@@ -927,6 +930,14 @@ function App() {
 
               <NodeGraph />
               {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
+              {/* Time controls: floating dock on the node-graph side of the
+                  divider, vertically centered — never overlapping the
+                  render canvas on the other side of it. */}
+              {!previewFloated && (
+                <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
+                  <TimeControlsStrip direction="column" />
+                </div>
+              )}
             </>
           )}
           {page === 'glsl' && <GLSLPage />}
@@ -946,10 +957,6 @@ function App() {
         {/* Right: Shader Preview — hidden when floated */}
         {!previewFloated && (
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            {/* Time controls live outside the canvas, not overlaid on it */}
-            <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: '#181825', borderBottom: '1px solid #313244', flexShrink: 0 }}>
-              <TimeControlsStrip />
-            </div>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
               {showHistogram && histData && <HistogramOverlay data={histData} />}

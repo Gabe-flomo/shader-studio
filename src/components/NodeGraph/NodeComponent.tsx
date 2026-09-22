@@ -3429,6 +3429,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   e.stopPropagation();
                   setKfMenu({ x: e.clientX, y: e.clientY, key });
                 }}
+                onDoubleClick={(e) => {
+                  if (!isKeyframed) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setKfModalKey(key);
+                }}
                 onMouseDown={(e) => {
                   if (e.altKey && !isConnected) {
                     e.stopPropagation();

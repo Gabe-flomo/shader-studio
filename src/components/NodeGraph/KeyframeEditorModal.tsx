@@ -139,6 +139,7 @@ function draw(
   selectedKf: number | null,
   activeColor: string,
   otherAxes: OtherAxisTrack[],
+  hoverInfo: { t: number; v: number } | null,
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -152,21 +153,33 @@ function draw(
   ctx.fillStyle = '#0d0d14';
   ctx.fillRect(0, 0, W, H);
 
-  // grid
+  // grid, with small tick labels so you can read off where you are in the
+  // timeline/value range without needing a live hover.
   ctx.strokeStyle = '#1e1e2e';
   ctx.lineWidth = 1;
+  ctx.font = '9px monospace';
   const tStart = Math.floor(viewT0 / gridT) * gridT;
   const tEnd = viewT0 + W / pxPerSec;
   for (let t = tStart; t <= tEnd; t += gridT) {
     const x = toX(t);
+    ctx.strokeStyle = '#1e1e2e';
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    ctx.fillStyle = '#585b70';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(fmt(t), x + 3, H - 4);
   }
   const vTop = fromY(0), vBot = fromY(H);
   const vStart = Math.floor(Math.min(vTop, vBot) / gridV) * gridV;
   const vEnd = Math.max(vTop, vBot);
   for (let v = vStart; v <= vEnd; v += gridV) {
     const y = toY(v);
+    ctx.strokeStyle = '#1e1e2e';
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    ctx.fillStyle = '#585b70';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(fmt(v), 3, y - 3);
   }
 
   // axes (t=0, v=0) — brighter
@@ -272,6 +285,28 @@ function draw(
       ctx.beginPath(); ctx.arc(cx, cy, KF_R + 4, 0, Math.PI * 2); ctx.stroke();
     }
   });
+
+  // Floating t/v readout above whichever point is live right now — the
+  // hovered one, or the one currently being dragged (hoverInfo tracks
+  // both cases; see handleMouseMove).
+  if (hoverInfo) {
+    const hx = toX(hoverInfo.t), hy = toY(hoverInfo.v);
+    const label = `t=${fmt(hoverInfo.t)}  v=${fmt(hoverInfo.v)}`;
+    ctx.font = '10px monospace';
+    const textW = ctx.measureText(label).width;
+    const padX = 6, boxH = 16;
+    const boxW = textW + padX * 2;
+    const boxX = Math.max(2, Math.min(W - boxW - 2, hx - boxW / 2));
+    const boxY = Math.max(2, hy - KF_R - boxH - 8);
+    ctx.fillStyle = '#1e1e2edd';
+    ctx.strokeStyle = '#45475a';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.rect(boxX, boxY, boxW, boxH); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = activeColor;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, boxX + padX, boxY + boxH / 2 + 1);
+  }
 }
 
 // ── KeyframeEditorModal ─────────────────────────────────────────────────────
@@ -393,10 +428,17 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes);
-  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes]);
+    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo);
+  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo]);
 
-  useEffect(() => { redraw(); }, [keyframes, view, redraw]);
+  // `anchor` is in the deps because it drives canvasW/canvasH below: a canvas
+  // element clears its drawn content the instant its width/height attributes
+  // change (a plain browser behavior, nothing React-specific), and anchor
+  // resolves one render after mount (its own effect fires after first paint)
+  // — without this, that resize silently wipes the canvas and nothing
+  // schedules a repaint, so the editor opens blank until some other state
+  // change (e.g. a hover) happens to trigger one.
+  useEffect(() => { redraw(); }, [keyframes, view, redraw, anchor]);
 
   const getLocalXY = useCallback((e: React.MouseEvent | MouseEvent) => {
     const canvas = canvasRef.current;
@@ -758,13 +800,10 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           onMouseLeave={() => { setHoverKf(null); setHoverInfo(null); }}
           style={{ display: 'block', width: '100%', height: `${canvasH}px`, borderRadius: '6px', border: '1px solid #31324488', cursor: cursorForMode, opacity: bypassed ? 0.5 : 1 }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#45475a' }}>
-          <span>
-            {toolMode === 'add' && 'click empty space: add keyframe · drag point: move'}
-            {toolMode === 'delete' && 'click a point: delete it'}
-            {toolMode === 'select' && 'click point: select (shows ease handles) · drag: move · dbl-click: delete · scroll: pan · pinch/ctrl+scroll: zoom value · hold shift while dragging to invert snap'}
-          </span>
-          <span style={{ color: activeColor, fontFamily: 'monospace' }}>{hoverInfo ? `t=${fmt(hoverInfo.t)}  v=${fmt(hoverInfo.v)}` : ''}</span>
+        <div style={{ fontSize: '10px', color: '#45475a' }}>
+          {toolMode === 'add' && 'click empty space: add keyframe · drag point: move'}
+          {toolMode === 'delete' && 'click a point: delete it'}
+          {toolMode === 'select' && 'click point: select (shows ease handles) · drag: move · dbl-click: delete · scroll: pan · pinch/ctrl+scroll: zoom value · hold shift while dragging to invert snap'}
         </div>
 
         {/* Grid + snap controls */}
