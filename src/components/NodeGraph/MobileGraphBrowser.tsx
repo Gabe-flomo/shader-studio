@@ -2937,7 +2937,11 @@ export function MobileGraphBrowser() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {renderNodeHeader(node)}
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Pinned, not part of the scroll below — the curve (and the title/
+            Clear/Done/axis row above it) stays on screen while you scroll
+            through Value/Easing/Playback underneath, instead of scrolling
+            away and losing your visual reference to what you're editing. */}
+        <div style={{ flexShrink: 0, padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: '1px solid #313244' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 700, color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {input.label}{axis ? ` · ${axis.toUpperCase()}` : ''}
@@ -2977,7 +2981,9 @@ export function MobileGraphBrowser() {
             selectedIndex={kfSelectedIndex}
             onSelect={setKfSelectedIndex}
           />
+        </div>
 
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {keyframes.length === 0 && (
             <div style={{ fontSize: '11px', color: '#585b70' }}>
               Pick "Add" below, then tap in the canvas to place a keyframe — or "Draw" to sketch a curve freehand.
