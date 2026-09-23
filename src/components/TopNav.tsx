@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import { useBreakpoint, isMobile } from '../hooks/useBreakpoint';
+import { useNodeGraphStore } from '../store/useNodeGraphStore';
 
 export type Page = 'studio' | 'shortcuts' | 'glsl' | 'fn';
 
@@ -12,11 +14,16 @@ interface TopNavProps {
 export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
   const bp = useBreakpoint();
   const mobile = isMobile(bp);
+  const undo = useNodeGraphStore(s => s.undo);
+  const redo = useNodeGraphStore(s => s.redo);
 
   return (
     <div
       style={{
-        height: '44px',
+        // Grows by the status-bar/notch inset (0 on a browser tab, real on
+        // an installed/full-screen mobile app) so the bar's own 44px of
+        // content sits below it instead of the notch overlapping the icons.
+        height: mobile ? 'calc(44px + env(safe-area-inset-top, 0px))' : '44px',
         flexShrink: 0,
         background: floating
           ? 'rgba(24, 24, 37, 0.85)'
@@ -25,11 +32,13 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         WebkitBackdropFilter: floating ? 'blur(12px)' : undefined,
         borderBottom: '1px solid #313244',
         display: 'flex',
-        alignItems: 'center',
-        paddingLeft: mobile ? '10px' : '12px',
-        paddingRight: mobile ? '10px' : '0px',
+        alignItems: mobile ? 'flex-end' : 'center',
+        paddingLeft: mobile ? 'max(10px, env(safe-area-inset-left, 0px))' : '12px',
+        paddingRight: mobile ? 'max(10px, env(safe-area-inset-right, 0px))' : '0px',
+        paddingBottom: mobile ? '8px' : 0,
         gap: '4px',
         userSelect: 'none',
+        boxSizing: 'border-box',
         // When floating on mobile, position absolute at top
         ...(floating ? {
           position: 'absolute' as const,
@@ -80,21 +89,36 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         title="Node Graph Studio"
       />
 
-      {/* Function Builder tab */}
-      <TabButton
-        active={page === 'fn'}
-        onClick={() => onPageChange('fn')}
-        label={mobile ? 'ƒ' : 'ƒ( ) Builder'}
-        title="Function Builder — write and plot named GLSL functions"
-      />
+      {/* Function Builder / GLSL editor tabs — desktop only. Mobile has no
+          keyboard shortcut to reach either, and screen space is tight, so
+          they're swapped for Undo/Redo below instead. */}
+      {!mobile && (
+        <>
+          <TabButton
+            active={page === 'fn'}
+            onClick={() => onPageChange('fn')}
+            label="ƒ( ) Builder"
+            title="Function Builder — write and plot named GLSL functions"
+          />
+          <TabButton
+            active={page === 'glsl'}
+            onClick={() => onPageChange('glsl')}
+            label="</> GLSL"
+            title="Raw GLSL Editor"
+          />
+        </>
+      )}
 
-      {/* GLSL editor tab */}
-      <TabButton
-        active={page === 'glsl'}
-        onClick={() => onPageChange('glsl')}
-        label={mobile ? '</>' : '</> GLSL'}
-        title="Raw GLSL Editor"
-      />
+      {/* Mobile: no Cmd+Z here, so undo/redo need an explicit button. Drawn
+          as SVG rather than a Unicode arrow glyph (↶/↷) — those render
+          inconsistently thin/cramped across fonts, unlike the rest of this
+          bar's crisp text labels. */}
+      {mobile && (
+        <>
+          <TabButton active={false} onClick={undo} label={<IconUndo />} title="Undo" />
+          <TabButton active={false} onClick={redo} label={<IconRedo />} title="Redo" />
+        </>
+      )}
 
       {/* Shortcuts tab */}
       <TabButton
@@ -115,7 +139,7 @@ function TabButton({
 }: {
   active: boolean;
   onClick: () => void;
-  label: string;
+  label: ReactNode;
   title?: string;
 }) {
   return (
@@ -123,6 +147,7 @@ function TabButton({
       onClick={onClick}
       title={title}
       style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         background: active ? '#313244' : 'none',
         border: active ? '1px solid #45475a' : '1px solid transparent',
         color: active ? '#cdd6f4' : '#585b70',
@@ -145,5 +170,25 @@ function TabButton({
     >
       {label}
     </button>
+  );
+}
+
+// Same currentColor-stroke, 16x16-viewBox style NodePalette.tsx uses for its
+// own icons — crisp at any zoom and immune to the font-rendering quirks a
+// Unicode glyph is exposed to (e.g. an emoji-presentation fallback).
+function IconUndo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <polyline points="7,10 3,6.5 7,3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 6.5 H9 a3 3 0 0 1 3 3 V13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconRedo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <polyline points="9,10 13,6.5 9,3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 6.5 H7 a3 3 0 0 0 -3 3 V13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

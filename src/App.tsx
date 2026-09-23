@@ -2,8 +2,8 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
-import { MobileGraphBrowser } from './components/NodeGraph/MobileGraphBrowser';
-import { CodePanel } from './components/CodePanel';
+import { MobileGraphBrowser, MobileNodeGraphOverlay } from './components/NodeGraph/MobileGraphBrowser';
+import { CodePanel, tokenizeLine } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -94,6 +94,44 @@ function AudioMasterVolumeWidget() {
       <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
         {Math.round(masterVolume * 100)}%
       </span>
+    </div>
+  );
+}
+
+// Mobile's own read-only generated-code view — desktop's CodePanel is a
+// draggable-height floating panel with mouse-based resize, not a fit for a
+// fullscreen mobile pane, so this reuses just its tokenizer/palette for the
+// same syntax highlighting rather than the whole component.
+function MobileCodeView({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const lines = code ? code.split('\n') : ['// No shader compiled yet'];
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* silent */ }
+  };
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, background: '#181825' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 12px', background: '#1e1e2e', borderBottom: '1px solid #313244', flexShrink: 0,
+      }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#89b4fa', letterSpacing: '0.04em' }}>FRAGMENT SHADER</span>
+        <button
+          onClick={handleCopy}
+          style={{ background: 'none', border: '1px solid #45475a', color: copied ? '#a6e3a1' : '#a6adc8', borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+        >{copied ? 'Copied' : 'Copy'}</button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.6 }}>
+        {lines.map((line, i) => (
+          <div key={i} style={{ whiteSpace: 'pre' }}>
+            <span style={{ color: '#45475a', userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
+            {tokenizeLine(line).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -224,6 +262,8 @@ function App() {
     groupNodes, deselectAll,
     searchPaletteOpen, setSearchPaletteOpen,
     nodeSlugMap,
+    mobileKeyframeEditor, mobileKeyframeTool, setMobileKeyframeTool,
+    mobileNodeOverlayOpen, setMobileNodeOverlayOpen,
   } = useNodeGraphStore();
 
   // Build probe display for selected node — shown in status bar instead of "hover for color"
@@ -268,7 +308,7 @@ function App() {
   const [showToolbarMenu, setShowToolbarMenu] = useState(false);
 
   // Mobile: canvas-only / split / graph-only layout mode
-  const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph'>('split');
+  const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph' | 'code'>('split');
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -284,6 +324,14 @@ function App() {
   // Examples button opens a browsable gallery of starter graphs.
   const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
   const [showMobileExamples, setShowMobileExamples]     = useState(false);
+  // Reset's own confirm step, in-app rather than window.confirm() — a native
+  // confirm dialog is unreliable (sometimes silently a no-op) inside a Tauri
+  // webview, which would make Reset look broken with no error or feedback.
+  const [showMobileResetConfirm, setShowMobileResetConfirm] = useState(false);
+  // Examples browser: which category folders are expanded — starts empty
+  // (all collapsed) since the full list is long enough to need scrolling
+  // past just the first one or two categories otherwise.
+  const [expandedExampleFolders, setExpandedExampleFolders] = useState<Set<string>>(new Set());
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   // Node search palette
@@ -576,8 +624,9 @@ function App() {
   // Preview fills entire screen, floating nav + bottom action bar
   // ══════════════════════════════════════════════════════════════════════════
   if (mobile && page === 'studio') {
-    const showCanvasPane = mobileLayout !== 'graph';
-    const showGraphPane  = mobileLayout !== 'canvas';
+    const showCanvasPane = mobileLayout !== 'graph' && mobileLayout !== 'code';
+    const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
+    const showCodePane   = mobileLayout === 'code';
     return (
       <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
@@ -585,7 +634,7 @@ function App() {
         <TopNav page={page} onPageChange={setPage} floating />
 
         {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: '44px' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))' }}>
           {showCanvasPane && (
             <div style={{
               position: 'relative',
@@ -631,6 +680,29 @@ function App() {
                   ) : null}
                 </div>
               )}
+
+              {/* Play/pause + reset, bottom-center of the canvas pane —
+                  mobile has no side dock to float this beside (unlike
+                  desktop's TimeControlsStrip next to the divider), so it
+                  overlays the canvas here instead. Node-graph toggle rides
+                  alongside it — same "floats on the canvas" idea, a
+                  read-only mirror of the real node layout while you watch
+                  the render, not another editor. */}
+              <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 22, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <TimeControlsStrip />
+                <button
+                  onClick={() => setMobileNodeOverlayOpen(!mobileNodeOverlayOpen)}
+                  title="Show the node graph over the canvas (read-only)"
+                  style={{
+                    background: mobileNodeOverlayOpen ? '#89b4fa22' : 'rgba(24,24,37,0.7)',
+                    border: `1px solid ${mobileNodeOverlayOpen ? '#89b4fa' : '#45475a'}`,
+                    color: mobileNodeOverlayOpen ? '#89b4fa' : '#a6adc8',
+                    borderRadius: '6px', width: '30px', height: '30px', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                >⊞</button>
+              </div>
+
+              <MobileNodeGraphOverlay />
             </div>
           )}
 
@@ -639,25 +711,36 @@ function App() {
               <MobileGraphBrowser />
             </div>
           )}
+
+          {showCodePane && (
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <MobileCodeView code={fragmentShader} />
+            </div>
+          )}
         </div>
 
-        {/* Error popup — sits above bottom bar */}
+        {/* Error popup — sits above bottom bar (whose own height now grows
+            with the home-indicator inset, so this has to match). */}
         {showErrors && errorCount > 0 && (
-          <div style={{ position: 'absolute', bottom: 56, left: 0, right: 0, zIndex: 24 }}>
+          <div style={{ position: 'absolute', bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 24 }}>
             {errorPopup}
           </div>
         )}
 
-        {/* Bottom action bar */}
+        {/* Bottom action bar — bottom/side padding grows with the home-
+            indicator/notch-side insets (0 in a plain browser tab, real on
+            an installed/full-screen mobile app) so it isn't flush against
+            the edge the OS itself draws over. */}
         <div style={{
           flexShrink: 0, zIndex: 25,
           background: 'rgba(24,24,37,0.90)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           borderTop: '1px solid #313244',
-          padding: '8px 12px',
+          padding: '8px calc(12px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px))',
           display: 'flex', alignItems: 'center', gap: '8px',
           minHeight: '56px',
+          boxSizing: 'border-box',
         }}>
           {/* Layout mode: canvas-only / split / graph-only */}
           <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
@@ -673,13 +756,49 @@ function App() {
             >▥</button>
             <button
               onClick={() => setMobileLayout('graph')}
-              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderRight: '1px solid #45475a' }}
               title="Graph fullscreen"
             >☰</button>
+            <button
+              onClick={() => setMobileLayout('code')}
+              style={{ ...btnStyle(mobileLayout === 'code'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              title="Generated code"
+            >{'{}'}</button>
           </div>
 
           {/* Error badge */}
           {errorBadge}
+
+          {/* Keyframe editor tool modes — only shown while
+              MobileGraphBrowser's keyframe editor is open for some node's
+              socket. No keyboard here for desktop's V/C/X/D shortcuts, so
+              these live as buttons instead — mirrors desktop's own
+              Select/Add/Delete/Draw toolbar (KeyframeEditorModal.tsx) one
+              for one, just relocated to the bottom bar. */}
+          {mobileKeyframeEditor && (
+            <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+              {([
+                { id: 'select', icon: '↖' },
+                // Plain "+" rather than a pencil glyph (✏) — the pencil
+                // renders as a full-color emoji in Chromium even with the
+                // U+FE0E text-presentation selector appended, looking like a
+                // stray colored blob next to its monochrome siblings.
+                { id: 'add', icon: '+' },
+                { id: 'delete', icon: '✕' },
+                { id: 'draw', icon: '∿' },
+              ] as const).map((m, i) => (
+                <button
+                  key={m.id}
+                  onClick={() => setMobileKeyframeTool(m.id)}
+                  style={{
+                    ...btnStyle(mobileKeyframeTool === m.id), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px',
+                    borderLeft: i > 0 ? '1px solid #45475a' : undefined,
+                  }}
+                  title={m.id}
+                >{m.icon}</button>
+              ))}
+            </div>
+          )}
 
           {/* Examples button — browse starter graphs; picking one loads it
               in place (loadExampleGraph replaces the current graph), tapping
@@ -719,10 +838,7 @@ function App() {
                   style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#cba6f7', borderColor: '#cba6f744' }}
                 >🎬 Record</button>
                 <button
-                  onClick={() => {
-                    setShowMobileActionMenu(false);
-                    if (window.confirm('Clear all nodes and start over?')) loadExampleGraph('blank');
-                  }}
+                  onClick={() => { setShowMobileActionMenu(false); setShowMobileResetConfirm(true); }}
                   style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#f38ba8', borderColor: '#f38ba844' }}
                 >✕ Reset</button>
                 <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
@@ -743,7 +859,9 @@ function App() {
               onClick={e => e.stopPropagation()}
               style={{
                 width: '100%', maxHeight: '75vh', overflowY: 'auto', background: '#181825',
-                borderRadius: '16px 16px 0 0', border: '1px solid #313244', padding: '12px',
+                borderRadius: '16px 16px 0 0', border: '1px solid #313244',
+                padding: '12px 12px calc(12px + env(safe-area-inset-bottom, 0px)) 12px',
+                boxSizing: 'border-box',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
@@ -754,28 +872,87 @@ function App() {
                   title="Close"
                 >✕</button>
               </div>
-              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => (
-                <div key={folder.label} style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em', marginBottom: '6px' }}>
-                    {folder.label.toUpperCase()}
+              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
+                const isOpen = expandedExampleFolders.has(folder.label);
+                return (
+                  <div key={folder.label} style={{ marginBottom: '12px' }}>
+                    <button
+                      onClick={() => setExpandedExampleFolders(s => {
+                        const next = new Set(s);
+                        if (next.has(folder.label)) next.delete(folder.label); else next.add(folder.label);
+                        return next;
+                      })}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
+                        background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
+                        cursor: 'pointer', touchAction: 'manipulation',
+                      }}
+                    >
+                      <span style={{ fontSize: '9px', color: folder.color }}>{isOpen ? '▾' : '▸'}</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em' }}>
+                        {folder.label.toUpperCase()}
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
+                          <button
+                            key={k}
+                            onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
+                            style={{
+                              background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                              padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+                              cursor: 'pointer', touchAction: 'manipulation',
+                            }}
+                          >
+                            {EXAMPLE_GRAPHS[k].label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
-                      <button
-                        key={k}
-                        onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
-                        style={{
-                          background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-                          padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
-                          cursor: 'pointer', touchAction: 'manipulation',
-                        }}
-                      >
-                        {EXAMPLE_GRAPHS[k].label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Reset confirm — a custom modal instead of window.confirm(), which
+            is unreliable inside a Tauri webview. */}
+        {showMobileResetConfirm && (
+          <div
+            onClick={() => setShowMobileResetConfirm(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-end' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', background: '#1e1e2e', borderRadius: '16px 16px 0 0',
+                border: '1px solid #45475a', padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#cdd6f4', marginBottom: '6px' }}>Clear all nodes?</div>
+              <div style={{ fontSize: '12px', color: '#a6adc8', marginBottom: '16px' }}>This starts over from a blank graph. This can't be undone.</div>
+              <button
+                onClick={() => { setShowMobileResetConfirm(false); loadExampleGraph('blank'); }}
+                style={{
+                  width: '100%', padding: '12px', marginBottom: '8px', background: '#f38ba822',
+                  border: '1px solid #f38ba866', borderRadius: '8px', color: '#f38ba8', fontSize: '13px',
+                  fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
+                }}
+              >
+                ✕ Reset
+              </button>
+              <button
+                onClick={() => setShowMobileResetConfirm(false)}
+                style={{
+                  width: '100%', padding: '12px', background: '#313244', border: '1px solid #45475a',
+                  borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
+                }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}

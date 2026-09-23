@@ -183,7 +183,7 @@ export const TextureInputNode: NodeDefinition = {
   type: 'textureInput',
   label: 'Texture Input',
   category: 'Sources',
-  description: 'Samples an image texture loaded from a file. Wire to UV for sampling position.',
+  description: 'Samples an image texture loaded from a file. Wire to UV for sampling position. Fit controls how the image’s own aspect ratio is respected: Stretch fills the UV space exactly (may distort), Fit shows the whole image with padding, Fill covers the space and crops.',
   inputs: {
     uv: { type: 'vec2', label: 'UV' },
   },
@@ -192,14 +192,48 @@ export const TextureInputNode: NodeDefinition = {
     alpha: { type: 'float', label: 'Alpha' },
     uv:    { type: 'vec2',  label: 'UV (pass-through)' },
   },
+  defaultParams: { fit: 'stretch', _imageAspect: 1 },
+  paramDefs: {
+    fit: { label: 'Fit', type: 'select', options: [
+      { value: 'stretch', label: 'Stretch' },
+      { value: 'contain', label: 'Fit (no crop)' },
+      { value: 'cover',   label: 'Fill (crop)' },
+    ]},
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const uvVar = inputVars.uv ?? 'g_uv';
     // Map from centered [-aspect,aspect] × [-1,1] UV back to [0,1] UV for texture sampling
     const samplerUV = `(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
+    const fit = typeof node.params.fit === 'string' ? node.params.fit : 'stretch';
+    const imageAspect = typeof node.params._imageAspect === 'number' && node.params._imageAspect > 0
+      ? node.params._imageAspect : 1;
+
+    let fitUV = samplerUV;
+    let fitLines = '';
+    if (fit === 'contain' || fit === 'cover') {
+      // relAspect = image aspect relative to the current canvas aspect (the
+      // canvas can change at runtime — window resize — so this is computed
+      // in GLSL; which formula/axis to apply is a compile-time choice, so
+      // no runtime branch is needed for stretch vs contain vs cover).
+      const isContain = fit === 'contain';
+      const scaleX = isContain
+        ? `${id}_relAspect < 1.0 ? 1.0 / ${id}_relAspect : 1.0`
+        : `${id}_relAspect > 1.0 ? 1.0 / ${id}_relAspect : 1.0`;
+      const scaleY = isContain
+        ? `${id}_relAspect > 1.0 ? ${id}_relAspect : 1.0`
+        : `${id}_relAspect < 1.0 ? ${id}_relAspect : 1.0`;
+      fitLines = [
+        `    float ${id}_relAspect = ${imageAspect.toFixed(6)} / (u_resolution.x / u_resolution.y);\n`,
+        `    vec2 ${id}_fitScale = vec2(${scaleX}, ${scaleY});\n`,
+        `    vec2 ${id}_fitUV = (${samplerUV} - 0.5) * ${id}_fitScale + 0.5;\n`,
+      ].join('');
+      fitUV = `${id}_fitUV`;
+    }
     return {
       code: [
-        `    vec4 ${id}_sample = texture2D(u_tex_${id}, clamp(${samplerUV}, 0.0, 1.0));\n`,
+        fitLines,
+        `    vec4 ${id}_sample = texture2D(u_tex_${id}, clamp(${fitUV}, 0.0, 1.0));\n`,
         `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
         `    float ${id}_alpha = ${id}_sample.a;\n`,
       ].join(''),

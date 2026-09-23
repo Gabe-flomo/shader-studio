@@ -1,5 +1,4 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import * as THREE from 'three';
 
 // Inject save-flash keyframe once
 if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
@@ -44,6 +43,7 @@ import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { AssetContextMenu } from './AssetContextMenu';
 import { KeyframeEditorModal } from './KeyframeEditorModal';
 import { socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
+import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -661,13 +661,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      const url = URL.createObjectURL(file);
-      const loader = new THREE.TextureLoader();
-      loader.load(url, (tex) => {
-        setNodeTexture(node.id, tex);
-        // Store thumbnail URL in params for display
-        updateNodeParams(node.id, { _thumbnailUrl: url }, { immediate: true });
-      });
+      loadImageTextureFromFile(file)
+        .then(({ texture, thumbnailDataUrl, imageAspect }) => {
+          setNodeTexture(node.id, texture);
+          updateNodeParams(node.id, { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect }, { immediate: true });
+        })
+        .catch(err => console.error('Failed to load texture image:', err));
     };
 
     return (
@@ -717,6 +716,22 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             {nodeTexture ? 'Change' : 'Load Image'}
             <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
           </label>
+        </div>
+
+        {/* Fit mode — this card bypasses the generic paramDefs renderer
+            (it returns early, above), so unlike most select params this one
+            needs its own dropdown here. */}
+        <div style={{ padding: '0 10px 8px', display: 'flex', alignItems: 'center', gap: '6px' }} onMouseDown={e => e.stopPropagation()}>
+          <span style={{ color: '#6c7086', fontSize: '10px' }}>Fit</span>
+          <select
+            value={(node.params.fit as string) ?? 'stretch'}
+            onChange={e => updateNodeParams(node.id, { fit: e.target.value }, { immediate: true })}
+            style={{ background: '#181825', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '3px', fontSize: '10px', padding: '2px 4px', outline: 'none', cursor: 'pointer', flex: 1 }}
+          >
+            <option value="stretch">Stretch</option>
+            <option value="contain">Fit (no crop)</option>
+            <option value="cover">Fill (crop)</option>
+          </select>
         </div>
 
         {/* Sockets row: UV input on left, outputs on right */}

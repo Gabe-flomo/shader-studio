@@ -240,13 +240,30 @@ export interface NodeGraph {
 
 // ── Group / subgraph node types ───────────────────────────────────────────────
 
+/**
+ * Sentinel `connection.nodeId` a plain-'group' subgraph node's input uses to
+ * mean "sourced from this group's own input port" (outputKey = the port's
+ * key) rather than another node in the subgraph. Set by groupNodes() when a
+ * dangling input becomes a port; read by shaderAssembler.ts's
+ * resolveGroupPortOverrides, which scans for it instead of trusting each
+ * port's own (legacy) toNodeId/toInputKey — connectNodes()/disconnectInput()
+ * need no special-casing since it's just an ordinary connection value, which
+ * is what lets a port be reused by more than one internal target and lets a
+ * target be freely rewired or disconnected from inside the group.
+ */
+export const GROUP_PORT_SENTINEL = '__port__';
+
 /** A port that maps an outer connection into a specific socket inside the subgraph. */
 export interface GroupInputPort {
   key: string;          // socket key on the group node's inputs
   type: DataType;
   label: string;
-  toNodeId: string;     // subgraph node that receives this value
-  toInputKey: string;   // which input socket on that node
+  /** @deprecated primary/first target only, kept for back-compat display — the
+   * live source of truth for a plain group is any subgraph node input whose
+   * connection.nodeId === GROUP_PORT_SENTINEL and outputKey === this port's key. */
+  toNodeId: string;
+  /** @deprecated see toNodeId */
+  toInputKey: string;
 }
 
 /** A port that maps a subgraph node's output to the group node's outputs. */
@@ -263,6 +280,27 @@ export interface SubgraphData {
   nodes: GraphNode[];
   inputPorts: GroupInputPort[];
   outputPorts: GroupOutputPort[];
+  /** Purely-visual node clusters at this scope — see LooseGroup below. */
+  looseGroups?: LooseGroup[];
+}
+
+/**
+ * A purely visual/organizational cluster of nodes — unlike a real `group`
+ * node, this has no compile effect at all: members stay exactly where they
+ * are in the flat node list, wired exactly as before. It only changes how
+ * they're *displayed* — collapsed to one compound-looking box on desktop's
+ * canvas (crossing wires reroute to the box's edge), or folded into one
+ * folder-style entry in mobile's list view. Scoped the same way regular
+ * nodes are: lives in the top-level looseGroups field, or nested in a
+ * SubgraphData alongside that scope's own nodes.
+ */
+export interface LooseGroup {
+  id: string;
+  label: string;
+  memberIds: string[];
+  collapsed: boolean;
+  /** Desktop canvas position for the collapsed compound box; unused on mobile. */
+  position: { x: number; y: number };
 }
 
 /**

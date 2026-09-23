@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
-import { migrateNodeParams } from '../types/nodeGraph';
+import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -247,6 +247,8 @@ const undoManager = new UndoManager();
 interface NodeGraphState {
   // Graph data
   nodes: GraphNode[];
+  /** Purely-visual node clusters at the top-level scope — see LooseGroup in types/nodeGraph.ts. */
+  looseGroups: import('../types/nodeGraph').LooseGroup[];
 
   // Compiled shaders
   vertexShader: string;
@@ -293,6 +295,26 @@ interface NodeGraphState {
 
   // Preview mode — isolates a single node's output for focused editing
   previewNodeId: string | null;
+
+  // Mobile keyframe editor — cross-cutting UI state, not graph data. Read
+  // and written by two siblings in the mobile layout: MobileGraphBrowser
+  // (renders the canvas editor in place of the node's card content when
+  // this is set) and App.tsx's bottom action bar (renders the Select/Add/
+  // Delete/Draw tool buttons when this is set) — hence living here rather
+  // than as local state either component would have to lift.
+  mobileKeyframeEditor: { nodeId: string; socketKey: string; axis?: string } | null;
+  setMobileKeyframeEditor: (target: { nodeId: string; socketKey: string; axis?: string } | null) => void;
+  mobileKeyframeTool: 'select' | 'add' | 'delete' | 'draw';
+  setMobileKeyframeTool: (tool: 'select' | 'add' | 'delete' | 'draw') => void;
+
+  // Read-only node-graph overlay floated on top of the shader canvas
+  // (mobile) — real desktop-style node cards at their actual positions,
+  // not the drill-down browser's abstract rank grid. Written by App.tsx's
+  // toggle button next to the play/pause controls, read by
+  // MobileGraphBrowser's overlay component — same cross-component
+  // rationale as mobileKeyframeEditor above.
+  mobileNodeOverlayOpen: boolean;
+  setMobileNodeOverlayOpen: (open: boolean) => void;
 
   // Node highlight filter — set by keyboard shortcuts to visually dim non-matching nodes.
   // null = no filter (all nodes normal). 'all' = clear any filter.
@@ -381,6 +403,29 @@ interface NodeGraphState {
   /** Remove a group input port and its external connection (called when disconnecting an external socket from inside a group) */
   removeGroupInputPort: (groupId: string, portKey: string) => void;
   /**
+   * Create a brand-new group input port already wired to `toNodeId`/`toInputKey`
+   * — combines addGroupInput + rerouteGroupInput into one step/one undo entry,
+   * for a UI (mobile's "Connect Existing" picker) where "feed this input from
+   * a new group input" is one tap rather than desktop's two-step add-then-drag.
+   */
+  exposeGroupInput: (groupId: string, toNodeId: string, toInputKey: string, type: import('../types/nodeGraph').DataType, label: string) => void;
+  /**
+   * Create a brand-new group input port wired to its OUTER source
+   * (sourceNodeId/sourceOutputKey, a node outside the group) but with no
+   * internal consumer yet — the mirror image of exposeGroupInput, which
+   * wires the inner side but leaves the outer side unset. Used by the
+   * group's own "+ Add Input" (its outer half is picked/created right
+   * there; which internal node ends up reading it is wired later, the same
+   * way as any other group input, from inside the group).
+   */
+  addGroupInputWithSource: (groupId: string, sourceNodeId: string, sourceOutputKey: string, type: import('../types/nodeGraph').DataType, label: string) => void;
+  /**
+   * Create a brand-new group output port already sourced from `fromNodeId`'s
+   * `fromOutputKey` — combines addGroupOutput + setGroupOutput into one step,
+   * for exposing an internal node's output that isn't a group output yet.
+   */
+  exposeGroupOutput: (groupId: string, fromNodeId: string, fromOutputKey: string, type: import('../types/nodeGraph').DataType, label: string) => void;
+  /**
    * Set the assignOp on a node (works for both top-level and subgraph nodes).
    * Controls how its outputs accumulate across iterations in a loop group.
    */
@@ -444,7 +489,19 @@ interface NodeGraphState {
   ungroupNode: (groupId: string) => void;
   /** Rename an input or output port label on a group node. */
   renameGroupPort: (nodeId: string, portKey: string, dir: 'in' | 'out', newLabel: string) => void;
+  /**
+   * Cluster existing nodes into a purely visual LooseGroup at the current
+   * active scope — no wiring/port logic, no compile effect, members stay
+   * exactly where they are. Returns the new group's ID or null if fewer
+   * than 2 valid member ids were given.
+   */
+  createLooseGroup: (nodeIds: string[], label?: string) => string | null;
+  /** Dissolve a LooseGroup — members are unaffected, just no longer clustered. */
+  ungroupLoose: (groupId: string) => void;
+  toggleLooseGroupCollapsed: (groupId: string) => void;
+  renameLooseGroup: (groupId: string, label: string) => void;
   undo: () => void;
+  redo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => void;
   autoLayout: () => void;
@@ -697,6 +754,84 @@ export function getActiveNodes(nodes: GraphNode[], path: string[]): GraphNode[] 
 }
 
 /**
+ * Remove `nodeId` from `nodeList` and repair the gap: any other node's input
+ * that was wired to the deleted node's output is bridged directly to the
+ * deleted node's own upstream source instead (when the types are
+ * compatible), the same "smart delete" removeNode's top-level path has
+ * always done — an input left dangling instead would silently fall back to
+ * whatever default the socket has, changing the shader with no visible
+ * cause. Picks the first compatible upstream source per orphaned input,
+ * same tie-break the top-level path uses. Shared so deleting a node inside
+ * a group (getActiveNodes-scoped `nodeList`) behaves identically to
+ * deleting one at the top level, instead of just clearing the connection.
+ */
+export function removeNodeFromList(nodeList: GraphNode[], nodeId: string): GraphNode[] {
+  const deletedNode = nodeList.find(n => n.id === nodeId);
+
+  type Src = { sourceNodeId: string; sourceOutputKey: string; sourceType: string };
+  const upstream: Src[] = [];
+  if (deletedNode) {
+    for (const input of Object.values(deletedNode.inputs)) {
+      if (!input.connection) continue;
+      const srcNode = nodeList.find(n => n.id === input.connection!.nodeId);
+      const srcDef = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+      const srcType = srcDef?.outputs[input.connection!.outputKey]?.type ?? '';
+      if (srcType) upstream.push({ sourceNodeId: input.connection.nodeId, sourceOutputKey: input.connection.outputKey, sourceType: srcType });
+    }
+  }
+
+  type Tgt = { targetNodeId: string; targetInputKey: string; targetType: string };
+  const downstream: Tgt[] = [];
+  for (const n of nodeList) {
+    if (n.id === nodeId) continue;
+    for (const [inputKey, input] of Object.entries(n.inputs)) {
+      if (input.connection?.nodeId !== nodeId) continue;
+      const tgtDef = getNodeDefinition(n.type);
+      const tgtType = tgtDef?.inputs[inputKey]?.type ?? '';
+      downstream.push({ targetNodeId: n.id, targetInputKey: inputKey, targetType: tgtType });
+    }
+  }
+
+  type Bridge = { sourceNodeId: string; sourceOutputKey: string; targetNodeId: string; targetInputKey: string };
+  const bridges: Bridge[] = [];
+  for (const tgt of downstream) {
+    for (const src of upstream) {
+      if (typesCompatible(src.sourceType as import('../types/nodeGraph').DataType, tgt.targetType as import('../types/nodeGraph').DataType)) {
+        bridges.push({ sourceNodeId: src.sourceNodeId, sourceOutputKey: src.sourceOutputKey, targetNodeId: tgt.targetNodeId, targetInputKey: tgt.targetInputKey });
+        break;
+      }
+    }
+  }
+
+  let newList = nodeList
+    .filter(n => n.id !== nodeId)
+    .map(n => ({
+      ...n,
+      inputs: Object.fromEntries(
+        Object.entries(n.inputs).map(([key, input]) => [
+          key,
+          input.connection?.nodeId === nodeId ? { ...input, connection: undefined } : input,
+        ]),
+      ),
+    }));
+
+  for (const bridge of bridges) {
+    newList = newList.map(n => {
+      if (n.id !== bridge.targetNodeId) return n;
+      return {
+        ...n,
+        inputs: {
+          ...n.inputs,
+          [bridge.targetInputKey]: { ...n.inputs[bridge.targetInputKey], connection: { nodeId: bridge.sourceNodeId, outputKey: bridge.sourceOutputKey } },
+        },
+      };
+    });
+  }
+
+  return newList;
+}
+
+/**
  * Apply `updater` to a specific node anywhere in the tree (top-level or nested).
  * Uses `activeGroupPath` to locate the parent scope when the node is nested.
  */
@@ -745,6 +880,73 @@ function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[])
     });
     return { ...outer, params: { ...outer.params, subgraph: { ...outerSg, nodes: newOuterSub } } };
   });
+}
+
+/**
+ * LooseGroup counterpart to getActiveNodes/setActiveNodes — reads/writes the
+ * looseGroups list at a given scope. Unlike nodes, the top-level list isn't
+ * nested inside any GraphNode, it's its own store field, so both functions
+ * thread it through as a separate argument/return value rather than folding
+ * it into the nodes tree the way subgraph.nodes is.
+ */
+export function getActiveLooseGroups(
+  nodes: GraphNode[],
+  topLevelLooseGroups: import('../types/nodeGraph').LooseGroup[],
+  path: string[],
+): import('../types/nodeGraph').LooseGroup[] {
+  if (path.length === 0) return topLevelLooseGroups;
+  const g0 = nodes.find(n => n.id === path[0]);
+  const sg0 = g0?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  if (!sg0) return [];
+  if (path.length === 1) return sg0.looseGroups ?? [];
+  const g1 = sg0.nodes.find(n => n.id === path[1]);
+  const sg1 = g1?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  return sg1?.looseGroups ?? [];
+}
+
+function setActiveLooseGroups(
+  nodes: GraphNode[],
+  topLevelLooseGroups: import('../types/nodeGraph').LooseGroup[],
+  path: string[],
+  newGroups: import('../types/nodeGraph').LooseGroup[],
+): { nodes: GraphNode[]; looseGroups: import('../types/nodeGraph').LooseGroup[] } {
+  if (path.length === 0) return { nodes, looseGroups: newGroups };
+  if (path.length === 1) {
+    const newNodes = nodes.map(n => {
+      if (n.id !== path[0]) return n;
+      const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return n;
+      return { ...n, params: { ...n.params, subgraph: { ...sg, looseGroups: newGroups } } };
+    });
+    return { nodes: newNodes, looseGroups: topLevelLooseGroups };
+  }
+  const newNodes = nodes.map(outer => {
+    if (outer.id !== path[0]) return outer;
+    const outerSg = outer.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+    if (!outerSg) return outer;
+    const newOuterNodes = outerSg.nodes.map(inner => {
+      if (inner.id !== path[1]) return inner;
+      const innerSg = inner.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!innerSg) return inner;
+      return { ...inner, params: { ...inner.params, subgraph: { ...innerSg, looseGroups: newGroups } } };
+    });
+    return { ...outer, params: { ...outer.params, subgraph: { ...outerSg, nodes: newOuterNodes } } };
+  });
+  return { nodes: newNodes, looseGroups: topLevelLooseGroups };
+}
+
+/**
+ * Drop a deleted node from every LooseGroup's membership, and dissolve any
+ * group that falls below 2 members — a "cluster" of zero or one node isn't
+ * meaningfully organizing anything anymore.
+ */
+function pruneLooseGroups(
+  looseGroups: import('../types/nodeGraph').LooseGroup[],
+  removedNodeId: string,
+): import('../types/nodeGraph').LooseGroup[] {
+  return looseGroups
+    .map(g => ({ ...g, memberIds: g.memberIds.filter(id => id !== removedNodeId) }))
+    .filter(g => g.memberIds.length >= 2);
 }
 
 /**
@@ -861,6 +1063,7 @@ function pickSurfacedParams(
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodes: [],
+  looseGroups: [],
   vertexShader: '',
   fragmentShader: '',
   compilationErrors: [],
@@ -877,6 +1080,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodeProbeValues: null,
   scopeProbeValues: {},
   previewNodeId: null,
+  mobileKeyframeEditor: null,
+  mobileKeyframeTool: 'select',
+  mobileNodeOverlayOpen: false,
   nodeHighlightFilter: null,
   _fitViewCallback: null,
   _viewportCenterGetter: null,
@@ -897,6 +1103,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   disconnectedNotice: null,
   groupPresets: loadGroupPresets(),
 
+  setMobileKeyframeEditor: (target) => set({ mobileKeyframeEditor: target }),
+  setMobileKeyframeTool: (tool) => set({ mobileKeyframeTool: tool }),
+  setMobileNodeOverlayOpen: (open) => set({ mobileNodeOverlayOpen: open }),
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   setRawGlslShader: (shader) => set({ rawGlslShader: shader }),
   setActiveGroupId: (id) => {
@@ -1767,6 +1976,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const outerReplacements: Array<{ nodeId: string; inputKey: string; newConnection: { nodeId: string; outputKey: string } }> = [];
 
     let portIdx = 0;
+    // nodeId -> inputKey -> portKey, so the dangling connection below can be
+    // rewritten to the '__port__' sentinel instead of left pointing at the
+    // (now-removed) outer node — see resolveGroupPortOverrides in
+    // shaderAssembler.ts for why: it's what lets the port be reused by more
+    // than one internal target, and lets the target be freely rewired or
+    // disconnected from inside the group afterward.
+    const danglingToPort = new Map<string, Map<string, string>>();
 
     // INPUT PORTS: selected node inputs wired to non-selected nodes
     for (const sn of selectedNodes) {
@@ -1782,6 +1998,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           toNodeId: sn.id,
           toInputKey: key,
         });
+        if (!danglingToPort.has(sn.id)) danglingToPort.set(sn.id, new Map());
+        danglingToPort.get(sn.id)!.set(key, portKey);
         groupInputSockets[portKey] = {
           type: inp.type,
           label: key,
@@ -1883,11 +2101,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
 
-    // Mark all original selected nodes as immutable within the group
-    const originalNodes = selectedNodes.map(n => ({
-      ...n,
-      params: { ...n.params, _groupOriginal: true },
-    }));
+    // Mark all original selected nodes as immutable within the group (only
+    // the node itself can't be deleted — its wiring, incl. the dangling
+    // inputs just turned into ports below, stays freely editable).
+    const originalNodes = selectedNodes.map(n => {
+      const portMap = danglingToPort.get(n.id);
+      const inputs = portMap
+        ? Object.fromEntries(Object.entries(n.inputs).map(([k, inp]) => {
+            const portKey = portMap.get(k);
+            return [k, portKey ? { ...inp, connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: portKey } } : inp];
+          }))
+        : n.inputs;
+      return { ...n, inputs, params: { ...n.params, _groupOriginal: true } };
+    });
 
     // Auto-inject a LoopIndex node so iteration counter `i` is always accessible
     const loopIndexNode: import('../types/nodeGraph').GraphNode = {
@@ -2004,17 +2230,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       subgraph.nodes.filter(n => n.type === 'loopIndex').map(n => n.id)
     );
 
-    // Build a map of authoritative outer connections from the group's inputPorts.
-    // inputPorts record the ground truth: inner node X's input key Y = outer connection Z.
-    // Using this (rather than the inner node's stored connection) ensures the right wiring
-    // is restored even when the inner connection was stale (e.g. carry nodes).
-    const outerConnectionPatch = new Map<string, Record<string, { nodeId: string; outputKey: string }>>();
+    // Build a map of authoritative outer connections by scanning subgraph
+    // nodes for the GROUP_PORT_SENTINEL connection (see groupNodes), not the
+    // port's own legacy toNodeId/toInputKey — a port can now be rewired to a
+    // different internal node (or shared by several), so the sentinel scan
+    // is the only way to know who's *actually* fed by it at ungroup time.
+    const portOuterConn = new Map<string, { nodeId: string; outputKey: string }>();
     for (const port of (subgraph.inputPorts ?? [])) {
       const outerConn = groupNode.inputs[port.key]?.connection;
-      if (!outerConn) continue;
-      const nodePatches = outerConnectionPatch.get(port.toNodeId) ?? {};
-      nodePatches[port.toInputKey] = outerConn;
-      outerConnectionPatch.set(port.toNodeId, nodePatches);
+      if (outerConn) portOuterConn.set(port.key, outerConn);
+    }
+    const outerConnectionPatch = new Map<string, Record<string, { nodeId: string; outputKey: string }>>();
+    for (const sn of subgraph.nodes) {
+      for (const [k, inp] of Object.entries(sn.inputs)) {
+        if (inp.connection?.nodeId !== GROUP_PORT_SENTINEL) continue;
+        const outerConn = portOuterConn.get(inp.connection.outputKey);
+        if (!outerConn) continue;
+        const nodePatches = outerConnectionPatch.get(sn.id) ?? {};
+        nodePatches[k] = outerConn;
+        outerConnectionPatch.set(sn.id, nodePatches);
+      }
     }
 
     // Restore subgraph nodes — exclude auto-injected sentinels (loopIndex) and
@@ -2091,6 +2326,57 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return { ...n, inputs: updatedInputs, outputs: updatedOutputs, params: { ...n.params, subgraph: updatedSubgraph } };
       }),
     }));
+  },
+
+  createLooseGroup: (nodeIds, label) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeNodes = getActiveNodes(nodes, activeGroupPath) ?? nodes;
+    const validIds = nodeIds.filter(id => activeNodes.some(n => n.id === id));
+    if (validIds.length < 2) return null;
+
+    undoManager.push(nodes);
+    const members = activeNodes.filter(n => validIds.includes(n.id));
+    const xs = members.map(n => n.position.x), ys = members.map(n => n.position.y);
+    const newGroup: import('../types/nodeGraph').LooseGroup = {
+      id: idGenerator.next(),
+      label: label ?? 'Group',
+      memberIds: validIds,
+      collapsed: true,
+      position: { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 },
+    };
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, [...activeLoose, newGroup]);
+    set({ nodes: newNodes, looseGroups: newTopLoose });
+    return newGroup.id;
+  },
+
+  ungroupLoose: (groupId) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    if (!activeLoose.some(g => g.id === groupId)) return;
+    undoManager.push(nodes);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, activeLoose.filter(g => g.id !== groupId));
+    set({ nodes: newNodes, looseGroups: newTopLoose });
+  },
+
+  // Collapse/rename are undo-exempt (same reasoning saveGroupPreset's own
+  // cosmetic-only writes skip it) — purely a view toggle/label, never worth
+  // burning an undo step, and never touches anything that would need a
+  // recompile.
+  toggleLooseGroupCollapsed: (groupId) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    const newLoose = activeLoose.map(g => g.id === groupId ? { ...g, collapsed: !g.collapsed } : g);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, newLoose);
+    set({ nodes: newNodes, looseGroups: newTopLoose });
+  },
+
+  renameLooseGroup: (groupId, label) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    const newLoose = activeLoose.map(g => g.id === groupId ? { ...g, label } : g);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, newLoose);
+    set({ nodes: newNodes, looseGroups: newTopLoose });
   },
 
   saveGroupPreset: (groupNodeId, label, description) => {
@@ -2315,9 +2601,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   undo: () => {
     const prev = undoManager.pop();
     if (!prev) return;
+    undoManager.pushRedo(get().nodes);
     // Restore counter so new nodes after undo don't collide
     idGenerator.syncFromGraph(prev);
     set({ nodes: prev, nodeProbeValues: null });
+    get().compile();
+  },
+
+  redo: () => {
+    const next = undoManager.popRedo();
+    if (!next) return;
+    undoManager.pushUndo(get().nodes);
+    idGenerator.syncFromGraph(next);
+    set({ nodes: next, nodeProbeValues: null });
     get().compile();
   },
 
@@ -2629,25 +2925,29 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const activeNodes = getActiveNodes(nodes, activeGroupPath);
       if (activeNodes) {
         const sgNode = activeNodes.find(n => n.id === nodeId);
-        // Block deletion of original (creation-time) nodes
-        if (sgNode?.params?._groupOriginal) return;
         if (sgNode) {
+          // _groupOriginal alone used to block every creation-time node
+          // forever — for a plain 'group' that's every node you selected
+          // when you made it, permanently frozen the moment you grouped
+          // them, the opposite of "group nodes to keep iterating on them
+          // together." The actual thing that needs protecting is narrower:
+          // def.anchored node TYPES (ScenePos/SceneOutput/MarchLoopInputs/
+          // MarchLoopOutput) are structural anchors the compiler requires
+          // to exist inside the specialized 3D scene group types — same
+          // flag NodeComponent.tsx's own 🔒 "Anchored — cannot be deleted"
+          // indicator already keys off, so this stays consistent with
+          // desktop's existing convention rather than inventing a new one.
+          if (sgNode.params?._groupOriginal && getNodeDefinition(sgNode.type)?.anchored) return;
+
           undoManager.push(nodes);
-          // Remove from subgraph and clear connections pointing to it
-          const newSgNodes = activeNodes
-            .filter(n => n.id !== nodeId)
-            .map(n => ({
-              ...n,
-              inputs: Object.fromEntries(
-                Object.entries(n.inputs).map(([k, inp]) => [
-                  k,
-                  inp.connection?.nodeId === nodeId ? { ...inp, connection: undefined } : inp,
-                ]),
-              ),
-            }));
+          const newSgNodes = removeNodeFromList(activeNodes, nodeId);
           set(state => {
             const newTop = setActiveNodes(state.nodes, activeGroupPath, newSgNodes);
-            return { nodes: newTop ?? state.nodes };
+            if (!newTop) return { nodes: state.nodes };
+            const activeLoose = getActiveLooseGroups(newTop, state.looseGroups, activeGroupPath);
+            const { nodes: prunedNodes, looseGroups: prunedTopLoose } =
+              setActiveLooseGroups(newTop, state.looseGroups, activeGroupPath, pruneLooseGroups(activeLoose, nodeId));
+            return { nodes: prunedNodes, looseGroups: prunedTopLoose };
           });
           get().compile();
           return;
@@ -2663,80 +2963,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       videoEngine.disposeNode(nodeId);
     }
 
-    // ── Collect bridge info before removing ────────────────────────────────
-    // Upstream: what was wired INTO the deleted node
-    type Src = { sourceNodeId: string; sourceOutputKey: string; sourceType: string };
-    const upstream: Src[] = [];
-    if (deletedNode) {
-      for (const input of Object.values(deletedNode.inputs)) {
-        if (!input.connection) continue;
-        const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
-        const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : undefined;
-        const srcType = srcDef?.outputs[input.connection!.outputKey]?.type ?? '';
-        if (srcType) upstream.push({ sourceNodeId: input.connection.nodeId, sourceOutputKey: input.connection.outputKey, sourceType: srcType });
-      }
-    }
-
-    // Downstream: what the deleted node was wired INTO
-    type Tgt = { targetNodeId: string; targetInputKey: string; targetType: string };
-    const downstream: Tgt[] = [];
-    for (const n of nodes) {
-      if (n.id === nodeId) continue;
-      for (const [inputKey, input] of Object.entries(n.inputs)) {
-        if (input.connection?.nodeId !== nodeId) continue;
-        const tgtDef  = getNodeDefinition(n.type);
-        const tgtType = tgtDef?.inputs[inputKey]?.type ?? '';
-        downstream.push({ targetNodeId: n.id, targetInputKey: inputKey, targetType: tgtType });
-      }
-    }
-
-    // Bridge: for each orphaned downstream input, pick the first compatible upstream source
-    type Bridge = { sourceNodeId: string; sourceOutputKey: string; targetNodeId: string; targetInputKey: string };
-    const bridges: Bridge[] = [];
-    for (const tgt of downstream) {
-      for (const src of upstream) {
-        if (typesCompatible(src.sourceType as DataType, tgt.targetType as DataType)) {
-          bridges.push({ sourceNodeId: src.sourceNodeId, sourceOutputKey: src.sourceOutputKey, targetNodeId: tgt.targetNodeId, targetInputKey: tgt.targetInputKey });
-          break;
-        }
-      }
-    }
-
     set(state => {
-      // Remove the node and clear any connections that pointed to it
-      let newNodes = state.nodes
-        .filter(n => n.id !== nodeId)
-        .map(n => ({
-          ...n,
-          inputs: Object.fromEntries(
-            Object.entries(n.inputs).map(([key, input]) => [
-              key,
-              input.connection?.nodeId === nodeId
-                ? { ...input, connection: undefined }
-                : input,
-            ])
-          ),
-        }));
-
-      // Re-wire bridged connections
-      for (const bridge of bridges) {
-        newNodes = newNodes.map(n => {
-          if (n.id !== bridge.targetNodeId) return n;
-          return {
-            ...n,
-            inputs: {
-              ...n.inputs,
-              [bridge.targetInputKey]: {
-                ...n.inputs[bridge.targetInputKey],
-                connection: { nodeId: bridge.sourceNodeId, outputKey: bridge.sourceOutputKey },
-              },
-            },
-          };
-        });
-      }
-
+      const newNodes = removeNodeFromList(state.nodes, nodeId);
       const previewNodeId = state.previewNodeId === nodeId ? null : state.previewNodeId;
-      return { nodes: newNodes, previewNodeId };
+      return { nodes: newNodes, previewNodeId, looseGroups: pruneLooseGroups(state.looseGroups, nodeId) };
     });
     get().compile();
   },
@@ -3184,14 +3414,44 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  // Wires `toNodeId`'s `toInputKey` to this port via the GROUP_PORT_SENTINEL
+  // connection — the live source of truth the compiler scans for (see
+  // resolveGroupPortOverrides) — so a port can drive any number of internal
+  // targets and each stays freely rewireable/disconnectable afterward,
+  // instead of a single fixed toNodeId/toInputKey silently overriding
+  // whatever the node is actually wired to. Also updates the port's own
+  // toNodeId/toInputKey as a display-only "primary target" record (legacy
+  // field, no longer read by the compiler for plain groups).
   rerouteGroupInput: (groupId, portKey, toNodeId, toInputKey) => {
+    undoManager.push(get().nodes);
     const { activeGroupPath } = get();
     set(state => {
       return {
         nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
           const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
           if (!sg) return n;
-          return { ...n, params: { ...n.params, subgraph: { ...sg, inputPorts: sg.inputPorts.map(p => p.key === portKey ? { ...p, toNodeId, toInputKey } : p) } } };
+          const newSgNodes = sg.nodes.map(sn => {
+            if (sn.id !== toNodeId) return sn;
+            const existing = sn.inputs[toInputKey];
+            return {
+              ...sn,
+              inputs: {
+                ...sn.inputs,
+                [toInputKey]: { ...(existing ?? { type: 'float' as import('../types/nodeGraph').DataType, label: toInputKey }), connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: portKey } },
+              },
+            };
+          });
+          return {
+            ...n,
+            params: {
+              ...n.params,
+              subgraph: {
+                ...sg,
+                nodes: newSgNodes,
+                inputPorts: sg.inputPorts.map(p => p.key === portKey ? { ...p, toNodeId, toInputKey } : p),
+              },
+            },
+          };
         }),
       };
     });
@@ -3219,6 +3479,83 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }),
       };
     });
+    get().compile();
+  },
+
+  exposeGroupInput: (groupId, toNodeId, toInputKey, type, label) => {
+    undoManager.push(get().nodes);
+    const { activeGroupPath } = get();
+    set(state => ({
+      nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+        let idx = sg.inputPorts.length + sg.outputPorts.length;
+        while (existingKeys.has(`in${idx}`)) idx++;
+        const portKey = `in${idx}`;
+        const newPort: import('../types/nodeGraph').GroupInputPort = { key: portKey, type, label, toNodeId, toInputKey };
+        const newSgNodes = sg.nodes.map(sn => {
+          if (sn.id !== toNodeId) return sn;
+          const existing = sn.inputs[toInputKey];
+          return {
+            ...sn,
+            inputs: {
+              ...sn.inputs,
+              [toInputKey]: { ...(existing ?? { type, label: toInputKey }), connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: portKey } },
+            },
+          };
+        });
+        return {
+          ...n,
+          inputs: { ...n.inputs, [portKey]: { type, label } },
+          params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes, inputPorts: [...sg.inputPorts, newPort] } },
+        };
+      }),
+    }));
+    get().compile();
+  },
+
+  addGroupInputWithSource: (groupId, sourceNodeId, sourceOutputKey, type, label) => {
+    undoManager.push(get().nodes);
+    const { activeGroupPath } = get();
+    set(state => ({
+      nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+        let idx = sg.inputPorts.length + sg.outputPorts.length;
+        while (existingKeys.has(`in${idx}`)) idx++;
+        const portKey = `in${idx}`;
+        const newPort: import('../types/nodeGraph').GroupInputPort = { key: portKey, type, label, toNodeId: '', toInputKey: '' };
+        return {
+          ...n,
+          inputs: { ...n.inputs, [portKey]: { type, label, connection: { nodeId: sourceNodeId, outputKey: sourceOutputKey } } },
+          params: { ...n.params, subgraph: { ...sg, inputPorts: [...sg.inputPorts, newPort] } },
+        };
+      }),
+    }));
+    get().compile();
+  },
+
+  exposeGroupOutput: (groupId, fromNodeId, fromOutputKey, type, label) => {
+    undoManager.push(get().nodes);
+    const { activeGroupPath } = get();
+    set(state => ({
+      nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+        let idx = sg.outputPorts.length;
+        let portKey = `out${idx}`;
+        while (existingKeys.has(portKey)) portKey = `out${++idx}`;
+        const newPort: import('../types/nodeGraph').GroupOutputPort = { key: portKey, type, label, fromNodeId, fromOutputKey };
+        return {
+          ...n,
+          outputs: { ...n.outputs, [portKey]: { type, label } },
+          params: { ...n.params, subgraph: { ...sg, outputPorts: [...sg.outputPorts, newPort] } },
+        };
+      }),
+    }));
     get().compile();
   },
 
@@ -3596,7 +3933,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     ));
 
     idGenerator.syncFromGraph(nodes);
-    set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    // Example graphs don't carry their own loose groups yet — reset rather
+    // than leave a previous graph's groups referencing node ids that don't
+    // exist in this one.
+    set({ nodes, looseGroups: [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
   },
 
@@ -3632,13 +3972,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: (name) => {
-    const { nodes } = get();
-    const payload = JSON.stringify({ nodes, savedAt: Date.now() });
+    const { nodes, looseGroups } = get();
+    const payload = JSON.stringify({ nodes, looseGroups, savedAt: Date.now() });
     localStorage.setItem(`shader-studio:${name}`, payload);
     const dir = getGraphDir();
     if (dir) {
       const slug = labelToSlug(name || 'graph');
-      writeTextFileAtPath(`${dir}/${slug}.json`, JSON.stringify({ nodes }, null, 2));
+      writeTextFileAtPath(`${dir}/${slug}.json`, JSON.stringify({ nodes, looseGroups }, null, 2));
     }
   },
 
@@ -3657,7 +3997,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const raw = localStorage.getItem(`shader-studio:${name}`);
     if (!raw) return;
     try {
-      const { nodes: rawNodes } = JSON.parse(raw) as { nodes: GraphNode[] };
+      const { nodes: rawNodes, looseGroups } = JSON.parse(raw) as { nodes: GraphNode[]; looseGroups?: import('../types/nodeGraph').LooseGroup[] };
       if (Array.isArray(rawNodes)) {
         // Strip in-memory audio state — audio buffers are not persisted, so
         // _isPlaying / _hasFile would crash the audio engine on load.
@@ -3671,7 +4011,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         idGenerator.syncFromGraph(nodes);
         // Reset group navigation so a saved graph that was captured inside a
         // subgraph doesn't leave the editor stranded in a non-existent group.
-        set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+        set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
         get().compile();
       }
     } catch {}
@@ -3682,8 +4022,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportGraph: async () => {
-    const { nodes } = get();
-    const json = JSON.stringify({ nodes }, null, 2);
+    const { nodes, looseGroups } = get();
+    const json = JSON.stringify({ nodes, looseGroups }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const name = isTauri ? 'shader-graph.json' : (window.prompt('File name:', 'shader-graph') ?? 'shader-graph');
     await saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
@@ -3692,11 +4032,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   importGraph: (json: string) => {
     undoManager.clear();
     try {
-      const { nodes: rawNodes } = JSON.parse(json) as { nodes: GraphNode[] };
+      const { nodes: rawNodes, looseGroups } = JSON.parse(json) as { nodes: GraphNode[]; looseGroups?: import('../types/nodeGraph').LooseGroup[] };
       if (Array.isArray(rawNodes)) {
         const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(n, getNodeDefinition));
         idGenerator.syncFromGraph(nodes);
-        set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+        set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
         get().compile();
       }
     } catch {}
