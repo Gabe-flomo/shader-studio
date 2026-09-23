@@ -1,4 +1,5 @@
 import { useBreakpoint, isMobile } from '../hooks/useBreakpoint';
+import { useNodeGraphStore } from '../store/useNodeGraphStore';
 
 export type Page = 'studio' | 'shortcuts' | 'glsl' | 'fn';
 
@@ -12,6 +13,8 @@ interface TopNavProps {
 export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
   const bp = useBreakpoint();
   const mobile = isMobile(bp);
+  const undo = useNodeGraphStore(s => s.undo);
+  const redo = useNodeGraphStore(s => s.redo);
 
   return (
     <div
@@ -80,21 +83,33 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         title="Node Graph Studio"
       />
 
-      {/* Function Builder tab */}
-      <TabButton
-        active={page === 'fn'}
-        onClick={() => onPageChange('fn')}
-        label={mobile ? 'ƒ' : 'ƒ( ) Builder'}
-        title="Function Builder — write and plot named GLSL functions"
-      />
+      {/* Function Builder / GLSL editor tabs — desktop only. Mobile has no
+          keyboard shortcut to reach either, and screen space is tight, so
+          they're swapped for Undo/Redo below instead. */}
+      {!mobile && (
+        <>
+          <TabButton
+            active={page === 'fn'}
+            onClick={() => onPageChange('fn')}
+            label="ƒ( ) Builder"
+            title="Function Builder — write and plot named GLSL functions"
+          />
+          <TabButton
+            active={page === 'glsl'}
+            onClick={() => onPageChange('glsl')}
+            label="</> GLSL"
+            title="Raw GLSL Editor"
+          />
+        </>
+      )}
 
-      {/* GLSL editor tab */}
-      <TabButton
-        active={page === 'glsl'}
-        onClick={() => onPageChange('glsl')}
-        label={mobile ? '</>' : '</> GLSL'}
-        title="Raw GLSL Editor"
-      />
+      {/* Mobile: no Cmd+Z here, so undo/redo need an explicit button */}
+      {mobile && (
+        <>
+          <TabButton active={false} onClick={undo} label="↶" title="Undo" />
+          <TabButton active={false} onClick={redo} label="↷" title="Redo" />
+        </>
+      )}
 
       {/* Shortcuts tab */}
       <TabButton

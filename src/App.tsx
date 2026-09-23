@@ -692,7 +692,11 @@ function App() {
             <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
               {([
                 { id: 'select', icon: '↖' },
-                { id: 'add', icon: '✏' },
+                // ︎ forces the text-style glyph — without it, this
+                // pencil renders as a full-color emoji in Chromium while its
+                // siblings stay plain monochrome text, looking like a stray
+                // colored blob in the toolbar.
+                { id: 'add', icon: '✏︎' },
                 { id: 'delete', icon: '✕' },
                 { id: 'draw', icon: '∿' },
               ] as const).map((m, i) => (

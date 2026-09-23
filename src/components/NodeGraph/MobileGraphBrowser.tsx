@@ -338,8 +338,48 @@ function downsampleDrawPath(path: Array<{ t: number; v: number }>): Keyframe[] {
 
 const KF_PAD = { l: 34, r: 10, t: 10, b: 20 };
 const KF_HIT_PX = 20;
+const KF_HANDLE_R = 6;
+const KF_HANDLE_HIT_PX = 16;
+// The snap grid a dragged keyframe's time gravitates toward once it's close
+// (aim-assist, not a hard quantize) — half-second increments, same idea as
+// desktop's grid snap but always-on and pixel-distance-based rather than a
+// modifier key, since there's no keyboard to hold shift with on mobile.
+const KF_TIME_SNAP = 0.5;
+const KF_TIME_SNAP_PX = 8;
 type KfTool = 'select' | 'add' | 'delete' | 'draw';
-type KfDrag = { kind: 'move'; index: number } | { kind: 'draw'; path: Array<{ t: number; v: number }> };
+type KfDrag =
+  | { kind: 'move'; index: number }
+  | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' }
+  | { kind: 'draw'; path: Array<{ t: number; v: number }> };
+
+// A segment the curve is made of, including the synthetic loop-back segment
+// in 'interpolate' mode — mirrors buildSegments in desktop's
+// KeyframeEditorModal.tsx exactly (absolute keyframe .t, not shifted to the
+// first keyframe like the GLSL-runtime/evalKeyframeCurve convention) so a
+// segment's on-canvas position always matches where its keyframes were
+// clicked. kfIndex is the keyframe that "owns" this segment's easing.
+interface KfSeg { start: number; end: number; v0: number; v1: number; ease: KeyframeEasing; kfIndex: number }
+function buildKfSegs(keyframes: Keyframe[], mode: KeyframeLoopMode, loopBack: number): KfSeg[] {
+  if (keyframes.length < 2) return [];
+  const segs: KfSeg[] = [];
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    segs.push({ start: keyframes[i].t, end: keyframes[i + 1].t, v0: keyframes[i].v, v1: keyframes[i + 1].v, ease: keyframes[i].ease, kfIndex: i });
+  }
+  if (mode === 'interpolate') {
+    const last = keyframes[keyframes.length - 1];
+    segs.push({ start: last.t, end: last.t + loopBack, v0: last.v, v1: keyframes[0].v, ease: last.ease, kfIndex: keyframes.length - 1 });
+  }
+  return segs;
+}
+function isLinearEase(e: KeyframeEasing): boolean {
+  return e.a === 0 && e.b === 0 && e.c === 1 && e.d === 1;
+}
+// Default for a freshly-curved segment — handles start spread apart (30%/70%
+// along the segment) rather than sharing an x-position. CSS's own 'ease'
+// preset (EASING_PRESETS.ease) has a === c === 0.25, so both handles sit at
+// the same horizontal spot and visually overlap, especially on a short
+// segment — not the "coming out at an angle" default that's easy to grab.
+const KF_DEFAULT_BEZIER: KeyframeEasing = { a: 0.3, b: 0.0, c: 0.7, d: 1.0 };
 
 function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, tool, onChange, selectedIndex, onSelect }: {
   keyframes: Keyframe[];
@@ -373,11 +413,21 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
   const maxT = Math.max(5, ...keyframes.map(k => k.t)) + 1;
   const minT = 0;
   const vSpan = valueMax - valueMin || 1;
+  const segs = useMemo(() => buildKfSegs(keyframes, mode, loopBack), [keyframes, mode, loopBack]);
+  const easeEditSeg = selectedIndex != null ? (segs.find(s => s.kfIndex === selectedIndex) ?? null) : null;
+  const showHandles = easeEditSeg != null && !isLinearEase(easeEditSeg.ease);
 
   const toX = (t: number) => KF_PAD.l + ((t - minT) / (maxT - minT)) * (size.width - KF_PAD.l - KF_PAD.r);
   const toY = (v: number) => KF_PAD.t + (1 - (v - valueMin) / vSpan) * (size.height - KF_PAD.t - KF_PAD.b);
   const fromX = (x: number) => minT + ((x - KF_PAD.l) / (size.width - KF_PAD.l - KF_PAD.r)) * (maxT - minT);
   const fromY = (y: number) => valueMax - ((y - KF_PAD.t) / (size.height - KF_PAD.t - KF_PAD.b)) * vSpan;
+  // Aim-assist: free while dragging, but gravitates to the nearest half-second
+  // once the pointer is within a few pixels of it — no keyboard to hold a
+  // modifier for a hard snap, so this is always-on instead.
+  const snapT = (t: number): number => {
+    const grid = Math.round(t / KF_TIME_SNAP) * KF_TIME_SNAP;
+    return Math.abs(toX(grid) - toX(t)) < KF_TIME_SNAP_PX ? grid : t;
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -419,6 +469,28 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       ctx.stroke();
     }
 
+    // Bezier handles for the selected keyframe's outgoing segment — only
+    // once it's actually curved (Linear has nothing to drag). Mirrors
+    // desktop's KeyframeEditorModal handle rendering, mapped into this
+    // segment's own time/value span rather than the full 0..1 canvas.
+    if (showHandles && easeEditSeg) {
+      const seg = easeEditSeg;
+      const segToX = (localT: number) => toX(seg.start + localT * (seg.end - seg.start));
+      const segToY = (localV01: number) => toY(seg.v0 + localV01 * (seg.v1 - seg.v0));
+      const p0x = segToX(0), p0y = segToY(0), p3x = segToX(1), p3y = segToY(1);
+      const p1x = segToX(seg.ease.a), p1y = segToY(seg.ease.b);
+      const p2x = segToX(seg.ease.c), p2y = segToY(seg.ease.d);
+      ctx.strokeStyle = '#f38ba888'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke();
+      ctx.strokeStyle = '#89b4fa88';
+      ctx.beginPath(); ctx.moveTo(p3x, p3y); ctx.lineTo(p2x, p2y); ctx.stroke();
+      [[p1x, p1y, '#f38ba8'], [p2x, p2y, '#89b4fa']].forEach(([hx, hy, color]) => {
+        ctx.fillStyle = color as string;
+        ctx.strokeStyle = '#11111b'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(hx as number, hy as number, KF_HANDLE_R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      });
+    }
+
     keyframes.forEach((kf, i) => {
       const x = toX(kf.t), y = toY(kf.v);
       const isSelected = i === selectedIndex;
@@ -431,7 +503,7 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       ctx.stroke();
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, selectedIndex, size, maxT]);
+  }, [keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, selectedIndex, size, maxT, showHandles, easeEditSeg]);
 
   const hitTest = (x: number, y: number): number | null => {
     let best: number | null = null, bestDist = KF_HIT_PX;
@@ -440,6 +512,17 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       if (d < bestDist) { bestDist = d; best = i; }
     });
     return best;
+  };
+  const hitTestHandle = (x: number, y: number): 'p1' | 'p2' | null => {
+    if (!showHandles || !easeEditSeg) return null;
+    const seg = easeEditSeg;
+    const segToX = (localT: number) => toX(seg.start + localT * (seg.end - seg.start));
+    const segToY = (localV01: number) => toY(seg.v0 + localV01 * (seg.v1 - seg.v0));
+    const p1 = { x: segToX(seg.ease.a), y: segToY(seg.ease.b) };
+    const p2 = { x: segToX(seg.ease.c), y: segToY(seg.ease.d) };
+    if (Math.hypot(x - p1.x, y - p1.y) <= KF_HANDLE_HIT_PX) return 'p1';
+    if (Math.hypot(x - p2.x, y - p2.y) <= KF_HANDLE_HIT_PX) return 'p2';
+    return null;
   };
   const pointerPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -451,6 +534,10 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     const { x, y } = pointerPos(e);
+    if (tool === 'select') {
+      const h = hitTestHandle(x, y);
+      if (h && easeEditSeg) { dragRef.current = { kind: 'handle', segIndex: easeEditSeg.kfIndex, which: h }; return; }
+    }
     const hit = hitTest(x, y);
     if (tool === 'delete') {
       if (hit != null) { onChange(keyframes.filter((_, i) => i !== hit)); onSelect(null); }
@@ -466,8 +553,8 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       return;
     }
     if (tool === 'add') {
-      const t = clampT(fromX(x)), v = clampV(fromY(y));
-      const fresh = { t, v, ease: EASING_PRESETS.ease };
+      const t = clampT(snapT(fromX(x))), v = clampV(fromY(y));
+      const fresh = { t, v, ease: KF_DEFAULT_BEZIER };
       const next = [...keyframes, fresh].sort((a, b) => a.t - b.t);
       onChange(next);
       onSelect(next.indexOf(fresh));
@@ -486,7 +573,26 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       if (!last || Math.hypot(toX(t) - toX(last.t), toY(v) - toY(last.v)) > 4) drag.path.push({ t, v });
       return;
     }
-    const next = keyframes.map((k, i) => i === drag.index ? { ...k, t: clampT(fromX(x)), v: clampV(fromY(y)) } : k);
+    if (drag.kind === 'handle') {
+      const seg = segs.find(s => s.kfIndex === drag.segIndex);
+      if (!seg) return;
+      // Same clamp desktop's handle drag uses: the time-axis component (a/c)
+      // can overshoot slightly past the segment's own [0,1] span, but the
+      // value-axis component (b/d) stays fully unclamped — that's how you
+      // author a bounce/overshoot curve (see kfCubicBezier in keyframes.ts).
+      const localT = Math.max(-0.5, Math.min(1.5, (fromX(x) - seg.start) / Math.max(seg.end - seg.start, 0.0001)));
+      const vRange = seg.v1 - seg.v0;
+      const localV = (fromY(y) - seg.v0) / (Math.abs(vRange) > 1e-6 ? vRange : 1);
+      const next = keyframes.map((k, i) => {
+        if (i !== seg.kfIndex) return k;
+        const ease = { ...k.ease };
+        if (drag.which === 'p1') { ease.a = localT; ease.b = localV; } else { ease.c = localT; ease.d = localV; }
+        return { ...k, ease };
+      });
+      onChange(next);
+      return;
+    }
+    const next = keyframes.map((k, i) => i === drag.index ? { ...k, t: clampT(snapT(fromX(x))), v: clampV(fromY(y)) } : k);
     onChange(next);
   };
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -499,6 +605,7 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       onSelect(null);
       return;
     }
+    if (drag.kind === 'handle') return;
     const moved = keyframes[drag.index];
     if (!moved) return;
     const sorted = [...keyframes].sort((a, b) => a.t - b.t);
@@ -1025,8 +1132,8 @@ export function MobileGraphBrowser() {
                               if (absN > 0) updateNodeParams(node.id, { [`__scMax_${key}`]: absN });
                             };
                             return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                                   <input
                                     type="range"
                                     min={effMin}
@@ -1039,29 +1146,29 @@ export function MobileGraphBrowser() {
                                       updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
                                     }}
                                     title="Double-tap to reset to default"
-                                    style={{ flex: 1 }}
+                                    style={{ flex: 1, minWidth: 0 }}
                                   />
                                   <button
                                     onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
                                     title="Tap for range, bidirectional & keyframe controls"
                                     style={{
-                                      display: 'flex', alignItems: 'center', gap: '3px',
+                                      display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
                                       background: isExpanded ? '#313244' : 'none',
                                       border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
                                       borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
                                       color: isExpanded ? '#cdd6f4' : '#a6adc8',
                                     }}
                                   >
-                                    <span style={{ fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                    <span style={{ fontSize: '10px', minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                                       {formatSliderValue(val, pd.step)}
                                     </span>
                                     <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
                                   </button>
                                 </div>
                                 {isExpanded && (
-                                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      <span style={{ fontSize: '10px', color: '#6c7086', width: '32px' }}>Value</span>
+                                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
                                       <input
                                         type="number"
                                         step={pd.step ?? 0.01}
@@ -1072,7 +1179,7 @@ export function MobileGraphBrowser() {
                                           if (Math.abs(n) > effMax) setCustomMax(n);
                                           updateNodeParams(node.id, { [key]: n }, { immediate: true });
                                         }}
-                                        style={{ ...exprTextInputStyle, flex: 1, padding: '4px 6px', fontSize: '11px' }}
+                                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
                                       />
                                     </div>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', touchAction: 'manipulation' }}>
@@ -1082,10 +1189,10 @@ export function MobileGraphBrowser() {
                                         onChange={e => updateNodeParams(node.id, { [`__scBidir_${key}`]: e.target.checked }, { immediate: true })}
                                         style={{ accentColor: '#cba6f7' }}
                                       />
-                                      <span style={{ fontSize: '10px', color: '#a6adc8' }}>Bidirectional</span>
+                                      <span style={{ fontSize: '9px', color: '#a6adc8' }}>Bidirectional</span>
                                     </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      <span style={{ fontSize: '10px', color: '#6c7086', width: '32px' }}>Max</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Max</span>
                                       <input
                                         type="number"
                                         step={pd.step ?? 0.01}
@@ -1094,12 +1201,12 @@ export function MobileGraphBrowser() {
                                           const n = parseFloat(e.target.value);
                                           if (!isNaN(n) && n > 0) setCustomMax(n);
                                         }}
-                                        style={{ ...exprTextInputStyle, flex: 1, padding: '4px 6px', fontSize: '11px' }}
+                                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
                                       />
                                       {customMax != null && (
                                         <button
                                           onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null }, { immediate: true })}
-                                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '4px', cursor: 'pointer', padding: '4px 6px', touchAction: 'manipulation' }}
+                                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '4px', cursor: 'pointer', padding: '3px 6px', touchAction: 'manipulation', flexShrink: 0 }}
                                         >Reset</button>
                                       )}
                                     </div>
@@ -1225,8 +1332,16 @@ export function MobileGraphBrowser() {
     const writeKeyframes = (next: Keyframe[]) => updateNodeParams(node.id, { [kfParamName]: next }, { immediate: true });
     const setMode = (m: KeyframeLoopMode) => updateNodeParams(node.id, { [`__kfMode_${target.socketKey}`]: m }, { immediate: true });
     const setLoopBack = (v: number) => updateNodeParams(node.id, { [`__kfLoopBack_${target.socketKey}`]: v }, { immediate: true });
+    const setLoopCount = (v: number | null) => updateNodeParams(node.id, { [`__kfLoopCount_${target.socketKey}`]: v }, { immediate: true });
 
     const selected = kfSelectedIndex != null ? keyframes[kfSelectedIndex] : undefined;
+    // This keyframe's easing only does anything if there's a next segment to
+    // ease into — the last keyframe in 'once'/'loop' mode has no outgoing
+    // segment, same as desktop's easeEditSeg derivation.
+    const hasOutgoingSegment = kfSelectedIndex != null && (
+      kfSelectedIndex < keyframes.length - 1 || (mode === 'interpolate' && kfSelectedIndex === keyframes.length - 1)
+    );
+    const isSelectedLinear = selected ? isLinearEase(selected.ease) : true;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -1281,76 +1396,97 @@ export function MobileGraphBrowser() {
 
           {selected && (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '11px', color: '#6c7086' }}>Time</span>
-                  <input
-                    type="number"
-                    step={0.1}
-                    value={selected.t}
-                    onChange={e => {
-                      const n = parseFloat(e.target.value);
-                      if (isNaN(n)) return;
-                      const moved = { ...selected, t: Math.max(0, n) };
-                      const next = keyframes.map((k, i) => i === kfSelectedIndex ? moved : k).sort((a, b) => a.t - b.t);
-                      writeKeyframes(next);
-                      setKfSelectedIndex(next.indexOf(moved));
-                    }}
-                    style={{ ...exprTextInputStyle, width: '64px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '11px', color: '#6c7086' }}>Value</span>
-                  <input
-                    type="number"
-                    step={pd?.step ?? 0.01}
-                    value={selected.v}
-                    onChange={e => {
-                      const n = parseFloat(e.target.value);
-                      if (isNaN(n)) return;
-                      writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, v: n } : k));
-                    }}
-                    style={{ ...exprTextInputStyle, width: '72px' }}
-                  />
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '11px', color: '#6c7086' }}>Value</span>
+                <input
+                  type="number"
+                  step={pd?.step ?? 0.01}
+                  value={selected.v}
+                  onChange={e => {
+                    const n = parseFloat(e.target.value);
+                    if (isNaN(n)) return;
+                    writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, v: n } : k));
+                  }}
+                  style={{ ...exprTextInputStyle, width: '60px', padding: '4px 6px', fontSize: '11px' }}
+                />
               </div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>
-                EASING (this keyframe → next)
-              </div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {Object.entries(EASING_PRESETS).map(([name, ease]) => {
-                  const isActive = selected.ease.a === ease.a && selected.ease.b === ease.b && selected.ease.c === ease.c && selected.ease.d === ease.d;
-                  return (
+
+              {hasOutgoingSegment && (
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                    EASING (this keyframe → next)
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <button
-                      key={name}
-                      style={smallTabBtnStyle(isActive)}
-                      onClick={() => writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, ease } : k))}
-                    >{name}</button>
-                  );
-                })}
-              </div>
+                      style={smallTabBtnStyle(isSelectedLinear)}
+                      onClick={() => writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, ease: EASING_PRESETS.linear } : k))}
+                    >Linear</button>
+                    <button
+                      style={smallTabBtnStyle(!isSelectedLinear)}
+                      // Switching on lands on the 'ease' preset — already at an
+                      // angle — rather than a degenerate straight line, whose
+                      // handles would sit exactly on top of the curve itself
+                      // and be hard to grab.
+                      onClick={() => { if (isSelectedLinear) writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, ease: KF_DEFAULT_BEZIER } : k)); }}
+                    >Bezier</button>
+                  </div>
+                  {!isSelectedLinear && (
+                    <div style={{ fontSize: '10px', color: '#585b70', marginTop: '6px' }}>
+                      Drag the orange/blue handles on the curve to shape it.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>PLAYBACK</div>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {(['once', 'loop', 'interpolate'] as const).map(m => (
-                <button key={m} style={smallTabBtnStyle(mode === m)} onClick={() => setMode(m)}>{m}</button>
-              ))}
-            </div>
-            {mode === 'interpolate' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-                <span style={{ fontSize: '11px', color: '#6c7086' }}>Loop back over</span>
-                <input
-                  type="number" min={0.01} step={0.1} value={loopBack}
-                  onChange={e => setLoopBack(Math.max(0.01, parseFloat(e.target.value) || 0.01))}
-                  style={{ ...exprTextInputStyle, width: '64px' }}
-                />
-                <span style={{ fontSize: '11px', color: '#6c7086' }}>sec</span>
+          {/* Playback settings only make sense once there's an actual curve
+              to play back — an empty keyframe list has nothing to loop. */}
+          {keyframes.length > 0 && (
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>PLAYBACK</div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {(['once', 'loop', 'interpolate'] as const).map(m => (
+                  <button key={m} style={smallTabBtnStyle(mode === m)} onClick={() => setMode(m)}>{m}</button>
+                ))}
               </div>
-            )}
-          </div>
+              {mode === 'interpolate' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
+                  <span style={{ fontSize: '10px', color: '#6c7086' }}>Loop back over</span>
+                  <input
+                    type="number" min={0.01} step={0.1} value={loopBack}
+                    onChange={e => setLoopBack(Math.max(0.01, parseFloat(e.target.value) || 0.01))}
+                    style={{ ...exprTextInputStyle, width: '48px', padding: '4px 6px', fontSize: '11px' }}
+                  />
+                  <span style={{ fontSize: '10px', color: '#6c7086' }}>sec</span>
+                </div>
+              )}
+              {mode !== 'once' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', touchAction: 'manipulation' }}>
+                    <input
+                      type="checkbox"
+                      checked={loopCount === null}
+                      onChange={e => setLoopCount(e.target.checked ? null : 3)}
+                      style={{ accentColor: '#cba6f7' }}
+                    />
+                    <span style={{ fontSize: '10px', color: '#a6adc8' }}>Loop forever</span>
+                  </label>
+                  {loopCount !== null && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', color: '#6c7086' }}>Repeat</span>
+                      <input
+                        type="number" min={1} step={1} value={loopCount}
+                        onChange={e => setLoopCount(Math.max(1, Math.round(parseFloat(e.target.value) || 1)))}
+                        style={{ ...exprTextInputStyle, width: '44px', padding: '4px 6px', fontSize: '11px' }}
+                      />
+                      <span style={{ fontSize: '10px', color: '#6c7086' }}>times</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

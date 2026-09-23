@@ -456,6 +456,7 @@ interface NodeGraphState {
   /** Rename an input or output port label on a group node. */
   renameGroupPort: (nodeId: string, portKey: string, dir: 'in' | 'out', newLabel: string) => void;
   undo: () => void;
+  redo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => void;
   autoLayout: () => void;
@@ -2330,9 +2331,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   undo: () => {
     const prev = undoManager.pop();
     if (!prev) return;
+    undoManager.pushRedo(get().nodes);
     // Restore counter so new nodes after undo don't collide
     idGenerator.syncFromGraph(prev);
     set({ nodes: prev, nodeProbeValues: null });
+    get().compile();
+  },
+
+  redo: () => {
+    const next = undoManager.popRedo();
+    if (!next) return;
+    undoManager.pushUndo(get().nodes);
+    idGenerator.syncFromGraph(next);
+    set({ nodes: next, nodeProbeValues: null });
     get().compile();
   },
 
