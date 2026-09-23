@@ -2308,22 +2308,23 @@ export function MobileGraphBrowser() {
             </div>
             {infoTab === 'info' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
-                  {def?.description ?? 'No info for this node.'}
-                </div>
-                {/* Same live, node-type-specific canvas diagrams desktop
-                    shows on the card itself (tone curves, gradient strips,
-                    wave shapes, ...) — reused as-is via InlineVizFrame
-                    rather than reinvented. For the many node types with no
-                    custom diagram, GenericPreviewViz falls back to an
-                    actual rendered shader thumbnail (also matching desktop's
-                    own behavior) rather than showing nothing. Collapsed by
-                    default either way: different node types want very
-                    different shapes (a wide equation strip vs. a square
-                    vector field vs. a square render), so reserving a fixed
-                    chunk of the card for it on every node — even ones you
-                    never open it on — is more clutter than it's worth;
-                    opt-in instead, sized to whatever ends up shown. */}
+                {/* Visual before the description — the description's length
+                    varies a lot node to node, and putting the toggle after
+                    it meant scroll position shifted depending on how long
+                    that text happened to be. Same live, node-type-specific
+                    canvas diagrams desktop shows on the card itself (tone
+                    curves, gradient strips, wave shapes, ...) — reused as-is
+                    via InlineVizFrame rather than reinvented. For the many
+                    node types with no custom diagram, GenericPreviewViz
+                    falls back to an actual rendered shader thumbnail (also
+                    matching desktop's own behavior) rather than showing
+                    nothing. Collapsed by default either way: different node
+                    types want very different shapes (a wide equation strip
+                    vs. a square vector field vs. a square render), so
+                    reserving a fixed chunk of the card for it on every node
+                    — even ones you never open it on — is more clutter than
+                    it's worth; opt-in instead, sized to whatever ends up
+                    shown. */}
                 {!SKIP_INLINE_PREVIEW.has(node.type) && (
                   <div>
                     <button
@@ -2339,6 +2340,9 @@ export function MobileGraphBrowser() {
                     )}
                   </div>
                 )}
+                <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
+                  {def?.description ?? 'No info for this node.'}
+                </div>
               </div>
             )}
             {infoTab === 'comment' && (
