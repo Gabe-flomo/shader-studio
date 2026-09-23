@@ -13,22 +13,23 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
-import type { GraphNode, DataType, LooseGroup } from '../../types/nodeGraph';
+import type { GraphNode, DataType, LooseGroup, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
+import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
+import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
-import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
-import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import {
   VECTOR_AXES, EASING_PRESETS, socketHasKeyframes, socketHasVectorKeyframes,
   getKeyframeConfig, getAxisKeyframeConfig,
 } from '../../compiler/keyframes';
 import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/keyframes';
+import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -83,6 +84,14 @@ function sliderableParam(node: GraphNode, key: string) {
   if (!pd || (pd.type !== 'float' && pd.type !== 'int')) return undefined;
   if (!paramVisible(node, pd)) return undefined;
   return pd;
+}
+// True for a real input socket, or a param-only float slider eligible for
+// its own keyframe track (see patchNodeParamsForUniforms) — anything the
+// mobile keyframe editor is allowed to open on.
+function nodeHasKeyframeableKey(node: GraphNode, key: string): boolean {
+  if (key in node.inputs) return true;
+  const pd = sliderableParam(node, key);
+  return !!pd && pd.type === 'float' && pd.step !== 1 && !SKIP_UNIFORM_TYPES.has(node.type);
 }
 function selectableParam(node: GraphNode, key: string) {
   const def = getNodeDefinition(node.type);
@@ -489,6 +498,119 @@ function TypeIcon({ type }: { type: string }) {
   }
   return <div style={dotStyle(TYPE_COLORS[type] ?? '#888')} />;
 }
+// ── Inline-viz frame ─────────────────────────────────────────────────────
+// NodeInlineViz's ~50 canvases each hardcode their own CSS pixel height
+// (36/64/100/...) alongside width:'100%' — sized for desktop's roughly-
+// 240px-wide node card, where the aspect ratio comes out close enough to
+// each canvas's own backing resolution. Mobile's Info tab is a different,
+// wider width that doesn't match any single one of those, so stretching
+// them all to it distorts anything not authored wide-and-short (a square
+// vector-field grid comes out squashed). Rather than touching ~50 draw
+// functions in a file shared with desktop, this reads the actual canvas's
+// backing resolution after it mounts — that ratio IS the visualization's
+// real intended shape — and sizes this wrapper to match via CSS
+// aspect-ratio, overriding the canvas's own fixed height to fill it
+// exactly instead of clipping or stretching to the author's original px
+// guess. Callers should pass `key={node.id}` so switching nodes remeasures
+// fresh rather than reusing a stale ratio.
+//
+// That still leaves the canvas's actual pixel buffer at its small
+// originally-authored size (e.g. 240×48) being stretched up to however
+// wide this frame ends up (often 300px+ on a phone) — a real upscale, so
+// text and thin lines come out visibly soft. Fixed by also resizing the
+// canvas's real width/height attributes (not just its CSS size) to match
+// this frame's actual measured on-screen size at the same aspect ratio,
+// so the backing buffer and the display size are 1:1 — no upscaling, no
+// blur. This runs in a *layout* effect, which React fires before any
+// passive (`useEffect`) effect — including the draw call every one of
+// these viz components makes on mount — so by the time a one-shot
+// (non-animated) viz actually draws, it already sees the corrected
+// resolution and paints crisply the first time; nothing needs a second
+// pass. Deliberately not scaled by devicePixelRatio: these draw functions
+// size their own fonts/line-widths in fixed canvas-pixel units, and
+// multiplying the backing resolution further on top of a retina display
+// would shrink that fixed-size text rather than just sharpen it. Runs on
+// every render (cheap no-op once the size stabilizes) so it also
+// self-corrects on an actual resize (rotation, window resize).
+function InlineVizFrame({ node }: { node: GraphNode }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const canvas = frame?.querySelector('canvas');
+    if (!frame || !canvas || !canvas.width || !canvas.height) return;
+    const aspect = canvas.width / canvas.height;
+    frame.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
+    canvas.style.height = '100%';
+    const rect = frame.getBoundingClientRect();
+    const targetW = Math.max(1, Math.round(rect.width));
+    const targetH = Math.max(1, Math.round(targetW / aspect));
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+  });
+  return (
+    // No padding — the aspect-ratio computed above is measured against this
+    // box's own border box, so any padding would shrink the content area
+    // the canvas actually fills (100% of the *content* box) below what the
+    // ratio assumed, squishing it and clipping whatever sits near the
+    // canvas's own bottom/right edge. Desktop's own wrapper (VIZ_CONTAINER
+    // in NodeInlineViz.tsx) is padding-free for the same reason.
+    // Full card width, not an arbitrary cap — it's collapsed behind the
+    // VISUAL toggle until you actually want it, so there's no ambient cost
+    // to letting a visualization that wants more room (a square field, a
+    // taller grid) actually take it; maxHeight is just a safety net against
+    // an extreme ratio blowing past a reasonable share of the viewport.
+    <div
+      ref={frameRef}
+      style={{
+        background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+        overflow: 'hidden', width: '100%', maxHeight: '60vh',
+      }}
+    >
+      <NodeInlineViz node={node} />
+    </div>
+  );
+}
+// Node types with no meaningful rendered preview — a terminal sink, a raw
+// scope probe, or a type that isn't really "a shader" on its own. Same
+// list desktop's own SKIP_PREVIEW (NodeComponent.tsx) excludes from its
+// 👁 in-card preview for the same reason.
+const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
+// ── Generic live-render fallback ─────────────────────────────────────────
+// For the ~75% of node types with no custom NodeInlineViz entry, this is
+// the same fallback desktop uses (NodeComponent.tsx's own isPreviewActive
+// branch): an actual rendered shader thumbnail, walking the node's
+// upstream ancestors into a self-contained shader (compileNodePreviewShader)
+// and rendering it on a shared offscreen-WebGL singleton
+// (nodePreviewRenderer). A static snapshot, not a live loop — recomputed
+// when the focused node changes, not every frame; INLINE_VIZ_TYPES types
+// get true live reactivity from their own canvas draw; this is "show
+// something correct" for everything else, same tradeoff desktop makes.
+function GenericPreviewViz({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    // `nodes` must already be the caller's active scope (getActiveNodes at
+    // its activeGroupPath) — a node's upstream ancestors only ever live in
+    // that same scope, since subgraphs are self-contained.
+    const fs = compileNodePreviewShader(node.id, nodes);
+    if (!fs) { setUrl(null); return; }
+    let cancelled = false;
+    const time = useNodeGraphStore.getState().currentTime ?? 0;
+    nodePreviewRenderer.renderNodePreview(node.id, fs, { u_time: { value: time } }, 256)
+      .then(dataUrl => { if (!cancelled) setUrl(dataUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, node.type]);
+
+  if (!url) return null;
+  return (
+    <div style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #313244', background: '#11111b' }}>
+      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+    </div>
+  );
+}
 // Tappable, collapsible column header ("▾ INPUTS" / "▸ OUTPUTS").
 const sectionHeaderBtnStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '4px', width: '100%',
@@ -504,45 +626,6 @@ const smallTabBtnStyle = (active: boolean): React.CSSProperties => ({
   color: active ? '#89b4fa' : '#6c7086',
   cursor: 'pointer', touchAction: 'manipulation',
 });
-
-// ── Node preview thumbnail ──────────────────────────────────────────────────
-// Reuses desktop's preview pipeline (compileNodePreviewShader walks the
-// node's upstream ancestors into a self-contained shader; nodePreviewRenderer
-// is a shared offscreen-WebGL singleton, not tied to the desktop canvas) to
-// render a small static snapshot next to the Remove button. Recomputed only
-// when the focused node changes, not on every param edit — same "snapshot,
-// not live" behavior as desktop's 👁 toggle. Callers must pass `key={nodeId}`
-// so switching nodes remounts this fresh (clears the stale thumbnail) rather
-// than reusing state across nodes.
-function NodePreviewThumb({ nodeId, nodeType, nodes }: { nodeId: string; nodeType: string; nodes: GraphNode[] }) {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    // `nodes` must already be the caller's active scope (getActiveNodes at
-    // its activeGroupPath), not always top-level — a node's upstream
-    // ancestors only ever live in that same scope (subgraphs are self-
-    // contained), so the scoped list alone is enough to walk them, but the
-    // *wrong* list (top-level, when this node is inside a group) means
-    // targetNode.find below comes up empty and the thumbnail silently never
-    // renders.
-    const fs = compileNodePreviewShader(nodeId, nodes);
-    if (!fs) return;
-    let cancelled = false;
-    const time = useNodeGraphStore.getState().currentTime ?? 0;
-    nodePreviewRenderer.renderNodePreview(nodeId, fs, { u_time: { value: time } }, 88)
-      .then(dataUrl => { if (!cancelled) setUrl(dataUrl); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeId, nodeType]);
-
-  if (!url) return null;
-  return (
-    <div style={{ width: '36px', height: '36px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #313244', flexShrink: 0, background: '#11111b' }}>
-      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-    </div>
-  );
-}
 
 // ── Keyframe canvas editor ──────────────────────────────────────────────────
 // Mirrors desktop's Select/Add/Delete/Draw mode toolbar (KeyframeEditorModal.
@@ -1203,6 +1286,9 @@ export function MobileGraphBrowser() {
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
   const removeNode = useNodeGraphStore(s => s.removeNode);
+  const previewNodeId = useNodeGraphStore(s => s.previewNodeId);
+  const setPreviewNodeId = useNodeGraphStore(s => s.setPreviewNodeId);
+  const toggleBypass = useNodeGraphStore(s => s.toggleBypass);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const setNodeAssignOp = useNodeGraphStore(s => s.setNodeAssignOp);
@@ -1279,6 +1365,14 @@ export function MobileGraphBrowser() {
   // Info/Comment toggle under a generic node's cards — defaults to Info,
   // reset alongside the other per-node view state below.
   const [infoTab, setInfoTab] = useState<'info' | 'comment' | 'assign'>('info');
+  // The Info tab's inline visualization (NodeInlineViz) is collapsed by
+  // default — different node types want very different aspect ratios (a
+  // wide equation strip vs. a roughly-square vector field), so rather than
+  // reserving a fixed chunk of the card for it on every node, it's opt-in:
+  // tap to reveal, sized to whatever that specific visualization actually
+  // wants (see InlineVizFrame) instead of a one-size-fits-all box that's
+  // in the way when you're not looking at it.
+  const [vizExpanded, setVizExpanded] = useState(false);
   // Which keyframe point is selected (for the easing-preset picker) — reset
   // whenever the editor's target (node/socket/axis) changes, below.
   const [kfSelectedIndex, setKfSelectedIndex] = useState<number | null>(null);
@@ -1290,6 +1384,19 @@ export function MobileGraphBrowser() {
   // desktop's own slider config panel uses (NodeComponent.tsx), so a range
   // customized on one platform carries over to the other.
   const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
+  // Which WIRING row is expanded — accordion, same one-key-at-a-time idea
+  // as openSliderConfig above, but for the inline "what's this connected
+  // to / pick something" panel that replaces the old separate connect
+  // sheet for inputs. wireAddNewFor tracks which row's "+ Add New Node"
+  // opened the search palette (independent of the accordion itself, since
+  // the palette is its own overlay). wiringSectionOpen folds the *entire*
+  // Wiring list at once — deliberately not reset per node (a view
+  // preference, not per-node state) the way the row accordion is.
+  const [wireExpandedKey, setWireExpandedKey] = useState<string | null>(null);
+  const [wireAddNewFor, setWireAddNewFor] = useState<string | null>(null);
+  const [wiringSectionOpen, setWiringSectionOpen] = useState(true);
+  // Same whole-section fold as wiringSectionOpen, for the VALUES list below it.
+  const [valuesSectionOpen, setValuesSectionOpen] = useState(true);
   // Track which group scope focusStack/forwardStack belong to — crossing a
   // group boundary (entering via "Enter Group", exiting via a breadcrumb
   // tap) drops both, the same way jumping to a totally different node tree
@@ -1352,6 +1459,8 @@ export function MobileGraphBrowser() {
     setHiddenSectionOpen(false);
     setInfoTab('info');
     setOpenSliderConfig(null);
+    setVizExpanded(false);
+    setWireExpandedKey(null);
   }
   // mobileKeyframeEditor lives in the store (App.tsx's bottom bar needs it
   // too), so navigating away without hitting "Done" — breadcrumb, back/
@@ -1367,9 +1476,9 @@ export function MobileGraphBrowser() {
   useEffect(() => {
     if (!mobileKeyframeEditor) return;
     if (mobileKeyframeEditor.nodeId !== focusedId) { setMobileKeyframeEditor(null); return; }
-    // Also covers the socket itself vanishing while still on this node
+    // Also covers the socket/param itself vanishing while still on this node
     // (e.g. its type changed) — same "nothing left to edit" case.
-    if (focusedNode && !focusedNode.inputs[mobileKeyframeEditor.socketKey]) setMobileKeyframeEditor(null);
+    if (focusedNode && !nodeHasKeyframeableKey(focusedNode, mobileKeyframeEditor.socketKey)) setMobileKeyframeEditor(null);
   }, [mobileKeyframeEditor, focusedId, focusedNode, setMobileKeyframeEditor]);
   const kfTargetKey = mobileKeyframeEditor
     ? `${mobileKeyframeEditor.nodeId}:${mobileKeyframeEditor.socketKey}:${mobileKeyframeEditor.axis ?? ''}`
@@ -1624,6 +1733,20 @@ export function MobileGraphBrowser() {
     }
     return best;
   };
+  // Same scan as bestConnectCandidate, but the full list (exact-type
+  // matches first) — used by an expanded WIRING row's inline candidate
+  // list, which replaced the separate "Connect Existing" sheet for inputs.
+  const allConnectCandidatesFor = (targetNodeId: string, type: string): Array<{ node: GraphNode; outKey: string; exact: boolean }> => {
+    const results: Array<{ node: GraphNode; outKey: string; exact: boolean }> = [];
+    for (const n of nodes) {
+      if (n.id === targetNodeId || wouldCreateCycle(nodes, n.id, targetNodeId)) continue;
+      const outKey = firstCompatibleOutputKey(n, type);
+      if (!outKey) continue;
+      results.push({ node: n, outKey, exact: n.outputs[outKey].type === type });
+    }
+    results.sort((a, b) => Number(b.exact) - Number(a.exact));
+    return results;
+  };
 
   // ── Connect-existing candidate list ──────────────────────────────────────
   const connectCandidates = useMemo(() => {
@@ -1743,13 +1866,50 @@ export function MobileGraphBrowser() {
   function renderNodeHeader(node: GraphNode) {
     const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinition(node.type)?.anchored;
     const canRemove = node.type !== 'output' && focusStack.length > 0 && !originalLocked;
+    const isPreviewActive = previewNodeId === node.id;
+    const isBypassed = !!node.bypassed;
+    // Same exclusion lists and behavior as desktop's own 👁/⊘ header buttons
+    // (NodeComponent.tsx) — previewing/bypassing these primitive/passthrough
+    // types isn't meaningful, so they're left out there too.
+    const canPreview = !['output', 'vec4Output', 'uv', 'time', 'mouse', 'constant'].includes(node.type);
+    const canBypass = !['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type);
     return (
       <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
         <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
         <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
         <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
         <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
-        <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} nodes={nodes} />
+        {isBypassed && (
+          <span style={{ fontSize: '9px', color: '#f9e2af', letterSpacing: '0.06em', fontWeight: 700, flexShrink: 0 }}>BYPASS</span>
+        )}
+        {canPreview && (
+          <button
+            onClick={() => setPreviewNodeId(isPreviewActive ? null : node.id)}
+            title={isPreviewActive ? 'Exit preview (restore full graph)' : 'Preview this node in isolation'}
+            style={{
+              background: isPreviewActive ? '#a6e3a122' : 'none',
+              border: `1px solid ${isPreviewActive ? '#a6e3a155' : '#45475a'}`,
+              color: isPreviewActive ? '#a6e3a1' : '#585b70',
+              borderRadius: '6px', width: '30px', height: '30px', fontSize: '14px', cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            👁
+          </button>
+        )}
+        {canBypass && (
+          <button
+            onClick={() => toggleBypass(node.id)}
+            title={isBypassed ? 'Enable node (currently bypassed)' : 'Bypass node (pass input through)'}
+            style={{
+              background: isBypassed ? '#f9e2af22' : 'none',
+              border: `1px solid ${isBypassed ? '#f9e2af55' : '#45475a'}`,
+              color: isBypassed ? '#f9e2af' : '#585b70',
+              borderRadius: '6px', width: '30px', height: '30px', fontSize: '14px', cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            ⊘
+          </button>
+        )}
         {canRemove && (
           <button
             onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
@@ -1883,8 +2043,22 @@ export function MobileGraphBrowser() {
       .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int' || pd.type === 'select') && paramVisible(node, pd))
       .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]]);
     const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries];
+    // vec3 / vec3color / bool paramDefs (Palette's Offset/Amplitude/Freq/
+    // Phase, any node with a plain on/off toggle, ...) don't fit the plain
+    // slider-row shape paramOnlyEntries above assumes — a vec3 needs 3
+    // sub-sliders (or "wired" in place of one, when its own
+    // `{key}_r/g/b` socket is connected — the desktop convention this
+    // mirrors), vec3color a colour picker, bool a checkbox. Desktop
+    // (NodeComponent.tsx) renders every one of these unconditionally, and
+    // mobile had no equivalent at all — not hidden, just never built —
+    // so e.g. Palette's 4 vec3 params were simply uneditable here.
+    const extraParamEntries: Array<[string, ParamDef]> = Object.entries(def?.paramDefs ?? {})
+      .filter((entry): entry is [string, ParamDef] => {
+        const [key, pd] = entry;
+        return !(key in node.inputs) && (pd.type === 'vec3' || pd.type === 'vec3color' || pd.type === 'bool') && paramVisible(node, pd);
+      });
     const outputEntries = Object.entries(node.outputs);
-    const hasInputs = inputEntries.length > 0;
+    const hasInputs = inputEntries.length > 0 || extraParamEntries.length > 0;
     const hasOutputs = outputEntries.length > 0;
     const hidden = hiddenInputKeys(node);
     const visibleInputEntries = inputEntries.filter(([key]) => !hidden.includes(key));
@@ -1898,20 +2072,120 @@ export function MobileGraphBrowser() {
       display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px',
     };
 
-    const renderInputCard = (key: string, inp: GraphNode['inputs'][string], isHidden: boolean) => {
-      // A synthetic paramOnlyEntries row (see above) has no real socket to
-      // wire or keyframe — it's a static param the compiler reads straight
-      // from node.params, same as e.g. a group's Iterations count.
-      const isRealSocket = key in node.inputs;
+    // ── Wiring row ────────────────────────────────────────────────────────
+    // Purely connectivity — a colored dot for the socket's type (matching
+    // the graph-diagram's own dot convention), a folder-style accordion
+    // instead of the old separate "Feed this input" sheet: tap the row to
+    // drop down its connection — an elbow line to a pill for whatever it's
+    // wired to (⛓ for a group port), or, when open, every existing
+    // compatible node as its own elbow+pill (tap to wire) plus "+ Add New
+    // Node" for the search palette. Same underlying mechanics as before
+    // (ghost suggestions inform the collapsed preview, connectNodes,
+    // disconnectInput, handleNodePlacedForInput) — just no longer a modal
+    // overlay.
+    const renderWireRow = (key: string, inp: GraphNode['inputs'][string], isLast: boolean) => {
       const isPortSourced = inp.connection?.nodeId === GROUP_PORT_SENTINEL;
       const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
       const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
-      // Ghost-suggested wire — only worth computing for an actually-open
-      // real socket; an already-wired or group-port-sourced one has nothing
-      // to suggest.
-      const ghostCandidate = (isRealSocket && !upstream && !isPortSourced)
-        ? bestConnectCandidate(node.id, inp.type)
-        : undefined;
+      const isExpanded = wireExpandedKey === key;
+      const candidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type) : [];
+      // Collapsed-row hint — lets a glance down the whole Wiring list show
+      // which open sockets already have a good suggestion, without
+      // expanding each one to find out.
+      const ghostCandidate = (!isExpanded && !upstream && !isPortSourced) ? bestConnectCandidate(node.id, inp.type) : undefined;
+      const pillStyle: React.CSSProperties = { ...chipStyle, fontSize: '11px', padding: '4px 10px', flexShrink: 0 };
+      return (
+        <div key={key} style={{ borderBottom: (isLast && !isExpanded) ? 'none' : '1px solid #24243a' }}>
+          <button
+            onClick={() => setWireExpandedKey(k => k === key ? null : key)}
+            style={{ display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '9px 10px', background: 'none', border: 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left', minWidth: 0 }}
+          >
+            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: TYPE_COLORS[inp.type] ?? '#888', flexShrink: 0 }} />
+            <div
+              onDoubleClick={e => { e.stopPropagation(); toggleHiddenInput(node, key); }}
+              title="Double-tap to hide"
+              style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >{inp.label}</div>
+            {!isExpanded && upstream && (
+              <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>{labelFor(upstream)}</span>
+            )}
+            {!isExpanded && isPortSourced && (
+              <span style={{ fontSize: '10px', color: '#cba6f7', flexShrink: 0 }}>⛓ {sourcePort?.label ?? inp.connection!.outputKey}</span>
+            )}
+            {!isExpanded && ghostCandidate && (
+              <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>⇢ {labelFor(ghostCandidate.node)}</span>
+            )}
+            <span style={{ fontSize: '9px', color: '#585b70', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+          </button>
+          {isExpanded && (
+            <div style={{ padding: '0 10px 10px 27px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {upstream && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                  <button style={pillStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+                  <button
+                    onClick={() => disconnectInput(node.id, key)}
+                    style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
+                    title="Disconnect"
+                  >✕ Disconnect</button>
+                </div>
+              )}
+              {/* Sourced from this group's own boundary port rather than
+                  another internal node — not navigable (there's nothing
+                  to drill into), but still freely disconnectable. */}
+              {isPortSourced && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                  <span style={{ ...pillStyle, cursor: 'default', color: '#cba6f7', border: '1px solid #cba6f755' }}>
+                    ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
+                  </span>
+                  <button
+                    onClick={() => disconnectInput(node.id, key)}
+                    style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
+                    title="Disconnect"
+                  >✕ Disconnect</button>
+                </div>
+              )}
+              {!upstream && !isPortSourced && (
+                <>
+                  {candidates.length === 0 && (
+                    <div style={{ fontSize: '11px', color: '#585b70' }}>No compatible nodes yet — add a new one below.</div>
+                  )}
+                  {candidates.map(c => (
+                    <div key={c.node.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                      <button
+                        style={{ ...pillStyle, border: c.exact ? '1px solid #45475a' : '1px dashed #45475a' }}
+                        title={c.exact ? undefined : 'Compatible via type promotion'}
+                        onClick={() => { connectNodes(c.node.id, c.outKey, node.id, key); setWireExpandedKey(null); }}
+                      >
+                        {labelFor(c.node)}
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setWireAddNewFor(key)}
+                    style={{ alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #45475a', color: '#89b4fa', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+                  >+ Add New Node</button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ── Value row ─────────────────────────────────────────────────────────
+    // Slider / keyframes / select — only for an input with nothing wired to
+    // it (a wired socket has no static value to tune here; its row in the
+    // wiring list above is the whole story). Returns null when there's
+    // genuinely nothing to show, so the caller can filter these out rather
+    // than rendering an empty card.
+    const renderValueRow = (key: string, inp: GraphNode['inputs'][string]) => {
+      const isRealSocket = key in node.inputs;
+      const isPortSourced = inp.connection?.nodeId === GROUP_PORT_SENTINEL;
+      const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+      if (upstream || isPortSourced) return null;
       // Externally-driven param: this node's own float slider for `key` is
       // exposed as a ps_ socket on the enclosing group, and that socket is
       // currently fed from outside — the outer wire wins at compile time, so
@@ -1926,79 +2200,40 @@ export function MobileGraphBrowser() {
       // stay ineligible).
       const isVectorKfType = inp.type === 'vec2' || inp.type === 'vec3';
       const kfAxes = isVectorKfType ? VECTOR_AXES[inp.type as 'vec2' | 'vec3'] : null;
-      const kfEligible = isRealSocket && !upstream && !isPortSourced && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+      const socketKfEligible = isRealSocket && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+      // A param-only float slider (no backing socket — e.g. Scatter's
+      // Frequency/Amplitude) can be keyframed too: the compiler already
+      // knows how to swap a live GLSL expression in for a numeric param (the
+      // same p()-passthrough trick patchNodeParamsForUniforms uses for
+      // uniforms — see compileStandardNode), extended to keyframes there.
+      // Excludes int-step sliders (loop counts etc — read as a JS number for
+      // control flow, never a real GLSL float) and SKIP_UNIFORM_TYPES node
+      // types, for the same reason uniform-patching itself skips them.
+      const rawParamPd = !isRealSocket ? sliderableParam(node, key) : undefined;
+      const paramKfEligible = !!rawParamPd && rawParamPd.type === 'float' && rawParamPd.step !== 1 && !SKIP_UNIFORM_TYPES.has(node.type);
+      const kfEligible = socketKfEligible || paramKfEligible;
       const isKeyframed = kfEligible && (
         inp.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, kfAxes ?? [])
       );
-      const pd = upstream || isPortSourced || isKeyframed ? undefined : sliderableParam(node, key);
+      const pd = isKeyframed ? undefined : sliderableParam(node, key);
       const val = pd ? currentSliderValue(node, key, pd) : 0;
-      const selectPd = upstream || isPortSourced ? undefined : selectableParam(node, key);
+      const selectPd = selectableParam(node, key);
       const selectVal = selectPd ? (node.params[key] !== undefined ? String(node.params[key]) : (selectPd.options?.[0]?.value ?? '')) : '';
+      if (!pd && !selectPd && !kfEligible) return null;
+      const dotColor = TYPE_COLORS[inp.type] ?? '#888';
+      // A small colored dot at each end of the track, echoing the Wiring
+      // row's type dot — same "what kind of value is this" color coding,
+      // just applied to a range instead of a connection.
+      const EndDot = () => (
+        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: dotColor, flexShrink: 0, opacity: 0.6 }} />
+      );
       return (
         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={inp.type} />
-            <div
-              onDoubleClick={() => toggleHiddenInput(node, key)}
-              title={isHidden ? 'Double-tap to unhide' : 'Double-tap to hide'}
-              style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', touchAction: 'manipulation' }}
-            >{inp.label}</div>
-            {!upstream && kfEligible && (
-              <button
-                style={smallIconBtnStyle(isKeyframed ? '#f9e2af' : '#a6adc8')}
-                title={isKeyframed ? 'Edit Keyframes' : 'Add Keyframes'}
-                onClick={() => {
-                  const axis = kfAxes ? kfAxes[0] : undefined;
-                  setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
-                  setMobileKeyframeTool(isKeyframed ? 'select' : 'add');
-                }}
-              >◆</button>
-            )}
-            {isRealSocket && !upstream && !isPortSourced && (
-              <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
-            )}
+            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+            {isKeyframed && <span style={{ fontSize: '9px', color: '#f9e2af', flexShrink: 0 }}>◆ animated</span>}
           </div>
-          {upstream && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
-              <button
-                onClick={() => disconnectInput(node.id, key)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
-                title="Disconnect"
-              >✕</button>
-            </div>
-          )}
-          {/* Sourced from this group's own boundary port rather than another
-              internal node — not navigable (there's nothing to drill into),
-              but still freely disconnectable, same as any other wire. */}
-          {isPortSourced && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', cursor: 'default', color: '#cba6f7', borderColor: '#cba6f755' }}>
-                ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
-              </span>
-              <button
-                onClick={() => disconnectInput(node.id, key)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
-                title="Disconnect"
-              >✕</button>
-            </div>
-          )}
-          {/* Ghost-suggested wire — a preview of the best already-placed
-              candidate, not a real connection yet. One tap commits it via
-              the exact same connectNodes call the "Connect Existing" picker
-              uses; the "+" button above still opens that picker for when
-              the guess isn't the one you want. */}
-          {ghostCandidate && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <button
-                onClick={() => connectNodes(ghostCandidate.node.id, ghostCandidate.outKey, node.id, key)}
-                title="Tap to connect this suggestion"
-                style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', background: 'none', border: '1px dashed #45475a', color: '#6c7086' }}
-              >
-                ⇢ {labelFor(ghostCandidate.node)}
-              </button>
-            </div>
-          )}
           {isExternallyDriven && (
             <div style={{ fontSize: '10px', color: '#6c7086', fontStyle: 'italic' }}>
               🔒 driven by group input — edit it from outside the group
@@ -2022,6 +2257,7 @@ export function MobileGraphBrowser() {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <EndDot />
                   <input
                     type="range"
                     min={effMin}
@@ -2035,8 +2271,9 @@ export function MobileGraphBrowser() {
                       updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
                     }}
                     title={isExternallyDriven ? 'Driven by an outer wire into this group — read-only here' : 'Double-tap to reset to default'}
-                    style={{ flex: 1, minWidth: 0, opacity: isExternallyDriven ? 0.4 : 1 }}
+                    style={{ flex: 1, minWidth: 0, opacity: isExternallyDriven ? 0.4 : 1, accentColor: dotColor }}
                   />
+                  <EndDot />
                   <button
                     onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
                     title="Tap for range, bidirectional & keyframe controls"
@@ -2102,11 +2339,76 @@ export function MobileGraphBrowser() {
                     <span style={{ fontSize: '9px', color: '#585b70' }}>
                       Range: {formatSliderValue(effMin, pd.step)} → {formatSliderValue(effMax, pd.step)}
                     </span>
+                    {kfEligible && (
+                      <button
+                        onClick={() => {
+                          const axis = kfAxes ? kfAxes[0] : undefined;
+                          setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                          setMobileKeyframeTool('add');
+                        }}
+                        style={{
+                          alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #f9e2af66',
+                          color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+                        }}
+                      >◆ Add Keyframes</button>
+                    )}
                   </div>
                 )}
               </div>
             );
           })()}
+          {isKeyframed && (() => {
+            const isExpanded = openSliderConfig === key;
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                <button
+                  onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
+                  title="Tap for keyframe controls"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px', width: '100%', background: 'none', border: 'none',
+                    padding: '2px 0', cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                >
+                  <EndDot />
+                  <div style={{ flex: 1, height: '2px', background: `repeating-linear-gradient(90deg, ${dotColor}88 0 4px, transparent 4px 8px)`, minWidth: 0 }} />
+                  <EndDot />
+                  <span style={{ fontSize: '8px', color: '#585b70', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+                </button>
+                {isExpanded && (
+                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', gap: '6px' }}>
+                    <button
+                      onClick={() => {
+                        const axis = kfAxes ? kfAxes[0] : undefined;
+                        setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                        setMobileKeyframeTool('select');
+                      }}
+                      style={{
+                        background: 'none', border: '1px solid #f9e2af66', color: '#f9e2af', borderRadius: '6px',
+                        padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+                      }}
+                    >◆ Edit Keyframes</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {/* Vector (vec2/vec3) sockets have no single scalar paramDef to put
+              a slider on — axis values only ever come from a wire or from
+              keyframes, never a raw number here — so this is the only entry
+              point they get before any keyframes exist. */}
+          {kfEligible && !pd && !isKeyframed && (
+            <button
+              onClick={() => {
+                const axis = kfAxes ? kfAxes[0] : undefined;
+                setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                setMobileKeyframeTool('add');
+              }}
+              style={{
+                alignSelf: 'flex-start', background: 'none', border: '1px dashed #f9e2af66',
+                color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+              }}
+            >◆ Add Keyframes</button>
+          )}
           {selectPd && (
             <select
               value={selectVal}
@@ -2121,6 +2423,96 @@ export function MobileGraphBrowser() {
               ))}
             </select>
           )}
+        </div>
+      );
+    };
+
+    // vec3 / vec3color / bool paramDefs (see extraParamEntries above) —
+    // mirrors NodeComponent.tsx's own widgets for each type exactly (same
+    // {key}_r/g/b "wired ↑" convention for a vec3 component whose own
+    // socket is connected, same 0-1 color-picker hex conversion) so a
+    // param behaves identically regardless of which platform edited it.
+    const renderExtraParamCard = (key: string, pd: ParamDef) => {
+      if (pd.type === 'bool') {
+        const val = node.params[key] !== false;
+        return (
+          <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <span style={{ flex: 1, fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</span>
+            <input
+              type="checkbox"
+              checked={val}
+              onChange={e => updateNodeParams(node.id, { [key]: e.target.checked }, { immediate: true })}
+              style={{ width: '18px', height: '18px', accentColor: '#cba6f7', cursor: 'pointer' }}
+            />
+          </div>
+        );
+      }
+      if (pd.type === 'vec3color') {
+        const vals = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
+        const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
+        const hex = `#${toHex(vals[0])}${toHex(vals[1])}${toHex(vals[2])}`;
+        return (
+          <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <span style={{ flex: 1, fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</span>
+            <input
+              type="color"
+              value={hex}
+              onChange={e => {
+                const h = e.target.value;
+                const r = parseInt(h.slice(1, 3), 16) / 255, g = parseInt(h.slice(3, 5), 16) / 255, b = parseInt(h.slice(5, 7), 16) / 255;
+                updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
+              }}
+              style={{ width: '36px', height: '26px', border: '1px solid #45475a', borderRadius: '4px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
+            />
+          </div>
+        );
+      }
+      // vec3 — 3 sub-sliders. A component whose own {key}_r/_g/_b socket is
+      // wired shows "wired" instead, since the wire wins at compile time
+      // (same fallback order Palette's own generateGLSL uses).
+      const vals = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
+      const step = pd.step ?? 0.01;
+      const min = pd.min ?? 0;
+      const max = pd.max ?? 1;
+      const compKeys = [`${key}_r`, `${key}_g`, `${key}_b`];
+      const compLabels = ['r', 'g', 'b'];
+      const compColors = ['#f38ba8', '#a6e3a1', '#89b4fa'];
+      return (
+        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+          <div style={{ fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</div>
+          {[0, 1, 2].map(idx => {
+            const compConnected = node.inputs[compKeys[idx]]?.connection != null;
+            return (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '10px', color: compColors[idx], width: '10px', flexShrink: 0 }}>{compLabels[idx]}</span>
+                {compConnected ? (
+                  <span style={{ fontSize: '11px', color: '#585b70', fontStyle: 'italic' }}>wired ↑</span>
+                ) : (
+                  <>
+                    <input
+                      type="range"
+                      min={min} max={max} step={step}
+                      value={vals[idx] ?? 0}
+                      onChange={e => {
+                        const next = [...vals];
+                        next[idx] = parseFloat(e.target.value);
+                        updateNodeParams(node.id, { [key]: next }, { immediate: true });
+                      }}
+                      onDoubleClick={() => {
+                        const defVal = def?.defaultParams?.[key];
+                        if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
+                      }}
+                      title="Double-tap to reset to default"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <span style={{ fontSize: '11px', color: '#a6adc8', width: '48px', textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                      {formatSliderValue(vals[idx] ?? 0, step)}
+                    </span>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       );
     };
@@ -2155,37 +2547,93 @@ export function MobileGraphBrowser() {
 
           {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={{ display: 'flex', gap: '6px' }}>
-              <button style={smallTabBtnStyle(nodeTab === 'inputs')} onClick={() => setNodeTab('inputs')}>Inputs ({inputEntries.length})</button>
+              <button style={smallTabBtnStyle(nodeTab === 'inputs')} onClick={() => setNodeTab('inputs')}>Inputs ({inputEntries.length + extraParamEntries.length})</button>
               <button style={smallTabBtnStyle(nodeTab === 'outputs')} onClick={() => setNodeTab('outputs')}>Outputs ({outputEntries.length})</button>
             </div>
           )}
 
-          {(hasInputs || node.type === 'group') && (nodeTab === 'inputs' || !hasOutputs) && (
-            <div>
-              {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
-              <div style={cardGridStyle}>
-                {visibleInputEntries.map(([key, inp]) => renderInputCard(key, inp, false))}
+          {(hasInputs || node.type === 'group') && (nodeTab === 'inputs' || !hasOutputs) && (() => {
+            // Wiring: real sockets only, in a compact list — synthetic
+            // paramOnlyEntries/extraParamEntries have no socket to wire.
+            // Values: whatever's actually eligible for a slider/select/
+            // keyframe control, real or synthetic, filtered from whichever
+            // renderValueRow finds nothing to show for (already-wired, or
+            // a vec2/vec3 socket like UV that's meant to be wired only).
+            const wireEntries = visibleInputEntries.filter(([key]) => key in node.inputs);
+            const valueRows = [
+              ...visibleInputEntries.map(([key, inp]) => renderValueRow(key, inp)),
+              ...extraParamEntries.map(([key, pd]) => renderExtraParamCard(key, pd)),
+            ].filter(Boolean);
+            return (
+              <div>
+                {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
+                {wireEntries.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setWiringSectionOpen(v => !v)}
+                      style={{ ...sectionHeaderBtnStyle, margin: '2px 2px 4px', width: 'auto' }}
+                    >
+                      <span>{wiringSectionOpen ? '▾' : '▸'} WIRING</span>
+                    </button>
+                    {wiringSectionOpen && (
+                      <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+                        {wireEntries.map(([key, inp], i) => renderWireRow(key, inp, i === wireEntries.length - 1))}
+                      </div>
+                    )}
+                  </>
+                )}
+                {node.type === 'group' && (
+                  <button
+                    onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'input', returnPath: activeGroupPath, stage: 'choose' })}
+                    style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                  >+ Add Input</button>
+                )}
+                {hiddenInputEntries.length > 0 && (
+                  <div style={{ marginTop: '8px' }}>
+                    <button style={sectionHeaderBtnStyle} onClick={() => setHiddenSectionOpen(v => !v)}>
+                      <span>{hiddenSectionOpen ? '▾' : '▸'} HIDDEN ({hiddenInputEntries.length})</span>
+                    </button>
+                    {hiddenSectionOpen && (
+                      <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden', marginTop: '6px' }}>
+                        {hiddenInputEntries.filter(([key]) => key in node.inputs).map(([key, inp], i, arr) => renderWireRow(key, inp, i === arr.length - 1))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {valueRows.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setValuesSectionOpen(v => !v)}
+                      style={{ ...sectionHeaderBtnStyle, margin: '12px 2px 4px', width: 'auto' }}
+                    >
+                      <span>{valuesSectionOpen ? '▾' : '▸'} VALUES</span>
+                    </button>
+                    {valuesSectionOpen && (
+                      <div style={cardGridStyle}>
+                        {valueRows}
+                      </div>
+                    )}
+                  </>
+                )}
+                {/* "+ Add New Node" from an expanded WIRING row — reuses the
+                    same place-then-wire flow as everywhere else
+                    (handleNodePlacedForInput), just opened inline from the
+                    row's own accordion instead of the old connect sheet. */}
+                {wireAddNewFor && node.inputs[wireAddNewFor] && (
+                  <NodeSearchPalette
+                    open
+                    onClose={() => setWireAddNewFor(null)}
+                    filterOutputType={node.inputs[wireAddNewFor].type}
+                    onNodePlaced={newId => {
+                      handleNodePlacedForInput(newId, { dir: 'input', nodeId: node.id, key: wireAddNewFor, type: node.inputs[wireAddNewFor].type });
+                      setWireAddNewFor(null);
+                      setWireExpandedKey(null);
+                    }}
+                  />
+                )}
               </div>
-              {node.type === 'group' && (
-                <button
-                  onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'input', returnPath: activeGroupPath, stage: 'choose' })}
-                  style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
-                >+ Add Input</button>
-              )}
-              {hiddenInputEntries.length > 0 && (
-                <div style={{ marginTop: '8px' }}>
-                  <button style={sectionHeaderBtnStyle} onClick={() => setHiddenSectionOpen(v => !v)}>
-                    <span>{hiddenSectionOpen ? '▾' : '▸'} HIDDEN ({hiddenInputEntries.length})</span>
-                  </button>
-                  {hiddenSectionOpen && (
-                    <div style={{ ...cardGridStyle, marginTop: '6px' }}>
-                      {hiddenInputEntries.map(([key, inp]) => renderInputCard(key, inp, true))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {(hasOutputs || node.type === 'group') && (nodeTab === 'outputs' || !hasInputs) && (
             <div>
@@ -2212,16 +2660,36 @@ export function MobileGraphBrowser() {
             </div>
             {infoTab === 'info' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {/* Same live, node-type-specific canvas diagrams desktop
-                    shows on the card itself (tone curves, gradient strips,
-                    wave shapes, ...) — reused as-is here rather than
-                    reinvented; they already scale to their container
-                    (width:'100%' with a fixed backing resolution) and
-                    already subscribe to live param/scope values, so this is
-                    just placing them, not building them. */}
-                {INLINE_VIZ_TYPES.has(node.type) && (
-                  <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', overflow: 'hidden' }}>
-                    <NodeInlineViz node={node} />
+                {/* Visual before the description — the description's length
+                    varies a lot node to node, and putting the toggle after
+                    it meant scroll position shifted depending on how long
+                    that text happened to be. Same live, node-type-specific
+                    canvas diagrams desktop shows on the card itself (tone
+                    curves, gradient strips, wave shapes, ...) — reused as-is
+                    via InlineVizFrame rather than reinvented. For the many
+                    node types with no custom diagram, GenericPreviewViz
+                    falls back to an actual rendered shader thumbnail (also
+                    matching desktop's own behavior) rather than showing
+                    nothing. Collapsed by default either way: different node
+                    types want very different shapes (a wide equation strip
+                    vs. a square vector field vs. a square render), so
+                    reserving a fixed chunk of the card for it on every node
+                    — even ones you never open it on — is more clutter than
+                    it's worth; opt-in instead, sized to whatever ends up
+                    shown. */}
+                {!SKIP_INLINE_PREVIEW.has(node.type) && (
+                  <div>
+                    <button
+                      onClick={() => setVizExpanded(v => !v)}
+                      style={{ ...sectionHeaderBtnStyle, padding: '4px 0' }}
+                    >
+                      <span>{vizExpanded ? '▾' : '▸'} VISUAL</span>
+                    </button>
+                    {vizExpanded && (
+                      INLINE_VIZ_TYPES.has(node.type)
+                        ? <InlineVizFrame key={node.id} node={node} />
+                        : <GenericPreviewViz key={node.id} node={node} nodes={nodes} />
+                    )}
                   </div>
                 )}
                 <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
@@ -2318,12 +2786,17 @@ export function MobileGraphBrowser() {
   // there's no keyboard here for desktop's V/C/X/D shortcuts.
   function renderKeyframeEditorView(node: GraphNode) {
     const target = mobileKeyframeEditor;
-    const input = target ? node.inputs[target.socketKey] : undefined;
+    const realInput = target ? node.inputs[target.socketKey] : undefined;
+    // Param-only float slider (no backing socket) — same synthetic shape
+    // paramOnlyEntries uses elsewhere in this file, just enough for this
+    // view to read .type/.label off it like a real input.
+    const paramPd = (target && !realInput) ? sliderableParam(node, target.socketKey) : undefined;
+    const input = realInput ?? (paramPd ? { type: 'float', label: paramPd.label } as GraphNode['inputs'][string] : undefined);
     if (!target || !input) {
-      // Socket vanished from under us (e.g. node type changed) — bail out to
-      // the normal detail view for this render; the useEffect above clears
-      // mobileKeyframeEditor itself (can't do that here mid-render, since
-      // it's a store field App.tsx also renders from).
+      // Socket/param vanished from under us (e.g. node type changed) — bail
+      // out to the normal detail view for this render; the useEffect above
+      // clears mobileKeyframeEditor itself (can't do that here mid-render,
+      // since it's a store field App.tsx also renders from).
       return renderNodeDetail(node);
     }
     const isVector = input.type === 'vec2' || input.type === 'vec3';
@@ -2784,7 +3257,7 @@ export function MobileGraphBrowser() {
                 <button
                   key={p.key}
                   onClick={() => commitConnectToGroupPort(p.key)}
-                  style={{ ...chipStyle, fontSize: '11px', color: '#cba6f7', borderColor: '#cba6f755' }}
+                  style={{ ...chipStyle, fontSize: '11px', color: '#cba6f7', border: '1px solid #cba6f755' }}
                 >⛓ {p.label}</button>
               ))}
             </div>
@@ -2909,12 +3382,19 @@ export function MobileGraphBrowser() {
     const pinnedUvNodes = isAtRoot ? nodes.filter(n => n.type === 'uv') : [];
     const pinnedOutputNodes = isAtRoot ? nodes.filter(n => n.type === 'output') : [];
     const pinnedIds = new Set([...pinnedUvNodes, ...pinnedOutputNodes].map(n => n.id));
+    // Expr Block / Custom Fn look like any other chip otherwise, even
+    // though they're fundamentally different from a built-in node — their
+    // actual behavior is whatever formula/code was typed in, not fixed by
+    // the type. A colored outline is enough to flag "look closer" without
+    // a badge/icon; selection still wins visually since it's the more
+    // immediately actionable state.
+    const isCodeNode = (n: GraphNode) => n.type === 'exprNode' || n.type === 'customFn';
     const chipStyleFor = (n: GraphNode) => {
       const selected = selectMode && selectedIds.includes(n.id);
       return {
         display: 'flex', alignItems: 'center', gap: '6px',
         background: selected ? '#313244' : '#1e1e2e',
-        border: selected ? '1px solid #cba6f7' : '1px solid #313244',
+        border: selected ? '1px solid #cba6f7' : isCodeNode(n) ? '1px solid #f9e2af88' : '1px solid #313244',
         borderRadius: '8px', padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
         cursor: 'pointer', touchAction: 'manipulation',
       } as React.CSSProperties;

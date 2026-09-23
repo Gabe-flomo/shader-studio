@@ -15,4 +15,11 @@ body {
 #root {
   width: 100vw;
   height: 100vh;
+  /* dvh tracks the *actual* visible viewport on mobile Safari, which
+     shrinks when its own address/tab bar is showing — 100vh there is
+     fixed to the fully-collapsed-chrome height, so fixed-height content
+     sized to it extends below the real visible area and gets covered by
+     the browser's own UI. Fallback line above keeps older browsers (no
+     dvh support) on 100vh. */
+  height: 100dvh;
 }

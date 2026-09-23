@@ -628,7 +628,7 @@ function App() {
     const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
     const showCodePane   = mobileLayout === 'code';
     return (
-      <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         {/* Floating TopNav */}
         <TopNav page={page} onPageChange={setPage} floating />
@@ -973,7 +973,7 @@ function App() {
 
   if (mobile && page === 'shortcuts') {
     return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
         <TopNav page={page} onPageChange={setPage} />
         <ShortcutsPage />
       </div>
@@ -982,7 +982,7 @@ function App() {
 
   if (mobile && page === 'glsl') {
     return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
         <TopNav page={page} onPageChange={setPage} />
         <GLSLPage />
       </div>
@@ -995,7 +995,7 @@ function App() {
   // ══════════════════════════════════════════════════════════════════════════
   if (tablet) {
     return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
         <TopNav page={page} onPageChange={setPage} />
 
         {page === 'shortcuts' && <ShortcutsPage />}
@@ -1107,7 +1107,7 @@ function App() {
   const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+    <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
       <TopNav page={page} onPageChange={setPage} />
 
       {page === 'shortcuts' && <ShortcutsPage />}

@@ -605,7 +605,7 @@ export class ShaderAssembler {
                       if (fb) innInputVars[k] = fb;
                     }
                   }
-                  const { patchedNode: patchedInn, uniforms: innUniforms } = patchNodeParamsForUniforms(inn, innDef);
+                  const { patchedNode: patchedInn, uniforms: innUniforms } = patchNodeParamsForUniforms(inn, innDef, fn => this.functions.add(fn));
                   Object.assign(this.paramUniforms, innUniforms);
                   const innResult = innDef.generateGLSL(patchedInn, innInputVars);
                   this.mainCode.push(innResult.code);
@@ -699,7 +699,7 @@ export class ShaderAssembler {
                 }
               }
 
-              const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(effectiveSubNode, subDef);
+              const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn));
               Object.assign(this.paramUniforms, subUniforms);
               const subResult = subDef.generateGLSL(patchedSub, subInputVars);
               // For carry-mode nodes: strip the type from the declaration so we get
@@ -3121,7 +3121,7 @@ export class ShaderAssembler {
           for (const line of nodeComment.split('\n')) this.mainCode.push(`    // ${line}\n`);
         }
         const sluggedNode = { ...node, id: nodeSlug };
-        const { patchedNode, uniforms: nodeUniforms } = patchNodeParamsForUniforms(sluggedNode, def);
+        const { patchedNode, uniforms: nodeUniforms } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn));
         Object.assign(this.paramUniforms, nodeUniforms);
 
         const override = typeof node.params.__codeOverride === 'string'

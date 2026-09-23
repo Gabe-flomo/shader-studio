@@ -4720,6 +4720,476 @@ export function PrintTextViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Chladni-family field vizzes (waveTerm, chladniField, chladniSuperposition) ───
+// Renders the same n/m interference math generateGLSL emits for each of
+// these node types (see physics.ts) as a live per-pixel field preview — a
+// square canvas, since this is a 2D spatial pattern, not a wide/short
+// readout like most of the vizzes above. n/m/mix read the live wired value
+// when connected (the same __preview__ scope registry ArithmeticOpViz
+// reads), falling back to the node's own static param otherwise, and
+// redraw continuously since these are commonly time-animated (Chladni Mode
+// Frequency, an LFO, a hand-authored ExprBlock...) — this file's own
+// existing rAF-loop vizzes (LengthViz, ArithmeticOpViz) already establish
+// that convention for exactly this reason. Aspect/Fill mode is skipped
+// here (it only matters for a non-square render surface, and this preview
+// canvas always is one); Bounded/Plate masks the same fixed square or disc
+// edge the shader does, so raising n/m visibly reorganizes the pattern
+// inside a boundary that stays put instead of just zooming the whole
+// preview.
+const CHLADNI_FIELD_RES = 96;
+
+function chladniLiveOrParam(node: GraphNode, key: string, fallback: number): number {
+  const conn = node.inputs[key]?.connection;
+  if (conn) {
+    const v = floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`);
+    if (v != null && Number.isFinite(v)) return v;
+  }
+  const pv = node.params[key];
+  return typeof pv === 'number' ? pv : fallback;
+}
+
+function waveTermValue(px: number, py: number, n: number, m: number): number {
+  return Math.cos(n * Math.PI * px) * Math.cos(m * Math.PI * py);
+}
+
+// Diverging colour so the zero-crossings (the actual "nodal lines" a real
+// plate would show) read as a dark band between blue and orange, same
+// convention a signed-distance/field preview elsewhere would use. Masked
+// (off-plate) pixels get the plain card background instead.
+function chladniFieldColor(v: number): [number, number, number] {
+  const t = Math.max(-1, Math.min(1, v));
+  if (t >= 0) return [Math.round(t * 235 + 20), Math.round(t * 110 + 15), Math.round((1 - t) * 30 + 10)];
+  const a = -t;
+  return [Math.round((1 - a) * 30 + 10), Math.round((1 - a) * 40 + 15), Math.round(a * 220 + 25)];
+}
+
+function drawChladniField(ctx: CanvasRenderingContext2D, W: number, H: number, field: (px: number, py: number) => number | null) {
+  const img = ctx.createImageData(W, H);
+  for (let j = 0; j < H; j++) {
+    const py = 1 - (j / (H - 1)) * 2; // top row = +1, so +y renders up like screen UV
+    for (let i = 0; i < W; i++) {
+      const px = (i / (W - 1)) * 2 - 1;
+      const v = field(px, py);
+      const idx = (j * W + i) * 4;
+      const [r, g, b] = v === null ? [17, 17, 27] : chladniFieldColor(v);
+      img.data[idx] = r; img.data[idx + 1] = g; img.data[idx + 2] = b; img.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+export function WaveTermViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef(0);
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const n = nodeRef.current;
+    const nVal = chladniLiveOrParam(n, 'n', 3.0);
+    const mVal = chladniLiveOrParam(n, 'm', 4.0);
+    const scale = chladniLiveOrParam(n, 'scale', 1.0);
+    const bounded = n.params.bounded !== 'infinite';
+    drawChladniField(ctx, canvas.width, canvas.height, (px, py) => {
+      const sx = px * scale, sy = py * scale;
+      if (bounded && (Math.abs(sx) > 1 || Math.abs(sy) > 1)) return null;
+      return waveTermValue(sx, sy, nVal, mVal);
+    });
+  }, []);
+
+  useEffect(() => {
+    const loop = () => { draw(); rafRef.current = requestAnimationFrame(loop); };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={CHLADNI_FIELD_RES} height={CHLADNI_FIELD_RES}
+        style={{ display: 'block', width: '100%', height: `${CHLADNI_FIELD_RES}px`, imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+export function ChladniFieldViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef(0);
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const n = nodeRef.current;
+    const nVal = chladniLiveOrParam(n, 'n', 6.0);
+    const mVal = chladniLiveOrParam(n, 'm', 4.0);
+    const mixVal = chladniLiveOrParam(n, 'mix', 1.0);
+    const scale = chladniLiveOrParam(n, 'scale', 1.0);
+    const circular = n.params.geometry === 'circular';
+    const bounded = n.params.bounded !== 'infinite';
+    drawChladniField(ctx, canvas.width, canvas.height, (px, py) => {
+      const sx = px * scale, sy = py * scale;
+      if (circular) {
+        const r = Math.hypot(sx, sy);
+        if (bounded && r > 1) return null;
+        const theta = Math.atan2(sy, sx);
+        return Math.cos(nVal * theta + mixVal * Math.PI) * Math.cos(mVal * Math.PI * r);
+      }
+      if (bounded && (Math.abs(sx) > 1 || Math.abs(sy) > 1)) return null;
+      return waveTermValue(sx, sy, nVal, mVal) + mixVal * waveTermValue(sx, sy, mVal, nVal);
+    });
+  }, []);
+
+  useEffect(() => {
+    const loop = () => { draw(); rafRef.current = requestAnimationFrame(loop); };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={CHLADNI_FIELD_RES} height={CHLADNI_FIELD_RES}
+        style={{ display: 'block', width: '100%', height: `${CHLADNI_FIELD_RES}px`, imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+const CHLADNI_SUPERPOSITION_VIZ_DEFAULTS: Record<number, { n: number; m: number; w: number }> = {
+  2: { n: 3.0, m: 8.0, w: 0.5 }, 3: { n: 7.0, m: 2.0, w: 0.3 }, 4: { n: 5.0, m: 5.0, w: 0.2 },
+  5: { n: 2.0, m: 9.0, w: 0.15 }, 6: { n: 8.0, m: 3.0, w: 0.1 },
+};
+
+export function ChladniSuperpositionViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef(0);
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const n = nodeRef.current;
+    const n1 = chladniLiveOrParam(n, 'n1', 6.0);
+    const m1 = chladniLiveOrParam(n, 'm1', 4.0);
+    const scale = chladniLiveOrParam(n, 'scale', 1.0);
+    const circular = n.params.geometry === 'circular';
+    const bounded = n.params.bounded !== 'infinite';
+    const termsCount = Math.max(1, Math.min(6, parseInt(typeof n.params.terms === 'string' ? n.params.terms : '1', 10) || 1));
+    const extraTerms: Array<{ n: number; m: number; w: number }> = [];
+    for (let i = 2; i <= termsCount; i++) {
+      const fb = CHLADNI_SUPERPOSITION_VIZ_DEFAULTS[i];
+      const nv = typeof n.params[`n${i}`] === 'number' ? n.params[`n${i}`] as number : fb.n;
+      const mv = typeof n.params[`m${i}`] === 'number' ? n.params[`m${i}`] as number : fb.m;
+      const wv = typeof n.params[`w${i}`] === 'number' ? n.params[`w${i}`] as number : fb.w;
+      extraTerms.push({ n: nv, m: mv, w: wv });
+    }
+    drawChladniField(ctx, canvas.width, canvas.height, (px, py) => {
+      const sx = px * scale, sy = py * scale;
+      if (circular) {
+        const r = Math.hypot(sx, sy);
+        if (bounded && r > 1) return null;
+        const theta = Math.atan2(sy, sx);
+        let sum = Math.cos(n1 * theta) * Math.cos(m1 * Math.PI * r);
+        for (const t of extraTerms) sum += t.w * Math.cos(t.n * theta) * Math.cos(t.m * Math.PI * r);
+        return sum;
+      }
+      if (bounded && (Math.abs(sx) > 1 || Math.abs(sy) > 1)) return null;
+      let sum = waveTermValue(sx, sy, n1, m1);
+      for (const t of extraTerms) sum += t.w * waveTermValue(sx, sy, t.n, t.m);
+      return sum;
+    });
+  }, []);
+
+  useEffect(() => {
+    const loop = () => { draw(); rafRef.current = requestAnimationFrame(loop); };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={CHLADNI_FIELD_RES} height={CHLADNI_FIELD_RES}
+        style={{ display: 'block', width: '100%', height: `${CHLADNI_FIELD_RES}px`, imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
+// Chladni Mode Frequency outputs an (n, m) scalar pair, not a field — same
+// "a × b → result" text-readout style as ArithmeticOpViz above, not a
+// square canvas.
+export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef(0);
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const n = nodeRef.current;
+    const W = canvas.width, H = canvas.height;
+    const freq = chladniLiveOrParam(n, 'frequency', 5.0);
+    const seed = chladniLiveOrParam(n, 'seed', 0.0);
+    const hash = (x: number) => { const s = Math.sin(x) * 43758.5453; return s - Math.floor(s); };
+    const ratio = 1.15 + hash(seed * 12.9898) * 1.55;
+    const phase = hash(seed * 78.233) * 5.0;
+    const nVal = freq;
+    const mVal = freq * ratio + phase;
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = 'middle';
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#cdd6f4';
+    ctx.textAlign = 'left';
+    ctx.fillText(`n ${nVal.toFixed(2)}`, 10, H / 2);
+    ctx.fillText(`m ${mVal.toFixed(2)}`, 10 + ctx.measureText(`n ${nVal.toFixed(2)}`).width + 14, H / 2);
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#45475a';
+    ctx.textAlign = 'right';
+    ctx.fillText('→ n, m', W - 8, H / 2);
+  }, []);
+
+  useEffect(() => {
+    const loop = () => { draw(); rafRef.current = requestAnimationFrame(loop); };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={36}
+        style={{ display: 'block', width: '100%', height: '36px' }} />
+    </div>
+  );
+}
+
+// ─── Swizzle (vec2Swizzle, vec3Swizzle) ────────────────────────────────────────
+// Two rows — input channels in their natural order, output channels in the
+// node's actual swizzle order (.yx, .zxy, ...) — each labelled and coloured
+// by source axis (same x/y/z/w convention SplitVecViz above uses) so the
+// reorder reads at a glance instead of needing to parse the mode string.
+// Live values (when the input is wired) come from the same
+// __preview__-keyed vectorValueRegistry SplitVecViz reads.
+
+export function SwizzleViz({ node }: { node: GraphNode }) {
+  const is3 = node.type === 'vec3Swizzle';
+  const axes = is3 ? ['x', 'y', 'z'] : ['x', 'y'];
+  const colors: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
+  const mode = String(node.params.mode || (is3 ? 'yzx' : 'yx'));
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+  const rafRef = useRef(0);
+  const inRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const outRefs = useRef<(HTMLSpanElement | null)[]>([]);
+
+  useEffect(() => {
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const n = nodeRef.current;
+      const conn = n.inputs.input?.connection;
+      const vec = conn ? vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) : undefined;
+      axes.forEach((_, i) => {
+        const el = inRefs.current[i];
+        if (el) el.textContent = vec ? vec[i]?.toFixed(2) ?? '—' : '—';
+      });
+      const m = String(nodeRef.current.params.mode || (is3 ? 'yzx' : 'yx'));
+      m.split('').forEach((ch, i) => {
+        const el = outRefs.current[i];
+        if (!el) return;
+        const srcIdx = axes.indexOf(ch);
+        el.textContent = vec && srcIdx >= 0 ? vec[srcIdx]?.toFixed(2) ?? '—' : '—';
+      });
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [axes, is3]);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '6px 12px', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '9px', color: '#585b70', width: '26px' }}>in</span>
+        {axes.map((c, i) => (
+          <span key={c} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span style={{ fontSize: '9px', color: colors[c] }}>{c}</span>
+            <span ref={el => { inRefs.current[i] = el; }} style={{ fontSize: '10px', color: '#cdd6f4' }}>—</span>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '9px', color: '#89b4fa', width: '26px' }}>.{mode}</span>
+        {mode.split('').map((c, i) => (
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span style={{ fontSize: '9px', color: colors[c] ?? '#585b70' }}>{c}</span>
+            <span ref={el => { outRefs.current[i] = el; }} style={{ fontSize: '10px', color: '#f9e2af' }}>—</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Quantize ───────────────────────────────────────────────────────────────
+// The same staircase floor(x/step + 0.5) * step the node's own generateGLSL
+// emits, over a domain sized to the current step so a handful of stairs are
+// always visible regardless of Step's magnitude, with a live dot (when
+// Input is wired) marking where the current value lands.
+
+export function QuantizeViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef(0);
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const n = nodeRef.current;
+    const W = canvas.width, H = canvas.height;
+    const step = Math.max(0.0001, typeof n.params.step === 'number' ? n.params.step : 1.0);
+    const domain = Math.max(step * 4, 1);
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#313244';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const toY = (v: number) => H / 2 - (v / domain) * (H / 2) * 0.9;
+    ctx.strokeStyle = '#f9e2af';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const x = (i / W) * domain * 2 - domain;
+      const y = Math.floor(x / step + 0.5) * step;
+      const py = toY(y);
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+
+    const conn = n.inputs.input?.connection;
+    const liveVal = conn ? floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) : null;
+    if (liveVal != null && Number.isFinite(liveVal)) {
+      const qx = ((liveVal + domain) / (domain * 2)) * W;
+      const qy = toY(Math.floor(liveVal / step + 0.5) * step);
+      ctx.fillStyle = '#a6e3a1';
+      ctx.beginPath(); ctx.arc(Math.max(0, Math.min(W, qx)), qy, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '8px monospace';
+    ctx.fillText(`step ${step.toFixed(3)}`, 4, H - 4);
+  }, []);
+
+  useEffect(() => {
+    const loop = () => { draw(); rafRef.current = requestAnimationFrame(loop); };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={56}
+        style={{ display: 'block', width: '100%', height: '56px' }} />
+    </div>
+  );
+}
+
+// ─── Mod Select ─────────────────────────────────────────────────────────────
+// The periodic on/off (or soft-edged) mask the node produces, drawn as a
+// horizontal strip over a few periods — mirrors the node's own
+// mod(value, period) < threshold*period window (plus its Softness ramp)
+// rather than a generic placeholder pattern.
+
+export function ModSelectViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const period = typeof node.params.period === 'number' ? node.params.period : 2.0;
+  const threshold = typeof node.params.threshold === 'number' ? node.params.threshold : 0.5;
+  const softness = typeof node.params.softness === 'number' ? node.params.softness : 0.0;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const per = Math.max(0.001, period);
+    const win = per * Math.max(0, Math.min(1, threshold));
+    const sft = Math.max(0.001, softness);
+    const periodsShown = 3;
+
+    for (let i = 0; i < W; i++) {
+      const value = (i / W) * per * periodsShown;
+      const mv = value % per;
+      const mask = mv < win ? 1 : mv < win + sft ? 1 - (mv - win) / sft : 0;
+      const bright = Math.round(mask * 200 + 20);
+      ctx.fillStyle = `rgb(${Math.round(bright * 0.5)},${bright},${Math.round(bright * 0.85)})`;
+      ctx.fillRect(i, 0, 1, H);
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, H - 12, W, 12);
+    ctx.fillStyle = '#a6adc8';
+    ctx.font = '8px monospace';
+    ctx.fillText(`period ${per.toFixed(2)}  thr ${threshold.toFixed(2)}`, 4, H - 3);
+  }, [period, threshold, softness]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={48}
+        style={{ display: 'block', width: '100%', height: '48px' }} />
+    </div>
+  );
+}
+
+// ─── Pixelate ───────────────────────────────────────────────────────────────
+// A checkerboard sized to the actual resulting grid (2 / Pixel Size cells
+// across, same UV-units math the node's own floor(uv/size)*size uses) so
+// Pixel Size's effect on blockiness is visible directly, not just implied.
+
+export function PixelateViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pixelSize = typeof node.params.pixelSize === 'number' ? node.params.pixelSize : 0.05;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+    const cells = Math.max(2, Math.min(24, Math.round(2 / Math.max(0.005, pixelSize))));
+    const cellW = W / cells, cellH = H / cells;
+    for (let row = 0; row < cells; row++) {
+      for (let col = 0; col < cells; col++) {
+        ctx.fillStyle = (row + col) % 2 === 0 ? '#2a2a3a' : '#232333';
+        ctx.fillRect(col * cellW, row * cellH, cellW, cellH);
+      }
+    }
+    ctx.strokeStyle = '#585b70';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= cells; i++) {
+      ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * cellH); ctx.lineTo(W, i * cellH); ctx.stroke();
+    }
+  }, [pixelSize]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={80} height={80}
+        style={{ display: 'block', width: '100%', height: '100%', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -5020,6 +5490,15 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'chladni':
     case 'chladni3d':
     case 'chladni3dParticles': return <SDF3DParamViz         node={node} />;
+    case 'waveTerm':           return <WaveTermViz           node={node} />;
+    case 'chladniField':       return <ChladniFieldViz       node={node} />;
+    case 'chladniSuperposition': return <ChladniSuperpositionViz node={node} />;
+    case 'chladniModeFreq':    return <ChladniModeFreqViz    node={node} />;
+    case 'vec2Swizzle':
+    case 'vec3Swizzle':        return <SwizzleViz            node={node} />;
+    case 'quantize':           return <QuantizeViz           node={node} />;
+    case 'modSelect':          return <ModSelectViz          node={node} />;
+    case 'pixelate':           return <PixelateViz           node={node} />;
 
     // ── Loop / Effect nodes → param display ───────────────────────────────────
     case 'fractalLoop':
@@ -5148,6 +5627,8 @@ export const INLINE_VIZ_TYPES = new Set([
   'mandelbrot', 'ifs', 'newtonFractal', 'lyapunov', 'apollonian',
   'truchet', 'metaballs', 'lissajous',
   'chladni', 'chladni3d', 'chladni3dParticles',
+  'waveTerm', 'chladniField', 'chladniSuperposition', 'chladniModeFreq',
+  'vec2Swizzle', 'vec3Swizzle', 'quantize', 'modSelect', 'pixelate',
   // Loop / Effect nodes
   'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
   'loopCarry', 'loopDomainFold',
