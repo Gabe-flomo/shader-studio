@@ -3157,12 +3157,19 @@ export function MobileGraphBrowser() {
     const pinnedUvNodes = isAtRoot ? nodes.filter(n => n.type === 'uv') : [];
     const pinnedOutputNodes = isAtRoot ? nodes.filter(n => n.type === 'output') : [];
     const pinnedIds = new Set([...pinnedUvNodes, ...pinnedOutputNodes].map(n => n.id));
+    // Expr Block / Custom Fn look like any other chip otherwise, even
+    // though they're fundamentally different from a built-in node — their
+    // actual behavior is whatever formula/code was typed in, not fixed by
+    // the type. A colored outline is enough to flag "look closer" without
+    // a badge/icon; selection still wins visually since it's the more
+    // immediately actionable state.
+    const isCodeNode = (n: GraphNode) => n.type === 'exprNode' || n.type === 'customFn';
     const chipStyleFor = (n: GraphNode) => {
       const selected = selectMode && selectedIds.includes(n.id);
       return {
         display: 'flex', alignItems: 'center', gap: '6px',
         background: selected ? '#313244' : '#1e1e2e',
-        border: selected ? '1px solid #cba6f7' : '1px solid #313244',
+        border: selected ? '1px solid #cba6f7' : isCodeNode(n) ? '1px solid #f9e2af88' : '1px solid #313244',
         borderRadius: '8px', padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
         cursor: 'pointer', touchAction: 'manipulation',
       } as React.CSSProperties;
