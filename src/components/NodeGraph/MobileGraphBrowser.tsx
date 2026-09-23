@@ -1290,6 +1290,11 @@ export function MobileGraphBrowser() {
   // screen, so re-showing them would either dangle or (worse) coincidentally
   // resolve to a same-id node in the new scope.
   const [groupPathFor, setGroupPathFor] = useState('');
+  // Breadcrumb overflow — the drill-down path can get arbitrarily deep, so
+  // only the 4 most recent locations show directly; the rest collapse
+  // behind a tappable "…" that lists them here instead of forcing a
+  // horizontal scroll to find your way back.
+  const [showHiddenPath, setShowHiddenPath] = useState(false);
   // See the groupPathFor effect below — set this immediately before an
   // action that changes activeGroupPath to also land on a specific node's
   // detail in that new scope, instead of that scope's Home.
@@ -1458,7 +1463,20 @@ export function MobileGraphBrowser() {
     setSelectedIds([]);
   };
   const jumpTo = (index: number) => { setFocusStack(stack => stack.slice(0, index + 1)); setForwardStack([]); };
-  const goHome = () => { exitToRoot(); setFocusStack([]); setForwardStack([]); };
+  // A full, unambiguous reset of the nav stack, not just "exit to root" —
+  // clears any in-flight select mode, a leftover breadcrumb popover, and
+  // (defensively) any pending post-scope-change focus a paused action might
+  // have registered, so Home always lands you on a completely clean state
+  // regardless of how deep or mid-action the navigation was.
+  const goHome = () => {
+    pendingFocusAfterScopeChangeRef.current = null;
+    exitToRoot();
+    setFocusStack([]);
+    setForwardStack([]);
+    setSelectMode(false);
+    setSelectedIds([]);
+    setShowHiddenPath(false);
+  };
   // Tapping a group breadcrumb segment for the level you're ALREADY at (its
   // path doesn't change) must still drop back to that group's own Home —
   // the groupPathFor effect only clears focusStack when activeGroupPath
@@ -3058,51 +3076,74 @@ export function MobileGraphBrowser() {
 
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: '#181825', color: '#cdd6f4', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderBottom: '1px solid #313244', overflowX: 'auto', flexShrink: 0 }}>
-        <button onClick={goHome} style={{ background: 'none', border: 'none', color: activeGroupPath.length === 0 && focusStack.length === 0 ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}>
-          Home
-        </button>
-        {/* Group ancestry — one segment per level of "Enter Group" drill-down,
-            before the in-node focusStack trail. Tapping one jumps straight to
-            being inside that level (getActiveNodes at a shorter prefix), same
-            as tapping a focusStack segment jumps to that node. */}
-        {activeGroupPath.map((id, i) => {
+      {/* Breadcrumb — the drill-down path (group ancestry + in-node focus
+          trail) is unbounded in principle, so it's collapsed to the 4 most
+          recent locations behind Home; anything older sits behind a
+          tappable "…" instead of forcing a horizontal scroll to get back. */}
+      {(() => {
+        type BreadcrumbSegment = { key: string; label: string; isCurrent: boolean; onClick: () => void };
+        const groupPathSegments: BreadcrumbSegment[] = activeGroupPath.flatMap((id, i) => {
           const parentScope = getActiveNodes(topLevelNodes, activeGroupPath.slice(0, i)) ?? topLevelNodes;
           const n = parentScope.find(nn => nn.id === id);
-          if (!n) return null;
-          const isCurrent = i === activeGroupPath.length - 1 && focusStack.length === 0;
-          return (
-            <span key={`grp-${id}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-              <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
-              <button
-                onClick={() => jumpToGroupDepth(i + 1)}
-                style={{ background: 'none', border: 'none', color: isCurrent ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
-              >
-                {labelFor(n)}
-              </button>
-            </span>
-          );
-        })}
-        {focusStack.map((id, i) => {
+          if (!n) return [];
+          return [{
+            key: `grp-${id}`,
+            label: labelFor(n),
+            isCurrent: i === activeGroupPath.length - 1 && focusStack.length === 0,
+            onClick: () => jumpToGroupDepth(i + 1),
+          }];
+        });
+        const focusPathSegments: BreadcrumbSegment[] = focusStack.flatMap((id, i) => {
           const n = nodes.find(nn => nn.id === id);
-          if (!n) return null;
-          return (
-            <span key={id} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-              <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
-              <button
-                onClick={() => jumpTo(i)}
-                style={{ background: 'none', border: 'none', color: i === focusStack.length - 1 ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
-              >
-                {labelFor(n)}
+          if (!n) return [];
+          return [{
+            key: `foc-${id}-${i}`,
+            label: labelFor(n),
+            isCurrent: i === focusStack.length - 1,
+            onClick: () => jumpTo(i),
+          }];
+        });
+        const allPathSegments = [...groupPathSegments, ...focusPathSegments];
+        const BREADCRUMB_VISIBLE = 4;
+        const hiddenPathSegments = allPathSegments.length > BREADCRUMB_VISIBLE ? allPathSegments.slice(0, -BREADCRUMB_VISIBLE) : [];
+        const visiblePathSegments = allPathSegments.length > BREADCRUMB_VISIBLE ? allPathSegments.slice(-BREADCRUMB_VISIBLE) : allPathSegments;
+
+        return (
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderBottom: '1px solid #313244', overflowX: 'auto' }}>
+              <button onClick={goHome} style={{ background: 'none', border: 'none', color: activeGroupPath.length === 0 && focusStack.length === 0 ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}>
+                Home
               </button>
-            </span>
-          );
-        })}
-        {/* Redo path — where you'd land if you kept tapping ›. Dimmed since
-            it's not where you are, but still tappable to fast-forward back
-            onto it (any OTHER navigation clears this, same as goForward). */}
-        {forwardStack.map((id, i) => {
+              {hiddenPathSegments.length > 0 && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                  <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
+                  <button
+                    onClick={() => setShowHiddenPath(v => !v)}
+                    title={`${hiddenPathSegments.length} more`}
+                    style={{ background: showHiddenPath ? '#313244' : 'none', border: 'none', borderRadius: '4px', color: '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', padding: '0 3px' }}
+                  >
+                    …
+                  </button>
+                </span>
+              )}
+              {visiblePathSegments.map(seg => (
+                <span key={seg.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                  <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
+                  <button
+                    onClick={seg.onClick}
+                    style={{ background: 'none', border: 'none', color: seg.isCurrent ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+                  >
+                    {seg.label}
+                  </button>
+                </span>
+              ))}
+              {/* Redo path — where you'd land if you kept tapping ›. Dimmed since
+                  it's not where you are, but still tappable to fast-forward back
+                  onto it (any OTHER navigation clears this, same as goForward).
+                  Not folded into the truncation above — it's rare and short-lived
+                  (any navigation away clears it), so it isn't the growth problem
+                  being solved here. */}
+              {forwardStack.map((id, i) => {
           const n = nodes.find(nn => nn.id === id);
           if (!n) return null;
           return (
@@ -3146,7 +3187,31 @@ export function MobileGraphBrowser() {
         >
           {!focusedNode && homeGraphView ? '☰ List' : '⋈ Graph'}
         </button>
-      </div>
+            </div>
+            {showHiddenPath && hiddenPathSegments.length > 0 && (
+              <>
+                <div onClick={() => setShowHiddenPath(false)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+                  background: '#1e1e2e', border: '1px solid #45475a', borderTop: 'none',
+                  padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: '6px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                }}>
+                  {hiddenPathSegments.map(seg => (
+                    <button
+                      key={seg.key}
+                      onClick={() => { seg.onClick(); setShowHiddenPath(false); }}
+                      style={{ background: '#313244', border: '1px solid #45475a', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+                    >
+                      {seg.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {focusedNode
         ? (mobileKeyframeEditor && mobileKeyframeEditor.nodeId === focusedNode.id
