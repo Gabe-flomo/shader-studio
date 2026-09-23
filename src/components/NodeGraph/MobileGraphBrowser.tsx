@@ -560,6 +560,13 @@ export function MobileGraphBrowser() {
     setFocusStack(stack => [...stack, forwardStack[0]]);
     setForwardStack(f => f.slice(1));
   };
+  // Jump forward multiple steps at once by tapping a dimmed breadcrumb item
+  // (index within forwardStack) — restores everything up to and including
+  // that node, keeping whatever's beyond it as the remaining redo history.
+  const goForwardTo = (index: number) => {
+    setFocusStack(stack => [...stack, ...forwardStack.slice(0, index + 1)]);
+    setForwardStack(f => f.slice(index + 1));
+  };
 
   const downstreamConsumers = (nodeId: string, outputKey: string) =>
     nodes.filter(n => Object.values(n.inputs).some(inp => inp.connection?.nodeId === nodeId && inp.connection.outputKey === outputKey));
@@ -1213,6 +1220,25 @@ export function MobileGraphBrowser() {
               <button
                 onClick={() => jumpTo(i)}
                 style={{ background: 'none', border: 'none', color: i === focusStack.length - 1 ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+              >
+                {labelFor(n)}
+              </button>
+            </span>
+          );
+        })}
+        {/* Redo path — where you'd land if you kept tapping ›. Dimmed since
+            it's not where you are, but still tappable to fast-forward back
+            onto it (any OTHER navigation clears this, same as goForward). */}
+        {forwardStack.map((id, i) => {
+          const n = nodes.find(nn => nn.id === id);
+          if (!n) return null;
+          return (
+            <span key={`fwd-${id}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, opacity: 0.4 }}>
+              <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
+              <button
+                onClick={() => goForwardTo(i)}
+                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+                title="Go forward to here"
               >
                 {labelFor(n)}
               </button>
