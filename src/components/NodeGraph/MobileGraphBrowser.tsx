@@ -1384,6 +1384,23 @@ export function MobileGraphBrowser() {
   // desktop's own slider config panel uses (NodeComponent.tsx), so a range
   // customized on one platform carries over to the other.
   const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
+  // Native `dblclick` is unreliable on iOS Safari for range inputs — the
+  // second tap's synthetic dblclick often just doesn't fire — so "double-
+  // tap to reset" silently did nothing on a real phone. This tracks tap
+  // timing by hand as a touch-side fallback alongside onDoubleClick (which
+  // still covers desktop mouse users). Keyed per-control so tapping two
+  // different sliders in quick succession doesn't cross-trigger.
+  const lastTapRef = useRef<{ key: string; time: number } | null>(null);
+  const handleDoubleTap = (tapKey: string, onDouble: () => void) => {
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last && last.key === tapKey && now - last.time < 400) {
+      lastTapRef.current = null;
+      onDouble();
+    } else {
+      lastTapRef.current = { key: tapKey, time: now };
+    }
+  };
   // Which WIRING row is expanded — accordion, same one-key-at-a-time idea
   // as openSliderConfig above, but for the inline "what's this connected
   // to / pick something" panel that replaces the old separate connect
@@ -2232,7 +2249,27 @@ export function MobileGraphBrowser() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={inp.type} />
             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
-            {isKeyframed && <span style={{ fontSize: '9px', color: '#f9e2af', flexShrink: 0 }}>◆ animated</span>}
+            {/* Quick keyframe access right in the header, not just inside
+                the fold — a keyframed row jumps straight into the editor,
+                an eligible-but-static one straight into "add". The fold's
+                own Add/Edit Keyframes button (below) still works too; this
+                is just a faster path for someone who already knows this
+                row is keyframeable and doesn't want to expand it first. */}
+            {kfEligible && (
+              <button
+                onClick={() => {
+                  const axis = kfAxes ? kfAxes[0] : undefined;
+                  setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                  setMobileKeyframeTool(isKeyframed ? 'select' : 'add');
+                }}
+                title={isKeyframed ? 'Edit keyframes' : 'Add keyframes'}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0, background: 'none', border: 'none',
+                  padding: '2px 4px', cursor: 'pointer', touchAction: 'manipulation',
+                  color: isKeyframed ? '#f9e2af' : '#585b70', fontSize: '9px',
+                }}
+              >◆{isKeyframed ? ' animated' : ''}</button>
+            )}
           </div>
           {isExternallyDriven && (
             <div style={{ fontSize: '10px', color: '#6c7086', fontStyle: 'italic' }}>
@@ -2270,6 +2307,10 @@ export function MobileGraphBrowser() {
                       const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
                       updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
                     }}
+                    onTouchEnd={() => handleDoubleTap(`slider_${key}`, () => {
+                      const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
+                      updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
+                    })}
                     title={isExternallyDriven ? 'Driven by an outer wire into this group — read-only here' : 'Double-tap to reset to default'}
                     style={{ flex: 1, minWidth: 0, opacity: isExternallyDriven ? 0.4 : 1, accentColor: dotColor }}
                   />
@@ -2502,6 +2543,10 @@ export function MobileGraphBrowser() {
                         const defVal = def?.defaultParams?.[key];
                         if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
                       }}
+                      onTouchEnd={() => handleDoubleTap(`vec3_${key}_${idx}`, () => {
+                        const defVal = def?.defaultParams?.[key];
+                        if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
+                      })}
                       title="Double-tap to reset to default"
                       style={{ flex: 1, minWidth: 0 }}
                     />

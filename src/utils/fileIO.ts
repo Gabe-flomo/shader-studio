@@ -131,25 +131,30 @@ export async function openTextFile(
     }
     return null;
   } else {
-    // Browser fallback: hidden file input
+    // Browser fallback: hidden file input. input.click() opens the OS
+    // picker asynchronously — removing the input right after calling it
+    // (the old code did) detaches it from the DOM before the user has
+    // actually picked a file, and mobile Safari then silently drops the
+    // 'change' event instead of firing it on a detached element. Keep the
+    // input mounted until a handler actually resolves the promise.
     return new Promise<string | null>((resolve) => {
       const input = Object.assign(document.createElement('input'), {
         type: 'file',
         accept,
         style: 'display:none',
       });
+      const cleanup = () => { input.remove(); };
       input.onchange = () => {
         const file = input.files?.[0];
-        if (!file) return resolve(null);
+        if (!file) { cleanup(); return resolve(null); }
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => resolve(null);
+        reader.onload = () => { cleanup(); resolve(reader.result as string); };
+        reader.onerror = () => { cleanup(); resolve(null); };
         reader.readAsText(file);
       };
-      input.oncancel = () => resolve(null);
+      input.oncancel = () => { cleanup(); resolve(null); };
       document.body.appendChild(input);
       input.click();
-      document.body.removeChild(input);
     });
   }
 }
