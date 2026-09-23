@@ -709,6 +709,84 @@ export function getActiveNodes(nodes: GraphNode[], path: string[]): GraphNode[] 
 }
 
 /**
+ * Remove `nodeId` from `nodeList` and repair the gap: any other node's input
+ * that was wired to the deleted node's output is bridged directly to the
+ * deleted node's own upstream source instead (when the types are
+ * compatible), the same "smart delete" removeNode's top-level path has
+ * always done — an input left dangling instead would silently fall back to
+ * whatever default the socket has, changing the shader with no visible
+ * cause. Picks the first compatible upstream source per orphaned input,
+ * same tie-break the top-level path uses. Shared so deleting a node inside
+ * a group (getActiveNodes-scoped `nodeList`) behaves identically to
+ * deleting one at the top level, instead of just clearing the connection.
+ */
+export function removeNodeFromList(nodeList: GraphNode[], nodeId: string): GraphNode[] {
+  const deletedNode = nodeList.find(n => n.id === nodeId);
+
+  type Src = { sourceNodeId: string; sourceOutputKey: string; sourceType: string };
+  const upstream: Src[] = [];
+  if (deletedNode) {
+    for (const input of Object.values(deletedNode.inputs)) {
+      if (!input.connection) continue;
+      const srcNode = nodeList.find(n => n.id === input.connection!.nodeId);
+      const srcDef = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+      const srcType = srcDef?.outputs[input.connection!.outputKey]?.type ?? '';
+      if (srcType) upstream.push({ sourceNodeId: input.connection.nodeId, sourceOutputKey: input.connection.outputKey, sourceType: srcType });
+    }
+  }
+
+  type Tgt = { targetNodeId: string; targetInputKey: string; targetType: string };
+  const downstream: Tgt[] = [];
+  for (const n of nodeList) {
+    if (n.id === nodeId) continue;
+    for (const [inputKey, input] of Object.entries(n.inputs)) {
+      if (input.connection?.nodeId !== nodeId) continue;
+      const tgtDef = getNodeDefinition(n.type);
+      const tgtType = tgtDef?.inputs[inputKey]?.type ?? '';
+      downstream.push({ targetNodeId: n.id, targetInputKey: inputKey, targetType: tgtType });
+    }
+  }
+
+  type Bridge = { sourceNodeId: string; sourceOutputKey: string; targetNodeId: string; targetInputKey: string };
+  const bridges: Bridge[] = [];
+  for (const tgt of downstream) {
+    for (const src of upstream) {
+      if (typesCompatible(src.sourceType as import('../types/nodeGraph').DataType, tgt.targetType as import('../types/nodeGraph').DataType)) {
+        bridges.push({ sourceNodeId: src.sourceNodeId, sourceOutputKey: src.sourceOutputKey, targetNodeId: tgt.targetNodeId, targetInputKey: tgt.targetInputKey });
+        break;
+      }
+    }
+  }
+
+  let newList = nodeList
+    .filter(n => n.id !== nodeId)
+    .map(n => ({
+      ...n,
+      inputs: Object.fromEntries(
+        Object.entries(n.inputs).map(([key, input]) => [
+          key,
+          input.connection?.nodeId === nodeId ? { ...input, connection: undefined } : input,
+        ]),
+      ),
+    }));
+
+  for (const bridge of bridges) {
+    newList = newList.map(n => {
+      if (n.id !== bridge.targetNodeId) return n;
+      return {
+        ...n,
+        inputs: {
+          ...n.inputs,
+          [bridge.targetInputKey]: { ...n.inputs[bridge.targetInputKey], connection: { nodeId: bridge.sourceNodeId, outputKey: bridge.sourceOutputKey } },
+        },
+      };
+    });
+  }
+
+  return newList;
+}
+
+/**
  * Apply `updater` to a specific node anywhere in the tree (top-level or nested).
  * Uses `activeGroupPath` to locate the parent scope when the node is nested.
  */
@@ -2655,22 +2733,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const activeNodes = getActiveNodes(nodes, activeGroupPath);
       if (activeNodes) {
         const sgNode = activeNodes.find(n => n.id === nodeId);
-        // Block deletion of original (creation-time) nodes
-        if (sgNode?.params?._groupOriginal) return;
         if (sgNode) {
+          // _groupOriginal alone used to block every creation-time node
+          // forever — for a plain 'group' that's every node you selected
+          // when you made it, permanently frozen the moment you grouped
+          // them, the opposite of "group nodes to keep iterating on them
+          // together." The actual thing that needs protecting is narrower:
+          // def.anchored node TYPES (ScenePos/SceneOutput/MarchLoopInputs/
+          // MarchLoopOutput) are structural anchors the compiler requires
+          // to exist inside the specialized 3D scene group types — same
+          // flag NodeComponent.tsx's own 🔒 "Anchored — cannot be deleted"
+          // indicator already keys off, so this stays consistent with
+          // desktop's existing convention rather than inventing a new one.
+          if (sgNode.params?._groupOriginal && getNodeDefinition(sgNode.type)?.anchored) return;
+
           undoManager.push(nodes);
-          // Remove from subgraph and clear connections pointing to it
-          const newSgNodes = activeNodes
-            .filter(n => n.id !== nodeId)
-            .map(n => ({
-              ...n,
-              inputs: Object.fromEntries(
-                Object.entries(n.inputs).map(([k, inp]) => [
-                  k,
-                  inp.connection?.nodeId === nodeId ? { ...inp, connection: undefined } : inp,
-                ]),
-              ),
-            }));
+          const newSgNodes = removeNodeFromList(activeNodes, nodeId);
           set(state => {
             const newTop = setActiveNodes(state.nodes, activeGroupPath, newSgNodes);
             return { nodes: newTop ?? state.nodes };
@@ -2689,78 +2767,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       videoEngine.disposeNode(nodeId);
     }
 
-    // ── Collect bridge info before removing ────────────────────────────────
-    // Upstream: what was wired INTO the deleted node
-    type Src = { sourceNodeId: string; sourceOutputKey: string; sourceType: string };
-    const upstream: Src[] = [];
-    if (deletedNode) {
-      for (const input of Object.values(deletedNode.inputs)) {
-        if (!input.connection) continue;
-        const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
-        const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : undefined;
-        const srcType = srcDef?.outputs[input.connection!.outputKey]?.type ?? '';
-        if (srcType) upstream.push({ sourceNodeId: input.connection.nodeId, sourceOutputKey: input.connection.outputKey, sourceType: srcType });
-      }
-    }
-
-    // Downstream: what the deleted node was wired INTO
-    type Tgt = { targetNodeId: string; targetInputKey: string; targetType: string };
-    const downstream: Tgt[] = [];
-    for (const n of nodes) {
-      if (n.id === nodeId) continue;
-      for (const [inputKey, input] of Object.entries(n.inputs)) {
-        if (input.connection?.nodeId !== nodeId) continue;
-        const tgtDef  = getNodeDefinition(n.type);
-        const tgtType = tgtDef?.inputs[inputKey]?.type ?? '';
-        downstream.push({ targetNodeId: n.id, targetInputKey: inputKey, targetType: tgtType });
-      }
-    }
-
-    // Bridge: for each orphaned downstream input, pick the first compatible upstream source
-    type Bridge = { sourceNodeId: string; sourceOutputKey: string; targetNodeId: string; targetInputKey: string };
-    const bridges: Bridge[] = [];
-    for (const tgt of downstream) {
-      for (const src of upstream) {
-        if (typesCompatible(src.sourceType as DataType, tgt.targetType as DataType)) {
-          bridges.push({ sourceNodeId: src.sourceNodeId, sourceOutputKey: src.sourceOutputKey, targetNodeId: tgt.targetNodeId, targetInputKey: tgt.targetInputKey });
-          break;
-        }
-      }
-    }
-
     set(state => {
-      // Remove the node and clear any connections that pointed to it
-      let newNodes = state.nodes
-        .filter(n => n.id !== nodeId)
-        .map(n => ({
-          ...n,
-          inputs: Object.fromEntries(
-            Object.entries(n.inputs).map(([key, input]) => [
-              key,
-              input.connection?.nodeId === nodeId
-                ? { ...input, connection: undefined }
-                : input,
-            ])
-          ),
-        }));
-
-      // Re-wire bridged connections
-      for (const bridge of bridges) {
-        newNodes = newNodes.map(n => {
-          if (n.id !== bridge.targetNodeId) return n;
-          return {
-            ...n,
-            inputs: {
-              ...n.inputs,
-              [bridge.targetInputKey]: {
-                ...n.inputs[bridge.targetInputKey],
-                connection: { nodeId: bridge.sourceNodeId, outputKey: bridge.sourceOutputKey },
-              },
-            },
-          };
-        });
-      }
-
+      const newNodes = removeNodeFromList(state.nodes, nodeId);
       const previewNodeId = state.previewNodeId === nodeId ? null : state.previewNodeId;
       return { nodes: newNodes, previewNodeId };
     });

@@ -1149,11 +1149,17 @@ export function MobileGraphBrowser() {
   // glance. Back/forward step through the drill-down history; Remove is
   // hidden for the Output node (which can't be removed), at Home
   // (unreachable here anyway, since this only renders once focused), and
-  // for a group's auto-created placeholder nodes (ScenePos/SceneOutput/
-  // MarchLoopInputs/MarchLoopOutput, tagged _groupOriginal) — removeNode
-  // silently no-ops on those, so hiding the button avoids a dead tap.
+  // for def.anchored node types (ScenePos/SceneOutput/MarchLoopInputs/
+  // MarchLoopOutput) when they're the group's own creation-time instance
+  // (_groupOriginal) — the structural anchors the specialized 3D scene
+  // group types need to exist. Same def.anchored flag NodeComponent.tsx's
+  // 🔒 "Anchored — cannot be deleted" indicator uses on desktop, and the
+  // same pair of conditions removeNode's store-level guard checks — a
+  // plain 'group' never stamps a def.anchored type on its own content, so
+  // this only ever hides Remove where the store would no-op anyway.
   function renderNodeHeader(node: GraphNode) {
-    const canRemove = node.type !== 'output' && focusStack.length > 0 && !node.params?._groupOriginal;
+    const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinition(node.type)?.anchored;
+    const canRemove = node.type !== 'output' && focusStack.length > 0 && !originalLocked;
     return (
       <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
         <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
