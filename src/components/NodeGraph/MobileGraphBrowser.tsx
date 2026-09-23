@@ -711,16 +711,17 @@ const KF_HIT_PX = 20;
 const KF_HANDLE_R = 6;
 const KF_HANDLE_HIT_PX = 16;
 // The snap grid a dragged keyframe's time gravitates toward once it's close
-// (aim-assist, not a hard quantize) — half-second increments, same idea as
-// desktop's grid snap but always-on and pixel-distance-based rather than a
-// modifier key, since there's no keyboard to hold shift with on mobile.
-const KF_TIME_SNAP = 0.5;
+// (aim-assist, not a hard quantize) — quarter-second increments, same idea
+// as desktop's grid snap but always-on and pixel-distance-based rather than
+// a modifier key, since there's no keyboard to hold shift with on mobile.
+const KF_TIME_SNAP = 0.25;
 const KF_TIME_SNAP_PX = 8;
 type KfTool = 'select' | 'add' | 'delete' | 'draw';
 type KfDrag =
   | { kind: 'move'; index: number }
   | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' }
-  | { kind: 'draw'; path: Array<{ t: number; v: number }> };
+  | { kind: 'draw'; path: Array<{ t: number; v: number }> }
+  | { kind: 'marquee' };
 
 // A segment the curve is made of, including the synthetic loop-back segment
 // in 'interpolate' mode — mirrors buildSegments in desktop's
@@ -766,15 +767,23 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 320, height: 220 });
+  // Shorter than the original 220px — leaves more of the rest of the sheet
+  // (value box, playback settings) in view/reachable without scrolling the
+  // canvas itself off-screen first, since there's no zoom control here to
+  // compensate for a tall fixed canvas eating the whole viewport.
+  const [size, setSize] = useState({ width: 320, height: 160 });
   const dragRef = useRef<KfDrag | null>(null);
+  // Delete tool: dragging from empty canvas (not directly on a point) opens
+  // a marquee rectangle instead of doing nothing — tapping a point directly
+  // still deletes just that one, unchanged.
+  const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
       const box = entries[0]?.contentRect;
-      if (box && box.width > 0) setSize({ width: box.width, height: 220 });
+      if (box && box.width > 0) setSize({ width: box.width, height: 160 });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -861,19 +870,34 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       });
     }
 
+    const marqueeBounds = marqueeRect ? {
+      xMin: Math.min(marqueeRect.x0, marqueeRect.x1), xMax: Math.max(marqueeRect.x0, marqueeRect.x1),
+      yMin: Math.min(marqueeRect.y0, marqueeRect.y1), yMax: Math.max(marqueeRect.y0, marqueeRect.y1),
+    } : null;
+
     keyframes.forEach((kf, i) => {
       const x = toX(kf.t), y = toY(kf.v);
       const isSelected = i === selectedIndex;
+      const isMarqueed = !!marqueeBounds && x >= marqueeBounds.xMin && x <= marqueeBounds.xMax && y >= marqueeBounds.yMin && y <= marqueeBounds.yMax;
       ctx.beginPath();
       ctx.arc(x, y, isSelected ? 7 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#f9e2af' : '#fab387';
+      ctx.fillStyle = isMarqueed ? '#f38ba8' : isSelected ? '#f9e2af' : '#fab387';
       ctx.fill();
       ctx.strokeStyle = '#181825';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
+
+    if (marqueeBounds) {
+      const { xMin, xMax, yMin, yMax } = marqueeBounds;
+      ctx.fillStyle = 'rgba(243,139,168,0.12)';
+      ctx.strokeStyle = '#f38ba8';
+      ctx.lineWidth = 1;
+      ctx.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
+      ctx.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, selectedIndex, size, maxT, showHandles, easeEditSeg]);
+  }, [keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, selectedIndex, size, maxT, showHandles, easeEditSeg, marqueeRect]);
 
   const hitTest = (x: number, y: number): number | null => {
     let best: number | null = null, bestDist = KF_HIT_PX;
@@ -910,7 +934,11 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     }
     const hit = hitTest(x, y);
     if (tool === 'delete') {
-      if (hit != null) { onChange(keyframes.filter((_, i) => i !== hit)); onSelect(null); }
+      if (hit != null) { onChange(keyframes.filter((_, i) => i !== hit)); onSelect(null); return; }
+      // Missed every point — start a marquee instead of doing nothing, so a
+      // drag over empty canvas can select and delete several points at once.
+      setMarqueeRect({ x0: x, y0: y, x1: x, y1: y });
+      dragRef.current = { kind: 'marquee' };
       return;
     }
     if (tool === 'draw') {
@@ -937,6 +965,10 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     const drag = dragRef.current;
     if (!drag) return;
     const { x, y } = pointerPos(e);
+    if (drag.kind === 'marquee') {
+      setMarqueeRect(r => r ? { ...r, x1: x, y1: y } : null);
+      return;
+    }
     if (drag.kind === 'draw') {
       const t = clampT(fromX(x)), v = clampV(fromY(y));
       const last = drag.path[drag.path.length - 1];
@@ -962,7 +994,11 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       onChange(next);
       return;
     }
-    const next = keyframes.map((k, i) => i === drag.index ? { ...k, t: clampT(snapT(fromX(x))), v: clampV(fromY(y)) } : k);
+    // Y (value) is intentionally locked during a point drag — pinpointing a
+    // value by finger on a small canvas is fiddly, so dragging only ever
+    // repositions a keyframe in time; the Value input box in the panel below
+    // is the one way to change what it's actually worth.
+    const next = keyframes.map((k, i) => i === drag.index ? { ...k, t: clampT(snapT(fromX(x))) } : k);
     onChange(next);
   };
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -973,6 +1009,21 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     if (drag.kind === 'draw') {
       onChange(downsampleDrawPath(drag.path));
       onSelect(null);
+      return;
+    }
+    if (drag.kind === 'marquee') {
+      if (marqueeRect) {
+        const xMin = Math.min(marqueeRect.x0, marqueeRect.x1), xMax = Math.max(marqueeRect.x0, marqueeRect.x1);
+        const yMin = Math.min(marqueeRect.y0, marqueeRect.y1), yMax = Math.max(marqueeRect.y0, marqueeRect.y1);
+        const toDelete = new Set(
+          keyframes
+            .map((kf, i) => ({ i, x: toX(kf.t), y: toY(kf.v) }))
+            .filter(p => p.x >= xMin && p.x <= xMax && p.y >= yMin && p.y <= yMax)
+            .map(p => p.i)
+        );
+        if (toDelete.size > 0) { onChange(keyframes.filter((_, i) => !toDelete.has(i))); onSelect(null); }
+      }
+      setMarqueeRect(null);
       return;
     }
     if (drag.kind === 'handle') return;
