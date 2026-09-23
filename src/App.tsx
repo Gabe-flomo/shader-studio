@@ -646,7 +646,25 @@ function App() {
       <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         {/* Floating TopNav */}
-        <TopNav page={page} onPageChange={setPage} floating />
+        <TopNav
+          page={page} onPageChange={setPage} floating
+          saveActive={showSavePanel}
+          loadActive={showLoadPanel}
+          onSaveClick={() => { setShowSavePanel(v => !v); setShowLoadPanel(false); }}
+          onLoadClick={() => { setSavedNames(getSavedGraphNames()); setShowLoadPanel(v => !v); setShowSavePanel(false); }}
+        />
+        {/* Save/load-by-name panels (savePanelEl/loadPanelEl) — same shared
+            elements desktop's node-graph toolbar uses. Both already carry
+            their own `position: absolute; top: 36px; left: 8px`, so this
+            wrapper just needs to BE their offset parent, anchored right
+            below the floating nav, rather than trying to reposition them
+            itself. */}
+        {(showSavePanel || showLoadPanel) && (
+          <div style={{ position: 'absolute', top: 'calc(44px + env(safe-area-inset-top, 0px))', left: 0, right: 0, zIndex: 31 }}>
+            {savePanelEl}
+            {loadPanelEl}
+          </div>
+        )}
 
         {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))' }}>
