@@ -14,6 +14,7 @@ import { FunctionBuilder } from './components/FunctionBuilder';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/TopNav';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
+import { MobileNodeBrowser } from './components/NodeGraph/MobileNodeBrowser';
 import { useNodeGraphStore, EXAMPLE_GRAPHS, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
@@ -339,11 +340,12 @@ function App() {
   // Examples button opens a browsable gallery of starter graphs.
   const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
   const [showMobileExamples, setShowMobileExamples]     = useState(false);
-  // "Nodes" tab inside the Examples sheet — browse every available node
-  // type (search, categories, descriptions) and place one disconnected,
-  // same NodeSearchPalette every other "Add Node" entry point in the app
-  // already uses, just opened from here instead of the graph FAB.
-  const [showMobileNodeBrowser, setShowMobileNodeBrowser] = useState(false);
+  // Examples sheet has two tabs: starter graphs (existing folder accordion)
+  // and an exploratory Nodes browser (MobileNodeBrowser) — category
+  // accordion, open a node to read its description/preview, then decide to
+  // add it. Deliberately not the same flow as the graph FAB's quick-search
+  // NodeSearchPalette; that already exists, this is for browsing/reference.
+  const [mobileExamplesTab, setMobileExamplesTab] = useState<'examples' | 'nodes'>('examples');
   // Reset's own confirm step, in-app rather than window.confirm() — a native
   // confirm dialog is unreliable (sometimes silently a no-op) inside a Tauri
   // webview, which would make Reset look broken with no error or feedback.
@@ -884,7 +886,7 @@ function App() {
               the button again just closes the browser and keeps whatever's
               currently on screen. */}
           <button
-            onClick={() => setShowMobileExamples(true)}
+            onClick={() => { setMobileExamplesTab('examples'); setShowMobileExamples(true); }}
             style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#a6e3a1', borderColor: '#a6e3a144', marginLeft: 'auto' }}
             title="Browse examples"
           >
@@ -944,15 +946,24 @@ function App() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: '#cdd6f4' }}>Examples</div>
-                <button
-                  onClick={() => { setShowMobileExamples(false); setShowMobileNodeBrowser(true); }}
-                  style={{
-                    background: 'none', border: '1px solid #45475a', color: '#89b4fa',
-                    borderRadius: '6px', padding: '3px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
-                  }}
-                  title="Browse every available node and add one disconnected"
-                >⬡ Nodes</button>
+                <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden' }}>
+                  <button
+                    onClick={() => setMobileExamplesTab('examples')}
+                    style={{
+                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', touchAction: 'manipulation',
+                      background: mobileExamplesTab === 'examples' ? '#313244' : 'none',
+                      color: mobileExamplesTab === 'examples' ? '#cdd6f4' : '#6c7086',
+                    }}
+                  >Examples</button>
+                  <button
+                    onClick={() => setMobileExamplesTab('nodes')}
+                    style={{
+                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', borderLeft: '1px solid #45475a', cursor: 'pointer', touchAction: 'manipulation',
+                      background: mobileExamplesTab === 'nodes' ? '#313244' : 'none',
+                      color: mobileExamplesTab === 'nodes' ? '#cdd6f4' : '#6c7086',
+                    }}
+                  >Nodes</button>
+                </div>
                 <div style={{ flex: 1 }} />
                 <button
                   onClick={() => setShowMobileExamples(false)}
@@ -960,59 +971,54 @@ function App() {
                   title="Close"
                 >✕</button>
               </div>
-              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
-                const isOpen = expandedExampleFolders.has(folder.label);
-                return (
-                  <div key={folder.label} style={{ marginBottom: '12px' }}>
-                    <button
-                      onClick={() => setExpandedExampleFolders(s => {
-                        const next = new Set(s);
-                        if (next.has(folder.label)) next.delete(folder.label); else next.add(folder.label);
-                        return next;
-                      })}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
-                        background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
-                        cursor: 'pointer', touchAction: 'manipulation',
-                      }}
-                    >
-                      <span style={{ fontSize: '9px', color: folder.color }}>{isOpen ? '▾' : '▸'}</span>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em' }}>
-                        {folder.label.toUpperCase()}
-                      </span>
-                    </button>
-                    {isOpen && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
-                          <button
-                            key={k}
-                            onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
-                            style={{
-                              background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-                              padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
-                              cursor: 'pointer', touchAction: 'manipulation',
-                            }}
-                          >
-                            {EXAMPLE_GRAPHS[k].label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {mobileExamplesTab === 'examples' ? (
+                EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
+                  const isOpen = expandedExampleFolders.has(folder.label);
+                  return (
+                    <div key={folder.label} style={{ marginBottom: '12px' }}>
+                      <button
+                        onClick={() => setExpandedExampleFolders(s => {
+                          const next = new Set(s);
+                          if (next.has(folder.label)) next.delete(folder.label); else next.add(folder.label);
+                          return next;
+                        })}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
+                          background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
+                          cursor: 'pointer', touchAction: 'manipulation',
+                        }}
+                      >
+                        <span style={{ fontSize: '9px', color: folder.color }}>{isOpen ? '▾' : '▸'}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em' }}>
+                          {folder.label.toUpperCase()}
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
+                            <button
+                              key={k}
+                              onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
+                              style={{
+                                background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                                padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+                                cursor: 'pointer', touchAction: 'manipulation',
+                              }}
+                            >
+                              {EXAMPLE_GRAPHS[k].label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <MobileNodeBrowser onClose={() => setShowMobileExamples(false)} />
+              )}
             </div>
           </div>
         )}
-
-        {/* "Nodes" tab from the Examples sheet — same NodeSearchPalette every
-            other "Add Node" entry point uses, no type filter so it browses
-            everything and places whatever's picked disconnected. */}
-        <NodeSearchPalette
-          open={showMobileNodeBrowser}
-          onClose={() => setShowMobileNodeBrowser(false)}
-          onNodePlaced={() => setShowMobileNodeBrowser(false)}
-        />
 
         {/* Reset confirm — a custom modal instead of window.confirm(), which
             is unreliable inside a Tauri webview. */}

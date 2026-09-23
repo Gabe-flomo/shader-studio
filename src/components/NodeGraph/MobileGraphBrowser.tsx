@@ -532,7 +532,7 @@ function TypeIcon({ type }: { type: string }) {
 // would shrink that fixed-size text rather than just sharpen it. Runs on
 // every render (cheap no-op once the size stabilizes) so it also
 // self-corrects on an actual resize (rotation, window resize).
-function InlineVizFrame({ node }: { node: GraphNode }) {
+export function InlineVizFrame({ node }: { node: GraphNode }) {
   const frameRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -576,7 +576,7 @@ function InlineVizFrame({ node }: { node: GraphNode }) {
 // scope probe, or a type that isn't really "a shader" on its own. Same
 // list desktop's own SKIP_PREVIEW (NodeComponent.tsx) excludes from its
 // 👁 in-card preview for the same reason.
-const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
+export const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
 // ── Generic live-render fallback ─────────────────────────────────────────
 // For the ~75% of node types with no custom NodeInlineViz entry, this is
 // the same fallback desktop uses (NodeComponent.tsx's own isPreviewActive
@@ -587,7 +587,7 @@ const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureIn
 // when the focused node changes, not every frame; INLINE_VIZ_TYPES types
 // get true live reactivity from their own canvas draw; this is "show
 // something correct" for everything else, same tradeoff desktop makes.
-function GenericPreviewViz({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
+export function GenericPreviewViz({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     // `nodes` must already be the caller's active scope (getActiveNodes at

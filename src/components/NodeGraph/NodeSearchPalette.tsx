@@ -10,27 +10,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-
-// ── Category accent colours (matches NodePalette) ─────────────────────────────
-const CATEGORY_COLORS: Record<string, string> = {
-  Sources:         '#89b4fa',
-  Transforms:      '#a6e3a1',
-  Math:            '#b4befe',
-  Color:           '#fab387',
-  Noise:           '#74c7ec',
-  Effects:         '#f38ba8',
-  Loops:           '#89dceb',
-  '2D Primitives': '#f9e2af',
-  SDF:             '#f5c2e7',
-  Combiners:       '#cba6f7',
-  Spaces:          '#f2cdcd',
-  Science:         '#94e2d5',
-  'Group Presets': '#f9e2af',
-  Output:          '#94e2d5',
-};
-
-// ── Types to hide from the palette (internal / special) ───────────────────────
-const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup']);
+import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
 
 // ── Build searchable list once ─────────────────────────────────────────────────
 interface SearchEntry {
