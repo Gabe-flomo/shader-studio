@@ -4,6 +4,8 @@ import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
 import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
 import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
+import { moveItem } from '../../lib/reorder';
+import { GLSL_PALETTE } from '../../lib/glslPalette';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -45,41 +47,7 @@ const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 const OPS = ['=', '+=', '-=', '*=', '/='];
 
 // ─── GLSL function palette ────────────────────────────────────────────────────
-
-interface GlslEntry { label: string; insert: string; group: string; }
-
-const GLSL_PALETTE: GlslEntry[] = [
-  { group: 'Trig',      label: 'sin(f)',            insert: 'sin()'                },
-  { group: 'Trig',      label: 'cos(f)',            insert: 'cos()'                },
-  { group: 'Trig',      label: 'atan(f,f)',          insert: 'atan(, )'             },
-  { group: 'Exp/Log',   label: 'exp(f)',             insert: 'exp()'                },
-  { group: 'Exp/Log',   label: 'sqrt(f)',            insert: 'sqrt()'               },
-  { group: 'Exp/Log',   label: 'pow(f,f)',           insert: 'pow(, )'              },
-  { group: 'Rounding',  label: 'floor(f)',           insert: 'floor()'              },
-  { group: 'Rounding',  label: 'ceil(f)',            insert: 'ceil()'               },
-  { group: 'Rounding',  label: 'fract(f)',           insert: 'fract()'              },
-  { group: 'Math',      label: 'abs(f)',             insert: 'abs()'                },
-  { group: 'Math',      label: 'mod(f,f)',           insert: 'mod(, )'              },
-  { group: 'Math',      label: 'min(f,f)',           insert: 'min(, )'              },
-  { group: 'Math',      label: 'max(f,f)',           insert: 'max(, )'              },
-  { group: 'Math',      label: 'clamp(f,f,f)',       insert: 'clamp(, , )'          },
-  { group: 'Math',      label: 'mix(f,f,f)',         insert: 'mix(, , )'            },
-  { group: 'Math',      label: 'smoothstep(f,f,f)',  insert: 'smoothstep(, , )'     },
-  { group: 'Vector',    label: 'length(v)',          insert: 'length()'             },
-  { group: 'Vector',    label: 'normalize(v)',       insert: 'normalize()'          },
-  { group: 'Vector',    label: 'dot(v,v)',           insert: 'dot(, )'              },
-  { group: 'Vector',    label: 'vec2(f,f)',          insert: 'vec2(, )'             },
-  { group: 'Vector',    label: 'vec3(f,f,f)',        insert: 'vec3(, , )'           },
-  { group: 'Custom',    label: 'palette(f,v3×4)',    insert: 'palette(, vec3(0.5), vec3(0.5), vec3(1.0), vec3(0.0,0.33,0.67))' },
-  { group: 'Custom',    label: 'rotate(v2,f)',       insert: 'rotate(, )'           },
-  { group: 'SDF',       label: 'sdBox(v2,v2)',       insert: 'sdBox(, )'            },
-  { group: 'SDF',       label: 'sdSegment(v2,v2,v2)',insert: 'sdSegment(, , )'      },
-  { group: 'SDF',       label: 'sdEllipse(v2,v2)',   insert: 'sdEllipse(, )'        },
-  { group: 'SDF',       label: 'opRepeat(v2,f)',     insert: 'opRepeat(, )'         },
-  { group: 'Constants', label: 'PI',                insert: 'PI'                   },
-  { group: 'Constants', label: 'TAU',               insert: 'TAU'                  },
-  { group: 'Constants', label: 'u_time',            insert: 'u_time'               },
-];
+// Shared with the mobile inline autocomplete — see src/lib/glslPalette.ts.
 
 const GLSL_GROUPS = Array.from(new Set(GLSL_PALETTE.map(e => e.group)));
 
@@ -133,7 +101,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];
   const lines: WarpLine[]        = (node.params.lines as WarpLine[] | undefined) ?? [];
   const result: string           = (node.params.result as string | undefined) ?? 'p';
-  const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'vec3';
+  const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'float';
 
   const [savedFlash, setSavedFlash]     = useState(false);
   const [autoWrap, setAutoWrap]         = useState(false);
@@ -275,6 +243,10 @@ export function ExprBlockModal({ node, onClose }: Props) {
 
   const removeLine = (idx: number) => {
     updateNodeParams(node.id, { lines: lines.filter((_, i) => i !== idx) });
+  };
+
+  const moveLine = (idx: number, to: number) => {
+    updateNodeParams(node.id, { lines: moveItem(lines, idx, to) });
   };
 
   const updateLine = (idx: number, field: keyof WarpLine, value: string) => {
@@ -647,6 +619,21 @@ export function ExprBlockModal({ node, onClose }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  {/* Reorder */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => moveLine(i, i - 1)}
+                      disabled={i === 0}
+                      style={{ background: 'none', border: 'none', color: i === 0 ? '#313244' : '#6c7086', cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
+                      title="Move up"
+                    >▲</button>
+                    <button
+                      onClick={() => moveLine(i, i + 1)}
+                      disabled={i === lines.length - 1}
+                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? '#313244' : '#6c7086', cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
+                      title="Move down"
+                    >▼</button>
+                  </div>
                   {/* LHS */}
                   <input
                     type="text"

@@ -18,6 +18,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   document.head.appendChild(s);
 }
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
+import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinition } from '../../nodes/definitions';
@@ -34,6 +35,7 @@ import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket } from './socketRegistry';
+import { moveItem } from '../../lib/reorder';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
@@ -118,16 +120,6 @@ const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
 const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat']);
 
-const TYPE_COLORS: Record<string, string> = {
-  float: '#f0a',
-  vec2: '#0af',
-  vec3: '#0fa',
-  vec4: '#fa0',
-  mat2:        '#f5c842',  // golden yellow for 2×2 matrix wires
-  mat3:        '#e8a020',  // amber for 3×3 matrix wires
-  scene3d:     '#cc88aa',  // pastel pink for 3D scene wires
-  spacewarp3d: '#aa88cc',  // pastel purple for space warp wires
-};
 
 const INPUT_STYLE: React.CSSProperties = {
   background: 'transparent',
@@ -3590,6 +3582,23 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                  {/* Reorder */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
+                    <button
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i - 1) })}
+                      disabled={i === 0}
+                      style={{ background: 'none', border: 'none', color: i === 0 ? '#313244' : '#6c7086', cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
+                      title="Move up"
+                    >▲</button>
+                    <button
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i + 1) })}
+                      disabled={i === lines.length - 1}
+                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? '#313244' : '#6c7086', cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
+                      title="Move down"
+                    >▼</button>
+                  </div>
                   {/* LHS */}
                   <input
                     type="text"

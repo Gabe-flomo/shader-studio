@@ -663,7 +663,12 @@ export const ExprBlockNode: NodeDefinition = {
   // Dynamic — populated from params.inputs via addNode() / updateNodeSockets()
   inputs: {},
   outputs: {
-    result: { type: 'vec3', label: 'Result (vec3)' },
+    // Matches defaultParams below (outputType: 'float', result: 'a' — 'a' is
+    // itself the default float input, so a fresh node is valid out of the
+    // box instead of assigning a float into a vec3). addNode() falls back to
+    // this static def when no overrideParams.outputType is given, so it has
+    // to agree with defaultParams.outputType, not just describe it.
+    result: { type: 'float', label: 'Result (float)' },
   },
   defaultParams: {
     // Dynamic inputs — each entry becomes a socket + local variable.
@@ -673,7 +678,7 @@ export const ExprBlockNode: NodeDefinition = {
       { name: 'b', type: 'vec2',  slider: null },
       { name: 'c', type: 'vec3',  slider: null },
     ] as Array<{ name: string; type: string; slider: { min: number; max: number } | null }>,
-    outputType: 'vec3',
+    outputType: 'float',
     // Per-line warp statements
     lines: [] as Array<{ lhs: string; op: string; rhs: string }>,
     result: 'a',
@@ -1383,6 +1388,99 @@ float gaussBlurWeight(float x, float y, float sigma) {
       }
     }
     lines.push(`    vec3 ${id}_result = ${id}_acc / ${id}_wsum;\n`);
+
+    return { code: lines.join(''), outputVars: { result: `${id}_result` } };
+  },
+};
+
+// ─── Bloom ──────────────────────────────────────────────────────────────────
+// True screen-space bloom: thresholds the bright pixels of ANY rendered color
+// (not an SDF — this is the piece Deep Glow can't do, since Deep Glow only
+// knows how to spread light using an actual distance value, not by looking at
+// neighboring pixels) and blurs that bright-pass outward using the same
+// u_prevFrame multi-tap trick as Gaussian Blur, then adds it back on top of
+// the original color. Wire final scene color + UV, right before Output.
+//
+// The sampling kernel uses genuine inverse-square distance weighting — the
+// same falloff shape the original Deep Glow SDF formula used — applied here
+// as a spiral-disk sampling kernel over the color image instead. This is
+// what actually gives continuous tight-core-to-soft-edge falloff; an earlier
+// version sampled a few fixed-radius RINGS with uniform per-ring weight,
+// which plateaus (near samples all read "fully bright" until they suddenly
+// don't) and bands badly at large radii (too few samples over a huge
+// circumference). Golden-angle spiral placement + per-pixel jitter avoids
+// that banding far better than a handful of concentric rings.
+export const BloomNode: NodeDefinition = {
+  type: 'bloom',
+  label: 'Bloom',
+  category: 'Effects',
+  description: 'Real screen-space bloom, After Effects Deep Glow-style — a post effect on the FINAL rendered color (no SDF/distance value needed, just like Grain applies to the whole image regardless of source). Samples a wide disk of the previous frame with genuine inverse-square distance weighting (the same falloff shape as the original Deep Glow formula), giving a continuous tight-core-to-soft-edge falloff instead of a flat blurred smudge. Wire your final scene color + UV, generally right before Output.',
+  inputs: {
+    color:     { type: 'vec3',  label: 'Color' },
+    uv:        { type: 'vec2',  label: 'UV' },
+    threshold: { type: 'float', label: 'Threshold' },
+    intensity: { type: 'float', label: 'Intensity' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Result' } },
+  defaultParams: { threshold: 0.3, intensity: 1.5, radius: 40.0 },
+  paramDefs: {
+    threshold: { label: 'Threshold', type: 'float', min: 0.0, max: 2.0,   step: 0.01, hint: 'Brightness cutoff before a pixel contributes to the bloom. Raise it so only the brightest highlights glow. There is a hard floor of 0.05 even at 0 — without one, imperceptibly faint residual brightness never fully dies out and slowly diffuses across the entire frame over a few seconds, since this reads its own previous output back every frame.' },
+    intensity: { label: 'Intensity', type: 'float', min: 0.0, max: 5.0,   step: 0.05 },
+    radius:    { label: 'Radius (px)', type: 'float', min: 1.0, max: 400.0, step: 1.0, hint: 'Full reach of the falloff, in pixels — most of the weight is still near the source (inverse-square), so raising this mainly extends how far the soft tail bleeds rather than uniformly brightening everything inside it.' },
+  },
+  glslFunction: `
+vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float jitter) {
+  vec3 acc = vec3(0.0);
+  float wsum = 0.0;
+  // Never let Threshold fully reach 0 — otherwise even imperceptibly faint
+  // residual brightness never gets fully cut off, and reading this node's own
+  // previous output back every frame slowly diffuses that residue across the
+  // entire frame over a few seconds (confirmed live: Threshold=0 washed the
+  // whole screen to flat gray well away from the actual bright source).
+  float effThreshold = max(threshold, 0.05);
+  for (int i = 0; i < 28; i++) {
+    // Uniform-density disk sampling (radius ~ sqrt(i)) with a golden-angle
+    // angular step — far better distributed than a few concentric rings, so
+    // it doesn't band even at large radii with a modest sample count.
+    float t = (float(i) + 0.5) / 28.0;
+    float r = sqrt(t) * radius;
+    float angle = float(i) * 2.39996323 + jitter;
+    vec2 offset = vec2(cos(angle), sin(angle)) * r * px;
+    // Clamp each tap before thresholding — u_prevFrame is a half-float
+    // target, and Bloom reads its OWN previous output back every frame, so
+    // an unbounded upstream HDR value (e.g. a raw Glow Layer, deliberately
+    // unclamped) would otherwise compound frame over frame into a runaway
+    // feedback loop that saturates to solid white.
+    vec3 tap = min(texture2D(u_prevFrame, clamp(uv01 + offset, 0.0, 1.0)).rgb, vec3(4.0));
+    vec3 bright = max(tap - vec3(effThreshold), 0.0);
+    // Inverse-square falloff weight by this sample's actual distance — this
+    // is what gives a continuous tight-core/soft-tail gradient (a weighted
+    // AVERAGE, so it stays bounded and doesn't scale with sample count).
+    float rn = r / max(radius, 0.0001);
+    float w = 1.0 / (1.0 + rn * rn * 9.0);
+    acc += bright * w;
+    wsum += w;
+  }
+  return acc / max(wsum, 0.0001);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id        = node.id;
+    const col       = inputVars.color     || 'vec3(0.0)';
+    const uvVar     = inputVars.uv        || 'g_uv';
+    const threshold = inputVars.threshold || p(node.params.threshold, 0.3);
+    const intensity = inputVars.intensity || p(node.params.intensity, 1.5);
+    const radius    = p(node.params.radius, 40.0);
+
+    const lines: string[] = [
+      `    vec2  ${id}_uv01   = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+      `    vec2  ${id}_px     = 1.0 / u_resolution;\n`,
+      `    float ${id}_jitter = noiseHash1(gl_FragCoord.xy) * 6.28318530718;\n`,
+      `    vec3  ${id}_glow   = bloomKernel(${id}_uv01, ${id}_px, ${radius}, ${threshold}, ${id}_jitter);\n`,
+      `    vec3  ${id}_hdr    = ${col} + ${id}_glow * ${intensity};\n`,
+      // Reinhard tonemap — without this the feedback loop above has no
+      // ceiling and visibly converges to flat white within a few frames.
+      `    vec3  ${id}_result = ${id}_hdr / (${id}_hdr + vec3(1.0));\n`,
+    ];
 
     return { code: lines.join(''), outputVars: { result: `${id}_result` } };
   },

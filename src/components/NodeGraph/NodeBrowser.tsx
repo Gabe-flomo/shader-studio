@@ -117,7 +117,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Bezier',  types: ['quadBezierShaper', 'cubicBezierShaper'] },
   ],
   Effects: [
-    { label: 'Blur',     types: ['gaussianBlur', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
+    { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
     { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
     { label: 'Lighting', types: ['makeLight', 'light', 'light2d', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },

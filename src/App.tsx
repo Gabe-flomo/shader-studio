@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
+import { MobileGraphBrowser } from './components/NodeGraph/MobileGraphBrowser';
 import { CodePanel } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
@@ -13,7 +14,7 @@ import { FunctionBuilder } from './components/FunctionBuilder';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/TopNav';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
-import { useNodeGraphStore } from './store/useNodeGraphStore';
+import { useNodeGraphStore, EXAMPLE_GRAPHS, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
@@ -266,10 +267,8 @@ function App() {
   const floatContainerRef = useRef<HTMLDivElement>(null);
   const [showToolbarMenu, setShowToolbarMenu] = useState(false);
 
-  // Mobile/tablet drawer state
-  const [drawerOpen, setDrawerOpen]         = useState(false);
-  // Mobile: show node graph as overlay on top of preview
-  const [showMobileGraph, setShowMobileGraph] = useState(false);
+  // Mobile: canvas-only / split / graph-only layout mode
+  const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph'>('split');
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -280,6 +279,11 @@ function App() {
   const [savedNames, setSavedNames]       = useState<string[]>([]);
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
+  // Mobile: the record button opens a menu (Record / Reset / Import / Export)
+  // instead of jumping straight into the export modal, and a separate
+  // Examples button opens a browsable gallery of starter graphs.
+  const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
+  const [showMobileExamples, setShowMobileExamples]     = useState(false);
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   // Node search palette
@@ -572,67 +576,69 @@ function App() {
   // Preview fills entire screen, floating nav + bottom action bar
   // ══════════════════════════════════════════════════════════════════════════
   if (mobile && page === 'studio') {
+    const showCanvasPane = mobileLayout !== 'graph';
+    const showGraphPane  = mobileLayout !== 'canvas';
     return (
-      <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none' }}>
-
-        {/* Full-screen shader preview as background */}
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
-          <AudioMasterVolumeWidget />
-        </div>
+      <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         {/* Floating TopNav */}
         <TopNav page={page} onPageChange={setPage} floating />
 
-        {/* Bottom action bar */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 25,
-          background: 'rgba(24,24,37,0.90)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          borderTop: '1px solid #313244',
-          padding: '8px 12px',
-          display: 'flex', alignItems: 'center', gap: '8px',
-          minHeight: '56px',
-        }}>
-          {/* Graph overlay toggle */}
-          <button
-            onClick={() => setShowMobileGraph(v => !v)}
-            style={{
-              ...btnStyle(showMobileGraph),
-              padding: '8px 12px',
-              fontSize: '13px',
-              flexShrink: 0,
-            }}
-            title={showMobileGraph ? 'Hide node graph' : 'Show node graph'}
-          >
-            {showMobileGraph ? '✕ Graph' : '◈ Graph'}
-          </button>
+        {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: '44px' }}>
+          {showCanvasPane && (
+            <div style={{
+              position: 'relative',
+              flex: mobileLayout === 'canvas' ? 1 : '0 0 auto',
+              height: mobileLayout === 'canvas' ? undefined : '42vh',
+              minHeight: 0,
+              background: '#000',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                position: 'relative',
+                width: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
+                height: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
+              }}>
+                <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+                <AudioMasterVolumeWidget />
+              </div>
 
-          {/* Nodes drawer toggle */}
-          <button
-            onClick={() => setDrawerOpen(v => !v)}
-            style={{
-              ...btnStyle(drawerOpen),
-              padding: '8px 12px',
-              fontSize: '13px',
-              flexShrink: 0,
-            }}
-          >
-            ⬡ Nodes
-          </button>
+              {/* Pixel color info / param hint, pinned to the canvas pane */}
+              {(hoveredParamHint || pixelSample) && (
+                <div style={{
+                  position: 'absolute', top: 8, right: 8, zIndex: 22,
+                  background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
+                  borderRadius: '6px', padding: '4px 8px',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontSize: '10px', fontFamily: 'monospace', color: '#585b70',
+                  border: '1px solid #313244',
+                  maxWidth: '320px',
+                }}>
+                  {hoveredParamHint ? (
+                    <>
+                      <span style={{ color: '#cba6f7', fontSize: '11px', flexShrink: 0 }}>?</span>
+                      <span style={{ color: '#cdd6f4', whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
+                    </>
+                  ) : pixelSample ? (
+                    <>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
+                      <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
+                      <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
+                      <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Error badge */}
-          {errorBadge}
-
-          {/* Record button */}
-          <button
-            onClick={() => setShowExport(true)}
-            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744' }}
-            title="Export animation"
-          >
-            🎬
-          </button>
+          {showGraphPane && (
+            <div style={{ flex: 1, minHeight: 0, borderTop: showCanvasPane ? '1px solid #313244' : undefined }}>
+              <MobileGraphBrowser />
+            </div>
+          )}
         </div>
 
         {/* Error popup — sits above bottom bar */}
@@ -642,76 +648,137 @@ function App() {
           </div>
         )}
 
-        {/* Pixel color info / param hint (top-right, non-intrusive) */}
-        {(hoveredParamHint || pixelSample) && (
-          <div style={{
-            position: 'absolute', top: 52, right: 10, zIndex: 22,
-            background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
-            borderRadius: '6px', padding: '4px 8px',
-            display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '10px', fontFamily: 'monospace', color: '#585b70',
-            border: '1px solid #313244',
-            maxWidth: '320px',
-          }}>
-            {hoveredParamHint ? (
-              <>
-                <span style={{ color: '#cba6f7', fontSize: '11px', flexShrink: 0 }}>?</span>
-                <span style={{ color: '#cdd6f4', whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
-              </>
-            ) : pixelSample ? (
-              <>
-                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
-                <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
-                <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
-                <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
-              </>
-            ) : null}
-          </div>
-        )}
-
-        {/* Node graph overlay — fills entire screen, nav + bar float above */}
-        {showMobileGraph && (
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 20,
-          }}>
-            <NodeGraph transparent />
-          </div>
-        )}
-
-        {/* Bottom sheet drawer backdrop */}
-        {drawerOpen && (
-          <div
-            onClick={() => setDrawerOpen(false)}
-            style={{ position: 'absolute', inset: 0, zIndex: 28, background: 'rgba(0,0,0,0.5)' }}
-          />
-        )}
-
-        {/* Bottom sheet drawer */}
+        {/* Bottom action bar */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 29,
-          height: '72vh',
-          background: '#1e1e2e',
-          borderRadius: '16px 16px 0 0',
-          borderTop: '1px solid #45475a',
-          display: 'flex', flexDirection: 'column',
-          transform: drawerOpen ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.5)',
+          flexShrink: 0, zIndex: 25,
+          background: 'rgba(24,24,37,0.90)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderTop: '1px solid #313244',
+          padding: '8px 12px',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          minHeight: '56px',
         }}>
-          {/* Drag handle + header */}
-          <div style={{ padding: '12px 16px 8px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#45475a', margin: '0 auto 0 auto', position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '8px' }} />
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa', paddingTop: '4px' }}>Add Node</span>
+          {/* Layout mode: canvas-only / split / graph-only */}
+          <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
             <button
-              onClick={() => setDrawerOpen(false)}
-              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '16px', padding: '0 4px', touchAction: 'manipulation' }}
-            >✕</button>
+              onClick={() => setMobileLayout('canvas')}
+              style={{ ...btnStyle(mobileLayout === 'canvas'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              title="Canvas fullscreen"
+            >▣</button>
+            <button
+              onClick={() => setMobileLayout('split')}
+              style={{ ...btnStyle(mobileLayout === 'split'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderLeft: '1px solid #45475a', borderRight: '1px solid #45475a' }}
+              title="Split view"
+            >▥</button>
+            <button
+              onClick={() => setMobileLayout('graph')}
+              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              title="Graph fullscreen"
+            >☰</button>
           </div>
-          {/* Palette fills rest of drawer */}
-          <NodePalette mode="drawer" onNodeAdded={() => setDrawerOpen(false)} />
+
+          {/* Error badge */}
+          {errorBadge}
+
+          {/* Examples button — browse starter graphs; picking one loads it
+              in place (loadExampleGraph replaces the current graph), tapping
+              the button again just closes the browser and keeps whatever's
+              currently on screen. */}
+          <button
+            onClick={() => setShowMobileExamples(true)}
+            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#a6e3a1', borderColor: '#a6e3a144', marginLeft: 'auto' }}
+            title="Browse examples"
+          >
+            ✦
+          </button>
+
+          {/* Action menu — was a direct-to-record button; now Record sits
+              alongside Reset/Import/Export since they're all "whole graph"
+              actions and none of them need to be one tap away. */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowMobileActionMenu(v => !v)}
+              style={{ ...btnStyle(showMobileActionMenu), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744' }}
+              title="Record, reset, import, export"
+            >
+              🎬
+            </button>
+            {showMobileActionMenu && (
+              <div
+                onMouseLeave={() => setShowMobileActionMenu(false)}
+                style={{
+                  position: 'absolute', bottom: 'calc(100% + 4px)', right: 0,
+                  background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '8px', padding: '4px',
+                  display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '140px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
+                }}
+              >
+                <button
+                  onClick={() => { setShowMobileActionMenu(false); setShowExport(true); }}
+                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#cba6f7', borderColor: '#cba6f744' }}
+                >🎬 Record</button>
+                <button
+                  onClick={() => {
+                    setShowMobileActionMenu(false);
+                    if (window.confirm('Clear all nodes and start over?')) loadExampleGraph('blank');
+                  }}
+                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#f38ba8', borderColor: '#f38ba844' }}
+                >✕ Reset</button>
+                <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
+                <button onClick={() => { setShowMobileActionMenu(false); importGraphFromFile(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
+                <button onClick={() => { setShowMobileActionMenu(false); exportGraph(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Examples browser */}
+        {showMobileExamples && (
+          <div
+            onClick={() => setShowMobileExamples(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 60, display: 'flex', alignItems: 'flex-end' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', maxHeight: '75vh', overflowY: 'auto', background: '#181825',
+                borderRadius: '16px 16px 0 0', border: '1px solid #313244', padding: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ flex: 1, fontSize: '14px', fontWeight: 700, color: '#cdd6f4' }}>Examples</div>
+                <button
+                  onClick={() => setShowMobileExamples(false)}
+                  style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                  title="Close"
+                >✕</button>
+              </div>
+              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => (
+                <div key={folder.label} style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em', marginBottom: '6px' }}>
+                    {folder.label.toUpperCase()}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
+                      <button
+                        key={k}
+                        onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
+                        style={{
+                          background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                          padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+                          cursor: 'pointer', touchAction: 'manipulation',
+                        }}
+                      >
+                        {EXAMPLE_GRAPHS[k].label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Export modal */}
         {showExport && (

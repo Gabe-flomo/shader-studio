@@ -317,7 +317,7 @@ export class ShaderAssembler {
   private detectStateful(): void {
     for (const node of this.allNodes) {
       if (node.type === 'prevFrame' || node.type === 'radianceCascadesApprox' ||
-          node.type === 'gaussianBlur' || node.type === 'radialBlur' ||
+          node.type === 'gaussianBlur' || node.type === 'bloom' || node.type === 'radialBlur' ||
           node.type === 'tiltShiftBlur' || node.type === 'lensBlur' ||
           node.type === 'motionBlur' || node.type === 'depthOfField') {
         this.isStateful = true;

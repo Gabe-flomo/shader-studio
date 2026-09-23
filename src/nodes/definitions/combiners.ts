@@ -314,7 +314,7 @@ export const DeepGlowNode: NodeDefinition = {
   defaultParams: { intensity: 1.5, radius: 0.08, saturation: 1.2, edgeSoftness: 0.01 },
   paramDefs: {
     intensity:    { label: 'Intensity',     type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
-    radius:       { label: 'Radius',        type: 'float', min: 0.01, max: 1.0,  step: 0.01 },
+    radius:       { label: 'Radius',        type: 'float', min: 0.01, max: 4.0,  step: 0.01, hint: 'Distance units, not pixels — scale to whatever feeds SDF. A raw SDF is usually 0.02–0.3; a raw scalar Field (e.g. Chladni) can need 1–4 for a visible bleed.' },
     saturation:   { label: 'Saturation',    type: 'float', min: 1.0,  max: 3.0,  step: 0.05 },
     edgeSoftness: { label: 'Edge Softness', type: 'float', min: 0.0,  max: 0.2,  step: 0.005 },
   },
@@ -332,7 +332,10 @@ vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float sat
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
-    const dVar = inputVars.d         || '1.0';
+    // No SDF wired — treat as "fully inside the shape everywhere" (d = 0) rather
+    // than "far outside" (which would make core/glow collapse to ~nothing), so a
+    // bare Color input still gets the full saturated-HDR + tonemap treatment.
+    const dVar = inputVars.d         || '0.0';
     const cVar = inputVars.color     || 'vec3(1.0)';
     const iVar = inputVars.intensity    || p(node.params.intensity, 1.5);
     const rVar = inputVars.radius       || p(node.params.radius, 0.08);

@@ -10,6 +10,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
 import { EXAMPLE_GRAPHS } from './exampleGraphs';
+import { groupNodesByRank } from './graphLayout';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
@@ -481,7 +482,7 @@ interface NodeGraphState {
 
 // ─── Example graph data ───────────────────────────────────────────────────────
 
-export { EXAMPLE_GRAPHS, DEFAULT_EXAMPLE } from './exampleGraphs';
+export { EXAMPLE_GRAPHS, DEFAULT_EXAMPLE, EXAMPLE_FOLDERS } from './exampleGraphs';
 
 
 // ─── Preview sub-graph builder ────────────────────────────────────────────────
@@ -3527,69 +3528,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const START_X = 40;
     const START_Y = 60;
 
-    /** Run the BFS column-layout algorithm on any array of nodes and return a
-     *  position map: nodeId → { x, y }. */
+    /** Run the BFS rank-layout algorithm (shared with the mobile drill-down
+     *  browser's home grid, via computeNodeRanks/groupNodesByRank — same
+     *  ranks, so a node lands in the same column here as it does in that
+     *  grid's row) on any array of nodes and return a position map. */
     function computeLayout(layoutNodes: import('../types/nodeGraph').GraphNode[]): Map<string, { x: number; y: number }> {
-      // Build map of nodeId → set of upstream nodeIds (nodes that feed INTO this node)
-      const upstreamOf: Map<string, Set<string>> = new Map();
-      for (const node of layoutNodes) {
-        if (!upstreamOf.has(node.id)) upstreamOf.set(node.id, new Set());
-        for (const input of Object.values(node.inputs)) {
-          if (input.connection) {
-            upstreamOf.get(node.id)!.add(input.connection.nodeId);
-          }
-        }
-      }
-
-      // Assign column = max(upstream columns) + 1, BFS order
-      const column: Map<string, number> = new Map();
-      const queue: string[] = [];
-
-      // Sources: nodes with no upstream
-      for (const node of layoutNodes) {
-        if (upstreamOf.get(node.id)!.size === 0) {
-          column.set(node.id, 0);
-          queue.push(node.id);
-        }
-      }
-
-      // BFS
-      while (queue.length > 0) {
-        const id = queue.shift()!;
-        const col = column.get(id)!;
-        for (const node of layoutNodes) {
-          if (upstreamOf.get(node.id)?.has(id)) {
-            const prev = column.get(node.id) ?? -1;
-            if (col + 1 > prev) {
-              column.set(node.id, col + 1);
-              queue.push(node.id);
-            }
-          }
-        }
-      }
-
-      // Any disconnected nodes not yet assigned get column 0
-      for (const node of layoutNodes) {
-        if (!column.has(node.id)) column.set(node.id, 0);
-      }
-
-      // Group nodes by column, sort within column by id for stability
-      const cols: Map<number, string[]> = new Map();
-      for (const [id, col] of column.entries()) {
-        if (!cols.has(col)) cols.set(col, []);
-        cols.get(col)!.push(id);
-      }
-      for (const arr of cols.values()) arr.sort();
-
-      // Assign positions — accumulate y per column so taller nodes don't overlap
+      const ranked = groupNodesByRank(layoutNodes);
       const newPositions: Map<string, { x: number; y: number }> = new Map();
-      const nodeMap = new Map(layoutNodes.map(n => [n.id, n]));
-      for (const [col, ids] of cols.entries()) {
+      for (const { rank, nodes: rankNodes } of ranked) {
         let y = START_Y;
-        for (const id of ids) {
-          newPositions.set(id, { x: START_X + col * 340, y });
-          const node = nodeMap.get(id);
-          y += (node ? estimateNodeHeight(node) : 210) + 24; // 24px gap between nodes
+        for (const node of rankNodes) {
+          newPositions.set(node.id, { x: START_X + rank * 340, y });
+          y += estimateNodeHeight(node) + 24; // 24px gap between nodes
         }
       }
       return newPositions;
