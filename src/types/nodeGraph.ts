@@ -178,9 +178,42 @@ export function migrateNodeParams(
 
   // Recurse into group subgraphs so nodes at any nesting depth are migrated
   if (result.params?.subgraph) {
-    const sg = result.params.subgraph as { nodes?: GraphNode[] };
+    const sg = result.params.subgraph as SubgraphData;
     if (Array.isArray(sg.nodes)) {
-      const migratedInner = sg.nodes.map(n => migrateNodeParams(n, getDef));
+      let migratedInner = sg.nodes.map(n => migrateNodeParams(n, getDef));
+
+      // Repair a group input port whose internal wiring predates
+      // GROUP_PORT_SENTINEL (or otherwise never got it): toNodeId/toInputKey
+      // is deprecated, display-only metadata — the *live* source of truth
+      // for a plain group's input is a subgraph node whose connection.nodeId
+      // === GROUP_PORT_SENTINEL. A file that only ever set toNodeId/
+      // toInputKey (an older save format, or a raw cross-scope nodeId that
+      // was never valid inside a subgraph's own scope) has a port that
+      // looks wired in the UI but silently compiles to that socket's type
+      // default (0.0, vec2(0.0), ...) — no error, just a wrong render. Only
+      // a connection that's unambiguously broken (points at an id that
+      // doesn't exist anywhere in this subgraph, and isn't the sentinel) is
+      // touched; a genuinely absent connection is left alone; disconnecting
+      // an input is a normal, intentional action elsewhere in the app and
+      // must stay that way here.
+      const idsInScope = new Set(migratedInner.map(n => n.id));
+      const inputPorts = sg.inputPorts ?? [];
+      if (inputPorts.length > 0) {
+        migratedInner = migratedInner.map(n => {
+          const port = inputPorts.find(p => p.toNodeId === n.id);
+          if (!port) return n;
+          const inp = n.inputs[port.toInputKey];
+          const conn = inp?.connection;
+          if (!inp || !conn) return n;
+          const dangling = conn.nodeId !== GROUP_PORT_SENTINEL && !idsInScope.has(conn.nodeId);
+          if (!dangling) return n;
+          return {
+            ...n,
+            inputs: { ...n.inputs, [port.toInputKey]: { ...inp, connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: port.key } } },
+          };
+        });
+      }
+
       result = { ...result, params: { ...result.params, subgraph: { ...sg, nodes: migratedInner } } };
     }
   }
