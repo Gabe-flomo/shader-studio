@@ -17,6 +17,8 @@ import type { GraphNode, DataType, LooseGroup } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
+import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
+import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
@@ -518,14 +520,58 @@ function InlineVizFrame({ node }: { node: GraphNode }) {
     // ratio assumed, squishing it and clipping whatever sits near the
     // canvas's own bottom/right edge. Desktop's own wrapper (VIZ_CONTAINER
     // in NodeInlineViz.tsx) is padding-free for the same reason.
+    // Full card width, not an arbitrary cap — it's collapsed behind the
+    // VISUAL toggle until you actually want it, so there's no ambient cost
+    // to letting a visualization that wants more room (a square field, a
+    // taller grid) actually take it; maxHeight is just a safety net against
+    // an extreme ratio blowing past a reasonable share of the viewport.
     <div
       ref={frameRef}
       style={{
         background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-        overflow: 'hidden', width: '100%', maxWidth: '280px', maxHeight: '280px',
+        overflow: 'hidden', width: '100%', maxHeight: '60vh',
       }}
     >
       <NodeInlineViz node={node} />
+    </div>
+  );
+}
+// Node types with no meaningful rendered preview — a terminal sink, a raw
+// scope probe, or a type that isn't really "a shader" on its own. Same
+// list desktop's own SKIP_PREVIEW (NodeComponent.tsx) excludes from its
+// 👁 in-card preview for the same reason.
+const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
+// ── Generic live-render fallback ─────────────────────────────────────────
+// For the ~75% of node types with no custom NodeInlineViz entry, this is
+// the same fallback desktop uses (NodeComponent.tsx's own isPreviewActive
+// branch): an actual rendered shader thumbnail, walking the node's
+// upstream ancestors into a self-contained shader (compileNodePreviewShader)
+// and rendering it on a shared offscreen-WebGL singleton
+// (nodePreviewRenderer). A static snapshot, not a live loop — recomputed
+// when the focused node changes, not every frame; INLINE_VIZ_TYPES types
+// get true live reactivity from their own canvas draw; this is "show
+// something correct" for everything else, same tradeoff desktop makes.
+function GenericPreviewViz({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    // `nodes` must already be the caller's active scope (getActiveNodes at
+    // its activeGroupPath) — a node's upstream ancestors only ever live in
+    // that same scope, since subgraphs are self-contained.
+    const fs = compileNodePreviewShader(node.id, nodes);
+    if (!fs) { setUrl(null); return; }
+    let cancelled = false;
+    const time = useNodeGraphStore.getState().currentTime ?? 0;
+    nodePreviewRenderer.renderNodePreview(node.id, fs, { u_time: { value: time } }, 256)
+      .then(dataUrl => { if (!cancelled) setUrl(dataUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, node.type]);
+
+  if (!url) return null;
+  return (
+    <div style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #313244', background: '#11111b' }}>
+      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
     </div>
   );
 }
@@ -2268,14 +2314,17 @@ export function MobileGraphBrowser() {
                 {/* Same live, node-type-specific canvas diagrams desktop
                     shows on the card itself (tone curves, gradient strips,
                     wave shapes, ...) — reused as-is via InlineVizFrame
-                    rather than reinvented. Collapsed by default: different
-                    node types want very different shapes (a wide equation
-                    strip vs. a square vector field), so reserving a fixed
+                    rather than reinvented. For the many node types with no
+                    custom diagram, GenericPreviewViz falls back to an
+                    actual rendered shader thumbnail (also matching desktop's
+                    own behavior) rather than showing nothing. Collapsed by
+                    default either way: different node types want very
+                    different shapes (a wide equation strip vs. a square
+                    vector field vs. a square render), so reserving a fixed
                     chunk of the card for it on every node — even ones you
                     never open it on — is more clutter than it's worth;
-                    opt-in instead, sized to whatever that visualization
-                    actually wants once shown. */}
-                {INLINE_VIZ_TYPES.has(node.type) && (
+                    opt-in instead, sized to whatever ends up shown. */}
+                {!SKIP_INLINE_PREVIEW.has(node.type) && (
                   <div>
                     <button
                       onClick={() => setVizExpanded(v => !v)}
@@ -2283,7 +2332,11 @@ export function MobileGraphBrowser() {
                     >
                       <span>{vizExpanded ? '▾' : '▸'} VISUAL</span>
                     </button>
-                    {vizExpanded && <InlineVizFrame key={node.id} node={node} />}
+                    {vizExpanded && (
+                      INLINE_VIZ_TYPES.has(node.type)
+                        ? <InlineVizFrame key={node.id} node={node} />
+                        : <GenericPreviewViz key={node.id} node={node} nodes={nodes} />
+                    )}
                   </div>
                 )}
               </div>
