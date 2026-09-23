@@ -1603,6 +1603,27 @@ export function MobileGraphBrowser() {
     pushFocus(newId);
   };
 
+  // ── Ghost-suggested connection ───────────────────────────────────────────
+  // For an unconnected input, the single best already-placed node that
+  // could feed it — same typesCompatible() scan connectCandidates below
+  // does for the "Connect Existing" picker, just proactive: surfaced right
+  // on the input's own row instead of waiting for a "+" tap to discover it
+  // exists. An exact-type match always wins over a coerced one (float→vec2,
+  // vec3→vec2, ...); among equally-good candidates, first-in-nodes wins —
+  // not a meaningful ordering on its own, just a deterministic one so the
+  // suggestion doesn't change between renders.
+  const bestConnectCandidate = (targetNodeId: string, type: string): { node: GraphNode; outKey: string } | undefined => {
+    let best: { node: GraphNode; outKey: string; exact: boolean } | undefined;
+    for (const n of nodes) {
+      if (n.id === targetNodeId || wouldCreateCycle(nodes, n.id, targetNodeId)) continue;
+      const outKey = firstCompatibleOutputKey(n, type);
+      if (!outKey) continue;
+      const exact = n.outputs[outKey].type === type;
+      if (!best || (exact && !best.exact)) best = { node: n, outKey, exact };
+    }
+    return best;
+  };
+
   // ── Connect-existing candidate list ──────────────────────────────────────
   const connectCandidates = useMemo(() => {
     if (!connectPicker) return [];
@@ -1884,6 +1905,12 @@ export function MobileGraphBrowser() {
       const isPortSourced = inp.connection?.nodeId === GROUP_PORT_SENTINEL;
       const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
       const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+      // Ghost-suggested wire — only worth computing for an actually-open
+      // real socket; an already-wired or group-port-sourced one has nothing
+      // to suggest.
+      const ghostCandidate = (isRealSocket && !upstream && !isPortSourced)
+        ? bestConnectCandidate(node.id, inp.type)
+        : undefined;
       // Externally-driven param: this node's own float slider for `key` is
       // exposed as a ps_ socket on the enclosing group, and that socket is
       // currently fed from outside — the outer wire wins at compile time, so
@@ -1953,6 +1980,22 @@ export function MobileGraphBrowser() {
                 style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
                 title="Disconnect"
               >✕</button>
+            </div>
+          )}
+          {/* Ghost-suggested wire — a preview of the best already-placed
+              candidate, not a real connection yet. One tap commits it via
+              the exact same connectNodes call the "Connect Existing" picker
+              uses; the "+" button above still opens that picker for when
+              the guess isn't the one you want. */}
+          {ghostCandidate && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                onClick={() => connectNodes(ghostCandidate.node.id, ghostCandidate.outKey, node.id, key)}
+                title="Tap to connect this suggestion"
+                style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', background: 'none', border: '1px dashed #45475a', color: '#6c7086' }}
+              >
+                ⇢ {labelFor(ghostCandidate.node)}
+              </button>
             </div>
           )}
           {isExternallyDriven && (
@@ -2840,6 +2883,17 @@ export function MobileGraphBrowser() {
     // A grouped node only ever appears inside its own folder entry, never
     // also duplicated in the plain rank grid below.
     const groupedIds = new Set(looseGroups.flatMap(g => g.memberIds));
+    // UV/Output pinned to the top/bottom of ROOT Home — the same "always
+    // first / always last" convention a group's own fixed ports row below
+    // uses, just for the two real node types that anchor every graph (the
+    // actual UV source, the single compile-mandatory sink) instead of a
+    // group's synthetic port placeholders. Root only: nothing stops a 'uv'
+    // node existing inside a plain group's subgraph too, but singleton-at-
+    // root is the case this solves, not "pin every uv node anywhere".
+    const isAtRoot = activeGroupPath.length === 0;
+    const pinnedUvNodes = isAtRoot ? nodes.filter(n => n.type === 'uv') : [];
+    const pinnedOutputNodes = isAtRoot ? nodes.filter(n => n.type === 'output') : [];
+    const pinnedIds = new Set([...pinnedUvNodes, ...pinnedOutputNodes].map(n => n.id));
     const chipStyleFor = (n: GraphNode) => {
       const selected = selectMode && selectedIds.includes(n.id);
       return {
@@ -2979,8 +3033,20 @@ export function MobileGraphBrowser() {
         </div>
       );
     };
+    // A pinned row still uses renderNodeChip — these are real nodes (tap
+    // navigates in, long-press opens the same context menu), just anchored
+    // out of the ordinary BFS-rank flow. withRef:true so they still
+    // participate in the connector-line overlay like an ordinary rank row.
+    const renderPinnedRow = (tag: 'uv' | 'output', pinnedNodes: GraphNode[]) => (
+      <div key={`pinned-${tag}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
+        <div style={{ width: '14px', flexShrink: 0, fontSize: '9px', fontWeight: 700, color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{tag === 'uv' ? 'IN' : 'OUT'}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+          {pinnedNodes.map(n => renderNodeChip(n, true))}
+        </div>
+      </div>
+    );
     const renderRankRow = (rank: number, rowNodes: GraphNode[]) => {
-      const visible = rowNodes.filter(n => !groupedIds.has(n.id));
+      const visible = rowNodes.filter(n => !groupedIds.has(n.id) && !pinnedIds.has(n.id));
       if (visible.length === 0) return null;
       return (
         <div key={`row-${rank}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
@@ -3007,6 +3073,8 @@ export function MobileGraphBrowser() {
         { rank: -1, render: () => renderFixedPortsRow('input' as const) },
         { rank: Infinity, render: () => renderFixedPortsRow('output' as const) },
       ] : []),
+      ...(pinnedUvNodes.length > 0 ? [{ rank: -1, render: () => renderPinnedRow('uv' as const, pinnedUvNodes) }] : []),
+      ...(pinnedOutputNodes.length > 0 ? [{ rank: Infinity, render: () => renderPinnedRow('output' as const, pinnedOutputNodes) }] : []),
     ].sort((a, b) => a.rank - b.rank);
     return (
       <div ref={homeContainerRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
