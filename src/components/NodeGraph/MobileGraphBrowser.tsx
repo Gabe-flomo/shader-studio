@@ -9,7 +9,7 @@
  * in the graph — never by dragging, always by picking from a list.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
@@ -1028,6 +1028,57 @@ export function MobileGraphBrowser() {
   // x position — reused here as row index, so a node's row in this grid
   // always matches the column it would land in on the canvas.
   const rankedRows = useMemo(() => groupNodesByRank(nodes), [nodes]);
+
+  // Connector overlay for the Home list (renderHome) — unlike the graph-
+  // diagram view (computeGraphLayout), chips here sit in a natural
+  // flex-wrap flow with no synthetic coordinates to draw lines from, so
+  // this measures actual chip positions via the DOM instead. Declared here
+  // (top level) rather than inside renderHome itself since it's a plain
+  // helper function called conditionally — hooks can't live inside it.
+  const homeContainerRef = useRef<HTMLDivElement>(null);
+  const homeChipRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const [homeEdges, setHomeEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number; key: string }>>([]);
+  const [homeSvgSize, setHomeSvgSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const container = homeContainerRef.current;
+    if (!container) return;
+    const remeasure = () => {
+      const cRect = container.getBoundingClientRect();
+      const points = new Map<string, { cx: number; top: number; bottom: number }>();
+      homeChipRefs.current.forEach((el, id) => {
+        const r = el.getBoundingClientRect();
+        points.set(id, {
+          cx: r.left - cRect.left + container.scrollLeft + r.width / 2,
+          top: r.top - cRect.top + container.scrollTop,
+          bottom: r.top - cRect.top + container.scrollTop + r.height,
+        });
+      });
+      const edges: Array<{ x1: number; y1: number; x2: number; y2: number; key: string }> = [];
+      for (const n of nodes) {
+        const to = points.get(n.id);
+        if (!to) continue;
+        for (const [key, inp] of Object.entries(n.inputs)) {
+          if (!inp.connection) continue;
+          const from = points.get(inp.connection.nodeId);
+          if (!from) continue;
+          edges.push({
+            x1: from.cx, y1: from.bottom,
+            x2: to.cx, y2: to.top,
+            key: `${inp.connection.nodeId}:${inp.connection.outputKey}->${n.id}:${key}`,
+          });
+        }
+      }
+      setHomeEdges(edges);
+      setHomeSvgSize({ width: container.scrollWidth, height: container.scrollHeight });
+    };
+    remeasure();
+    // Re-measure on width changes (device rotation, split-view divider drag,
+    // a chip's row rewrapping) — the ResizeObserver, not just the effect's
+    // own dependency array, is what catches those.
+    const ro = new ResizeObserver(remeasure);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [nodes, rankedRows, focusedNode, homeGraphView]);
 
   const pushFocus = (id: string) => { setFocusStack(stack => [...stack, id]); setForwardStack([]); };
   const jumpTo = (index: number) => { setFocusStack(stack => stack.slice(0, index + 1)); setForwardStack([]); };
@@ -2073,28 +2124,43 @@ export function MobileGraphBrowser() {
       return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>No nodes yet.</div>;
     }
     return (
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-        {rankedRows.map(({ rank, nodes: rowNodes }) => (
-          <div key={rank} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
-            <div style={{ width: '14px', flexShrink: 0, fontSize: '10px', color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{rank}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
-              {rowNodes.map(n => (
-                <button
-                  key={n.id}
-                  onClick={() => pushFocus(n.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-                    padding: '8px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
-                  }}
-                >
-                  <div style={dotStyle(nodeDotColor(n))} />
-                  {labelFor(n)}
-                </button>
-              ))}
+      <div ref={homeContainerRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
+        {/* Connector overlay — measured from actual chip positions (see the
+            useLayoutEffect above), not a synthetic layout, since these chips
+            sit in a natural flex-wrap flow. z-index:0 under the rows below
+            it so a line's endpoint tucks behind the chip it connects to,
+            same as the graph-diagram view's edges terminate at a node box's
+            edge rather than floating on top of it. */}
+        <svg
+          width={homeSvgSize.width} height={homeSvgSize.height}
+          style={{ position: 'absolute', top: 0, left: 0, zIndex: 0, pointerEvents: 'none' }}
+        >
+          <GraphEdges edges={homeEdges} />
+        </svg>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {rankedRows.map(({ rank, nodes: rowNodes }) => (
+            <div key={rank} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
+              <div style={{ width: '14px', flexShrink: 0, fontSize: '10px', color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{rank}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+                {rowNodes.map(n => (
+                  <button
+                    key={n.id}
+                    ref={el => { if (el) homeChipRefs.current.set(n.id, el); else homeChipRefs.current.delete(n.id); }}
+                    onClick={() => pushFocus(n.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                      padding: '8px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
+                    }}
+                  >
+                    <div style={dotStyle(nodeDotColor(n))} />
+                    {labelFor(n)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
