@@ -1236,6 +1236,12 @@ export function MobileGraphBrowser() {
   const [groupPortBuilder, setGroupPortBuilder] = useState<null | {
     groupId: string; dir: 'input' | 'output'; returnPath: string[]; stage: 'choose' | 'pickExisting' | 'addNew';
   }>(null);
+  // Home's "+ Add Node" FAB — places a freestanding node with no wiring
+  // target, into whatever scope Home is currently showing (root or inside
+  // a group), same scoping NodeSearchPalette's own addNode() already does.
+  const [homeAddNodeOpen, setHomeAddNodeOpen] = useState(false);
+  // Long-press context menu on a Home chip — holds the target node's id.
+  const [longPressMenuFor, setLongPressMenuFor] = useState<string | null>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
   // 'rank' is the synthetic BFS-depth grid (computeGraphLayout); 'real' mirrors
   // the desktop canvas's actual spatial layout (computeRealLayout), read-only.
@@ -1386,6 +1392,14 @@ export function MobileGraphBrowser() {
   // helper function called conditionally — hooks can't live inside it.
   const homeContainerRef = useRef<HTMLDivElement>(null);
   const homeChipRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  // Long-press detection for Home's node chips — a ref (not local closures
+  // recreated each render) so a re-render mid-press doesn't orphan a
+  // pending timer. Keyed by node id: `fired` stays false while the timer is
+  // pending, flips true when it fires, and the entry is only deleted once
+  // consumed (see longPressWasFired) — touchend/mouseup must NOT clear an
+  // already-fired entry, or the click that follows the release would read
+  // it as a plain tap and navigate right after opening the menu.
+  const longPressRef = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; fired: boolean; x: number; y: number }>>(new Map());
   const [homeEdges, setHomeEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number; key: string }>>([]);
   const [homeSvgSize, setHomeSvgSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
@@ -1445,6 +1459,39 @@ export function MobileGraphBrowser() {
     setFocusStack(stack => [...stack, id]); setForwardStack([]);
   };
   const viewGroupPorts = (id: string) => { setFocusStack(stack => [...stack, id]); setForwardStack([]); };
+  // ── Long-press gesture (Home chips) ──────────────────────────────────────
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_MOVE_TOLERANCE = 10;
+  const longPressStart = (id: string, x: number, y: number, onLongPress: () => void) => {
+    const existing = longPressRef.current.get(id);
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      const entry = longPressRef.current.get(id);
+      if (entry) entry.fired = true;
+      onLongPress();
+    }, LONG_PRESS_MS);
+    longPressRef.current.set(id, { timer, fired: false, x, y });
+  };
+  const longPressMove = (id: string, x: number, y: number) => {
+    const entry = longPressRef.current.get(id);
+    if (!entry || entry.fired) return;
+    if (Math.abs(x - entry.x) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(y - entry.y) > LONG_PRESS_MOVE_TOLERANCE) {
+      clearTimeout(entry.timer);
+      longPressRef.current.delete(id);
+    }
+  };
+  const longPressClearPending = (id: string) => {
+    const entry = longPressRef.current.get(id);
+    if (entry && !entry.fired) { clearTimeout(entry.timer); longPressRef.current.delete(id); }
+  };
+  // Consumed once by the chip's own onClick — true means the long-press
+  // already handled this gesture, so the click shouldn't also navigate.
+  const longPressWasFired = (id: string): boolean => {
+    const entry = longPressRef.current.get(id);
+    if (!entry) return false;
+    longPressRef.current.delete(id);
+    return entry.fired;
+  };
   const toggleSelected = (id: string) => setSelectedIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   const commitLooseGroup = () => {
     if (selectedIds.length < 2) return;
@@ -2783,7 +2830,12 @@ export function MobileGraphBrowser() {
   // matches that arrangement.
   function renderHome() {
     if (nodes.length === 0) {
-      return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>No nodes yet.</div>;
+      return (
+        <div style={{ flex: 1, position: 'relative', padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>
+          No nodes yet.
+          {renderAddNodeFab()}
+        </div>
+      );
     }
     // A grouped node only ever appears inside its own folder entry, never
     // also duplicated in the plain rank grid below.
@@ -2805,12 +2857,24 @@ export function MobileGraphBrowser() {
     // tap target.
     const renderNodeChip = (n: GraphNode, withRef: boolean) => {
       const isUnsealedGroup = GROUP_TYPES.has(n.type) && !n.sealed;
+      // Long-press (or mouse-hold, for desktop-browser testing) opens the
+      // Delete / "add a node to this socket" menu; a normal tap still just
+      // navigates in, same as before — see longPressWasFired.
       const chip = (
         <button
           key={n.id}
           ref={withRef ? (el => { if (el) homeChipRefs.current.set(n.id, el); else homeChipRefs.current.delete(n.id); }) : undefined}
-          onClick={() => (selectMode ? toggleSelected(n.id) : pushFocus(n.id))}
-          style={chipStyleFor(n)}
+          onClick={() => { if (longPressWasFired(n.id)) return; selectMode ? toggleSelected(n.id) : pushFocus(n.id); }}
+          onTouchStart={e => { const t = e.touches[0]; longPressStart(n.id, t.clientX, t.clientY, () => setLongPressMenuFor(n.id)); }}
+          onTouchMove={e => { const t = e.touches[0]; longPressMove(n.id, t.clientX, t.clientY); }}
+          onTouchEnd={() => longPressClearPending(n.id)}
+          onTouchCancel={() => longPressClearPending(n.id)}
+          onMouseDown={e => longPressStart(n.id, e.clientX, e.clientY, () => setLongPressMenuFor(n.id))}
+          onMouseMove={e => longPressMove(n.id, e.clientX, e.clientY)}
+          onMouseUp={() => longPressClearPending(n.id)}
+          onMouseLeave={() => longPressClearPending(n.id)}
+          onContextMenu={e => e.preventDefault()}
+          style={{ ...chipStyleFor(n), WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
         >
           <div style={dotStyle(nodeDotColor(n))} />
           {labelFor(n)}{isUnsealedGroup ? ' ›' : ''}
@@ -3005,7 +3069,37 @@ export function MobileGraphBrowser() {
             </button>
           </div>
         )}
+        {!selectMode && renderAddNodeFab()}
       </div>
+    );
+  }
+  // Floating "+" — the only way to place a completely freestanding node
+  // (no pre-existing socket to wire it to). Reuses NodeSearchPalette with
+  // no type filter and no spawnPosition, so it lands in whatever scope
+  // Home is currently showing (root or inside a group) via addNode()'s own
+  // activeGroupPath scoping, same as every other "Add New Node" flow here.
+  function renderAddNodeFab() {
+    return (
+      <>
+        <button
+          onClick={() => setHomeAddNodeOpen(true)}
+          title="Add a new node"
+          style={{
+            position: 'absolute', right: '14px', bottom: '14px', zIndex: 3,
+            width: '44px', height: '44px', borderRadius: '50%',
+            background: '#89b4fa', border: 'none', color: '#181825',
+            fontSize: '22px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          +
+        </button>
+        <NodeSearchPalette
+          open={homeAddNodeOpen}
+          onClose={() => setHomeAddNodeOpen(false)}
+          onNodePlaced={id => { setHomeAddNodeOpen(false); pushFocus(id); }}
+        />
+      </>
     );
   }
 
@@ -3221,8 +3315,91 @@ export function MobileGraphBrowser() {
 
       {renderGraphNavigatorOverlay()}
       {renderGroupPortBuilderOverlay()}
+      {renderLongPressMenu()}
     </div>
   );
+
+  // ── Long-press context menu — top-level (not nested in renderHome) so it
+  // keeps rendering across whatever renderHome does; also lets its own
+  // "feed this input"/"add output consumer" rows reuse the exact same
+  // pending/setPending → renderSocketOverlays flow every other socket "+"
+  // button uses, by jumping focus onto the node first (renderSocketOverlays
+  // only renders for the currently-focused node).
+  function renderLongPressMenu() {
+    if (!longPressMenuFor) return null;
+    const node = nodes.find(n => n.id === longPressMenuFor);
+    if (!node) return null;
+    const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinition(node.type)?.anchored;
+    const canDelete = node.type !== 'output' && !originalLocked;
+    const openInputs = Object.entries(node.inputs).filter(([, inp]) => !inp.connection);
+    const outputs = Object.entries(node.outputs);
+    const close = () => setLongPressMenuFor(null);
+    const feedInput = (key: string, type: string) => {
+      setFocusStack([node.id]); setForwardStack([]);
+      setPending({ dir: 'input', nodeId: node.id, key, type });
+      close();
+    };
+    const feedOutput = (key: string, type: string) => {
+      setFocusStack([node.id]); setForwardStack([]);
+      setPending({ dir: 'output', nodeId: node.id, key, type });
+      close();
+    };
+    const rowBtnStyle: React.CSSProperties = {
+      display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 10px',
+      background: '#181825', border: '1px solid #313244', borderRadius: '8px', marginBottom: '6px',
+      color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+    };
+    const sectionLabelStyle: React.CSSProperties = {
+      fontSize: '10px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+      color: '#6c7086', margin: '10px 0 6px',
+    };
+    return (
+      <div
+        onClick={close}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 46, display: 'flex', alignItems: 'flex-end' }}
+      >
+        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '80%', overflowY: 'auto', background: '#1e1e2e', borderRadius: '16px 16px 0 0', border: '1px solid #45475a', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+            <div style={dotStyle(nodeDotColor(node))} />
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
+          </div>
+          {canDelete && (
+            <button
+              onClick={() => { removeNode(node.id); close(); }}
+              style={{ ...rowBtnStyle, border: '1px solid #f38ba866', color: '#f38ba8' }}
+            >
+              🗑 Delete
+            </button>
+          )}
+          {openInputs.length > 0 && (
+            <>
+              <div style={sectionLabelStyle}>Add a node to an open input</div>
+              {openInputs.map(([key, inp]) => (
+                <button key={key} onClick={() => feedInput(key, inp.type)} style={rowBtnStyle}>
+                  <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
+                  {inp.label}
+                </button>
+              ))}
+            </>
+          )}
+          {outputs.length > 0 && (
+            <>
+              <div style={sectionLabelStyle}>Add a node consuming an output</div>
+              {outputs.map(([key, out]) => (
+                <button key={key} onClick={() => feedOutput(key, out.type)} style={rowBtnStyle}>
+                  <div style={dotStyle(TYPE_COLORS[out.type] ?? '#888')} />
+                  {out.label}
+                </button>
+              ))}
+            </>
+          )}
+          {!canDelete && openInputs.length === 0 && outputs.length === 0 && (
+            <div style={{ fontSize: '11px', color: '#585b70', padding: '4px 0' }}>Nothing available for this node.</div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ── Group port builder overlay — top-level (not nested in a node's own
   // detail) since "Add Output" → "Add New Node" briefly enters the group,
