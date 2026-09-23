@@ -9,7 +9,7 @@
  * in the graph — never by dragging, always by picking from a list.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
@@ -19,6 +19,8 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
+import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
+import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -162,6 +164,46 @@ const addBtnStyle: React.CSSProperties = {
   borderRadius: '6px', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: '18px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
 };
+// Compact square icon button for tight rows (e.g. "+" / "✕" sitting side by
+// side on an Expr Block input row) — smaller than addBtnStyle so a pair of
+// them doesn't force the row taller than the text field next to them.
+const smallIconBtnStyle = (color: string): React.CSSProperties => ({
+  flexShrink: 0, background: 'none', border: 'none', color,
+  width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '15px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
+});
+
+// ── Node preview thumbnail ──────────────────────────────────────────────────
+// Reuses desktop's preview pipeline (compileNodePreviewShader walks the
+// node's upstream ancestors into a self-contained shader; nodePreviewRenderer
+// is a shared offscreen-WebGL singleton, not tied to the desktop canvas) to
+// render a small static snapshot next to the Remove button. Recomputed only
+// when the focused node changes, not on every param edit — same "snapshot,
+// not live" behavior as desktop's 👁 toggle. Callers must pass `key={nodeId}`
+// so switching nodes remounts this fresh (clears the stale thumbnail) rather
+// than reusing state across nodes.
+function NodePreviewThumb({ nodeId, nodeType }: { nodeId: string; nodeType: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nodes = useNodeGraphStore.getState().nodes;
+    const fs = compileNodePreviewShader(nodeId, nodes);
+    if (!fs) return;
+    let cancelled = false;
+    const time = useNodeGraphStore.getState().currentTime ?? 0;
+    nodePreviewRenderer.renderNodePreview(nodeId, fs, { u_time: { value: time } }, 88)
+      .then(dataUrl => { if (!cancelled) setUrl(dataUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [nodeId, nodeType]);
+
+  if (!url) return null;
+  return (
+    <div style={{ width: '36px', height: '36px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #313244', flexShrink: 0, background: '#11111b' }}>
+      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+    </div>
+  );
+}
 
 // ── Expr Block editor (mobile) ──────────────────────────────────────────────
 const EXPR_TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
@@ -177,9 +219,9 @@ const exprSelectStyle: React.CSSProperties = {
 // Thin highlight stroke around whichever input/line card currently has focus
 // — makes it obvious which element you're editing on a small screen.
 const exprCardStyle = (focused: boolean): React.CSSProperties => ({
-  background: '#1e1e2e', borderRadius: '8px', padding: '10px',
+  background: '#1e1e2e', borderRadius: '8px', padding: '7px 8px',
   border: focused ? '1px solid #89b4fa' : '1px solid #313244',
-  display: 'flex', flexDirection: 'column', gap: '8px',
+  display: 'flex', flexDirection: 'column', gap: '6px',
 });
 type ExprInputDef = { name: string; type: DataType; slider: { min: number; max: number } | null; carry?: boolean };
 type ExprLine = { lhs: string; op: string; rhs: string };
@@ -192,28 +234,50 @@ function wordBeforeCursor(str: string, cursor: number): { start: number; word: s
   return { start, word: str.slice(start, cursor) };
 }
 
-// ── GLSL expression input with inline builtin-function autocomplete ────────
+// The only global uniforms every compiled shader (and every Expr Block's
+// scope) can always reference, regardless of what the node declares —
+// suggested after local variables but before builtin functions.
+const GLSL_GLOBALS = ['u_time', 'u_resolution'];
+
+type ExprSuggestion = { label: string; insert: string; kind: 'variable' | 'global' | 'function' };
+
+// ── GLSL expression input with inline autocomplete ─────────────────────────
 // Used for any freeform GLSL expression field (a line's RHS, the result
 // expression) — not the LHS, which is normally just a variable/component
-// name. As you type an identifier, matching entries from the shared
-// GLSL_PALETTE (sin, mix, clamp, …) appear as a chip row below the field;
-// tapping one replaces the partial word with the full snippet and drops the
-// cursor inside its parens, ready to type the first argument.
-function GlslExprInput({ value, onChange, placeholder, style }: {
+// name. As you type an identifier, matching suggestions appear as a chip row
+// below the field, ranked local variables first (this block's declared
+// inputs), then the couple of always-available globals, then builtin
+// functions from GLSL_PALETTE; tapping one replaces the partial word with
+// the full snippet and drops the cursor inside its parens (functions) or
+// right after (variables/globals), ready to keep typing.
+function GlslExprInput({ value, onChange, placeholder, style, variables = [] }: {
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
   style: React.CSSProperties;
+  variables?: string[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
 
-  const matches = useMemo(() => {
+  const matches = useMemo<ExprSuggestion[]>(() => {
     if (query.length === 0) return [];
     const q = query.toLowerCase();
-    return GLSL_PALETTE.filter(e => e.label.toLowerCase().startsWith(q)).slice(0, 8);
-  }, [query]);
+    const varMatches: ExprSuggestion[] = variables
+      .filter(v => v.toLowerCase().startsWith(q))
+      .map(v => ({ label: v, insert: v, kind: 'variable' }));
+    const globalMatches: ExprSuggestion[] = GLSL_GLOBALS
+      .filter(v => v.toLowerCase().startsWith(q))
+      .map(v => ({ label: v, insert: v, kind: 'global' }));
+    // GLSL_PALETTE's Constants group also lists u_time (for desktop's insert
+    // palette) — skip it here since GLSL_GLOBALS already covers it, ranked
+    // higher, and we don't want the same chip appearing twice.
+    const fnMatches: ExprSuggestion[] = GLSL_PALETTE
+      .filter(e => e.label.toLowerCase().startsWith(q) && !GLSL_GLOBALS.includes(e.label))
+      .map(e => ({ label: e.label, insert: e.insert, kind: 'function' }));
+    return [...varMatches, ...globalMatches, ...fnMatches].slice(0, 8);
+  }, [query, variables]);
 
   const syncQueryFromCaret = (el: HTMLInputElement) => {
     const cursor = el.selectionStart ?? el.value.length;
@@ -262,12 +326,13 @@ function GlslExprInput({ value, onChange, placeholder, style }: {
         }}>
           {matches.map(m => (
             <button
-              key={m.label}
+              key={`${m.kind}:${m.label}`}
               onMouseDown={e => e.preventDefault()}
               onClick={() => applySuggestion(m.insert)}
               style={{
                 flexShrink: 0, background: '#313244', border: '1px solid #45475a', borderRadius: '4px',
-                padding: '4px 8px', fontSize: '11px', color: '#a6e3a1', fontFamily: 'monospace',
+                padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace',
+                color: m.kind === 'variable' ? '#89b4fa' : m.kind === 'global' ? '#cba6f7' : '#a6e3a1',
                 cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap',
               }}
             >
@@ -287,11 +352,12 @@ function GlslExprInput({ value, onChange, placeholder, style }: {
 // neighboring row's midpoint, that row swaps position in the array (and the
 // drag continues from there) — the row you're holding is translateY'd to
 // visually track the pointer between swaps.
-function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine }: {
+function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables }: {
   lines: ExprLine[];
   onReorder: (next: ExprLine[]) => void;
   onUpdateLine: (idx: number, field: keyof ExprLine, value: string) => void;
   onRemoveLine: (idx: number) => void;
+  variables: string[];
 }) {
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [drag, setDrag] = useState<{ index: number; startY: number; currentY: number } | null>(null);
@@ -369,6 +435,7 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine }: {
                 onChange={v => onUpdateLine(i, 'rhs', v)}
                 placeholder="expression…"
                 style={{ ...exprTextInputStyle, flex: 1, color: '#a6e3a1' }}
+                variables={variables}
               />
             </div>
           </div>
@@ -390,6 +457,12 @@ export function MobileGraphBrowser() {
   const [pending, setPending] = useState<PendingSocket | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
+  // The graph diagram is reachable from anywhere (not just Home) via the
+  // breadcrumb's "⋈ Graph" button — at Home it toggles the list/graph view
+  // in place (homeGraphView above); inside a node it opens this overlay
+  // instead, highlighting the current node, so you can jump straight to any
+  // other node without walking back up the drill-down stack.
+  const [showGraphOverlay, setShowGraphOverlay] = useState(false);
   // Expr Block nodes have their own two-mode editor (Inputs / Output); it
   // always opens on Inputs, the same as a freshly-added block would. Reset
   // during render (not an effect) when focus moves to a different node —
@@ -478,7 +551,8 @@ export function MobileGraphBrowser() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ fontWeight: 700, fontSize: '15px', color: '#cdd6f4', flex: 1 }}>{labelFor(node)}</div>
+          <div style={{ fontWeight: 700, fontSize: '15px', color: '#cdd6f4', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
+          <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
           {node.type !== 'output' && focusStack.length > 0 && (
             <button
               onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
@@ -691,7 +765,8 @@ export function MobileGraphBrowser() {
     return (
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ fontWeight: 700, fontSize: '15px', color: '#cdd6f4', flex: 1 }}>{labelFor(node)}</div>
+          <div style={{ fontWeight: 700, fontSize: '15px', color: '#cdd6f4', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
+          <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
           <button
             onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
             style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
@@ -734,7 +809,7 @@ export function MobileGraphBrowser() {
                     onBlur={() => setFocusedInputIdx(null)}
                     style={exprCardStyle(focusedInputIdx === idx)}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
                       <input
                         type="text"
@@ -746,26 +821,23 @@ export function MobileGraphBrowser() {
                       <select value={inp.type} onChange={e => retypeInput(idx, e.target.value as DataType)} style={exprSelectStyle}>
                         {EXPR_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
-                      <button
-                        onClick={() => removeInput(idx)}
-                        title="Remove input"
-                        style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
-                      >✕</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: 'auto' }}>
+                        {!upstream && (
+                          <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key: inp.name, type: inp.type })}>+</button>
+                        )}
+                        <button style={smallIconBtnStyle('#f38ba8')} title="Remove input" onClick={() => removeInput(idx)}>✕</button>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '18px' }}>
-                      {upstream ? (
-                        <>
-                          <button style={chipStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
-                          <button
-                            onClick={() => disconnectInput(node.id, inp.name)}
-                            style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
-                            title="Disconnect"
-                          >✕</button>
-                        </>
-                      ) : (
-                        <button style={addBtnStyle} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key: inp.name, type: inp.type })}>+</button>
-                      )}
-                    </div>
+                    {upstream && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '18px' }}>
+                        <button style={chipStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+                        <button
+                          onClick={() => disconnectInput(node.id, inp.name)}
+                          style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                          title="Disconnect"
+                        >✕</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -790,7 +862,7 @@ export function MobileGraphBrowser() {
                 {lines.length === 0 && (
                   <div style={{ fontSize: '11px', color: '#45475a', fontFamily: 'monospace', marginBottom: '8px' }}>No lines yet.</div>
                 )}
-                <ExprLinesList lines={lines} onReorder={setLines} onUpdateLine={updateLine} onRemoveLine={removeLine} />
+                <ExprLinesList lines={lines} onReorder={setLines} onUpdateLine={updateLine} onRemoveLine={removeLine} variables={customInputs.map(i => i.name)} />
                 <button
                   onClick={addLine}
                   style={{ marginTop: '8px', background: '#a6e3a111', border: '1px solid #a6e3a133', color: '#a6e3a1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
@@ -803,7 +875,7 @@ export function MobileGraphBrowser() {
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>RESULT</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '11px', color: '#6c7086', fontFamily: 'monospace' }}>return</span>
-                  <GlslExprInput value={result} onChange={updateResult} placeholder="p" style={{ ...exprTextInputStyle, flex: 1, color: '#89b4fa' }} />
+                  <GlslExprInput value={result} onChange={updateResult} placeholder="p" style={{ ...exprTextInputStyle, flex: 1, color: '#89b4fa' }} variables={customInputs.map(i => i.name)} />
                 </div>
               </div>
 
@@ -874,6 +946,58 @@ export function MobileGraphBrowser() {
               </button>
             );
           })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Graph navigator overlay ───────────────────────────────────────────────
+  // Reachable from the breadcrumb's "⋈ Graph" button while inside any node
+  // (not just Home) — same diagram as the Home graph view, but the currently
+  // focused node is highlighted, and tapping any node teleports straight to
+  // it (resets the drill-down stack to just that node) rather than requiring
+  // you to walk back up through Home first.
+  function renderGraphNavigatorOverlay() {
+    if (!showGraphOverlay) return null;
+    const layout = computeGraphLayout(nodes, rankedRows);
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: '#181825', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+          <div style={{ flex: 1, fontSize: '13px', fontWeight: 700, color: '#89b4fa' }}>Tap a node to jump there</div>
+          <button
+            onClick={() => setShowGraphOverlay(false)}
+            style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+            title="Close"
+          >✕</button>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
+            <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+              <GraphEdges edges={layout.edges} />
+            </svg>
+            {nodes.map(n => {
+              const p = layout.pos.get(n.id);
+              if (!p) return null;
+              const isCurrent = n.id === focusedId;
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => { setFocusStack([n.id]); setShowGraphOverlay(false); }}
+                  style={{
+                    position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
+                    display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
+                    background: isCurrent ? '#313244' : '#1e1e2e',
+                    border: isCurrent ? '2px solid #89b4fa' : '1px solid #313244',
+                    borderRadius: '6px', padding: '0 8px', fontSize: '11px', color: '#cdd6f4',
+                    cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                >
+                  <div style={dotStyle(nodeDotColor(n))} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -979,24 +1103,24 @@ export function MobileGraphBrowser() {
             </span>
           );
         })}
-        {!focusedNode && (
-          <button
-            onClick={() => setHomeGraphView(v => !v)}
-            style={{
-              marginLeft: 'auto', flexShrink: 0,
-              background: homeGraphView ? '#313244' : 'none', border: '1px solid #45475a', color: '#89b4fa',
-              borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
-            }}
-            title="See the flow as a connected graph instead of a plain list"
-          >
-            {homeGraphView ? '☰ List' : '⋈ Graph'}
-          </button>
-        )}
+        <button
+          onClick={() => (focusedNode ? setShowGraphOverlay(true) : setHomeGraphView(v => !v))}
+          style={{
+            marginLeft: 'auto', flexShrink: 0,
+            background: !focusedNode && homeGraphView ? '#313244' : 'none', border: '1px solid #45475a', color: '#89b4fa',
+            borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
+          }}
+          title="See the flow as a connected graph"
+        >
+          {!focusedNode && homeGraphView ? '☰ List' : '⋈ Graph'}
+        </button>
       </div>
 
       {focusedNode
         ? (focusedNode.type === 'exprNode' ? renderExprBlockDetail(focusedNode) : renderNodeDetail(focusedNode))
         : (homeGraphView ? renderHomeGraph() : renderHome())}
+
+      {renderGraphNavigatorOverlay()}
     </div>
   );
 }
