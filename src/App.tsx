@@ -309,6 +309,13 @@ function App() {
 
   // Mobile: canvas-only / split / graph-only layout mode
   const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph' | 'code'>('split');
+  // Mobile split mode: how much vertical space (in vh) the canvas pane gets
+  // — used to be a fixed 42vh with no way to change it. Now draggable via
+  // the divider between the two panes (see mobileSplitDragRef below), with
+  // the canvas itself always kept square by capping its width to the same
+  // vh value, so a shorter canvas pane doesn't stretch it wide.
+  const [mobileCanvasVh, setMobileCanvasVh] = useState(42);
+  const mobileSplitDragRef = useRef(false);
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -639,7 +646,7 @@ function App() {
             <div style={{
               position: 'relative',
               flex: mobileLayout === 'canvas' ? 1 : '0 0 auto',
-              height: mobileLayout === 'canvas' ? undefined : '42vh',
+              height: mobileLayout === 'canvas' ? undefined : `${mobileCanvasVh}vh`,
               minHeight: 0,
               background: '#000',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -647,8 +654,8 @@ function App() {
             }}>
               <div style={{
                 position: 'relative',
-                width: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
-                height: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
+                width: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
+                height: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
               }}>
                 <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
                 <AudioMasterVolumeWidget />
@@ -703,6 +710,38 @@ function App() {
               </div>
 
               <MobileNodeGraphOverlay />
+            </div>
+          )}
+
+          {/* Drag to resize the canvas/graph split — used to be a fixed
+              42vh with no way to change it. The canvas pane itself stays
+              square (width capped to the same vh value above), so dragging
+              this only ever changes how much of the screen it gets, not its
+              aspect ratio. Only shown in split mode — canvas-only/graph-only
+              already give one pane the full remaining space. */}
+          {showCanvasPane && showGraphPane && (
+            <div
+              onPointerDown={e => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                mobileSplitDragRef.current = true;
+              }}
+              onPointerMove={e => {
+                if (!mobileSplitDragRef.current) return;
+                const vh = (e.clientY / window.innerHeight) * 100;
+                setMobileCanvasVh(Math.max(15, Math.min(75, vh)));
+              }}
+              onPointerUp={e => {
+                mobileSplitDragRef.current = false;
+                if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+              }}
+              onPointerCancel={() => { mobileSplitDragRef.current = false; }}
+              style={{
+                flexShrink: 0, height: '18px', margin: '-9px 0', zIndex: 23, position: 'relative',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'ns-resize', touchAction: 'none',
+              }}
+            >
+              <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#45475a' }} />
             </div>
           )}
 
