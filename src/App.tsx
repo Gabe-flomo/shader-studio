@@ -640,6 +640,14 @@ function App() {
                   ) : null}
                 </div>
               )}
+
+              {/* Play/pause + reset, bottom-center of the canvas pane —
+                  mobile has no side dock to float this beside (unlike
+                  desktop's TimeControlsStrip next to the divider), so it
+                  overlays the canvas here instead. */}
+              <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 22 }}>
+                <TimeControlsStrip />
+              </div>
             </div>
           )}
 
