@@ -31,6 +31,12 @@ import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
+  // Groups get their own color rather than their first output's type color —
+  // a group's output type is often incidental (whatever its last-added port
+  // happens to be), and the point of the dot here is "this is a group, a
+  // subgraph," not "this outputs a vec3." Same mauve used everywhere else
+  // this session for group-related UI (⛓ port chips, Folder rows, etc).
+  if (GROUP_TYPES.has(n.type)) return '#cba6f7';
   const outType = Object.values(n.outputs)[0]?.type;
   return TYPE_COLORS[outType ?? 'float'] ?? '#888';
 }
@@ -1284,6 +1290,10 @@ export function MobileGraphBrowser() {
   // screen, so re-showing them would either dangle or (worse) coincidentally
   // resolve to a same-id node in the new scope.
   const [groupPathFor, setGroupPathFor] = useState('');
+  // See the groupPathFor effect below — set this immediately before an
+  // action that changes activeGroupPath to also land on a specific node's
+  // detail in that new scope, instead of that scope's Home.
+  const pendingFocusAfterScopeChangeRef = useRef<string | null>(null);
   // Inline "Rename Group" field (plain 'group' type only) — desktop uses
   // window.prompt() for this; not reused here since a native prompt is
   // unreliable inside a Tauri webview (same reason Reset's confirm dialog
@@ -1306,7 +1316,18 @@ export function MobileGraphBrowser() {
   const groupPathKey = activeGroupPath.join('/');
   if (groupPathFor !== groupPathKey) {
     setGroupPathFor(groupPathKey);
-    setFocusStack([]);
+    // Normally landing on this scope's Home ([]) is exactly right — but a
+    // couple of actions (viewing a just-exited group's own ports page,
+    // returning to a group's card after "Add Output" placed a new internal
+    // node) want to change scope AND land on a specific node's detail in
+    // the SAME action. Since this reset runs synchronously during render,
+    // whoever wants that has to register it in a ref *before* triggering
+    // the scope change — setting focusStack directly from their own
+    // event handler would just get overwritten by this same reset one
+    // render later.
+    const pending = pendingFocusAfterScopeChangeRef.current;
+    pendingFocusAfterScopeChangeRef.current = null;
+    setFocusStack(pending ? [pending] : []);
     setForwardStack([]);
     setSelectMode(false);
     setSelectedIds([]);
@@ -1444,6 +1465,16 @@ export function MobileGraphBrowser() {
   // itself changes, so relying on it here would leave a deeper focusStack
   // stuck in place when exitToDepth is a no-op on an unchanged path.
   const jumpToGroupDepth = (depth: number) => { exitToDepth(depth); setFocusStack([]); setForwardStack([]); };
+  // From inside a group's Home list, tapping its "fixed" Group Inputs/
+  // Outputs row steps back out one level and straight onto that group's
+  // own card, open to the matching tab — the same ports page reached from
+  // outside via its ⚙ icon, just the other direction.
+  const viewParentGroupPorts = (tab: 'inputs' | 'outputs') => {
+    if (!activeGroupId) return;
+    pendingFocusAfterScopeChangeRef.current = activeGroupId;
+    setNodeTab(tab);
+    exitToDepth(activeGroupPath.length - 1);
+  };
   const goBack = () => {
     if (focusStack.length === 0) return;
     setForwardStack(f => [focusStack[focusStack.length - 1], ...f]);
@@ -1575,22 +1606,32 @@ export function MobileGraphBrowser() {
       addGroupInputWithSource(groupPortBuilder.groupId, sourceId, sourceOutKey, sourceType, sourceLabel);
     } else {
       exposeGroupOutput(groupPortBuilder.groupId, sourceId, sourceOutKey, sourceType, sourceLabel);
-      // Restore the scope "Add New Node" entered (a no-op if we never left,
-      // i.e. "Connect Existing" was used instead). This drops back to that
-      // scope's Home rather than the group's own card — the groupPathFor
-      // effect resets focusStack to [] whenever activeGroupPath changes,
-      // which a render-time set here can't outrace — but Home shows the
-      // group right at the top, one tap away.
+      // Restore the scope "Add New Node" entered — a no-op if we never left
+      // (i.e. "Connect Existing" was used instead), in which case the ref
+      // below must stay unset: the groupPathFor effect only consumes it on
+      // an actual path change, and a no-op exitToDepth never triggers that,
+      // so a set-but-never-consumed ref would wrongly apply itself to some
+      // unrelated later scope change instead.
+      const leftScope = useNodeGraphStore.getState().activeGroupPath.length !== groupPortBuilder.returnPath.length;
+      if (leftScope) pendingFocusAfterScopeChangeRef.current = groupPortBuilder.groupId;
       exitToDepth(groupPortBuilder.returnPath.length);
     }
     setGroupPortBuilder(null);
   };
   const handleGroupPortNodePlaced = (newId: string) => {
     if (!groupPortBuilder) return;
-    // 'output' already entered the group (see startGroupPortAddNew), so the
-    // new node landed in its subgraph; 'input' never left the outer scope.
-    const scopeNodes = groupPortBuilder.dir === 'output' ? getFreshActiveNodes() : nodes;
-    const newNode = scopeNodes.find(n => n.id === newId);
+    // addNode() (called by NodeSearchPalette just before this fires) is
+    // synchronous, but the component's own `nodes` closure is still the
+    // snapshot from the render that opened this sheet — one render behind,
+    // same reasoning as getFreshActiveNodes' own comment above. That stale
+    // read was the actual bug behind "node got added but the port never
+    // did": newNode came back undefined, so this bailed out silently before
+    // ever calling commitGroupPortFromNode. Always read fresh, regardless
+    // of dir — 'output' already entered the group (see
+    // startGroupPortAddNew), 'input' never left the outer scope, but
+    // getFreshActiveNodes resolves the correct one either way since it
+    // reads activeGroupPath fresh from the store too.
+    const newNode = getFreshActiveNodes().find(n => n.id === newId);
     if (!newNode) { setGroupPortBuilder(null); return; }
     const outKey = Object.keys(newNode.outputs)[0];
     if (!outKey) { setGroupPortBuilder(null); return; }
@@ -2769,6 +2810,32 @@ export function MobileGraphBrowser() {
         </div>
       );
     };
+    // Fixed rows for the group's own boundary ports — a plain group's
+    // subgraph has no built-in anchor nodes the way a SceneGroup's scenePos/
+    // sceneOutput do, so without these its inputs/outputs are invisible from
+    // the inside (you'd only ever see them from the group's own card,
+    // outside it). Locked/non-deletable in spirit like those anchors — tap
+    // steps back out to that same card, open on the matching tab.
+    const renderFixedPortsRow = (dir: 'input' | 'output') => {
+      const outputPorts = (parentGroupNode?.params?.subgraph as { outputPorts?: unknown[] } | undefined)?.outputPorts ?? [];
+      const count = dir === 'input' ? activeGroupInputPorts.length : outputPorts.length;
+      return (
+        <div key={`fixed-ports-${dir}`} style={{ padding: '4px 12px', borderBottom: '1px solid #24243a' }}>
+          <button
+            onClick={() => viewParentGroupPorts(dir === 'input' ? 'inputs' : 'outputs')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 10px',
+              background: '#cba6f712', border: '1px dashed #cba6f755', borderRadius: '8px',
+              color: '#cba6f7', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: '11px' }}>🔒</span>
+            <span style={{ flex: 1 }}>{dir === 'input' ? 'Group Inputs' : 'Group Outputs'}</span>
+            <span style={{ color: '#585b70', fontSize: '10px' }}>({count})</span>
+          </button>
+        </div>
+      );
+    };
     const renderLooseGroupRow = (g: LooseGroup) => {
       // Store-backed, not local UI state — the collapsed/expanded
       // state is shared with desktop's own compound-box toggle
@@ -2846,11 +2913,18 @@ export function MobileGraphBrowser() {
     // is interleaved into the same rank ordering as the plain rows, placed
     // strictly after anything outside it that feeds one of its members, so
     // the list never shows a group above (before) a node it's connected to.
+    const isInsidePlainGroup = parentGroupNode?.type === 'group';
     type HomeEntry = { rank: number; render: () => React.ReactNode };
     const entries: HomeEntry[] = [
       ...rankedRows
         .map(({ rank, nodes: rowNodes }) => ({ rank, render: () => renderRankRow(rank, rowNodes) })),
       ...looseGroups.map(g => ({ rank: computeGroupRank(g, nodes, nodeRanks), render: () => renderLooseGroupRow(g) })),
+      // Always first (rank -1: the ultimate source anything wired to a port
+      // traces back to) and always last (rank Infinity: the ultimate sink).
+      ...(isInsidePlainGroup ? [
+        { rank: -1, render: () => renderFixedPortsRow('input' as const) },
+        { rank: Infinity, render: () => renderFixedPortsRow('output' as const) },
+      ] : []),
     ].sort((a, b) => a.rank - b.rank);
     return (
       <div ref={homeContainerRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
