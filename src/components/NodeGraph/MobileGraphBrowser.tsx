@@ -10,13 +10,13 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
-import type { GraphNode, DataType } from '../../types/nodeGraph';
+import type { GraphNode, DataType, LooseGroup } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { typesCompatible } from '../../lib/typesCompatible';
-import { groupNodesByRank } from '../../store/graphLayout';
+import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
@@ -159,6 +159,36 @@ function GraphEdges({ edges }: { edges: ReturnType<typeof computeGraphLayout>['e
       })}
     </>
   );
+}
+
+// Where a loose group's folder row should sit among the plain rank rows in
+// Home's list: strictly after every node OUTSIDE the group that feeds one of
+// its members (never rendered "above" — i.e. earlier in the list than —
+// something it's connected to), and otherwise at its most-upstream member's
+// own rank. Rank strictly increases along an edge (computeNodeRanks), so an
+// external feeder's rank is always < the member it feeds; using the highest
+// such feeder + 1 is enough to guarantee the group comes after all of them,
+// direct or indirect.
+function computeGroupRank(group: LooseGroup, nodes: GraphNode[], nodeRanks: Map<string, number>): number {
+  const memberSet = new Set(group.memberIds);
+  let maxExternalFeederRank = -1;
+  for (const n of nodes) {
+    if (!memberSet.has(n.id)) continue;
+    for (const input of Object.values(n.inputs)) {
+      const srcId = input.connection?.nodeId;
+      if (srcId && !memberSet.has(srcId)) {
+        const r = nodeRanks.get(srcId) ?? 0;
+        if (r > maxExternalFeederRank) maxExternalFeederRank = r;
+      }
+    }
+  }
+  if (maxExternalFeederRank >= 0) return maxExternalFeederRank + 1;
+  let minMemberRank = Infinity;
+  for (const id of group.memberIds) {
+    const r = nodeRanks.get(id);
+    if (r != null && r < minMemberRank) minMemberRank = r;
+  }
+  return minMemberRank === Infinity ? 0 : minMemberRank;
 }
 
 const dotStyle = (color: string): React.CSSProperties => ({
@@ -897,9 +927,22 @@ export function MobileGraphBrowser() {
   const exitToRoot = useNodeGraphStore(s => s.exitToRoot);
   const exitToDepth = useNodeGraphStore(s => s.exitToDepth);
   const ungroupNode = useNodeGraphStore(s => s.ungroupNode);
+  const groupNodes = useNodeGraphStore(s => s.groupNodes);
   const nodes = useMemo(
     () => getActiveNodes(topLevelNodes, activeGroupPath) ?? topLevelNodes,
     [topLevelNodes, activeGroupPath],
+  );
+  // LooseGroup — a purely visual cluster (no compile effect, no wiring of
+  // its own) scoped the same way `nodes` is. Same getActiveNodes-style
+  // narrowing, just for the parallel looseGroups field.
+  const topLevelLooseGroups = useNodeGraphStore(s => s.looseGroups);
+  const createLooseGroup = useNodeGraphStore(s => s.createLooseGroup);
+  const ungroupLoose = useNodeGraphStore(s => s.ungroupLoose);
+  const toggleLooseGroupCollapsed = useNodeGraphStore(s => s.toggleLooseGroupCollapsed);
+  const renameLooseGroup = useNodeGraphStore(s => s.renameLooseGroup);
+  const looseGroups = useMemo(
+    () => getActiveLooseGroups(topLevelNodes, topLevelLooseGroups, activeGroupPath),
+    [topLevelNodes, topLevelLooseGroups, activeGroupPath],
   );
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
@@ -979,6 +1022,15 @@ export function MobileGraphBrowser() {
   // was replaced with an in-app one).
   const [renamingGroupFor, setRenamingGroupFor] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  // Loose-group multi-select — Home-only, "pick some chips then tap Group"
+  // instead of a real canvas drag-select (mobile has no canvas to drag on).
+  // Since loose grouping has no ports/type-compatibility to work out
+  // (unlike a real Group), any 2+ ids in the current scope are valid — no
+  // desktop-side "discover dangling connections" step to mirror here.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [renamingLooseGroupId, setRenamingLooseGroupId] = useState<string | null>(null);
+  const [renameLooseGroupValue, setRenameLooseGroupValue] = useState('');
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
@@ -988,6 +1040,8 @@ export function MobileGraphBrowser() {
     setGroupPathFor(groupPathKey);
     setFocusStack([]);
     setForwardStack([]);
+    setSelectMode(false);
+    setSelectedIds([]);
   }
 
   if (exprModeFor !== focusedId) {
@@ -1028,6 +1082,7 @@ export function MobileGraphBrowser() {
   // x position — reused here as row index, so a node's row in this grid
   // always matches the column it would land in on the canvas.
   const rankedRows = useMemo(() => groupNodesByRank(nodes), [nodes]);
+  const nodeRanks = useMemo(() => computeNodeRanks(nodes), [nodes]);
 
   // Connector overlay for the Home list (renderHome) — unlike the graph-
   // diagram view (computeGraphLayout), chips here sit in a natural
@@ -1080,7 +1135,39 @@ export function MobileGraphBrowser() {
     return () => ro.disconnect();
   }, [nodes, rankedRows, focusedNode, homeGraphView]);
 
-  const pushFocus = (id: string) => { setFocusStack(stack => [...stack, id]); setForwardStack([]); };
+  // Groups are subgraphs, not just nodes with ports — tapping one should
+  // drill straight into its contents the same way tapping a folder does,
+  // not stop at a ports-only detail card first. enterGroup updates
+  // activeGroupPath, which the groupPathFor effect above turns into a
+  // focusStack reset on the next render, so this needs no manual reset here.
+  // Sealed groups compile as standalone functions and can't be entered, so
+  // those still fall through to the normal detail view (it shows the
+  // 🔒 banner). viewGroupPorts below is the escape hatch for reaching an
+  // *unsealed* group's own ports (to wire something to/from it) without
+  // entering it.
+  const pushFocus = (id: string) => {
+    const target = nodes.find(n => n.id === id);
+    if (target && GROUP_TYPES.has(target.type) && !target.sealed) { enterGroup(id); return; }
+    setFocusStack(stack => [...stack, id]); setForwardStack([]);
+  };
+  const viewGroupPorts = (id: string) => { setFocusStack(stack => [...stack, id]); setForwardStack([]); };
+  const toggleSelected = (id: string) => setSelectedIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  const commitLooseGroup = () => {
+    if (selectedIds.length < 2) return;
+    createLooseGroup(selectedIds);
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
+  // Real group — same compile-affecting groupNodes() desktop's canvas uses,
+  // just reached from mobile's select mode instead of a drag-select. Stays
+  // on Home afterward (rather than auto-entering the new group) so its chip
+  // is visible in context first.
+  const commitRealGroup = () => {
+    if (selectedIds.length < 1) return;
+    groupNodes(selectedIds);
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
   const jumpTo = (index: number) => { setFocusStack(stack => stack.slice(0, index + 1)); setForwardStack([]); };
   const goHome = () => { exitToRoot(); setFocusStack([]); setForwardStack([]); };
   // Tapping a group breadcrumb segment for the level you're ALREADY at (its
@@ -2093,7 +2180,11 @@ export function MobileGraphBrowser() {
               return (
                 <button
                   key={n.id}
-                  onClick={() => { setFocusStack([n.id]); setShowGraphOverlay(false); }}
+                  onClick={() => {
+                    if (GROUP_TYPES.has(n.type) && !n.sealed) enterGroup(n.id);
+                    else setFocusStack([n.id]);
+                    setShowGraphOverlay(false);
+                  }}
                   style={{
                     position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
                     display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
@@ -2123,6 +2214,132 @@ export function MobileGraphBrowser() {
     if (nodes.length === 0) {
       return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>No nodes yet.</div>;
     }
+    // A grouped node only ever appears inside its own folder entry, never
+    // also duplicated in the plain rank grid below.
+    const groupedIds = new Set(looseGroups.flatMap(g => g.memberIds));
+    const chipStyleFor = (n: GraphNode) => {
+      const selected = selectMode && selectedIds.includes(n.id);
+      return {
+        display: 'flex', alignItems: 'center', gap: '6px',
+        background: selected ? '#313244' : '#1e1e2e',
+        border: selected ? '1px solid #cba6f7' : '1px solid #313244',
+        borderRadius: '8px', padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+        cursor: 'pointer', touchAction: 'manipulation',
+      } as React.CSSProperties;
+    };
+    // A real (compile-affecting) group's chip now drills straight into its
+    // subgraph on tap (see pushFocus) — this small companion button is the
+    // only remaining way to reach its own ports (to wire something to/from
+    // it) without entering it, since the ports detail view is no longer the
+    // tap target.
+    const renderNodeChip = (n: GraphNode, withRef: boolean) => {
+      const isUnsealedGroup = GROUP_TYPES.has(n.type) && !n.sealed;
+      const chip = (
+        <button
+          key={n.id}
+          ref={withRef ? (el => { if (el) homeChipRefs.current.set(n.id, el); else homeChipRefs.current.delete(n.id); }) : undefined}
+          onClick={() => (selectMode ? toggleSelected(n.id) : pushFocus(n.id))}
+          style={chipStyleFor(n)}
+        >
+          <div style={dotStyle(nodeDotColor(n))} />
+          {labelFor(n)}{isUnsealedGroup ? ' ›' : ''}
+        </button>
+      );
+      if (!isUnsealedGroup || selectMode) return chip;
+      return (
+        <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {chip}
+          <button
+            onClick={() => viewGroupPorts(n.id)}
+            title="View this group's own ports"
+            style={{ background: 'none', border: '1px solid #313244', color: '#585b70', borderRadius: '6px', width: '22px', height: '22px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+          >⚙</button>
+        </div>
+      );
+    };
+    const renderLooseGroupRow = (g: LooseGroup) => {
+      // Store-backed, not local UI state — the collapsed/expanded
+      // state is shared with desktop's own compound-box toggle
+      // for the same group, not a mobile-only view preference.
+      const isOpen = !g.collapsed;
+      const isRenaming = renamingLooseGroupId === g.id;
+      const members = nodes.filter(n => g.memberIds.includes(n.id));
+      return (
+        <div key={g.id} style={{ padding: '4px 12px', borderBottom: '1px solid #24243a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0' }}>
+            <button
+              onClick={() => toggleLooseGroupCollapsed(g.id)}
+              style={{
+                flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px',
+                background: 'none', border: 'none', color: '#cdd6f4', fontSize: '12px',
+                cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left', padding: '4px 0',
+              }}
+            >
+              <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
+              <span style={{ flexShrink: 0 }}>📁</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.label}</span>
+              <span style={{ color: '#585b70', fontSize: '10px', flexShrink: 0 }}>({members.length})</span>
+            </button>
+            <button
+              onClick={() => { setRenamingLooseGroupId(g.id); setRenameLooseGroupValue(g.label); }}
+              title="Rename"
+              style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+            >✎</button>
+            <button
+              onClick={() => ungroupLoose(g.id)}
+              title="Ungroup (members are unaffected)"
+              style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+            >✕</button>
+          </div>
+          {isRenaming && (
+            <div style={{ display: 'flex', gap: '6px', paddingBottom: '6px' }}>
+              <input
+                autoFocus
+                type="text"
+                value={renameLooseGroupValue}
+                onChange={e => setRenameLooseGroupValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { renameLooseGroup(g.id, renameLooseGroupValue.trim() || g.label); setRenamingLooseGroupId(null); }
+                  if (e.key === 'Escape') setRenamingLooseGroupId(null);
+                }}
+                style={{ ...exprTextInputStyle, flex: 1 }}
+              />
+              <button
+                onClick={() => { renameLooseGroup(g.id, renameLooseGroupValue.trim() || g.label); setRenamingLooseGroupId(null); }}
+                style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px', padding: '0 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+              >Save</button>
+            </div>
+          )}
+          {isOpen && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingLeft: '20px', paddingBottom: '8px' }}>
+              {members.map(n => renderNodeChip(n, false))}
+            </div>
+          )}
+        </div>
+      );
+    };
+    const renderRankRow = (rank: number, rowNodes: GraphNode[]) => {
+      const visible = rowNodes.filter(n => !groupedIds.has(n.id));
+      if (visible.length === 0) return null;
+      return (
+        <div key={`row-${rank}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
+          <div style={{ width: '14px', flexShrink: 0, fontSize: '10px', color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{rank}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+            {visible.map(n => renderNodeChip(n, true))}
+          </div>
+        </div>
+      );
+    };
+    // Loose groups aren't pinned to a fixed "GROUPS" section up top — each
+    // is interleaved into the same rank ordering as the plain rows, placed
+    // strictly after anything outside it that feeds one of its members, so
+    // the list never shows a group above (before) a node it's connected to.
+    type HomeEntry = { rank: number; render: () => React.ReactNode };
+    const entries: HomeEntry[] = [
+      ...rankedRows
+        .map(({ rank, nodes: rowNodes }) => ({ rank, render: () => renderRankRow(rank, rowNodes) })),
+      ...looseGroups.map(g => ({ rank: computeGroupRank(g, nodes, nodeRanks), render: () => renderLooseGroupRow(g) })),
+    ].sort((a, b) => a.rank - b.rank);
     return (
       <div ref={homeContainerRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
         {/* Connector overlay — measured from actual chip positions (see the
@@ -2138,29 +2355,52 @@ export function MobileGraphBrowser() {
           <GraphEdges edges={homeEdges} />
         </svg>
         <div style={{ position: 'relative', zIndex: 1 }}>
-          {rankedRows.map(({ rank, nodes: rowNodes }) => (
-            <div key={rank} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
-              <div style={{ width: '14px', flexShrink: 0, fontSize: '10px', color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{rank}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
-                {rowNodes.map(n => (
-                  <button
-                    key={n.id}
-                    ref={el => { if (el) homeChipRefs.current.set(n.id, el); else homeChipRefs.current.delete(n.id); }}
-                    onClick={() => pushFocus(n.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '6px',
-                      background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-                      padding: '8px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
-                    }}
-                  >
-                    <div style={dotStyle(nodeDotColor(n))} />
-                    {labelFor(n)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+          {entries.map(e => e.render())}
         </div>
+        {/* Floating group actions — only while actively selecting. Real
+            groups rewire the graph (compile-affecting, same groupNodes()
+            desktop's canvas uses); folders are purely visual clustering
+            with no wiring of their own. */}
+        {selectMode && (
+          <div style={{
+            position: 'sticky', bottom: 0, left: 0, right: 0, zIndex: 2,
+            background: 'rgba(24,24,37,0.95)', backdropFilter: 'blur(8px)',
+            borderTop: '1px solid #313244', padding: '10px 12px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            <span style={{ flex: 1, fontSize: '11px', color: '#a6adc8' }}>
+              {selectedIds.length === 0 ? 'Tap nodes to select them' : `${selectedIds.length} selected`}
+            </span>
+            <button
+              onClick={commitRealGroup}
+              disabled={selectedIds.length < 1}
+              title="Group into a real node — rewires the graph, has its own inputs/outputs"
+              style={{
+                background: selectedIds.length < 1 ? '#313244' : '#89b4fa18',
+                border: `1px solid ${selectedIds.length < 1 ? '#45475a' : '#89b4fa55'}`,
+                color: selectedIds.length < 1 ? '#585b70' : '#89b4fa',
+                borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 600,
+                cursor: selectedIds.length < 1 ? 'default' : 'pointer', touchAction: 'manipulation',
+              }}
+            >
+              ⛓ Group{selectedIds.length >= 1 ? ` (${selectedIds.length})` : ''}
+            </button>
+            <button
+              onClick={commitLooseGroup}
+              disabled={selectedIds.length < 2}
+              title="Cluster visually only — no wiring, no compile effect"
+              style={{
+                background: selectedIds.length < 2 ? '#313244' : '#cba6f722',
+                border: `1px solid ${selectedIds.length < 2 ? '#45475a' : '#cba6f766'}`,
+                color: selectedIds.length < 2 ? '#585b70' : '#cba6f7',
+                borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 600,
+                cursor: selectedIds.length < 2 ? 'default' : 'pointer', touchAction: 'manipulation',
+              }}
+            >
+              📁 Folder{selectedIds.length >= 2 ? ` (${selectedIds.length})` : ''}
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -2269,10 +2509,27 @@ export function MobileGraphBrowser() {
             </span>
           );
         })}
+        {/* Select mode — the mobile entry point for creating a loose group,
+            since there's no canvas here to drag-select on. Only makes sense
+            on the rank-grid list itself, not the graph diagram or a
+            focused node's detail. */}
+        {!focusedNode && !homeGraphView && (
+          <button
+            onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}
+            style={{
+              marginLeft: 'auto', flexShrink: 0,
+              background: selectMode ? '#313244' : 'none', border: '1px solid #45475a', color: selectMode ? '#cba6f7' : '#89b4fa',
+              borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
+            }}
+            title="Select nodes to group"
+          >
+            {selectMode ? 'Cancel' : '☑ Select'}
+          </button>
+        )}
         <button
           onClick={() => (focusedNode ? setShowGraphOverlay(true) : setHomeGraphView(v => !v))}
           style={{
-            marginLeft: 'auto', flexShrink: 0,
+            marginLeft: focusedNode || homeGraphView ? 'auto' : 0, flexShrink: 0,
             background: !focusedNode && homeGraphView ? '#313244' : 'none', border: '1px solid #45475a', color: '#89b4fa',
             borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
           }}

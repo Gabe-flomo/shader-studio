@@ -263,6 +263,27 @@ export interface SubgraphData {
   nodes: GraphNode[];
   inputPorts: GroupInputPort[];
   outputPorts: GroupOutputPort[];
+  /** Purely-visual node clusters at this scope — see LooseGroup below. */
+  looseGroups?: LooseGroup[];
+}
+
+/**
+ * A purely visual/organizational cluster of nodes — unlike a real `group`
+ * node, this has no compile effect at all: members stay exactly where they
+ * are in the flat node list, wired exactly as before. It only changes how
+ * they're *displayed* — collapsed to one compound-looking box on desktop's
+ * canvas (crossing wires reroute to the box's edge), or folded into one
+ * folder-style entry in mobile's list view. Scoped the same way regular
+ * nodes are: lives in the top-level looseGroups field, or nested in a
+ * SubgraphData alongside that scope's own nodes.
+ */
+export interface LooseGroup {
+  id: string;
+  label: string;
+  memberIds: string[];
+  collapsed: boolean;
+  /** Desktop canvas position for the collapsed compound box; unused on mobile. */
+  position: { x: number; y: number };
 }
 
 /**

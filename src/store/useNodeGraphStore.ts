@@ -247,6 +247,8 @@ const undoManager = new UndoManager();
 interface NodeGraphState {
   // Graph data
   nodes: GraphNode[];
+  /** Purely-visual node clusters at the top-level scope — see LooseGroup in types/nodeGraph.ts. */
+  looseGroups: import('../types/nodeGraph').LooseGroup[];
 
   // Compiled shaders
   vertexShader: string;
@@ -455,6 +457,17 @@ interface NodeGraphState {
   ungroupNode: (groupId: string) => void;
   /** Rename an input or output port label on a group node. */
   renameGroupPort: (nodeId: string, portKey: string, dir: 'in' | 'out', newLabel: string) => void;
+  /**
+   * Cluster existing nodes into a purely visual LooseGroup at the current
+   * active scope — no wiring/port logic, no compile effect, members stay
+   * exactly where they are. Returns the new group's ID or null if fewer
+   * than 2 valid member ids were given.
+   */
+  createLooseGroup: (nodeIds: string[], label?: string) => string | null;
+  /** Dissolve a LooseGroup — members are unaffected, just no longer clustered. */
+  ungroupLoose: (groupId: string) => void;
+  toggleLooseGroupCollapsed: (groupId: string) => void;
+  renameLooseGroup: (groupId: string, label: string) => void;
   undo: () => void;
   redo: () => void;
   compile: () => void;
@@ -838,6 +851,73 @@ function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[])
 }
 
 /**
+ * LooseGroup counterpart to getActiveNodes/setActiveNodes — reads/writes the
+ * looseGroups list at a given scope. Unlike nodes, the top-level list isn't
+ * nested inside any GraphNode, it's its own store field, so both functions
+ * thread it through as a separate argument/return value rather than folding
+ * it into the nodes tree the way subgraph.nodes is.
+ */
+export function getActiveLooseGroups(
+  nodes: GraphNode[],
+  topLevelLooseGroups: import('../types/nodeGraph').LooseGroup[],
+  path: string[],
+): import('../types/nodeGraph').LooseGroup[] {
+  if (path.length === 0) return topLevelLooseGroups;
+  const g0 = nodes.find(n => n.id === path[0]);
+  const sg0 = g0?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  if (!sg0) return [];
+  if (path.length === 1) return sg0.looseGroups ?? [];
+  const g1 = sg0.nodes.find(n => n.id === path[1]);
+  const sg1 = g1?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+  return sg1?.looseGroups ?? [];
+}
+
+function setActiveLooseGroups(
+  nodes: GraphNode[],
+  topLevelLooseGroups: import('../types/nodeGraph').LooseGroup[],
+  path: string[],
+  newGroups: import('../types/nodeGraph').LooseGroup[],
+): { nodes: GraphNode[]; looseGroups: import('../types/nodeGraph').LooseGroup[] } {
+  if (path.length === 0) return { nodes, looseGroups: newGroups };
+  if (path.length === 1) {
+    const newNodes = nodes.map(n => {
+      if (n.id !== path[0]) return n;
+      const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!sg) return n;
+      return { ...n, params: { ...n.params, subgraph: { ...sg, looseGroups: newGroups } } };
+    });
+    return { nodes: newNodes, looseGroups: topLevelLooseGroups };
+  }
+  const newNodes = nodes.map(outer => {
+    if (outer.id !== path[0]) return outer;
+    const outerSg = outer.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+    if (!outerSg) return outer;
+    const newOuterNodes = outerSg.nodes.map(inner => {
+      if (inner.id !== path[1]) return inner;
+      const innerSg = inner.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+      if (!innerSg) return inner;
+      return { ...inner, params: { ...inner.params, subgraph: { ...innerSg, looseGroups: newGroups } } };
+    });
+    return { ...outer, params: { ...outer.params, subgraph: { ...outerSg, nodes: newOuterNodes } } };
+  });
+  return { nodes: newNodes, looseGroups: topLevelLooseGroups };
+}
+
+/**
+ * Drop a deleted node from every LooseGroup's membership, and dissolve any
+ * group that falls below 2 members — a "cluster" of zero or one node isn't
+ * meaningfully organizing anything anymore.
+ */
+function pruneLooseGroups(
+  looseGroups: import('../types/nodeGraph').LooseGroup[],
+  removedNodeId: string,
+): import('../types/nodeGraph').LooseGroup[] {
+  return looseGroups
+    .map(g => ({ ...g, memberIds: g.memberIds.filter(id => id !== removedNodeId) }))
+    .filter(g => g.memberIds.length >= 2);
+}
+
+/**
  * Deep-clone a group node, assigning new IDs to the group itself and all its
  * subgraph nodes (recursively for nested groups).
  */
@@ -951,6 +1031,7 @@ function pickSurfacedParams(
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodes: [],
+  looseGroups: [],
   vertexShader: '',
   fragmentShader: '',
   compilationErrors: [],
@@ -2187,6 +2268,57 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }));
   },
 
+  createLooseGroup: (nodeIds, label) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeNodes = getActiveNodes(nodes, activeGroupPath) ?? nodes;
+    const validIds = nodeIds.filter(id => activeNodes.some(n => n.id === id));
+    if (validIds.length < 2) return null;
+
+    undoManager.push(nodes);
+    const members = activeNodes.filter(n => validIds.includes(n.id));
+    const xs = members.map(n => n.position.x), ys = members.map(n => n.position.y);
+    const newGroup: import('../types/nodeGraph').LooseGroup = {
+      id: idGenerator.next(),
+      label: label ?? 'Group',
+      memberIds: validIds,
+      collapsed: true,
+      position: { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 },
+    };
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, [...activeLoose, newGroup]);
+    set({ nodes: newNodes, looseGroups: newTopLoose });
+    return newGroup.id;
+  },
+
+  ungroupLoose: (groupId) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    if (!activeLoose.some(g => g.id === groupId)) return;
+    undoManager.push(nodes);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, activeLoose.filter(g => g.id !== groupId));
+    set({ nodes: newNodes, looseGroups: newTopLoose });
+  },
+
+  // Collapse/rename are undo-exempt (same reasoning saveGroupPreset's own
+  // cosmetic-only writes skip it) — purely a view toggle/label, never worth
+  // burning an undo step, and never touches anything that would need a
+  // recompile.
+  toggleLooseGroupCollapsed: (groupId) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    const newLoose = activeLoose.map(g => g.id === groupId ? { ...g, collapsed: !g.collapsed } : g);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, newLoose);
+    set({ nodes: newNodes, looseGroups: newTopLoose });
+  },
+
+  renameLooseGroup: (groupId, label) => {
+    const { nodes, looseGroups, activeGroupPath } = get();
+    const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
+    const newLoose = activeLoose.map(g => g.id === groupId ? { ...g, label } : g);
+    const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, newLoose);
+    set({ nodes: newNodes, looseGroups: newTopLoose });
+  },
+
   saveGroupPreset: (groupNodeId, label, description) => {
     const { nodes, activeGroupPath } = get();
     const searchNodes = activeGroupPath.length > 0
@@ -2751,7 +2883,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           const newSgNodes = removeNodeFromList(activeNodes, nodeId);
           set(state => {
             const newTop = setActiveNodes(state.nodes, activeGroupPath, newSgNodes);
-            return { nodes: newTop ?? state.nodes };
+            if (!newTop) return { nodes: state.nodes };
+            const activeLoose = getActiveLooseGroups(newTop, state.looseGroups, activeGroupPath);
+            const { nodes: prunedNodes, looseGroups: prunedTopLoose } =
+              setActiveLooseGroups(newTop, state.looseGroups, activeGroupPath, pruneLooseGroups(activeLoose, nodeId));
+            return { nodes: prunedNodes, looseGroups: prunedTopLoose };
           });
           get().compile();
           return;
@@ -2770,7 +2906,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(state => {
       const newNodes = removeNodeFromList(state.nodes, nodeId);
       const previewNodeId = state.previewNodeId === nodeId ? null : state.previewNodeId;
-      return { nodes: newNodes, previewNodeId };
+      return { nodes: newNodes, previewNodeId, looseGroups: pruneLooseGroups(state.looseGroups, nodeId) };
     });
     get().compile();
   },
@@ -3630,7 +3766,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     ));
 
     idGenerator.syncFromGraph(nodes);
-    set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    // Example graphs don't carry their own loose groups yet — reset rather
+    // than leave a previous graph's groups referencing node ids that don't
+    // exist in this one.
+    set({ nodes, looseGroups: [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
   },
 
@@ -3666,13 +3805,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: (name) => {
-    const { nodes } = get();
-    const payload = JSON.stringify({ nodes, savedAt: Date.now() });
+    const { nodes, looseGroups } = get();
+    const payload = JSON.stringify({ nodes, looseGroups, savedAt: Date.now() });
     localStorage.setItem(`shader-studio:${name}`, payload);
     const dir = getGraphDir();
     if (dir) {
       const slug = labelToSlug(name || 'graph');
-      writeTextFileAtPath(`${dir}/${slug}.json`, JSON.stringify({ nodes }, null, 2));
+      writeTextFileAtPath(`${dir}/${slug}.json`, JSON.stringify({ nodes, looseGroups }, null, 2));
     }
   },
 
@@ -3691,7 +3830,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const raw = localStorage.getItem(`shader-studio:${name}`);
     if (!raw) return;
     try {
-      const { nodes: rawNodes } = JSON.parse(raw) as { nodes: GraphNode[] };
+      const { nodes: rawNodes, looseGroups } = JSON.parse(raw) as { nodes: GraphNode[]; looseGroups?: import('../types/nodeGraph').LooseGroup[] };
       if (Array.isArray(rawNodes)) {
         // Strip in-memory audio state — audio buffers are not persisted, so
         // _isPlaying / _hasFile would crash the audio engine on load.
@@ -3705,7 +3844,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         idGenerator.syncFromGraph(nodes);
         // Reset group navigation so a saved graph that was captured inside a
         // subgraph doesn't leave the editor stranded in a non-existent group.
-        set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+        set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
         get().compile();
       }
     } catch {}
@@ -3716,8 +3855,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportGraph: async () => {
-    const { nodes } = get();
-    const json = JSON.stringify({ nodes }, null, 2);
+    const { nodes, looseGroups } = get();
+    const json = JSON.stringify({ nodes, looseGroups }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const name = isTauri ? 'shader-graph.json' : (window.prompt('File name:', 'shader-graph') ?? 'shader-graph');
     await saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
@@ -3726,11 +3865,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   importGraph: (json: string) => {
     undoManager.clear();
     try {
-      const { nodes: rawNodes } = JSON.parse(json) as { nodes: GraphNode[] };
+      const { nodes: rawNodes, looseGroups } = JSON.parse(json) as { nodes: GraphNode[]; looseGroups?: import('../types/nodeGraph').LooseGroup[] };
       if (Array.isArray(rawNodes)) {
         const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(n, getNodeDefinition));
         idGenerator.syncFromGraph(nodes);
-        set({ nodes, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+        set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
         get().compile();
       }
     } catch {}
