@@ -1375,6 +1375,17 @@ export function MobileGraphBrowser() {
   // desktop's own slider config panel uses (NodeComponent.tsx), so a range
   // customized on one platform carries over to the other.
   const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
+  // Which WIRING row is expanded — accordion, same one-key-at-a-time idea
+  // as openSliderConfig above, but for the inline "what's this connected
+  // to / pick something" panel that replaces the old separate connect
+  // sheet for inputs. wireAddNewFor tracks which row's "+ Add New Node"
+  // opened the search palette (independent of the accordion itself, since
+  // the palette is its own overlay). wiringSectionOpen folds the *entire*
+  // Wiring list at once — deliberately not reset per node (a view
+  // preference, not per-node state) the way the row accordion is.
+  const [wireExpandedKey, setWireExpandedKey] = useState<string | null>(null);
+  const [wireAddNewFor, setWireAddNewFor] = useState<string | null>(null);
+  const [wiringSectionOpen, setWiringSectionOpen] = useState(true);
   // Track which group scope focusStack/forwardStack belong to — crossing a
   // group boundary (entering via "Enter Group", exiting via a breadcrumb
   // tap) drops both, the same way jumping to a totally different node tree
@@ -1438,6 +1449,7 @@ export function MobileGraphBrowser() {
     setInfoTab('info');
     setOpenSliderConfig(null);
     setVizExpanded(false);
+    setWireExpandedKey(null);
   }
   // mobileKeyframeEditor lives in the store (App.tsx's bottom bar needs it
   // too), so navigating away without hitting "Done" — breadcrumb, back/
@@ -1709,6 +1721,20 @@ export function MobileGraphBrowser() {
       if (!best || (exact && !best.exact)) best = { node: n, outKey, exact };
     }
     return best;
+  };
+  // Same scan as bestConnectCandidate, but the full list (exact-type
+  // matches first) — used by an expanded WIRING row's inline candidate
+  // list, which replaced the separate "Connect Existing" sheet for inputs.
+  const allConnectCandidatesFor = (targetNodeId: string, type: string): Array<{ node: GraphNode; outKey: string; exact: boolean }> => {
+    const results: Array<{ node: GraphNode; outKey: string; exact: boolean }> = [];
+    for (const n of nodes) {
+      if (n.id === targetNodeId || wouldCreateCycle(nodes, n.id, targetNodeId)) continue;
+      const outKey = firstCompatibleOutputKey(n, type);
+      if (!outKey) continue;
+      results.push({ node: n, outKey, exact: n.outputs[outKey].type === type });
+    }
+    results.sort((a, b) => Number(b.exact) - Number(a.exact));
+    return results;
   };
 
   // ── Connect-existing candidate list ──────────────────────────────────────
@@ -2036,70 +2062,103 @@ export function MobileGraphBrowser() {
     };
 
     // ── Wiring row ────────────────────────────────────────────────────────
-    // Purely connectivity — one compact line per real socket, no slider.
-    // Split out from the old combined card so a node's Inputs tab reads as
-    // two focused lists (which sockets are connected to what, then what's
-    // left to actually tune) instead of one wire-status-plus-value block
-    // repeated per input — same underlying wiring mechanics as before
-    // (ghost suggestions, ⛓ group-port chips, connect/disconnect), just
-    // laid out as a list rather than a grid of cards.
+    // Purely connectivity — a colored dot for the socket's type (matching
+    // the graph-diagram's own dot convention), a folder-style accordion
+    // instead of the old separate "Feed this input" sheet: tap the row to
+    // drop down its connection — an elbow line to a pill for whatever it's
+    // wired to (⛓ for a group port), or, when open, every existing
+    // compatible node as its own elbow+pill (tap to wire) plus "+ Add New
+    // Node" for the search palette. Same underlying mechanics as before
+    // (ghost suggestions inform the collapsed preview, connectNodes,
+    // disconnectInput, handleNodePlacedForInput) — just no longer a modal
+    // overlay.
     const renderWireRow = (key: string, inp: GraphNode['inputs'][string], isLast: boolean) => {
       const isPortSourced = inp.connection?.nodeId === GROUP_PORT_SENTINEL;
       const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
       const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
-      const ghostCandidate = (!upstream && !isPortSourced) ? bestConnectCandidate(node.id, inp.type) : undefined;
+      const isExpanded = wireExpandedKey === key;
+      const candidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type) : [];
+      // Collapsed-row hint — lets a glance down the whole Wiring list show
+      // which open sockets already have a good suggestion, without
+      // expanding each one to find out.
+      const ghostCandidate = (!isExpanded && !upstream && !isPortSourced) ? bestConnectCandidate(node.id, inp.type) : undefined;
+      const pillStyle: React.CSSProperties = { ...chipStyle, fontSize: '11px', padding: '4px 10px', flexShrink: 0 };
       return (
-        <div
-          key={key}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 10px', borderBottom: isLast ? 'none' : '1px solid #24243a', minWidth: 0 }}
-        >
-          <TypeIcon type={inp.type} />
-          <div
-            onDoubleClick={() => toggleHiddenInput(node, key)}
-            title="Double-tap to hide"
-            style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', touchAction: 'manipulation' }}
-          >{inp.label}</div>
-          {upstream && (
-            <>
-              <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', flexShrink: 0 }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
-              <button
-                onClick={() => disconnectInput(node.id, key)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation', flexShrink: 0 }}
-                title="Disconnect"
-              >✕</button>
-            </>
-          )}
-          {/* Sourced from this group's own boundary port rather than another
-              internal node — not navigable (there's nothing to drill into),
-              but still freely disconnectable, same as any other wire. */}
-          {isPortSourced && (
-            <>
-              <span style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', cursor: 'default', color: '#cba6f7', borderColor: '#cba6f755', flexShrink: 0 }}>
-                ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
-              </span>
-              <button
-                onClick={() => disconnectInput(node.id, key)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation', flexShrink: 0 }}
-                title="Disconnect"
-              >✕</button>
-            </>
-          )}
-          {/* Ghost-suggested wire — a preview of the best already-placed
-              candidate, not a real connection yet. One tap commits it via
-              the exact same connectNodes call the "Connect Existing" picker
-              uses; the "+" button still opens that picker for when the
-              guess isn't the one you want. */}
-          {!upstream && !isPortSourced && ghostCandidate && (
-            <button
-              onClick={() => connectNodes(ghostCandidate.node.id, ghostCandidate.outKey, node.id, key)}
-              title="Tap to connect this suggestion"
-              style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', background: 'none', border: '1px dashed #45475a', color: '#6c7086', flexShrink: 0 }}
-            >
-              ⇢ {labelFor(ghostCandidate.node)}
-            </button>
-          )}
-          {!upstream && !isPortSourced && (
-            <button style={{ ...smallIconBtnStyle('#89b4fa'), flexShrink: 0 }} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
+        <div key={key} style={{ borderBottom: (isLast && !isExpanded) ? 'none' : '1px solid #24243a' }}>
+          <button
+            onClick={() => setWireExpandedKey(k => k === key ? null : key)}
+            style={{ display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '9px 10px', background: 'none', border: 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left', minWidth: 0 }}
+          >
+            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: TYPE_COLORS[inp.type] ?? '#888', flexShrink: 0 }} />
+            <div
+              onDoubleClick={e => { e.stopPropagation(); toggleHiddenInput(node, key); }}
+              title="Double-tap to hide"
+              style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >{inp.label}</div>
+            {!isExpanded && upstream && (
+              <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>{labelFor(upstream)}</span>
+            )}
+            {!isExpanded && isPortSourced && (
+              <span style={{ fontSize: '10px', color: '#cba6f7', flexShrink: 0 }}>⛓ {sourcePort?.label ?? inp.connection!.outputKey}</span>
+            )}
+            {!isExpanded && ghostCandidate && (
+              <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>⇢ {labelFor(ghostCandidate.node)}</span>
+            )}
+            <span style={{ fontSize: '9px', color: '#585b70', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+          </button>
+          {isExpanded && (
+            <div style={{ padding: '0 10px 10px 27px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {upstream && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                  <button style={pillStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+                  <button
+                    onClick={() => disconnectInput(node.id, key)}
+                    style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
+                    title="Disconnect"
+                  >✕ Disconnect</button>
+                </div>
+              )}
+              {/* Sourced from this group's own boundary port rather than
+                  another internal node — not navigable (there's nothing
+                  to drill into), but still freely disconnectable. */}
+              {isPortSourced && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                  <span style={{ ...pillStyle, cursor: 'default', color: '#cba6f7', border: '1px solid #cba6f755' }}>
+                    ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
+                  </span>
+                  <button
+                    onClick={() => disconnectInput(node.id, key)}
+                    style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
+                    title="Disconnect"
+                  >✕ Disconnect</button>
+                </div>
+              )}
+              {!upstream && !isPortSourced && (
+                <>
+                  {candidates.length === 0 && (
+                    <div style={{ fontSize: '11px', color: '#585b70' }}>No compatible nodes yet — add a new one below.</div>
+                  )}
+                  {candidates.map(c => (
+                    <div key={c.node.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                      <button
+                        style={{ ...pillStyle, border: c.exact ? '1px solid #45475a' : '1px dashed #45475a' }}
+                        title={c.exact ? undefined : 'Compatible via type promotion'}
+                        onClick={() => { connectNodes(c.node.id, c.outKey, node.id, key); setWireExpandedKey(null); }}
+                      >
+                        {labelFor(c.node)}
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setWireAddNewFor(key)}
+                    style={{ alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #45475a', color: '#89b4fa', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+                  >+ Add New Node</button>
+                </>
+              )}
+            </div>
           )}
         </div>
       );
@@ -2424,10 +2483,17 @@ export function MobileGraphBrowser() {
                 {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
                 {wireEntries.length > 0 && (
                   <>
-                    <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: '#585b70', margin: '2px 2px 4px' }}>WIRING</div>
-                    <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
-                      {wireEntries.map(([key, inp], i) => renderWireRow(key, inp, i === wireEntries.length - 1))}
-                    </div>
+                    <button
+                      onClick={() => setWiringSectionOpen(v => !v)}
+                      style={{ ...sectionHeaderBtnStyle, margin: '2px 2px 4px', width: 'auto' }}
+                    >
+                      <span>{wiringSectionOpen ? '▾' : '▸'} WIRING</span>
+                    </button>
+                    {wiringSectionOpen && (
+                      <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+                        {wireEntries.map(([key, inp], i) => renderWireRow(key, inp, i === wireEntries.length - 1))}
+                      </div>
+                    )}
                   </>
                 )}
                 {node.type === 'group' && (
@@ -2455,6 +2521,22 @@ export function MobileGraphBrowser() {
                       {valueRows}
                     </div>
                   </>
+                )}
+                {/* "+ Add New Node" from an expanded WIRING row — reuses the
+                    same place-then-wire flow as everywhere else
+                    (handleNodePlacedForInput), just opened inline from the
+                    row's own accordion instead of the old connect sheet. */}
+                {wireAddNewFor && node.inputs[wireAddNewFor] && (
+                  <NodeSearchPalette
+                    open
+                    onClose={() => setWireAddNewFor(null)}
+                    filterOutputType={node.inputs[wireAddNewFor].type}
+                    onNodePlaced={newId => {
+                      handleNodePlacedForInput(newId, { dir: 'input', nodeId: node.id, key: wireAddNewFor, type: node.inputs[wireAddNewFor].type });
+                      setWireAddNewFor(null);
+                      setWireExpandedKey(null);
+                    }}
+                  />
                 )}
               </div>
             );
@@ -3077,7 +3159,7 @@ export function MobileGraphBrowser() {
                 <button
                   key={p.key}
                   onClick={() => commitConnectToGroupPort(p.key)}
-                  style={{ ...chipStyle, fontSize: '11px', color: '#cba6f7', borderColor: '#cba6f755' }}
+                  style={{ ...chipStyle, fontSize: '11px', color: '#cba6f7', border: '1px solid #cba6f755' }}
                 >⛓ {p.label}</button>
               ))}
             </div>
