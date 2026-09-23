@@ -21,8 +21,6 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
-import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
-import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import {
   VECTOR_AXES, EASING_PRESETS, socketHasKeyframes, socketHasVectorKeyframes,
@@ -504,45 +502,6 @@ const smallTabBtnStyle = (active: boolean): React.CSSProperties => ({
   color: active ? '#89b4fa' : '#6c7086',
   cursor: 'pointer', touchAction: 'manipulation',
 });
-
-// ── Node preview thumbnail ──────────────────────────────────────────────────
-// Reuses desktop's preview pipeline (compileNodePreviewShader walks the
-// node's upstream ancestors into a self-contained shader; nodePreviewRenderer
-// is a shared offscreen-WebGL singleton, not tied to the desktop canvas) to
-// render a small static snapshot next to the Remove button. Recomputed only
-// when the focused node changes, not on every param edit — same "snapshot,
-// not live" behavior as desktop's 👁 toggle. Callers must pass `key={nodeId}`
-// so switching nodes remounts this fresh (clears the stale thumbnail) rather
-// than reusing state across nodes.
-function NodePreviewThumb({ nodeId, nodeType, nodes }: { nodeId: string; nodeType: string; nodes: GraphNode[] }) {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    // `nodes` must already be the caller's active scope (getActiveNodes at
-    // its activeGroupPath), not always top-level — a node's upstream
-    // ancestors only ever live in that same scope (subgraphs are self-
-    // contained), so the scoped list alone is enough to walk them, but the
-    // *wrong* list (top-level, when this node is inside a group) means
-    // targetNode.find below comes up empty and the thumbnail silently never
-    // renders.
-    const fs = compileNodePreviewShader(nodeId, nodes);
-    if (!fs) return;
-    let cancelled = false;
-    const time = useNodeGraphStore.getState().currentTime ?? 0;
-    nodePreviewRenderer.renderNodePreview(nodeId, fs, { u_time: { value: time } }, 88)
-      .then(dataUrl => { if (!cancelled) setUrl(dataUrl); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeId, nodeType]);
-
-  if (!url) return null;
-  return (
-    <div style={{ width: '36px', height: '36px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #313244', flexShrink: 0, background: '#11111b' }}>
-      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-    </div>
-  );
-}
 
 // ── Keyframe canvas editor ──────────────────────────────────────────────────
 // Mirrors desktop's Select/Add/Delete/Draw mode toolbar (KeyframeEditorModal.
@@ -1203,6 +1162,9 @@ export function MobileGraphBrowser() {
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
   const removeNode = useNodeGraphStore(s => s.removeNode);
+  const previewNodeId = useNodeGraphStore(s => s.previewNodeId);
+  const setPreviewNodeId = useNodeGraphStore(s => s.setPreviewNodeId);
+  const toggleBypass = useNodeGraphStore(s => s.toggleBypass);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const setNodeAssignOp = useNodeGraphStore(s => s.setNodeAssignOp);
@@ -1743,13 +1705,50 @@ export function MobileGraphBrowser() {
   function renderNodeHeader(node: GraphNode) {
     const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinition(node.type)?.anchored;
     const canRemove = node.type !== 'output' && focusStack.length > 0 && !originalLocked;
+    const isPreviewActive = previewNodeId === node.id;
+    const isBypassed = !!node.bypassed;
+    // Same exclusion lists and behavior as desktop's own 👁/⊘ header buttons
+    // (NodeComponent.tsx) — previewing/bypassing these primitive/passthrough
+    // types isn't meaningful, so they're left out there too.
+    const canPreview = !['output', 'vec4Output', 'uv', 'time', 'mouse', 'constant'].includes(node.type);
+    const canBypass = !['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type);
     return (
       <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
         <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
         <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
         <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
         <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
-        <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} nodes={nodes} />
+        {isBypassed && (
+          <span style={{ fontSize: '9px', color: '#f9e2af', letterSpacing: '0.06em', fontWeight: 700, flexShrink: 0 }}>BYPASS</span>
+        )}
+        {canPreview && (
+          <button
+            onClick={() => setPreviewNodeId(isPreviewActive ? null : node.id)}
+            title={isPreviewActive ? 'Exit preview (restore full graph)' : 'Preview this node in isolation'}
+            style={{
+              background: isPreviewActive ? '#a6e3a122' : 'none',
+              border: `1px solid ${isPreviewActive ? '#a6e3a155' : '#45475a'}`,
+              color: isPreviewActive ? '#a6e3a1' : '#585b70',
+              borderRadius: '6px', width: '30px', height: '30px', fontSize: '14px', cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            👁
+          </button>
+        )}
+        {canBypass && (
+          <button
+            onClick={() => toggleBypass(node.id)}
+            title={isBypassed ? 'Enable node (currently bypassed)' : 'Bypass node (pass input through)'}
+            style={{
+              background: isBypassed ? '#f9e2af22' : 'none',
+              border: `1px solid ${isBypassed ? '#f9e2af55' : '#45475a'}`,
+              color: isBypassed ? '#f9e2af' : '#585b70',
+              borderRadius: '6px', width: '30px', height: '30px', fontSize: '14px', cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            ⊘
+          </button>
+        )}
         {canRemove && (
           <button
             onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
@@ -2220,7 +2219,17 @@ export function MobileGraphBrowser() {
                     already subscribe to live param/scope values, so this is
                     just placing them, not building them. */}
                 {INLINE_VIZ_TYPES.has(node.type) && (
-                  <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', overflow: 'hidden' }}>
+                  // maxWidth caps how far these get stretched — most of
+                  // NodeInlineViz's canvases have a 240px backing resolution
+                  // (a few use 160/200), sized for desktop's node-card width.
+                  // Mobile's Info tab is wider than that, and `width:'100%'`
+                  // (baked into NodeInlineViz itself) would upscale the
+                  // canvas bitmap past its native resolution — soft/blurry
+                  // text and thin lines. Capping near the common backing
+                  // width keeps the upscale factor close to what it already
+                  // is on a typical desktop card, without touching the
+                  // shared (and huge) NodeInlineViz.tsx.
+                  <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', overflow: 'hidden', maxWidth: '280px' }}>
                     <NodeInlineViz node={node} />
                   </div>
                 )}
