@@ -6,12 +6,39 @@ export type ExampleGraph = { label: string; nodes: GraphNode[]; counter: number 
 export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[]; counter: number }> = {
 
   // ── Blank / New ────────────────────────────────────────────────────────────
+  // A brand-new graph used to be just UV -> Output with nothing wired — a
+  // black screen with no hint of what to do next. A minimal UV -> Circle SDF
+  // -> distance -> glow -> Color chain gives every new project a visible,
+  // recognizable starting point instead.
   blank: {
     label: '[ New ]',
-    counter: 2,
+    counter: 4,
     nodes: [
-      { id: 'n1', type: 'uv',     position: { x: 100, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'n2', type: 'output', position: { x: 420, y: 240 }, inputs: { color: { type: 'vec3', label: 'Color', connection: undefined } }, outputs: {}, params: {} },
+      { id: 'n1', type: 'uv', position: { x: 100, y: 240 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'n3', type: 'circleSDF', position: { x: 340, y: 240 },
+        inputs: {
+          position: { type: 'vec2', label: 'Position', connection: { nodeId: 'n1', outputKey: 'uv' } },
+          radius:   { type: 'float', label: 'Radius' },
+          offset:   { type: 'vec2', label: 'Offset' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.3, posX: 0.0, posY: 0.0 },
+      },
+      {
+        id: 'n4', type: 'makeLight', position: { x: 580, y: 240 },
+        inputs: {
+          distance:   { type: 'float', label: 'Distance', connection: { nodeId: 'n3', outputKey: 'distance' } },
+          brightness: { type: 'float', label: 'Brightness' },
+        },
+        outputs: { glow: { type: 'float', label: 'Glow' } },
+        params: { brightness: 10.0 },
+      },
+      {
+        id: 'n2', type: 'output', position: { x: 820, y: 240 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'n4', outputKey: 'glow' } } },
+        outputs: {}, params: {},
+      },
     ],
   },
 

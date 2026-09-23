@@ -2182,7 +2182,12 @@ export function MobileGraphBrowser() {
       const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
       const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
       const isExpanded = wireExpandedKey === key;
-      const candidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type) : [];
+      // Capped to the top 3 — already sorted exact-type-match first (see
+      // allConnectCandidatesFor), so these are the most sensible matches; a
+      // long candidate list buried the actually-useful ones in scroll. Search
+      // ("+ Add New Node" below) still reaches anything past the top 3.
+      const allCandidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type) : [];
+      const candidates = allCandidates.slice(0, 3);
       // Collapsed-row hint — lets a glance down the whole Wiring list show
       // which open sockets already have a good suggestion, without
       // expanding each one to find out.
@@ -2257,6 +2262,11 @@ export function MobileGraphBrowser() {
                       </button>
                     </div>
                   ))}
+                  {allCandidates.length > candidates.length && (
+                    <div style={{ fontSize: '10px', color: '#585b70', marginLeft: '18px' }}>
+                      +{allCandidates.length - candidates.length} more — search below to find them
+                    </div>
+                  )}
                   <button
                     onClick={() => setWireAddNewFor(key)}
                     style={{ alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #45475a', color: '#89b4fa', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
