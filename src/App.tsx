@@ -339,6 +339,11 @@ function App() {
   // Examples button opens a browsable gallery of starter graphs.
   const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
   const [showMobileExamples, setShowMobileExamples]     = useState(false);
+  // "Nodes" tab inside the Examples sheet — browse every available node
+  // type (search, categories, descriptions) and place one disconnected,
+  // same NodeSearchPalette every other "Add Node" entry point in the app
+  // already uses, just opened from here instead of the graph FAB.
+  const [showMobileNodeBrowser, setShowMobileNodeBrowser] = useState(false);
   // Reset's own confirm step, in-app rather than window.confirm() — a native
   // confirm dialog is unreliable (sometimes silently a no-op) inside a Tauri
   // webview, which would make Reset look broken with no error or feedback.
@@ -938,8 +943,17 @@ function App() {
                 boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-                <div style={{ flex: 1, fontSize: '14px', fontWeight: 700, color: '#cdd6f4' }}>Examples</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#cdd6f4' }}>Examples</div>
+                <button
+                  onClick={() => { setShowMobileExamples(false); setShowMobileNodeBrowser(true); }}
+                  style={{
+                    background: 'none', border: '1px solid #45475a', color: '#89b4fa',
+                    borderRadius: '6px', padding: '3px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                  title="Browse every available node and add one disconnected"
+                >⬡ Nodes</button>
+                <div style={{ flex: 1 }} />
                 <button
                   onClick={() => setShowMobileExamples(false)}
                   style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
@@ -990,6 +1004,15 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* "Nodes" tab from the Examples sheet — same NodeSearchPalette every
+            other "Add Node" entry point uses, no type filter so it browses
+            everything and places whatever's picked disconnected. */}
+        <NodeSearchPalette
+          open={showMobileNodeBrowser}
+          onClose={() => setShowMobileNodeBrowser(false)}
+          onNodePlaced={() => setShowMobileNodeBrowser(false)}
+        />
 
         {/* Reset confirm — a custom modal instead of window.confirm(), which
             is unreliable inside a Tauri webview. */}
