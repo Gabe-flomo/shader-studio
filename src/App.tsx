@@ -594,7 +594,7 @@ function App() {
         <TopNav page={page} onPageChange={setPage} floating />
 
         {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: '44px' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))' }}>
           {showCanvasPane && (
             <div style={{
               position: 'relative',
@@ -658,23 +658,28 @@ function App() {
           )}
         </div>
 
-        {/* Error popup — sits above bottom bar */}
+        {/* Error popup — sits above bottom bar (whose own height now grows
+            with the home-indicator inset, so this has to match). */}
         {showErrors && errorCount > 0 && (
-          <div style={{ position: 'absolute', bottom: 56, left: 0, right: 0, zIndex: 24 }}>
+          <div style={{ position: 'absolute', bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 24 }}>
             {errorPopup}
           </div>
         )}
 
-        {/* Bottom action bar */}
+        {/* Bottom action bar — bottom/side padding grows with the home-
+            indicator/notch-side insets (0 in a plain browser tab, real on
+            an installed/full-screen mobile app) so it isn't flush against
+            the edge the OS itself draws over. */}
         <div style={{
           flexShrink: 0, zIndex: 25,
           background: 'rgba(24,24,37,0.90)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           borderTop: '1px solid #313244',
-          padding: '8px 12px',
+          padding: '8px calc(12px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px))',
           display: 'flex', alignItems: 'center', gap: '8px',
           minHeight: '56px',
+          boxSizing: 'border-box',
         }}>
           {/* Layout mode: canvas-only / split / graph-only */}
           <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
@@ -788,7 +793,9 @@ function App() {
               onClick={e => e.stopPropagation()}
               style={{
                 width: '100%', maxHeight: '75vh', overflowY: 'auto', background: '#181825',
-                borderRadius: '16px 16px 0 0', border: '1px solid #313244', padding: '12px',
+                borderRadius: '16px 16px 0 0', border: '1px solid #313244',
+                padding: '12px 12px calc(12px + env(safe-area-inset-bottom, 0px)) 12px',
+                boxSizing: 'border-box',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
@@ -855,7 +862,8 @@ function App() {
               onClick={e => e.stopPropagation()}
               style={{
                 width: '100%', background: '#1e1e2e', borderRadius: '16px 16px 0 0',
-                border: '1px solid #45475a', padding: '16px',
+                border: '1px solid #45475a', padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px',
+                boxSizing: 'border-box',
               }}
             >
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#cdd6f4', marginBottom: '6px' }}>Clear all nodes?</div>

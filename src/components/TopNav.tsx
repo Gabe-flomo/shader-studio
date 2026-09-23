@@ -20,7 +20,10 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
   return (
     <div
       style={{
-        height: '44px',
+        // Grows by the status-bar/notch inset (0 on a browser tab, real on
+        // an installed/full-screen mobile app) so the bar's own 44px of
+        // content sits below it instead of the notch overlapping the icons.
+        height: mobile ? 'calc(44px + env(safe-area-inset-top, 0px))' : '44px',
         flexShrink: 0,
         background: floating
           ? 'rgba(24, 24, 37, 0.85)'
@@ -29,11 +32,13 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         WebkitBackdropFilter: floating ? 'blur(12px)' : undefined,
         borderBottom: '1px solid #313244',
         display: 'flex',
-        alignItems: 'center',
-        paddingLeft: mobile ? '10px' : '12px',
-        paddingRight: mobile ? '10px' : '0px',
+        alignItems: mobile ? 'flex-end' : 'center',
+        paddingLeft: mobile ? 'max(10px, env(safe-area-inset-left, 0px))' : '12px',
+        paddingRight: mobile ? 'max(10px, env(safe-area-inset-right, 0px))' : '0px',
+        paddingBottom: mobile ? '8px' : 0,
         gap: '4px',
         userSelect: 'none',
+        boxSizing: 'border-box',
         // When floating on mobile, position absolute at top
         ...(floating ? {
           position: 'absolute' as const,
