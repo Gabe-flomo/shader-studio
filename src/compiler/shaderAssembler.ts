@@ -3111,6 +3111,15 @@ export class ShaderAssembler {
   }
 
   private compileStandardNode(node: GraphNode, inputVars: Record<string, string>, nodeSlug: string, def: NonNullable<ReturnType<typeof getNodeDefinition>>): void {
+        // A node's own comment (node.params.__comment, set from the "Comment"
+        // tab on either platform) surfaces here as a plain GLSL comment right
+        // before its generated code, so reading the output shader carries the
+        // same annotations as the graph. Emitted once per line to keep a
+        // multi-line comment readable rather than one long // line.
+        const nodeComment = typeof node.params.__comment === 'string' ? node.params.__comment.trim() : '';
+        if (nodeComment) {
+          for (const line of nodeComment.split('\n')) this.mainCode.push(`    // ${line}\n`);
+        }
         const sluggedNode = { ...node, id: nodeSlug };
         const { patchedNode, uniforms: nodeUniforms } = patchNodeParamsForUniforms(sluggedNode, def);
         Object.assign(this.paramUniforms, nodeUniforms);
