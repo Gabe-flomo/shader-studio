@@ -66,6 +66,13 @@ function sliderableParam(node: GraphNode, key: string) {
   if (!paramVisible(node, pd)) return undefined;
   return pd;
 }
+function selectableParam(node: GraphNode, key: string) {
+  const def = getNodeDefinition(node.type);
+  const pd = def?.paramDefs?.[key];
+  if (!pd || pd.type !== 'select') return undefined;
+  if (!paramVisible(node, pd)) return undefined;
+  return pd;
+}
 function currentSliderValue(node: GraphNode, key: string, pd: { min?: number }): number {
   if (typeof node.params[key] === 'number') return node.params[key] as number;
   const def = getNodeDefinition(node.type);
@@ -1487,17 +1494,18 @@ export function MobileGraphBrowser() {
   function renderNodeDetail(node: GraphNode) {
     const def = getNodeDefinition(node.type);
     // Most sliderable params (Radius, Width/2...) double as declared input
-    // sockets, so they're already in node.inputs. A group's own Iterations
-    // is paramDefs-only with no matching socket — a group's `inputs` is
-    // built entirely from its ports/ps_ sockets, never from its own type's
-    // paramDefs — so it'd otherwise never get a row here at all. Scoped to
-    // GROUP_TYPES rather than every node type, since other paramDefs-only
-    // float/int fields elsewhere may be intentionally not meant as a row.
-    const paramOnlyEntries: Array<[string, GraphNode['inputs'][string]]> = GROUP_TYPES.has(node.type)
-      ? Object.entries(def?.paramDefs ?? {})
-          .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int') && paramVisible(node, pd))
-          .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]])
-      : [];
+    // sockets, so they're already in node.inputs. Some paramDefs never do —
+    // a group's own Iterations (a group's `inputs` is built entirely from
+    // its ports/ps_ sockets, never its own type's paramDefs), and select-type
+    // params generally (a dropdown like Menger Sponge's Iterations or Mirror
+    // Fold's Symmetry isn't a wireable socket on any node type, so it's
+    // never declared in def.inputs either) — so they'd otherwise never get a
+    // row here at all. Desktop renders every float/int/select paramDef
+    // (subject to paramVisible) unconditionally, so this matches that rather
+    // than guessing which ones matter.
+    const paramOnlyEntries: Array<[string, GraphNode['inputs'][string]]> = Object.entries(def?.paramDefs ?? {})
+      .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int' || pd.type === 'select') && paramVisible(node, pd))
+      .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]]);
     const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries];
     const outputEntries = Object.entries(node.outputs);
     const hasInputs = inputEntries.length > 0;
@@ -1542,6 +1550,8 @@ export function MobileGraphBrowser() {
       );
       const pd = upstream || isPortSourced || isKeyframed ? undefined : sliderableParam(node, key);
       const val = pd ? currentSliderValue(node, key, pd) : 0;
+      const selectPd = upstream || isPortSourced ? undefined : selectableParam(node, key);
+      const selectVal = selectPd ? (node.params[key] !== undefined ? String(node.params[key]) : (selectPd.options?.[0]?.value ?? '')) : '';
       return (
         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1699,6 +1709,20 @@ export function MobileGraphBrowser() {
               </div>
             );
           })()}
+          {selectPd && (
+            <select
+              value={selectVal}
+              onChange={e => updateNodeParams(node.id, { [key]: e.target.value }, { immediate: true })}
+              style={{
+                background: '#1e1e2e', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px',
+                padding: '6px 8px', fontSize: '12px', outline: 'none',
+              }}
+            >
+              {(selectPd.options ?? []).map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          )}
         </div>
       );
     };
