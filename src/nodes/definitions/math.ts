@@ -8,7 +8,7 @@ function ot(node: GraphNode): string {
 }
 
 export const AddNode: NodeDefinition = {
-  type: 'add', label: 'Add', category: 'Math', description: 'Add two float values (a + b)',
+  type: 'add', label: 'Add', category: 'Math', subcategory: 'Arithmetic', description: 'Add two float values (a + b)',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
@@ -20,7 +20,7 @@ export const AddNode: NodeDefinition = {
 };
 
 export const SubtractNode: NodeDefinition = {
-  type: 'subtract', label: 'Subtract', category: 'Math', description: 'Subtract b from a (a - b)',
+  type: 'subtract', label: 'Subtract', category: 'Math', subcategory: 'Arithmetic', description: 'Subtract b from a (a - b)',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
@@ -32,7 +32,7 @@ export const SubtractNode: NodeDefinition = {
 };
 
 export const MultiplyNode: NodeDefinition = {
-  type: 'multiply', label: 'Multiply', category: 'Math', description: 'Multiply two float values (a × b).',
+  type: 'multiply', label: 'Multiply', category: 'Math', subcategory: 'Arithmetic', description: 'Multiply two float values (a × b).',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 1.0 },
@@ -44,7 +44,7 @@ export const MultiplyNode: NodeDefinition = {
 };
 
 export const DivideNode: NodeDefinition = {
-  type: 'divide', label: 'Divide', category: 'Math', description: 'Divide a by b (a / b).',
+  type: 'divide', label: 'Divide', category: 'Math', subcategory: 'Arithmetic', description: 'Divide a by b (a / b).',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 1.0 },
@@ -56,7 +56,7 @@ export const DivideNode: NodeDefinition = {
 };
 
 export const SinNode: NodeDefinition = {
-  type: 'sin', label: 'Sin', category: 'Math', description: 'Sine of input: amp * sin(input * freq).',
+  type: 'sin', label: 'Sin', category: 'Math', subcategory: 'Trigonometry', description: 'Sine of input: amp * sin(input * freq).',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { freq: 1.0, amp: 1.0 },
@@ -70,7 +70,7 @@ export const SinNode: NodeDefinition = {
 };
 
 export const CosNode: NodeDefinition = {
-  type: 'cos', label: 'Cos', category: 'Math', description: 'Cosine of input: amp * cos(input * freq).',
+  type: 'cos', label: 'Cos', category: 'Math', subcategory: 'Trigonometry', description: 'Cosine of input: amp * cos(input * freq).',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { freq: 1.0, amp: 1.0 },
@@ -84,7 +84,7 @@ export const CosNode: NodeDefinition = {
 };
 
 export const TanNode: NodeDefinition = {
-  type: 'tan', label: 'Tan', category: 'Math', description: 'Tangent of input: amp * tan(input * freq). Approaches ±∞ at ±π/2.',
+  type: 'tan', label: 'Tan', category: 'Math', subcategory: 'Trigonometry', description: 'Tangent of input: amp * tan(input * freq). Approaches ±∞ at ±π/2.',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { freq: 1.0, amp: 1.0 },
@@ -98,7 +98,7 @@ export const TanNode: NodeDefinition = {
 };
 
 export const ExpNode: NodeDefinition = {
-  type: 'exp', label: 'Exp', category: 'Math', description: 'exp(input × scale).',
+  type: 'exp', label: 'Exp', category: 'Math', subcategory: 'Arithmetic', description: 'exp(input × scale).',
   inputs: { input: { type: 'float', label: 'Input' }, scale: { type: 'float', label: 'Scale' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { scale: 1.0 },
@@ -111,7 +111,7 @@ export const ExpNode: NodeDefinition = {
 };
 
 export const PowNode: NodeDefinition = {
-  type: 'pow', label: 'Pow', category: 'Math', description: 'base ^ exponent.',
+  type: 'pow', label: 'Pow', category: 'Math', subcategory: 'Arithmetic', description: 'base ^ exponent.',
   inputs: { base: { type: 'float', label: 'Base' }, exponent: { type: 'float', label: 'Exponent' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { exponent: 1.2 },
@@ -127,7 +127,7 @@ export const PowNode: NodeDefinition = {
 };
 
 export const NegateNode: NodeDefinition = {
-  type: 'negate', label: 'Negate', category: 'Math', description: 'Negate a float (-x).',
+  type: 'negate', label: 'Negate', category: 'Math', subcategory: 'Arithmetic', description: 'Negate a float (-x).',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -136,7 +136,7 @@ export const NegateNode: NodeDefinition = {
 };
 
 export const LengthNode: NodeDefinition = {
-  type: 'length', label: 'Length', category: 'Math', description: 'Distance from a vec2 to the origin, multiplied by scale.',
+  type: 'length', label: 'Length', category: 'Math', subcategory: 'Vector Ops', description: 'Distance from a vec2 to the origin, multiplied by scale.',
   inputs: { input: { type: 'vec2', label: 'Input' }, scale: { type: 'float', label: 'Scale' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { scale: 1.0 },
@@ -149,7 +149,7 @@ export const LengthNode: NodeDefinition = {
 };
 
 export const MultiplyVec3Node: NodeDefinition = {
-  type: 'multiplyVec3', label: 'Scale Color', category: 'Math', description: 'Scale a vec3 color by a float intensity.',
+  type: 'multiplyVec3', label: 'Scale Color', category: 'Math', subcategory: 'Vector Ops', description: 'Scale a vec3 color by a float intensity.',
   inputs: { color: { type: 'vec3', label: 'Color' }, scale: { type: 'float', label: 'Scale' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   defaultParams: { scale: 1.0 },
@@ -162,7 +162,7 @@ export const MultiplyVec3Node: NodeDefinition = {
 };
 
 export const AddVec3Node: NodeDefinition = {
-  type: 'addVec3', label: 'Add Colors', category: 'Math', description: 'Add two vec3 colors together.',
+  type: 'addVec3', label: 'Add Colors', category: 'Math', subcategory: 'Vector Ops', description: 'Add two vec3 colors together.',
   inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -172,7 +172,7 @@ export const AddVec3Node: NodeDefinition = {
 };
 
 export const TanhNode: NodeDefinition = {
-  type: 'tanh', label: 'Tanh', category: 'Math', description: 'Hyperbolic tangent.',
+  type: 'tanh', label: 'Tanh', category: 'Math', subcategory: 'Trigonometry', description: 'Hyperbolic tangent.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
@@ -181,7 +181,7 @@ export const TanhNode: NodeDefinition = {
 };
 
 export const MinMathNode: NodeDefinition = {
-  type: 'minMath', label: 'Min', category: 'Math', description: 'Minimum of two floats.',
+  type: 'minMath', label: 'Min', category: 'Math', subcategory: 'Comparison', description: 'Minimum of two floats.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
@@ -193,7 +193,7 @@ export const MinMathNode: NodeDefinition = {
 };
 
 export const MaxNode: NodeDefinition = {
-  type: 'max', label: 'Max', category: 'Math', description: 'Maximum of two floats.',
+  type: 'max', label: 'Max', category: 'Math', subcategory: 'Comparison', description: 'Maximum of two floats.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
@@ -205,7 +205,7 @@ export const MaxNode: NodeDefinition = {
 };
 
 export const ClampNode: NodeDefinition = {
-  type: 'clamp', label: 'Clamp', category: 'Math', description: 'Clamp a value between min and max. Use the type picker (f/v2/v3) to clamp vectors component-wise.',
+  type: 'clamp', label: 'Clamp', category: 'Math', subcategory: 'Comparison', description: 'Clamp a value between min and max. Use the type picker (f/v2/v3) to clamp vectors component-wise.',
   inputs: { input: { type: 'float', label: 'Input' }, lo: { type: 'float', label: 'Min' }, hi: { type: 'float', label: 'Max' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { lo: 0.0, hi: 1.0 },
@@ -220,7 +220,7 @@ export const ClampNode: NodeDefinition = {
 };
 
 export const MixNode: NodeDefinition = {
-  type: 'mix', label: 'Mix', category: 'Math', description: 'Linear interpolation: mix(a, b, t).',
+  type: 'mix', label: 'Mix', category: 'Math', subcategory: 'Interpolation', description: 'Linear interpolation: mix(a, b, t).',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, t: { type: 'float', label: 'T' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { t: 0.5 },
@@ -233,7 +233,7 @@ export const MixNode: NodeDefinition = {
 };
 
 export const MixVec3Node: NodeDefinition = {
-  type: 'mixVec3', label: 'Mix (Color)', category: 'Math',
+  type: 'mixVec3', label: 'Mix (Color)', category: 'Math', subcategory: 'Interpolation',
   description: 'Blend two vec3 colors: mix(a, b, fac). fac=0 → A, fac=1 → B.',
   inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' }, fac: { type: 'float', label: 'Fac' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
@@ -247,7 +247,7 @@ export const MixVec3Node: NodeDefinition = {
 };
 
 export const ModNode: NodeDefinition = {
-  type: 'mod', label: 'Mod', category: 'Math', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
+  type: 'mod', label: 'Mod', category: 'Math', subcategory: 'Modulo', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
   inputs: { input: { type: 'float', label: 'Input' }, period: { type: 'float', label: 'Period' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { period: 1.0 },
@@ -264,7 +264,7 @@ export const ModNode: NodeDefinition = {
 export const ModSelectNode: NodeDefinition = {
   type: 'modSelect',
   label: 'Mod Select',
-  category: 'Math',
+  category: 'Math', subcategory: 'Modulo',
   description: 'Outputs a mask when mod(value, period) < threshold*period. Use for even/odd rows, every-Nth column, or any periodic selection. Also outputs raw mod value and normalized phase 0–1.',
   inputs: {
     value:  { type: 'float', label: 'Value'  },
@@ -300,7 +300,7 @@ export const ModSelectNode: NodeDefinition = {
 };
 
 export const Atan2Node: NodeDefinition = {
-  type: 'atan2', label: 'Atan2', category: 'Math', description: 'Polar angle: atan(y, x).',
+  type: 'atan2', label: 'Atan2', category: 'Math', subcategory: 'Trigonometry', description: 'Polar angle: atan(y, x).',
   inputs: { y: { type: 'float', label: 'Y' }, x: { type: 'float', label: 'X' } },
   outputs: { angle: { type: 'float', label: 'Angle' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -310,7 +310,7 @@ export const Atan2Node: NodeDefinition = {
 };
 
 export const CeilNode: NodeDefinition = {
-  type: 'ceil', label: 'Ceil', category: 'Math', description: 'Round up to nearest integer.',
+  type: 'ceil', label: 'Ceil', category: 'Math', subcategory: 'Rounding', description: 'Round up to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
@@ -319,7 +319,7 @@ export const CeilNode: NodeDefinition = {
 };
 
 export const FloorNode: NodeDefinition = {
-  type: 'floor', label: 'Floor', category: 'Math', description: 'Round down to nearest integer.',
+  type: 'floor', label: 'Floor', category: 'Math', subcategory: 'Rounding', description: 'Round down to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -328,7 +328,7 @@ export const FloorNode: NodeDefinition = {
 };
 
 export const SqrtNode: NodeDefinition = {
-  type: 'sqrt', label: 'Sqrt', category: 'Math', description: 'Square root.',
+  type: 'sqrt', label: 'Sqrt', category: 'Math', subcategory: 'Arithmetic', description: 'Square root.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -337,7 +337,7 @@ export const SqrtNode: NodeDefinition = {
 };
 
 export const RoundNode: NodeDefinition = {
-  type: 'round', label: 'Round', category: 'Math', description: 'Round to nearest integer.',
+  type: 'round', label: 'Round', category: 'Math', subcategory: 'Rounding', description: 'Round to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -348,7 +348,7 @@ export const RoundNode: NodeDefinition = {
 export const QuantizeNode: NodeDefinition = {
   type: 'quantize',
   label: 'Quantize',
-  category: 'Math',
+  category: 'Math', subcategory: 'Rounding',
   description: 'Snaps a float to the nearest multiple of Step. Wire this upstream of any continuous input — like Wave Term or Chladni Field\'s n/m sockets — to get discrete stepped jumps instead of a smooth continuous sweep, without baking a fixed step size into the node itself.',
   inputs: {
     input: { type: 'float', label: 'Input' },
@@ -374,7 +374,7 @@ export const QuantizeNode: NodeDefinition = {
 };
 
 export const DotNode: NodeDefinition = {
-  type: 'dot', label: 'Dot', category: 'Math', description: 'Dot product of two vec2 inputs.',
+  type: 'dot', label: 'Dot', category: 'Math', subcategory: 'Vector Ops', description: 'Dot product of two vec2 inputs.',
   inputs: { a: { type: 'vec2', label: 'A' }, b: { type: 'vec2', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -384,7 +384,7 @@ export const DotNode: NodeDefinition = {
 };
 
 export const MakeVec2Node: NodeDefinition = {
-  type: 'makeVec2', label: 'Make Vec2', category: 'Math', description: 'Build a vec2 from two float values.',
+  type: 'makeVec2', label: 'Make Vec2', category: 'Math', subcategory: 'Vector Build/Split', description: 'Build a vec2 from two float values.',
   inputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
   outputs: { xy: { type: 'vec2', label: 'XY' } },
   defaultParams: { x: 0.0, y: 0.0 },
@@ -398,7 +398,7 @@ export const MakeVec2Node: NodeDefinition = {
 };
 
 export const ExtractXNode: NodeDefinition = {
-  type: 'extractX', label: 'Extract X', category: 'Math', description: 'Extract the X component (.x) from a vec2.',
+  type: 'extractX', label: 'Extract X', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract the X component (.x) from a vec2.',
   inputs: { v: { type: 'vec2', label: 'Vec2' } }, outputs: { x: { type: 'float', label: 'X' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_x`;
@@ -407,7 +407,7 @@ export const ExtractXNode: NodeDefinition = {
 };
 
 export const ExtractYNode: NodeDefinition = {
-  type: 'extractY', label: 'Extract Y', category: 'Math', description: 'Extract the Y component (.y) from a vec2.',
+  type: 'extractY', label: 'Extract Y', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract the Y component (.y) from a vec2.',
   inputs: { v: { type: 'vec2', label: 'Vec2' } }, outputs: { y: { type: 'float', label: 'Y' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_y`;
@@ -416,7 +416,7 @@ export const ExtractYNode: NodeDefinition = {
 };
 
 export const SplitVec2Node: NodeDefinition = {
-  type: 'splitVec2', label: 'Split Vec2', category: 'Math', description: 'Extract X and Y float components from a vec2.',
+  type: 'splitVec2', label: 'Split Vec2', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract X and Y float components from a vec2.',
   inputs:  { v: { type: 'vec2', label: 'Vec2' } },
   outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -430,7 +430,7 @@ export const SplitVec2Node: NodeDefinition = {
 };
 
 export const SplitVec3Node: NodeDefinition = {
-  type: 'splitVec3', label: 'Split Vec3', category: 'Math', description: 'Extract X, Y, and Z float components from a vec3.',
+  type: 'splitVec3', label: 'Split Vec3', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract X, Y, and Z float components from a vec3.',
   inputs:  { v: { type: 'vec3', label: 'Vec3' } },
   outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -444,7 +444,7 @@ export const SplitVec3Node: NodeDefinition = {
 };
 
 export const SplitVec4Node: NodeDefinition = {
-  type: 'splitVec4', label: 'Split Vec4', category: 'Math', description: 'Extract X, Y, Z, and W float components from a vec4.',
+  type: 'splitVec4', label: 'Split Vec4', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract X, Y, Z, and W float components from a vec4.',
   inputs:  { v: { type: 'vec4', label: 'Vec4' } },
   outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' }, w: { type: 'float', label: 'W' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -458,7 +458,7 @@ export const SplitVec4Node: NodeDefinition = {
 };
 
 export const MakeVec3Node: NodeDefinition = {
-  type: 'makeVec3', label: 'Make Vec3', category: 'Math', description: 'Build a vec3 color from three float values.',
+  type: 'makeVec3', label: 'Make Vec3', category: 'Math', subcategory: 'Vector Build/Split', description: 'Build a vec3 color from three float values.',
   inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
   outputs: { rgb: { type: 'vec3', label: 'RGB' } },
   defaultParams: { r: 0.0, g: 0.0, b: 0.0 },
@@ -473,7 +473,7 @@ export const MakeVec3Node: NodeDefinition = {
 };
 
 export const FloatToVec3Node: NodeDefinition = {
-  type: 'floatToVec3', label: 'Float → Color', category: 'Math', description: 'Convert a float to a grayscale vec3.',
+  type: 'floatToVec3', label: 'Float → Color', category: 'Math', subcategory: 'Vector Build/Split', description: 'Convert a float to a grayscale vec3.',
   inputs: { input: { type: 'float', label: 'Float' } }, outputs: { rgb: { type: 'vec3', label: 'Color' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_rgb`;
@@ -482,7 +482,7 @@ export const FloatToVec3Node: NodeDefinition = {
 };
 
 export const FractRawNode: NodeDefinition = {
-  type: 'fractRaw', label: 'Fract (scalar)', category: 'Math', description: 'Raw fract(x) on a float.',
+  type: 'fractRaw', label: 'Fract (scalar)', category: 'Math', subcategory: 'Rounding', description: 'Raw fract(x) on a float.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -491,7 +491,7 @@ export const FractRawNode: NodeDefinition = {
 };
 
 export const SmoothstepNode: NodeDefinition = {
-  type: 'smoothstep', label: 'Smoothstep', category: 'Math', description: 'smoothstep(edge0, edge1, x). Use the type picker (f/v2/v3) to smoothstep vectors component-wise.',
+  type: 'smoothstep', label: 'Smoothstep', category: 'Math', subcategory: 'Interpolation', description: 'smoothstep(edge0, edge1, x). Use the type picker (f/v2/v3) to smoothstep vectors component-wise.',
   inputs: { value: { type: 'float', label: 'Value' }, edge0: { type: 'float', label: 'Edge 0' }, edge1: { type: 'float', label: 'Edge 1' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { edge0: 0.0, edge1: 1.0 },
@@ -506,7 +506,7 @@ export const SmoothstepNode: NodeDefinition = {
 };
 
 export const AddVec2Node: NodeDefinition = {
-  type: 'addVec2', label: 'Add Vec2', category: 'Math', description: 'Add two vec2 values.',
+  type: 'addVec2', label: 'Add Vec2', category: 'Math', subcategory: 'Vector Ops', description: 'Add two vec2 values.',
   inputs: { a: { type: 'vec2', label: 'A' }, b: { type: 'vec2', label: 'B' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -516,7 +516,7 @@ export const AddVec2Node: NodeDefinition = {
 };
 
 export const MultiplyVec2Node: NodeDefinition = {
-  type: 'multiplyVec2', label: 'Scale Vec2', category: 'Math', description: 'Scale a vec2 by a float.',
+  type: 'multiplyVec2', label: 'Scale Vec2', category: 'Math', subcategory: 'Vector Ops', description: 'Scale a vec2 by a float.',
   inputs: { v: { type: 'vec2', label: 'Vec2' }, scale: { type: 'float', label: 'Scale' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },
   defaultParams: { scale: 1.0 },
@@ -529,7 +529,7 @@ export const MultiplyVec2Node: NodeDefinition = {
 };
 
 export const NormalizeVec2Node: NodeDefinition = {
-  type: 'normalizeVec2', label: 'Normalize Vec2', category: 'Math', description: 'Normalize a vec2 to unit length.',
+  type: 'normalizeVec2', label: 'Normalize Vec2', category: 'Math', subcategory: 'Vector Ops', description: 'Normalize a vec2 to unit length.',
   inputs: { v: { type: 'vec2', label: 'Vec2' } }, outputs: { result: { type: 'vec2', label: 'Result' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
@@ -540,7 +540,7 @@ export const NormalizeVec2Node: NodeDefinition = {
 export const RemapNode: NodeDefinition = {
   type: 'remap',
   label: 'Remap',
-  category: 'Math',
+  category: 'Math', subcategory: 'Interpolation',
   description: 'Re-map a value from [inMin, inMax] to [outMin, outMax]. Smoothstep mode eases in/out. Great for turning a 0–1 noise into any range you need.',
   inputs: {
     value:  { type: 'float', label: 'Value'      },
@@ -581,7 +581,7 @@ export const RemapNode: NodeDefinition = {
 // ─── New Math Nodes (V2) ───────────────────────────────────────────────────────
 
 export const CrossProductNode: NodeDefinition = {
-  type: 'crossProduct', label: 'Cross Product', category: 'Math', description: 'Cross product of two vec3 vectors',
+  type: 'crossProduct', label: 'Cross Product', category: 'Math', subcategory: 'Vector Ops', description: 'Cross product of two vec3 vectors',
   inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   defaultParams: {},
@@ -598,7 +598,7 @@ export const CrossProductNode: NodeDefinition = {
 };
 
 export const ReflectNode: NodeDefinition = {
-  type: 'reflect', label: 'Reflect', category: 'Math', description: 'Reflect incident vector I around normal N',
+  type: 'reflect', label: 'Reflect', category: 'Math', subcategory: 'Vector Ops', description: 'Reflect incident vector I around normal N',
   inputs: { incident: { type: 'vec3', label: 'Incident' }, normal: { type: 'vec3', label: 'Normal' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   defaultParams: {},
@@ -615,7 +615,7 @@ export const ReflectNode: NodeDefinition = {
 };
 
 export const RefractDirNode: NodeDefinition = {
-  type: 'refractDir', label: 'Refract Dir', category: 'Math',
+  type: 'refractDir', label: 'Refract Dir', category: 'Math', subcategory: 'Vector Ops',
   description: 'Compute refracted ray direction via Snell\'s law (GLSL refract). When total internal reflection occurs, falls back to the reflected direction and sets TIR=1.',
   inputs: {
     incident: { type: 'vec3', label: 'Incident' },
@@ -651,7 +651,7 @@ export const RefractDirNode: NodeDefinition = {
 };
 
 export const ComplexMulNode: NodeDefinition = {
-  type: 'complexMul', label: 'Complex Mul', category: 'Math', description: 'Multiply two complex numbers (vec2)',
+  type: 'complexMul', label: 'Complex Mul', category: 'Math', subcategory: 'Complex Numbers', description: 'Multiply two complex numbers (vec2)',
   inputs: { a: { type: 'vec2', label: 'A (re,im)' }, b: { type: 'vec2', label: 'B (re,im)' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },
   defaultParams: {},
@@ -672,7 +672,7 @@ export const ComplexMulNode: NodeDefinition = {
 };
 
 export const ComplexPowNode: NodeDefinition = {
-  type: 'complexPow', label: 'Complex Pow', category: 'Math', description: 'Raise complex number (vec2) to a real power via polar form',
+  type: 'complexPow', label: 'Complex Pow', category: 'Math', subcategory: 'Complex Numbers', description: 'Raise complex number (vec2) to a real power via polar form',
   inputs: { z: { type: 'vec2', label: 'Z (re,im)' }, exponent: { type: 'float', label: 'Exponent' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },
   defaultParams: { exponent: 2.0 },
@@ -694,7 +694,7 @@ export const ComplexPowNode: NodeDefinition = {
 };
 
 export const AngleToVec2Node: NodeDefinition = {
-  type: 'angleToVec2', label: 'Angle → Vec2', category: 'Math', description: 'Convert angle (radians) to unit direction vec2',
+  type: 'angleToVec2', label: 'Angle → Vec2', category: 'Math', subcategory: 'Angles', description: 'Convert angle (radians) to unit direction vec2',
   inputs: { angle: { type: 'float', label: 'Angle (rad)' } },
   outputs: { result: { type: 'vec2', label: 'Direction' } },
   defaultParams: { angle: 0.0 },
@@ -710,7 +710,7 @@ export const AngleToVec2Node: NodeDefinition = {
 };
 
 export const Vec2AngleNode: NodeDefinition = {
-  type: 'vec2Angle', label: 'Vec2 → Angle', category: 'Math', description: 'Get angle of a vec2 direction (atan2)',
+  type: 'vec2Angle', label: 'Vec2 → Angle', category: 'Math', subcategory: 'Angles', description: 'Get angle of a vec2 direction (atan2)',
   inputs: { v: { type: 'vec2', label: 'Vector' } },
   outputs: { result: { type: 'float', label: 'Angle (rad)' } },
   defaultParams: {},
@@ -726,7 +726,7 @@ export const Vec2AngleNode: NodeDefinition = {
 };
 
 export const LuminanceNode: NodeDefinition = {
-  type: 'luminance', label: 'Luminance', category: 'Math', description: 'Perceptual luminance of a vec3 RGB color (BT.709)',
+  type: 'luminance', label: 'Luminance', category: 'Math', subcategory: 'Color', description: 'Perceptual luminance of a vec3 RGB color (BT.709)',
   inputs: { color: { type: 'vec3', label: 'RGB' } },
   outputs: { result: { type: 'float', label: 'Luminance' } },
   defaultParams: {},
@@ -742,7 +742,7 @@ export const LuminanceNode: NodeDefinition = {
 };
 
 export const SignNode: NodeDefinition = {
-  type: 'sign', label: 'Sign', category: 'Math', description: 'Sign of a float value (-1, 0, +1)',
+  type: 'sign', label: 'Sign', category: 'Math', subcategory: 'Comparison', description: 'Sign of a float value (-1, 0, +1)',
   inputs: { value: { type: 'float', label: 'Value' } },
   outputs: { result: { type: 'float', label: 'Sign' } },
   defaultParams: {},
@@ -758,7 +758,7 @@ export const SignNode: NodeDefinition = {
 };
 
 export const StepNode: NodeDefinition = {
-  type: 'step', label: 'Step', category: 'Math', description: 'step(edge, x) — 0 if x < edge, else 1',
+  type: 'step', label: 'Step', category: 'Math', subcategory: 'Comparison', description: 'step(edge, x) — 0 if x < edge, else 1',
   inputs: { edge: { type: 'float', label: 'Edge' }, x: { type: 'float', label: 'X' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { edge: 0.5 },
@@ -777,7 +777,7 @@ export const StepNode: NodeDefinition = {
 export const WeightedAverageNode: NodeDefinition = {
   type: 'weightedAverage',
   label: 'Weighted Average',
-  category: 'Math',
+  category: 'Math', subcategory: 'Interpolation',
   description: 'Weighted average of 2–4 float inputs. Great for combining noise octaves.',
   inputs: {
     a: { type: 'float', label: 'A' },
@@ -951,7 +951,7 @@ export const SelectNode: NodeDefinition = {
 export const Vec2SwizzleNode: NodeDefinition = {
   type: 'vec2Swizzle',
   label: 'Vec2 Swizzle',
-  category: 'Math',
+  category: 'Math', subcategory: 'Vector Build/Split',
   description:
     'Reorder vec2 channels. .yx swaps X and Y — useful for axis reflection, ' +
     '90° rotation prep, or feeding one axis into the other. .xx / .yy broadcast a single channel.',
@@ -987,7 +987,7 @@ export const Vec2SwizzleNode: NodeDefinition = {
 export const Vec3SwizzleNode: NodeDefinition = {
   type: 'vec3Swizzle',
   label: 'Vec3 Swizzle',
-  category: 'Math',
+  category: 'Math', subcategory: 'Vector Build/Split',
   description:
     'Reorder vec3 channels. .yzx / .zxy are cyclic permutations used for ' +
     'cross-products (a.yzx * b.zxy - a.zxy * b.yzx), component-min (min(v, min(v.yzx, v.zxy))), ' +
@@ -1041,7 +1041,7 @@ function substituteComps(expr: string, id: string, dims: number): string {
 export const TransformVecNode: NodeDefinition = {
   type: 'transformVec',
   label: 'Transform Vec',
-  category: 'Math',
+  category: 'Math', subcategory: 'Vector Build/Split',
   description: 'Split a vector into components, apply per-component GLSL expressions, reassemble.',
   inputs:  { uv: { type: 'vec2', label: 'Vec' } },
   outputs: {

@@ -94,6 +94,12 @@ export interface NodeDefinition {
   type: string;
   label: string;
   category: string;
+  /** Optional finer grouping within `category` — used by the mobile Nodes
+   *  browser to break up a large category (e.g. Math's 50+ nodes) into
+   *  named sub-lists (Trigonometry, Vectors, ...) instead of one long flat
+   *  list. Purely a browsing aid; unset categories still work everywhere
+   *  else exactly as before. */
+  subcategory?: string;
   description?: string;
 
   inputs: Record<string, InputSocket>;

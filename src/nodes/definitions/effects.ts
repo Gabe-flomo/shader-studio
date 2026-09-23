@@ -38,6 +38,7 @@ export const AbsNode: NodeDefinition = {
   type: 'abs',
   label: 'Abs',
   category: 'Math',
+  subcategory: 'Arithmetic',
   description: 'Absolute value of a float',
   inputs: {
     input: { type: 'float', label: 'Input' },
