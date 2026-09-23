@@ -1386,6 +1386,8 @@ export function MobileGraphBrowser() {
   const [wireExpandedKey, setWireExpandedKey] = useState<string | null>(null);
   const [wireAddNewFor, setWireAddNewFor] = useState<string | null>(null);
   const [wiringSectionOpen, setWiringSectionOpen] = useState(true);
+  // Same whole-section fold as wiringSectionOpen, for the VALUES list below it.
+  const [valuesSectionOpen, setValuesSectionOpen] = useState(true);
   // Track which group scope focusStack/forwardStack belong to — crossing a
   // group boundary (entering via "Enter Group", exiting via a breadcrumb
   // tap) drops both, the same way jumping to a totally different node tree
@@ -2198,22 +2200,19 @@ export function MobileGraphBrowser() {
       const selectPd = selectableParam(node, key);
       const selectVal = selectPd ? (node.params[key] !== undefined ? String(node.params[key]) : (selectPd.options?.[0]?.value ?? '')) : '';
       if (!pd && !selectPd && !kfEligible) return null;
+      const dotColor = TYPE_COLORS[inp.type] ?? '#888';
+      // A small colored dot at each end of the track, echoing the Wiring
+      // row's type dot — same "what kind of value is this" color coding,
+      // just applied to a range instead of a connection.
+      const EndDot = () => (
+        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: dotColor, flexShrink: 0, opacity: 0.6 }} />
+      );
       return (
         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={inp.type} />
             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
-            {kfEligible && (
-              <button
-                style={smallIconBtnStyle(isKeyframed ? '#f9e2af' : '#a6adc8')}
-                title={isKeyframed ? 'Edit Keyframes' : 'Add Keyframes'}
-                onClick={() => {
-                  const axis = kfAxes ? kfAxes[0] : undefined;
-                  setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
-                  setMobileKeyframeTool(isKeyframed ? 'select' : 'add');
-                }}
-              >◆</button>
-            )}
+            {isKeyframed && <span style={{ fontSize: '9px', color: '#f9e2af', flexShrink: 0 }}>◆ animated</span>}
           </div>
           {isExternallyDriven && (
             <div style={{ fontSize: '10px', color: '#6c7086', fontStyle: 'italic' }}>
@@ -2238,6 +2237,7 @@ export function MobileGraphBrowser() {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <EndDot />
                   <input
                     type="range"
                     min={effMin}
@@ -2251,8 +2251,9 @@ export function MobileGraphBrowser() {
                       updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
                     }}
                     title={isExternallyDriven ? 'Driven by an outer wire into this group — read-only here' : 'Double-tap to reset to default'}
-                    style={{ flex: 1, minWidth: 0, opacity: isExternallyDriven ? 0.4 : 1 }}
+                    style={{ flex: 1, minWidth: 0, opacity: isExternallyDriven ? 0.4 : 1, accentColor: dotColor }}
                   />
+                  <EndDot />
                   <button
                     onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
                     title="Tap for range, bidirectional & keyframe controls"
@@ -2318,11 +2319,76 @@ export function MobileGraphBrowser() {
                     <span style={{ fontSize: '9px', color: '#585b70' }}>
                       Range: {formatSliderValue(effMin, pd.step)} → {formatSliderValue(effMax, pd.step)}
                     </span>
+                    {kfEligible && (
+                      <button
+                        onClick={() => {
+                          const axis = kfAxes ? kfAxes[0] : undefined;
+                          setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                          setMobileKeyframeTool('add');
+                        }}
+                        style={{
+                          alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #f9e2af66',
+                          color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+                        }}
+                      >◆ Add Keyframes</button>
+                    )}
                   </div>
                 )}
               </div>
             );
           })()}
+          {isKeyframed && (() => {
+            const isExpanded = openSliderConfig === key;
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                <button
+                  onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
+                  title="Tap for keyframe controls"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px', width: '100%', background: 'none', border: 'none',
+                    padding: '2px 0', cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                >
+                  <EndDot />
+                  <div style={{ flex: 1, height: '2px', background: `repeating-linear-gradient(90deg, ${dotColor}88 0 4px, transparent 4px 8px)`, minWidth: 0 }} />
+                  <EndDot />
+                  <span style={{ fontSize: '8px', color: '#585b70', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+                </button>
+                {isExpanded && (
+                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', gap: '6px' }}>
+                    <button
+                      onClick={() => {
+                        const axis = kfAxes ? kfAxes[0] : undefined;
+                        setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                        setMobileKeyframeTool('select');
+                      }}
+                      style={{
+                        background: 'none', border: '1px solid #f9e2af66', color: '#f9e2af', borderRadius: '6px',
+                        padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+                      }}
+                    >◆ Edit Keyframes</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {/* Vector (vec2/vec3) sockets have no single scalar paramDef to put
+              a slider on — axis values only ever come from a wire or from
+              keyframes, never a raw number here — so this is the only entry
+              point they get before any keyframes exist. */}
+          {kfEligible && !pd && !isKeyframed && (
+            <button
+              onClick={() => {
+                const axis = kfAxes ? kfAxes[0] : undefined;
+                setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                setMobileKeyframeTool('add');
+              }}
+              style={{
+                alignSelf: 'flex-start', background: 'none', border: '1px dashed #f9e2af66',
+                color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+              }}
+            >◆ Add Keyframes</button>
+          )}
           {selectPd && (
             <select
               value={selectVal}
@@ -2516,10 +2582,17 @@ export function MobileGraphBrowser() {
                 )}
                 {valueRows.length > 0 && (
                   <>
-                    <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: '#585b70', margin: '12px 2px 4px' }}>VALUES</div>
-                    <div style={cardGridStyle}>
-                      {valueRows}
-                    </div>
+                    <button
+                      onClick={() => setValuesSectionOpen(v => !v)}
+                      style={{ ...sectionHeaderBtnStyle, margin: '12px 2px 4px', width: 'auto' }}
+                    >
+                      <span>{valuesSectionOpen ? '▾' : '▸'} VALUES</span>
+                    </button>
+                    {valuesSectionOpen && (
+                      <div style={cardGridStyle}>
+                        {valueRows}
+                      </div>
+                    )}
                   </>
                 )}
                 {/* "+ Add New Node" from an expanded WIRING row — reuses the
