@@ -752,7 +752,7 @@ function isLinearEase(e: KeyframeEasing): boolean {
 // segment — not the "coming out at an angle" default that's easy to grab.
 const KF_DEFAULT_BEZIER: KeyframeEasing = { a: 0.3, b: 0.0, c: 0.7, d: 1.0 };
 
-function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, tool, onChange, selectedIndex, onSelect }: {
+function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, tool, onChange, selectedIndex, onSelect, height = 160 }: {
   keyframes: Keyframe[];
   mode: KeyframeLoopMode;
   loopBack: number;
@@ -764,26 +764,34 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
   onChange: (next: Keyframe[]) => void;
   selectedIndex: number | null;
   onSelect: (index: number | null) => void;
+  /** Caller-controlled canvas height (e.g. a "compact" mode toggle) — still
+   *  fully interactive at any height, just less of it, so bezier/marquee
+   *  editing never requires re-expanding first. Defaults to the standard
+   *  160px used everywhere that doesn't offer a compact toggle. */
+  height?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Shorter than the original 220px — leaves more of the rest of the sheet
-  // (value box, playback settings) in view/reachable without scrolling the
-  // canvas itself off-screen first, since there's no zoom control here to
-  // compensate for a tall fixed canvas eating the whole viewport.
-  const [size, setSize] = useState({ width: 320, height: 160 });
+  const [size, setSize] = useState({ width: 320, height });
   const dragRef = useRef<KfDrag | null>(null);
   // Delete tool: dragging from empty canvas (not directly on a point) opens
   // a marquee rectangle instead of doing nothing — tapping a point directly
   // still deletes just that one, unchanged.
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
+  // Follow the `height` prop when it changes (e.g. the compact-mode toggle)
+  // — the ResizeObserver below only fires on width/container changes, not
+  // when this prop alone changes without the container itself resizing.
+  useEffect(() => setSize(s => (s.height === height ? s : { ...s, height })), [height]);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
       const box = entries[0]?.contentRect;
-      if (box && box.width > 0) setSize({ width: box.width, height: 160 });
+      // Preserve whatever height is currently in state (the `height` prop
+      // effect above owns that) — this observer only ever reacts to width.
+      if (box && box.width > 0) setSize(s => ({ width: box.width, height: s.height }));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -1465,6 +1473,13 @@ export function MobileGraphBrowser() {
   const [wiringSectionOpen, setWiringSectionOpen] = useState(true);
   // Same whole-section fold as wiringSectionOpen, for the VALUES list below it.
   const [valuesSectionOpen, setValuesSectionOpen] = useState(true);
+  // Keyframe editor's pinned canvas: full-size by default, but a phone
+  // screen is short enough that the scrollable controls under it (Value,
+  // Easing, Playback) can end up squeezed to almost nothing. Toggling this
+  // shrinks the canvas instead of hiding it — it's still fully interactive
+  // (bezier handles, marquee delete, ...) at the smaller size, just less of
+  // it, so you never have to re-expand just to keep editing.
+  const [kfCanvasCompact, setKfCanvasCompact] = useState(false);
   // Track which group scope focusStack/forwardStack belong to — crossing a
   // group boundary (entering via "Enter Group", exiting via a breadcrumb
   // tap) drops both, the same way jumping to a totally different node tree
@@ -2946,6 +2961,11 @@ export function MobileGraphBrowser() {
             <div style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 700, color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {input.label}{axis ? ` · ${axis.toUpperCase()}` : ''}
             </div>
+            <button
+              onClick={() => setKfCanvasCompact(v => !v)}
+              title={kfCanvasCompact ? 'Expand the curve view' : 'Shrink the curve view to make more room below'}
+              style={{ background: 'none', border: '1px solid #45475a', color: '#a6adc8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+            >{kfCanvasCompact ? '⌄' : '⌃'}</button>
             {keyframes.length > 0 && (
               <button
                 onClick={() => writeKeyframes([])}
@@ -2980,6 +3000,7 @@ export function MobileGraphBrowser() {
             onChange={writeKeyframes}
             selectedIndex={kfSelectedIndex}
             onSelect={setKfSelectedIndex}
+            height={kfCanvasCompact ? 90 : 160}
           />
         </div>
 
