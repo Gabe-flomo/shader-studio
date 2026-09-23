@@ -663,7 +663,12 @@ export const ExprBlockNode: NodeDefinition = {
   // Dynamic — populated from params.inputs via addNode() / updateNodeSockets()
   inputs: {},
   outputs: {
-    result: { type: 'vec3', label: 'Result (vec3)' },
+    // Matches defaultParams below (outputType: 'float', result: 'a' — 'a' is
+    // itself the default float input, so a fresh node is valid out of the
+    // box instead of assigning a float into a vec3). addNode() falls back to
+    // this static def when no overrideParams.outputType is given, so it has
+    // to agree with defaultParams.outputType, not just describe it.
+    result: { type: 'float', label: 'Result (float)' },
   },
   defaultParams: {
     // Dynamic inputs — each entry becomes a socket + local variable.
@@ -673,7 +678,7 @@ export const ExprBlockNode: NodeDefinition = {
       { name: 'b', type: 'vec2',  slider: null },
       { name: 'c', type: 'vec3',  slider: null },
     ] as Array<{ name: string; type: string; slider: { min: number; max: number } | null }>,
-    outputType: 'vec3',
+    outputType: 'float',
     // Per-line warp statements
     lines: [] as Array<{ lhs: string; op: string; rhs: string }>,
     result: 'a',

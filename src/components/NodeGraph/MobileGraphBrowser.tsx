@@ -9,7 +9,7 @@
  * in the graph — never by dragging, always by picking from a list.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
@@ -18,6 +18,7 @@ import { NodeSearchPalette } from './NodeSearchPalette';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
+import { GLSL_PALETTE } from '../../lib/glslPalette';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -173,12 +174,209 @@ const exprSelectStyle: React.CSSProperties = {
   background: '#11111b', border: '1px solid #45475a', color: '#89b4fa',
   borderRadius: '6px', padding: '8px 6px', fontSize: '13px', cursor: 'pointer', outline: 'none',
 };
-const reorderBtnStyle = (disabled: boolean): React.CSSProperties => ({
-  background: 'none', border: 'none', color: disabled ? '#313244' : '#6c7086',
-  cursor: disabled ? 'default' : 'pointer', padding: '2px', fontSize: '11px', lineHeight: 1, touchAction: 'manipulation',
+// Thin highlight stroke around whichever input/line card currently has focus
+// — makes it obvious which element you're editing on a small screen.
+const exprCardStyle = (focused: boolean): React.CSSProperties => ({
+  background: '#1e1e2e', borderRadius: '8px', padding: '10px',
+  border: focused ? '1px solid #89b4fa' : '1px solid #313244',
+  display: 'flex', flexDirection: 'column', gap: '8px',
 });
 type ExprInputDef = { name: string; type: DataType; slider: { min: number; max: number } | null; carry?: boolean };
 type ExprLine = { lhs: string; op: string; rhs: string };
+
+// The identifier-ish token immediately before `cursor` in `str` — e.g. for
+// "sin(a) + cl|" with the cursor at "|", returns { start: 10, word: "cl" }.
+function wordBeforeCursor(str: string, cursor: number): { start: number; word: string } {
+  let start = cursor;
+  while (start > 0 && /[A-Za-z0-9_]/.test(str[start - 1])) start--;
+  return { start, word: str.slice(start, cursor) };
+}
+
+// ── GLSL expression input with inline builtin-function autocomplete ────────
+// Used for any freeform GLSL expression field (a line's RHS, the result
+// expression) — not the LHS, which is normally just a variable/component
+// name. As you type an identifier, matching entries from the shared
+// GLSL_PALETTE (sin, mix, clamp, …) appear as a chip row below the field;
+// tapping one replaces the partial word with the full snippet and drops the
+// cursor inside its parens, ready to type the first argument.
+function GlslExprInput({ value, onChange, placeholder, style }: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  style: React.CSSProperties;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const matches = useMemo(() => {
+    if (query.length === 0) return [];
+    const q = query.toLowerCase();
+    return GLSL_PALETTE.filter(e => e.label.toLowerCase().startsWith(q)).slice(0, 8);
+  }, [query]);
+
+  const syncQueryFromCaret = (el: HTMLInputElement) => {
+    const cursor = el.selectionStart ?? el.value.length;
+    setQuery(wordBeforeCursor(el.value, cursor).word);
+  };
+
+  const applySuggestion = (insert: string) => {
+    const el = inputRef.current;
+    const cursor = el?.selectionStart ?? value.length;
+    const { start } = wordBeforeCursor(value, cursor);
+    const before = value.slice(0, start);
+    const after = value.slice(cursor);
+    const next = before + insert + after;
+    onChange(next);
+    setOpen(false);
+    setQuery('');
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const parenIdx = insert.indexOf('(');
+      const caret = before.length + (parenIdx >= 0 ? parenIdx + 1 : insert.length);
+      el.setSelectionRange(caret, caret);
+    });
+  };
+
+  return (
+    <div style={{ position: 'relative', flex: (style as { flex?: number | string }).flex, minWidth: 0 }}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        spellCheck={false}
+        onChange={e => { onChange(e.target.value); syncQueryFromCaret(e.target); }}
+        onFocus={e => { syncQueryFromCaret(e.target); setOpen(true); }}
+        onKeyUp={e => syncQueryFromCaret(e.currentTarget)}
+        onClick={e => syncQueryFromCaret(e.currentTarget)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        style={{ ...style, width: '100%' }}
+      />
+      {open && matches.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', zIndex: 30,
+          display: 'flex', gap: '4px', overflowX: 'auto', background: '#11111b',
+          border: '1px solid #45475a', borderRadius: '6px', padding: '4px',
+        }}>
+          {matches.map(m => (
+            <button
+              key={m.label}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => applySuggestion(m.insert)}
+              style={{
+                flexShrink: 0, background: '#313244', border: '1px solid #45475a', borderRadius: '4px',
+                padding: '4px 8px', fontSize: '11px', color: '#a6e3a1', fontFamily: 'monospace',
+                cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap',
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Reorderable GLSL line list (drag handle, press-and-drag) ───────────────
+// A dedicated component (not a helper function) so its drag-state hooks obey
+// the rules of hooks regardless of how the parent conditionally renders it.
+// Dragging works by pointer capture on the handle: as the pointer crosses a
+// neighboring row's midpoint, that row swaps position in the array (and the
+// drag continues from there) — the row you're holding is translateY'd to
+// visually track the pointer between swaps.
+function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine }: {
+  lines: ExprLine[];
+  onReorder: (next: ExprLine[]) => void;
+  onUpdateLine: (idx: number, field: keyof ExprLine, value: string) => void;
+  onRemoveLine: (idx: number) => void;
+}) {
+  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [drag, setDrag] = useState<{ index: number; startY: number; currentY: number } | null>(null);
+  const [focusedIdx, setFocusedIdx] = useState<number | null>(null);
+
+  const handlePointerDown = (index: number, e: React.PointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrag({ index, startY: e.clientY, currentY: e.clientY });
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!drag) return;
+    const currentY = e.clientY;
+    const rows = rowRefs.current;
+    let targetIndex = drag.index;
+    for (let i = 0; i < rows.length; i++) {
+      const el = rows[i];
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (currentY < rect.top + rect.height / 2) { targetIndex = i; break; }
+      targetIndex = i;
+    }
+    if (targetIndex !== drag.index) {
+      onReorder(moveItem(lines, drag.index, targetIndex));
+      setDrag({ index: targetIndex, startY: currentY, currentY });
+    } else {
+      setDrag(d => (d ? { ...d, currentY } : d));
+    }
+  };
+  const endDrag = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    setDrag(null);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {lines.map((line, i) => {
+        const isDragging = drag?.index === i;
+        return (
+          <div
+            key={i}
+            ref={el => { rowRefs.current[i] = el; }}
+            onFocus={() => setFocusedIdx(i)}
+            onBlur={() => setFocusedIdx(null)}
+            style={{
+              ...exprCardStyle(focusedIdx === i),
+              position: 'relative',
+              transform: isDragging ? `translateY(${drag!.currentY - drag!.startY}px)` : undefined,
+              zIndex: isDragging ? 10 : undefined,
+              boxShadow: isDragging ? '0 6px 16px rgba(0,0,0,0.5)' : undefined,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onPointerDown={e => handlePointerDown(i, e)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                style={{ background: 'none', border: 'none', color: '#6c7086', fontSize: '16px', lineHeight: 1, cursor: 'grab', padding: '4px', touchAction: 'none' }}
+                title="Drag to reorder"
+              >☰</button>
+              <span style={{ fontSize: '10px', color: '#585b70', flex: 1 }}>Line {i + 1}</span>
+              <button
+                onClick={() => onRemoveLine(i)}
+                style={{ background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                title="Remove line"
+              >✕</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input type="text" value={line.lhs} onChange={e => onUpdateLine(i, 'lhs', e.target.value)} placeholder="p.xy" style={{ ...exprTextInputStyle, width: '64px' }} />
+              <select value={line.op} onChange={e => onUpdateLine(i, 'op', e.target.value)} style={exprSelectStyle}>
+                {EXPR_OPS.map(op => <option key={op} value={op}>{op}</option>)}
+              </select>
+              <GlslExprInput
+                value={line.rhs}
+                onChange={v => onUpdateLine(i, 'rhs', v)}
+                placeholder="expression…"
+                style={{ ...exprTextInputStyle, flex: 1, color: '#a6e3a1' }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function MobileGraphBrowser() {
   const nodes = useNodeGraphStore(s => s.nodes);
@@ -198,6 +396,9 @@ export function MobileGraphBrowser() {
   // React's documented pattern for "adjust state when a prop changes".
   const [exprMode, setExprMode] = useState<'inputs' | 'output'>('inputs');
   const [exprModeFor, setExprModeFor] = useState<string | undefined>(undefined);
+  // Which Expr Block input card currently has focus, for the thin highlight
+  // stroke — cleared naturally by the row's onBlur, not reset elsewhere.
+  const [focusedInputIdx, setFocusedInputIdx] = useState<number | null>(null);
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
@@ -462,7 +663,7 @@ export function MobileGraphBrowser() {
     const customInputs = (node.params.inputs as ExprInputDef[] | undefined) ?? [];
     const lines = (node.params.lines as ExprLine[] | undefined) ?? [];
     const result = (node.params.result as string | undefined) ?? 'p';
-    const outputType = (node.params.outputType as DataType | undefined) ?? 'vec3';
+    const outputType = (node.params.outputType as DataType | undefined) ?? 'float';
     const outSocket = node.outputs.result;
     const outType: DataType = outSocket?.type ?? outputType;
     const consumers = downstreamConsumers(node.id, 'result');
@@ -484,7 +685,7 @@ export function MobileGraphBrowser() {
     const removeLine = (idx: number) => updateNodeParams(node.id, { lines: lines.filter((_, i) => i !== idx) });
     const updateLine = (idx: number, field: keyof ExprLine, value: string) =>
       updateNodeParams(node.id, { lines: lines.map((l, i) => i === idx ? { ...l, [field]: value } : l) });
-    const moveLine = (idx: number, to: number) => updateNodeParams(node.id, { lines: moveItem(lines, idx, to) });
+    const setLines = (next: ExprLine[]) => updateNodeParams(node.id, { lines: next });
     const updateResult = (value: string) => updateNodeParams(node.id, { result: value });
 
     return (
@@ -527,7 +728,12 @@ export function MobileGraphBrowser() {
                 const socket = node.inputs[inp.name];
                 const upstream = socket?.connection ? nodes.find(n => n.id === socket.connection!.nodeId) : undefined;
                 return (
-                  <div key={idx} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div
+                    key={idx}
+                    onFocus={() => setFocusedInputIdx(idx)}
+                    onBlur={() => setFocusedInputIdx(null)}
+                    style={exprCardStyle(focusedInputIdx === idx)}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
                       <input
@@ -535,7 +741,7 @@ export function MobileGraphBrowser() {
                         value={inp.name}
                         onChange={e => renameInput(idx, e.target.value)}
                         placeholder="name"
-                        style={{ ...exprTextInputStyle, flex: 1 }}
+                        style={{ ...exprTextInputStyle, width: '92px', flexShrink: 0 }}
                       />
                       <select value={inp.type} onChange={e => retypeInput(idx, e.target.value as DataType)} style={exprSelectStyle}>
                         {EXPR_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -543,8 +749,8 @@ export function MobileGraphBrowser() {
                       <button
                         onClick={() => removeInput(idx)}
                         title="Remove input"
-                        style={{ background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
-                      >🗑</button>
+                        style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                      >✕</button>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '18px' }}>
                       {upstream ? (
@@ -581,43 +787,23 @@ export function MobileGraphBrowser() {
 
               <div>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>LINES</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {lines.map((line, i) => (
-                    <div key={i} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <button onClick={() => moveLine(i, i - 1)} disabled={i === 0} style={reorderBtnStyle(i === 0)} title="Move up">▲</button>
-                          <button onClick={() => moveLine(i, i + 1)} disabled={i === lines.length - 1} style={reorderBtnStyle(i === lines.length - 1)} title="Move down">▼</button>
-                        </div>
-                        <span style={{ fontSize: '10px', color: '#585b70', flex: 1 }}>Line {i + 1}</span>
-                        <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }} title="Remove line">✕</button>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input type="text" value={line.lhs} onChange={e => updateLine(i, 'lhs', e.target.value)} placeholder="p.xy" style={{ ...exprTextInputStyle, width: '64px' }} />
-                        <select value={line.op} onChange={e => updateLine(i, 'op', e.target.value)} style={exprSelectStyle}>
-                          {EXPR_OPS.map(op => <option key={op} value={op}>{op}</option>)}
-                        </select>
-                        <input type="text" value={line.rhs} onChange={e => updateLine(i, 'rhs', e.target.value)} placeholder="expression…" style={{ ...exprTextInputStyle, flex: 1, color: '#a6e3a1' }} />
-                      </div>
-                    </div>
-                  ))}
-                  {lines.length === 0 && (
-                    <div style={{ fontSize: '11px', color: '#45475a', fontFamily: 'monospace' }}>No lines yet.</div>
-                  )}
-                  <button
-                    onClick={addLine}
-                    style={{ alignSelf: 'flex-start', background: '#a6e3a111', border: '1px solid #a6e3a133', color: '#a6e3a1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
-                  >
-                    + Add Line
-                  </button>
-                </div>
+                {lines.length === 0 && (
+                  <div style={{ fontSize: '11px', color: '#45475a', fontFamily: 'monospace', marginBottom: '8px' }}>No lines yet.</div>
+                )}
+                <ExprLinesList lines={lines} onReorder={setLines} onUpdateLine={updateLine} onRemoveLine={removeLine} />
+                <button
+                  onClick={addLine}
+                  style={{ marginTop: '8px', background: '#a6e3a111', border: '1px solid #a6e3a133', color: '#a6e3a1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                >
+                  + Add Line
+                </button>
               </div>
 
               <div>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>RESULT</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '11px', color: '#6c7086', fontFamily: 'monospace' }}>return</span>
-                  <input type="text" value={result} onChange={e => updateResult(e.target.value)} placeholder="p" style={{ ...exprTextInputStyle, flex: 1, color: '#89b4fa' }} />
+                  <GlslExprInput value={result} onChange={updateResult} placeholder="p" style={{ ...exprTextInputStyle, flex: 1, color: '#89b4fa' }} />
                 </div>
               </div>
 
