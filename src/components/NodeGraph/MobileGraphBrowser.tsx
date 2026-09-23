@@ -16,6 +16,7 @@ import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
 import type { GraphNode, DataType, LooseGroup } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
+import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
@@ -2210,8 +2211,22 @@ export function MobileGraphBrowser() {
               )}
             </div>
             {infoTab === 'info' && (
-              <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
-                {def?.description ?? 'No info for this node.'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Same live, node-type-specific canvas diagrams desktop
+                    shows on the card itself (tone curves, gradient strips,
+                    wave shapes, ...) — reused as-is here rather than
+                    reinvented; they already scale to their container
+                    (width:'100%' with a fixed backing resolution) and
+                    already subscribe to live param/scope values, so this is
+                    just placing them, not building them. */}
+                {INLINE_VIZ_TYPES.has(node.type) && (
+                  <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', overflow: 'hidden' }}>
+                    <NodeInlineViz node={node} />
+                  </div>
+                )}
+                <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
+                  {def?.description ?? 'No info for this node.'}
+                </div>
               </div>
             )}
             {infoTab === 'comment' && (
