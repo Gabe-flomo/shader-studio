@@ -504,14 +504,41 @@ function TypeIcon({ type }: { type: string }) {
 // exactly instead of clipping or stretching to the author's original px
 // guess. Callers should pass `key={node.id}` so switching nodes remeasures
 // fresh rather than reusing a stale ratio.
+//
+// That still leaves the canvas's actual pixel buffer at its small
+// originally-authored size (e.g. 240×48) being stretched up to however
+// wide this frame ends up (often 300px+ on a phone) — a real upscale, so
+// text and thin lines come out visibly soft. Fixed by also resizing the
+// canvas's real width/height attributes (not just its CSS size) to match
+// this frame's actual measured on-screen size at the same aspect ratio,
+// so the backing buffer and the display size are 1:1 — no upscaling, no
+// blur. This runs in a *layout* effect, which React fires before any
+// passive (`useEffect`) effect — including the draw call every one of
+// these viz components makes on mount — so by the time a one-shot
+// (non-animated) viz actually draws, it already sees the corrected
+// resolution and paints crisply the first time; nothing needs a second
+// pass. Deliberately not scaled by devicePixelRatio: these draw functions
+// size their own fonts/line-widths in fixed canvas-pixel units, and
+// multiplying the backing resolution further on top of a retina display
+// would shrink that fixed-size text rather than just sharpen it. Runs on
+// every render (cheap no-op once the size stabilizes) so it also
+// self-corrects on an actual resize (rotation, window resize).
 function InlineVizFrame({ node }: { node: GraphNode }) {
   const frameRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const frame = frameRef.current;
     const canvas = frame?.querySelector('canvas');
     if (!frame || !canvas || !canvas.width || !canvas.height) return;
+    const aspect = canvas.width / canvas.height;
     frame.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
     canvas.style.height = '100%';
+    const rect = frame.getBoundingClientRect();
+    const targetW = Math.max(1, Math.round(rect.width));
+    const targetH = Math.max(1, Math.round(targetW / aspect));
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
   });
   return (
     // No padding — the aspect-ratio computed above is measured against this
