@@ -2125,7 +2125,18 @@ export function MobileGraphBrowser() {
     const paramOnlyEntries: Array<[string, GraphNode['inputs'][string]]> = Object.entries(def?.paramDefs ?? {})
       .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int' || pd.type === 'select') && paramVisible(node, pd))
       .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]]);
-    const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries];
+    // A vec3 paramDef's own r/g/b sockets (Palette's offset_r/g/b, ...) get
+    // their own full row inside that param's card below (renderExtraParamCard)
+    // — excluding them here avoids showing the exact same wire/slider/
+    // keyframe control twice, once generically and once in the dedicated
+    // card, which is exactly the "two sections for one control" duplication
+    // that card redesign exists to fix.
+    const vecComponentKeys = new Set(
+      Object.entries(def?.paramDefs ?? {})
+        .filter(([key, pd]) => !(key in node.inputs) && pd.type === 'vec3' && paramVisible(node, pd))
+        .flatMap(([key]) => ['r', 'g', 'b'].map(axis => `${key}_${axis}`))
+    );
+    const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries].filter(([key]) => !vecComponentKeys.has(key));
     // vec3 / vec3color / bool paramDefs (Palette's Offset/Amplitude/Freq/
     // Phase, any node with a plain on/off toggle, ...) don't fit the plain
     // slider-row shape paramOnlyEntries above assumes — a vec3 needs 3
@@ -2574,52 +2585,134 @@ export function MobileGraphBrowser() {
           </div>
         );
       }
-      // vec3 — 3 sub-sliders. A component whose own {key}_r/_g/_b socket is
-      // wired shows "wired" instead, since the wire wins at compile time
-      // (same fallback order Palette's own generateGLSL uses).
+      // vec3 — one full row per component, same dot/slider/expand-fold
+      // treatment as a real value row (renderValueRow) rather than three
+      // sliders crammed into one card: tap a component to reach its Value
+      // box and, when that component has its own backing socket (Palette's
+      // offset_r/g/b — not every vec3 paramDef does; Fractal Loop's
+      // offset/amplitude/freq/phase have no component sockets at all, see
+      // FractalLoopNode), keyframe access too. A wired component still just
+      // shows "wired ↑", since the wire wins at compile time (same fallback
+      // order Palette's own generateGLSL uses).
       const vals = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
       const step = pd.step ?? 0.01;
       const min = pd.min ?? 0;
       const max = pd.max ?? 1;
-      const compKeys = [`${key}_r`, `${key}_g`, `${key}_b`];
       const compLabels = ['r', 'g', 'b'];
       const compColors = ['#f38ba8', '#a6e3a1', '#89b4fa'];
       return (
-        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
-          <div style={{ fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</div>
+        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+          <div style={{ fontSize: '12px', color: '#cdd6f4', padding: '2px 0 4px' }}>{pd.label}</div>
           {[0, 1, 2].map(idx => {
-            const compConnected = node.inputs[compKeys[idx]]?.connection != null;
-            return (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '10px', color: compColors[idx], width: '10px', flexShrink: 0 }}>{compLabels[idx]}</span>
-                {compConnected ? (
+            const axisLabel = compLabels[idx];
+            const axisColor = compColors[idx];
+            const compKey = `${key}_${axisLabel}`;
+            const isCompSocket = compKey in node.inputs;
+            const compConnected = isCompSocket && node.inputs[compKey]?.connection != null;
+            const kfEligible = isCompSocket;
+            const isKeyframed = kfEligible && socketHasKeyframes(node, compKey);
+            const val = vals[idx] ?? 0;
+            const isExpanded = openSliderConfig === compKey;
+            const isLast = idx === 2;
+            const resetToDefault = () => {
+              const defVal = def?.defaultParams?.[key];
+              if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
+            };
+            const AxisDot = () => (
+              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: axisColor, flexShrink: 0, opacity: 0.6 }} />
+            );
+
+            if (compConnected) {
+              return (
+                <div key={axisLabel} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', borderBottom: isLast ? 'none' : '1px solid #24243a' }}>
+                  <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
                   <span style={{ fontSize: '11px', color: '#585b70', fontStyle: 'italic' }}>wired ↑</span>
-                ) : (
-                  <>
-                    <input
-                      type="range"
-                      min={min} max={max} step={step}
-                      value={vals[idx] ?? 0}
-                      onChange={e => {
-                        const next = [...vals];
-                        next[idx] = parseFloat(e.target.value);
-                        updateNodeParams(node.id, { [key]: next }, { immediate: true });
-                      }}
-                      onDoubleClick={() => {
-                        const defVal = def?.defaultParams?.[key];
-                        if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
-                      }}
-                      onTouchEnd={() => handleDoubleTap(`vec3_${key}_${idx}`, () => {
-                        const defVal = def?.defaultParams?.[key];
-                        if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
-                      })}
-                      title="Double-tap to reset to default"
-                      style={{ flex: 1, minWidth: 0 }}
-                    />
-                    <span style={{ fontSize: '11px', color: '#a6adc8', width: '48px', textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                      {formatSliderValue(vals[idx] ?? 0, step)}
+                </div>
+              );
+            }
+            if (isKeyframed) {
+              return (
+                <div key={axisLabel} style={{ padding: '4px 0', borderBottom: isLast ? 'none' : '1px solid #24243a' }}>
+                  <button
+                    onClick={() => setOpenSliderConfig(o => o === compKey ? null : compKey)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', touchAction: 'manipulation' }}
+                  >
+                    <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
+                    <span style={{ fontSize: '10px', color: '#f9e2af', flex: 1, textAlign: 'left' }}>◆ animated</span>
+                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                  </button>
+                  {isExpanded && (
+                    <div style={{ marginTop: '4px', marginLeft: '16px' }}>
+                      <button
+                        onClick={() => { setMobileKeyframeEditor({ nodeId: node.id, socketKey: compKey }); setMobileKeyframeTool('select'); }}
+                        style={{ background: 'none', border: '1px solid #f9e2af66', color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
+                      >◆ Edit Keyframes</button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div key={axisLabel} style={{ padding: '4px 0', borderBottom: isLast ? 'none' : '1px solid #24243a', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
+                  <AxisDot />
+                  <input
+                    type="range"
+                    min={min} max={max} step={step}
+                    value={val}
+                    onChange={e => {
+                      const next = [...vals];
+                      next[idx] = parseFloat(e.target.value);
+                      updateNodeParams(node.id, { [key]: next }, { immediate: true });
+                    }}
+                    onDoubleClick={resetToDefault}
+                    onTouchEnd={() => handleDoubleTap(`vec3_${key}_${idx}`, resetToDefault)}
+                    title="Double-tap to reset to default"
+                    style={{ flex: 1, minWidth: 0, accentColor: axisColor }}
+                  />
+                  <AxisDot />
+                  <button
+                    onClick={() => setOpenSliderConfig(o => o === compKey ? null : compKey)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+                      background: isExpanded ? '#313244' : 'none',
+                      border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
+                      borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
+                      color: isExpanded ? '#cdd6f4' : '#a6adc8',
+                    }}
+                  >
+                    <span style={{ fontSize: '10px', minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {formatSliderValue(val, step)}
                     </span>
-                  </>
+                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
+                      <input
+                        type="number"
+                        step={step}
+                        value={val}
+                        onChange={e => {
+                          const n = parseFloat(e.target.value);
+                          if (isNaN(n)) return;
+                          const next = [...vals];
+                          next[idx] = n;
+                          updateNodeParams(node.id, { [key]: next }, { immediate: true });
+                        }}
+                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
+                      />
+                    </div>
+                    {kfEligible && (
+                      <button
+                        onClick={() => { setMobileKeyframeEditor({ nodeId: node.id, socketKey: compKey }); setMobileKeyframeTool('add'); }}
+                        style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed #f9e2af66', color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
+                      >◆ Add Keyframes</button>
+                    )}
+                  </div>
                 )}
               </div>
             );
