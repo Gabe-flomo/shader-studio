@@ -482,7 +482,7 @@ interface NodeGraphState {
 
 // ─── Example graph data ───────────────────────────────────────────────────────
 
-export { EXAMPLE_GRAPHS, DEFAULT_EXAMPLE } from './exampleGraphs';
+export { EXAMPLE_GRAPHS, DEFAULT_EXAMPLE, EXAMPLE_FOLDERS } from './exampleGraphs';
 
 
 // ─── Preview sub-graph builder ────────────────────────────────────────────────

@@ -168,6 +168,13 @@ const smallIconBtnStyle = (color: string): React.CSSProperties => ({
   width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: '15px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
 });
+// Back/forward buttons in the node header — dims and becomes inert (but
+// stays in the layout, so the header doesn't jump) when there's nowhere to go.
+const navBtnStyle = (enabled: boolean): React.CSSProperties => ({
+  flexShrink: 0, background: 'none', border: 'none', color: enabled ? '#89b4fa' : '#3a3a52',
+  width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '17px', lineHeight: 1, cursor: enabled ? 'pointer' : 'default', touchAction: 'manipulation',
+});
 
 // ── Socket type icon ─────────────────────────────────────────────────────────
 // Used in the node detail view's Inputs/Outputs cards in place of a plain
@@ -204,6 +211,14 @@ const sectionHeaderBtnStyle: React.CSSProperties = {
   fontSize: '11px', fontWeight: 700, color: '#7d8296', letterSpacing: '0.05em',
   cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
 };
+// Small pill tab, e.g. the Info/Comment toggle under a node's cards.
+const smallTabBtnStyle = (active: boolean): React.CSSProperties => ({
+  padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+  background: active ? '#313244' : 'none',
+  border: active ? '1px solid #89b4fa' : '1px solid #45475a',
+  color: active ? '#89b4fa' : '#6c7086',
+  cursor: 'pointer', touchAction: 'manipulation',
+});
 
 // ── Node preview thumbnail ──────────────────────────────────────────────────
 // Reuses desktop's preview pipeline (compileNodePreviewShader walks the
@@ -486,6 +501,11 @@ export function MobileGraphBrowser() {
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
 
   const [focusStack, setFocusStack] = useState<string[]>([]);
+  // Redo history for the ‹/› back/forward buttons in the node header — only
+  // populated by goBack (what you stepped away from); any fresh navigation
+  // (drilling into a new node, jumping via breadcrumb, going Home) discards
+  // it, same as a browser tab's forward history after you follow a new link.
+  const [forwardStack, setForwardStack] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSocket | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
@@ -508,6 +528,9 @@ export function MobileGraphBrowser() {
   // each collapses independently by tapping its own header. Reset open on
   // every node change (below), same as exprMode.
   const [nodeSectionsOpen, setNodeSectionsOpen] = useState({ inputs: true, outputs: true });
+  // Info/Comment toggle under a generic node's cards — defaults to Info,
+  // reset alongside the other per-node view state below.
+  const [infoTab, setInfoTab] = useState<'info' | 'comment'>('info');
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
@@ -516,6 +539,7 @@ export function MobileGraphBrowser() {
     setExprModeFor(focusedId);
     setExprMode('inputs');
     setNodeSectionsOpen({ inputs: true, outputs: true });
+    setInfoTab('info');
   }
 
   // Same rank assignment the desktop "Auto Layout" button uses for spatial
@@ -523,9 +547,19 @@ export function MobileGraphBrowser() {
   // always matches the column it would land in on the canvas.
   const rankedRows = useMemo(() => groupNodesByRank(nodes), [nodes]);
 
-  const pushFocus = (id: string) => setFocusStack(stack => [...stack, id]);
-  const jumpTo = (index: number) => setFocusStack(stack => stack.slice(0, index + 1));
-  const goHome = () => setFocusStack([]);
+  const pushFocus = (id: string) => { setFocusStack(stack => [...stack, id]); setForwardStack([]); };
+  const jumpTo = (index: number) => { setFocusStack(stack => stack.slice(0, index + 1)); setForwardStack([]); };
+  const goHome = () => { setFocusStack([]); setForwardStack([]); };
+  const goBack = () => {
+    if (focusStack.length === 0) return;
+    setForwardStack(f => [focusStack[focusStack.length - 1], ...f]);
+    setFocusStack(stack => stack.slice(0, -1));
+  };
+  const goForward = () => {
+    if (forwardStack.length === 0) return;
+    setFocusStack(stack => [...stack, forwardStack[0]]);
+    setForwardStack(f => f.slice(1));
+  };
 
   const downstreamConsumers = (nodeId: string, outputKey: string) =>
     nodes.filter(n => Object.values(n.inputs).some(inp => inp.connection?.nodeId === nodeId && inp.connection.outputKey === outputKey));
@@ -592,8 +626,10 @@ export function MobileGraphBrowser() {
         {/* Header — the one fixed element as you scroll the cards below, so
             it's styled brighter than everything else to anchor "what node
             am I in" at a glance. */}
-        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px', background: '#242438' }}>
-          <div style={dotStyle(nodeDotColor(node))} />
+        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
+          <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
+          <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
+          <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
           <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
           <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
           {node.type !== 'output' && focusStack.length > 0 && (
@@ -624,8 +660,11 @@ export function MobileGraphBrowser() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <TypeIcon type={inp.type} />
                             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+                            {!upstream && (
+                              <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
+                            )}
                           </div>
-                          {upstream ? (
+                          {upstream && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
                               <button
@@ -634,8 +673,6 @@ export function MobileGraphBrowser() {
                                 title="Disconnect"
                               >✕</button>
                             </div>
-                          ) : (
-                            <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
                           )}
                           {pd && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -645,7 +682,7 @@ export function MobileGraphBrowser() {
                                 max={pd.max ?? 1}
                                 step={pd.step ?? 0.01}
                                 value={val}
-                                onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) })}
+                                onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) }, { immediate: true })}
                                 style={{ flex: 1 }}
                               />
                               <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '38px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -675,13 +712,15 @@ export function MobileGraphBrowser() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <TypeIcon type={out.type} />
                             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
-                            {consumers.map(c => (
-                              <button key={c.id} style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(c.id)}>{labelFor(c)} ›</button>
-                            ))}
                             <button style={smallIconBtnStyle('#89b4fa')} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
                           </div>
+                          {consumers.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+                              {consumers.map(c => (
+                                <button key={c.id} style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(c.id)}>{labelFor(c)} ›</button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -691,9 +730,32 @@ export function MobileGraphBrowser() {
             )}
           </div>
 
-          {def?.description && (
-            <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>{def.description}</div>
-          )}
+          <div>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+              <button style={smallTabBtnStyle(infoTab === 'info')} onClick={() => setInfoTab('info')}>ℹ Info</button>
+              <button style={smallTabBtnStyle(infoTab === 'comment')} onClick={() => setInfoTab('comment')}>✎ Comment</button>
+            </div>
+            {infoTab === 'info' ? (
+              <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
+                {def?.description ?? 'No info for this node.'}
+              </div>
+            ) : (
+              <textarea
+                // Same node.params.__comment key desktop's own comment editor
+                // uses (NodeComponent.tsx) — a "__"-prefixed metadata field,
+                // not a regular node param — so a comment written on either
+                // platform shows up on the other for the same node.
+                value={(node.params.__comment as string | undefined) ?? ''}
+                onChange={e => updateNodeParams(node.id, { __comment: e.target.value }, { immediate: true })}
+                placeholder="Add a note…"
+                style={{
+                  width: '100%', minHeight: '64px', background: '#1e1e2e', border: '1px solid #313244',
+                  borderRadius: '8px', padding: '8px', fontSize: '12px', color: '#cdd6f4',
+                  fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+            )}
+          </div>
         </div>
 
         {renderSocketOverlays(node)}
@@ -815,8 +877,10 @@ export function MobileGraphBrowser() {
 
     return (
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px', background: '#242438' }}>
-          <div style={dotStyle(nodeDotColor(node))} />
+        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
+          <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
+          <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
+          <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
           <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
           <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
           <button

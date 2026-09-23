@@ -14,7 +14,7 @@ import { FunctionBuilder } from './components/FunctionBuilder';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/TopNav';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
-import { useNodeGraphStore } from './store/useNodeGraphStore';
+import { useNodeGraphStore, EXAMPLE_GRAPHS, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
@@ -279,6 +279,11 @@ function App() {
   const [savedNames, setSavedNames]       = useState<string[]>([]);
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
+  // Mobile: the record button opens a menu (Record / Reset / Import / Export)
+  // instead of jumping straight into the export modal, and a separate
+  // Examples button opens a browsable gallery of starter graphs.
+  const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
+  const [showMobileExamples, setShowMobileExamples]     = useState(false);
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   // Node search palette
@@ -676,15 +681,104 @@ function App() {
           {/* Error badge */}
           {errorBadge}
 
-          {/* Record button */}
+          {/* Examples button — browse starter graphs; picking one loads it
+              in place (loadExampleGraph replaces the current graph), tapping
+              the button again just closes the browser and keeps whatever's
+              currently on screen. */}
           <button
-            onClick={() => setShowExport(true)}
-            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744', marginLeft: 'auto' }}
-            title="Export animation"
+            onClick={() => setShowMobileExamples(true)}
+            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#a6e3a1', borderColor: '#a6e3a144', marginLeft: 'auto' }}
+            title="Browse examples"
           >
-            🎬
+            ✦
           </button>
+
+          {/* Action menu — was a direct-to-record button; now Record sits
+              alongside Reset/Import/Export since they're all "whole graph"
+              actions and none of them need to be one tap away. */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowMobileActionMenu(v => !v)}
+              style={{ ...btnStyle(showMobileActionMenu), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744' }}
+              title="Record, reset, import, export"
+            >
+              🎬
+            </button>
+            {showMobileActionMenu && (
+              <div
+                onMouseLeave={() => setShowMobileActionMenu(false)}
+                style={{
+                  position: 'absolute', bottom: 'calc(100% + 4px)', right: 0,
+                  background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '8px', padding: '4px',
+                  display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '140px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
+                }}
+              >
+                <button
+                  onClick={() => { setShowMobileActionMenu(false); setShowExport(true); }}
+                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#cba6f7', borderColor: '#cba6f744' }}
+                >🎬 Record</button>
+                <button
+                  onClick={() => {
+                    setShowMobileActionMenu(false);
+                    if (window.confirm('Clear all nodes and start over?')) loadExampleGraph('blank');
+                  }}
+                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#f38ba8', borderColor: '#f38ba844' }}
+                >✕ Reset</button>
+                <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
+                <button onClick={() => { setShowMobileActionMenu(false); importGraphFromFile(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
+                <button onClick={() => { setShowMobileActionMenu(false); exportGraph(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Examples browser */}
+        {showMobileExamples && (
+          <div
+            onClick={() => setShowMobileExamples(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 60, display: 'flex', alignItems: 'flex-end' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', maxHeight: '75vh', overflowY: 'auto', background: '#181825',
+                borderRadius: '16px 16px 0 0', border: '1px solid #313244', padding: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ flex: 1, fontSize: '14px', fontWeight: 700, color: '#cdd6f4' }}>Examples</div>
+                <button
+                  onClick={() => setShowMobileExamples(false)}
+                  style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                  title="Close"
+                >✕</button>
+              </div>
+              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => (
+                <div key={folder.label} style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em', marginBottom: '6px' }}>
+                    {folder.label.toUpperCase()}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
+                      <button
+                        key={k}
+                        onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
+                        style={{
+                          background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                          padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+                          cursor: 'pointer', touchAction: 'manipulation',
+                        }}
+                      >
+                        {EXAMPLE_GRAPHS[k].label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Export modal */}
         {showExport && (
