@@ -1388,6 +1388,15 @@ export function MobileGraphBrowser() {
   const [homeAddNodeOpen, setHomeAddNodeOpen] = useState(false);
   // Long-press context menu on a Home chip — holds the target node's id.
   const [longPressMenuFor, setLongPressMenuFor] = useState<string | null>(null);
+  // "Insert a node into a connection" — picked from the long-press menu's
+  // own "insert into a connection" section (one entry per existing edge
+  // out of that node). Holds the specific edge being split so the search
+  // palette can filter to types with a compatible socket on both sides,
+  // and so placing one can rewire source->new->target afterward.
+  const [pathInsert, setPathInsert] = useState<{
+    sourceNodeId: string; sourceOutputKey: string; sourceOutputType: string;
+    targetNodeId: string; targetInputKey: string; targetInputType: string;
+  } | null>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
   // 'rank' is the synthetic BFS-depth grid (computeGraphLayout); 'real' mirrors
   // the desktop canvas's actual spatial layout (computeRealLayout), read-only.
@@ -1793,6 +1802,24 @@ export function MobileGraphBrowser() {
     if (!newNode) return;
     const inKey = firstCompatibleInputKey(newNode, socket.type);
     if (inKey) connectNodes(socket.nodeId, socket.key, newId, inKey);
+    pushFocus(newId);
+  };
+
+  // Splices a freshly-placed node into an existing source->target edge:
+  // source now feeds the new node instead, and the new node feeds target
+  // in target's original input's place. The search palette that triggers
+  // this was already filtered (filterOutputType=targetInputType,
+  // filterInputType=sourceOutputType) so a compatible pair is guaranteed
+  // to exist; first-match is the same convention every other placement
+  // flow here uses when more than one socket would technically qualify.
+  const handleNodePlacedForPathInsert = (newId: string, edge: NonNullable<typeof pathInsert>) => {
+    const newNode = getFreshActiveNodes().find(n => n.id === newId);
+    if (!newNode) return;
+    const inKey = firstCompatibleInputKey(newNode, edge.sourceOutputType);
+    const outKey = firstCompatibleOutputKey(newNode, edge.targetInputType);
+    if (!inKey || !outKey) return;
+    connectNodes(edge.sourceNodeId, edge.sourceOutputKey, newId, inKey);
+    connectNodes(newId, outKey, edge.targetNodeId, edge.targetInputKey);
     pushFocus(newId);
   };
 
@@ -4105,6 +4132,7 @@ export function MobileGraphBrowser() {
       {renderGraphNavigatorOverlay()}
       {renderGroupPortBuilderOverlay()}
       {renderLongPressMenu()}
+      {renderPathInsertPalette()}
     </div>
   );
 
@@ -4122,6 +4150,19 @@ export function MobileGraphBrowser() {
     const canDelete = node.type !== 'output' && !originalLocked;
     const openInputs = Object.entries(node.inputs).filter(([, inp]) => !inp.connection);
     const outputs = Object.entries(node.outputs);
+    // Every existing edge OUT of this node — one entry per (output, downstream
+    // node+input) pair, since one output can feed several consumers. "Insert
+    // a node into a connection" below offers to splice a new node into any
+    // one of these, same idea as hovering a connection line on desktop.
+    const outgoingEdges = outputs.flatMap(([outKey, out]) =>
+      nodes
+        .filter(n => n.id !== node.id)
+        .flatMap(target => Object.entries(target.inputs)
+          .filter(([, inp]) => inp.connection?.nodeId === node.id && inp.connection?.outputKey === outKey)
+          .map(([inKey, inp]) => ({
+            sourceOutputKey: outKey, sourceOutputLabel: out.label, sourceOutputType: out.type,
+            targetNode: target, targetInputKey: inKey, targetInputLabel: inp.label, targetInputType: inp.type,
+          }))));
     const close = () => setLongPressMenuFor(null);
     const feedInput = (key: string, type: string) => {
       setFocusStack([node.id]); setForwardStack([]);
@@ -4131,6 +4172,13 @@ export function MobileGraphBrowser() {
     const feedOutput = (key: string, type: string) => {
       setFocusStack([node.id]); setForwardStack([]);
       setPending({ dir: 'output', nodeId: node.id, key, type });
+      close();
+    };
+    const insertIntoPath = (edge: typeof outgoingEdges[number]) => {
+      setPathInsert({
+        sourceNodeId: node.id, sourceOutputKey: edge.sourceOutputKey, sourceOutputType: edge.sourceOutputType,
+        targetNodeId: edge.targetNode.id, targetInputKey: edge.targetInputKey, targetInputType: edge.targetInputType,
+      });
       close();
     };
     const rowBtnStyle: React.CSSProperties = {
@@ -4182,11 +4230,42 @@ export function MobileGraphBrowser() {
               ))}
             </>
           )}
+          {outgoingEdges.length > 0 && (
+            <>
+              <div style={sectionLabelStyle}>Insert a node into a connection</div>
+              {outgoingEdges.map((edge, i) => (
+                <button key={i} onClick={() => insertIntoPath(edge)} style={rowBtnStyle}>
+                  <div style={dotStyle(TYPE_COLORS[edge.sourceOutputType] ?? '#888')} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {edge.sourceOutputLabel} → {labelFor(edge.targetNode)}.{edge.targetInputLabel}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
           {!canDelete && openInputs.length === 0 && outputs.length === 0 && (
             <div style={{ fontSize: '11px', color: '#585b70', padding: '4px 0' }}>Nothing available for this node.</div>
           )}
         </div>
       </div>
+    );
+  }
+
+  // Search palette for "Insert a node into a connection" — filtered both
+  // ways at once (needs an input compatible with the edge's source output,
+  // AND an output compatible with the edge's target input), so only types
+  // that can actually sit in the middle of this specific edge show up.
+  function renderPathInsertPalette() {
+    if (!pathInsert) return null;
+    const edge = pathInsert;
+    return (
+      <NodeSearchPalette
+        open
+        onClose={() => setPathInsert(null)}
+        filterOutputType={edge.targetInputType}
+        filterInputType={edge.sourceOutputType}
+        onNodePlaced={newId => { handleNodePlacedForPathInsert(newId, edge); setPathInsert(null); }}
+      />
     );
   }
 
