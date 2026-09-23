@@ -13,7 +13,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
-import type { GraphNode, DataType, LooseGroup } from '../../types/nodeGraph';
+import type { GraphNode, DataType, LooseGroup, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
@@ -1979,8 +1979,22 @@ export function MobileGraphBrowser() {
       .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int' || pd.type === 'select') && paramVisible(node, pd))
       .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]]);
     const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries];
+    // vec3 / vec3color / bool paramDefs (Palette's Offset/Amplitude/Freq/
+    // Phase, any node with a plain on/off toggle, ...) don't fit the plain
+    // slider-row shape paramOnlyEntries above assumes — a vec3 needs 3
+    // sub-sliders (or "wired" in place of one, when its own
+    // `{key}_r/g/b` socket is connected — the desktop convention this
+    // mirrors), vec3color a colour picker, bool a checkbox. Desktop
+    // (NodeComponent.tsx) renders every one of these unconditionally, and
+    // mobile had no equivalent at all — not hidden, just never built —
+    // so e.g. Palette's 4 vec3 params were simply uneditable here.
+    const extraParamEntries: Array<[string, ParamDef]> = Object.entries(def?.paramDefs ?? {})
+      .filter((entry): entry is [string, ParamDef] => {
+        const [key, pd] = entry;
+        return !(key in node.inputs) && (pd.type === 'vec3' || pd.type === 'vec3color' || pd.type === 'bool') && paramVisible(node, pd);
+      });
     const outputEntries = Object.entries(node.outputs);
-    const hasInputs = inputEntries.length > 0;
+    const hasInputs = inputEntries.length > 0 || extraParamEntries.length > 0;
     const hasOutputs = outputEntries.length > 0;
     const hidden = hiddenInputKeys(node);
     const visibleInputEntries = inputEntries.filter(([key]) => !hidden.includes(key));
@@ -2221,6 +2235,96 @@ export function MobileGraphBrowser() {
       );
     };
 
+    // vec3 / vec3color / bool paramDefs (see extraParamEntries above) —
+    // mirrors NodeComponent.tsx's own widgets for each type exactly (same
+    // {key}_r/g/b "wired ↑" convention for a vec3 component whose own
+    // socket is connected, same 0-1 color-picker hex conversion) so a
+    // param behaves identically regardless of which platform edited it.
+    const renderExtraParamCard = (key: string, pd: ParamDef) => {
+      if (pd.type === 'bool') {
+        const val = node.params[key] !== false;
+        return (
+          <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <span style={{ flex: 1, fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</span>
+            <input
+              type="checkbox"
+              checked={val}
+              onChange={e => updateNodeParams(node.id, { [key]: e.target.checked }, { immediate: true })}
+              style={{ width: '18px', height: '18px', accentColor: '#cba6f7', cursor: 'pointer' }}
+            />
+          </div>
+        );
+      }
+      if (pd.type === 'vec3color') {
+        const vals = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
+        const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
+        const hex = `#${toHex(vals[0])}${toHex(vals[1])}${toHex(vals[2])}`;
+        return (
+          <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <span style={{ flex: 1, fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</span>
+            <input
+              type="color"
+              value={hex}
+              onChange={e => {
+                const h = e.target.value;
+                const r = parseInt(h.slice(1, 3), 16) / 255, g = parseInt(h.slice(3, 5), 16) / 255, b = parseInt(h.slice(5, 7), 16) / 255;
+                updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
+              }}
+              style={{ width: '36px', height: '26px', border: '1px solid #45475a', borderRadius: '4px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
+            />
+          </div>
+        );
+      }
+      // vec3 — 3 sub-sliders. A component whose own {key}_r/_g/_b socket is
+      // wired shows "wired" instead, since the wire wins at compile time
+      // (same fallback order Palette's own generateGLSL uses).
+      const vals = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
+      const step = pd.step ?? 0.01;
+      const min = pd.min ?? 0;
+      const max = pd.max ?? 1;
+      const compKeys = [`${key}_r`, `${key}_g`, `${key}_b`];
+      const compLabels = ['r', 'g', 'b'];
+      const compColors = ['#f38ba8', '#a6e3a1', '#89b4fa'];
+      return (
+        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+          <div style={{ fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</div>
+          {[0, 1, 2].map(idx => {
+            const compConnected = node.inputs[compKeys[idx]]?.connection != null;
+            return (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '10px', color: compColors[idx], width: '10px', flexShrink: 0 }}>{compLabels[idx]}</span>
+                {compConnected ? (
+                  <span style={{ fontSize: '11px', color: '#585b70', fontStyle: 'italic' }}>wired ↑</span>
+                ) : (
+                  <>
+                    <input
+                      type="range"
+                      min={min} max={max} step={step}
+                      value={vals[idx] ?? 0}
+                      onChange={e => {
+                        const next = [...vals];
+                        next[idx] = parseFloat(e.target.value);
+                        updateNodeParams(node.id, { [key]: next }, { immediate: true });
+                      }}
+                      onDoubleClick={() => {
+                        const defVal = def?.defaultParams?.[key];
+                        if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
+                      }}
+                      title="Double-tap to reset to default"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <span style={{ fontSize: '11px', color: '#a6adc8', width: '48px', textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                      {formatSliderValue(vals[idx] ?? 0, step)}
+                    </span>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
     const renderOutputCard = (key: string, out: GraphNode['outputs'][string]) => {
       const consumers = downstreamConsumers(node.id, key);
       return (
@@ -2251,7 +2355,7 @@ export function MobileGraphBrowser() {
 
           {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={{ display: 'flex', gap: '6px' }}>
-              <button style={smallTabBtnStyle(nodeTab === 'inputs')} onClick={() => setNodeTab('inputs')}>Inputs ({inputEntries.length})</button>
+              <button style={smallTabBtnStyle(nodeTab === 'inputs')} onClick={() => setNodeTab('inputs')}>Inputs ({inputEntries.length + extraParamEntries.length})</button>
               <button style={smallTabBtnStyle(nodeTab === 'outputs')} onClick={() => setNodeTab('outputs')}>Outputs ({outputEntries.length})</button>
             </div>
           )}
@@ -2261,6 +2365,7 @@ export function MobileGraphBrowser() {
               {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
               <div style={cardGridStyle}>
                 {visibleInputEntries.map(([key, inp]) => renderInputCard(key, inp, false))}
+                {extraParamEntries.map(([key, pd]) => renderExtraParamCard(key, pd))}
               </div>
               {node.type === 'group' && (
                 <button
