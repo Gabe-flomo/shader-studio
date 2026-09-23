@@ -12,6 +12,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
+import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
 import type { GraphNode, DataType, LooseGroup } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
@@ -40,6 +41,11 @@ function nodeDotColor(n: GraphNode): string {
 // semantics and are created/removed as a unit, same restriction desktop
 // applies in NodeGraph.tsx's context menu.
 const GROUP_TYPES = new Set(['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup']);
+
+// Node types with no meaningful assign operator — same exclusion list
+// desktop's NodeComponent.tsx uses (an anchor/loop-machinery node's output
+// isn't something you'd accumulate into).
+const ASSIGN_OP_EXCLUDED = new Set(['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group']);
 
 // ── Inline param sliders (unconnected float/int inputs only) ──────────────────
 // Mirrors the desktop card's paramDefs-driven slider: same key convention
@@ -153,6 +159,57 @@ function GraphEdges({ edges }: { edges: ReturnType<typeof computeGraphLayout>['e
           <path
             key={e.key}
             d={`M ${e.x1} ${e.y1} C ${e.x1} ${midY}, ${e.x2} ${midY}, ${e.x2} ${e.y2}`}
+            stroke="#585b70" strokeWidth={1.5} fill="none"
+          />
+        );
+      })}
+    </>
+  );
+}
+
+// ── "Real" (desktop canvas) layout — read-only mirror ──────────────────────
+// Unlike computeGraphLayout's synthetic rank grid, this places every node at
+// its actual node.position (the same spatial arrangement the desktop canvas
+// shows), so the two apps' mental picture of "where things are" matches.
+// Horizontal flow (desktop wires run left-socket-to-right-socket), so edges
+// use a horizontal bezier — computeGraphLayout's GraphEdges is vertical and
+// wouldn't read correctly here.
+function computeRealLayout(nodes: GraphNode[]) {
+  const pos = new Map<string, { x: number; y: number }>();
+  if (nodes.length === 0) return { pos, width: 0, height: 0, edges: [] as ReturnType<typeof computeGraphLayout>['edges'] };
+  const xs = nodes.map(n => n.position.x);
+  const ys = nodes.map(n => n.position.y);
+  const minX = Math.min(...xs), minY = Math.min(...ys);
+  for (const n of nodes) pos.set(n.id, { x: n.position.x - minX + GRAPH_PAD, y: n.position.y - minY + GRAPH_PAD });
+  const width = Math.max(...xs) - minX + GRAPH_NODE_W + GRAPH_PAD * 2;
+  const height = Math.max(...ys) - minY + GRAPH_NODE_H + GRAPH_PAD * 2;
+
+  const edges: ReturnType<typeof computeGraphLayout>['edges'] = [];
+  for (const n of nodes) {
+    const to = pos.get(n.id);
+    if (!to) continue;
+    for (const [key, inp] of Object.entries(n.inputs)) {
+      if (!inp.connection) continue;
+      const from = pos.get(inp.connection.nodeId);
+      if (!from) continue;
+      edges.push({
+        x1: from.x + GRAPH_NODE_W, y1: from.y + GRAPH_NODE_H / 2,
+        x2: to.x, y2: to.y + GRAPH_NODE_H / 2,
+        key: `${inp.connection.nodeId}:${inp.connection.outputKey}->${n.id}:${key}`,
+      });
+    }
+  }
+  return { pos, width, height, edges };
+}
+function GraphEdgesHorizontal({ edges }: { edges: ReturnType<typeof computeGraphLayout>['edges'] }) {
+  return (
+    <>
+      {edges.map(e => {
+        const midX = (e.x1 + e.x2) / 2;
+        return (
+          <path
+            key={e.key}
+            d={`M ${e.x1} ${e.y1} C ${midX} ${e.y1}, ${midX} ${e.y2}, ${e.x2} ${e.y2}`}
             stroke="#585b70" strokeWidth={1.5} fill="none"
           />
         );
@@ -944,11 +1001,30 @@ export function MobileGraphBrowser() {
     () => getActiveLooseGroups(topLevelNodes, topLevelLooseGroups, activeGroupPath),
     [topLevelNodes, topLevelLooseGroups, activeGroupPath],
   );
+  // The group node whose subgraph is `nodes` — undefined at the top level.
+  // Its own .inputs carries each port's live connection (for the "group
+  // inputs as a wiring source" picker and the ps_ externally-driven-param
+  // greyed-out check), and its id is what exposeGroupInput/rerouteGroupInput
+  // etc. need as `groupId`.
+  const activeGroupId = activeGroupPath[activeGroupPath.length - 1];
+  const parentGroupNode = useMemo(() => {
+    if (!activeGroupId) return undefined;
+    const parentScope = getActiveNodes(topLevelNodes, activeGroupPath.slice(0, -1)) ?? topLevelNodes;
+    return parentScope.find(n => n.id === activeGroupId);
+  }, [topLevelNodes, activeGroupPath, activeGroupId]);
+  const activeGroupInputPorts = (parentGroupNode?.params?.subgraph as { inputPorts?: import('../../types/nodeGraph').GroupInputPort[] } | undefined)?.inputPorts ?? [];
+  const activeGroupOutputPorts = (parentGroupNode?.params?.subgraph as { outputPorts?: import('../../types/nodeGraph').GroupOutputPort[] } | undefined)?.outputPorts ?? [];
+  const exposeGroupInput = useNodeGraphStore(s => s.exposeGroupInput);
+  const exposeGroupOutput = useNodeGraphStore(s => s.exposeGroupOutput);
+  const removeGroupOutput = useNodeGraphStore(s => s.removeGroupOutput);
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
   const removeNode = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
+  const setNodeAssignOp = useNodeGraphStore(s => s.setNodeAssignOp);
+  const setNodeAssignInit = useNodeGraphStore(s => s.setNodeAssignInit);
+  const toggleNodeCarryMode = useNodeGraphStore(s => s.toggleNodeCarryMode);
   // Cross-cutting with App.tsx's bottom action bar — see the store field's
   // own comment. mobileKeyframeTool is read here to drive the canvas editor
   // and written from the bottom bar's mode buttons, not from this file.
@@ -966,6 +1042,9 @@ export function MobileGraphBrowser() {
   const [pending, setPending] = useState<PendingSocket | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
+  // 'rank' is the synthetic BFS-depth grid (computeGraphLayout); 'real' mirrors
+  // the desktop canvas's actual spatial layout (computeRealLayout), read-only.
+  const [homeGraphLayoutMode, setHomeGraphLayoutMode] = useState<'rank' | 'real'>('rank');
   // The graph diagram is reachable from anywhere (not just Home) via the
   // breadcrumb's "⋈ Graph" button — at Home it toggles the list/graph view
   // in place (homeGraphView above); inside a node it opens this overlay
@@ -997,7 +1076,7 @@ export function MobileGraphBrowser() {
   const [hiddenSectionOpen, setHiddenSectionOpen] = useState(false);
   // Info/Comment toggle under a generic node's cards — defaults to Info,
   // reset alongside the other per-node view state below.
-  const [infoTab, setInfoTab] = useState<'info' | 'comment'>('info');
+  const [infoTab, setInfoTab] = useState<'info' | 'comment' | 'assign'>('info');
   // Which keyframe point is selected (for the easing-preset picker) — reset
   // whenever the editor's target (node/socket/axis) changes, below.
   const [kfSelectedIndex, setKfSelectedIndex] = useState<number | null>(null);
@@ -1280,6 +1359,27 @@ export function MobileGraphBrowser() {
     pushFocus(otherId);
   };
 
+  // Group input ports compatible with what's being wired — only relevant for
+  // dir:'input' pickers opened from inside a group. A port already feeding
+  // one internal node can be picked again for another (see GROUP_PORT_SENTINEL
+  // in shaderAssembler.ts): one port, many internal targets.
+  const groupPortCandidates = useMemo(() => {
+    if (!connectPicker || connectPicker.dir !== 'input' || !activeGroupId) return [];
+    return activeGroupInputPorts.filter(p => typesCompatible(p.type, connectPicker.type));
+  }, [connectPicker, activeGroupId, activeGroupInputPorts]);
+
+  const commitConnectToGroupPort = (portKey: string) => {
+    if (!connectPicker || !activeGroupId) return;
+    connectNodes(GROUP_PORT_SENTINEL, portKey, connectPicker.nodeId, connectPicker.key);
+    setConnectPicker(null);
+  };
+
+  const commitNewGroupInput = () => {
+    if (!connectPicker || !activeGroupId) return;
+    exposeGroupInput(activeGroupId, connectPicker.nodeId, connectPicker.key, connectPicker.type as DataType, connectPicker.key);
+    setConnectPicker(null);
+  };
+
   // ── Shared node-detail header ────────────────────────────────────────────
   // Used by every "inside a node" view (generic, Expr Block, keyframe
   // editor) — the one fixed element as you scroll/edit below it, styled
@@ -1386,7 +1486,19 @@ export function MobileGraphBrowser() {
   // ── Node detail (focused) view ───────────────────────────────────────────
   function renderNodeDetail(node: GraphNode) {
     const def = getNodeDefinition(node.type);
-    const inputEntries = Object.entries(node.inputs);
+    // Most sliderable params (Radius, Width/2...) double as declared input
+    // sockets, so they're already in node.inputs. A group's own Iterations
+    // is paramDefs-only with no matching socket — a group's `inputs` is
+    // built entirely from its ports/ps_ sockets, never from its own type's
+    // paramDefs — so it'd otherwise never get a row here at all. Scoped to
+    // GROUP_TYPES rather than every node type, since other paramDefs-only
+    // float/int fields elsewhere may be intentionally not meant as a row.
+    const paramOnlyEntries: Array<[string, GraphNode['inputs'][string]]> = GROUP_TYPES.has(node.type)
+      ? Object.entries(def?.paramDefs ?? {})
+          .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int') && paramVisible(node, pd))
+          .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]])
+      : [];
+    const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries];
     const outputEntries = Object.entries(node.outputs);
     const hasInputs = inputEntries.length > 0;
     const hasOutputs = outputEntries.length > 0;
@@ -1403,7 +1515,19 @@ export function MobileGraphBrowser() {
     };
 
     const renderInputCard = (key: string, inp: GraphNode['inputs'][string], isHidden: boolean) => {
-      const upstream = inp.connection ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+      // A synthetic paramOnlyEntries row (see above) has no real socket to
+      // wire or keyframe — it's a static param the compiler reads straight
+      // from node.params, same as e.g. a group's Iterations count.
+      const isRealSocket = key in node.inputs;
+      const isPortSourced = inp.connection?.nodeId === GROUP_PORT_SENTINEL;
+      const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
+      const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+      // Externally-driven param: this node's own float slider for `key` is
+      // exposed as a ps_ socket on the enclosing group, and that socket is
+      // currently fed from outside — the outer wire wins at compile time, so
+      // the local slider is locked to avoid implying it still does anything.
+      const psSocket = parentGroupNode?.inputs?.[`ps_${node.id}_${key}`];
+      const isExternallyDriven = !!psSocket?.connection;
       // Keyframes are a third input mode alongside "wired" and "static
       // value" — same eligibility rule desktop uses (NodeComponent.tsx): an
       // unwired float socket, or an unwired vec2/vec3 socket that declares
@@ -1412,11 +1536,11 @@ export function MobileGraphBrowser() {
       // stay ineligible).
       const isVectorKfType = inp.type === 'vec2' || inp.type === 'vec3';
       const kfAxes = isVectorKfType ? VECTOR_AXES[inp.type as 'vec2' | 'vec3'] : null;
-      const kfEligible = !upstream && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+      const kfEligible = isRealSocket && !upstream && !isPortSourced && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
       const isKeyframed = kfEligible && (
         inp.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, kfAxes ?? [])
       );
-      const pd = upstream || isKeyframed ? undefined : sliderableParam(node, key);
+      const pd = upstream || isPortSourced || isKeyframed ? undefined : sliderableParam(node, key);
       const val = pd ? currentSliderValue(node, key, pd) : 0;
       return (
         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
@@ -1438,7 +1562,7 @@ export function MobileGraphBrowser() {
                 }}
               >◆</button>
             )}
-            {!upstream && (
+            {isRealSocket && !upstream && !isPortSourced && (
               <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
             )}
           </div>
@@ -1450,6 +1574,26 @@ export function MobileGraphBrowser() {
                 style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
                 title="Disconnect"
               >✕</button>
+            </div>
+          )}
+          {/* Sourced from this group's own boundary port rather than another
+              internal node — not navigable (there's nothing to drill into),
+              but still freely disconnectable, same as any other wire. */}
+          {isPortSourced && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', cursor: 'default', color: '#cba6f7', borderColor: '#cba6f755' }}>
+                ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
+              </span>
+              <button
+                onClick={() => disconnectInput(node.id, key)}
+                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
+                title="Disconnect"
+              >✕</button>
+            </div>
+          )}
+          {isExternallyDriven && (
+            <div style={{ fontSize: '10px', color: '#6c7086', fontStyle: 'italic' }}>
+              🔒 driven by group input — edit it from outside the group
             </div>
           )}
           {pd && (() => {
@@ -1476,13 +1620,14 @@ export function MobileGraphBrowser() {
                     max={effMax}
                     step={pd.step ?? 0.01}
                     value={Math.max(effMin, Math.min(effMax, val))}
+                    disabled={isExternallyDriven}
                     onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) }, { immediate: true })}
                     onDoubleClick={() => {
                       const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
                       updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
                     }}
-                    title="Double-tap to reset to default"
-                    style={{ flex: 1, minWidth: 0 }}
+                    title={isExternallyDriven ? 'Driven by an outer wire into this group — read-only here' : 'Double-tap to reset to default'}
+                    style={{ flex: 1, minWidth: 0, opacity: isExternallyDriven ? 0.4 : 1 }}
                   />
                   <button
                     onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
@@ -1560,11 +1705,25 @@ export function MobileGraphBrowser() {
 
     const renderOutputCard = (key: string, out: GraphNode['outputs'][string]) => {
       const consumers = downstreamConsumers(node.id, key);
+      // Is this exact (node, output) already a group output port? Lets the
+      // button below toggle expose/un-expose instead of stacking duplicates.
+      const exposedPort = activeGroupId ? activeGroupOutputPorts.find(p => p.fromNodeId === node.id && p.fromOutputKey === key) : undefined;
       return (
         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={out.type} />
             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
+            {activeGroupId && (
+              <button
+                style={{
+                  background: exposedPort ? '#cba6f722' : 'none', border: `1px solid ${exposedPort ? '#cba6f755' : '#45475a'}`,
+                  color: exposedPort ? '#cba6f7' : '#a6adc8', borderRadius: '5px', padding: '3px 6px', fontSize: '10px',
+                  cursor: 'pointer', touchAction: 'manipulation',
+                }}
+                title={exposedPort ? "Un-expose (remove this group output)" : 'Expose as this group’s output'}
+                onClick={() => exposedPort ? removeGroupOutput(activeGroupId, exposedPort.key) : exposeGroupOutput(activeGroupId, node.id, key, out.type, out.label)}
+              >{exposedPort ? '⛓ Exposed' : '⛓ Expose'}</button>
+            )}
             <button style={smallIconBtnStyle('#89b4fa')} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
           </div>
           {consumers.length > 0 && (
@@ -1626,12 +1785,16 @@ export function MobileGraphBrowser() {
             <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
               <button style={smallTabBtnStyle(infoTab === 'info')} onClick={() => setInfoTab('info')}>ℹ Info</button>
               <button style={smallTabBtnStyle(infoTab === 'comment')} onClick={() => setInfoTab('comment')}>✎ Comment</button>
+              {!ASSIGN_OP_EXCLUDED.has(node.type) && (
+                <button style={smallTabBtnStyle(infoTab === 'assign')} onClick={() => setInfoTab('assign')}>⇄ Assign</button>
+              )}
             </div>
-            {infoTab === 'info' ? (
+            {infoTab === 'info' && (
               <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
                 {def?.description ?? 'No info for this node.'}
               </div>
-            ) : (
+            )}
+            {infoTab === 'comment' && (
               <textarea
                 // Same node.params.__comment key desktop's own comment editor
                 // uses (NodeComponent.tsx) — a "__"-prefixed metadata field,
@@ -1647,6 +1810,64 @@ export function MobileGraphBrowser() {
                 }}
               />
             )}
+            {infoTab === 'assign' && !ASSIGN_OP_EXCLUDED.has(node.type) && (() => {
+              const assignOp = node.assignOp ?? '=';
+              const isInsideLoop = !!parentGroupNode && typeof parentGroupNode.params?.iterations === 'number' && (parentGroupNode.params.iterations as number) > 1;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: '#a6adc8' }}>Operator</span>
+                    <select
+                      value={assignOp}
+                      onChange={e => setNodeAssignOp(node.id, e.target.value as GraphNode['assignOp'])}
+                      title="Declare an accumulator and combine this node's output (+= -= *= /=) instead of overwriting it"
+                      style={{
+                        background: assignOp !== '=' ? '#313244' : '#1e1e2e',
+                        border: `1px solid ${assignOp !== '=' ? '#89b4fa88' : '#45475a'}`,
+                        color: assignOp !== '=' ? '#89b4fa' : '#cdd6f4',
+                        borderRadius: '6px', padding: '4px 8px', fontSize: '12px', fontFamily: 'monospace',
+                      }}
+                    >
+                      <option value="="> = </option>
+                      <option value="+=">+=</option>
+                      <option value="-=">-=</option>
+                      <option value="*=">*=</option>
+                      <option value="/=">/=</option>
+                    </select>
+                    {isInsideLoop && (
+                      <button
+                        onClick={() => toggleNodeCarryMode(node.id)}
+                        title={node.carryMode ? 'Carry mode ON — output feeds back as input each iteration. Tap to disable.' : 'Enable carry mode — output feeds back as input each iteration'}
+                        style={{
+                          marginLeft: 'auto',
+                          background: node.carryMode ? '#a6e3a122' : 'none', border: `1px solid ${node.carryMode ? '#a6e3a155' : '#45475a'}`,
+                          color: node.carryMode ? '#a6e3a1' : '#a6adc8', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', fontFamily: 'monospace',
+                        }}
+                      >⟳ Carry</button>
+                    )}
+                  </div>
+                  {assignOp !== '=' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, fontFamily: 'monospace' }}>init</span>
+                      <input
+                        type="text"
+                        value={node.assignInit ?? ''}
+                        onChange={e => setNodeAssignInit(node.id, e.target.value)}
+                        placeholder="default (0 or 1)"
+                        style={{ ...exprTextInputStyle, flex: 1 }}
+                      />
+                      {node.assignInit && (
+                        <button
+                          onClick={() => setNodeAssignInit(node.id, '')}
+                          title="Clear init expression (revert to neutral element)"
+                          style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '12px', padding: '2px' }}
+                        >✕</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -2114,6 +2335,28 @@ export function MobileGraphBrowser() {
     const candidateIds = new Set(connectCandidates.map(c => c.id));
     return (
       <div style={{ flex: 1, overflow: 'auto' }}>
+        {/* Group's own input ports — this group's boundary sockets, wireable
+            just like any other source. Only shown while wiring an input and
+            inside a group (dir:'output' pickers pick a downstream consumer,
+            which is never one of these). */}
+        {connectPicker.dir === 'input' && activeGroupId && (
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid #313244' }}>
+            <div style={{ fontSize: '10px', color: '#6c7086', marginBottom: '6px', letterSpacing: '0.04em' }}>GROUP INPUTS</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {groupPortCandidates.map(p => (
+                <button
+                  key={p.key}
+                  onClick={() => commitConnectToGroupPort(p.key)}
+                  style={{ ...chipStyle, fontSize: '11px', color: '#cba6f7', borderColor: '#cba6f755' }}
+                >⛓ {p.label}</button>
+              ))}
+              <button
+                onClick={commitNewGroupInput}
+                style={{ ...chipStyle, fontSize: '11px', background: 'none', borderStyle: 'dashed', color: '#89b4fa' }}
+              >+ New Group Input</button>
+            </div>
+          </div>
+        )}
         <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
           <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
             <GraphEdges edges={layout.edges} />
@@ -2416,32 +2659,55 @@ export function MobileGraphBrowser() {
     if (nodes.length === 0) {
       return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>No nodes yet.</div>;
     }
-    const layout = computeGraphLayout(nodes, rankedRows);
+    const isReal = homeGraphLayoutMode === 'real';
+    const layout = isReal ? computeRealLayout(nodes) : computeGraphLayout(nodes, rankedRows);
     return (
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
-          <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
-            <GraphEdges edges={layout.edges} />
-          </svg>
-          {nodes.map(n => {
-            const p = layout.pos.get(n.id);
-            if (!p) return null;
-            return (
-              <button
-                key={n.id}
-                onClick={() => pushFocus(n.id)}
-                style={{
-                  position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
-                  display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
-                  background: '#1e1e2e', border: '1px solid #313244', borderRadius: '6px',
-                  padding: '0 8px', fontSize: '11px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
-                }}
-              >
-                <div style={dotStyle(nodeDotColor(n))} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
-              </button>
-            );
-          })}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Rank (synthetic BFS-depth grid) vs. Real (desktop canvas's actual
+            spatial layout, read-only — no dragging, no editing) — tapping a
+            node still drills in the same way in either mode. */}
+        <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+          {(['rank', 'real'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setHomeGraphLayoutMode(mode)}
+              style={{
+                padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                background: homeGraphLayoutMode === mode ? '#313244' : 'none',
+                border: `1px solid ${homeGraphLayoutMode === mode ? '#89b4fa' : '#45475a'}`,
+                color: homeGraphLayoutMode === mode ? '#89b4fa' : '#6c7086',
+                cursor: 'pointer', touchAction: 'manipulation',
+              }}
+            >
+              {mode === 'rank' ? 'Rank' : 'Real (desktop layout)'}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
+            <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+              {isReal ? <GraphEdgesHorizontal edges={layout.edges} /> : <GraphEdges edges={layout.edges} />}
+            </svg>
+            {nodes.map(n => {
+              const p = layout.pos.get(n.id);
+              if (!p) return null;
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => pushFocus(n.id)}
+                  style={{
+                    position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
+                    display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
+                    background: '#1e1e2e', border: '1px solid #313244', borderRadius: '6px',
+                    padding: '0 8px', fontSize: '11px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                >
+                  <div style={dotStyle(nodeDotColor(n))} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );

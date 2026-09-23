@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
-import { migrateNodeParams } from '../types/nodeGraph';
+import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -393,6 +393,19 @@ interface NodeGraphState {
   rerouteGroupInput: (groupId: string, portKey: string, toNodeId: string, toInputKey: string) => void;
   /** Remove a group input port and its external connection (called when disconnecting an external socket from inside a group) */
   removeGroupInputPort: (groupId: string, portKey: string) => void;
+  /**
+   * Create a brand-new group input port already wired to `toNodeId`/`toInputKey`
+   * — combines addGroupInput + rerouteGroupInput into one step/one undo entry,
+   * for a UI (mobile's "Connect Existing" picker) where "feed this input from
+   * a new group input" is one tap rather than desktop's two-step add-then-drag.
+   */
+  exposeGroupInput: (groupId: string, toNodeId: string, toInputKey: string, type: import('../types/nodeGraph').DataType, label: string) => void;
+  /**
+   * Create a brand-new group output port already sourced from `fromNodeId`'s
+   * `fromOutputKey` — combines addGroupOutput + setGroupOutput into one step,
+   * for exposing an internal node's output that isn't a group output yet.
+   */
+  exposeGroupOutput: (groupId: string, fromNodeId: string, fromOutputKey: string, type: import('../types/nodeGraph').DataType, label: string) => void;
   /**
    * Set the assignOp on a node (works for both top-level and subgraph nodes).
    * Controls how its outputs accumulate across iterations in a loop group.
@@ -1942,6 +1955,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const outerReplacements: Array<{ nodeId: string; inputKey: string; newConnection: { nodeId: string; outputKey: string } }> = [];
 
     let portIdx = 0;
+    // nodeId -> inputKey -> portKey, so the dangling connection below can be
+    // rewritten to the '__port__' sentinel instead of left pointing at the
+    // (now-removed) outer node — see resolveGroupPortOverrides in
+    // shaderAssembler.ts for why: it's what lets the port be reused by more
+    // than one internal target, and lets the target be freely rewired or
+    // disconnected from inside the group afterward.
+    const danglingToPort = new Map<string, Map<string, string>>();
 
     // INPUT PORTS: selected node inputs wired to non-selected nodes
     for (const sn of selectedNodes) {
@@ -1957,6 +1977,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           toNodeId: sn.id,
           toInputKey: key,
         });
+        if (!danglingToPort.has(sn.id)) danglingToPort.set(sn.id, new Map());
+        danglingToPort.get(sn.id)!.set(key, portKey);
         groupInputSockets[portKey] = {
           type: inp.type,
           label: key,
@@ -2058,11 +2080,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
 
-    // Mark all original selected nodes as immutable within the group
-    const originalNodes = selectedNodes.map(n => ({
-      ...n,
-      params: { ...n.params, _groupOriginal: true },
-    }));
+    // Mark all original selected nodes as immutable within the group (only
+    // the node itself can't be deleted — its wiring, incl. the dangling
+    // inputs just turned into ports below, stays freely editable).
+    const originalNodes = selectedNodes.map(n => {
+      const portMap = danglingToPort.get(n.id);
+      const inputs = portMap
+        ? Object.fromEntries(Object.entries(n.inputs).map(([k, inp]) => {
+            const portKey = portMap.get(k);
+            return [k, portKey ? { ...inp, connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: portKey } } : inp];
+          }))
+        : n.inputs;
+      return { ...n, inputs, params: { ...n.params, _groupOriginal: true } };
+    });
 
     // Auto-inject a LoopIndex node so iteration counter `i` is always accessible
     const loopIndexNode: import('../types/nodeGraph').GraphNode = {
@@ -2179,17 +2209,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       subgraph.nodes.filter(n => n.type === 'loopIndex').map(n => n.id)
     );
 
-    // Build a map of authoritative outer connections from the group's inputPorts.
-    // inputPorts record the ground truth: inner node X's input key Y = outer connection Z.
-    // Using this (rather than the inner node's stored connection) ensures the right wiring
-    // is restored even when the inner connection was stale (e.g. carry nodes).
-    const outerConnectionPatch = new Map<string, Record<string, { nodeId: string; outputKey: string }>>();
+    // Build a map of authoritative outer connections by scanning subgraph
+    // nodes for the GROUP_PORT_SENTINEL connection (see groupNodes), not the
+    // port's own legacy toNodeId/toInputKey — a port can now be rewired to a
+    // different internal node (or shared by several), so the sentinel scan
+    // is the only way to know who's *actually* fed by it at ungroup time.
+    const portOuterConn = new Map<string, { nodeId: string; outputKey: string }>();
     for (const port of (subgraph.inputPorts ?? [])) {
       const outerConn = groupNode.inputs[port.key]?.connection;
-      if (!outerConn) continue;
-      const nodePatches = outerConnectionPatch.get(port.toNodeId) ?? {};
-      nodePatches[port.toInputKey] = outerConn;
-      outerConnectionPatch.set(port.toNodeId, nodePatches);
+      if (outerConn) portOuterConn.set(port.key, outerConn);
+    }
+    const outerConnectionPatch = new Map<string, Record<string, { nodeId: string; outputKey: string }>>();
+    for (const sn of subgraph.nodes) {
+      for (const [k, inp] of Object.entries(sn.inputs)) {
+        if (inp.connection?.nodeId !== GROUP_PORT_SENTINEL) continue;
+        const outerConn = portOuterConn.get(inp.connection.outputKey);
+        if (!outerConn) continue;
+        const nodePatches = outerConnectionPatch.get(sn.id) ?? {};
+        nodePatches[k] = outerConn;
+        outerConnectionPatch.set(sn.id, nodePatches);
+      }
     }
 
     // Restore subgraph nodes — exclude auto-injected sentinels (loopIndex) and
@@ -3354,14 +3393,44 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  // Wires `toNodeId`'s `toInputKey` to this port via the GROUP_PORT_SENTINEL
+  // connection — the live source of truth the compiler scans for (see
+  // resolveGroupPortOverrides) — so a port can drive any number of internal
+  // targets and each stays freely rewireable/disconnectable afterward,
+  // instead of a single fixed toNodeId/toInputKey silently overriding
+  // whatever the node is actually wired to. Also updates the port's own
+  // toNodeId/toInputKey as a display-only "primary target" record (legacy
+  // field, no longer read by the compiler for plain groups).
   rerouteGroupInput: (groupId, portKey, toNodeId, toInputKey) => {
+    undoManager.push(get().nodes);
     const { activeGroupPath } = get();
     set(state => {
       return {
         nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
           const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
           if (!sg) return n;
-          return { ...n, params: { ...n.params, subgraph: { ...sg, inputPorts: sg.inputPorts.map(p => p.key === portKey ? { ...p, toNodeId, toInputKey } : p) } } };
+          const newSgNodes = sg.nodes.map(sn => {
+            if (sn.id !== toNodeId) return sn;
+            const existing = sn.inputs[toInputKey];
+            return {
+              ...sn,
+              inputs: {
+                ...sn.inputs,
+                [toInputKey]: { ...(existing ?? { type: 'float' as import('../types/nodeGraph').DataType, label: toInputKey }), connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: portKey } },
+              },
+            };
+          });
+          return {
+            ...n,
+            params: {
+              ...n.params,
+              subgraph: {
+                ...sg,
+                nodes: newSgNodes,
+                inputPorts: sg.inputPorts.map(p => p.key === portKey ? { ...p, toNodeId, toInputKey } : p),
+              },
+            },
+          };
         }),
       };
     });
@@ -3389,6 +3458,61 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }),
       };
     });
+    get().compile();
+  },
+
+  exposeGroupInput: (groupId, toNodeId, toInputKey, type, label) => {
+    undoManager.push(get().nodes);
+    const { activeGroupPath } = get();
+    set(state => ({
+      nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+        let idx = sg.inputPorts.length + sg.outputPorts.length;
+        while (existingKeys.has(`in${idx}`)) idx++;
+        const portKey = `in${idx}`;
+        const newPort: import('../types/nodeGraph').GroupInputPort = { key: portKey, type, label, toNodeId, toInputKey };
+        const newSgNodes = sg.nodes.map(sn => {
+          if (sn.id !== toNodeId) return sn;
+          const existing = sn.inputs[toInputKey];
+          return {
+            ...sn,
+            inputs: {
+              ...sn.inputs,
+              [toInputKey]: { ...(existing ?? { type, label: toInputKey }), connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: portKey } },
+            },
+          };
+        });
+        return {
+          ...n,
+          inputs: { ...n.inputs, [portKey]: { type, label } },
+          params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes, inputPorts: [...sg.inputPorts, newPort] } },
+        };
+      }),
+    }));
+    get().compile();
+  },
+
+  exposeGroupOutput: (groupId, fromNodeId, fromOutputKey, type, label) => {
+    undoManager.push(get().nodes);
+    const { activeGroupPath } = get();
+    set(state => ({
+      nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+        let idx = sg.outputPorts.length;
+        let portKey = `out${idx}`;
+        while (existingKeys.has(portKey)) portKey = `out${++idx}`;
+        const newPort: import('../types/nodeGraph').GroupOutputPort = { key: portKey, type, label, fromNodeId, fromOutputKey };
+        return {
+          ...n,
+          outputs: { ...n.outputs, [portKey]: { type, label } },
+          params: { ...n.params, subgraph: { ...sg, outputPorts: [...sg.outputPorts, newPort] } },
+        };
+      }),
+    }));
     get().compile();
   },
 

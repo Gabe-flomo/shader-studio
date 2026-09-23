@@ -1,3 +1,4 @@
+import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { GraphNode, DataType, InputSocket, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { topologicalSort } from './topoSort';
@@ -274,6 +275,34 @@ function isGlslVarRef(v: string): boolean {
   return true;
 }
 
+/**
+ * Resolve a group subgraph's input-port overrides by scanning every internal
+ * node for the GROUP_PORT_SENTINEL connection, instead of trusting each
+ * port's own (legacy) toNodeId/toInputKey. This is what lets one port drive
+ * any number of internal targets, and lets a node inside the group be freely
+ * rewired or disconnected from a port without the port silently overriding
+ * it again at compile time (the old toNodeId/toInputKey mapping was a fixed,
+ * single target that ignored whatever the internal node was actually wired
+ * to). `portValues` maps each port's key to its resolved outer GLSL var;
+ * `slugMap` maps original subgraph node ids to their compiled (prefixed) ids.
+ */
+function resolveGroupPortOverrides(
+  subgraphNodes: GraphNode[],
+  portValues: Map<string, string>,
+  slugMap: Map<string, string>,
+): Map<string, string> {
+  const overrides = new Map<string, string>();
+  for (const gn of subgraphNodes) {
+    for (const [inKey, inp] of Object.entries(gn.inputs)) {
+      if (inp.connection?.nodeId !== GROUP_PORT_SENTINEL) continue;
+      const srcVar = portValues.get(inp.connection.outputKey);
+      if (!srcVar) continue;
+      overrides.set(`${slugMap.get(gn.id) ?? gn.id}:${inKey}`, srcVar);
+    }
+  }
+  return overrides;
+}
+
 // ── Main assembler ────────────────────────────────────────────────────────────
 
 
@@ -476,12 +505,12 @@ export class ShaderAssembler {
                   }
                 }
                 // Build inner port overrides from the nested group's resolved input vars (slug-keyed)
-                const innerPortOverrides = new Map<string, string>();
+                const innerPortValues = new Map<string, string>();
                 for (const port of (innerSubgraph.inputPorts ?? [])) {
                   const outerVar = nestedInputVars[port.key];
-                  const mappedToNodeId = innerSlugMap.get(port.toNodeId) ?? port.toNodeId;
-                  if (outerVar) innerPortOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
+                  if (outerVar) innerPortValues.set(port.key, outerVar);
                 }
+                const innerPortOverrides = resolveGroupPortOverrides(innerSubgraph.nodes, innerPortValues, innerSlugMap);
                 // Collect GLSL helpers from inner subgraph nodes
                 for (const inn of innerSubgraph.nodes) {
                   const innDef = getNodeDefinition(inn.type);
@@ -706,14 +735,12 @@ export class ShaderAssembler {
           if (iters <= 1) {
             // ── Single pass (original behavior) ──────────────────────────────────
             const prefix = `${nodeSlug}_g_`;
-            const portInputOverrides = new Map<string, string>();
+            const portValues = new Map<string, string>();
             for (const port of (subgraph.inputPorts ?? [])) {
               const outerVar = inputVars[port.key];
-              if (outerVar) {
-                const mappedToNodeId = subSlugMap.get(port.toNodeId) ?? port.toNodeId;
-                portInputOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
-              }
+              if (outerVar) portValues.set(port.key, outerVar);
             }
+            const portInputOverrides = resolveGroupPortOverrides(subgraph.nodes, portValues, subSlugMap);
             compileSubgraphPass(prefix, portInputOverrides);
             for (const [sid, sslug] of subSlugMap) this.nodeSlugMap.set(sid, prefix + sslug);
             const groupOutputVars: Record<string, string> = {};
@@ -766,16 +793,14 @@ export class ShaderAssembler {
 
             // Build portInputOverrides early — needed for carry-mode node init resolution below.
             // Keys use SLUG-based ids (matching compileSubgraphPass's slug-keyed lookup).
-            const portInputOverrides = new Map<string, string>();
+            const portValues = new Map<string, string>();
             for (const port of inPorts) {
               const outerVar = carryInKeys.has(port.key)
                 ? carryVarNames[port.key]   // carry: use the persistent carry var
                 : inputVars[port.key];      // fixed: same outer var every iteration
-              if (outerVar) {
-                const mappedToNodeId = subSlugMap.get(port.toNodeId) ?? port.toNodeId;
-                portInputOverrides.set(`${mappedToNodeId}:${port.toInputKey}`, outerVar);
-              }
+              if (outerVar) portValues.set(port.key, outerVar);
             }
+            const portInputOverrides = resolveGroupPortOverrides(subgraph.nodes, portValues, subSlugMap);
 
             // 1c. Carry-mode nodes: forward-declare the node's natural output var outside the loop,
             //     initialize it, then feed it back as the carry input each iteration.
@@ -1154,14 +1179,15 @@ export class ShaderAssembler {
               const grpSlugMap = new Map<string, string>();
               for (const gn of grpSubgraph.nodes) grpSlugMap.set(gn.id, computeNodeSlug(gn, this.usedSlugs));
               const grpPrefix = `${sn.id}_g_`;
-              const grpPortOverrides = new Map<string, string>();
+              const grpPortValues = new Map<string, string>();
               for (const port of (grpSubgraph.inputPorts ?? [])) {
                 const portInp = sn.inputs[port.key];
                 let srcVar: string | undefined;
                 if (portInp?.connection) srcVar = this.nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
                 if (!srcVar) srcVar = sgPortOverrides.get(`${sn.id.slice(sgPrefix.length)}:${port.key}`);
-                if (srcVar) grpPortOverrides.set(`${grpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+                if (srcVar) grpPortValues.set(port.key, srcVar);
               }
+              const grpPortOverrides = resolveGroupPortOverrides(grpSubgraph.nodes, grpPortValues, grpSlugMap);
               const grpPrefixed: GraphNode[] = grpSubgraph.nodes.map(gn => {
                 // Apply slider overrides stored as 'innerNodeId::paramKey' on the group node's params
                 const overridePrefix = `${gn.id}::`;
@@ -1647,14 +1673,15 @@ export class ShaderAssembler {
                       const igrpSlugMap = new Map<string, string>();
                       for (const gn of igrpSub.nodes) igrpSlugMap.set(gn.id, computeNodeSlug(gn, this.usedSlugs));
                       const igrpPrefix = `${sgn.id}_g_`;
-                      const igrpPortOverrides = new Map<string, string>();
+                      const igrpPortValues = new Map<string, string>();
                       for (const port of (igrpSub.inputPorts ?? [])) {
                         const portInp = sgn.inputs[port.key];
                         let srcVar: string | undefined;
                         if (portInp?.connection) srcVar = this.nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
                         if (!srcVar) srcVar = sgPortOverridesInline.get(`${sgn.id.slice(sgInnerPrefix.length)}:${port.key}`);
-                        if (srcVar) igrpPortOverrides.set(`${igrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+                        if (srcVar) igrpPortValues.set(port.key, srcVar);
                       }
+                      const igrpPortOverrides = resolveGroupPortOverrides(igrpSub.nodes, igrpPortValues, igrpSlugMap);
                       const igrpPrefixed: GraphNode[] = igrpSub.nodes.map(gn => ({
                         ...gn, id: igrpPrefix + igrpSlugMap.get(gn.id)!,
                         inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
@@ -1761,14 +1788,15 @@ export class ShaderAssembler {
                   if (slug) mlGrpSlugToOrigNode.set(slug, origGn);
                 }
                 const mlGrpPrefix = `${sn.id}_g_`;
-                const mlGrpPortOverrides = new Map<string, string>();
+                const mlGrpPortValues = new Map<string, string>();
                 for (const port of (mlGrpSubgraph.inputPorts ?? [])) {
                   const portInp = sn.inputs[port.key];
                   let srcVar: string | undefined;
                   if (portInp?.connection) srcVar = this.nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
                   if (!srcVar) srcVar = mlPortOverrides.get(`${sn.id.slice(mlPrefix.length)}:${port.key}`);
-                  if (srcVar) mlGrpPortOverrides.set(`${mlGrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+                  if (srcVar) mlGrpPortValues.set(port.key, srcVar);
                 }
+                const mlGrpPortOverrides = resolveGroupPortOverrides(mlGrpSubgraph.nodes, mlGrpPortValues, mlGrpSlugMap);
                 const mlGrpPrefixed: GraphNode[] = mlGrpSubgraph.nodes.map(gn => ({
                   ...gn, id: mlGrpPrefix + mlGrpSlugMap.get(gn.id)!,
                   inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
@@ -2389,14 +2417,15 @@ export class ShaderAssembler {
                       const igrpSlugMap = new Map<string, string>();
                       for (const gn of igrpSub.nodes) igrpSlugMap.set(gn.id, computeNodeSlug(gn, this.usedSlugs));
                       const igrpPrefix = `${sgn.id}_g_`;
-                      const igrpPortOverrides = new Map<string, string>();
+                      const igrpPortValues = new Map<string, string>();
                       for (const port of (igrpSub.inputPorts ?? [])) {
                         const portInp = sgn.inputs[port.key];
                         let srcVar: string | undefined;
                         if (portInp?.connection) srcVar = this.nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
                         if (!srcVar) srcVar = sgPortOverridesInline.get(`${sgn.id.slice(sgInnerPrefix.length)}:${port.key}`);
-                        if (srcVar) igrpPortOverrides.set(`${igrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+                        if (srcVar) igrpPortValues.set(port.key, srcVar);
                       }
+                      const igrpPortOverrides = resolveGroupPortOverrides(igrpSub.nodes, igrpPortValues, igrpSlugMap);
                       const igrpPrefixed: GraphNode[] = igrpSub.nodes.map(gn => ({
                         ...gn, id: igrpPrefix + igrpSlugMap.get(gn.id)!,
                         inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
@@ -2497,14 +2526,15 @@ export class ShaderAssembler {
                   if (slug) mlGrpSlugToOrigNode.set(slug, origGn);
                 }
                 const mlGrpPrefix = `${sn.id}_g_`;
-                const mlGrpPortOverrides = new Map<string, string>();
+                const mlGrpPortValues = new Map<string, string>();
                 for (const port of (mlGrpSubgraph.inputPorts ?? [])) {
                   const portInp = sn.inputs[port.key];
                   let srcVar: string | undefined;
                   if (portInp?.connection) srcVar = this.nodeOutputs.get(portInp.connection.nodeId)?.[portInp.connection.outputKey];
                   if (!srcVar) srcVar = mlPortOverrides.get(`${sn.id.slice(mlPrefix.length)}:${port.key}`);
-                  if (srcVar) mlGrpPortOverrides.set(`${mlGrpSlugMap.get(port.toNodeId) ?? port.toNodeId}:${port.toInputKey}`, srcVar);
+                  if (srcVar) mlGrpPortValues.set(port.key, srcVar);
                 }
+                const mlGrpPortOverrides = resolveGroupPortOverrides(mlGrpSubgraph.nodes, mlGrpPortValues, mlGrpSlugMap);
                 const mlGrpPrefixed: GraphNode[] = mlGrpSubgraph.nodes.map(gn => ({
                   ...gn, id: mlGrpPrefix + mlGrpSlugMap.get(gn.id)!,
                   inputs: Object.fromEntries(Object.entries(gn.inputs).map(([k, inp]) => [k, inp.connection
