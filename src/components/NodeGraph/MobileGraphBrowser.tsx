@@ -1012,7 +1012,7 @@ export function MobileGraphBrowser() {
   // The group node whose subgraph is `nodes` — undefined at the top level.
   // Its own .inputs carries each port's live connection (for the "group
   // inputs as a wiring source" picker and the ps_ externally-driven-param
-  // greyed-out check), and its id is what exposeGroupInput/rerouteGroupInput
+  // greyed-out check), and its id is what addGroupInputWithSource/exposeGroupOutput
   // etc. need as `groupId`.
   const activeGroupId = activeGroupPath[activeGroupPath.length - 1];
   const parentGroupNode = useMemo(() => {
@@ -1021,10 +1021,8 @@ export function MobileGraphBrowser() {
     return parentScope.find(n => n.id === activeGroupId);
   }, [topLevelNodes, activeGroupPath, activeGroupId]);
   const activeGroupInputPorts = (parentGroupNode?.params?.subgraph as { inputPorts?: import('../../types/nodeGraph').GroupInputPort[] } | undefined)?.inputPorts ?? [];
-  const activeGroupOutputPorts = (parentGroupNode?.params?.subgraph as { outputPorts?: import('../../types/nodeGraph').GroupOutputPort[] } | undefined)?.outputPorts ?? [];
-  const exposeGroupInput = useNodeGraphStore(s => s.exposeGroupInput);
+  const addGroupInputWithSource = useNodeGraphStore(s => s.addGroupInputWithSource);
   const exposeGroupOutput = useNodeGraphStore(s => s.exposeGroupOutput);
-  const removeGroupOutput = useNodeGraphStore(s => s.removeGroupOutput);
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
   const removeNode = useNodeGraphStore(s => s.removeNode);
@@ -1051,6 +1049,17 @@ export function MobileGraphBrowser() {
   const [forwardStack, setForwardStack] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSocket | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
+  // Building a brand-new group port from the group's own settings page (its
+  // Inputs/Outputs tabs, viewed from outside): 'choose' shows Connect
+  // Existing / Add New Node; 'output' resolves entirely inside the
+  // subgraph (a new internal node becomes the port's source, so 'addNew'
+  // briefly enters the group — returnPath is where to restore to
+  // afterward); 'input' resolves entirely in the current/outer scope (the
+  // port's outer source), never touching activeGroupPath, and leaves the
+  // port unwired internally — same as wiring any other group input later.
+  const [groupPortBuilder, setGroupPortBuilder] = useState<null | {
+    groupId: string; dir: 'input' | 'output'; returnPath: string[]; stage: 'choose' | 'pickExisting' | 'addNew';
+  }>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
   // 'rank' is the synthetic BFS-depth grid (computeGraphLayout); 'real' mirrors
   // the desktop canvas's actual spatial layout (computeRealLayout), read-only.
@@ -1384,10 +1393,45 @@ export function MobileGraphBrowser() {
     setConnectPicker(null);
   };
 
-  const commitNewGroupInput = () => {
-    if (!connectPicker || !activeGroupId) return;
-    exposeGroupInput(activeGroupId, connectPicker.nodeId, connectPicker.key, connectPicker.type as DataType, connectPicker.key);
-    setConnectPicker(null);
+  // ── Group port builder — "+ Add Input"/"+ Add Output" on a group's own
+  // settings page. Both end in picking a source node's first output;
+  // "Add Output" requires that node to live inside the subgraph (it's what
+  // sends data out), "Add Input" requires it to live outside (it's what
+  // feeds the port in) — see the state comment above for why only 'output'
+  // ever touches activeGroupPath.
+  const groupBuilderNode = groupPortBuilder ? nodes.find(n => n.id === groupPortBuilder.groupId) : undefined;
+  const groupBuilderSubgraphNodes = (groupBuilderNode?.params?.subgraph as { nodes?: GraphNode[] } | undefined)?.nodes ?? [];
+  const startGroupPortAddNew = () => {
+    if (!groupPortBuilder) return;
+    if (groupPortBuilder.dir === 'output') enterGroup(groupPortBuilder.groupId);
+    setGroupPortBuilder(b => b && { ...b, stage: 'addNew' });
+  };
+  const commitGroupPortFromNode = (sourceId: string, sourceOutKey: string, sourceType: DataType, sourceLabel: string) => {
+    if (!groupPortBuilder) return;
+    if (groupPortBuilder.dir === 'input') {
+      addGroupInputWithSource(groupPortBuilder.groupId, sourceId, sourceOutKey, sourceType, sourceLabel);
+    } else {
+      exposeGroupOutput(groupPortBuilder.groupId, sourceId, sourceOutKey, sourceType, sourceLabel);
+      // Restore the scope "Add New Node" entered (a no-op if we never left,
+      // i.e. "Connect Existing" was used instead). This drops back to that
+      // scope's Home rather than the group's own card — the groupPathFor
+      // effect resets focusStack to [] whenever activeGroupPath changes,
+      // which a render-time set here can't outrace — but Home shows the
+      // group right at the top, one tap away.
+      exitToDepth(groupPortBuilder.returnPath.length);
+    }
+    setGroupPortBuilder(null);
+  };
+  const handleGroupPortNodePlaced = (newId: string) => {
+    if (!groupPortBuilder) return;
+    // 'output' already entered the group (see startGroupPortAddNew), so the
+    // new node landed in its subgraph; 'input' never left the outer scope.
+    const scopeNodes = groupPortBuilder.dir === 'output' ? getFreshActiveNodes() : nodes;
+    const newNode = scopeNodes.find(n => n.id === newId);
+    if (!newNode) { setGroupPortBuilder(null); return; }
+    const outKey = Object.keys(newNode.outputs)[0];
+    if (!outKey) { setGroupPortBuilder(null); return; }
+    commitGroupPortFromNode(newId, outKey, newNode.outputs[outKey].type, newNode.outputs[outKey].label);
   };
 
   // ── Shared node-detail header ────────────────────────────────────────────
@@ -1770,25 +1814,11 @@ export function MobileGraphBrowser() {
 
     const renderOutputCard = (key: string, out: GraphNode['outputs'][string]) => {
       const consumers = downstreamConsumers(node.id, key);
-      // Is this exact (node, output) already a group output port? Lets the
-      // button below toggle expose/un-expose instead of stacking duplicates.
-      const exposedPort = activeGroupId ? activeGroupOutputPorts.find(p => p.fromNodeId === node.id && p.fromOutputKey === key) : undefined;
       return (
         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={out.type} />
             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
-            {activeGroupId && (
-              <button
-                style={{
-                  background: exposedPort ? '#cba6f722' : 'none', border: `1px solid ${exposedPort ? '#cba6f755' : '#45475a'}`,
-                  color: exposedPort ? '#cba6f7' : '#a6adc8', borderRadius: '5px', padding: '3px 6px', fontSize: '10px',
-                  cursor: 'pointer', touchAction: 'manipulation',
-                }}
-                title={exposedPort ? "Un-expose (remove this group output)" : 'Expose as this group’s output'}
-                onClick={() => exposedPort ? removeGroupOutput(activeGroupId, exposedPort.key) : exposeGroupOutput(activeGroupId, node.id, key, out.type, out.label)}
-              >{exposedPort ? '⛓ Exposed' : '⛓ Expose'}</button>
-            )}
             <button style={smallIconBtnStyle('#89b4fa')} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
           </div>
           {consumers.length > 0 && (
@@ -1810,19 +1840,25 @@ export function MobileGraphBrowser() {
           {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
           {node.type === 'textureInput' && renderTextureUploadBanner(node)}
 
-          {hasInputs && hasOutputs && (
+          {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={{ display: 'flex', gap: '6px' }}>
               <button style={smallTabBtnStyle(nodeTab === 'inputs')} onClick={() => setNodeTab('inputs')}>Inputs ({inputEntries.length})</button>
               <button style={smallTabBtnStyle(nodeTab === 'outputs')} onClick={() => setNodeTab('outputs')}>Outputs ({outputEntries.length})</button>
             </div>
           )}
 
-          {hasInputs && (nodeTab === 'inputs' || !hasOutputs) && (
+          {(hasInputs || node.type === 'group') && (nodeTab === 'inputs' || !hasOutputs) && (
             <div>
               {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
               <div style={cardGridStyle}>
                 {visibleInputEntries.map(([key, inp]) => renderInputCard(key, inp, false))}
               </div>
+              {node.type === 'group' && (
+                <button
+                  onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'input', returnPath: activeGroupPath, stage: 'choose' })}
+                  style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                >+ Add Input</button>
+              )}
               {hiddenInputEntries.length > 0 && (
                 <div style={{ marginTop: '8px' }}>
                   <button style={sectionHeaderBtnStyle} onClick={() => setHiddenSectionOpen(v => !v)}>
@@ -1838,12 +1874,18 @@ export function MobileGraphBrowser() {
             </div>
           )}
 
-          {hasOutputs && (nodeTab === 'outputs' || !hasInputs) && (
+          {(hasOutputs || node.type === 'group') && (nodeTab === 'outputs' || !hasInputs) && (
             <div>
               {!hasInputs && <div style={sectionHeaderBtnStyle}><span>OUTPUTS</span></div>}
               <div style={cardGridStyle}>
                 {outputEntries.map(([key, out]) => renderOutputCard(key, out))}
               </div>
+              {node.type === 'group' && (
+                <button
+                  onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'output', returnPath: activeGroupPath, stage: 'choose' })}
+                  style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                >+ Add Output</button>
+              )}
             </div>
           )}
 
@@ -2401,11 +2443,13 @@ export function MobileGraphBrowser() {
     const candidateIds = new Set(connectCandidates.map(c => c.id));
     return (
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {/* Group's own input ports — this group's boundary sockets, wireable
-            just like any other source. Only shown while wiring an input and
-            inside a group (dir:'output' pickers pick a downstream consumer,
-            which is never one of these). */}
-        {connectPicker.dir === 'input' && activeGroupId && (
+        {/* Group's own (already-created) input ports — this group's boundary
+            sockets, reusable as a source just like any other node's output;
+            one port can feed any number of internal targets. Creating a NEW
+            port happens from the group's own settings page (its "+ Add
+            Input"), not here — so this only shows when there's something
+            existing to pick. */}
+        {connectPicker.dir === 'input' && activeGroupId && groupPortCandidates.length > 0 && (
           <div style={{ padding: '10px 12px', borderBottom: '1px solid #313244' }}>
             <div style={{ fontSize: '10px', color: '#6c7086', marginBottom: '6px', letterSpacing: '0.04em' }}>GROUP INPUTS</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -2416,10 +2460,6 @@ export function MobileGraphBrowser() {
                   style={{ ...chipStyle, fontSize: '11px', color: '#cba6f7', borderColor: '#cba6f755' }}
                 >⛓ {p.label}</button>
               ))}
-              <button
-                onClick={commitNewGroupInput}
-                style={{ ...chipStyle, fontSize: '11px', background: 'none', borderStyle: 'dashed', color: '#89b4fa' }}
-              >+ New Group Input</button>
             </div>
           </div>
         )}
@@ -2878,6 +2918,85 @@ export function MobileGraphBrowser() {
         : (homeGraphView ? renderHomeGraph() : renderHome())}
 
       {renderGraphNavigatorOverlay()}
+      {renderGroupPortBuilderOverlay()}
     </div>
   );
+
+  // ── Group port builder overlay — top-level (not nested in a node's own
+  // detail) since "Add Output" → "Add New Node" briefly enters the group,
+  // which swaps the whole dispatch away from the group's own detail view
+  // (focusStack resets to []); this needs to keep rendering across that.
+  function renderGroupPortBuilderOverlay() {
+    if (!groupPortBuilder) return null;
+    const dirLabel = groupPortBuilder.dir === 'input' ? 'Input' : 'Output';
+    const scopeHint = groupPortBuilder.dir === 'input'
+      ? 'from outside the group'
+      : 'from inside the group';
+    return (
+      <div
+        onClick={() => setGroupPortBuilder(null)}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 45, display: 'flex', alignItems: 'flex-end' }}
+      >
+        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '80%', overflowY: 'auto', background: '#1e1e2e', borderRadius: '16px 16px 0 0', border: '1px solid #45475a', padding: '16px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa', marginBottom: '4px' }}>
+            Add {dirLabel}
+          </div>
+          {groupPortBuilder.stage === 'choose' && (
+            <>
+              <div style={{ fontSize: '11px', color: '#6c7086', marginBottom: '12px' }}>
+                Pick the node {scopeHint} that supplies this port’s value.
+              </div>
+              <button
+                style={{ width: '100%', padding: '12px', marginBottom: '8px', background: '#313244', border: '1px solid #45475a', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+                onClick={() => setGroupPortBuilder(b => b && { ...b, stage: 'pickExisting' })}
+              >
+                Connect Existing Node
+              </button>
+              <button
+                style={{ width: '100%', padding: '12px', background: '#313244', border: '1px solid #45475a', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+                onClick={startGroupPortAddNew}
+              >
+                Add New Node
+              </button>
+            </>
+          )}
+          {groupPortBuilder.stage === 'pickExisting' && (() => {
+            const candidates = groupPortBuilder.dir === 'output'
+              ? groupBuilderSubgraphNodes
+              : nodes.filter(n => n.id !== groupPortBuilder.groupId && !wouldCreateCycle(nodes, n.id, groupPortBuilder.groupId));
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {candidates.length === 0 && (
+                  <div style={{ fontSize: '11px', color: '#585b70', padding: '8px 0' }}>
+                    {groupPortBuilder.dir === 'output' ? 'No nodes inside this group yet — try "Add New Node" instead.' : 'No compatible nodes yet — try "Add New Node" instead.'}
+                  </div>
+                )}
+                {candidates.map(n => {
+                  const outKey = Object.keys(n.outputs)[0];
+                  if (!outKey) return null;
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => commitGroupPortFromNode(n.id, outKey, n.outputs[outKey].type, n.outputs[outKey].label)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px', background: '#181825', border: '1px solid #313244', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left' }}
+                    >
+                      <div style={dotStyle(nodeDotColor(n))} />
+                      {labelFor(n)}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+        {groupPortBuilder.stage === 'addNew' && (
+          <NodeSearchPalette
+            open
+            onClose={() => setGroupPortBuilder(null)}
+            onNodePlaced={handleGroupPortNodePlaced}
+          />
+        )}
+      </div>
+    );
+  }
 }

@@ -401,6 +401,16 @@ interface NodeGraphState {
    */
   exposeGroupInput: (groupId: string, toNodeId: string, toInputKey: string, type: import('../types/nodeGraph').DataType, label: string) => void;
   /**
+   * Create a brand-new group input port wired to its OUTER source
+   * (sourceNodeId/sourceOutputKey, a node outside the group) but with no
+   * internal consumer yet — the mirror image of exposeGroupInput, which
+   * wires the inner side but leaves the outer side unset. Used by the
+   * group's own "+ Add Input" (its outer half is picked/created right
+   * there; which internal node ends up reading it is wired later, the same
+   * way as any other group input, from inside the group).
+   */
+  addGroupInputWithSource: (groupId: string, sourceNodeId: string, sourceOutputKey: string, type: import('../types/nodeGraph').DataType, label: string) => void;
+  /**
    * Create a brand-new group output port already sourced from `fromNodeId`'s
    * `fromOutputKey` — combines addGroupOutput + setGroupOutput into one step,
    * for exposing an internal node's output that isn't a group output yet.
@@ -3488,6 +3498,28 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           ...n,
           inputs: { ...n.inputs, [portKey]: { type, label } },
           params: { ...n.params, subgraph: { ...sg, nodes: newSgNodes, inputPorts: [...sg.inputPorts, newPort] } },
+        };
+      }),
+    }));
+    get().compile();
+  },
+
+  addGroupInputWithSource: (groupId, sourceNodeId, sourceOutputKey, type, label) => {
+    undoManager.push(get().nodes);
+    const { activeGroupPath } = get();
+    set(state => ({
+      nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
+        const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
+        if (!sg) return n;
+        const existingKeys = new Set([...sg.inputPorts.map(p => p.key), ...sg.outputPorts.map(p => p.key)]);
+        let idx = sg.inputPorts.length + sg.outputPorts.length;
+        while (existingKeys.has(`in${idx}`)) idx++;
+        const portKey = `in${idx}`;
+        const newPort: import('../types/nodeGraph').GroupInputPort = { key: portKey, type, label, toNodeId: '', toInputKey: '' };
+        return {
+          ...n,
+          inputs: { ...n.inputs, [portKey]: { type, label, connection: { nodeId: sourceNodeId, outputKey: sourceOutputKey } } },
+          params: { ...n.params, subgraph: { ...sg, inputPorts: [...sg.inputPorts, newPort] } },
         };
       }),
     }));
