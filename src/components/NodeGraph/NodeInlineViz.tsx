@@ -4970,6 +4970,226 @@ export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Swizzle (vec2Swizzle, vec3Swizzle) ────────────────────────────────────────
+// Two rows — input channels in their natural order, output channels in the
+// node's actual swizzle order (.yx, .zxy, ...) — each labelled and coloured
+// by source axis (same x/y/z/w convention SplitVecViz above uses) so the
+// reorder reads at a glance instead of needing to parse the mode string.
+// Live values (when the input is wired) come from the same
+// __preview__-keyed vectorValueRegistry SplitVecViz reads.
+
+export function SwizzleViz({ node }: { node: GraphNode }) {
+  const is3 = node.type === 'vec3Swizzle';
+  const axes = is3 ? ['x', 'y', 'z'] : ['x', 'y'];
+  const colors: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
+  const mode = String(node.params.mode || (is3 ? 'yzx' : 'yx'));
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+  const rafRef = useRef(0);
+  const inRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const outRefs = useRef<(HTMLSpanElement | null)[]>([]);
+
+  useEffect(() => {
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const n = nodeRef.current;
+      const conn = n.inputs.input?.connection;
+      const vec = conn ? vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) : undefined;
+      axes.forEach((_, i) => {
+        const el = inRefs.current[i];
+        if (el) el.textContent = vec ? vec[i]?.toFixed(2) ?? '—' : '—';
+      });
+      const m = String(nodeRef.current.params.mode || (is3 ? 'yzx' : 'yx'));
+      m.split('').forEach((ch, i) => {
+        const el = outRefs.current[i];
+        if (!el) return;
+        const srcIdx = axes.indexOf(ch);
+        el.textContent = vec && srcIdx >= 0 ? vec[srcIdx]?.toFixed(2) ?? '—' : '—';
+      });
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [axes, is3]);
+
+  return (
+    <div style={{ ...VIZ_CONTAINER, padding: '6px 12px', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '9px', color: '#585b70', width: '26px' }}>in</span>
+        {axes.map((c, i) => (
+          <span key={c} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span style={{ fontSize: '9px', color: colors[c] }}>{c}</span>
+            <span ref={el => { inRefs.current[i] = el; }} style={{ fontSize: '10px', color: '#cdd6f4' }}>—</span>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '9px', color: '#89b4fa', width: '26px' }}>.{mode}</span>
+        {mode.split('').map((c, i) => (
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span style={{ fontSize: '9px', color: colors[c] ?? '#585b70' }}>{c}</span>
+            <span ref={el => { outRefs.current[i] = el; }} style={{ fontSize: '10px', color: '#f9e2af' }}>—</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Quantize ───────────────────────────────────────────────────────────────
+// The same staircase floor(x/step + 0.5) * step the node's own generateGLSL
+// emits, over a domain sized to the current step so a handful of stairs are
+// always visible regardless of Step's magnitude, with a live dot (when
+// Input is wired) marking where the current value lands.
+
+export function QuantizeViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef(0);
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const n = nodeRef.current;
+    const W = canvas.width, H = canvas.height;
+    const step = Math.max(0.0001, typeof n.params.step === 'number' ? n.params.step : 1.0);
+    const domain = Math.max(step * 4, 1);
+
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#313244';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const toY = (v: number) => H / 2 - (v / domain) * (H / 2) * 0.9;
+    ctx.strokeStyle = '#f9e2af';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= W; i++) {
+      const x = (i / W) * domain * 2 - domain;
+      const y = Math.floor(x / step + 0.5) * step;
+      const py = toY(y);
+      i === 0 ? ctx.moveTo(i, py) : ctx.lineTo(i, py);
+    }
+    ctx.stroke();
+
+    const conn = n.inputs.input?.connection;
+    const liveVal = conn ? floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) : null;
+    if (liveVal != null && Number.isFinite(liveVal)) {
+      const qx = ((liveVal + domain) / (domain * 2)) * W;
+      const qy = toY(Math.floor(liveVal / step + 0.5) * step);
+      ctx.fillStyle = '#a6e3a1';
+      ctx.beginPath(); ctx.arc(Math.max(0, Math.min(W, qx)), qy, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    ctx.fillStyle = '#6c7086';
+    ctx.font = '8px monospace';
+    ctx.fillText(`step ${step.toFixed(3)}`, 4, H - 4);
+  }, []);
+
+  useEffect(() => {
+    const loop = () => { draw(); rafRef.current = requestAnimationFrame(loop); };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [draw]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={56}
+        style={{ display: 'block', width: '100%', height: '56px' }} />
+    </div>
+  );
+}
+
+// ─── Mod Select ─────────────────────────────────────────────────────────────
+// The periodic on/off (or soft-edged) mask the node produces, drawn as a
+// horizontal strip over a few periods — mirrors the node's own
+// mod(value, period) < threshold*period window (plus its Softness ramp)
+// rather than a generic placeholder pattern.
+
+export function ModSelectViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const period = typeof node.params.period === 'number' ? node.params.period : 2.0;
+  const threshold = typeof node.params.threshold === 'number' ? node.params.threshold : 0.5;
+  const softness = typeof node.params.softness === 'number' ? node.params.softness : 0.0;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const W = canvas.width, H = canvas.height;
+    const per = Math.max(0.001, period);
+    const win = per * Math.max(0, Math.min(1, threshold));
+    const sft = Math.max(0.001, softness);
+    const periodsShown = 3;
+
+    for (let i = 0; i < W; i++) {
+      const value = (i / W) * per * periodsShown;
+      const mv = value % per;
+      const mask = mv < win ? 1 : mv < win + sft ? 1 - (mv - win) / sft : 0;
+      const bright = Math.round(mask * 200 + 20);
+      ctx.fillStyle = `rgb(${Math.round(bright * 0.5)},${bright},${Math.round(bright * 0.85)})`;
+      ctx.fillRect(i, 0, 1, H);
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, H - 12, W, 12);
+    ctx.fillStyle = '#a6adc8';
+    ctx.font = '8px monospace';
+    ctx.fillText(`period ${per.toFixed(2)}  thr ${threshold.toFixed(2)}`, 4, H - 3);
+  }, [period, threshold, softness]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={240} height={48}
+        style={{ display: 'block', width: '100%', height: '48px' }} />
+    </div>
+  );
+}
+
+// ─── Pixelate ───────────────────────────────────────────────────────────────
+// A checkerboard sized to the actual resulting grid (2 / Pixel Size cells
+// across, same UV-units math the node's own floor(uv/size)*size uses) so
+// Pixel Size's effect on blockiness is visible directly, not just implied.
+
+export function PixelateViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pixelSize = typeof node.params.pixelSize === 'number' ? node.params.pixelSize : 0.05;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = '#11111b';
+    ctx.fillRect(0, 0, W, H);
+    const cells = Math.max(2, Math.min(24, Math.round(2 / Math.max(0.005, pixelSize))));
+    const cellW = W / cells, cellH = H / cells;
+    for (let row = 0; row < cells; row++) {
+      for (let col = 0; col < cells; col++) {
+        ctx.fillStyle = (row + col) % 2 === 0 ? '#2a2a3a' : '#232333';
+        ctx.fillRect(col * cellW, row * cellH, cellW, cellH);
+      }
+    }
+    ctx.strokeStyle = '#585b70';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= cells; i++) {
+      ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * cellH); ctx.lineTo(W, i * cellH); ctx.stroke();
+    }
+  }, [pixelSize]);
+
+  return (
+    <div style={VIZ_CONTAINER}>
+      <canvas ref={canvasRef} width={80} height={80}
+        style={{ display: 'block', width: '100%', height: '100%', imageRendering: 'pixelated' }} />
+    </div>
+  );
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
@@ -5274,6 +5494,11 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'chladniField':       return <ChladniFieldViz       node={node} />;
     case 'chladniSuperposition': return <ChladniSuperpositionViz node={node} />;
     case 'chladniModeFreq':    return <ChladniModeFreqViz    node={node} />;
+    case 'vec2Swizzle':
+    case 'vec3Swizzle':        return <SwizzleViz            node={node} />;
+    case 'quantize':           return <QuantizeViz           node={node} />;
+    case 'modSelect':          return <ModSelectViz          node={node} />;
+    case 'pixelate':           return <PixelateViz           node={node} />;
 
     // ── Loop / Effect nodes → param display ───────────────────────────────────
     case 'fractalLoop':
@@ -5403,6 +5628,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'truchet', 'metaballs', 'lissajous',
   'chladni', 'chladni3d', 'chladni3dParticles',
   'waveTerm', 'chladniField', 'chladniSuperposition', 'chladniModeFreq',
+  'vec2Swizzle', 'vec3Swizzle', 'quantize', 'modSelect', 'pixelate',
   // Loop / Effect nodes
   'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
   'loopCarry', 'loopDomainFold',
