@@ -148,10 +148,6 @@ function GraphEdges({ edges }: { edges: ReturnType<typeof computeGraphLayout>['e
   );
 }
 
-const rowStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '10px',
-  padding: '10px 12px', borderBottom: '1px solid #313244',
-};
 const dotStyle = (color: string): React.CSSProperties => ({
   width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0,
 });
@@ -172,6 +168,42 @@ const smallIconBtnStyle = (color: string): React.CSSProperties => ({
   width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: '15px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
 });
+
+// ── Socket type icon ─────────────────────────────────────────────────────────
+// Used in the node detail view's Inputs/Outputs cards in place of a plain
+// color dot: floats get a "#", vectors get their component letters in
+// brackets ("[XY]", "[XYZ]", "[XYZW]") with each letter in its own axis
+// color, so a socket's shape is readable at a glance instead of just its
+// color. Anything else (bool, sampler2D, mat3, …) falls back to the dot.
+const AXIS_COLORS: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
+const VECTOR_AXES: Record<string, string[]> = { vec2: ['x', 'y'], vec3: ['x', 'y', 'z'], vec4: ['x', 'y', 'z', 'w'] };
+function TypeIcon({ type }: { type: string }) {
+  if (type === 'float' || type === 'int') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', flexShrink: 0, fontFamily: 'monospace', fontWeight: 700, fontSize: '12px', color: TYPE_COLORS[type] ?? '#888' }}>
+        #
+      </span>
+    );
+  }
+  const axes = VECTOR_AXES[type];
+  if (axes) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, fontFamily: 'monospace', fontWeight: 700, fontSize: '10px', whiteSpace: 'nowrap' }}>
+        <span style={{ color: '#585b70' }}>[</span>
+        {axes.map(a => <span key={a} style={{ color: AXIS_COLORS[a] }}>{a.toUpperCase()}</span>)}
+        <span style={{ color: '#585b70' }}>]</span>
+      </span>
+    );
+  }
+  return <div style={dotStyle(TYPE_COLORS[type] ?? '#888')} />;
+}
+// Tappable, collapsible column header ("▾ INPUTS" / "▸ OUTPUTS").
+const sectionHeaderBtnStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '4px', width: '100%',
+  background: 'none', border: 'none', padding: '4px 2px',
+  fontSize: '11px', fontWeight: 700, color: '#7d8296', letterSpacing: '0.05em',
+  cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+};
 
 // ── Node preview thumbnail ──────────────────────────────────────────────────
 // Reuses desktop's preview pipeline (compileNodePreviewShader walks the
@@ -472,6 +504,10 @@ export function MobileGraphBrowser() {
   // Which Expr Block input card currently has focus, for the thin highlight
   // stroke — cleared naturally by the row's onBlur, not reset elsewhere.
   const [focusedInputIdx, setFocusedInputIdx] = useState<number | null>(null);
+  // Generic node detail: whether the Inputs/Outputs column is expanded —
+  // each collapses independently by tapping its own header. Reset open on
+  // every node change (below), same as exprMode.
+  const [nodeSectionsOpen, setNodeSectionsOpen] = useState({ inputs: true, outputs: true });
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
@@ -479,6 +515,7 @@ export function MobileGraphBrowser() {
   if (exprModeFor !== focusedId) {
     setExprModeFor(focusedId);
     setExprMode('inputs');
+    setNodeSectionsOpen({ inputs: true, outputs: true });
   }
 
   // Same rank assignment the desktop "Auto Layout" button uses for spatial
@@ -548,10 +585,16 @@ export function MobileGraphBrowser() {
   // ── Node detail (focused) view ───────────────────────────────────────────
   function renderNodeDetail(node: GraphNode) {
     const def = getNodeDefinition(node.type);
+    const hasInputs = Object.keys(node.inputs).length > 0;
+    const hasOutputs = Object.keys(node.outputs).length > 0;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ fontWeight: 700, fontSize: '15px', color: '#cdd6f4', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
+        {/* Header — the one fixed element as you scroll the cards below, so
+            it's styled brighter than everything else to anchor "what node
+            am I in" at a glance. */}
+        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px', background: '#242438' }}>
+          <div style={dotStyle(nodeDotColor(node))} />
+          <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
           <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
           {node.type !== 'output' && focusStack.length > 0 && (
             <button
@@ -563,85 +606,93 @@ export function MobileGraphBrowser() {
           )}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {Object.keys(node.inputs).length > 0 && (
-            <>
-              <div style={{ padding: '8px 12px 4px', fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em' }}>INPUTS</div>
-              {Object.entries(node.inputs).map(([key, inp]) => {
-                const upstream = inp.connection ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
-                const pd = upstream ? undefined : sliderableParam(node, key);
-                const val = pd ? currentSliderValue(node, key, pd) : 0;
-                return (
-                  <div key={key} style={{ ...rowStyle, flexDirection: 'column', alignItems: 'stretch', gap: pd ? '8px' : 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '13px', color: '#cdd6f4' }}>{inp.label}</div>
-                        <div style={{ fontSize: '10px', color: '#585b70' }}>{inp.type}</div>
-                      </div>
-                      {upstream ? (
-                        <>
-                          <button style={chipStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
-                          <button
-                            onClick={() => disconnectInput(node.id, key)}
-                            style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
-                            title="Disconnect"
-                          >✕</button>
-                        </>
-                      ) : (
-                        <button style={addBtnStyle} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
-                      )}
-                    </div>
-                    {pd && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '20px' }}>
-                        <input
-                          type="range"
-                          min={pd.min ?? 0}
-                          max={pd.max ?? 1}
-                          step={pd.step ?? 0.01}
-                          value={val}
-                          onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) })}
-                          style={{ flex: 1 }}
-                        />
-                        <span style={{ fontSize: '11px', color: '#a6adc8', minWidth: '44px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {formatSliderValue(val, pd.step)}
-                        </span>
-                      </div>
-                    )}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            {hasInputs && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <button style={sectionHeaderBtnStyle} onClick={() => setNodeSectionsOpen(s => ({ ...s, inputs: !s.inputs }))}>
+                  <span>{nodeSectionsOpen.inputs ? '▾' : '▸'} INPUTS</span>
+                </button>
+                {nodeSectionsOpen.inputs && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                    {Object.entries(node.inputs).map(([key, inp]) => {
+                      const upstream = inp.connection ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+                      const pd = upstream ? undefined : sliderableParam(node, key);
+                      const val = pd ? currentSliderValue(node, key, pd) : 0;
+                      return (
+                        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <TypeIcon type={inp.type} />
+                            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+                          </div>
+                          {upstream ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+                              <button
+                                onClick={() => disconnectInput(node.id, key)}
+                                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
+                                title="Disconnect"
+                              >✕</button>
+                            </div>
+                          ) : (
+                            <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
+                          )}
+                          {pd && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <input
+                                type="range"
+                                min={pd.min ?? 0}
+                                max={pd.max ?? 1}
+                                step={pd.step ?? 0.01}
+                                value={val}
+                                onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) })}
+                                style={{ flex: 1 }}
+                              />
+                              <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '38px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                {formatSliderValue(val, pd.step)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </>
-          )}
+                )}
+              </div>
+            )}
 
-          {Object.keys(node.outputs).length > 0 && (
-            <>
-              <div style={{ padding: '8px 12px 4px', fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em' }}>OUTPUTS</div>
-              {Object.entries(node.outputs).map(([key, out]) => {
-                const consumers = downstreamConsumers(node.id, key);
-                return (
-                  <div key={key} style={{ ...rowStyle, flexWrap: 'wrap' }}>
-                    <div style={dotStyle(TYPE_COLORS[out.type] ?? '#888')} />
-                    <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', color: '#cdd6f4' }}>{out.label}</div>
-                      <div style={{ fontSize: '10px', color: '#585b70' }}>{out.type}</div>
-                    </div>
-                    <button style={addBtnStyle} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
-                    {consumers.length > 0 && (
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', width: '100%', paddingLeft: '20px' }}>
-                        {consumers.map(c => (
-                          <button key={c.id} style={chipStyle} onClick={() => pushFocus(c.id)}>{labelFor(c)} ›</button>
-                        ))}
-                      </div>
-                    )}
+            {hasOutputs && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <button style={sectionHeaderBtnStyle} onClick={() => setNodeSectionsOpen(s => ({ ...s, outputs: !s.outputs }))}>
+                  <span>{nodeSectionsOpen.outputs ? '▾' : '▸'} OUTPUTS</span>
+                </button>
+                {nodeSectionsOpen.outputs && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                    {Object.entries(node.outputs).map(([key, out]) => {
+                      const consumers = downstreamConsumers(node.id, key);
+                      return (
+                        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <TypeIcon type={out.type} />
+                            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+                            {consumers.map(c => (
+                              <button key={c.id} style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(c.id)}>{labelFor(c)} ›</button>
+                            ))}
+                            <button style={smallIconBtnStyle('#89b4fa')} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </>
-          )}
+                )}
+              </div>
+            )}
+          </div>
 
           {def?.description && (
-            <div style={{ padding: '12px', fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>{def.description}</div>
+            <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>{def.description}</div>
           )}
         </div>
 
@@ -764,8 +815,9 @@ export function MobileGraphBrowser() {
 
     return (
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ fontWeight: 700, fontSize: '15px', color: '#cdd6f4', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
+        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '8px', background: '#242438' }}>
+          <div style={dotStyle(nodeDotColor(node))} />
+          <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
           <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
           <button
             onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
