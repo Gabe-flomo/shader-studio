@@ -22,6 +22,7 @@ import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
+import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import {
   VECTOR_AXES, EASING_PRESETS, socketHasKeyframes, socketHasVectorKeyframes,
   getKeyframeConfig, getAxisKeyframeConfig,
@@ -1032,6 +1033,8 @@ export function MobileGraphBrowser() {
   const setNodeAssignOp = useNodeGraphStore(s => s.setNodeAssignOp);
   const setNodeAssignInit = useNodeGraphStore(s => s.setNodeAssignInit);
   const toggleNodeCarryMode = useNodeGraphStore(s => s.toggleNodeCarryMode);
+  const setNodeTexture = useNodeGraphStore(s => s.setNodeTexture);
+  const nodeTextures = useNodeGraphStore(s => s.nodeTextures);
   // Cross-cutting with App.tsx's bottom action bar — see the store field's
   // own comment. mobileKeyframeTool is read here to drive the canvas editor
   // and written from the bottom bar's mode buttons, not from this file.
@@ -1424,6 +1427,44 @@ export function MobileGraphBrowser() {
     );
   }
 
+  // ── Texture Input upload — a plain file input, so on iOS this already
+  // opens the native Photos/Camera/Files picker with no extra plumbing.
+  // Desktop's NodeComponent.tsx has its own equivalent card; this is
+  // mobile's, since the generic Inputs/Outputs tabs below have nowhere to
+  // put "pick a file" (uv/color/alpha/uv are ordinary sockets and still
+  // wire normally through those tabs — only the upload button is special).
+  function renderTextureUploadBanner(node: GraphNode) {
+    const thumbnailUrl = node.params._thumbnailUrl as string | undefined;
+    const hasTexture = !!nodeTextures[node.id];
+    const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = ''; // allow re-picking the same file
+      if (!file) return;
+      loadImageTextureFromFile(file)
+        .then(({ texture, thumbnailDataUrl, imageAspect }) => {
+          setNodeTexture(node.id, texture);
+          updateNodeParams(node.id, { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect }, { immediate: true });
+        })
+        .catch(err => console.error('Failed to load texture image:', err));
+    };
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '10px' }}>
+        {thumbnailUrl ? (
+          <img src={thumbnailUrl} alt="texture" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: '6px', border: '1px solid #45475a', flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: 48, height: 48, background: '#313244', borderRadius: '6px', border: '1px dashed #45475a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🖼</div>
+        )}
+        <label style={{
+          flex: 1, textAlign: 'center', fontSize: '13px', fontWeight: 600, color: '#89b4fa',
+          background: '#89b4fa18', border: '1px solid #89b4fa55', borderRadius: '8px', padding: '10px', cursor: 'pointer', touchAction: 'manipulation',
+        }}>
+          {hasTexture ? 'Change Image' : 'Choose Image'}
+          <input type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
+        </label>
+      </div>
+    );
+  }
+
   // ── Group entry point — "Enter <Group Label> ›" plus, for a plain 'group'
   // (not the fixed-purpose 3D scene group types), rename/ungroup. Sealed
   // groups compile as a standalone function; entering them is blocked by
@@ -1767,6 +1808,7 @@ export function MobileGraphBrowser() {
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
+          {node.type === 'textureInput' && renderTextureUploadBanner(node)}
 
           {hasInputs && hasOutputs && (
             <div style={{ display: 'flex', gap: '6px' }}>
