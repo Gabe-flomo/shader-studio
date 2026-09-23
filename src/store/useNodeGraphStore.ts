@@ -307,6 +307,15 @@ interface NodeGraphState {
   mobileKeyframeTool: 'select' | 'add' | 'delete' | 'draw';
   setMobileKeyframeTool: (tool: 'select' | 'add' | 'delete' | 'draw') => void;
 
+  // Read-only node-graph overlay floated on top of the shader canvas
+  // (mobile) — real desktop-style node cards at their actual positions,
+  // not the drill-down browser's abstract rank grid. Written by App.tsx's
+  // toggle button next to the play/pause controls, read by
+  // MobileGraphBrowser's overlay component — same cross-component
+  // rationale as mobileKeyframeEditor above.
+  mobileNodeOverlayOpen: boolean;
+  setMobileNodeOverlayOpen: (open: boolean) => void;
+
   // Node highlight filter — set by keyboard shortcuts to visually dim non-matching nodes.
   // null = no filter (all nodes normal). 'all' = clear any filter.
   nodeHighlightFilter: string | null;  // e.g. 'float', 'vec2', 'vec3', 'uv-in', 'uv-out'
@@ -1073,6 +1082,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   previewNodeId: null,
   mobileKeyframeEditor: null,
   mobileKeyframeTool: 'select',
+  mobileNodeOverlayOpen: false,
   nodeHighlightFilter: null,
   _fitViewCallback: null,
   _viewportCenterGetter: null,
@@ -1095,6 +1105,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   setMobileKeyframeEditor: (target) => set({ mobileKeyframeEditor: target }),
   setMobileKeyframeTool: (tool) => set({ mobileKeyframeTool: tool }),
+  setMobileNodeOverlayOpen: (open) => set({ mobileNodeOverlayOpen: open }),
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   setRawGlslShader: (shader) => set({ rawGlslShader: shader }),
   setActiveGroupId: (id) => {

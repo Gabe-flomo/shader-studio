@@ -35,6 +35,16 @@ function nodeDotColor(n: GraphNode): string {
   return TYPE_COLORS[outType ?? 'float'] ?? '#888';
 }
 
+// A custom name (desktop's "Rename Group", also usable on customFn nodes)
+// overrides the type's default label — same node.params.label convention
+// and fallback order NodeComponent.tsx uses, so a group renamed on either
+// platform shows the same name on the other. Pure function of `n`, hoisted
+// out of the component so MobileNodeGraphOverlay (a separate exported
+// component) can use it too.
+function labelFor(n: GraphNode): string {
+  return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
+}
+
 // Node types that collapse a subgraph — same set NodeGraph.tsx's context
 // menu checks (isGroup/isSceneGroup/isSpaceWarpGroup/isMarchLoopGroup) to
 // decide whether "Enter Group" applies. Only plain 'group' supports
@@ -223,6 +233,166 @@ function GraphEdgesHorizontal({ edges }: { edges: ReturnType<typeof computeGraph
         );
       })}
     </>
+  );
+}
+
+// ── Read-only node-graph overlay (floats on the shader canvas) ─────────────
+// Unlike computeRealLayout (used by the Graph view's "Real" mode, still an
+// abstract rank-grid-style chip just positioned at real coordinates), this
+// lays out compact but recognizable node cards — a title bar plus per-socket
+// port dots on the left/right edges, same visual language desktop's canvas
+// uses, just condensed (no sliders/params inside the box) — with edges
+// running dot-to-dot instead of box-center-to-box-center.
+const OVERLAY_CARD_W = 132, OVERLAY_TITLE_H = 22, OVERLAY_PORT_ROW_H = 14, OVERLAY_PAD = 28;
+interface OverlayPort { key: string; type: DataType; label: string; y: number }
+interface OverlayNodeLayout { x: number; y: number; w: number; h: number; inputs: OverlayPort[]; outputs: OverlayPort[] }
+function computeOverlayLayout(nodes: GraphNode[]) {
+  const layouts = new Map<string, OverlayNodeLayout>();
+  const edges: Array<{ x1: number; y1: number; x2: number; y2: number; key: string; type: DataType }> = [];
+  if (nodes.length === 0) return { layouts, width: 0, height: 0, edges };
+
+  const xs = nodes.map(n => n.position.x);
+  const ys = nodes.map(n => n.position.y);
+  const minX = Math.min(...xs), minY = Math.min(...ys);
+  for (const n of nodes) {
+    const inputs: OverlayPort[] = Object.entries(n.inputs).map(([key, inp], i) => ({
+      key, type: inp.type, label: inp.label, y: OVERLAY_TITLE_H + i * OVERLAY_PORT_ROW_H + OVERLAY_PORT_ROW_H / 2,
+    }));
+    const outputs: OverlayPort[] = Object.entries(n.outputs).map(([key, out], i) => ({
+      key, type: out.type, label: out.label, y: OVERLAY_TITLE_H + i * OVERLAY_PORT_ROW_H + OVERLAY_PORT_ROW_H / 2,
+    }));
+    const rows = Math.max(inputs.length, outputs.length, 1);
+    layouts.set(n.id, {
+      x: n.position.x - minX + OVERLAY_PAD,
+      y: n.position.y - minY + OVERLAY_PAD,
+      w: OVERLAY_CARD_W,
+      h: OVERLAY_TITLE_H + rows * OVERLAY_PORT_ROW_H,
+      inputs, outputs,
+    });
+  }
+  let maxX = 0, maxY = 0;
+  for (const l of layouts.values()) { maxX = Math.max(maxX, l.x + l.w); maxY = Math.max(maxY, l.y + l.h); }
+
+  for (const n of nodes) {
+    const to = layouts.get(n.id);
+    if (!to) continue;
+    for (const [key, inp] of Object.entries(n.inputs)) {
+      if (!inp.connection) continue;
+      const from = layouts.get(inp.connection.nodeId);
+      if (!from) continue;
+      const toPort = to.inputs.find(p => p.key === key);
+      const fromPort = from.outputs.find(p => p.key === inp.connection!.outputKey);
+      if (!toPort || !fromPort) continue;
+      edges.push({
+        x1: from.x + from.w, y1: from.y + fromPort.y,
+        x2: to.x, y2: to.y + toPort.y,
+        key: `${inp.connection.nodeId}:${inp.connection.outputKey}->${n.id}:${key}`,
+        type: inp.type,
+      });
+    }
+  }
+  return { layouts, width: maxX + OVERLAY_PAD, height: maxY + OVERLAY_PAD, edges };
+}
+
+/**
+ * Floats on top of the live shader preview (rendered by App.tsx inside the
+ * canvas pane's own relative wrapper), toggled by a button next to the
+ * play/pause controls — a read-only mirror of the desktop canvas's actual
+ * spatial layout, not the drill-down browser's abstract rank grid. Purely a
+ * visual reference for "what does this look like as a real node graph while
+ * I watch the render" — no drag, no wiring, no tap-to-navigate; List/Graph
+ * already own navigation. Self-contained (reads straight from the store)
+ * rather than taking nodes as a prop, since it renders as a sibling of
+ * MobileGraphBrowser, not a child of it.
+ */
+export function MobileNodeGraphOverlay() {
+  const open = useNodeGraphStore(s => s.mobileNodeOverlayOpen);
+  const setOpen = useNodeGraphStore(s => s.setMobileNodeOverlayOpen);
+  const topLevelNodes = useNodeGraphStore(s => s.nodes);
+  const activeGroupPath = useNodeGraphStore(s => s.activeGroupPath);
+  const nodes = useMemo(
+    () => getActiveNodes(topLevelNodes, activeGroupPath) ?? topLevelNodes,
+    [topLevelNodes, activeGroupPath],
+  );
+  const layout = useMemo(() => computeOverlayLayout(nodes), [nodes]);
+  if (!open) return null;
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 19,
+      background: 'rgba(17,17,27,0.74)', backdropFilter: 'blur(1px)', WebkitBackdropFilter: 'blur(1px)',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', flexShrink: 0 }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: '#89b4fa', letterSpacing: '0.06em' }}>
+          NODE GRAPH{activeGroupPath.length > 0 ? ' — inside group' : ''} · read-only
+        </span>
+        <button
+          onClick={() => setOpen(false)}
+          style={{ background: 'rgba(24,24,37,0.8)', border: '1px solid #45475a', color: '#a6adc8', borderRadius: '5px', width: '22px', height: '22px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+        >✕</button>
+      </div>
+      {nodes.length === 0 ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#585b70' }}>No nodes yet.</div>
+      ) : (
+        <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
+            <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+              {layout.edges.map(e => {
+                const midX = (e.x1 + e.x2) / 2;
+                return (
+                  <path
+                    key={e.key}
+                    d={`M ${e.x1} ${e.y1} C ${midX} ${e.y1}, ${midX} ${e.y2}, ${e.x2} ${e.y2}`}
+                    stroke={TYPE_COLORS[e.type] ?? '#585b70'} strokeWidth={1.5} fill="none" opacity={0.85}
+                  />
+                );
+              })}
+            </svg>
+            {nodes.map(n => {
+              const l = layout.layouts.get(n.id);
+              if (!l) return null;
+              const hasPorts = l.inputs.length > 0 || l.outputs.length > 0;
+              return (
+                <div
+                  key={n.id}
+                  style={{
+                    position: 'absolute', left: l.x, top: l.y, width: l.w, height: l.h,
+                    background: 'rgba(30,30,46,0.92)', border: '1px solid #45475a', borderRadius: '6px',
+                  }}
+                >
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '5px', height: OVERLAY_TITLE_H, padding: '0 8px',
+                    borderBottom: hasPorts ? '1px solid #313244' : 'none', overflow: 'hidden',
+                  }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: nodeDotColor(n), flexShrink: 0 }} />
+                    <span style={{ fontSize: '10px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
+                  </div>
+                  {l.inputs.map(p => (
+                    <div
+                      key={`i-${p.key}`} title={p.label}
+                      style={{
+                        position: 'absolute', left: -4, top: p.y - 4, width: 8, height: 8, borderRadius: '50%',
+                        background: TYPE_COLORS[p.type] ?? '#888', border: '1px solid #11111b',
+                      }}
+                    />
+                  ))}
+                  {l.outputs.map(p => (
+                    <div
+                      key={`o-${p.key}`} title={p.label}
+                      style={{
+                        position: 'absolute', right: -4, top: p.y - 4, width: 8, height: 8, borderRadius: '50%',
+                        background: TYPE_COLORS[p.type] ?? '#888', border: '1px solid #11111b',
+                      }}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1308,13 +1478,6 @@ export function MobileGraphBrowser() {
     const next = hidden.includes(key) ? hidden.filter(k => k !== key) : [...hidden, key];
     updateNodeParams(node.id, { __hiddenInputs: next }, { immediate: true });
   };
-
-  // A custom name (desktop's "Rename Group", also usable on customFn nodes)
-  // overrides the type's default label — same node.params.label convention
-  // and fallback order NodeComponent.tsx uses, so a group renamed on either
-  // platform shows the same name on the other.
-  const labelFor = (n: GraphNode) =>
-    (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
 
   // addNode() just ran synchronously before either handler below fires (it's
   // the onNodePlaced callback), so the closure's `nodes` can be one render

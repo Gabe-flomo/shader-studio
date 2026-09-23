@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
-import { MobileGraphBrowser } from './components/NodeGraph/MobileGraphBrowser';
+import { MobileGraphBrowser, MobileNodeGraphOverlay } from './components/NodeGraph/MobileGraphBrowser';
 import { CodePanel, tokenizeLine } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
@@ -263,6 +263,7 @@ function App() {
     searchPaletteOpen, setSearchPaletteOpen,
     nodeSlugMap,
     mobileKeyframeEditor, mobileKeyframeTool, setMobileKeyframeTool,
+    mobileNodeOverlayOpen, setMobileNodeOverlayOpen,
   } = useNodeGraphStore();
 
   // Build probe display for selected node — shown in status bar instead of "hover for color"
@@ -683,10 +684,25 @@ function App() {
               {/* Play/pause + reset, bottom-center of the canvas pane —
                   mobile has no side dock to float this beside (unlike
                   desktop's TimeControlsStrip next to the divider), so it
-                  overlays the canvas here instead. */}
-              <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 22 }}>
+                  overlays the canvas here instead. Node-graph toggle rides
+                  alongside it — same "floats on the canvas" idea, a
+                  read-only mirror of the real node layout while you watch
+                  the render, not another editor. */}
+              <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 22, display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <TimeControlsStrip />
+                <button
+                  onClick={() => setMobileNodeOverlayOpen(!mobileNodeOverlayOpen)}
+                  title="Show the node graph over the canvas (read-only)"
+                  style={{
+                    background: mobileNodeOverlayOpen ? '#89b4fa22' : 'rgba(24,24,37,0.7)',
+                    border: `1px solid ${mobileNodeOverlayOpen ? '#89b4fa' : '#45475a'}`,
+                    color: mobileNodeOverlayOpen ? '#89b4fa' : '#a6adc8',
+                    borderRadius: '6px', width: '30px', height: '30px', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
+                  }}
+                >⊞</button>
               </div>
+
+              <MobileNodeGraphOverlay />
             </div>
           )}
 
