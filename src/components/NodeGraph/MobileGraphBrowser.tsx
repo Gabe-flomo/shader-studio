@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
@@ -32,6 +32,14 @@ function nodeDotColor(n: GraphNode): string {
   const outType = Object.values(n.outputs)[0]?.type;
   return TYPE_COLORS[outType ?? 'float'] ?? '#888';
 }
+
+// Node types that collapse a subgraph — same set NodeGraph.tsx's context
+// menu checks (isGroup/isSceneGroup/isSpaceWarpGroup/isMarchLoopGroup) to
+// decide whether "Enter Group" applies. Only plain 'group' supports
+// rename/ungroup — the others (3D scene building blocks) have fixed
+// semantics and are created/removed as a unit, same restriction desktop
+// applies in NodeGraph.tsx's context menu.
+const GROUP_TYPES = new Set(['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup']);
 
 // ── Inline param sliders (unconnected float/int inputs only) ──────────────────
 // Mirrors the desktop card's paramDefs-driven slider: same key convention
@@ -234,11 +242,17 @@ const smallTabBtnStyle = (active: boolean): React.CSSProperties => ({
 // not live" behavior as desktop's 👁 toggle. Callers must pass `key={nodeId}`
 // so switching nodes remounts this fresh (clears the stale thumbnail) rather
 // than reusing state across nodes.
-function NodePreviewThumb({ nodeId, nodeType }: { nodeId: string; nodeType: string }) {
+function NodePreviewThumb({ nodeId, nodeType, nodes }: { nodeId: string; nodeType: string; nodes: GraphNode[] }) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const nodes = useNodeGraphStore.getState().nodes;
+    // `nodes` must already be the caller's active scope (getActiveNodes at
+    // its activeGroupPath), not always top-level — a node's upstream
+    // ancestors only ever live in that same scope (subgraphs are self-
+    // contained), so the scoped list alone is enough to walk them, but the
+    // *wrong* list (top-level, when this node is inside a group) means
+    // targetNode.find below comes up empty and the thumbnail silently never
+    // renders.
     const fs = compileNodePreviewShader(nodeId, nodes);
     if (!fs) return;
     let cancelled = false;
@@ -247,6 +261,7 @@ function NodePreviewThumb({ nodeId, nodeType }: { nodeId: string; nodeType: stri
       .then(dataUrl => { if (!cancelled) setUrl(dataUrl); })
       .catch(() => {});
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId, nodeType]);
 
   if (!url) return null;
@@ -868,7 +883,24 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
 }
 
 export function MobileGraphBrowser() {
-  const nodes = useNodeGraphStore(s => s.nodes);
+  // Always the flat top-level list — a group's contents live nested in
+  // node.params.subgraph.nodes, never in this array. Everything below reads
+  // `nodes`, which is the *active* scope instead (topLevelNodes narrowed by
+  // activeGroupPath via getActiveNodes) — addNode/updateNodeParams/
+  // connectNodes/disconnectInput/removeNode already all key off the store's
+  // own activeGroupPath to decide whether to write into a subgraph, so
+  // scoping just the read side here is enough to make every existing
+  // wiring/edit flow in this file work unchanged one level inside a group.
+  const topLevelNodes = useNodeGraphStore(s => s.nodes);
+  const activeGroupPath = useNodeGraphStore(s => s.activeGroupPath);
+  const enterGroup = useNodeGraphStore(s => s.enterGroup);
+  const exitToRoot = useNodeGraphStore(s => s.exitToRoot);
+  const exitToDepth = useNodeGraphStore(s => s.exitToDepth);
+  const ungroupNode = useNodeGraphStore(s => s.ungroupNode);
+  const nodes = useMemo(
+    () => getActiveNodes(topLevelNodes, activeGroupPath) ?? topLevelNodes,
+    [topLevelNodes, activeGroupPath],
+  );
   const connectNodes = useNodeGraphStore(s => s.connectNodes);
   const disconnectInput = useNodeGraphStore(s => s.disconnectInput);
   const removeNode = useNodeGraphStore(s => s.removeNode);
@@ -924,9 +956,29 @@ export function MobileGraphBrowser() {
   // desktop's own slider config panel uses (NodeComponent.tsx), so a range
   // customized on one platform carries over to the other.
   const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
+  // Track which group scope focusStack/forwardStack belong to — crossing a
+  // group boundary (entering via "Enter Group", exiting via a breadcrumb
+  // tap) drops both, the same way jumping to a totally different node tree
+  // should: old focus-stack node ids belong to a scope that's no longer on
+  // screen, so re-showing them would either dangle or (worse) coincidentally
+  // resolve to a same-id node in the new scope.
+  const [groupPathFor, setGroupPathFor] = useState('');
+  // Inline "Rename Group" field (plain 'group' type only) — desktop uses
+  // window.prompt() for this; not reused here since a native prompt is
+  // unreliable inside a Tauri webview (same reason Reset's confirm dialog
+  // was replaced with an in-app one).
+  const [renamingGroupFor, setRenamingGroupFor] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
+
+  const groupPathKey = activeGroupPath.join('/');
+  if (groupPathFor !== groupPathKey) {
+    setGroupPathFor(groupPathKey);
+    setFocusStack([]);
+    setForwardStack([]);
+  }
 
   if (exprModeFor !== focusedId) {
     setExprModeFor(focusedId);
@@ -968,7 +1020,13 @@ export function MobileGraphBrowser() {
 
   const pushFocus = (id: string) => { setFocusStack(stack => [...stack, id]); setForwardStack([]); };
   const jumpTo = (index: number) => { setFocusStack(stack => stack.slice(0, index + 1)); setForwardStack([]); };
-  const goHome = () => { setFocusStack([]); setForwardStack([]); };
+  const goHome = () => { exitToRoot(); setFocusStack([]); setForwardStack([]); };
+  // Tapping a group breadcrumb segment for the level you're ALREADY at (its
+  // path doesn't change) must still drop back to that group's own Home —
+  // the groupPathFor effect only clears focusStack when activeGroupPath
+  // itself changes, so relying on it here would leave a deeper focusStack
+  // stuck in place when exitToDepth is a no-op on an unchanged path.
+  const jumpToGroupDepth = (depth: number) => { exitToDepth(depth); setFocusStack([]); setForwardStack([]); };
   const goBack = () => {
     if (focusStack.length === 0) return;
     setForwardStack(f => [focusStack[focusStack.length - 1], ...f]);
@@ -990,10 +1048,27 @@ export function MobileGraphBrowser() {
   const downstreamConsumers = (nodeId: string, outputKey: string) =>
     nodes.filter(n => Object.values(n.inputs).some(inp => inp.connection?.nodeId === nodeId && inp.connection.outputKey === outputKey));
 
-  const labelFor = (n: GraphNode) => getNodeDefinition(n.type)?.label ?? n.type;
+  // A custom name (desktop's "Rename Group", also usable on customFn nodes)
+  // overrides the type's default label — same node.params.label convention
+  // and fallback order NodeComponent.tsx uses, so a group renamed on either
+  // platform shows the same name on the other.
+  const labelFor = (n: GraphNode) =>
+    (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
+
+  // addNode() just ran synchronously before either handler below fires (it's
+  // the onNodePlaced callback), so the closure's `nodes` can be one render
+  // behind — reading fresh from the store is deliberate, not a mistake to
+  // "simplify" away. It has to go through the same activeGroupPath scoping
+  // as the component's own `nodes`, though: the store's own .nodes is
+  // always the flat top-level list, and a node just placed inside a group
+  // only exists in its subgraph, not there.
+  const getFreshActiveNodes = (): GraphNode[] => {
+    const state = useNodeGraphStore.getState();
+    return getActiveNodes(state.nodes, state.activeGroupPath) ?? state.nodes;
+  };
 
   const handleNodePlacedForInput = (newId: string, socket: Extract<PendingSocket, { dir: 'input' }>) => {
-    const newNode = useNodeGraphStore.getState().nodes.find(n => n.id === newId);
+    const newNode = getFreshActiveNodes().find(n => n.id === newId);
     if (!newNode) return;
     const outKey = firstCompatibleOutputKey(newNode, socket.type);
     if (outKey) connectNodes(newId, outKey, socket.nodeId, socket.key);
@@ -1001,7 +1076,7 @@ export function MobileGraphBrowser() {
   };
 
   const handleNodePlacedForOutput = (newId: string, socket: Extract<PendingSocket, { dir: 'output' }>) => {
-    const newNode = useNodeGraphStore.getState().nodes.find(n => n.id === newId);
+    const newNode = getFreshActiveNodes().find(n => n.id === newId);
     if (!newNode) return;
     const inKey = firstCompatibleInputKey(newNode, socket.type);
     if (inKey) connectNodes(socket.nodeId, socket.key, newId, inKey);
@@ -1047,22 +1122,92 @@ export function MobileGraphBrowser() {
   // editor) — the one fixed element as you scroll/edit below it, styled
   // brighter than everything else to anchor "what node am I in" at a
   // glance. Back/forward step through the drill-down history; Remove is
-  // hidden only for the Output node (which can't be removed) or at Home
-  // (unreachable here anyway, since this only renders once focused).
+  // hidden for the Output node (which can't be removed), at Home
+  // (unreachable here anyway, since this only renders once focused), and
+  // for a group's auto-created placeholder nodes (ScenePos/SceneOutput/
+  // MarchLoopInputs/MarchLoopOutput, tagged _groupOriginal) — removeNode
+  // silently no-ops on those, so hiding the button avoids a dead tap.
   function renderNodeHeader(node: GraphNode) {
+    const canRemove = node.type !== 'output' && focusStack.length > 0 && !node.params?._groupOriginal;
     return (
       <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
         <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
         <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
         <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
         <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
-        <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
-        {node.type !== 'output' && focusStack.length > 0 && (
+        <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} nodes={nodes} />
+        {canRemove && (
           <button
             onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
             style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
           >
             Remove
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Group entry point — "Enter <Group Label> ›" plus, for a plain 'group'
+  // (not the fixed-purpose 3D scene group types), rename/ungroup. Sealed
+  // groups compile as a standalone function; entering them is blocked by
+  // the store itself, so this shows why instead of a button that no-ops.
+  function renderGroupBanner(node: GraphNode) {
+    const def = getNodeDefinition(node.type);
+    const isPlainGroup = node.type === 'group';
+    const isRenaming = renamingGroupFor === node.id;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {node.sealed ? (
+          <div style={{ fontSize: '11px', color: '#6c7086', background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '10px' }}>
+            🔒 Sealed — compiles as a standalone function, contents aren't editable.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              onClick={() => enterGroup(node.id)}
+              style={{
+                flex: 1, background: '#89b4fa18', border: '1px solid #89b4fa55', color: '#89b4fa',
+                borderRadius: '8px', padding: '10px', fontSize: '13px', fontWeight: 600,
+                cursor: 'pointer', touchAction: 'manipulation',
+              }}
+            >
+              Enter {def?.label ?? 'Group'} ›
+            </button>
+            {isPlainGroup && (
+              <button
+                onClick={() => { setRenamingGroupFor(node.id); setRenameValue(labelFor(node)); }}
+                title="Rename"
+                style={{ background: 'none', border: '1px solid #45475a', color: '#a6adc8', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+              >✎</button>
+            )}
+          </div>
+        )}
+        {isPlainGroup && isRenaming && (
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input
+              autoFocus
+              type="text"
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { updateNodeParams(node.id, { label: renameValue.trim() || undefined }, { immediate: true }); setRenamingGroupFor(null); }
+                if (e.key === 'Escape') setRenamingGroupFor(null);
+              }}
+              style={{ ...exprTextInputStyle, flex: 1 }}
+            />
+            <button
+              onClick={() => { updateNodeParams(node.id, { label: renameValue.trim() || undefined }, { immediate: true }); setRenamingGroupFor(null); }}
+              style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px', padding: '0 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+            >Save</button>
+          </div>
+        )}
+        {isPlainGroup && !node.sealed && (
+          <button
+            onClick={() => { ungroupNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
+            style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '8px', padding: '8px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+          >
+            Ungroup
           </button>
         )}
       </div>
@@ -1079,6 +1224,7 @@ export function MobileGraphBrowser() {
         {renderNodeHeader(node)}
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
             {hasInputs && (
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1937,9 +2083,30 @@ export function MobileGraphBrowser() {
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: '#181825', color: '#cdd6f4', fontFamily: 'system-ui, sans-serif' }}>
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderBottom: '1px solid #313244', overflowX: 'auto', flexShrink: 0 }}>
-        <button onClick={goHome} style={{ background: 'none', border: 'none', color: focusStack.length === 0 ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}>
+        <button onClick={goHome} style={{ background: 'none', border: 'none', color: activeGroupPath.length === 0 && focusStack.length === 0 ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}>
           Home
         </button>
+        {/* Group ancestry — one segment per level of "Enter Group" drill-down,
+            before the in-node focusStack trail. Tapping one jumps straight to
+            being inside that level (getActiveNodes at a shorter prefix), same
+            as tapping a focusStack segment jumps to that node. */}
+        {activeGroupPath.map((id, i) => {
+          const parentScope = getActiveNodes(topLevelNodes, activeGroupPath.slice(0, i)) ?? topLevelNodes;
+          const n = parentScope.find(nn => nn.id === id);
+          if (!n) return null;
+          const isCurrent = i === activeGroupPath.length - 1 && focusStack.length === 0;
+          return (
+            <span key={`grp-${id}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+              <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
+              <button
+                onClick={() => jumpToGroupDepth(i + 1)}
+                style={{ background: 'none', border: 'none', color: isCurrent ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+              >
+                {labelFor(n)}
+              </button>
+            </span>
+          );
+        })}
         {focusStack.map((id, i) => {
           const n = nodes.find(nn => nn.id === id);
           if (!n) return null;
