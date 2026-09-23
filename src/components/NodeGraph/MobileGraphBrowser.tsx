@@ -487,6 +487,48 @@ function TypeIcon({ type }: { type: string }) {
   }
   return <div style={dotStyle(TYPE_COLORS[type] ?? '#888')} />;
 }
+// ── Inline-viz frame ─────────────────────────────────────────────────────
+// NodeInlineViz's ~50 canvases each hardcode their own CSS pixel height
+// (36/64/100/...) alongside width:'100%' — sized for desktop's roughly-
+// 240px-wide node card, where the aspect ratio comes out close enough to
+// each canvas's own backing resolution. Mobile's Info tab is a different,
+// wider width that doesn't match any single one of those, so stretching
+// them all to it distorts anything not authored wide-and-short (a square
+// vector-field grid comes out squashed). Rather than touching ~50 draw
+// functions in a file shared with desktop, this reads the actual canvas's
+// backing resolution after it mounts — that ratio IS the visualization's
+// real intended shape — and sizes this wrapper to match via CSS
+// aspect-ratio, overriding the canvas's own fixed height to fill it
+// exactly instead of clipping or stretching to the author's original px
+// guess. Callers should pass `key={node.id}` so switching nodes remeasures
+// fresh rather than reusing a stale ratio.
+function InlineVizFrame({ node }: { node: GraphNode }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const canvas = frame?.querySelector('canvas');
+    if (!frame || !canvas || !canvas.width || !canvas.height) return;
+    frame.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
+    canvas.style.height = '100%';
+  });
+  return (
+    // No padding — the aspect-ratio computed above is measured against this
+    // box's own border box, so any padding would shrink the content area
+    // the canvas actually fills (100% of the *content* box) below what the
+    // ratio assumed, squishing it and clipping whatever sits near the
+    // canvas's own bottom/right edge. Desktop's own wrapper (VIZ_CONTAINER
+    // in NodeInlineViz.tsx) is padding-free for the same reason.
+    <div
+      ref={frameRef}
+      style={{
+        background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+        overflow: 'hidden', width: '100%', maxWidth: '280px', maxHeight: '280px',
+      }}
+    >
+      <NodeInlineViz node={node} />
+    </div>
+  );
+}
 // Tappable, collapsible column header ("▾ INPUTS" / "▸ OUTPUTS").
 const sectionHeaderBtnStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '4px', width: '100%',
@@ -1241,6 +1283,14 @@ export function MobileGraphBrowser() {
   // Info/Comment toggle under a generic node's cards — defaults to Info,
   // reset alongside the other per-node view state below.
   const [infoTab, setInfoTab] = useState<'info' | 'comment' | 'assign'>('info');
+  // The Info tab's inline visualization (NodeInlineViz) is collapsed by
+  // default — different node types want very different aspect ratios (a
+  // wide equation strip vs. a roughly-square vector field), so rather than
+  // reserving a fixed chunk of the card for it on every node, it's opt-in:
+  // tap to reveal, sized to whatever that specific visualization actually
+  // wants (see InlineVizFrame) instead of a one-size-fits-all box that's
+  // in the way when you're not looking at it.
+  const [vizExpanded, setVizExpanded] = useState(false);
   // Which keyframe point is selected (for the easing-preset picker) — reset
   // whenever the editor's target (node/socket/axis) changes, below.
   const [kfSelectedIndex, setKfSelectedIndex] = useState<number | null>(null);
@@ -1314,6 +1364,7 @@ export function MobileGraphBrowser() {
     setHiddenSectionOpen(false);
     setInfoTab('info');
     setOpenSliderConfig(null);
+    setVizExpanded(false);
   }
   // mobileKeyframeEditor lives in the store (App.tsx's bottom bar needs it
   // too), so navigating away without hitting "Done" — breadcrumb, back/
@@ -2211,31 +2262,30 @@ export function MobileGraphBrowser() {
             </div>
             {infoTab === 'info' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {/* Same live, node-type-specific canvas diagrams desktop
-                    shows on the card itself (tone curves, gradient strips,
-                    wave shapes, ...) — reused as-is here rather than
-                    reinvented; they already scale to their container
-                    (width:'100%' with a fixed backing resolution) and
-                    already subscribe to live param/scope values, so this is
-                    just placing them, not building them. */}
-                {INLINE_VIZ_TYPES.has(node.type) && (
-                  // maxWidth caps how far these get stretched — most of
-                  // NodeInlineViz's canvases have a 240px backing resolution
-                  // (a few use 160/200), sized for desktop's node-card width.
-                  // Mobile's Info tab is wider than that, and `width:'100%'`
-                  // (baked into NodeInlineViz itself) would upscale the
-                  // canvas bitmap past its native resolution — soft/blurry
-                  // text and thin lines. Capping near the common backing
-                  // width keeps the upscale factor close to what it already
-                  // is on a typical desktop card, without touching the
-                  // shared (and huge) NodeInlineViz.tsx.
-                  <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', overflow: 'hidden', maxWidth: '280px' }}>
-                    <NodeInlineViz node={node} />
-                  </div>
-                )}
                 <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
                   {def?.description ?? 'No info for this node.'}
                 </div>
+                {/* Same live, node-type-specific canvas diagrams desktop
+                    shows on the card itself (tone curves, gradient strips,
+                    wave shapes, ...) — reused as-is via InlineVizFrame
+                    rather than reinvented. Collapsed by default: different
+                    node types want very different shapes (a wide equation
+                    strip vs. a square vector field), so reserving a fixed
+                    chunk of the card for it on every node — even ones you
+                    never open it on — is more clutter than it's worth;
+                    opt-in instead, sized to whatever that visualization
+                    actually wants once shown. */}
+                {INLINE_VIZ_TYPES.has(node.type) && (
+                  <div>
+                    <button
+                      onClick={() => setVizExpanded(v => !v)}
+                      style={{ ...sectionHeaderBtnStyle, padding: '4px 0' }}
+                    >
+                      <span>{vizExpanded ? '▾' : '▸'} VISUAL</span>
+                    </button>
+                    {vizExpanded && <InlineVizFrame key={node.id} node={node} />}
+                  </div>
+                )}
               </div>
             )}
             {infoTab === 'comment' && (
