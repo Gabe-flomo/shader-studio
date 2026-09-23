@@ -1,4 +1,5 @@
 import type { GraphNode, NodeDefinition, DataType } from '../types/nodeGraph';
+import { getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed } from './keyframes';
 
 /** Node types whose params must remain as baked compile-time constants.
  *
@@ -34,21 +35,34 @@ export function defaultGlslVal(type: DataType | string): string {
 
 /**
  * For each eligible float paramDef, replace the numeric value in `node.params`
- * with a uniform name string (e.g. `'u_p_nodeId_scale'`).
+ * with a uniform name string (e.g. `'u_p_nodeId_scale'`) — or, if that param
+ * has its own keyframe track (a param-only slider with no backing input
+ * socket, like Scatter's Frequency/Amplitude — a real socket's keyframes are
+ * already handled by resolveInputVars), a `kf_...(u_time)` call expression
+ * instead. Keyframes win over a plain uniform when both would apply.
  *
  * The `p()` helper in node definitions treats any string param as a pre-resolved
- * GLSL expression, so node defs work identically in both bake and uniform mode.
+ * GLSL expression, so node defs work identically in bake, uniform, and keyframe
+ * mode without knowing which one they're in.
  *
  * Skips:
  * - Nodes whose type is in SKIP_UNIFORM_TYPES (loop control nodes)
  * - Integer-step params (`step === 1`) — loop counts, octave counts, etc.
  * - Non-float paramDefs (vec3, select, string)
+ * - Keyframing a key that's also a real input socket (that key's static
+ *   fallback param value is never read when the socket exists — the socket's
+ *   own resolveInputVars path already owns its keyframes)
+ *
+ * @param registerFn - sink for keyframe curve-evaluator GLSL functions
+ *   (`this.functions.add`, same convention resolveInputVars uses). Omit to
+ *   uniform-patch only, e.g. call sites that don't need keyframe support.
  *
  * Returns `{ patchedNode, uniforms }` where `uniforms` maps name → current value.
  */
 export function patchNodeParamsForUniforms(
   node: GraphNode,
   def: NodeDefinition,
+  registerFn?: (glsl: string) => void,
 ): { patchedNode: GraphNode; uniforms: Record<string, number> } {
   const uniforms: Record<string, number> = {};
 
@@ -63,6 +77,17 @@ export function patchNodeParamsForUniforms(
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
     if (paramDef.type !== 'float') continue;  // only scalar floats
     if (paramDef.step === 1) continue;         // integer param — keep baked
+    if (!(key in node.inputs) && registerFn && !isKeyframeBypassed(node, key)) {
+      const kfCfg = getKeyframeConfig(node, key);
+      if (kfCfg) {
+        const fnName = `kf_${safeId}_${key}`;
+        const { glslFunction, sharedFunction, expr } = generateKeyframeGLSL(fnName, kfCfg);
+        registerFn(sharedFunction);
+        registerFn(glslFunction);
+        patchedParams[key] = expr;
+        continue;
+      }
+    }
     const val = node.params[key];
     if (typeof val !== 'number') continue;
     const uniformName = `u_p_${safeId}_${key}`;

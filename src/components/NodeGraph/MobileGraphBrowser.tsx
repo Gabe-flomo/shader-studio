@@ -29,6 +29,7 @@ import {
   getKeyframeConfig, getAxisKeyframeConfig,
 } from '../../compiler/keyframes';
 import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/keyframes';
+import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -83,6 +84,14 @@ function sliderableParam(node: GraphNode, key: string) {
   if (!pd || (pd.type !== 'float' && pd.type !== 'int')) return undefined;
   if (!paramVisible(node, pd)) return undefined;
   return pd;
+}
+// True for a real input socket, or a param-only float slider eligible for
+// its own keyframe track (see patchNodeParamsForUniforms) — anything the
+// mobile keyframe editor is allowed to open on.
+function nodeHasKeyframeableKey(node: GraphNode, key: string): boolean {
+  if (key in node.inputs) return true;
+  const pd = sliderableParam(node, key);
+  return !!pd && pd.type === 'float' && pd.step !== 1 && !SKIP_UNIFORM_TYPES.has(node.type);
 }
 function selectableParam(node: GraphNode, key: string) {
   const def = getNodeDefinition(node.type);
@@ -1467,9 +1476,9 @@ export function MobileGraphBrowser() {
   useEffect(() => {
     if (!mobileKeyframeEditor) return;
     if (mobileKeyframeEditor.nodeId !== focusedId) { setMobileKeyframeEditor(null); return; }
-    // Also covers the socket itself vanishing while still on this node
+    // Also covers the socket/param itself vanishing while still on this node
     // (e.g. its type changed) — same "nothing left to edit" case.
-    if (focusedNode && !focusedNode.inputs[mobileKeyframeEditor.socketKey]) setMobileKeyframeEditor(null);
+    if (focusedNode && !nodeHasKeyframeableKey(focusedNode, mobileKeyframeEditor.socketKey)) setMobileKeyframeEditor(null);
   }, [mobileKeyframeEditor, focusedId, focusedNode, setMobileKeyframeEditor]);
   const kfTargetKey = mobileKeyframeEditor
     ? `${mobileKeyframeEditor.nodeId}:${mobileKeyframeEditor.socketKey}:${mobileKeyframeEditor.axis ?? ''}`
@@ -2191,7 +2200,18 @@ export function MobileGraphBrowser() {
       // stay ineligible).
       const isVectorKfType = inp.type === 'vec2' || inp.type === 'vec3';
       const kfAxes = isVectorKfType ? VECTOR_AXES[inp.type as 'vec2' | 'vec3'] : null;
-      const kfEligible = isRealSocket && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+      const socketKfEligible = isRealSocket && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+      // A param-only float slider (no backing socket — e.g. Scatter's
+      // Frequency/Amplitude) can be keyframed too: the compiler already
+      // knows how to swap a live GLSL expression in for a numeric param (the
+      // same p()-passthrough trick patchNodeParamsForUniforms uses for
+      // uniforms — see compileStandardNode), extended to keyframes there.
+      // Excludes int-step sliders (loop counts etc — read as a JS number for
+      // control flow, never a real GLSL float) and SKIP_UNIFORM_TYPES node
+      // types, for the same reason uniform-patching itself skips them.
+      const rawParamPd = !isRealSocket ? sliderableParam(node, key) : undefined;
+      const paramKfEligible = !!rawParamPd && rawParamPd.type === 'float' && rawParamPd.step !== 1 && !SKIP_UNIFORM_TYPES.has(node.type);
+      const kfEligible = socketKfEligible || paramKfEligible;
       const isKeyframed = kfEligible && (
         inp.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, kfAxes ?? [])
       );
@@ -2766,12 +2786,17 @@ export function MobileGraphBrowser() {
   // there's no keyboard here for desktop's V/C/X/D shortcuts.
   function renderKeyframeEditorView(node: GraphNode) {
     const target = mobileKeyframeEditor;
-    const input = target ? node.inputs[target.socketKey] : undefined;
+    const realInput = target ? node.inputs[target.socketKey] : undefined;
+    // Param-only float slider (no backing socket) — same synthetic shape
+    // paramOnlyEntries uses elsewhere in this file, just enough for this
+    // view to read .type/.label off it like a real input.
+    const paramPd = (target && !realInput) ? sliderableParam(node, target.socketKey) : undefined;
+    const input = realInput ?? (paramPd ? { type: 'float', label: paramPd.label } as GraphNode['inputs'][string] : undefined);
     if (!target || !input) {
-      // Socket vanished from under us (e.g. node type changed) — bail out to
-      // the normal detail view for this render; the useEffect above clears
-      // mobileKeyframeEditor itself (can't do that here mid-render, since
-      // it's a store field App.tsx also renders from).
+      // Socket/param vanished from under us (e.g. node type changed) — bail
+      // out to the normal detail view for this render; the useEffect above
+      // clears mobileKeyframeEditor itself (can't do that here mid-render,
+      // since it's a store field App.tsx also renders from).
       return renderNodeDetail(node);
     }
     const isVector = input.type === 'vec2' || input.type === 'vec3';
