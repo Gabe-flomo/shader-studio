@@ -285,6 +285,10 @@ function App() {
   // Examples button opens a browsable gallery of starter graphs.
   const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
   const [showMobileExamples, setShowMobileExamples]     = useState(false);
+  // Examples browser: which category folders are expanded — starts empty
+  // (all collapsed) since the full list is long enough to need scrolling
+  // past just the first one or two categories otherwise.
+  const [expandedExampleFolders, setExpandedExampleFolders] = useState<Set<string>>(new Set());
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   // Node search palette
@@ -786,28 +790,47 @@ function App() {
                   title="Close"
                 >✕</button>
               </div>
-              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => (
-                <div key={folder.label} style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em', marginBottom: '6px' }}>
-                    {folder.label.toUpperCase()}
+              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
+                const isOpen = expandedExampleFolders.has(folder.label);
+                return (
+                  <div key={folder.label} style={{ marginBottom: '12px' }}>
+                    <button
+                      onClick={() => setExpandedExampleFolders(s => {
+                        const next = new Set(s);
+                        if (next.has(folder.label)) next.delete(folder.label); else next.add(folder.label);
+                        return next;
+                      })}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
+                        background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
+                        cursor: 'pointer', touchAction: 'manipulation',
+                      }}
+                    >
+                      <span style={{ fontSize: '9px', color: folder.color }}>{isOpen ? '▾' : '▸'}</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em' }}>
+                        {folder.label.toUpperCase()}
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
+                          <button
+                            key={k}
+                            onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
+                            style={{
+                              background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                              padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+                              cursor: 'pointer', touchAction: 'manipulation',
+                            }}
+                          >
+                            {EXAMPLE_GRAPHS[k].label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
-                      <button
-                        key={k}
-                        onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
-                        style={{
-                          background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-                          padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
-                          cursor: 'pointer', touchAction: 'manipulation',
-                        }}
-                      >
-                        {EXAMPLE_GRAPHS[k].label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
