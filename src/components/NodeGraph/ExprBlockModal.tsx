@@ -6,6 +6,7 @@ import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
 import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
+import { NumberInput } from './NumberInput';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -218,9 +219,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
     updateNodeSockets(node.id, next, outputType);
   };
 
-  const updateSliderRange = (idx: number, field: 'min' | 'max', raw: string) => {
-    const val = parseFloat(raw);
-    if (isNaN(val)) return;
+  const updateSliderRange = (idx: number, field: 'min' | 'max', val: number) => {
     const inp = customInputs[idx];
     const oldSlider = inp.slider ?? { min: 0, max: 1 };
     const newSlider = { ...oldSlider, [field]: val };
@@ -547,21 +546,19 @@ export function ExprBlockModal({ node, onClose }: Props) {
                         <>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: '#6c7086' }}>
                             <span>min</span>
-                            <input
-                              type="number"
+                            <NumberInput
                               value={inp.slider.min}
                               step={0.1}
-                              onChange={e => updateSliderRange(idx, 'min', e.target.value)}
+                              onCommit={n => updateSliderRange(idx, 'min', n)}
                               style={{ ...INPUT_STYLE, width: '44px', padding: '1px 4px', fontSize: '10px' }}
                             />
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: '#6c7086' }}>
                             <span>max</span>
-                            <input
-                              type="number"
+                            <NumberInput
                               value={inp.slider.max}
                               step={0.1}
-                              onChange={e => updateSliderRange(idx, 'max', e.target.value)}
+                              onCommit={n => updateSliderRange(idx, 'max', n)}
                               style={{ ...INPUT_STYLE, width: '44px', padding: '1px 4px', fontSize: '10px' }}
                             />
                           </div>

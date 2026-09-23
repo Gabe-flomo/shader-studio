@@ -44,6 +44,7 @@ import { AssetContextMenu } from './AssetContextMenu';
 import { KeyframeEditorModal } from './KeyframeEditorModal';
 import { socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
+import { NumberInput } from './NumberInput';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -1360,11 +1361,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           {(['min', 'max'] as const).map(key => (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
               <span style={{ color: '#6c7086', fontSize: '10px', minWidth: '22px' }}>{key}</span>
-              <input
-                type="number"
+              <NumberInput
                 value={typeof node.params[key] === 'number' ? node.params[key] as number : (key === 'min' ? -1 : 1)}
                 step={0.1}
-                onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) || 0 })}
+                onCommit={n => updateNodeParams(node.id, { [key]: n })}
                 style={{ ...INPUT_STYLE, width: '48px', fontSize: '10px', padding: '1px 4px' }}
               />
             </div>
@@ -3805,15 +3805,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   const raw = node.params[k];
                   const val = typeof raw === 'number' ? raw : 0;
                   return (
-                    <input
+                    <NumberInput
                       key={k}
-                      type="number"
-                      step="0.01"
+                      step={0.01}
                       value={val}
-                      onChange={e => {
-                        const n = parseFloat(e.target.value);
-                        if (!isNaN(n)) updateNodeParams(node.id, { [k]: n });
-                      }}
+                      onCommit={n => updateNodeParams(node.id, { [k]: n })}
                       style={cellStyle}
                     />
                   );
@@ -4199,12 +4195,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         }}
                       />
                       {/* No min/max on number input — allows typing values beyond the slider range */}
-                      <input
-                        type="number"
+                      <NumberInput
                         style={{ ...INPUT_STYLE, width: '48px' }}
                         step={step}
                         value={vals[idx] ?? 0}
-                        onChange={e => setVec3Component(key, idx, e.target.value)}
+                        onCommit={n => setVec3Component(key, idx, String(n))}
                       />
                     </div>
                   );
@@ -4316,16 +4311,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#6c7086', fontSize: '11px' }}>{inp.name}{isWired ? ' ⟵' : ''}</span>
-                  <input
-                    type="number"
+                  <NumberInput
                     disabled={isWired}
                     style={{ ...INPUT_STYLE, width: '56px', opacity: isWired ? 0.5 : 1 }}
                     value={val}
                     step={step}
-                    onChange={e => {
-                      const v = parseFloat(e.target.value);
-                      if (!isNaN(v)) updateNodeParams(node.id, { [inp.name]: v }, { immediate: true });
-                    }}
+                    onCommit={n => updateNodeParams(node.id, { [inp.name]: n }, { immediate: true })}
                   />
                 </div>
                 <input

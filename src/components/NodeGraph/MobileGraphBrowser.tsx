@@ -30,6 +30,7 @@ import {
 } from '../../compiler/keyframes';
 import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/keyframes';
 import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
+import { NumberInput } from './NumberInput';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -2450,13 +2451,10 @@ export function MobileGraphBrowser() {
                   <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                       <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         step={pd.step ?? 0.01}
                         value={val}
-                        onChange={e => {
-                          const n = parseFloat(e.target.value);
-                          if (isNaN(n)) return;
+                        onCommit={n => {
                           if (Math.abs(n) > effMax) setCustomMax(n);
                           updateNodeParams(node.id, { [key]: n }, { immediate: true });
                         }}
@@ -2474,14 +2472,10 @@ export function MobileGraphBrowser() {
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                       <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Max</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         step={pd.step ?? 0.01}
                         value={effMax}
-                        onChange={e => {
-                          const n = parseFloat(e.target.value);
-                          if (!isNaN(n) && n > 0) setCustomMax(n);
-                        }}
+                        onCommit={n => { if (n > 0) setCustomMax(n); }}
                         style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
                       />
                       {customMax != null && (
@@ -2729,13 +2723,10 @@ export function MobileGraphBrowser() {
                   <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                       <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         step={step}
                         value={val}
-                        onChange={e => {
-                          const n = parseFloat(e.target.value);
-                          if (isNaN(n)) return;
+                        onCommit={n => {
                           const next = [...vals];
                           next[idx] = n;
                           updateNodeParams(node.id, { [key]: next }, { immediate: true });
@@ -3145,15 +3136,10 @@ export function MobileGraphBrowser() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '11px', color: '#6c7086' }}>Value</span>
-                <input
-                  type="number"
+                <NumberInput
                   step={pd?.step ?? 0.01}
                   value={selected.v}
-                  onChange={e => {
-                    const n = parseFloat(e.target.value);
-                    if (isNaN(n)) return;
-                    writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, v: n } : k));
-                  }}
+                  onCommit={n => writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, v: n } : k))}
                   style={{ ...exprTextInputStyle, width: '60px', padding: '4px 6px', fontSize: '11px' }}
                 />
               </div>
@@ -3200,9 +3186,9 @@ export function MobileGraphBrowser() {
               {mode === 'interpolate' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
                   <span style={{ fontSize: '10px', color: '#6c7086' }}>Loop back over</span>
-                  <input
-                    type="number" min={0.01} step={0.1} value={loopBack}
-                    onChange={e => setLoopBack(Math.max(0.01, parseFloat(e.target.value) || 0.01))}
+                  <NumberInput
+                    min={0.01} step={0.1} value={loopBack}
+                    onCommit={n => setLoopBack(Math.max(0.01, n))}
                     style={{ ...exprTextInputStyle, width: '48px', padding: '4px 6px', fontSize: '11px' }}
                   />
                   <span style={{ fontSize: '10px', color: '#6c7086' }}>sec</span>
@@ -3222,9 +3208,9 @@ export function MobileGraphBrowser() {
                   {loopCount !== null && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '10px', color: '#6c7086' }}>Repeat</span>
-                      <input
-                        type="number" min={1} step={1} value={loopCount}
-                        onChange={e => setLoopCount(Math.max(1, Math.round(parseFloat(e.target.value) || 1)))}
+                      <NumberInput
+                        min={1} step={1} value={loopCount}
+                        onCommit={n => setLoopCount(Math.max(1, Math.round(n)))}
                         style={{ ...exprTextInputStyle, width: '44px', padding: '4px 6px', fontSize: '11px' }}
                       />
                       <span style={{ fontSize: '10px', color: '#6c7086' }}>times</span>

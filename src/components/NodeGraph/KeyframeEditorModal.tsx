@@ -5,6 +5,7 @@ import type { KeyframePreset } from '../../types/keyframePreset';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
 import { TimeControlsStrip } from '../TimeControlsStrip';
+import { NumberInput } from './NumberInput';
 
 const MAX_KEYFRAMES = 8;
 const HANDLE_R = 6;
@@ -1180,13 +1181,13 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           <span style={{ color: '#6c7086' }}>Grid</span>
           <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ color: '#6c7086', fontSize: '10px' }}>Time</span>
-            <input type="number" step={0.05} min={0.05} value={view.gridT} style={inputStyle}
-              onChange={e => setView(v => ({ ...v, gridT: Math.max(0.01, parseFloat(e.target.value) || 0.5) }))} />
+            <NumberInput step={0.05} min={0.05} value={view.gridT} style={inputStyle}
+              onCommit={n => setView(v => ({ ...v, gridT: Math.max(0.01, n) }))} />
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ color: '#6c7086', fontSize: '10px' }}>Value</span>
-            <input type="number" step={0.1} min={0.01} value={view.gridV} style={inputStyle}
-              onChange={e => setView(v => ({ ...v, gridV: Math.max(0.01, parseFloat(e.target.value) || 1) }))} />
+            <NumberInput step={0.1} min={0.01} value={view.gridV} style={inputStyle}
+              onCommit={n => setView(v => ({ ...v, gridV: Math.max(0.01, n) }))} />
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
             <input type="checkbox" checked={view.snap} onChange={e => setView(v => ({ ...v, snap: e.target.checked }))} />
@@ -1205,8 +1206,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           {mode === 'interpolate' && (
             <>
               <span style={{ color: '#6c7086', fontSize: '11px' }}>Loop-back (s)</span>
-              <input type="number" step={0.1} min={0.01} value={loopBack} style={inputStyle}
-                onChange={e => setLoopBack(parseFloat(e.target.value) || 1)} />
+              <NumberInput step={0.1} min={0.01} value={loopBack} style={inputStyle}
+                onCommit={n => setLoopBack(Math.max(0.01, n))} />
             </>
           )}
           {(mode === 'loop' || mode === 'interpolate') && (
@@ -1218,14 +1219,14 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           {(mode === 'loop' || mode === 'interpolate') && loopCount !== null && (
             <>
               <span style={{ color: '#6c7086', fontSize: '11px' }}>× times</span>
-              <input type="number" step={1} min={1} value={loopCount} style={inputStyle}
-                onChange={e => setLoopCount(Math.max(1, Math.round(parseFloat(e.target.value) || 1)))} />
+              <NumberInput step={1} min={1} value={loopCount} style={inputStyle}
+                onCommit={n => setLoopCount(Math.max(1, Math.round(n)))} />
             </>
           )}
           <span style={{ color: '#6c7086', fontSize: '11px' }}>Offset (s)</span>
-          <input type="number" step={0.1} value={offset} style={inputStyle}
+          <NumberInput step={0.1} value={offset} style={inputStyle}
             title="Delay before this track starts playing, in global time — shifts the whole track without moving any keyframe"
-            onChange={e => setOffset(parseFloat(e.target.value) || 0)} />
+            onCommit={n => setOffset(n)} />
           <button
             onClick={() => (kfPlaying ? stopKfPlayback() : startKfPlayback())}
             disabled={keyframes.length === 0}
