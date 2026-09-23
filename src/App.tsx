@@ -36,6 +36,9 @@ function getPaletteWidth(bp: ReturnType<typeof useBreakpoint>) {
 
 const MIN_PREVIEW = 200;
 const MIN_GRAPH   = 280;
+// Mobile split mode: default canvas-pane height, restored by double-
+// tapping/double-clicking the drag divider between the two panes.
+const MOBILE_CANVAS_VH_DEFAULT = 42;
 
 // ── Button style helper ───────────────────────────────────────────────────────
 const btnStyle = (active = false): React.CSSProperties => ({
@@ -314,8 +317,13 @@ function App() {
   // the divider between the two panes (see mobileSplitDragRef below), with
   // the canvas itself always kept square by capping its width to the same
   // vh value, so a shorter canvas pane doesn't stretch it wide.
-  const [mobileCanvasVh, setMobileCanvasVh] = useState(42);
+  const [mobileCanvasVh, setMobileCanvasVh] = useState(MOBILE_CANVAS_VH_DEFAULT);
   const mobileSplitDragRef = useRef(false);
+  // Double-tap/double-click the divider to snap back to the default split.
+  // Manual timing (not just onDoubleClick) since iOS Safari doesn't reliably
+  // synthesize a second-tap dblclick — same fallback pattern used for
+  // slider reset in MobileGraphBrowser.tsx.
+  const lastDividerTapRef = useRef(0);
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -733,8 +741,17 @@ function App() {
               onPointerUp={e => {
                 mobileSplitDragRef.current = false;
                 if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                const now = Date.now();
+                if (now - lastDividerTapRef.current < 400) {
+                  setMobileCanvasVh(MOBILE_CANVAS_VH_DEFAULT);
+                  lastDividerTapRef.current = 0;
+                } else {
+                  lastDividerTapRef.current = now;
+                }
               }}
               onPointerCancel={() => { mobileSplitDragRef.current = false; }}
+              onDoubleClick={() => setMobileCanvasVh(MOBILE_CANVAS_VH_DEFAULT)}
+              title="Double-tap to reset to the default split"
               style={{
                 flexShrink: 0, height: '18px', margin: '-9px 0', zIndex: 23, position: 'relative',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
