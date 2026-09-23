@@ -1,4 +1,5 @@
 import type { GraphNode } from '../types/nodeGraph';
+import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 
 export type ExampleGraph = { label: string; nodes: GraphNode[]; counter: number };
 
@@ -886,8 +887,8 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
                 id: 'ring_a', type: 'loopRingStep',
                 position: { x: 100, y: 100 },
                 inputs: {
-                  uv:    { type: 'vec2', label: 'UV' },
-                  color: { type: 'vec3', label: 'Color in' },
+                  uv:    { type: 'vec2', label: 'UV', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in0' } },
+                  color: { type: 'vec3', label: 'Color in', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in1' } },
                 },
                 outputs: {
                   uv:    { type: 'vec2', label: 'UV out' },
@@ -1283,7 +1284,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // Group input in_uv initialises the carry on the first iteration
               {
                 id: 'fract_n', type: 'fract', position: { x: 120, y: 160 },
-                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } } },
                 outputs: { output: { type: 'vec2', label: 'Output' } },
                 params:  { scale: 1.5 },
                 carryMode: true,
@@ -1298,7 +1299,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // Length of original UV0 (fixed — received via in_uv0 port each iter)
               {
                 id: 'len_o', type: 'length', position: { x: 120, y: 340 },
-                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv0' } } },
                 outputs: { output: { type: 'float', label: 'Output' } },
                 params:  { scale: 1.0 },
               },
@@ -1436,7 +1437,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // UV carry: fract(uv * 2.0) - 0.5  (tighter fold)
               {
                 id: 'fract_n', type: 'fract', position: { x: 120, y: 180 },
-                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } } },
                 outputs: { output: { type: 'vec2', label: 'Output' } },
                 params:  { scale: 2.0 },
                 carryMode: true,
@@ -1569,7 +1570,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // Carry: UV is scaled ×2 each iteration (doubles noise frequency)
               {
                 id: 'uv_scale', type: 'multiplyVec2', position: { x: 120, y: 180 },
-                inputs:  { v: { type: 'vec2', label: 'Vec2' } },
+                inputs:  { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } } },
                 outputs: { result: { type: 'vec2', label: 'Result' } },
                 params:  { scale: 2.0 },
                 carryMode: true,
@@ -1577,7 +1578,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // Animated time shift: time * 0.15
               {
                 id: 't_shift', type: 'multiply', position: { x: 120, y: 300 },
-                inputs:  { a: { type: 'float', label: 'A' } },
+                inputs:  { a: { type: 'float', label: 'A', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_time' } } },
                 outputs: { result: { type: 'float', label: 'Result' } },
                 params:  { b: 0.15 },
               },
@@ -1678,8 +1679,8 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               {
                 id: 'warp_n', type: 'smoothWarp', position: { x: 120, y: 200 },
                 inputs:  {
-                  input:    { type: 'vec2',  label: 'UV' },
-                  time:     { type: 'float', label: 'Time' },
+                  input:    { type: 'vec2',  label: 'UV', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } },
+                  time:     { type: 'float', label: 'Time', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_time' } },
                   strength: { type: 'float', label: 'Strength' },
                 },
                 outputs: { output: { type: 'vec2', label: 'UV out' } },
@@ -1749,7 +1750,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // Carry: abs(uv * 1.6) - 0.9  (Mandelbox-style fold)
               {
                 id: 'fold_n', type: 'exprNode', position: { x: 120, y: 180 },
-                inputs:  { uv: { type: 'vec2', label: 'uv (vec2)' } },
+                inputs:  { uv: { type: 'vec2', label: 'uv (vec2)', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } } },
                 outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
                 params:  {
                   inputs: [{ name: 'uv', type: 'vec2', slider: null }],
@@ -1769,7 +1770,7 @@ export const EXAMPLE_GRAPHS: Record<string, { label: string; nodes: GraphNode[];
               // Original UV length for center falloff
               {
                 id: 'len_o', type: 'length', position: { x: 120, y: 360 },
-                inputs:  { input: { type: 'vec2', label: 'Input' } },
+                inputs:  { input: { type: 'vec2', label: 'Input', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv0' } } },
                 outputs: { output: { type: 'float', label: 'Output' } },
                 params:  { scale: 1.0 },
               },
