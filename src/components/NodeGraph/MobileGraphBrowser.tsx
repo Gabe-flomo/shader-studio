@@ -938,10 +938,20 @@ export function MobileGraphBrowser() {
   // Which Expr Block input card currently has focus, for the thin highlight
   // stroke — cleared naturally by the row's onBlur, not reset elsewhere.
   const [focusedInputIdx, setFocusedInputIdx] = useState<number | null>(null);
-  // Generic node detail: whether the Inputs/Outputs column is expanded —
-  // each collapses independently by tapping its own header. Reset open on
-  // every node change (below), same as exprMode.
-  const [nodeSectionsOpen, setNodeSectionsOpen] = useState({ inputs: true, outputs: true });
+  // Generic node detail: Inputs/Outputs as a tab toggle (was a permanent
+  // 2-column split — collapsing one side didn't give the other any more
+  // room, since both columns still held flex:1 in the same row) so the
+  // active side gets the full card width. Reset to 'inputs' on every node
+  // change (below), same as exprMode.
+  const [nodeTab, setNodeTab] = useState<'inputs' | 'outputs'>('inputs');
+  // Double-tapping an input card's label moves it into this collapsed
+  // "Hidden" section — declutters a node whose most-visited state is a few
+  // sliders among a handful of always-wired, never-touched sockets (UV,
+  // Time, ...). Persisted per-node in node.params.__hiddenInputs (read via
+  // hiddenInputKeys below) so it survives navigating away and back, not
+  // just local view state. Whether that section itself is expanded is
+  // local, reset per node same as nodeTab.
+  const [hiddenSectionOpen, setHiddenSectionOpen] = useState(false);
   // Info/Comment toggle under a generic node's cards — defaults to Info,
   // reset alongside the other per-node view state below.
   const [infoTab, setInfoTab] = useState<'info' | 'comment'>('info');
@@ -983,7 +993,8 @@ export function MobileGraphBrowser() {
   if (exprModeFor !== focusedId) {
     setExprModeFor(focusedId);
     setExprMode('inputs');
-    setNodeSectionsOpen({ inputs: true, outputs: true });
+    setNodeTab('inputs');
+    setHiddenSectionOpen(false);
     setInfoTab('info');
     setOpenSliderConfig(null);
   }
@@ -1047,6 +1058,20 @@ export function MobileGraphBrowser() {
 
   const downstreamConsumers = (nodeId: string, outputKey: string) =>
     nodes.filter(n => Object.values(n.inputs).some(inp => inp.connection?.nodeId === nodeId && inp.connection.outputKey === outputKey));
+
+  // Mobile-only declutter: an input key moved here stays out of the main
+  // list until double-tapped again. "__"-prefixed like every other node-
+  // level metadata field in this file (__comment, __scMax_<key>, ...), so
+  // it round-trips through save/export/import/undo for free, but desktop
+  // has no reason to read it — it's not data the shader needs, just which
+  // sockets this node's mobile view has tucked away.
+  const hiddenInputKeys = (node: GraphNode): string[] =>
+    Array.isArray(node.params.__hiddenInputs) ? node.params.__hiddenInputs as string[] : [];
+  const toggleHiddenInput = (node: GraphNode, key: string) => {
+    const hidden = hiddenInputKeys(node);
+    const next = hidden.includes(key) ? hidden.filter(k => k !== key) : [...hidden, key];
+    updateNodeParams(node.id, { __hiddenInputs: next }, { immediate: true });
+  };
 
   // A custom name (desktop's "Rename Group", also usable on customFn nodes)
   // overrides the type's default label — same node.params.label convention
@@ -1217,210 +1242,241 @@ export function MobileGraphBrowser() {
   // ── Node detail (focused) view ───────────────────────────────────────────
   function renderNodeDetail(node: GraphNode) {
     const def = getNodeDefinition(node.type);
-    const hasInputs = Object.keys(node.inputs).length > 0;
-    const hasOutputs = Object.keys(node.outputs).length > 0;
+    const inputEntries = Object.entries(node.inputs);
+    const outputEntries = Object.entries(node.outputs);
+    const hasInputs = inputEntries.length > 0;
+    const hasOutputs = outputEntries.length > 0;
+    const hidden = hiddenInputKeys(node);
+    const visibleInputEntries = inputEntries.filter(([key]) => !hidden.includes(key));
+    const hiddenInputEntries = inputEntries.filter(([key]) => hidden.includes(key));
+    // Cards used to be forced to half width, permanently, sharing a flex row
+    // with the other column even when that column was collapsed to just its
+    // header. auto-fit gives each card the full row on a phone (minmax's
+    // floor is wider than one phone-width column) while still letting a
+    // wide viewport lay out more than one per row.
+    const cardGridStyle: React.CSSProperties = {
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px',
+    };
+
+    const renderInputCard = (key: string, inp: GraphNode['inputs'][string], isHidden: boolean) => {
+      const upstream = inp.connection ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+      // Keyframes are a third input mode alongside "wired" and "static
+      // value" — same eligibility rule desktop uses (NodeComponent.tsx): an
+      // unwired float socket, or an unwired vec2/vec3 socket that declares
+      // which static params back each axis (most vec2/vec3 sockets are
+      // meant to be wired — UV, positions — and don't declare this, so they
+      // stay ineligible).
+      const isVectorKfType = inp.type === 'vec2' || inp.type === 'vec3';
+      const kfAxes = isVectorKfType ? VECTOR_AXES[inp.type as 'vec2' | 'vec3'] : null;
+      const kfEligible = !upstream && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+      const isKeyframed = kfEligible && (
+        inp.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, kfAxes ?? [])
+      );
+      const pd = upstream || isKeyframed ? undefined : sliderableParam(node, key);
+      const val = pd ? currentSliderValue(node, key, pd) : 0;
+      return (
+        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <TypeIcon type={inp.type} />
+            <div
+              onDoubleClick={() => toggleHiddenInput(node, key)}
+              title={isHidden ? 'Double-tap to unhide' : 'Double-tap to hide'}
+              style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', touchAction: 'manipulation' }}
+            >{inp.label}</div>
+            {!upstream && kfEligible && (
+              <button
+                style={smallIconBtnStyle(isKeyframed ? '#f9e2af' : '#a6adc8')}
+                title={isKeyframed ? 'Edit Keyframes' : 'Add Keyframes'}
+                onClick={() => {
+                  const axis = kfAxes ? kfAxes[0] : undefined;
+                  setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                  setMobileKeyframeTool(isKeyframed ? 'select' : 'add');
+                }}
+              >◆</button>
+            )}
+            {!upstream && (
+              <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
+            )}
+          </div>
+          {upstream && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+              <button
+                onClick={() => disconnectInput(node.id, key)}
+                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
+                title="Disconnect"
+              >✕</button>
+            </div>
+          )}
+          {pd && (() => {
+            const bidir = node.params[`__scBidir_${key}`] === true;
+            const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
+            const baseMax = pd.max ?? 1;
+            const effMax = customMax ?? baseMax;
+            const effMin = bidir ? -effMax : (customMax != null ? 0 : (pd.min ?? 0));
+            // Accordion: tapping the value opens this card's full
+            // controls and collapses whichever other card was open,
+            // since openSliderConfig holds a single key, not a
+            // per-card flag.
+            const isExpanded = openSliderConfig === key;
+            const setCustomMax = (n: number) => {
+              const absN = Math.abs(n);
+              if (absN > 0) updateNodeParams(node.id, { [`__scMax_${key}`]: absN });
+            };
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <input
+                    type="range"
+                    min={effMin}
+                    max={effMax}
+                    step={pd.step ?? 0.01}
+                    value={Math.max(effMin, Math.min(effMax, val))}
+                    onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) }, { immediate: true })}
+                    onDoubleClick={() => {
+                      const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
+                      updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
+                    }}
+                    title="Double-tap to reset to default"
+                    style={{ flex: 1, minWidth: 0 }}
+                  />
+                  <button
+                    onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
+                    title="Tap for range, bidirectional & keyframe controls"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+                      background: isExpanded ? '#313244' : 'none',
+                      border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
+                      borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
+                      color: isExpanded ? '#cdd6f4' : '#a6adc8',
+                    }}
+                  >
+                    <span style={{ fontSize: '10px', minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {formatSliderValue(val, pd.step)}
+                    </span>
+                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
+                      <input
+                        type="number"
+                        step={pd.step ?? 0.01}
+                        value={val}
+                        onChange={e => {
+                          const n = parseFloat(e.target.value);
+                          if (isNaN(n)) return;
+                          if (Math.abs(n) > effMax) setCustomMax(n);
+                          updateNodeParams(node.id, { [key]: n }, { immediate: true });
+                        }}
+                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
+                      />
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', touchAction: 'manipulation' }}>
+                      <input
+                        type="checkbox"
+                        checked={bidir}
+                        onChange={e => updateNodeParams(node.id, { [`__scBidir_${key}`]: e.target.checked }, { immediate: true })}
+                        style={{ accentColor: '#cba6f7' }}
+                      />
+                      <span style={{ fontSize: '9px', color: '#a6adc8' }}>Bidirectional</span>
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Max</span>
+                      <input
+                        type="number"
+                        step={pd.step ?? 0.01}
+                        value={effMax}
+                        onChange={e => {
+                          const n = parseFloat(e.target.value);
+                          if (!isNaN(n) && n > 0) setCustomMax(n);
+                        }}
+                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
+                      />
+                      {customMax != null && (
+                        <button
+                          onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null }, { immediate: true })}
+                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '4px', cursor: 'pointer', padding: '3px 6px', touchAction: 'manipulation', flexShrink: 0 }}
+                        >Reset</button>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '9px', color: '#585b70' }}>
+                      Range: {formatSliderValue(effMin, pd.step)} → {formatSliderValue(effMax, pd.step)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      );
+    };
+
+    const renderOutputCard = (key: string, out: GraphNode['outputs'][string]) => {
+      const consumers = downstreamConsumers(node.id, key);
+      return (
+        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <TypeIcon type={out.type} />
+            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
+            <button style={smallIconBtnStyle('#89b4fa')} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
+          </div>
+          {consumers.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+              {consumers.map(c => (
+                <button key={c.id} style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(c.id)}>{labelFor(c)} ›</button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {renderNodeHeader(node)}
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            {hasInputs && (
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <button style={sectionHeaderBtnStyle} onClick={() => setNodeSectionsOpen(s => ({ ...s, inputs: !s.inputs }))}>
-                  <span>{nodeSectionsOpen.inputs ? '▾' : '▸'} INPUTS</span>
-                </button>
-                {nodeSectionsOpen.inputs && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                    {Object.entries(node.inputs).map(([key, inp]) => {
-                      const upstream = inp.connection ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
-                      // Keyframes are a third input mode alongside "wired"
-                      // and "static value" — same eligibility rule desktop
-                      // uses (NodeComponent.tsx): an unwired float socket, or
-                      // an unwired vec2/vec3 socket that declares which
-                      // static params back each axis (most vec2/vec3 sockets
-                      // are meant to be wired — UV, positions — and don't
-                      // declare this, so they stay ineligible).
-                      const isVectorKfType = inp.type === 'vec2' || inp.type === 'vec3';
-                      const kfAxes = isVectorKfType ? VECTOR_AXES[inp.type as 'vec2' | 'vec3'] : null;
-                      const kfEligible = !upstream && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
-                      const isKeyframed = kfEligible && (
-                        inp.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, kfAxes ?? [])
-                      );
-                      const pd = upstream || isKeyframed ? undefined : sliderableParam(node, key);
-                      const val = pd ? currentSliderValue(node, key, pd) : 0;
-                      return (
-                        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <TypeIcon type={inp.type} />
-                            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
-                            {!upstream && kfEligible && (
-                              <button
-                                style={smallIconBtnStyle(isKeyframed ? '#f9e2af' : '#a6adc8')}
-                                title={isKeyframed ? 'Edit Keyframes' : 'Add Keyframes'}
-                                onClick={() => {
-                                  const axis = kfAxes ? kfAxes[0] : undefined;
-                                  setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
-                                  setMobileKeyframeTool(isKeyframed ? 'select' : 'add');
-                                }}
-                              >◆</button>
-                            )}
-                            {!upstream && (
-                              <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
-                            )}
-                          </div>
-                          {upstream && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
-                              <button
-                                onClick={() => disconnectInput(node.id, key)}
-                                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
-                                title="Disconnect"
-                              >✕</button>
-                            </div>
-                          )}
-                          {pd && (() => {
-                            const bidir = node.params[`__scBidir_${key}`] === true;
-                            const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
-                            const baseMax = pd.max ?? 1;
-                            const effMax = customMax ?? baseMax;
-                            const effMin = bidir ? -effMax : (customMax != null ? 0 : (pd.min ?? 0));
-                            // Accordion: tapping the value opens this card's full
-                            // controls and collapses whichever other card was open,
-                            // since openSliderConfig holds a single key, not a
-                            // per-card flag.
-                            const isExpanded = openSliderConfig === key;
-                            const setCustomMax = (n: number) => {
-                              const absN = Math.abs(n);
-                              if (absN > 0) updateNodeParams(node.id, { [`__scMax_${key}`]: absN });
-                            };
-                            return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                                  <input
-                                    type="range"
-                                    min={effMin}
-                                    max={effMax}
-                                    step={pd.step ?? 0.01}
-                                    value={Math.max(effMin, Math.min(effMax, val))}
-                                    onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) }, { immediate: true })}
-                                    onDoubleClick={() => {
-                                      const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
-                                      updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
-                                    }}
-                                    title="Double-tap to reset to default"
-                                    style={{ flex: 1, minWidth: 0 }}
-                                  />
-                                  <button
-                                    onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
-                                    title="Tap for range, bidirectional & keyframe controls"
-                                    style={{
-                                      display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
-                                      background: isExpanded ? '#313244' : 'none',
-                                      border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
-                                      borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
-                                      color: isExpanded ? '#cdd6f4' : '#a6adc8',
-                                    }}
-                                  >
-                                    <span style={{ fontSize: '10px', minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                                      {formatSliderValue(val, pd.step)}
-                                    </span>
-                                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
-                                  </button>
-                                </div>
-                                {isExpanded && (
-                                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
-                                      <input
-                                        type="number"
-                                        step={pd.step ?? 0.01}
-                                        value={val}
-                                        onChange={e => {
-                                          const n = parseFloat(e.target.value);
-                                          if (isNaN(n)) return;
-                                          if (Math.abs(n) > effMax) setCustomMax(n);
-                                          updateNodeParams(node.id, { [key]: n }, { immediate: true });
-                                        }}
-                                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
-                                      />
-                                    </div>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', touchAction: 'manipulation' }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={bidir}
-                                        onChange={e => updateNodeParams(node.id, { [`__scBidir_${key}`]: e.target.checked }, { immediate: true })}
-                                        style={{ accentColor: '#cba6f7' }}
-                                      />
-                                      <span style={{ fontSize: '9px', color: '#a6adc8' }}>Bidirectional</span>
-                                    </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Max</span>
-                                      <input
-                                        type="number"
-                                        step={pd.step ?? 0.01}
-                                        value={effMax}
-                                        onChange={e => {
-                                          const n = parseFloat(e.target.value);
-                                          if (!isNaN(n) && n > 0) setCustomMax(n);
-                                        }}
-                                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
-                                      />
-                                      {customMax != null && (
-                                        <button
-                                          onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null }, { immediate: true })}
-                                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '4px', cursor: 'pointer', padding: '3px 6px', touchAction: 'manipulation', flexShrink: 0 }}
-                                        >Reset</button>
-                                      )}
-                                    </div>
-                                    <span style={{ fontSize: '9px', color: '#585b70' }}>
-                                      Range: {formatSliderValue(effMin, pd.step)} → {formatSliderValue(effMax, pd.step)}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
 
-            {hasOutputs && (
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <button style={sectionHeaderBtnStyle} onClick={() => setNodeSectionsOpen(s => ({ ...s, outputs: !s.outputs }))}>
-                  <span>{nodeSectionsOpen.outputs ? '▾' : '▸'} OUTPUTS</span>
-                </button>
-                {nodeSectionsOpen.outputs && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                    {Object.entries(node.outputs).map(([key, out]) => {
-                      const consumers = downstreamConsumers(node.id, key);
-                      return (
-                        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <TypeIcon type={out.type} />
-                            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
-                            <button style={smallIconBtnStyle('#89b4fa')} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
-                          </div>
-                          {consumers.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
-                              {consumers.map(c => (
-                                <button key={c.id} style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(c.id)}>{labelFor(c)} ›</button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+          {hasInputs && hasOutputs && (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button style={smallTabBtnStyle(nodeTab === 'inputs')} onClick={() => setNodeTab('inputs')}>Inputs ({inputEntries.length})</button>
+              <button style={smallTabBtnStyle(nodeTab === 'outputs')} onClick={() => setNodeTab('outputs')}>Outputs ({outputEntries.length})</button>
+            </div>
+          )}
+
+          {hasInputs && (nodeTab === 'inputs' || !hasOutputs) && (
+            <div>
+              {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
+              <div style={cardGridStyle}>
+                {visibleInputEntries.map(([key, inp]) => renderInputCard(key, inp, false))}
               </div>
-            )}
-          </div>
+              {hiddenInputEntries.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  <button style={sectionHeaderBtnStyle} onClick={() => setHiddenSectionOpen(v => !v)}>
+                    <span>{hiddenSectionOpen ? '▾' : '▸'} HIDDEN ({hiddenInputEntries.length})</span>
+                  </button>
+                  {hiddenSectionOpen && (
+                    <div style={{ ...cardGridStyle, marginTop: '6px' }}>
+                      {hiddenInputEntries.map(([key, inp]) => renderInputCard(key, inp, true))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {hasOutputs && (nodeTab === 'outputs' || !hasInputs) && (
+            <div>
+              {!hasInputs && <div style={sectionHeaderBtnStyle}><span>OUTPUTS</span></div>}
+              <div style={cardGridStyle}>
+                {outputEntries.map(([key, out]) => renderOutputCard(key, out))}
+              </div>
+            </div>
+          )}
 
           <div>
             <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
