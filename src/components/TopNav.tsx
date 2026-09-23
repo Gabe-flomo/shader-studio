@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useBreakpoint, isMobile } from '../hooks/useBreakpoint';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 
@@ -103,11 +104,14 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
         </>
       )}
 
-      {/* Mobile: no Cmd+Z here, so undo/redo need an explicit button */}
+      {/* Mobile: no Cmd+Z here, so undo/redo need an explicit button. Drawn
+          as SVG rather than a Unicode arrow glyph (↶/↷) — those render
+          inconsistently thin/cramped across fonts, unlike the rest of this
+          bar's crisp text labels. */}
       {mobile && (
         <>
-          <TabButton active={false} onClick={undo} label="↶" title="Undo" />
-          <TabButton active={false} onClick={redo} label="↷" title="Redo" />
+          <TabButton active={false} onClick={undo} label={<IconUndo />} title="Undo" />
+          <TabButton active={false} onClick={redo} label={<IconRedo />} title="Redo" />
         </>
       )}
 
@@ -130,7 +134,7 @@ function TabButton({
 }: {
   active: boolean;
   onClick: () => void;
-  label: string;
+  label: ReactNode;
   title?: string;
 }) {
   return (
@@ -138,6 +142,7 @@ function TabButton({
       onClick={onClick}
       title={title}
       style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         background: active ? '#313244' : 'none',
         border: active ? '1px solid #45475a' : '1px solid transparent',
         color: active ? '#cdd6f4' : '#585b70',
@@ -160,5 +165,25 @@ function TabButton({
     >
       {label}
     </button>
+  );
+}
+
+// Same currentColor-stroke, 16x16-viewBox style NodePalette.tsx uses for its
+// own icons — crisp at any zoom and immune to the font-rendering quirks a
+// Unicode glyph is exposed to (e.g. an emoji-presentation fallback).
+function IconUndo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <polyline points="7,10 3,6.5 7,3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 6.5 H9 a3 3 0 0 1 3 3 V13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconRedo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <polyline points="9,10 13,6.5 9,3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 6.5 H7 a3 3 0 0 0 -3 3 V13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

@@ -285,6 +285,10 @@ function App() {
   // Examples button opens a browsable gallery of starter graphs.
   const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
   const [showMobileExamples, setShowMobileExamples]     = useState(false);
+  // Reset's own confirm step, in-app rather than window.confirm() — a native
+  // confirm dialog is unreliable (sometimes silently a no-op) inside a Tauri
+  // webview, which would make Reset look broken with no error or feedback.
+  const [showMobileResetConfirm, setShowMobileResetConfirm] = useState(false);
   // Examples browser: which category folders are expanded — starts empty
   // (all collapsed) since the full list is long enough to need scrolling
   // past just the first one or two categories otherwise.
@@ -696,11 +700,11 @@ function App() {
             <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
               {([
                 { id: 'select', icon: '↖' },
-                // ︎ forces the text-style glyph — without it, this
-                // pencil renders as a full-color emoji in Chromium while its
-                // siblings stay plain monochrome text, looking like a stray
-                // colored blob in the toolbar.
-                { id: 'add', icon: '✏︎' },
+                // Plain "+" rather than a pencil glyph (✏) — the pencil
+                // renders as a full-color emoji in Chromium even with the
+                // U+FE0E text-presentation selector appended, looking like a
+                // stray colored blob next to its monochrome siblings.
+                { id: 'add', icon: '+' },
                 { id: 'delete', icon: '✕' },
                 { id: 'draw', icon: '∿' },
               ] as const).map((m, i) => (
@@ -755,10 +759,7 @@ function App() {
                   style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#cba6f7', borderColor: '#cba6f744' }}
                 >🎬 Record</button>
                 <button
-                  onClick={() => {
-                    setShowMobileActionMenu(false);
-                    if (window.confirm('Clear all nodes and start over?')) loadExampleGraph('blank');
-                  }}
+                  onClick={() => { setShowMobileActionMenu(false); setShowMobileResetConfirm(true); }}
                   style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#f38ba8', borderColor: '#f38ba844' }}
                 >✕ Reset</button>
                 <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
@@ -831,6 +832,45 @@ function App() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Reset confirm — a custom modal instead of window.confirm(), which
+            is unreliable inside a Tauri webview. */}
+        {showMobileResetConfirm && (
+          <div
+            onClick={() => setShowMobileResetConfirm(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-end' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', background: '#1e1e2e', borderRadius: '16px 16px 0 0',
+                border: '1px solid #45475a', padding: '16px',
+              }}
+            >
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#cdd6f4', marginBottom: '6px' }}>Clear all nodes?</div>
+              <div style={{ fontSize: '12px', color: '#a6adc8', marginBottom: '16px' }}>This starts over from a blank graph. This can't be undone.</div>
+              <button
+                onClick={() => { setShowMobileResetConfirm(false); loadExampleGraph('blank'); }}
+                style={{
+                  width: '100%', padding: '12px', marginBottom: '8px', background: '#f38ba822',
+                  border: '1px solid #f38ba866', borderRadius: '8px', color: '#f38ba8', fontSize: '13px',
+                  fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
+                }}
+              >
+                ✕ Reset
+              </button>
+              <button
+                onClick={() => setShowMobileResetConfirm(false)}
+                style={{
+                  width: '100%', padding: '12px', background: '#313244', border: '1px solid #45475a',
+                  borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
+                }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}

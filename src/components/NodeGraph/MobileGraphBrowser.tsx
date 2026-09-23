@@ -935,6 +935,24 @@ export function MobileGraphBrowser() {
     setInfoTab('info');
     setOpenSliderConfig(null);
   }
+  // mobileKeyframeEditor lives in the store (App.tsx's bottom bar needs it
+  // too), so navigating away without hitting "Done" — breadcrumb, back/
+  // forward, Home, drilling into a different node — would otherwise leave
+  // it set for a node that's no longer on screen: the keyframe tool
+  // buttons would keep showing in the bottom bar with nothing under them
+  // to act on. Closing it here, keyed off focus rather than any one
+  // navigation action, catches every path that leaves this node. A
+  // useEffect, not the render-time-adjustment pattern the resets above
+  // use — those only touch this component's own local state, but this
+  // setter updates a store field App.tsx also renders from, and React
+  // disallows updating another component while this one is still rendering.
+  useEffect(() => {
+    if (!mobileKeyframeEditor) return;
+    if (mobileKeyframeEditor.nodeId !== focusedId) { setMobileKeyframeEditor(null); return; }
+    // Also covers the socket itself vanishing while still on this node
+    // (e.g. its type changed) — same "nothing left to edit" case.
+    if (focusedNode && !focusedNode.inputs[mobileKeyframeEditor.socketKey]) setMobileKeyframeEditor(null);
+  }, [mobileKeyframeEditor, focusedId, focusedNode, setMobileKeyframeEditor]);
   const kfTargetKey = mobileKeyframeEditor
     ? `${mobileKeyframeEditor.nodeId}:${mobileKeyframeEditor.socketKey}:${mobileKeyframeEditor.axis ?? ''}`
     : undefined;
@@ -1300,9 +1318,10 @@ export function MobileGraphBrowser() {
     const target = mobileKeyframeEditor;
     const input = target ? node.inputs[target.socketKey] : undefined;
     if (!target || !input) {
-      // Socket vanished from under us (e.g. node type changed) — bail out
-      // to the normal detail view instead of rendering a broken editor.
-      if (target) setMobileKeyframeEditor(null);
+      // Socket vanished from under us (e.g. node type changed) — bail out to
+      // the normal detail view for this render; the useEffect above clears
+      // mobileKeyframeEditor itself (can't do that here mid-render, since
+      // it's a store field App.tsx also renders from).
       return renderNodeDetail(node);
     }
     const isVector = input.type === 'vec2' || input.type === 'vec3';
