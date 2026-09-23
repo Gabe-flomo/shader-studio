@@ -3,7 +3,7 @@ import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './co
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { MobileGraphBrowser } from './components/NodeGraph/MobileGraphBrowser';
-import { CodePanel } from './components/CodePanel';
+import { CodePanel, tokenizeLine } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -94,6 +94,44 @@ function AudioMasterVolumeWidget() {
       <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
         {Math.round(masterVolume * 100)}%
       </span>
+    </div>
+  );
+}
+
+// Mobile's own read-only generated-code view — desktop's CodePanel is a
+// draggable-height floating panel with mouse-based resize, not a fit for a
+// fullscreen mobile pane, so this reuses just its tokenizer/palette for the
+// same syntax highlighting rather than the whole component.
+function MobileCodeView({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const lines = code ? code.split('\n') : ['// No shader compiled yet'];
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* silent */ }
+  };
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, background: '#181825' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 12px', background: '#1e1e2e', borderBottom: '1px solid #313244', flexShrink: 0,
+      }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#89b4fa', letterSpacing: '0.04em' }}>FRAGMENT SHADER</span>
+        <button
+          onClick={handleCopy}
+          style={{ background: 'none', border: '1px solid #45475a', color: copied ? '#a6e3a1' : '#a6adc8', borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+        >{copied ? 'Copied' : 'Copy'}</button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.6 }}>
+        {lines.map((line, i) => (
+          <div key={i} style={{ whiteSpace: 'pre' }}>
+            <span style={{ color: '#45475a', userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
+            {tokenizeLine(line).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -269,7 +307,7 @@ function App() {
   const [showToolbarMenu, setShowToolbarMenu] = useState(false);
 
   // Mobile: canvas-only / split / graph-only layout mode
-  const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph'>('split');
+  const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph' | 'code'>('split');
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -585,8 +623,9 @@ function App() {
   // Preview fills entire screen, floating nav + bottom action bar
   // ══════════════════════════════════════════════════════════════════════════
   if (mobile && page === 'studio') {
-    const showCanvasPane = mobileLayout !== 'graph';
-    const showGraphPane  = mobileLayout !== 'canvas';
+    const showCanvasPane = mobileLayout !== 'graph' && mobileLayout !== 'code';
+    const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
+    const showCodePane   = mobileLayout === 'code';
     return (
       <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
@@ -656,6 +695,12 @@ function App() {
               <MobileGraphBrowser />
             </div>
           )}
+
+          {showCodePane && (
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <MobileCodeView code={fragmentShader} />
+            </div>
+          )}
         </div>
 
         {/* Error popup — sits above bottom bar (whose own height now grows
@@ -695,9 +740,14 @@ function App() {
             >▥</button>
             <button
               onClick={() => setMobileLayout('graph')}
-              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderRight: '1px solid #45475a' }}
               title="Graph fullscreen"
             >☰</button>
+            <button
+              onClick={() => setMobileLayout('code')}
+              style={{ ...btnStyle(mobileLayout === 'code'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
+              title="Generated code"
+            >{'{}'}</button>
           </div>
 
           {/* Error badge */}
