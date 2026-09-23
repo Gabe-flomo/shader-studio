@@ -224,6 +224,7 @@ function App() {
     groupNodes, deselectAll,
     searchPaletteOpen, setSearchPaletteOpen,
     nodeSlugMap,
+    mobileKeyframeEditor, mobileKeyframeTool, setMobileKeyframeTool,
   } = useNodeGraphStore();
 
   // Build probe display for selected node — shown in status bar instead of "hover for color"
@@ -680,6 +681,33 @@ function App() {
 
           {/* Error badge */}
           {errorBadge}
+
+          {/* Keyframe editor tool modes — only shown while
+              MobileGraphBrowser's keyframe editor is open for some node's
+              socket. No keyboard here for desktop's V/C/X/D shortcuts, so
+              these live as buttons instead — mirrors desktop's own
+              Select/Add/Delete/Draw toolbar (KeyframeEditorModal.tsx) one
+              for one, just relocated to the bottom bar. */}
+          {mobileKeyframeEditor && (
+            <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+              {([
+                { id: 'select', icon: '↖' },
+                { id: 'add', icon: '✏' },
+                { id: 'delete', icon: '✕' },
+                { id: 'draw', icon: '∿' },
+              ] as const).map((m, i) => (
+                <button
+                  key={m.id}
+                  onClick={() => setMobileKeyframeTool(m.id)}
+                  style={{
+                    ...btnStyle(mobileKeyframeTool === m.id), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px',
+                    borderLeft: i > 0 ? '1px solid #45475a' : undefined,
+                  }}
+                  title={m.id}
+                >{m.icon}</button>
+              ))}
+            </div>
+          )}
 
           {/* Examples button — browse starter graphs; picking one loads it
               in place (loadExampleGraph replaces the current graph), tapping

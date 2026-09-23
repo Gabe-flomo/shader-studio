@@ -294,6 +294,17 @@ interface NodeGraphState {
   // Preview mode — isolates a single node's output for focused editing
   previewNodeId: string | null;
 
+  // Mobile keyframe editor — cross-cutting UI state, not graph data. Read
+  // and written by two siblings in the mobile layout: MobileGraphBrowser
+  // (renders the canvas editor in place of the node's card content when
+  // this is set) and App.tsx's bottom action bar (renders the Select/Add/
+  // Delete/Draw tool buttons when this is set) — hence living here rather
+  // than as local state either component would have to lift.
+  mobileKeyframeEditor: { nodeId: string; socketKey: string; axis?: string } | null;
+  setMobileKeyframeEditor: (target: { nodeId: string; socketKey: string; axis?: string } | null) => void;
+  mobileKeyframeTool: 'select' | 'add' | 'delete' | 'draw';
+  setMobileKeyframeTool: (tool: 'select' | 'add' | 'delete' | 'draw') => void;
+
   // Node highlight filter — set by keyboard shortcuts to visually dim non-matching nodes.
   // null = no filter (all nodes normal). 'all' = clear any filter.
   nodeHighlightFilter: string | null;  // e.g. 'float', 'vec2', 'vec3', 'uv-in', 'uv-out'
@@ -877,6 +888,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodeProbeValues: null,
   scopeProbeValues: {},
   previewNodeId: null,
+  mobileKeyframeEditor: null,
+  mobileKeyframeTool: 'select',
   nodeHighlightFilter: null,
   _fitViewCallback: null,
   _viewportCenterGetter: null,
@@ -897,6 +910,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   disconnectedNotice: null,
   groupPresets: loadGroupPresets(),
 
+  setMobileKeyframeEditor: (target) => set({ mobileKeyframeEditor: target }),
+  setMobileKeyframeTool: (tool) => set({ mobileKeyframeTool: tool }),
   setNodeHighlightFilter: (filter) => set({ nodeHighlightFilter: filter }),
   setRawGlslShader: (shader) => set({ rawGlslShader: shader }),
   setActiveGroupId: (id) => {

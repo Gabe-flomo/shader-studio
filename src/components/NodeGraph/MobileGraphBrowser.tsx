@@ -21,6 +21,11 @@ import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
+import {
+  VECTOR_AXES, EASING_PRESETS, socketHasKeyframes, socketHasVectorKeyframes,
+  getKeyframeConfig, getAxisKeyframeConfig,
+} from '../../compiler/keyframes';
+import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/keyframes';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -183,7 +188,7 @@ const navBtnStyle = (enabled: boolean): React.CSSProperties => ({
 // color, so a socket's shape is readable at a glance instead of just its
 // color. Anything else (bool, sampler2D, mat3, …) falls back to the dot.
 const AXIS_COLORS: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
-const VECTOR_AXES: Record<string, string[]> = { vec2: ['x', 'y'], vec3: ['x', 'y', 'z'], vec4: ['x', 'y', 'z', 'w'] };
+const ICON_VECTOR_AXES: Record<string, string[]> = { vec2: ['x', 'y'], vec3: ['x', 'y', 'z'], vec4: ['x', 'y', 'z', 'w'] };
 function TypeIcon({ type }: { type: string }) {
   if (type === 'float' || type === 'int') {
     return (
@@ -192,7 +197,7 @@ function TypeIcon({ type }: { type: string }) {
       </span>
     );
   }
-  const axes = VECTOR_AXES[type];
+  const axes = ICON_VECTOR_AXES[type];
   if (axes) {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, fontFamily: 'monospace', fontWeight: 700, fontSize: '10px', whiteSpace: 'nowrap' }}>
@@ -248,6 +253,269 @@ function NodePreviewThumb({ nodeId, nodeType }: { nodeId: string; nodeType: stri
   return (
     <div style={{ width: '36px', height: '36px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #313244', flexShrink: 0, background: '#11111b' }}>
       <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+    </div>
+  );
+}
+
+// ── Keyframe canvas editor ──────────────────────────────────────────────────
+// Mirrors desktop's Select/Add/Delete/Draw mode toolbar (KeyframeEditorModal.
+// tsx) on a plain <canvas> with pointer events instead of mouse-only drag.
+// Two simplifications versus desktop, both deliberate for a first mobile
+// pass: the view always auto-fits the current keyframes (no manual pan/
+// zoom), and easing is chosen from EASING_PRESETS per keyframe instead of
+// dragging bezier handles — same underlying Keyframe.ease data either way,
+// so desktop can still fine-tune a curve mobile only roughed in.
+
+// Same segment construction + local-time formula as generateKeyframeGLSL
+// (compiler/keyframes.ts), evaluated in JS instead of emitted as GLSL, purely
+// to draw the preview curve here — the real shader evaluation is fully
+// GPU-side and untouched. Kept in lockstep by hand since there's no shared
+// source between the two; if that GLSL codegen changes, update this too.
+function kfCubicBezierJS(x: number, a: number, b: number, c: number, d: number): number {
+  const A = 1 - 3 * c + 3 * a, B = 3 * c - 6 * a, C = 3 * a;
+  let t = Math.max(0, Math.min(1, x));
+  for (let i = 0; i < 5; i++) {
+    const cx = A * t * t * t + B * t * t + C * t;
+    const slope = 1 / (3 * A * t * t + 2 * B * t + C);
+    t -= (cx - x) * slope;
+    t = Math.max(0, Math.min(1, t));
+  }
+  const E = 1 - 3 * d + 3 * b, F = 3 * d - 6 * b, G = 3 * b;
+  return E * t * t * t + F * t * t + G * t;
+}
+function evalKeyframeCurve(
+  keyframes: Keyframe[], mode: KeyframeLoopMode, loopBack: number, offset: number, loopCount: number | null, t: number,
+): number {
+  if (keyframes.length === 0) return 0;
+  if (keyframes.length === 1) return keyframes[0].v;
+  const t0 = keyframes[0].t + offset;
+  const duration = Math.max(keyframes[keyframes.length - 1].t - keyframes[0].t, 0.0001);
+  type Seg = { start: number; end: number; v0: number; v1: number; ease: KeyframeEasing };
+  const segs: Seg[] = [];
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    const a = keyframes[i], b = keyframes[i + 1];
+    segs.push({ start: a.t - keyframes[0].t, end: b.t - keyframes[0].t, v0: a.v, v1: b.v, ease: a.ease });
+  }
+  if (mode === 'interpolate') {
+    const last = keyframes[keyframes.length - 1];
+    segs.push({ start: duration, end: duration + loopBack, v0: last.v, v1: keyframes[0].v, ease: last.ease });
+  }
+  const loopSpan = mode === 'interpolate' ? duration + loopBack : duration;
+  let lt: number;
+  if (mode === 'once') {
+    lt = Math.max(0, Math.min(t - t0, duration));
+  } else if (loopCount != null) {
+    lt = (t - t0) >= loopCount * loopSpan ? loopSpan : (((t - t0) % loopSpan) + loopSpan) % loopSpan;
+  } else {
+    lt = (((t - t0) % loopSpan) + loopSpan) % loopSpan;
+  }
+  for (const seg of segs) {
+    if (lt < seg.end) {
+      const segDur = Math.max(seg.end - seg.start, 0.0001);
+      const st = Math.max(0, Math.min(1, (lt - seg.start) / segDur));
+      return seg.v0 + (seg.v1 - seg.v0) * kfCubicBezierJS(st, seg.ease.a, seg.ease.b, seg.ease.c, seg.ease.d);
+    }
+  }
+  return segs[segs.length - 1]?.v1 ?? keyframes[keyframes.length - 1].v;
+}
+// Draw mode: the recorded path (many samples) is reduced to at most 8
+// evenly-spaced points with linear easing, same cap and approach desktop's
+// downsamplePath uses — GLSL codegen unrolls one if/else branch per segment,
+// so an unbounded point count isn't just a UI concern.
+function downsampleDrawPath(path: Array<{ t: number; v: number }>): Keyframe[] {
+  if (path.length === 0) return [];
+  const MAX_POINTS = 8;
+  const picked = path.length <= MAX_POINTS
+    ? path
+    : Array.from({ length: MAX_POINTS }, (_, i) => path[Math.round((i / (MAX_POINTS - 1)) * (path.length - 1))]);
+  const out: Keyframe[] = [];
+  for (const p of picked) {
+    const t = out.length > 0 && p.t <= out[out.length - 1].t ? out[out.length - 1].t + 0.001 : p.t;
+    out.push({ t, v: p.v, ease: EASING_PRESETS.linear });
+  }
+  return out;
+}
+
+const KF_PAD = { l: 34, r: 10, t: 10, b: 20 };
+const KF_HIT_PX = 20;
+type KfTool = 'select' | 'add' | 'delete' | 'draw';
+type KfDrag = { kind: 'move'; index: number } | { kind: 'draw'; path: Array<{ t: number; v: number }> };
+
+function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, tool, onChange, selectedIndex, onSelect }: {
+  keyframes: Keyframe[];
+  mode: KeyframeLoopMode;
+  loopBack: number;
+  offset: number;
+  loopCount: number | null;
+  valueMin: number;
+  valueMax: number;
+  tool: KfTool;
+  onChange: (next: Keyframe[]) => void;
+  selectedIndex: number | null;
+  onSelect: (index: number | null) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 320, height: 220 });
+  const dragRef = useRef<KfDrag | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const box = entries[0]?.contentRect;
+      if (box && box.width > 0) setSize({ width: box.width, height: 220 });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const maxT = Math.max(5, ...keyframes.map(k => k.t)) + 1;
+  const minT = 0;
+  const vSpan = valueMax - valueMin || 1;
+
+  const toX = (t: number) => KF_PAD.l + ((t - minT) / (maxT - minT)) * (size.width - KF_PAD.l - KF_PAD.r);
+  const toY = (v: number) => KF_PAD.t + (1 - (v - valueMin) / vSpan) * (size.height - KF_PAD.t - KF_PAD.b);
+  const fromX = (x: number) => minT + ((x - KF_PAD.l) / (size.width - KF_PAD.l - KF_PAD.r)) * (maxT - minT);
+  const fromY = (y: number) => valueMax - ((y - KF_PAD.t) / (size.height - KF_PAD.t - KF_PAD.b)) * vSpan;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size.width * dpr;
+    canvas.height = size.height * dpr;
+    canvas.style.width = `${size.width}px`;
+    canvas.style.height = `${size.height}px`;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.width, size.height);
+
+    ctx.strokeStyle = '#24243a';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#585b70';
+    ctx.font = '9px monospace';
+    const gridStep = Math.max(1, Math.round(maxT / 8));
+    for (let gt = 0; gt <= maxT; gt += gridStep) {
+      const x = toX(gt);
+      ctx.beginPath(); ctx.moveTo(x, KF_PAD.t); ctx.lineTo(x, size.height - KF_PAD.b); ctx.stroke();
+      ctx.fillText(`${gt}s`, x - 6, size.height - 6);
+    }
+    ctx.fillText(valueMax.toFixed(1), 2, toY(valueMax) + 8);
+    ctx.fillText(valueMin.toFixed(1), 2, toY(valueMin));
+
+    if (keyframes.length > 0) {
+      ctx.strokeStyle = '#89b4fa';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const steps = 120;
+      for (let i = 0; i <= steps; i++) {
+        const t = minT + (i / steps) * (maxT - minT);
+        const v = Math.max(valueMin, Math.min(valueMax, evalKeyframeCurve(keyframes, mode, loopBack, offset, loopCount, t)));
+        const x = toX(t), y = toY(v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    keyframes.forEach((kf, i) => {
+      const x = toX(kf.t), y = toY(kf.v);
+      const isSelected = i === selectedIndex;
+      ctx.beginPath();
+      ctx.arc(x, y, isSelected ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? '#f9e2af' : '#fab387';
+      ctx.fill();
+      ctx.strokeStyle = '#181825';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, selectedIndex, size, maxT]);
+
+  const hitTest = (x: number, y: number): number | null => {
+    let best: number | null = null, bestDist = KF_HIT_PX;
+    keyframes.forEach((kf, i) => {
+      const d = Math.hypot(toX(kf.t) - x, toY(kf.v) - y);
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    return best;
+  };
+  const pointerPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+  const clampV = (v: number) => Math.max(valueMin, Math.min(valueMax, v));
+  const clampT = (t: number) => Math.max(0, t);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const { x, y } = pointerPos(e);
+    const hit = hitTest(x, y);
+    if (tool === 'delete') {
+      if (hit != null) { onChange(keyframes.filter((_, i) => i !== hit)); onSelect(null); }
+      return;
+    }
+    if (tool === 'draw') {
+      dragRef.current = { kind: 'draw', path: [{ t: clampT(fromX(x)), v: clampV(fromY(y)) }] };
+      return;
+    }
+    if (hit != null) {
+      onSelect(hit);
+      dragRef.current = { kind: 'move', index: hit };
+      return;
+    }
+    if (tool === 'add') {
+      const t = clampT(fromX(x)), v = clampV(fromY(y));
+      const fresh = { t, v, ease: EASING_PRESETS.ease };
+      const next = [...keyframes, fresh].sort((a, b) => a.t - b.t);
+      onChange(next);
+      onSelect(next.indexOf(fresh));
+      dragRef.current = { kind: 'move', index: next.indexOf(fresh) };
+    } else {
+      onSelect(null);
+    }
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { x, y } = pointerPos(e);
+    if (drag.kind === 'draw') {
+      const t = clampT(fromX(x)), v = clampV(fromY(y));
+      const last = drag.path[drag.path.length - 1];
+      if (!last || Math.hypot(toX(t) - toX(last.t), toY(v) - toY(last.v)) > 4) drag.path.push({ t, v });
+      return;
+    }
+    const next = keyframes.map((k, i) => i === drag.index ? { ...k, t: clampT(fromX(x)), v: clampV(fromY(y)) } : k);
+    onChange(next);
+  };
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (!drag) return;
+    if (drag.kind === 'draw') {
+      onChange(downsampleDrawPath(drag.path));
+      onSelect(null);
+      return;
+    }
+    const moved = keyframes[drag.index];
+    if (!moved) return;
+    const sorted = [...keyframes].sort((a, b) => a.t - b.t);
+    onChange(sorted);
+    onSelect(sorted.indexOf(moved));
+  };
+
+  return (
+    <div ref={containerRef} style={{ width: '100%' }}>
+      <canvas
+        ref={canvasRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{ display: 'block', borderRadius: '8px', background: '#11111b', border: '1px solid #313244', touchAction: 'none' }}
+      />
     </div>
   );
 }
@@ -499,6 +767,13 @@ export function MobileGraphBrowser() {
   const removeNode = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
+  // Cross-cutting with App.tsx's bottom action bar — see the store field's
+  // own comment. mobileKeyframeTool is read here to drive the canvas editor
+  // and written from the bottom bar's mode buttons, not from this file.
+  const mobileKeyframeEditor = useNodeGraphStore(s => s.mobileKeyframeEditor);
+  const setMobileKeyframeEditor = useNodeGraphStore(s => s.setMobileKeyframeEditor);
+  const mobileKeyframeTool = useNodeGraphStore(s => s.mobileKeyframeTool);
+  const setMobileKeyframeTool = useNodeGraphStore(s => s.setMobileKeyframeTool);
 
   const [focusStack, setFocusStack] = useState<string[]>([]);
   // Redo history for the ‹/› back/forward buttons in the node header — only
@@ -531,6 +806,17 @@ export function MobileGraphBrowser() {
   // Info/Comment toggle under a generic node's cards — defaults to Info,
   // reset alongside the other per-node view state below.
   const [infoTab, setInfoTab] = useState<'info' | 'comment'>('info');
+  // Which keyframe point is selected (for the easing-preset picker) — reset
+  // whenever the editor's target (node/socket/axis) changes, below.
+  const [kfSelectedIndex, setKfSelectedIndex] = useState<number | null>(null);
+  const [kfSelectedFor, setKfSelectedFor] = useState<string | undefined>(undefined);
+  // Which float input card is expanded — tapping a card's value opens its
+  // full controls (numeric entry, custom max, bidirectional) and collapses
+  // any other expanded card, since this is a single shared key rather than
+  // a per-card boolean. Same __scMax_<key>/__scBidir_<key> node.params keys
+  // desktop's own slider config panel uses (NodeComponent.tsx), so a range
+  // customized on one platform carries over to the other.
+  const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
 
   const focusedId = focusStack[focusStack.length - 1];
   const focusedNode = focusedId ? nodes.find(n => n.id === focusedId) : undefined;
@@ -540,6 +826,14 @@ export function MobileGraphBrowser() {
     setExprMode('inputs');
     setNodeSectionsOpen({ inputs: true, outputs: true });
     setInfoTab('info');
+    setOpenSliderConfig(null);
+  }
+  const kfTargetKey = mobileKeyframeEditor
+    ? `${mobileKeyframeEditor.nodeId}:${mobileKeyframeEditor.socketKey}:${mobileKeyframeEditor.axis ?? ''}`
+    : undefined;
+  if (kfSelectedFor !== kfTargetKey) {
+    setKfSelectedFor(kfTargetKey);
+    setKfSelectedIndex(null);
   }
 
   // Same rank assignment the desktop "Auto Layout" button uses for spatial
@@ -623,6 +917,33 @@ export function MobileGraphBrowser() {
     pushFocus(otherId);
   };
 
+  // ── Shared node-detail header ────────────────────────────────────────────
+  // Used by every "inside a node" view (generic, Expr Block, keyframe
+  // editor) — the one fixed element as you scroll/edit below it, styled
+  // brighter than everything else to anchor "what node am I in" at a
+  // glance. Back/forward step through the drill-down history; Remove is
+  // hidden only for the Output node (which can't be removed) or at Home
+  // (unreachable here anyway, since this only renders once focused).
+  function renderNodeHeader(node: GraphNode) {
+    return (
+      <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
+        <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
+        <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
+        <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
+        <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
+        <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
+        {node.type !== 'output' && focusStack.length > 0 && (
+          <button
+            onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
+            style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // ── Node detail (focused) view ───────────────────────────────────────────
   function renderNodeDetail(node: GraphNode) {
     const def = getNodeDefinition(node.type);
@@ -630,24 +951,7 @@ export function MobileGraphBrowser() {
     const hasOutputs = Object.keys(node.outputs).length > 0;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        {/* Header — the one fixed element as you scroll the cards below, so
-            it's styled brighter than everything else to anchor "what node
-            am I in" at a glance. */}
-        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
-          <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
-          <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
-          <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
-          <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
-          <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
-          {node.type !== 'output' && focusStack.length > 0 && (
-            <button
-              onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
-              style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
-            >
-              Remove
-            </button>
-          )}
-        </div>
+        {renderNodeHeader(node)}
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
@@ -660,13 +964,37 @@ export function MobileGraphBrowser() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
                     {Object.entries(node.inputs).map(([key, inp]) => {
                       const upstream = inp.connection ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
-                      const pd = upstream ? undefined : sliderableParam(node, key);
+                      // Keyframes are a third input mode alongside "wired"
+                      // and "static value" — same eligibility rule desktop
+                      // uses (NodeComponent.tsx): an unwired float socket, or
+                      // an unwired vec2/vec3 socket that declares which
+                      // static params back each axis (most vec2/vec3 sockets
+                      // are meant to be wired — UV, positions — and don't
+                      // declare this, so they stay ineligible).
+                      const isVectorKfType = inp.type === 'vec2' || inp.type === 'vec3';
+                      const kfAxes = isVectorKfType ? VECTOR_AXES[inp.type as 'vec2' | 'vec3'] : null;
+                      const kfEligible = !upstream && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+                      const isKeyframed = kfEligible && (
+                        inp.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, kfAxes ?? [])
+                      );
+                      const pd = upstream || isKeyframed ? undefined : sliderableParam(node, key);
                       const val = pd ? currentSliderValue(node, key, pd) : 0;
                       return (
                         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <TypeIcon type={inp.type} />
                             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+                            {!upstream && kfEligible && (
+                              <button
+                                style={smallIconBtnStyle(isKeyframed ? '#f9e2af' : '#a6adc8')}
+                                title={isKeyframed ? 'Edit Keyframes' : 'Add Keyframes'}
+                                onClick={() => {
+                                  const axis = kfAxes ? kfAxes[0] : undefined;
+                                  setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                                  setMobileKeyframeTool(isKeyframed ? 'select' : 'add');
+                                }}
+                              >◆</button>
+                            )}
                             {!upstream && (
                               <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
                             )}
@@ -681,22 +1009,108 @@ export function MobileGraphBrowser() {
                               >✕</button>
                             </div>
                           )}
-                          {pd && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <input
-                                type="range"
-                                min={pd.min ?? 0}
-                                max={pd.max ?? 1}
-                                step={pd.step ?? 0.01}
-                                value={val}
-                                onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) }, { immediate: true })}
-                                style={{ flex: 1 }}
-                              />
-                              <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '38px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                                {formatSliderValue(val, pd.step)}
-                              </span>
-                            </div>
-                          )}
+                          {pd && (() => {
+                            const bidir = node.params[`__scBidir_${key}`] === true;
+                            const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
+                            const baseMax = pd.max ?? 1;
+                            const effMax = customMax ?? baseMax;
+                            const effMin = bidir ? -effMax : (customMax != null ? 0 : (pd.min ?? 0));
+                            // Accordion: tapping the value opens this card's full
+                            // controls and collapses whichever other card was open,
+                            // since openSliderConfig holds a single key, not a
+                            // per-card flag.
+                            const isExpanded = openSliderConfig === key;
+                            const setCustomMax = (n: number) => {
+                              const absN = Math.abs(n);
+                              if (absN > 0) updateNodeParams(node.id, { [`__scMax_${key}`]: absN });
+                            };
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <input
+                                    type="range"
+                                    min={effMin}
+                                    max={effMax}
+                                    step={pd.step ?? 0.01}
+                                    value={Math.max(effMin, Math.min(effMax, val))}
+                                    onChange={e => updateNodeParams(node.id, { [key]: parseFloat(e.target.value) }, { immediate: true })}
+                                    onDoubleClick={() => {
+                                      const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
+                                      updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
+                                    }}
+                                    title="Double-tap to reset to default"
+                                    style={{ flex: 1 }}
+                                  />
+                                  <button
+                                    onClick={() => setOpenSliderConfig(o => o === key ? null : key)}
+                                    title="Tap for range, bidirectional & keyframe controls"
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: '3px',
+                                      background: isExpanded ? '#313244' : 'none',
+                                      border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
+                                      borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
+                                      color: isExpanded ? '#cdd6f4' : '#a6adc8',
+                                    }}
+                                  >
+                                    <span style={{ fontSize: '10px', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                      {formatSliderValue(val, pd.step)}
+                                    </span>
+                                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                                  </button>
+                                </div>
+                                {isExpanded && (
+                                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ fontSize: '10px', color: '#6c7086', width: '32px' }}>Value</span>
+                                      <input
+                                        type="number"
+                                        step={pd.step ?? 0.01}
+                                        value={val}
+                                        onChange={e => {
+                                          const n = parseFloat(e.target.value);
+                                          if (isNaN(n)) return;
+                                          if (Math.abs(n) > effMax) setCustomMax(n);
+                                          updateNodeParams(node.id, { [key]: n }, { immediate: true });
+                                        }}
+                                        style={{ ...exprTextInputStyle, flex: 1, padding: '4px 6px', fontSize: '11px' }}
+                                      />
+                                    </div>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', touchAction: 'manipulation' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={bidir}
+                                        onChange={e => updateNodeParams(node.id, { [`__scBidir_${key}`]: e.target.checked }, { immediate: true })}
+                                        style={{ accentColor: '#cba6f7' }}
+                                      />
+                                      <span style={{ fontSize: '10px', color: '#a6adc8' }}>Bidirectional</span>
+                                    </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ fontSize: '10px', color: '#6c7086', width: '32px' }}>Max</span>
+                                      <input
+                                        type="number"
+                                        step={pd.step ?? 0.01}
+                                        value={effMax}
+                                        onChange={e => {
+                                          const n = parseFloat(e.target.value);
+                                          if (!isNaN(n) && n > 0) setCustomMax(n);
+                                        }}
+                                        style={{ ...exprTextInputStyle, flex: 1, padding: '4px 6px', fontSize: '11px' }}
+                                      />
+                                      {customMax != null && (
+                                        <button
+                                          onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null }, { immediate: true })}
+                                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '4px', cursor: 'pointer', padding: '4px 6px', touchAction: 'manipulation' }}
+                                        >Reset</button>
+                                      )}
+                                    </div>
+                                    <span style={{ fontSize: '9px', color: '#585b70' }}>
+                                      Range: {formatSliderValue(effMin, pd.step)} → {formatSliderValue(effMax, pd.step)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}
@@ -766,6 +1180,178 @@ export function MobileGraphBrowser() {
         </div>
 
         {renderSocketOverlays(node)}
+      </div>
+    );
+  }
+
+  // ── Keyframe editor view ─────────────────────────────────────────────────
+  // Replaces the node detail's card content (not the header) while a socket
+  // is being keyframed. The Select/Add/Delete/Draw tool buttons live in
+  // App.tsx's bottom action bar (mobileKeyframeTool, read above) since
+  // there's no keyboard here for desktop's V/C/X/D shortcuts.
+  function renderKeyframeEditorView(node: GraphNode) {
+    const target = mobileKeyframeEditor;
+    const input = target ? node.inputs[target.socketKey] : undefined;
+    if (!target || !input) {
+      // Socket vanished from under us (e.g. node type changed) — bail out
+      // to the normal detail view instead of rendering a broken editor.
+      if (target) setMobileKeyframeEditor(null);
+      return renderNodeDetail(node);
+    }
+    const isVector = input.type === 'vec2' || input.type === 'vec3';
+    const axes = isVector ? VECTOR_AXES[input.type as 'vec2' | 'vec3'] : null;
+    const axis = target.axis;
+    const cfg = axis ? getAxisKeyframeConfig(node, target.socketKey, axis) : getKeyframeConfig(node, target.socketKey);
+    const keyframes = cfg?.keyframes ?? [];
+    const mode = cfg?.mode ?? 'once';
+    const loopBack = cfg?.loopBack ?? 1;
+    const offset = cfg?.offset ?? 0;
+    const loopCount = cfg?.loopCount ?? null;
+
+    const paramDefKey = axis ? input.axisParams?.[axes!.indexOf(axis)] : target.socketKey;
+    const pd = paramDefKey ? getNodeDefinition(node.type)?.paramDefs?.[paramDefKey] : undefined;
+    const kfVals = keyframes.map(k => k.v);
+    const autoMin = kfVals.length ? Math.min(...kfVals) : 0;
+    const autoMax = kfVals.length ? Math.max(...kfVals) : 1;
+    const baseMin = pd?.min ?? (autoMin === autoMax ? autoMin - 1 : autoMin);
+    const baseMax = pd?.max ?? (autoMin === autoMax ? autoMax + 1 : autoMax);
+    // A keyframe's value can be typed in directly (below) and land outside
+    // the socket's normal slider range — expand the graph to fit it rather
+    // than silently clipping the point off the top/bottom of the canvas.
+    const valueMin = Math.min(baseMin, autoMin);
+    const valueMax = Math.max(baseMax, autoMax);
+
+    const kfParamName = `__keyframes_${target.socketKey}${axis ? `_${axis}` : ''}`;
+    const writeKeyframes = (next: Keyframe[]) => updateNodeParams(node.id, { [kfParamName]: next }, { immediate: true });
+    const setMode = (m: KeyframeLoopMode) => updateNodeParams(node.id, { [`__kfMode_${target.socketKey}`]: m }, { immediate: true });
+    const setLoopBack = (v: number) => updateNodeParams(node.id, { [`__kfLoopBack_${target.socketKey}`]: v }, { immediate: true });
+
+    const selected = kfSelectedIndex != null ? keyframes[kfSelectedIndex] : undefined;
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {renderNodeHeader(node)}
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 700, color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {input.label}{axis ? ` · ${axis.toUpperCase()}` : ''}
+            </div>
+            {keyframes.length > 0 && (
+              <button
+                onClick={() => writeKeyframes([])}
+                style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+              >Clear</button>
+            )}
+            <button
+              onClick={() => setMobileKeyframeEditor(null)}
+              style={{ background: 'none', border: '1px solid #45475a', color: '#89b4fa', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+            >Done</button>
+          </div>
+
+          {axes && (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {axes.map(a => (
+                <button key={a} style={smallTabBtnStyle(axis === a)} onClick={() => setMobileKeyframeEditor({ ...target, axis: a })}>
+                  {a.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <KeyframeCanvasEditor
+            keyframes={keyframes}
+            mode={mode}
+            loopBack={loopBack}
+            offset={offset}
+            loopCount={loopCount}
+            valueMin={valueMin}
+            valueMax={valueMax}
+            tool={mobileKeyframeTool}
+            onChange={writeKeyframes}
+            selectedIndex={kfSelectedIndex}
+            onSelect={setKfSelectedIndex}
+          />
+
+          {keyframes.length === 0 && (
+            <div style={{ fontSize: '11px', color: '#585b70' }}>
+              Pick "Add" below, then tap in the canvas to place a keyframe — or "Draw" to sketch a curve freehand.
+            </div>
+          )}
+
+          {selected && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', color: '#6c7086' }}>Time</span>
+                  <input
+                    type="number"
+                    step={0.1}
+                    value={selected.t}
+                    onChange={e => {
+                      const n = parseFloat(e.target.value);
+                      if (isNaN(n)) return;
+                      const moved = { ...selected, t: Math.max(0, n) };
+                      const next = keyframes.map((k, i) => i === kfSelectedIndex ? moved : k).sort((a, b) => a.t - b.t);
+                      writeKeyframes(next);
+                      setKfSelectedIndex(next.indexOf(moved));
+                    }}
+                    style={{ ...exprTextInputStyle, width: '64px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', color: '#6c7086' }}>Value</span>
+                  <input
+                    type="number"
+                    step={pd?.step ?? 0.01}
+                    value={selected.v}
+                    onChange={e => {
+                      const n = parseFloat(e.target.value);
+                      if (isNaN(n)) return;
+                      writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, v: n } : k));
+                    }}
+                    style={{ ...exprTextInputStyle, width: '72px' }}
+                  />
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                EASING (this keyframe → next)
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {Object.entries(EASING_PRESETS).map(([name, ease]) => {
+                  const isActive = selected.ease.a === ease.a && selected.ease.b === ease.b && selected.ease.c === ease.c && selected.ease.d === ease.d;
+                  return (
+                    <button
+                      key={name}
+                      style={smallTabBtnStyle(isActive)}
+                      onClick={() => writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, ease } : k))}
+                    >{name}</button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>PLAYBACK</div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {(['once', 'loop', 'interpolate'] as const).map(m => (
+                <button key={m} style={smallTabBtnStyle(mode === m)} onClick={() => setMode(m)}>{m}</button>
+              ))}
+            </div>
+            {mode === 'interpolate' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#6c7086' }}>Loop back over</span>
+                <input
+                  type="number" min={0.01} step={0.1} value={loopBack}
+                  onChange={e => setLoopBack(Math.max(0.01, parseFloat(e.target.value) || 0.01))}
+                  style={{ ...exprTextInputStyle, width: '64px' }}
+                />
+                <span style={{ fontSize: '11px', color: '#6c7086' }}>sec</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -884,19 +1470,7 @@ export function MobileGraphBrowser() {
 
     return (
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
-          <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
-          <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
-          <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
-          <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
-          <NodePreviewThumb key={node.id} nodeId={node.id} nodeType={node.type} />
-          <button
-            onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
-            style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
-          >
-            Remove
-          </button>
-        </div>
+        {renderNodeHeader(node)}
 
         <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
           {(['inputs', 'output'] as const).map(mode => (
@@ -1259,7 +1833,9 @@ export function MobileGraphBrowser() {
       </div>
 
       {focusedNode
-        ? (focusedNode.type === 'exprNode' ? renderExprBlockDetail(focusedNode) : renderNodeDetail(focusedNode))
+        ? (mobileKeyframeEditor && mobileKeyframeEditor.nodeId === focusedNode.id
+            ? renderKeyframeEditorView(focusedNode)
+            : (focusedNode.type === 'exprNode' ? renderExprBlockDetail(focusedNode) : renderNodeDetail(focusedNode)))
         : (homeGraphView ? renderHomeGraph() : renderHome())}
 
       {renderGraphNavigatorOverlay()}
