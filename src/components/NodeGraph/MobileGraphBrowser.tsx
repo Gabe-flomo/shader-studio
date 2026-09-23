@@ -2035,20 +2035,87 @@ export function MobileGraphBrowser() {
       display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px',
     };
 
-    const renderInputCard = (key: string, inp: GraphNode['inputs'][string], isHidden: boolean) => {
-      // A synthetic paramOnlyEntries row (see above) has no real socket to
-      // wire or keyframe — it's a static param the compiler reads straight
-      // from node.params, same as e.g. a group's Iterations count.
-      const isRealSocket = key in node.inputs;
+    // ── Wiring row ────────────────────────────────────────────────────────
+    // Purely connectivity — one compact line per real socket, no slider.
+    // Split out from the old combined card so a node's Inputs tab reads as
+    // two focused lists (which sockets are connected to what, then what's
+    // left to actually tune) instead of one wire-status-plus-value block
+    // repeated per input — same underlying wiring mechanics as before
+    // (ghost suggestions, ⛓ group-port chips, connect/disconnect), just
+    // laid out as a list rather than a grid of cards.
+    const renderWireRow = (key: string, inp: GraphNode['inputs'][string], isLast: boolean) => {
       const isPortSourced = inp.connection?.nodeId === GROUP_PORT_SENTINEL;
       const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
       const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
-      // Ghost-suggested wire — only worth computing for an actually-open
-      // real socket; an already-wired or group-port-sourced one has nothing
-      // to suggest.
-      const ghostCandidate = (isRealSocket && !upstream && !isPortSourced)
-        ? bestConnectCandidate(node.id, inp.type)
-        : undefined;
+      const ghostCandidate = (!upstream && !isPortSourced) ? bestConnectCandidate(node.id, inp.type) : undefined;
+      return (
+        <div
+          key={key}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 10px', borderBottom: isLast ? 'none' : '1px solid #24243a', minWidth: 0 }}
+        >
+          <TypeIcon type={inp.type} />
+          <div
+            onDoubleClick={() => toggleHiddenInput(node, key)}
+            title="Double-tap to hide"
+            style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', touchAction: 'manipulation' }}
+          >{inp.label}</div>
+          {upstream && (
+            <>
+              <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', flexShrink: 0 }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
+              <button
+                onClick={() => disconnectInput(node.id, key)}
+                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation', flexShrink: 0 }}
+                title="Disconnect"
+              >✕</button>
+            </>
+          )}
+          {/* Sourced from this group's own boundary port rather than another
+              internal node — not navigable (there's nothing to drill into),
+              but still freely disconnectable, same as any other wire. */}
+          {isPortSourced && (
+            <>
+              <span style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', cursor: 'default', color: '#cba6f7', borderColor: '#cba6f755', flexShrink: 0 }}>
+                ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
+              </span>
+              <button
+                onClick={() => disconnectInput(node.id, key)}
+                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation', flexShrink: 0 }}
+                title="Disconnect"
+              >✕</button>
+            </>
+          )}
+          {/* Ghost-suggested wire — a preview of the best already-placed
+              candidate, not a real connection yet. One tap commits it via
+              the exact same connectNodes call the "Connect Existing" picker
+              uses; the "+" button still opens that picker for when the
+              guess isn't the one you want. */}
+          {!upstream && !isPortSourced && ghostCandidate && (
+            <button
+              onClick={() => connectNodes(ghostCandidate.node.id, ghostCandidate.outKey, node.id, key)}
+              title="Tap to connect this suggestion"
+              style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', background: 'none', border: '1px dashed #45475a', color: '#6c7086', flexShrink: 0 }}
+            >
+              ⇢ {labelFor(ghostCandidate.node)}
+            </button>
+          )}
+          {!upstream && !isPortSourced && (
+            <button style={{ ...smallIconBtnStyle('#89b4fa'), flexShrink: 0 }} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
+          )}
+        </div>
+      );
+    };
+
+    // ── Value row ─────────────────────────────────────────────────────────
+    // Slider / keyframes / select — only for an input with nothing wired to
+    // it (a wired socket has no static value to tune here; its row in the
+    // wiring list above is the whole story). Returns null when there's
+    // genuinely nothing to show, so the caller can filter these out rather
+    // than rendering an empty card.
+    const renderValueRow = (key: string, inp: GraphNode['inputs'][string]) => {
+      const isRealSocket = key in node.inputs;
+      const isPortSourced = inp.connection?.nodeId === GROUP_PORT_SENTINEL;
+      const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
+      if (upstream || isPortSourced) return null;
       // Externally-driven param: this node's own float slider for `key` is
       // exposed as a ps_ socket on the enclosing group, and that socket is
       // currently fed from outside — the outer wire wins at compile time, so
@@ -2063,24 +2130,21 @@ export function MobileGraphBrowser() {
       // stay ineligible).
       const isVectorKfType = inp.type === 'vec2' || inp.type === 'vec3';
       const kfAxes = isVectorKfType ? VECTOR_AXES[inp.type as 'vec2' | 'vec3'] : null;
-      const kfEligible = isRealSocket && !upstream && !isPortSourced && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
+      const kfEligible = isRealSocket && (inp.type === 'float' || (isVectorKfType && !!inp.axisParams));
       const isKeyframed = kfEligible && (
         inp.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, kfAxes ?? [])
       );
-      const pd = upstream || isPortSourced || isKeyframed ? undefined : sliderableParam(node, key);
+      const pd = isKeyframed ? undefined : sliderableParam(node, key);
       const val = pd ? currentSliderValue(node, key, pd) : 0;
-      const selectPd = upstream || isPortSourced ? undefined : selectableParam(node, key);
+      const selectPd = selectableParam(node, key);
       const selectVal = selectPd ? (node.params[key] !== undefined ? String(node.params[key]) : (selectPd.options?.[0]?.value ?? '')) : '';
+      if (!pd && !selectPd && !kfEligible) return null;
       return (
         <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={inp.type} />
-            <div
-              onDoubleClick={() => toggleHiddenInput(node, key)}
-              title={isHidden ? 'Double-tap to unhide' : 'Double-tap to hide'}
-              style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', touchAction: 'manipulation' }}
-            >{inp.label}</div>
-            {!upstream && kfEligible && (
+            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+            {kfEligible && (
               <button
                 style={smallIconBtnStyle(isKeyframed ? '#f9e2af' : '#a6adc8')}
                 title={isKeyframed ? 'Edit Keyframes' : 'Add Keyframes'}
@@ -2091,51 +2155,7 @@ export function MobileGraphBrowser() {
                 }}
               >◆</button>
             )}
-            {isRealSocket && !upstream && !isPortSourced && (
-              <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key, type: inp.type })}>+</button>
-            )}
           </div>
-          {upstream && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <button style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px' }} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
-              <button
-                onClick={() => disconnectInput(node.id, key)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
-                title="Disconnect"
-              >✕</button>
-            </div>
-          )}
-          {/* Sourced from this group's own boundary port rather than another
-              internal node — not navigable (there's nothing to drill into),
-              but still freely disconnectable, same as any other wire. */}
-          {isPortSourced && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', cursor: 'default', color: '#cba6f7', borderColor: '#cba6f755' }}>
-                ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
-              </span>
-              <button
-                onClick={() => disconnectInput(node.id, key)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }}
-                title="Disconnect"
-              >✕</button>
-            </div>
-          )}
-          {/* Ghost-suggested wire — a preview of the best already-placed
-              candidate, not a real connection yet. One tap commits it via
-              the exact same connectNodes call the "Connect Existing" picker
-              uses; the "+" button above still opens that picker for when
-              the guess isn't the one you want. */}
-          {ghostCandidate && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <button
-                onClick={() => connectNodes(ghostCandidate.node.id, ghostCandidate.outKey, node.id, key)}
-                title="Tap to connect this suggestion"
-                style={{ ...chipStyle, fontSize: '10px', padding: '3px 8px', background: 'none', border: '1px dashed #45475a', color: '#6c7086' }}
-              >
-                ⇢ {labelFor(ghostCandidate.node)}
-              </button>
-            </div>
-          )}
           {isExternallyDriven && (
             <div style={{ fontSize: '10px', color: '#6c7086', fontStyle: 'italic' }}>
               🔒 driven by group input — edit it from outside the group
@@ -2387,33 +2407,58 @@ export function MobileGraphBrowser() {
             </div>
           )}
 
-          {(hasInputs || node.type === 'group') && (nodeTab === 'inputs' || !hasOutputs) && (
-            <div>
-              {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
-              <div style={cardGridStyle}>
-                {visibleInputEntries.map(([key, inp]) => renderInputCard(key, inp, false))}
-                {extraParamEntries.map(([key, pd]) => renderExtraParamCard(key, pd))}
-              </div>
-              {node.type === 'group' && (
-                <button
-                  onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'input', returnPath: activeGroupPath, stage: 'choose' })}
-                  style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
-                >+ Add Input</button>
-              )}
-              {hiddenInputEntries.length > 0 && (
-                <div style={{ marginTop: '8px' }}>
-                  <button style={sectionHeaderBtnStyle} onClick={() => setHiddenSectionOpen(v => !v)}>
-                    <span>{hiddenSectionOpen ? '▾' : '▸'} HIDDEN ({hiddenInputEntries.length})</span>
-                  </button>
-                  {hiddenSectionOpen && (
-                    <div style={{ ...cardGridStyle, marginTop: '6px' }}>
-                      {hiddenInputEntries.map(([key, inp]) => renderInputCard(key, inp, true))}
+          {(hasInputs || node.type === 'group') && (nodeTab === 'inputs' || !hasOutputs) && (() => {
+            // Wiring: real sockets only, in a compact list — synthetic
+            // paramOnlyEntries/extraParamEntries have no socket to wire.
+            // Values: whatever's actually eligible for a slider/select/
+            // keyframe control, real or synthetic, filtered from whichever
+            // renderValueRow finds nothing to show for (already-wired, or
+            // a vec2/vec3 socket like UV that's meant to be wired only).
+            const wireEntries = visibleInputEntries.filter(([key]) => key in node.inputs);
+            const valueRows = [
+              ...visibleInputEntries.map(([key, inp]) => renderValueRow(key, inp)),
+              ...extraParamEntries.map(([key, pd]) => renderExtraParamCard(key, pd)),
+            ].filter(Boolean);
+            return (
+              <div>
+                {!hasOutputs && <div style={sectionHeaderBtnStyle}><span>INPUTS</span></div>}
+                {wireEntries.length > 0 && (
+                  <>
+                    <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: '#585b70', margin: '2px 2px 4px' }}>WIRING</div>
+                    <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+                      {wireEntries.map(([key, inp], i) => renderWireRow(key, inp, i === wireEntries.length - 1))}
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                  </>
+                )}
+                {node.type === 'group' && (
+                  <button
+                    onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'input', returnPath: activeGroupPath, stage: 'choose' })}
+                    style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                  >+ Add Input</button>
+                )}
+                {hiddenInputEntries.length > 0 && (
+                  <div style={{ marginTop: '8px' }}>
+                    <button style={sectionHeaderBtnStyle} onClick={() => setHiddenSectionOpen(v => !v)}>
+                      <span>{hiddenSectionOpen ? '▾' : '▸'} HIDDEN ({hiddenInputEntries.length})</span>
+                    </button>
+                    {hiddenSectionOpen && (
+                      <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden', marginTop: '6px' }}>
+                        {hiddenInputEntries.filter(([key]) => key in node.inputs).map(([key, inp], i, arr) => renderWireRow(key, inp, i === arr.length - 1))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {valueRows.length > 0 && (
+                  <>
+                    <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', color: '#585b70', margin: '12px 2px 4px' }}>VALUES</div>
+                    <div style={cardGridStyle}>
+                      {valueRows}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {(hasOutputs || node.type === 'group') && (nodeTab === 'outputs' || !hasInputs) && (
             <div>
