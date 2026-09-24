@@ -56,7 +56,7 @@ describe('pattern nodes', () => {
       mk('o', 'output', 300, {}, { color: { nodeId: 'n', outputKey: 'color' } }),
     ]);
     expect(fs).toContain('mat2(');
-    expect(fs).toMatch(/\* tanh\(clamp\(\w+_distance \* u_p_\w+_exposure, 0\.0, 40\.0\)\)/);
+    expect(fs).toMatch(/\* tanh\(clamp\(\w+ \* u_p_\w+_exposure, 0\.0, 40\.0\)\)/);
     expect(fs).toMatch(/_color = \w+_color \* 0\.5 \+ 0\.5;/);
   });
 
@@ -65,8 +65,8 @@ describe('pattern nodes', () => {
     const r = fresnel.generateGLSL({ id: 'f', type: 'fresnelSchlick', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { ior: 1.5 } }, { normal: 'n_normal', rayDir: 'cam_rd' });
     expect(r.code).toContain('dot(normalize(n_normal), -normalize(cam_rd))');
     const phase = getNodeDefinition('phaseHG')!;
-    const r2 = phase.generateGLSL({ id: 'h', type: 'phaseHG', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { g: 0.5, lightDir: [0, 1, 0] } }, { rayDir: 'cam_rd' });
-    expect(r2.code).toContain('dot(-normalize(cam_rd), normalize(vec3(0.0, 1.0, 0.0)))');
+    const r2 = phase.generateGLSL({ id: 'h', type: 'phaseHG', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { g: 0.5 } }, { rayDir: 'cam_rd', lightDir: 'sun' });
+    expect(r2.code).toContain('dot(-normalize(cam_rd), normalize(sun))');
     // Without the vectors, the cos θ socket still drives it
     expect(phase.generateGLSL({ id: 'h', type: 'phaseHG', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: {} }, { cosTheta: 'ct' }).code).toContain('clamp(ct, -1.0, 1.0)');
   });

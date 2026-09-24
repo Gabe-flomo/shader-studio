@@ -1912,14 +1912,13 @@ export const PhaseHGNode: NodeDefinition = {
   inputs: {
     cosTheta: { type: 'float', label: 'cos(θ)', hint: 'Wire this, or wire Ray Dir (and a Light Dir) below and it is computed for you.' },
     rayDir:   { type: 'vec3',  label: 'Ray Dir', hint: 'The camera ray direction. With Light Dir, replaces the Dot node.' },
-    lightDir: { type: 'vec3',  label: 'Light Dir', hint: 'Direction to the light. Unwired, the Light Dir sliders are used.' },
+    lightDir: { type: 'vec3',  label: 'Light Dir', hint: 'Direction to the light. Unwired, light comes from the upper left front.' },
   },
   outputs: { phase: { type: 'float', label: 'Phase' } },
-  defaultParams: { g: 0.0, lightDir: [0.5, 0.8, 0.3] },
+  defaultParams: { g: 0.0 },
   paramDefs: {
     g: { label: 'Anisotropy (g)', type: 'float', min: -0.99, max: 0.99, step: 0.01,
          hint: 'Scattering asymmetry. 0 = isotropic fog. +0.8 = forward-scattering cloud. -0.3 = backlit haze.' },
-    lightDir: { label: 'Light Dir', type: 'vec3', min: -1.0, max: 1.0, step: 0.01, hint: 'Where the light comes from, used when Ray Dir is wired but Light Dir is not.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
