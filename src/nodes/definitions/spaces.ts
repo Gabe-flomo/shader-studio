@@ -13,7 +13,7 @@ import { p } from './helpers';
 export const PolarSpaceNode: NodeDefinition = {
   type: 'polarSpace',
   label: 'Polar Space',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Map',
   description: 'Convert UV to polar coordinates (angle, radius). Straight lines become spirals, circles become horizontal stripes. Twist adds a spin that increases with radius. Use the "seamless" vec2 output (cos/sin encoded) for noise inputs — it has zero seam artifacts.',
   inputs: {
     input:       { type: 'vec2',  label: 'UV' },
@@ -60,7 +60,7 @@ export const PolarSpaceNode: NodeDefinition = {
 export const LogPolarSpaceNode: NodeDefinition = {
   type: 'logPolarSpace',
   label: 'Log-Polar Space',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Map',
   description: 'Logarithmic polar coordinates — spirals become straight lines, concentric circles become uniform stripes. Creates Escher-like infinite spiral tiling.',
   inputs: {
     input: { type: 'vec2',  label: 'UV' },
@@ -100,7 +100,7 @@ export const LogPolarSpaceNode: NodeDefinition = {
 export const HyperbolicSpaceNode: NodeDefinition = {
   type: 'hyperbolicSpace',
   label: 'Hyperbolic Space',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Map',
   description: "Poincaré disk model of hyperbolic geometry. Space curves away from the center — parallel lines diverge, everything compresses toward the boundary at infinity. Curvature controls how bent the space is.",
   inputs: {
     input:     { type: 'vec2',  label: 'UV' },
@@ -134,7 +134,7 @@ vec2 hyperbolicSpace(vec2 p, float k) {
 export const InversionSpaceNode: NodeDefinition = {
   type: 'inversionSpace',
   label: 'Circle Inversion',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Map',
   description: 'Inverts space through a circle of given radius: near→far, far→near. Objects outside the circle map inside and vice versa. Creates Apollonian gasket-like patterns when tiled.',
   inputs: {
     input:  { type: 'vec2',  label: 'UV' },
@@ -166,7 +166,7 @@ export const InversionSpaceNode: NodeDefinition = {
 export const MobiusSpaceNode: NodeDefinition = {
   type: 'mobiusSpace',
   label: 'Möbius Transform',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Map',
   description: 'Möbius transformation on the complex plane — the only maps that send circles to circles. Conformal (angle-preserving). Shift the pole to move where the warp concentrates; Angle rotates in complex space.',
   inputs: {
     input: { type: 'vec2',  label: 'UV' },
@@ -213,7 +213,7 @@ vec2 mobiusSpace(vec2 z, vec2 pole, float ang) {
 export const SwirlSpaceNode: NodeDefinition = {
   type: 'swirlSpace',
   label: 'Swirl / Vortex',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Rotates space by an amount that grows with distance from center, forming a vortex. Animate Strength with Time for a spinning galaxy effect.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
@@ -251,7 +251,7 @@ export const SwirlSpaceNode: NodeDefinition = {
 export const KaleidoSpaceNode: NodeDefinition = {
   type: 'kaleidoSpace',
   label: 'Kaleidoscope',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Repeat',
   description: 'Folds space into N mirror-symmetric wedge sectors, creating mandala/kaleidoscope symmetry. Any pattern placed downstream gets infinitely reflected.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
@@ -289,7 +289,7 @@ export const KaleidoSpaceNode: NodeDefinition = {
 export const SphericalSpaceNode: NodeDefinition = {
   type: 'sphericalSpace',
   label: 'Spherical / Fisheye',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Projects UV through a virtual sphere. Positive strength = fisheye barrel distortion (wide-angle). Negative strength = pincushion (telephoto). At ±1 approaches stereographic projection.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
@@ -325,7 +325,7 @@ export const SphericalSpaceNode: NodeDefinition = {
 export const RippleSpaceNode: NodeDefinition = {
   type: 'rippleSpace',
   label: 'Ripple / Wave',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Displaces UV with sine waves — creates water ripples, heat haze, flag waves. Wire Time to animate continuously.',
   inputs: {
     input: { type: 'vec2',  label: 'UV' },
@@ -369,7 +369,7 @@ export const RippleSpaceNode: NodeDefinition = {
 export const InfiniteRepeatSpaceNode: NodeDefinition = {
   type: 'infiniteRepeatSpace',
   label: 'Infinite Repeat',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Repeat',
   description: 'Tiles space infinitely using modulo, keeping the origin at the center of each cell. Perfect for SDF repetition. Also outputs the integer Cell ID for per-cell variation.',
   inputs: {
     input: { type: 'vec2',  label: 'UV' },
@@ -405,7 +405,7 @@ export const InfiniteRepeatSpaceNode: NodeDefinition = {
 
 // WaveTexture — procedural bands/rings/directional waves
 export const WaveTextureNode: NodeDefinition = {
-  type: 'waveTexture', label: 'Wave Texture', category: 'Spaces',
+  type: 'waveTexture', label: 'Wave Texture', category: '2D Space', subcategory: 'Pattern',
   description: 'Procedural wave pattern: bands, rings, or directional waves.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV' },
@@ -455,7 +455,7 @@ export const WaveTextureNode: NodeDefinition = {
 
 // MagicTexture — multicolored interference pattern (Blender-style)
 export const MagicTextureNode: NodeDefinition = {
-  type: 'magicTexture', label: 'Magic Texture', category: 'Spaces',
+  type: 'magicTexture', label: 'Magic Texture', category: '2D Space', subcategory: 'Pattern',
   description: 'Multicolored interference / psychedelic pattern reminiscent of Blender\'s Magic texture.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV' },
@@ -492,7 +492,7 @@ export const MagicTextureNode: NodeDefinition = {
 
 // Grid — outputs a grid/checkerboard mask + cell ID
 export const GridNode: NodeDefinition = {
-  type: 'grid', label: 'Grid', category: 'Spaces',
+  type: 'grid', label: 'Grid', category: '2D Space', subcategory: 'Repeat',
   deprecated: true,
   description: 'Grid lines + checkerboard mask with configurable cell size and line width.',
   inputs: {
@@ -537,7 +537,7 @@ export const GridNode: NodeDefinition = {
 
 // Shear — shear/skew a UV coordinate
 export const ShearNode: NodeDefinition = {
-  type: 'shear', label: 'Shear', category: 'Spaces',
+  type: 'shear', label: 'Shear', category: '2D Space', subcategory: 'Basic',
   description: 'Shear/skew UV space: shift X by factor of Y and vice versa.',
   inputs: {
     uv:      { type: 'vec2',  label: 'UV' },
@@ -570,7 +570,7 @@ export const ShearNode: NodeDefinition = {
 export const Perspective2DNode: NodeDefinition = {
   type: 'perspective2d',
   label: 'Perspective 2D',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Fake 3D perspective projection for 2D UVs. ratio=0: flat. ratio=1: mild. ratio=2+: dramatic. Use Y axis for floor, X for wall.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'    },
@@ -634,7 +634,7 @@ export const Perspective2DNode: NodeDefinition = {
 export const MirroredRepeat2DNode: NodeDefinition = {
   type: 'mirroredRepeat2D',
   label: 'Mirrored Repeat',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Repeat',
   description: 'Tiles UV space with mirroring on every other cell. Produces SDF-correct tiling for symmetric shapes — no boundary discontinuities. Pairs with any SDF or pattern node.',
   inputs: {
     input: { type: 'vec2',  label: 'UV' },
@@ -678,7 +678,7 @@ export const MirroredRepeat2DNode: NodeDefinition = {
 export const LimitedRepeat2DNode: NodeDefinition = {
   type: 'limitedRepeat2D',
   label: 'Limited Repeat',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Repeat',
   description: 'Tiles UV space a finite number of times (N×M grid). Correct for symmetric shapes — at the edges the boundary tile is extended rather than clipped. Great for windows, keys, columns.',
   inputs: {
     input:  { type: 'vec2',  label: 'UV'      },
@@ -726,7 +726,7 @@ export const LimitedRepeat2DNode: NodeDefinition = {
 export const AngularRepeat2DNode: NodeDefinition = {
   type: 'angularRepeat2D',
   label: 'Angular Repeat',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Repeat',
   description: 'Repeats UV space N times radially around the origin — creates ring/gear/petal arrangements. Feed into any SDF or pattern. sectorID output identifies which copy (0..N-1).',
   inputs: {
     input: { type: 'vec2',  label: 'UV'    },

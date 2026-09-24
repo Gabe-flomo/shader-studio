@@ -65,7 +65,7 @@ vec2 swirlWarpOffset(vec2 uv, float cx, float cy, float twist, float falloff, fl
 export const FractNode: NodeDefinition = {
   type: 'fract',
   label: 'Fract / Tile',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Tile space using fract with an optional scale multiplier. Wire a float to Scale to animate tile count.',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
@@ -92,7 +92,7 @@ export const FractNode: NodeDefinition = {
 export const UVWarpNode: NodeDefinition = {
   type: 'uvWarp',
   label: 'UV Warp (Jitter)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Hash-grid jitter warp — intentionally blocky/pixelated displacement. Great for glitch and mosaic effects. For smooth flowing warps use UV Warp (Smooth).',
   inputs: {
     input: { type: 'vec2', label: 'UV' },
@@ -125,7 +125,7 @@ export const UVWarpNode: NodeDefinition = {
 export const SmoothWarpNode: NodeDefinition = {
   type: 'smoothWarp',
   label: 'UV Warp (Smooth)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Smooth bilinear value-noise warp — flowing, organic displacement with no visible grid edges. Use Strength to control how much it moves, Scale for frequency.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
@@ -159,7 +159,7 @@ export const SmoothWarpNode: NodeDefinition = {
 export const CurlWarpNode: NodeDefinition = {
   type: 'curlWarp',
   label: 'UV Warp (Curl)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Divergence-free curl noise warp — simulates fluid flow, smoke, and turbulent streams. Particles never converge or diverge, giving a very natural swirling motion.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
@@ -193,7 +193,7 @@ export const CurlWarpNode: NodeDefinition = {
 export const SwirlWarpNode: NodeDefinition = {
   type: 'swirlWarp',
   label: 'UV Warp (Swirl)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Rotational twist warp — strongest at center, decays with distance. Twist sets max rotation angle, Falloff controls how quickly it fades outward. Animates with time.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
@@ -232,7 +232,7 @@ export const SwirlWarpNode: NodeDefinition = {
 export const DisplaceNode: NodeDefinition = {
   type: 'displace',
   label: 'Displace',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Displace UV by any vec2 input — plug in noise, math expressions, or any vec2 to use as the warp field. This is the "bring your own function" warp node.',
   inputs: {
     input:  { type: 'vec2',  label: 'UV' },
@@ -261,7 +261,7 @@ export const DisplaceNode: NodeDefinition = {
 export const Rotate2DNode: NodeDefinition = {
   type: 'rotate2d',
   label: 'Rotate 2D',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Rotate a 2D vector by an angle (radians)',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
@@ -291,7 +291,7 @@ export const Rotate2DNode: NodeDefinition = {
 export const UvTransform2dNode: NodeDefinition = {
   type: 'uvTransform2d',
   label: 'UV Transform 2D',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Full 2D affine transform: translate + rotate + scale composed as a single mat2 multiply. More efficient than chaining three separate nodes. Rotation and scale apply relative to pivot.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
@@ -336,7 +336,7 @@ export const UvTransform2dNode: NodeDefinition = {
 export const UvReciprocalNode: NodeDefinition = {
   type: 'uvReciprocal',
   label: 'UV Reciprocal',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Applies N/x family transforms to UV. Bounded = smooth lens distortion. Raw = hyperbolic (interesting with fract). Circle inversion = Möbius-like, foundation for inversion fractal patterns.',
   inputs: { uv: { type: 'vec2', label: 'UV' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },

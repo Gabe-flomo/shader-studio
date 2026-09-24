@@ -529,6 +529,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [showPublish, setShowPublish] = useState(false); // group card → Publish as node
+  // "Publish as node" on the selection bar groups the selection and asks the
+  // new group's card to open the dialog as soon as it exists.
+  const pendingPublishGroupId = useNodeGraphStore(s => s.pendingPublishGroupId);
+  const setPendingPublishGroupId = useNodeGraphStore(s => s.setPendingPublishGroupId);
+  useEffect(() => {
+    if (pendingPublishGroupId && pendingPublishGroupId === node.id && node.type === 'group') {
+      setPendingPublishGroupId(null);
+      setShowPublish(true);
+    }
+  }, [pendingPublishGroupId, node.id, node.type, setPendingPublishGroupId]);
   // Custom Fn card → Publish as node (code source), or a user node's "open source" for code-backed types
   const [publishCode, setPublishCode] = useState<{ code: string; entry?: string; label: string; existingId?: string } | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -659,6 +669,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const specialHeadStyle: React.CSSProperties = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '8px 8px 8px 14px',
     borderBottom: `1px solid ${tk.border.subtle}`, cursor: 'grab',
+    background: tk.bg.head, borderRadius: `${radius.card}px ${radius.card}px 0 0`,
   };
 
   // ── Loop Index node special card ─────────────────────────────────────────────
@@ -1913,6 +1924,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           style={{
             display: 'flex', alignItems: 'center', gap: 3, padding: '7px 7px 7px 11px', cursor: 'grab',
             borderBottom: `1px solid ${tk.border.subtle}`,
+            background: tk.bg.head, borderRadius: collapsed ? radius.card - 2 : `${radius.card - 2}px ${radius.card - 2}px 0 0`,
           }}
         >
           <button
@@ -2751,6 +2763,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         style={{
           display: 'flex', alignItems: 'center', gap: 3, padding: isTouchDevice ? '10px 8px' : 8, position: 'relative',
           minHeight: isTouchDevice ? 44 : undefined, cursor: 'grab', borderBottom: `1px solid ${tk.border.subtle}`,
+          background: tk.bg.head, borderRadius: collapsed ? radius.card : `${radius.card}px ${radius.card}px 0 0`,
         }}
       >
         <button

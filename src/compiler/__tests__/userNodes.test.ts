@@ -150,6 +150,23 @@ describe('user node registry + compile', () => {
     expect(getUserNodeDefinition('nope')).toBeUndefined();
   });
 
+  it('a live param is also a socket, so another node can drive it', async () => {
+    const def = await publish();
+    const nd = getNodeDefinition(def.id)!;
+    expect(nd.inputs.freq).toMatchObject({ type: 'float', label: 'Frequency' });
+    const graph: GraphNode[] = [
+      { id: 't', type: 'time', position: { x: 0, y: 0 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'a', type: def.id, position: { x: 0, y: 0 },
+        inputs: { uv: { type: 'vec2', label: 'UV' }, freq: { type: 'float', label: 'Frequency', connection: { nodeId: 't', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' }, wave: { type: 'float', label: 'Wave' } }, params: { freq: 4 } },
+      { id: 'out', type: 'output', position: { x: 0, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'a', outputKey: 'color' } } }, outputs: {}, params: {} },
+    ];
+    const r = compileGraph({ nodes: graph });
+    expect(r.success, r.errors?.join()).toBe(true);
+    // the wire wins over the slider: the call takes the Time node's variable
+    expect(r.fragmentShader).toMatch(/= un_test_fn\(g_uv, \w*time\w*, /);
+  });
+
   it('compiles a graph using the node: one call, param as a live uniform, function emitted once', async () => {
     const def = await publish();
     const inst = (id: string, x: number): GraphNode => ({

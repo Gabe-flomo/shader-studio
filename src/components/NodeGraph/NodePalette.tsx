@@ -256,6 +256,15 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const { activeTab } = state;
 
   const refreshSavedNames     = () => setSavedNames(getSavedGraphNames());
+  const importGraphsBulk      = useNodeGraphStore(s => s.importGraphsBulk);
+  const importGraphs = async (mode: 'files' | 'folder') => {
+    const r = await importGraphsBulk(mode);
+    refreshSavedNames();
+    if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import graphs' }); return; }
+    const n = r.imported?.length ?? 0;
+    const skipped = r.skipped?.length ?? 0;
+    toast.success(`Imported ${n} graph${n === 1 ? '' : 's'}`, { message: skipped ? `${skipped} file${skipped === 1 ? '' : 's'} skipped (${r.skipped![0].reason}).` : undefined });
+  };
   // Saves and deletes from anywhere (the top bar too) keep this list current
   useEffect(() => {
     const onChange = () => setSavedNames(useNodeGraphStore.getState().getSavedGraphNames());
@@ -407,8 +416,11 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 <Button size="sm" variant="primary" disabled={!graphSaveInput.trim()} onClick={saveCurrentGraph}>Save</Button>
               </div>
             ) : (
-              <Button size="sm" icon="save" style={{ alignSelf: 'flex-start', marginBottom: 6 }}
-                onClick={() => { setShowGraphSaveInput(true); setGraphSaveInput(''); }}>Save current graph</Button>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                <Button size="sm" icon="save" onClick={() => { setShowGraphSaveInput(true); setGraphSaveInput(''); }}>Save current graph</Button>
+                <Button size="sm" icon="import" title="Import several graph files at once" onClick={() => importGraphs('files')}>Import files…</Button>
+                <Button size="sm" icon="folder" title="Import a folder of graphs; its folders are recreated here" onClick={() => importGraphs('folder')}>Import folder…</Button>
+              </div>
             )}
             <FolderableList
               scopeKey="graphs"

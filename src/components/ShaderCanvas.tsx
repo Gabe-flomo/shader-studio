@@ -1,6 +1,7 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { PREVIEW_ASPECTS, fitAspect } from '../utils/graphImportPlan';
 import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
@@ -625,6 +626,24 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Build a 1-px probe shader: insert a new gl_FragColor at the very end of main()
     // using lastIndexOf('}') so it works even when nodes compile after the output node's
     // gl_FragColor (i.e. when the scope node isn't connected to the Output node).
+    // A probe reads a node's variable out of the *current* fragment shader. The
+    // variable map and the shader text are updated by different paths (store
+    // write vs. async compile swap), so around a recompile — a renamed node
+    // changes its slug — one can be ahead of the other. Probing a name the
+    // shader doesn't declare is an "undeclared identifier" error, so skip it
+    // until both agree. Cached per shader text since this runs every frame.
+    let declaresFs: string | null = null;
+    const declaresCache = new Map<string, boolean>();
+    const fsDeclares = (fs: string, varName: string): boolean => {
+      if (declaresFs !== fs) { declaresFs = fs; declaresCache.clear(); }
+      let hit = declaresCache.get(varName);
+      if (hit === undefined) {
+        hit = new RegExp(`\\b${varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(fs);
+        declaresCache.set(varName, hit);
+      }
+      return hit;
+    };
+
     const buildProbeShader = (fs: string, varName: string, varType: string): string => {
       let packed: string;
       switch (varType) {
@@ -1003,6 +1022,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               for (const [outKey, varName] of Object.entries(outputVars)) {
                 const outSocket = selNode.outputs[outKey];
                 const varType   = outSocket?.type ?? 'float';
+                if (!fsDeclares(curFs, varName)) continue; // map and shader out of step; next frame
 
                 // Get or build a probe material for this variable
                 let pm = probeMatCache.get(varName);
@@ -1070,6 +1090,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
               if (!outputVars?.value) continue;
               const varName = outputVars.value;
+              if (!fsDeclares(curScopeFs, varName)) continue;
               // Scope node uses min/max params; LFO nodes derive range from offset ± amplitude
               let scopeMin: number;
               let scopeMax: number;
@@ -1135,7 +1156,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               if (floatOutputKey) {
                 const outputVars = nodeOutputVarMapRef.current.get(previewId);
                 const varName    = outputVars?.[floatOutputKey];
-                if (varName) {
+                if (varName && fsDeclares(curFs, varName)) {
                   const cacheKey = `${varName}::-1::1`;
                   let pm = previewScopeMatCache.get(cacheKey);
                   if (!pm) {
@@ -1188,7 +1209,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 const upType = upNode.outputs[upKey]?.type;
                 if (!upType) continue;
                 const upVarName = nodeOutputVarMapRef.current.get(upId)?.[upKey];
-                if (!upVarName) continue;
+                if (!upVarName || !fsDeclares(curFs, upVarName)) continue;
 
                 const probeKey = `__preview__${upId}:${upKey}`;
 
@@ -1267,7 +1288,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               for (const [outKey, outSocket] of Object.entries(previewNode.outputs)) {
                 if (outSocket.type !== 'vec2' && outSocket.type !== 'vec3') continue;
                 const ownVarName = nodeOutputVarMapRef.current.get(previewId)?.[outKey];
-                if (!ownVarName) continue;
+                if (!ownVarName || !fsDeclares(curFs, ownVarName)) continue;
                 const ownProbeKey = `__preview__${previewId}:${outKey}`;
 
                 if (outSocket.type === 'vec2') {
@@ -1653,10 +1674,35 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     requestRenderRef.current();
   }, [paramUniforms]);
 
+  // ── Aspect: hold the canvas to a chosen ratio inside the panel ─────────────
+  // The export renders at the canvas size × scale, so a 16:9 preview gives a
+  // 16:9 video whatever shape the panel is. The inner div keeps its own
+  // ResizeObserver above, so the renderer follows the fitted size.
+  const previewAspect = useNodeGraphStore(s => s.previewAspect);
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const ratio = PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.ratio ?? null;
+    const outer = outerRef.current;
+    if (!ratio || !outer) { setFit(null); return; }
+    const apply = () => {
+      const r = outer.getBoundingClientRect();
+      setFit(fitAspect(r.width, r.height, ratio));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(outer);
+    return () => ro.disconnect();
+  }, [previewAspect]);
+
   return (
-    <div
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden' }}
-    />
+    <div ref={outerRef} style={{ width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        ref={canvasRef}
+        style={fit
+          ? { width: fit.width, height: fit.height, background: '#000', position: 'relative', overflow: 'hidden', flexShrink: 0 }
+          : { width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden' }}
+      />
+    </div>
   );
 }

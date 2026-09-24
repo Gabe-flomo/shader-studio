@@ -16,7 +16,9 @@ import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { paramBindingKey } from '../compiler/uniformPatcher';
-import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
+import { saveTextFile, openTextFile, pickJsonFiles, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
+import { planGraphImport, type PreviewAspect } from '../utils/graphImportPlan';
+import { loadFolders, createFolder, moveItemsToFolder } from '../utils/assetFolders';
 import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
 import type { ExampleGraph } from './exampleIndex';
@@ -419,6 +421,14 @@ interface NodeGraphState {
 
   // Raw GLSL editor override — when set, ShaderCanvas uses this shader instead of the compiled graph
   rawGlslShader: string | null;
+  /** Shape the preview (and therefore every export) is held to. Persisted. */
+  previewAspect: PreviewAspect;
+  setPreviewAspect: (a: PreviewAspect) => void;
+  /** A group just made from a selection that should open its Publish dialog once its card mounts. */
+  pendingPublishGroupId: string | null;
+  setPendingPublishGroupId: (id: string | null) => void;
+  /** Import many graphs (a multi-file pick or a folder); folders are recreated in Saved Graphs. */
+  importGraphsBulk: (mode: 'files' | 'folder') => Promise<FileResult & { imported?: string[]; skipped?: Array<{ path: string; reason: string }> }>;
   setRawGlslShader: (shader: string | null) => void;
 
   /** Brief notice shown when group output reassignment auto-disconnected incompatible outer connections */
@@ -1174,6 +1184,44 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   isStateful: false,
   nodeSlugMap: new Map(),
   rawGlslShader: null,
+  previewAspect: ((): PreviewAspect => {
+    try { const v = localStorage.getItem('shader-studio:settings:previewAspect'); return (v as PreviewAspect) || 'free'; } catch { return 'free'; }
+  })(),
+  setPreviewAspect: (a) => {
+    try { localStorage.setItem('shader-studio:settings:previewAspect', a); } catch { /* preference only */ }
+    set({ previewAspect: a });
+  },
+  pendingPublishGroupId: null,
+  setPendingPublishGroupId: (id) => set({ pendingPublishGroupId: id }),
+  importGraphsBulk: async (mode) => {
+    let files: Array<{ path: string; content: string }> | null;
+    try {
+      files = await pickJsonFiles(mode);
+    } catch (e) {
+      return { ok: false, error: errorMessage(e) };
+    }
+    if (files === null) return CANCELLED;
+    const plan = planGraphImport(files, get().getSavedGraphNames());
+    if (plan.graphs.length === 0) {
+      const why = plan.skipped.length ? ` (${plan.skipped.length} file${plan.skipped.length === 1 ? '' : 's'} skipped: ${plan.skipped[0].reason})` : '';
+      return { ok: false, error: `No graphs found in what you picked${why}.` };
+    }
+    const folderIds = new Map(loadFolders('graphs').map(f => [f.label, f.id]));
+    const imported: string[] = [];
+    for (const g of plan.graphs) {
+      const stored = safeSetItem(`shader-studio:${g.name}`, g.payload, `graph "${g.name}"`);
+      if (!stored.ok) return { ok: false, error: stored.error, imported, skipped: plan.skipped };
+      imported.push(g.name);
+      if (g.folder) {
+        let fid = folderIds.get(g.folder);
+        if (!fid) { fid = createFolder('graphs', g.folder).id; folderIds.set(g.folder, fid); }
+        moveItemsToFolder('graphs', [g.name], fid);
+      }
+    }
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
+    window.dispatchEvent(new Event('assetbrowser-folders-changed'));
+    return { ok: true, imported, skipped: plan.skipped };
+  },
   disconnectedNotice: null,
   groupPresets: loadGroupPresets(),
 

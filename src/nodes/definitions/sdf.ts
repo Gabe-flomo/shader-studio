@@ -68,7 +68,7 @@ export const SdEllipseNode: NodeDefinition = {
 };
 
 export const OpRepeatNode: NodeDefinition = {
-  type: 'opRepeat', label: 'Repeat Space (Grid)', aliases: ['opRepeat'], category: 'Spaces',
+  type: 'opRepeat', label: 'Repeat Space (Grid)', aliases: ['opRepeat'], category: '2D Space', subcategory: 'Repeat',
   description: 'Infinite domain repetition — tiles p every s units',
   inputs: {
     p: { type: 'vec2', label: 'UV' },
@@ -89,7 +89,7 @@ export const OpRepeatNode: NodeDefinition = {
 };
 
 export const OpRepeatPolarNode: NodeDefinition = {
-  type: 'opRepeatPolar', label: 'Repeat Space (Radial)', aliases: ['opRepeatPolar'], category: 'Spaces',
+  type: 'opRepeatPolar', label: 'Repeat Space (Radial)', aliases: ['opRepeatPolar'], category: '2D Space', subcategory: 'Repeat',
   description: 'Polar domain repetition — n-fold rotational symmetry',
   inputs: {
     p: { type: 'vec2', label: 'UV' },
@@ -114,7 +114,7 @@ export const OpRepeatPolarNode: NodeDefinition = {
 export const SdfOffsetNode: NodeDefinition = {
   type: 'sdfOffset',
   label: 'SDF Offset',
-  category: 'SDF',
+  category: '2D SDF Ops', subcategory: 'Modify',
   description: 'Expands or shrinks a shape by offsetting the zero-crossing: sdf + amount. Negative = expand, positive = shrink. Rounds corners as a side effect.',
   inputs: {
     sdf:    { type: 'float', label: 'SDF'    },
@@ -141,7 +141,7 @@ export const SdfOffsetNode: NodeDefinition = {
 export const SdfSharpenNode: NodeDefinition = {
   type: 'sdfSharpen',
   label: 'SDF Sharpen',
-  category: 'SDF',
+  category: '2D SDF Ops', subcategory: 'Modify',
   description: 'Steepens (>1) or flattens (<1) the distance gradient without moving the zero-crossing. Use before smoothstep for harder or softer edges.',
   inputs: { sdf: { type: 'float', label: 'SDF' } },
   outputs: { result: { type: 'float', label: 'Result' } },
@@ -165,7 +165,7 @@ export const SdfSharpenNode: NodeDefinition = {
 export const Sdf2dSmoothUnionNode: NodeDefinition = {
   type: 'sdf2dSmoothUnion',
   label: 'Smooth Union 2D',
-  category: 'SDF',
+  category: '2D SDF Ops', subcategory: 'Combine',
   description: 'Blends two SDFs with smin — organic merged boundary. Also outputs a blend factor (0=A, 1=B) for color or material interpolation at the merge zone.',
   inputs: {
     sdfA: { type: 'float', label: 'SDF A' },
@@ -203,7 +203,7 @@ export const Sdf2dSmoothUnionNode: NodeDefinition = {
 export const Sdf2dOnionNode: NodeDefinition = {
   type: 'sdf2dOnion',
   label: 'SDF Onion 2D',
-  category: 'SDF',
+  category: '2D SDF Ops', subcategory: 'Modify',
   description: 'Converts any shape into a hollow shell: abs(sdf) - thickness. Chain multiple times or use in a looped group for concentric rings.',
   inputs: { sdf: { type: 'float', label: 'SDF' } },
   outputs: { result: { type: 'float', label: 'Result' } },

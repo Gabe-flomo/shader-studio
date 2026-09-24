@@ -903,7 +903,7 @@ export const SDFUnionNode: NodeDefinition = {
 };
 
 export const SDFSubtractNode: NodeDefinition = {
-  type: 'sdfSubtract', label: 'SDF Subtract', category: '3D Boolean Ops',
+  type: 'sdfSubtract', label: 'SDF Subtract', category: '2D SDF Ops', subcategory: 'Combine',
   description: 'Carve "cut" out of "base". cut=shape being removed, base=main shape.',
   inputs: { cut: { type: 'float', label: 'Cut' }, base: { type: 'float', label: 'Base' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },

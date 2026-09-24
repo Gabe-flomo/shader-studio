@@ -12,6 +12,8 @@ import { Field } from './ui/Field';
 import { Icon } from './ui/Icon';
 import { Modal } from './ui/Modal';
 import { RulerSlider } from './ui/RulerSlider';
+import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -93,6 +95,8 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const [manualStop, setManualStop] = useState(false);
   const [bitrate, setBitrate]       = useState(50); // Mbps
   const [resScale, setResScale]     = useState(1);
+  const previewAspect    = useNodeGraphStore(s => s.previewAspect);
+  const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const [codec, setCodec]           = useState<FfmpegCodec>('h264');
   const [mode, setMode]             = useState<RecordMode>(inTauri ? 'ffmpeg' : 'mediarecorder');
   const [filename, setFilename]     = useState('shader-export');
@@ -550,6 +554,17 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                 </div>
               )}
               {mode === 'mediarecorder' && <Toggle checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}
+            </Section>
+
+            <Section label="Shape" meta={PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.hint}>
+              <Segmented
+                fill
+                ariaLabel="Aspect ratio"
+                value={previewAspect}
+                onChange={v => setPreviewAspect(v as typeof previewAspect)}
+                options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.label, title: a.hint }))}
+              />
+              <Help>The preview takes this shape too, so what you see is what you export. Free follows the panel.</Help>
             </Section>
 
             <Section label="Resolution" meta={canvas && current ? `${displayW} × ${displayH} px` : undefined}>

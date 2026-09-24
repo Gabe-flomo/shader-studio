@@ -6,7 +6,7 @@ import { p } from './helpers';
 export const SmoothMinNode: NodeDefinition = {
   type: 'smoothMin',
   label: 'Smooth Min',
-  category: 'Combiners',
+  category: '2D SDF Ops', subcategory: 'Combine',
   description: 'Smooth minimum of two SDF values — merges two shapes with a rounded blend seam. K controls how wide the blend zone is.',
   inputs: {
     a: { type: 'float', label: 'A' },
@@ -34,7 +34,7 @@ export const SmoothMinNode: NodeDefinition = {
 export const MinNode: NodeDefinition = {
   type: 'min',
   label: 'Min (Union)',
-  category: 'Combiners',
+  category: '2D SDF Ops', subcategory: 'Combine',
   description: 'SDF union — minimum of two distance fields. Combines two shapes into one.',
   inputs: {
     a: { type: 'float', label: 'A' },
@@ -55,7 +55,7 @@ export const MinNode: NodeDefinition = {
 export const MaxNode2: NodeDefinition = {
   type: 'sdfMax',
   label: 'Max (Intersect)',
-  category: 'Combiners',
+  category: '2D SDF Ops', subcategory: 'Combine',
   description: 'SDF intersection — maximum of two distance fields. Keeps only the region where both shapes overlap.',
   inputs: {
     a: { type: 'float', label: 'A' },
@@ -75,7 +75,7 @@ export const MaxNode2: NodeDefinition = {
 export const SmoothMaxNode: NodeDefinition = {
   type: 'smoothMax',
   label: 'Smooth Max',
-  category: 'Combiners',
+  category: '2D SDF Ops', subcategory: 'Combine',
   description: 'Smooth intersection — blended maximum of two SDFs. Like Smooth Min but keeps the overlap region with a soft edge.',
   inputs: {
     a: { type: 'float', label: 'A' },
@@ -105,7 +105,7 @@ float smax(float a, float b, float k) {
 export const SmoothSubtractNode: NodeDefinition = {
   type: 'smoothSubtract',
   label: 'Smooth Subtract',
-  category: 'Combiners',
+  category: '2D SDF Ops', subcategory: 'Combine',
   description: 'Smooth SDF subtraction — cuts shape B from A with a rounded chamfered edge.',
   inputs: {
     a: { type: 'float', label: 'Shape' },
@@ -333,7 +333,7 @@ vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float sat
 export const SDFOutlineNode: NodeDefinition = {
   type: 'sdfOutline',
   label: 'SDF Outline',
-  category: 'Combiners',
+  category: '2D SDF Ops', subcategory: 'Modify',
   description: 'Draws a colored filled shape + optional outline from a single SDF. Fill color inside, stroke color at the edge band, transparent outside.',
   inputs: {
     d:           { type: 'float', label: 'SDF' },
@@ -517,7 +517,7 @@ export const Light2DNode: NodeDefinition = {
 export const SDFColorizeNode: NodeDefinition = {
   type: 'sdfColorize',
   label: 'SDF Colorize',
-  category: 'Combiners',
+  category: '2D SDF Ops', subcategory: 'Style',
   description: 'Turn a raw SDF float into a visualized color — fills inside with one color, outside with another, anti-aliased edge. Good for quickly visualizing any distance field.',
   inputs: {
     d:       { type: 'float', label: 'SDF' },

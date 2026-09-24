@@ -335,7 +335,7 @@ export const ParticleEmitterNode: NodeDefinition = {
 export const VectorFieldNode: NodeDefinition = {
   type: 'vectorField',
   label: 'Vector Field',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Warp',
   description:
     'Noise-driven vec2 direction field. Each pixel gets a direction based on its position and time. ' +
     'Connect to Particle Emitter "field" (gravity mode) for field-driven particle motion. ' +
@@ -424,7 +424,7 @@ export const VectorFieldNode: NodeDefinition = {
 export const GravityFieldNode: NodeDefinition = {
   type: 'gravityField',
   label: 'Gravity Field',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Warp',
   description:
     'Point-attractor force field. Outputs a vec2 pointing toward (attract), away from (repel), ' +
     'or tangentially around (orbit) an attractor position. ' +
@@ -508,7 +508,7 @@ export const GravityFieldNode: NodeDefinition = {
 export const SpiralFieldNode: NodeDefinition = {
   type: 'spiralField',
   label: 'Spiral Field',
-  category: 'Spaces',
+  category: '2D Space', subcategory: 'Warp',
   description:
     'Combines inward pull and tangential rotation into a spiral force field. ' +
     'Ratio=0 is pure inward pull. Ratio=1 is pure orbit. 0.5 = balanced spiral. ' +
