@@ -588,13 +588,13 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
 
       {/* Icon rail */}
       <div style={{ width: 52, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 0', borderRight: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle }}>
-        {SIDEBAR_TABS.map(({ id, label, icon, color }) => (
-          <RailButton key={id} icon={icon} label={label} active={focusedPane.activeTab === id} activeColor={color(tk)}
+        {SIDEBAR_TABS.map(({ id, label, icon }) => (
+          <RailButton key={id} icon={icon} label={label} active={focusedPane.activeTab === id}
             onClick={() => updatePane(focusedPane.id, { activeTab: id })} />
         ))}
         {onCollapse && (
           <div style={{ marginTop: 'auto' }}>
-            <RailButton icon="chevL" label="Collapse sidebar" active={false} activeColor={tk.accent.base} onClick={onCollapse} />
+            <RailButton icon="chevL" label="Collapse sidebar" active={false} onClick={onCollapse} />
           </div>
         )}
       </div>
@@ -641,7 +641,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   );
 }
 
-function RailButton({ icon, label, active, activeColor, onClick }: { icon: IconName; label: string; active: boolean; activeColor: string; onClick: () => void }) {
+function RailButton({ icon, label, active, onClick }: { icon: IconName; label: string; active: boolean; onClick: () => void }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
@@ -655,8 +655,8 @@ function RailButton({ icon, label, active, activeColor, onClick }: { icon: IconN
         style={{
           width: 36, height: 36, border: 0, borderRadius: 10, padding: 0, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: active ? alpha(activeColor, 0.14) : hover ? tk.bg.hover : 'transparent',
-          color: active ? activeColor : hover ? tk.text.secondary : tk.text.faint,
+          background: active ? tk.bg.selected : hover ? tk.bg.hover : 'transparent',
+          color: active ? tk.accent.base : hover ? tk.text.secondary : tk.text.faint,
         }}
       >
         <Icon name={icon} />

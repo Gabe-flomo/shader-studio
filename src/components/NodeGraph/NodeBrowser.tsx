@@ -3,9 +3,8 @@ import { createPortal } from 'react-dom';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import type { GraphNode } from '../../types/nodeGraph';
-import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { categoryColor } from '../../theme/categories';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 
@@ -286,12 +285,12 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
 
 // ── Node pill ─────────────────────────────────────────────────────────────────
 function NodePill({
-  type, label, description, color,
+  type, label, description,
   isSelected, isHighlighted,
   onSingleClick, onDoubleClick,
   swapMode, btnRef,
 }: {
-  type: string; label: string; description?: string; color: string;
+  type: string; label: string; description?: string;
   isSelected: boolean; isHighlighted: boolean;
   onSingleClick: () => void; onDoubleClick: () => void;
   swapMode: boolean;
@@ -322,18 +321,18 @@ function NodePill({
         transition: 'background 0.12s, box-shadow 0.12s',
       }}
     >
-      {hovered && !on && <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />}
       {label}
     </button>
   );
 }
 
 // ── Caps labels ───────────────────────────────────────────────────────────────
-function CapsLabel({ children }: { children: ReactNode }) {
+function CapsLabel({ children, rule = false }: { children: ReactNode; rule?: boolean }) {
   const tk = useTokens();
   return (
-    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint, padding: '10px 2px 6px' }}>
-      {children}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 4px' }}>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint }}>{children}</span>
+      {rule && <span style={{ flex: 1, height: 1, background: tk.border.subtle }} />}
     </div>
   );
 }
@@ -356,7 +355,6 @@ export function NodeBrowser({
   context, onGlslInsert,
 }: NodeBrowserProps) {
   const tk = useTokens();
-  const mode = useThemeMode();
   const [path, setPath] = useState<string[]>([]);
   const [previewType, setPreviewType] = useState<string | null>(null);
   const [highlightType, setHighlightType] = useState<string | null>(null);
@@ -415,17 +413,15 @@ export function NodeBrowser({
     setPreviewType(null);
   }, [isGlsl, onAdd, onGlslInsert]);
 
-  const color = (cat: string) => categoryColor(cat, mode);
-
   // A wrap of node pills, with the preview card for the selected one underneath.
-  const renderPills = (nodes: Array<{ type: string; label: string; description?: string }>, pillColor: string) => (
+  const renderPills = (nodes: Array<{ type: string; label: string; description?: string }>) => (
     <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {nodes.map(def => (
           <NodePill
             key={def.type}
             type={def.type} label={def.label} description={def.description}
-            color={pillColor} isSelected={previewType === def.type}
+            isSelected={previewType === def.type}
             isHighlighted={highlightType === def.type}
             onSingleClick={() => handleNodeClick(def.type)}
             onDoubleClick={() => handleNodeDblClick(def.type)}
@@ -483,7 +479,7 @@ export function NodeBrowser({
       .map(({ def }) => def);
     innerContent = results.length === 0
       ? <div style={{ color: tk.text.faint, fontSize: 12, padding: '4px 2px' }}>No matches</div>
-      : <div>{renderPills(results, tk.accent.base)}</div>;
+      : <div>{renderPills(results)}</div>;
 
   } else if (path.length === 0) {
     const favCount = favorites.filter(t => NODE_REGISTRY[t] && !HIDDEN_NODES.has(t)).length;
@@ -503,12 +499,11 @@ export function NodeBrowser({
           if (sectionCats.length === 0) return null;
           return (
             <div key={section.label}>
-              <CapsLabel>{section.label}</CapsLabel>
+              <CapsLabel rule>{section.label}</CapsLabel>
               {sectionCats.map(cat => (
                 <CategoryRow
                   key={cat}
                   cat={cat}
-                  icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: color(cat) }} />}
                   count={getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length}
                   onClick={() => { setPath([cat]); setPreviewType(null); }}
                 />
@@ -524,7 +519,6 @@ export function NodeBrowser({
             <CategoryRow
               key={cat}
               cat={cat}
-              icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: color(cat) }} />}
               count={n}
               onClick={() => { setPath([cat]); setPreviewType(null); }}
             />
@@ -542,7 +536,7 @@ export function NodeBrowser({
         {crumb('Favorites', favDefs.length)}
         {favDefs.length === 0
           ? <div style={{ color: tk.text.faint, fontSize: 12 }}>No favorites yet</div>
-          : renderPills(favDefs, tk.status.warning)}
+          : renderPills(favDefs)}
       </div>
     );
 
@@ -560,12 +554,12 @@ export function NodeBrowser({
             return (
               <div key={group.label}>
                 <CapsLabel>{group.label}</CapsLabel>
-                {renderPills(groupNodes, color(cat))}
+                {renderPills(groupNodes)}
               </div>
             );
           })
         ) : (
-          <div style={{ marginTop: 4 }}>{renderPills([...rawNodes].sort((a, b) => a.label.localeCompare(b.label)), color(cat))}</div>
+          <div style={{ marginTop: 4 }}>{renderPills([...rawNodes].sort((a, b) => a.label.localeCompare(b.label)))}</div>
         )}
       </div>
     );
@@ -593,7 +587,7 @@ function Count({ n }: { n: number }) {
 
 // ── Category row ──────────────────────────────────────────────────────────────
 function CategoryRow({ cat, icon, count, onClick }: {
-  cat: string; icon: ReactNode; count: number; onClick: () => void;
+  cat: string; icon?: ReactNode; count: number; onClick: () => void;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
@@ -603,12 +597,12 @@ function CategoryRow({ cat, icon, count, onClick }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        width: '100%', height: 32, display: 'flex', alignItems: 'center', gap: 9, padding: '0 6px 0 8px', border: 0,
+        width: '100%', height: 30, display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 0 8px', border: 0,
         borderRadius: radius.md, background: hovered ? tk.bg.hover : 'transparent', cursor: 'pointer', textAlign: 'left',
         color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`,
       }}
     >
-      <span style={{ width: 14, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+      {icon && <span style={{ width: 14, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
       <Count n={count} />
       <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
