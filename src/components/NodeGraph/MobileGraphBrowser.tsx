@@ -38,7 +38,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, type Tokens } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
-import { IconButton } from '../ui/Button';
+import { Button, IconButton } from '../ui/Button';
 import { Sheet } from '../ui/Sheet';
 import { suggestConnections } from './smartConnect';
 import { wirePath } from './wirePath';
@@ -3820,7 +3820,10 @@ export function MobileGraphBrowser() {
       ...(pinnedOutputNodes.length > 0 ? [{ rank: Infinity, render: () => renderPinnedRow('output' as const, pinnedOutputNodes) }] : []),
     ].sort((a, b) => a.rank - b.rank);
     return (
-      <div ref={homeContainerRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
+      // The list scrolls inside a fixed frame, so the + button and the select bar stay pinned to
+      // the bottom however long the list gets.
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div ref={homeContainerRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', position: 'relative', paddingBottom: selectMode ? 64 : 72 }}>
         {/* Connector overlay — measured from actual chip positions (see the
             useLayoutEffect above), not a synthetic layout, since these chips
             sit in a natural flex-wrap flow. z-index:0 under the rows below
@@ -3836,48 +3839,27 @@ export function MobileGraphBrowser() {
         <div style={{ position: 'relative', zIndex: 1 }}>
           {entries.map(e => e.render())}
         </div>
-        {/* Floating group actions — only while actively selecting. Real
-            groups rewire the graph (compile-affecting, same groupNodes()
-            desktop's canvas uses); folders are purely visual clustering
-            with no wiring of their own. */}
+      </div>
+        {/* Group actions while selecting. A real group rewires the graph (same groupNodes() as the
+            desktop canvas); a folder only clusters nodes visually. */}
         {selectMode && (
           <div style={{
-            position: 'sticky', bottom: 0, left: 0, right: 0, zIndex: 2,
-            background: 'rgba(24,24,37,0.95)', backdropFilter: 'blur(8px)',
-            borderTop: `1px solid ${tc.surface0}`, padding: '10px 12px',
-            display: 'flex', alignItems: 'center', gap: '8px',
+            position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 2, boxSizing: 'border-box',
+            background: tk.bg.panel, borderTop: `1px solid ${tk.border.default}`, boxShadow: '0 -6px 20px rgba(20,20,30,0.06)',
+            padding: '10px 12px calc(10px + env(safe-area-inset-bottom, 0px))',
+            display: 'flex', alignItems: 'center', gap: 8, font: `13px ${fontFamily.ui}`,
           }}>
-            <span style={{ flex: 1, fontSize: '11px', color: tc.subtext0 }}>
+            <span style={{ flex: 1, color: selectedIds.length ? tk.text.primary : tk.text.muted, fontWeight: selectedIds.length ? 600 : 400 }}>
               {selectedIds.length === 0 ? 'Tap nodes to select them' : `${selectedIds.length} selected`}
             </span>
-            <button
-              onClick={commitRealGroup}
-              disabled={selectedIds.length < 1}
-              title="Group into a real node — rewires the graph, has its own inputs/outputs"
-              style={{
-                background: selectedIds.length < 1 ? tc.surface0 : `${tc.blue}18`,
-                border: `1px solid ${selectedIds.length < 1 ? tc.surface1 : `${tc.blue}55`}`,
-                color: selectedIds.length < 1 ? tc.surface2 : tc.blue,
-                borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 600,
-                cursor: selectedIds.length < 1 ? 'default' : 'pointer', touchAction: 'manipulation',
-              }}
-            >
-              ⛓ Group{selectedIds.length >= 1 ? ` (${selectedIds.length})` : ''}
-            </button>
-            <button
-              onClick={commitLooseGroup}
-              disabled={selectedIds.length < 2}
-              title="Cluster visually only — no wiring, no compile effect"
-              style={{
-                background: selectedIds.length < 2 ? tc.surface0 : `${tc.mauve}22`,
-                border: `1px solid ${selectedIds.length < 2 ? tc.surface1 : `${tc.mauve}66`}`,
-                color: selectedIds.length < 2 ? tc.surface2 : tc.mauve,
-                borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 600,
-                cursor: selectedIds.length < 2 ? 'default' : 'pointer', touchAction: 'manipulation',
-              }}
-            >
-              📁 Folder{selectedIds.length >= 2 ? ` (${selectedIds.length})` : ''}
-            </button>
+            <Button icon="presets" variant={selectedIds.length >= 1 ? 'primary' : 'secondary'} disabled={selectedIds.length < 1} onClick={commitRealGroup}
+              title="Group into a real node — rewires the graph, has its own inputs and outputs" style={{ height: 40 }}>
+              Group
+            </Button>
+            <Button icon="folder" disabled={selectedIds.length < 2} onClick={commitLooseGroup}
+              title="Cluster visually only — no wiring, no compile effect" style={{ height: 40 }}>
+              Folder
+            </Button>
           </div>
         )}
         {!selectMode && renderAddNodeFab()}
