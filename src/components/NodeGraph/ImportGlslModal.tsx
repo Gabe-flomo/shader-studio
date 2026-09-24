@@ -1,24 +1,29 @@
 import React, { useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { parseGlslFunctions, buildCustomFnParams } from '../../utils/glslParser';
-import { ctp } from '../../theme/palette';
+import { useCtp, type CtpPalette } from '../../theme/nodePalette';
+import { Modal } from '../ui/Modal';
+import { useTokens } from '../../theme/themeStore';
 
 interface Props {
   onClose: () => void;
 }
 
-const BTN: React.CSSProperties = {
-  background: ctp.surface0,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
+const BTNFor = (tc: CtpPalette): React.CSSProperties => ({
+  background: tc.surface0,
+  border: `1px solid ${tc.surface1}`,
+  color: tc.text,
   borderRadius: '4px',
   padding: '5px 12px',
   fontSize: '12px',
   fontFamily: 'monospace',
   cursor: 'pointer',
-};
+});
 
 export function ImportGlslModal({ onClose }: Props) {
+  const tc = useCtp();
+  const tk = useTokens();
+  const BTN = BTNFor(tc);
   const { addNode } = useNodeGraphStore();
   const [code, setCode] = useState('');
 
@@ -35,48 +40,11 @@ export function ImportGlslModal({ onClose }: Props) {
   };
 
   return (
-    // Backdrop
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      {/* Panel */}
-      <div
-        style={{
-          background: ctp.base,
-          border: `1px solid ${ctp.surface1}`,
-          borderRadius: '10px',
-          width: '640px',
-          maxHeight: '85vh',
-          overflowY: 'auto',
-          padding: '18px 22px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          color: ctp.text,
-          fontSize: '12px',
-        }}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.green }}>↓ Import GLSL Function</span>
-          <button
-            onClick={onClose}
-            style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, fontSize: '16px', padding: '0 4px' }}
-          >
-            ✕
-          </button>
-        </div>
-
+    <Modal title="Import GLSL function" subtitle="Paste GLSL; the first function becomes a Custom Fn node" icon="import" iconColor={tk.status.success} width={660} onClose={onClose}>
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, fontSize: 12.5 }}>
         {/* Description */}
-        <div style={{ fontSize: '11px', color: ctp.surface2, lineHeight: 1.5 }}>
-          Paste one or more GLSL functions. The <strong style={{ color: ctp.text }}>first</strong> function
+        <div style={{ fontSize: '11px', color: tc.surface2, lineHeight: 1.5 }}>
+          Paste one or more GLSL functions. The <strong style={{ color: tc.text }}>first</strong> function
           becomes the node's entry point. All code is injected as helper functions.
         </div>
 
@@ -88,9 +56,9 @@ export function ImportGlslModal({ onClose }: Props) {
           rows={12}
           placeholder={`// Example:\nfloat sdBox(vec2 p, vec2 b) {\n  vec2 d = abs(p) - b;\n  return length(max(d,0.0)) + min(max(d.x,d.y),0.0);\n}`}
           style={{
-            background: ctp.crust,
-            border: `1px solid ${ctp.surface1}`,
-            color: ctp.blue,
+            background: tc.crust,
+            border: `1px solid ${tc.surface1}`,
+            color: tc.blue,
             padding: '10px 12px',
             borderRadius: '6px',
             fontSize: '12px',
@@ -107,16 +75,16 @@ export function ImportGlslModal({ onClose }: Props) {
         <div>
           <div style={{
             fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: ctp.surface2, marginBottom: '6px',
+            textTransform: 'uppercase', color: tc.surface2, marginBottom: '6px',
           }}>
             Detected Functions
           </div>
           {code.trim() === '' ? (
-            <div style={{ color: ctp.surface2, fontSize: '11px', fontStyle: 'italic' }}>
+            <div style={{ color: tc.surface2, fontSize: '11px', fontStyle: 'italic' }}>
               Paste GLSL code above to preview detected functions
             </div>
           ) : parsed.length === 0 ? (
-            <div style={{ color: ctp.red, fontSize: '11px' }}>
+            <div style={{ color: tc.red, fontSize: '11px' }}>
               No function signatures detected. Make sure your code includes a return type, name, and body.
             </div>
           ) : (
@@ -125,17 +93,17 @@ export function ImportGlslModal({ onClose }: Props) {
                 <div
                   key={i}
                   style={{
-                    background: i === 0 ? '#1e3a2a' : '#1a1a2e',
-                    border: `1px solid ${i === 0 ? `${ctp.green}55` : ctp.surface1}`,
+                    background: i === 0 ? `${tc.green}1a` : tc.mantle,
+                    border: `1px solid ${i === 0 ? `${tc.green}55` : tc.surface1}`,
                     borderRadius: '5px',
                     padding: '4px 10px',
                     fontSize: '11px',
                     fontFamily: 'monospace',
-                    color: i === 0 ? ctp.green : ctp.surface2,
+                    color: i === 0 ? tc.green : tc.surface2,
                   }}
                   title={i === 0 ? 'Entry point — will be called in the node body' : 'Helper function'}
                 >
-                  {i === 0 && <span style={{ color: ctp.green, marginRight: '4px' }}>★</span>}
+                  {i === 0 && <span style={{ color: tc.green, marginRight: '4px' }}>★</span>}
                   {fn.returnType} {fn.name}({fn.params.map(p => `${p.type} ${p.name}`).join(', ')})
                 </div>
               ))}
@@ -146,28 +114,28 @@ export function ImportGlslModal({ onClose }: Props) {
         {/* What will be created preview */}
         {parsed.length > 0 && (
           <div style={{
-            background: ctp.mantle,
-            border: `1px solid ${ctp.surface0}`,
+            background: tc.mantle,
+            border: `1px solid ${tc.surface0}`,
             borderRadius: '6px',
             padding: '10px 12px',
             fontSize: '11px',
             fontFamily: 'monospace',
           }}>
-            <div style={{ color: ctp.surface2, marginBottom: '6px', fontSize: '10px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            <div style={{ color: tc.surface2, marginBottom: '6px', fontSize: '10px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
               Node Preview
             </div>
-            <div><span style={{ color: ctp.surface2 }}>Label: </span><span style={{ color: ctp.text }}>{parsed[0].name}</span></div>
-            <div><span style={{ color: ctp.surface2 }}>Output: </span><span style={{ color: ctp.blue }}>{parsed[0].returnType}</span></div>
-            <div><span style={{ color: ctp.surface2 }}>Inputs: </span>
+            <div><span style={{ color: tc.surface2 }}>Label: </span><span style={{ color: tc.text }}>{parsed[0].name}</span></div>
+            <div><span style={{ color: tc.surface2 }}>Output: </span><span style={{ color: tc.blue }}>{parsed[0].returnType}</span></div>
+            <div><span style={{ color: tc.surface2 }}>Inputs: </span>
               {parsed[0].params.length === 0
-                ? <span style={{ color: ctp.surface2 }}>none</span>
+                ? <span style={{ color: tc.surface2 }}>none</span>
                 : parsed[0].params.map((p, i) => (
-                  <span key={i} style={{ color: ctp.mauve, marginRight: '8px' }}>{p.type} <span style={{ color: ctp.text }}>{p.name}</span></span>
+                  <span key={i} style={{ color: tc.mauve, marginRight: '8px' }}>{p.type} <span style={{ color: tc.text }}>{p.name}</span></span>
                 ))
               }
             </div>
-            <div style={{ marginTop: '4px' }}><span style={{ color: ctp.surface2 }}>Body: </span>
-              <span style={{ color: ctp.green }}>
+            <div style={{ marginTop: '4px' }}><span style={{ color: tc.surface2 }}>Body: </span>
+              <span style={{ color: tc.green }}>
                 {parsed[0].name}({parsed[0].params.map(p => p.name).join(', ')})
               </span>
             </div>
@@ -179,8 +147,8 @@ export function ImportGlslModal({ onClose }: Props) {
           <button
             onClick={onClose}
             style={{ ...BTN }}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface0)}
           >
             Cancel
           </button>
@@ -189,18 +157,18 @@ export function ImportGlslModal({ onClose }: Props) {
             disabled={parsed.length === 0}
             style={{
               ...BTN,
-              background: parsed.length > 0 ? '#1e3a2a' : ctp.mantle,
-              border: `1px solid ${parsed.length > 0 ? `${ctp.green}55` : ctp.surface0}`,
-              color: parsed.length > 0 ? ctp.green : ctp.surface1,
+              background: parsed.length > 0 ? `${tc.green}1a` : tc.mantle,
+              border: `1px solid ${parsed.length > 0 ? `${tc.green}55` : tc.surface0}`,
+              color: parsed.length > 0 ? tc.green : tc.surface1,
               cursor: parsed.length > 0 ? 'pointer' : 'not-allowed',
             }}
-            onMouseEnter={e => { if (parsed.length > 0) (e.currentTarget as HTMLButtonElement).style.background = '#2a4a3a'; }}
-            onMouseLeave={e => { if (parsed.length > 0) (e.currentTarget as HTMLButtonElement).style.background = '#1e3a2a'; }}
+            onMouseEnter={e => { if (parsed.length > 0) (e.currentTarget as HTMLButtonElement).style.background = `${tc.green}33`; }}
+            onMouseLeave={e => { if (parsed.length > 0) (e.currentTarget as HTMLButtonElement).style.background = `${tc.green}1a`; }}
           >
             Create Node
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

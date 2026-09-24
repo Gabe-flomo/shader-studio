@@ -6,11 +6,11 @@
  * showing every GLSL variable computed before this node, grouped by type.
  */
 import React, { useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { ctp } from '../../theme/palette';
+import { useCtp, type CtpPalette } from '../../theme/nodePalette';
+import { Modal } from '../ui/Modal';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
@@ -55,31 +55,31 @@ const TYPE_COLOR: Record<DataType, string> = {
   mat3:        '#f5c842',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
-  particle:    ctp.yellow,
+  particle:    '#f9e2af',
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const BTN: React.CSSProperties = {
-  background: ctp.surface0,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
+const BTNFor = (tc: CtpPalette): React.CSSProperties => ({
+  background: tc.surface0,
+  border: `1px solid ${tc.surface1}`,
+  color: tc.text,
   borderRadius: '4px',
   padding: '3px 8px',
   fontSize: '11px',
   fontFamily: 'monospace',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
-};
+});
 
-const SECTION: React.CSSProperties = {
+const SECTIONFor = (tc: CtpPalette): React.CSSProperties => ({
   fontSize: '10px',
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase' as const,
-  color: ctp.surface2,
+  color: tc.surface2,
   margin: '10px 0 4px',
-};
+});
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -89,6 +89,9 @@ interface Props {
 }
 
 export function AssignInitModal({ node, onClose }: Props) {
+  const tc = useCtp();
+  const BTN = BTNFor(tc);
+  const SECTION = SECTIONFor(tc);
   const setNodeAssignInit = useNodeGraphStore(s => s.setNodeAssignInit);
   const nodeOutputVarMap  = useNodeGraphStore(s => s.nodeOutputVarMap);
   const topNodes          = useNodeGraphStore(s => s.nodes);
@@ -208,50 +211,9 @@ export function AssignInitModal({ node, onClose }: Props) {
 
   const hasAnyVars = availableVars.length > 0;
 
-  return createPortal(
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onMouseDown={e => { if (e.target === e.currentTarget) handleApply(); }}
-    >
-      <div
-        onMouseDown={e => e.stopPropagation()}
-        style={{
-          background: ctp.base,
-          border: `1px solid ${ctp.surface1}`,
-          borderRadius: '10px',
-          width: 'min(580px, calc(100vw - 32px))',
-          maxHeight: '82vh',
-          overflowY: 'auto',
-          padding: '16px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 0,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          color: ctp.text,
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              init expression
-            </span>
-            <span style={{ fontSize: '12px', color: ctp.blue, fontFamily: 'monospace' }}>
-              {nodeLabel}
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 2px' }}
-          >
-            ✕
-          </button>
-        </div>
-
+  return (
+    <Modal title="Initial value" subtitle={nodeLabel} icon="edit" width={620} closeOnScrim={false} onClose={onClose}>
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 0, fontSize: 12.5 }}>
         {/* Expression textarea */}
         <textarea
           ref={taRef}
@@ -265,10 +227,10 @@ export function AssignInitModal({ node, onClose }: Props) {
           spellCheck={false}
           autoFocus
           style={{
-            background: ctp.crust,
-            border: `1px solid ${ctp.surface1}`,
+            background: tc.crust,
+            border: `1px solid ${tc.surface1}`,
             borderRadius: '6px',
-            color: ctp.text,
+            color: tc.text,
             fontFamily: 'monospace',
             fontSize: '13px',
             padding: '10px 12px',
@@ -279,7 +241,7 @@ export function AssignInitModal({ node, onClose }: Props) {
             boxSizing: 'border-box',
           }}
         />
-        <div style={{ fontSize: '10px', color: ctp.surface1, marginTop: '4px', marginBottom: '4px' }}>
+        <div style={{ fontSize: '10px', color: tc.surface1, marginTop: '4px', marginBottom: '4px' }}>
           ⌘ Enter to apply · Esc to cancel · Click a variable or function to insert
         </div>
 
@@ -322,7 +284,7 @@ export function AssignInitModal({ node, onClose }: Props) {
                         onClick={() => insertAtCursor(v.varName)}
                         style={{
                           ...BTN,
-                          background: ctp.base,
+                          background: tc.base,
                           border: `1px solid ${color}44`,
                           color,
                         }}
@@ -355,19 +317,18 @@ export function AssignInitModal({ node, onClose }: Props) {
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px', justifyContent: 'flex-end' }}>
           <button
             onClick={onClose}
-            style={{ ...BTN, color: ctp.overlay0, background: 'none', border: `1px solid ${ctp.surface0}` }}
+            style={{ ...BTN, color: tc.overlay0, background: 'none', border: `1px solid ${tc.surface0}` }}
           >
             Cancel
           </button>
           <button
             onClick={handleApply}
-            style={{ ...BTN, background: `${ctp.blue}22`, border: `1px solid ${ctp.blue}88`, color: ctp.blue }}
+            style={{ ...BTN, background: `${tc.blue}22`, border: `1px solid ${tc.blue}88`, color: tc.blue }}
           >
             Apply
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }

@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
-import { ctp } from '../../theme/palette';
+import { useCtp, type CtpPalette } from '../../theme/nodePalette';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -14,16 +15,16 @@ function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
 
 interface Handle { key: string; x: number; y: number; color: string }
 
-function getHandles(node: GraphNode): Handle[] {
+function getHandles(node: GraphNode, tc: CtpPalette): Handle[] {
   if (node.type === 'cubicBezierShaper') {
     return [
-      { key: 'ab', x: np(node.params.a, 0.25), y: np(node.params.b, 0.1),  color: ctp.red },
-      { key: 'cd', x: np(node.params.c, 0.75), y: np(node.params.d, 1.0),  color: ctp.blue },
+      { key: 'ab', x: np(node.params.a, 0.25), y: np(node.params.b, 0.1),  color: tc.red },
+      { key: 'cd', x: np(node.params.c, 0.75), y: np(node.params.d, 1.0),  color: tc.blue },
     ];
   }
   // quadBezierShaper
   return [
-    { key: 'ab', x: np(node.params.a, 0.5), y: np(node.params.b, 0.5), color: ctp.red },
+    { key: 'ab', x: np(node.params.a, 0.5), y: np(node.params.b, 0.5), color: tc.red },
   ];
 }
 
@@ -68,6 +69,7 @@ function drawEditor(
   node: GraphNode,
   dragKey: string | null,
   cursorPos: { x: number; y: number } | null,
+  tc: CtpPalette,
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -83,11 +85,11 @@ function drawEditor(
   void fromCanvas; // used externally
 
   // Background
-  ctx.fillStyle = ctp.crust;
+  ctx.fillStyle = tc.crust;
   ctx.fillRect(0, 0, W, H);
 
   // Grid
-  ctx.strokeStyle = ctp.base;
+  ctx.strokeStyle = tc.base;
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     const gx = mg + (i / 4) * (W - 2 * mg);
@@ -97,32 +99,32 @@ function drawEditor(
   }
 
   // Identity diagonal
-  ctx.strokeStyle = '#2a2a3a';
+  ctx.strokeStyle = tc.surface1;
   ctx.setLineDash([3, 4]);
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(mg, H - mg); ctx.lineTo(W - mg, mg); ctx.stroke();
   ctx.setLineDash([]);
 
-  const handles = getHandles(node);
+  const handles = getHandles(node, tc);
   const fn = evalCurve(node);
 
   // Control point guide lines
   if (node.type === 'cubicBezierShaper') {
     const [h1, h2] = handles;
-    ctx.strokeStyle = `${ctp.red}30`;
+    ctx.strokeStyle = `${tc.red}30`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(mg, H - mg); ctx.lineTo(toCanvasX(h1.x), toCanvasY(h1.y)); ctx.stroke();
-    ctx.strokeStyle = `${ctp.blue}30`;
+    ctx.strokeStyle = `${tc.blue}30`;
     ctx.beginPath(); ctx.moveTo(W - mg, mg); ctx.lineTo(toCanvasX(h2.x), toCanvasY(h2.y)); ctx.stroke();
   } else {
     const [h] = handles;
-    ctx.strokeStyle = `${ctp.red}30`;
+    ctx.strokeStyle = `${tc.red}30`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(mg, H - mg); ctx.lineTo(toCanvasX(h.x), toCanvasY(h.y)); ctx.lineTo(W - mg, mg); ctx.stroke();
   }
 
   // Curve
-  ctx.strokeStyle = ctp.blue;
+  ctx.strokeStyle = tc.blue;
   ctx.lineWidth = 2;
   ctx.beginPath();
   for (let px = 0; px <= W - 2 * mg; px++) {
@@ -145,14 +147,14 @@ function drawEditor(
     ctx.beginPath(); ctx.moveTo(cx, mg); ctx.lineTo(cx, H - mg); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(mg, cy); ctx.lineTo(W - mg, cy); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = ctp.crust;
+    ctx.fillStyle = tc.text;
+    ctx.strokeStyle = tc.crust;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     // Label
     ctx.font = '10px monospace';
     ctx.textAlign = cx > W / 2 ? 'right' : 'left';
-    ctx.fillStyle = ctp.text;
+    ctx.fillStyle = tc.text;
     const lx = cx > W / 2 ? cx - 8 : cx + 8;
     ctx.fillText(`(${cursorPos.x.toFixed(3)}, ${yn.toFixed(3)})`, lx, cy - 8);
   }
@@ -161,8 +163,8 @@ function drawEditor(
   handles.forEach(h => {
     const hx = toCanvasX(h.x), hy = toCanvasY(h.y);
     const isActive = dragKey === h.key;
-    ctx.fillStyle = isActive ? '#ffffff' : h.color;
-    ctx.strokeStyle = ctp.crust;
+    ctx.fillStyle = isActive ? tc.text : h.color;
+    ctx.strokeStyle = tc.crust;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(hx, hy, isActive ? HANDLE_R + 1 : HANDLE_R, 0, Math.PI * 2);
@@ -170,7 +172,7 @@ function drawEditor(
     // Label
     ctx.font = '9px monospace';
     ctx.textAlign = hx > W / 2 ? 'right' : 'left';
-    ctx.fillStyle = ctp.overlay0;
+    ctx.fillStyle = tc.overlay0;
     const lx2 = hx > W / 2 ? hx - HANDLE_R - 4 : hx + HANDLE_R + 4;
     ctx.fillText(`(${h.x.toFixed(2)}, ${h.y.toFixed(2)})`, lx2, hy);
   });
@@ -185,6 +187,7 @@ interface Props { node: GraphNode; onClose: () => void }
 const MODAL_W = 360;
 
 export function BezierEditorModal({ node, onClose }: Props) {
+  const tc = useCtp();
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const nodeRef    = useRef(node);
@@ -210,8 +213,8 @@ export function BezierEditorModal({ node, onClose }: Props) {
 
   const redraw = useCallback((dk: string | null, cp: { x: number; y: number } | null) => {
     const canvas = canvasRef.current;
-    if (canvas) drawEditor(canvas, nodeRef.current, dk, cp);
-  }, []);
+    if (canvas) drawEditor(canvas, nodeRef.current, dk, cp, tc);
+  }, [tc]);
 
   // Redraw when params change
   useEffect(() => {
@@ -228,7 +231,7 @@ export function BezierEditorModal({ node, onClose }: Props) {
     const toCanvasX = (v: number) => mg + v * (W - 2 * mg);
     const toCanvasY = (v: number) => H - mg - v * (H - 2 * mg);
 
-    const handles = getHandles(nodeRef.current);
+    const handles = getHandles(nodeRef.current, tc);
     for (const h of handles) {
       const dx = coords.px - toCanvasX(h.x);
       const dy = coords.py - toCanvasY(h.y);
@@ -238,7 +241,7 @@ export function BezierEditorModal({ node, onClose }: Props) {
         return;
       }
     }
-  }, [getCoords]);
+  }, [getCoords, tc]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     const coords = getCoords(e);
@@ -292,24 +295,9 @@ export function BezierEditorModal({ node, onClose }: Props) {
     }
   }, [node.id, node.type, updateNodeParams]);
 
-  return createPortal(
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        style={{ background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '10px', width: `${MODAL_W}px`, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.65)', color: ctp.text, fontSize: '12px' }}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.red }}>⬡ {title} Editor</span>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={resetDefaults} style={{ background: 'none', border: `1px solid ${ctp.surface1}55`, color: ctp.overlay0, cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>Reset</button>
-            <button onClick={onClose} style={{ background: 'none', border: `1px solid ${ctp.red}55`, color: ctp.red, cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
-          </div>
-        </div>
-
+  return (
+    <Modal title={title} subtitle="Drag the handles to shape the curve" icon="curve" width={MODAL_W} onClose={onClose} headerActions={<Button size="sm" variant="ghost" icon="reset" onClick={resetDefaults}>Reset</Button>}>
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, fontSize: 12.5 }}>
         {/* Canvas */}
         <canvas
           ref={canvasRef}
@@ -317,20 +305,19 @@ export function BezierEditorModal({ node, onClose }: Props) {
           height={MODAL_W - 40}
           onMouseDown={handleMouseDown}
           onMouseLeave={handleMouseLeave}
-          style={{ display: 'block', width: '100%', cursor: dragKey ? 'grabbing' : 'crosshair', borderRadius: '6px', border: `1px solid ${ctp.surface0}88` }}
+          style={{ display: 'block', width: '100%', cursor: dragKey ? 'grabbing' : 'crosshair', borderRadius: '6px', border: `1px solid ${tc.surface0}88` }}
         />
 
         {/* Param values */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '10px', color: ctp.overlay0, fontFamily: 'monospace' }}>
-          {getHandles(node).map(h => (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '10px', color: tc.overlay0, fontFamily: 'monospace' }}>
+          {getHandles(node, tc).map(h => (
             <span key={h.key} style={{ color: h.color }}>
               ({h.x.toFixed(3)}, {h.y.toFixed(3)})
             </span>
           ))}
-          <span style={{ marginLeft: 'auto', color: ctp.surface1 }}>drag handles to edit · hover to read</span>
+          <span style={{ marginLeft: 'auto', color: tc.surface1 }}>drag handles to edit · hover to read</span>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
