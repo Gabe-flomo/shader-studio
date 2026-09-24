@@ -26,9 +26,11 @@ class InputBus {
   private sources = new Set<InputSource>();
   /** channel key → uniform name (reverse of the compiler's liveUniforms). */
   private bindings = new Map<string, string>();
+  /** `${nodeId}::${paramKey}` → param uniform name (the compiler's paramBindings, as is). */
+  private paramBindings = new Map<string, string>();
   private result = new Map<string, number>();
   private writer: InputWriter = (channelKey, value) => {
-    const uniform = this.bindings.get(channelKey);
+    const uniform = this.bindings.get(channelKey) ?? this.paramBindings.get(channelKey);
     if (uniform !== undefined) this.result.set(uniform, value);
   };
 
@@ -43,8 +45,17 @@ class InputBus {
     for (const [uniform, channelKey] of Object.entries(liveUniforms)) this.bindings.set(channelKey, uniform);
   }
 
+  /**
+   * Take the compiler's paramBindings so mappings can drive any live param by
+   * `${nodeId}::${paramKey}`, exactly like a slider drag but without the store.
+   */
+  setParamBindings(paramBindings: Record<string, string>): void {
+    this.paramBindings.clear();
+    for (const [key, uniform] of Object.entries(paramBindings)) this.paramBindings.set(key, uniform);
+  }
+
   hasBindings(): boolean {
-    return this.bindings.size > 0;
+    return this.bindings.size > 0 || this.paramBindings.size > 0;
   }
 
   /** Uniform names bound in the current shader (for registering them on the material). */
@@ -60,7 +71,7 @@ class InputBus {
   tick(dt: number, time: number): Map<string, number> {
     const result = this.result;
     result.clear();
-    if (this.bindings.size === 0) return result;
+    if (this.bindings.size === 0 && this.paramBindings.size === 0) return result;
     for (const source of this.sources) source.tickInputs(dt, time, this.writer);
     return result;
   }

@@ -5,6 +5,8 @@ import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry } from '../lib
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
 import { inputBus } from '../lib/inputBus';
+import { midiEngine } from '../lib/midiEngine';
+import { playMapper } from '../lib/playMapper';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
@@ -1483,14 +1485,25 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // This fires on *every* store write, including the ~10 Hz frame-loop
     // writes above, so rebuilding the node Map/Set is gated on the `nodes`
     // reference actually changing.
-    let lastLive = useNodeGraphStore.getState().liveUniforms;
+    // Input bus: the JS-side sources that write float uniforms each frame, and
+    // the two name maps they route through (see lib/inputBus.ts).
+    const s0 = useNodeGraphStore.getState();
+    let lastLive = s0.liveUniforms;
+    let lastParamBindings = s0.paramBindings;
+    let lastPlay = s0.play;
     inputBus.setBindings(lastLive);
+    inputBus.setParamBindings(lastParamBindings);
+    playMapper.setInstrument(lastPlay);
+    const offMidi = inputBus.addSource(midiEngine);
+    const offPlay = inputBus.addSource(playMapper);
     const unsub = useNodeGraphStore.subscribe(state => {
       selectedNodeIdRef.current   = state.selectedNodeId;
       previewNodeIdRef.current    = state.previewNodeId;
       nodeOutputVarMapRef.current = state.nodeOutputVarMap;
       if (state.nodes !== nodesRef.current) syncNodes(state.nodes);
       if (state.liveUniforms !== lastLive) { lastLive = state.liveUniforms; inputBus.setBindings(lastLive); }
+      if (state.paramBindings !== lastParamBindings) { lastParamBindings = state.paramBindings; inputBus.setParamBindings(lastParamBindings); }
+      if (state.play !== lastPlay) { lastPlay = state.play; playMapper.setInstrument(lastPlay); }
     });
     // Initialize immediately
     const s = useNodeGraphStore.getState();
@@ -1498,7 +1511,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     previewNodeIdRef.current    = s.previewNodeId;
     nodeOutputVarMapRef.current = s.nodeOutputVarMap;
     syncNodes(s.nodes);
-    return unsub;
+    return () => { unsub(); offMidi(); offPlay(); };
   }, []);
 
   // Update shader when compiled output changes — flush old errors first.
