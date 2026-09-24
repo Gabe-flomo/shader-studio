@@ -59,6 +59,7 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
+import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -417,6 +418,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Swap mode
   const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
   const setSwapTargetNodeId = useNodeGraphStore(s => s.setSwapTargetNodeId);
+  const openUserNodeSource  = useNodeGraphStore(s => s.openUserNodeSource);
   const isSwapTarget       = swapTargetNodeId === node.id;
   // currentTime is only needed for the Time node live badge — subscribed below conditionally
   const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
@@ -3891,6 +3893,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           label={nodeComment ? 'Edit comment' : 'Add a comment'}
           onClick={() => { setShowCommentEditor(v => !v); setShowCommentPreview(false); }} />
         <CardButton icon="code" on={showCode} label={showCode ? 'Hide the generated GLSL' : 'Show the generated GLSL'} onClick={() => setShowCode(v => !v)} />
+        {getUserNode(node.type)?.source && (
+          <CardButton icon="layoutGraph" tint="fn" label="Open this node type's source graph (publish it again to update every instance)"
+            onClick={() => openUserNodeSource(node.type, { x: node.position.x, y: node.position.y + 260 })} />
+        )}
         {Object.keys(def.paramDefs ?? {}).length > 0 && (
           <CardButton icon="resetParams" label="Reset parameters to defaults"
             onClick={() => { if (def.defaultParams) updateNodeParams(node.id, def.defaultParams as Record<string, unknown>, { immediate: true }); }} />

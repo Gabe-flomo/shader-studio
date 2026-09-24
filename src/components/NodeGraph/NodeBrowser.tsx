@@ -3,6 +3,8 @@ import { scoreNodeDef } from '../../nodes/searchNodes';
 import { createPortal } from 'react-dom';
 import { getAllCategories, getNodesByCategory, getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
+import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
@@ -235,15 +237,22 @@ function CategoryChip({ children }: { children: ReactNode }) {
 }
 
 // ── Preview card ──────────────────────────────────────────────────────────────
-function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert, swapMode }: {
+function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert, swapMode, onDismiss }: {
   type: string; onAdd: () => void;
   isFavorite: boolean; onToggleFavorite: () => void;
   context?: 'studio' | 'glsl';
   onGlslInsert?: (code: string) => void;
   swapMode: boolean;
+  /** Close the preview (after the previewed type was deleted). */
+  onDismiss?: () => void;
 }) {
   const tk = useTokens();
   const def = getNodeDefinition(type);
+  // User-published node types can be re-opened for editing or deleted from here.
+  const userNode = getUserNode(type);
+  const deleteUserNode = useNodeGraphStore(s => s.deleteUserNode);
+  const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
+  const exportUserNodes = useNodeGraphStore(s => s.exportUserNodes);
   const node = makeSyntheticNode(type);
   const hasViz = INLINE_VIZ_TYPES.has(type);
   const isGlsl = context === 'glsl';
@@ -280,6 +289,29 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
         <Button size="sm" variant="primary" icon="code" onClick={() => { if (glslSource) onGlslInsert?.(glslSource); }}>Insert at cursor</Button>
       ) : (
         <Button size="sm" variant="primary" icon="plus" onClick={onAdd}>{swapMode ? 'Replace with this' : 'Add to graph'}</Button>
+      )}
+      {userNode && !isGlsl && (
+        <div style={{ display: 'flex', gap: 6, paddingTop: 6, borderTop: `1px solid ${tk.border.subtle}` }}>
+          {userNode.source && (
+            <Button size="sm" icon="layoutGraph" style={{ flex: 1 }} title="Place the node's source graph as a group; publish it again to update this node type"
+              onClick={() => openUserNodeSource(userNode.id, { x: 200 + Math.random() * 120, y: 120 + Math.random() * 200 })}>
+              Open source graph
+            </Button>
+          )}
+          <Button size="sm" icon="export" title="Save this node type as a .json file you can share or import into another project"
+            onClick={() => exportUserNodes([userNode.id])}>
+            Export
+          </Button>
+          <Button size="sm" variant="danger" icon="trash" title="Delete this node type. Placed instances stop compiling."
+            onClick={() => {
+              if (window.confirm(`Delete node type “${userNode.label}”?\n\nAny placed instances will stop compiling until they're removed.`)) {
+                deleteUserNode(userNode.id);
+                onDismiss?.();
+              }
+            }}>
+            Delete node type
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -442,6 +474,7 @@ export function NodeBrowser({
           context={context}
           onGlslInsert={onGlslInsert}
           swapMode={!!swapTargetNodeId}
+          onDismiss={() => setPreviewType(null)}
         />
       )}
     </>

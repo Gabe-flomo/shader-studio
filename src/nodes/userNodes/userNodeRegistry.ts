@@ -14,7 +14,7 @@
  */
 
 import type { NodeDefinition, InputSocket, OutputSocket, ParamDef, GraphNode } from '../../types/nodeGraph';
-import type { UserNodeDefinition } from '../../types/userNode';
+import type { UserNodeDefinition, UserNodeExport } from '../../types/userNode';
 import { PresetManager } from '../../store/managers/PresetManager';
 import type { FileResult } from '../../utils/fileIO';
 import { p } from '../definitions/helpers';
@@ -111,6 +111,57 @@ export function resetUserNodesForTests(): void {
   compiled.clear();
   loaded = true;
   notify();
+}
+
+// ── Sharing ───────────────────────────────────────────────────────────────────
+// A node definition is self-contained GLSL plus metadata, so a file exported
+// from one project works in any other copy of Shader Studio. The source
+// subgraph travels with it so the recipient can open and re-publish it.
+
+export function exportUserNodes(ids?: string[]): UserNodeExport {
+  ensureLoaded();
+  const nodes = (ids ? ids.map(id => defs.get(id)).filter((d): d is UserNodeDefinition => !!d) : getAllUserNodes());
+  return { version: 1, nodes };
+}
+
+export interface ImportUserNodesResult {
+  ok: boolean;
+  imported: string[];
+  /** Definitions that already existed and were replaced (same id). */
+  replaced: string[];
+  error?: string;
+}
+
+/**
+ * Import one or more definitions from JSON: either an export file
+ * (`{ version: 1, nodes: [...] }`) or a bare definition object. A definition
+ * with an id that already exists replaces it — ids embed a timestamp, so a
+ * collision means the same node being shared again, and updating is what
+ * the sender intends.
+ */
+export async function importUserNodes(json: string): Promise<ImportUserNodesResult> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch (e) {
+    return { ok: false, imported: [], replaced: [], error: `Not valid JSON: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const candidates: unknown[] = Array.isArray((parsed as UserNodeExport)?.nodes)
+    ? (parsed as UserNodeExport).nodes
+    : Array.isArray(parsed) ? parsed : [parsed];
+  const valid = candidates.filter(isValidDefinition);
+  if (valid.length === 0) {
+    return { ok: false, imported: [], replaced: [], error: 'The file has no node definitions in it. Export one from the Presets tab (My nodes) or a node’s info card.' };
+  }
+  ensureLoaded();
+  const imported: string[] = [];
+  const replaced: string[] = [];
+  for (const def of valid) {
+    (defs.has(def.id) ? replaced : imported).push(def.label);
+    const r = await registerUserNode({ ...def, savedAt: Date.now() });
+    if (!r.ok) return { ok: false, imported, replaced, error: r.error };
+  }
+  return { ok: true, imported, replaced };
 }
 
 /** `un_<label slug>_<base36 time>` — unique, and readable in the emitted GLSL. */

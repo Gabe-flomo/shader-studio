@@ -9,7 +9,7 @@ import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
 import type { SubgraphData } from '../types/nodeGraph';
 import { buildUserNodeDefinition, type PublishUserNodeSpec } from '../nodes/userNodes/publishUserNode';
-import { registerUserNode, unregisterUserNode, getUserNode } from '../nodes/userNodes/userNodeRegistry';
+import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
@@ -574,6 +574,10 @@ interface NodeGraphState {
   deleteUserNode: (id: string) => void;
   /** Re-open a published node's source subgraph as an editable group. */
   openUserNodeSource: (id: string, position?: { x: number; y: number }) => string | null;
+  /** Save one node type (or all of them) as a shareable .json file. */
+  exportUserNodes: (ids?: string[]) => Promise<FileResult>;
+  /** Pick a .json exported from any Shader Studio and register the node types in it. */
+  importUserNodesFromFile: () => Promise<FileResult & { imported?: string[]; replaced?: string[] }>;
 }
 
 // ─── Example graph data ───────────────────────────────────────────────────────
@@ -2565,6 +2569,27 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // existing node type instead of creating a second one.
     if (groupId) get().updateNodeParams(groupId, { __userNodeId: id, iterations: def.source.iterations }, { immediate: true });
     return groupId;
+  },
+
+  exportUserNodes: async (ids) => {
+    const payload = exportUserNodes(ids);
+    if (payload.nodes.length === 0) return { ok: false, error: 'No node types to export yet.' };
+    const name = payload.nodes.length === 1 ? `${labelToSlug(payload.nodes[0].label)}.node.json` : 'my-nodes.json';
+    return saveTextFile(JSON.stringify(payload, null, 2), name);
+  },
+
+  importUserNodesFromFile: async () => {
+    let json: string | null;
+    try {
+      json = await openTextFile('.json');
+    } catch (e) {
+      return { ok: false, error: errorMessage(e) };
+    }
+    if (json === null) return CANCELLED;
+    const r = await importUserNodes(json);
+    if (!r.ok) return { ok: false, error: r.error ?? 'Import failed' };
+    get().compile();
+    return { ok: true, imported: r.imported, replaced: r.replaced };
   },
 
   swapNode: (nodeId, newType) => {

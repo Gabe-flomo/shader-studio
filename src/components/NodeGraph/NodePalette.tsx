@@ -18,6 +18,7 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult } from '../shell/reportFileResult';
+import { toast } from '../ui/toastStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions' | 'keyframes';
@@ -40,7 +41,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDelete, onRename, onEdit, editLabel = 'Edit' }: {
+function ItemRow({ label, icon, color, onClick, onDelete, onRename, onEdit, editLabel = 'Edit', onExport }: {
   label: string; icon: IconName; color: string;
   onClick: () => void;
   onDelete?: () => void;
@@ -48,6 +49,8 @@ function ItemRow({ label, icon, color, onClick, onDelete, onRename, onEdit, edit
   /** Open the item for editing (distinct from renaming). */
   onEdit?: () => void;
   editLabel?: string;
+  /** Save the item as a shareable file. */
+  onExport?: () => void;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
@@ -67,6 +70,7 @@ function ItemRow({ label, icon, color, onClick, onDelete, onRename, onEdit, edit
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}
       >{label}</button>
+      {hovered && onExport && <IconButton icon="export" label="Export as a file" size="sm" onClick={e => { e.stopPropagation(); onExport(); }} />}
       {hovered && onEdit && <IconButton icon="layoutGraph" label={editLabel} size="sm" onClick={e => { e.stopPropagation(); onEdit(); }} />}
       {hovered && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
       {hovered && onDelete && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
@@ -144,6 +148,17 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
   const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
   const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
+  const exportUserNodes    = useNodeGraphStore(s => s.exportUserNodes);
+  const importUserNodesFromFile = useNodeGraphStore(s => s.importUserNodesFromFile);
+  const importUserNodes = async () => {
+    const r = await importUserNodesFromFile();
+    if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import node types' }); return; }
+    const parts = [
+      r.imported?.length ? `${r.imported.length} new: ${r.imported.join(', ')}` : '',
+      r.replaced?.length ? `${r.replaced.length} updated: ${r.replaced.join(', ')}` : '',
+    ].filter(Boolean);
+    toast.success('Node types imported', { message: parts.join(' · ') });
+  };
   const userNodes          = useUserNodes();
   const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
   const loadExampleGraph  = useNodeGraphStore(s => s.loadExampleGraph);
@@ -334,7 +349,15 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
       case 'presets':
         return (
           <>
-            <TabSectionHeader label="My nodes" />
+            <TabSectionHeader label="My nodes" action={
+              <span style={{ display: 'flex', gap: 2 }}>
+                <IconButton icon="import" label="Import node types from a .json file" size="sm" onClick={importUserNodes} />
+                {userNodes.length > 0 && (
+                  <IconButton icon="export" label="Export all node types as one .json file" size="sm"
+                    onClick={async () => reportFileResult(await exportUserNodes(), { failTitle: 'Couldn’t export node types' })} />
+                )}
+              </span>
+            } />
             <FolderableList
               scopeKey="presets:usernodes"
               color={tabColor('presets')}
@@ -350,10 +373,11 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                       if (openUserNodeSource(d.id, {x,y})) onNodeAdded?.();
                     } : undefined}
                     editLabel="Open source graph (publish again to update)"
+                    onExport={async () => reportFileResult(await exportUserNodes([d.id]), { failTitle: `Couldn’t export “${d.label}”` })}
                     onDelete={() => { if (window.confirm(`Delete node type “${d.label}”? Placed instances will stop compiling.`)) deleteUserNode(d.id); }} />
                 );
               }}
-              emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes.</EmptyHint>}
+              emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes. Or import a .json someone shared.</EmptyHint>}
             />
             <TabSectionHeader label="Group presets" />
             <FolderableList

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData } from '../../types/nodeGraph';
 import type { UserNodeDefinition } from '../../types/userNode';
 import { flattenSubgraphToFunction } from '../flattenSubgraph';
-import { registerUserNode, resetUserNodesForTests, getUserNodeDefinition } from '../../nodes/userNodes/userNodeRegistry';
+import { registerUserNode, resetUserNodesForTests, getUserNodeDefinition, exportUserNodes, importUserNodes, getUserNode, unregisterUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { compileGraph } from '../graphCompiler';
 
@@ -183,5 +183,32 @@ describe('user node registry + compile', () => {
     for (const u of freqUniforms) expect(fs).toMatch(new RegExp(`= un_test_fn\\([^;]*\\b${u}\\b`));
     // unconnected uv input falls back to the graph UV
     expect(fs).toMatch(/un_test_fn\(g_uv, /);
+  });
+
+  it('exports to a self-contained JSON file and imports it back (replace on same id)', async () => {
+    const def = await publish();
+    const file = JSON.stringify(exportUserNodes([def.id]));
+    expect(JSON.parse(file)).toMatchObject({ version: 1, nodes: [{ id: def.id, functionCode: expect.stringContaining('un_test_fn') }] });
+
+    unregisterUserNode(def.id);
+    expect(getUserNode(def.id)).toBeUndefined();
+
+    const r = await importUserNodes(file);
+    expect(r.ok).toBe(true);
+    expect(r.imported).toEqual(['Test Ripple']);
+    expect(getNodeDefinition(def.id)?.label).toBe('Test Ripple');
+
+    // importing the same file again updates in place rather than duplicating
+    const again = await importUserNodes(file);
+    expect(again.replaced).toEqual(['Test Ripple']);
+    expect(again.imported).toEqual([]);
+
+    // a bare definition object (not wrapped in an export file) also works
+    const bare = await importUserNodes(JSON.stringify({ ...def, id: 'un_other', label: 'Other' }));
+    expect(bare.imported).toEqual(['Other']);
+
+    // garbage is refused with a message
+    expect((await importUserNodes('{"hello": 1}')).ok).toBe(false);
+    expect((await importUserNodes('not json')).ok).toBe(false);
   });
 });
