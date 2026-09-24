@@ -104,6 +104,8 @@ interface Props {
   onEnterGroup?: (groupId: string) => void;
   /** Node has a compilation error — show red ring */
   hasError?: boolean;
+  /** Click (not drag) on an open socket → Smart connect suggestions at the pointer */
+  onSuggestSocket?: (nodeId: string, key: string, dir: 'in' | 'out', x: number, y: number) => void;
   /** Compile problems traced to this node (see compiler/nodeErrors.ts) */
   errors?: NodeError[];
   /**
@@ -372,7 +374,7 @@ const getZoom = () => getView().zoom;
 // Memoised: NodeGraph re-renders on every pan commit, selection change and
 // store write, and a plain function component would re-render every card each
 // time. All props are stable references or primitives.
-export const NodeComponent = React.memo(function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, activeGroupNode = null, dimmed = false, onEnterGroup, hasError = false, errors, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover }: Props) {
+export const NodeComponent = React.memo(function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, activeGroupNode = null, dimmed = false, onEnterGroup, hasError = false, errors, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover, onSuggestSocket }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const inputStyle_ = inputStyleFor(tc);
@@ -3042,6 +3044,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   if (isConnected) {
                     if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
                     disconnectInput(node.id, key);
+                  } else if (!isExternal && onSuggestSocket) {
+                    // Click on an open input: the nearest outputs that could feed it
+                    onSuggestSocket(node.id, key, 'in', e.clientX, e.clientY);
                   } else {
                     onEndConnection(node.id, key);
                   }
