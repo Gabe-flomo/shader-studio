@@ -765,3 +765,85 @@ export const AngularRepeat2DNode: NodeDefinition = {
     };
   },
 };
+
+// ─── CRT Screen ─────────────────────────────────────────────────────────────
+// After Xor's GM Shaders Mini: CRT — the UV half of the effect (curvature, cell pixelation, vignette).
+
+export const CrtScreenNode: NodeDefinition = {
+  type: 'crtScreen',
+  label: 'CRT Screen',
+  category: '2D Space', subcategory: 'Warp',
+  aliases: ['Screen Curvature', 'Tube'],
+  description: 'The UV half of a CRT: bows the screen like a curved tube, snaps the picture to the shadow-mask cells so it pixelates to match, and gives a Vignette that darkens toward the bent edges. Put it before the picture; put **CRT Mask** (Post Processing) after it and wire Vignette across. After Xor\'s GM Shaders Mini: CRT.',
+  inputs: {
+    uv:        { type: 'vec2',  label: 'UV' },
+    curvature: { type: 'float', label: 'Curvature' },
+  },
+  outputs: {
+    uv:       { type: 'vec2',  label: 'UV', hint: 'Curved (and snapped) UV to draw the picture with.' },
+    vignette: { type: 'float', label: 'Vignette', hint: '1 in the middle, 0 at the bent corners. Wire to CRT Mask.' },
+  },
+  defaultParams: { curvature: 0.06, cellSize: 6.0, snap: 'on', vignettePower: 0.4 },
+  paramDefs: {
+    curvature:     { label: 'Curvature', type: 'float', min: 0, max: 0.15, step: 0.005, hint: 'How much the tube bows. 0.03–0.1 looks like glass; 0 is flat.' },
+    cellSize:      { label: 'Cell size', type: 'float', min: 2, max: 16, step: 0.5, hint: 'Shadow-mask cell in pixels; match CRT Mask\'s Cell size so the pixelation lines up.' },
+    snap:          { label: 'Pixelate to cells', type: 'select', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }], hint: 'Rounds the picture to whole cells, as the mask would.' },
+    vignettePower: { label: 'Vignette curve', type: 'float', min: 0.1, max: 2, step: 0.05, hint: 'Smaller is a sharper, brighter-centred vignette. 0.4 is the classic.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uv = inputVars.uv ?? 'g_uv';
+    const curv = inputVars.curvature ?? p(node.params.curvature, 0.06);
+    const cell = p(node.params.cellSize, 6.0);
+    const snap = node.params.snap !== 'off';
+    return {
+      code: [
+        `    vec2 ${id}_asp = vec2(u_resolution.x / u_resolution.y, 1.0);\n`,
+        `    vec2 ${id}_p = ${uv} / ${id}_asp;\n`,
+        `    ${id}_p *= 1.0 + (dot(${id}_p, ${id}_p) - 1.0) * ${curv};\n`,
+        `    vec2 ${id}_edge = max(1.0 - ${id}_p * ${id}_p, 0.0);\n`,
+        `    float ${id}_vignette = pow(${id}_edge.x * ${id}_edge.y, ${p(node.params.vignettePower, 0.4)});\n`,
+        `    vec2 ${id}_px = (${id}_p * 0.5 + 0.5) * u_resolution;\n`,
+        ...(snap ? [
+          `    vec2 ${id}_coord = ${id}_px / ${cell};\n`,
+          `    ${id}_px = (floor(${id}_coord + vec2(0.0, fract(floor(${id}_coord.x) * 0.5))) + 0.5) * ${cell};\n`,
+        ] : []),
+        `    vec2 ${id}_uv = (${id}_px / u_resolution * 2.0 - 1.0) * ${id}_asp;\n`,
+      ].join(''),
+      outputVars: { uv: `${id}_uv`, vignette: `${id}_vignette` },
+    };
+  },
+};
+
+// ─── Lens Distortion ────────────────────────────────────────────────────────
+
+export const LensDistortionNode: NodeDefinition = {
+  type: 'lensDistortion',
+  label: 'Lens Distortion',
+  category: '2D Space', subcategory: 'Warp',
+  aliases: ['Barrel', 'Pincushion', 'Fisheye Lens'],
+  description: 'Bows straight lines like a camera lens using the Brown–Conrady radial model `1 + k1·r² + k2·r⁴`: positive k1 is barrel, negative is pincushion, and k1 and k2 with opposite signs give the moustache distortion of a wide zoom. Zoom hides the stretched edges. Put it before the picture; for a colour fringe add Chromatic Aberration after.',
+  inputs: {
+    input: { type: 'vec2',  label: 'UV' },
+    k1:    { type: 'float', label: 'k1' },
+  },
+  outputs: { output: { type: 'vec2', label: 'UV' } },
+  defaultParams: { k1: 0.25, k2: 0.0, zoom: 1.0 },
+  paramDefs: {
+    k1:   { label: 'k1 (barrel)', type: 'float', min: -1, max: 1, step: 0.005, hint: 'Main bend. 0.2 is a noticeable barrel; negative pinches the edges in.' },
+    k2:   { label: 'k2 (edge)', type: 'float', min: -1, max: 1, step: 0.005, hint: 'Bends the correction again further out. Opposite sign to k1 gives a moustache curve.' },
+    zoom: { label: 'Zoom', type: 'float', min: 0.5, max: 2, step: 0.01, hint: 'Scales the result so the stretched border can be cropped away. 1.06 hides most of it.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const uv = inputVars.input ?? 'vec2(0.0)';
+    const k1 = inputVars.k1 ?? p(node.params.k1, 0.25);
+    return {
+      code: [
+        `    float ${id}_r2 = dot(${uv}, ${uv});\n`,
+        `    vec2 ${id}_output = ${uv} * (1.0 + ${k1} * ${id}_r2 + ${p(node.params.k2, 0.0)} * ${id}_r2 * ${id}_r2) / ${p(node.params.zoom, 1.0)};\n`,
+      ].join(''),
+      outputVars: { output: `${id}_output` },
+    };
+  },
+};

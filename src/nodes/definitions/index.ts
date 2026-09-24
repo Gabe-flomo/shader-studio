@@ -169,8 +169,7 @@ import {
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
   Perspective2DNode,
-  MirroredRepeat2DNode, LimitedRepeat2DNode, AngularRepeat2DNode,
-} from './spaces';
+  MirroredRepeat2DNode, LimitedRepeat2DNode, AngularRepeat2DNode, CrtScreenNode, LensDistortionNode } from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './sdf';
 import {
@@ -184,8 +183,7 @@ import {
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
   GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
-  ChromaShiftNode,
-} from './effects';
+  ChromaShiftNode, GlowToColorNode, NormalToColorNode, CrtMaskNode } from './effects';
 import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
@@ -214,15 +212,15 @@ import {
   GyroidFieldNode, SchwarzPFieldNode,
   MirrorFold3DNode, DomainWarp3DNode,
 } from './sdf3d';
-import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode } from './scene3d';
+import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode } from './scene3d';
 import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
-  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
 import { PrintFloatNode, PrintTextNode } from './text';
-import { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+import { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
 import { LFONode, BPMSyncNode } from './animations';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
@@ -344,6 +342,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   light2d: Light2DNode,
   // Effects
   abs: AbsNode,
+  glowToColor: GlowToColorNode,
+  crtMask: CrtMaskNode,
+  oklabMix: OklabMixNode,
+  crtScreen: CrtScreenNode,
+  lensDistortion: LensDistortionNode,
+  normalToColor: NormalToColorNode,
+  rotationMatrix: RotationMatrixNode,
+  volumeGlow: VolumeGlowNode,
   toneMap: ToneMapNode,
   grain: GrainNode,
   light: LightNode,

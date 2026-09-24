@@ -17,7 +17,7 @@ import { PerfBadge, PerfPanel } from './PerfPanel';
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, compact = false,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -33,6 +33,8 @@ export function CanvasToolbar({
   showOutline?: boolean;
   onToggleOutline?: () => void;
   onClear: () => void;
+  /** Right-click on the trash: empty the canvas down to UV → Output */
+  onClearMinimal?: () => void;
   /** Narrow canvas (tablet): Fit and Auto layout become icon buttons. */
   compact?: boolean;
 }) {
@@ -110,7 +112,9 @@ export function CanvasToolbar({
       {onToggleOutline && (
         <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
       )}
-      <IconButton icon="trash" label="Clear all nodes" size="sm" tone="danger" onClick={onClear} />
+      <span onContextMenu={e => { if (onClearMinimal) { e.preventDefault(); onClearMinimal(); } }} style={{ display: 'inline-flex' }}>
+        <IconButton icon="trash" label={onClearMinimal ? 'Reset to the starter graph · right-click: clear to just UV and Output' : 'Clear all nodes'} size="sm" tone="danger" onClick={onClear} />
+      </span>
     </div>
   );
 }

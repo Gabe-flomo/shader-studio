@@ -10,6 +10,7 @@ import { WireLayer, type EdgeInfo } from './WireLayer';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
+import { explainPreview, previewLegend } from '../../lib/previewExplain';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
@@ -140,6 +141,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
   const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
+  const previewStats = useNodeGraphStore(s => s.previewStats);
+  const previewCaption = previewNode ? (explainPreview(previewNode, previewDef ?? undefined, previewStats) ?? previewLegend(previewNode, previewDef ?? undefined)) : null;
   const previewLabel = previewDef
     ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
         ? (previewNode.params.label as string) || previewDef.label
@@ -1122,14 +1125,17 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         <div
           style={{
             position: 'absolute', top: redesignToolbar ? 66 : 10, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
-            height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px 0 12px', borderRadius: 10,
+            minHeight: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: 560,
             background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.status.success, 0.35)}`,
-            color: tk.text.secondary, fontSize: 12.5, userSelect: 'none', whiteSpace: 'nowrap',
+            color: tk.text.secondary, fontSize: 12.5, userSelect: 'none',
           }}
         >
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.success }} />
-          <span>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
-          <Button size="sm" variant="ghost" style={{ height: 26 }} onClick={() => setPreviewNodeId(null)}>Exit</Button>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.success, flexShrink: 0 }} />
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+            <span style={{ whiteSpace: 'nowrap' }}>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
+            {previewCaption && <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.35 }}>{previewCaption}</span>}
+          </span>
+          <Button size="sm" variant="ghost" style={{ height: 26, flexShrink: 0 }} onClick={() => setPreviewNodeId(null)}>Exit</Button>
         </div>
       )}
 
@@ -1194,11 +1200,12 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           showOutline={showOutline}
           onToggleOutline={toggleOutline}
           onClear={() => loadExampleGraph('blank')}
+          onClearMinimal={() => useNodeGraphStore.getState().clearToMinimal()}
           compact={compactToolbar}
         />
       )}
       {redesignToolbar && <SelectionBar top={previewNodeId ? 108 : 66} />}
-      {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 108 : 66} onClose={() => setShowOutline(false)} />}
+      {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
       {/* Toolbar — top-right, always in screen space */}
       {!redesignToolbar && <div

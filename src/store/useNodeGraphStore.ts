@@ -341,6 +341,9 @@ interface NodeGraphState {
   nodeOutputVarMap: Map<string, Record<string, string>>;
   /** Live-sampled values for the selected node: outputKey → number[] (1–4 components) */
   nodeProbeValues: Record<string, number[]> | null;
+  /** Frame stats of the isolated preview (clipped / black / flat), for the explaining caption */
+  previewStats: import('../lib/previewExplain').PreviewStats | null;
+  setPreviewStats: (stats: import('../lib/previewExplain').PreviewStats | null) => void;
   setSelectedNodeId: (id: string | null) => void;
   /** Open `groupPath` (group ids from the current level inward), select `nodeId` there and ask the canvas to centre on it. */
   revealNode: (groupPath: string[], nodeId: string) => void;
@@ -580,6 +583,8 @@ interface NodeGraphState {
   redo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => Promise<void>;
+  /** Empty the canvas down to UV → Output (the trash button's right-click) */
+  clearToMinimal: () => void;
   autoLayout: () => void;
   /** `source` is the shader the errors were reported against (their line numbers point into it) */
   setGlslErrors: (errors: string[], source?: string | null) => void;
@@ -1176,6 +1181,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   selectedNodeIds: [],
   nodeOutputVarMap: new Map(),
   nodeProbeValues: null,
+  previewStats: null,
+  setPreviewStats: (stats) => set(state => {
+    const cur = state.previewStats;
+    if (cur === stats) return state;
+    if (cur && stats && cur.flat === stats.flat && Math.abs(cur.clipped - stats.clipped) < 0.02 && Math.abs(cur.black - stats.black) < 0.02 && Math.abs(cur.mean - stats.mean) < 0.03) return state;
+    return { previewStats: stats };
+  }),
   scopeProbeValues: {},
   previewNodeId: null,
   mobileKeyframeEditor: null,
@@ -4264,6 +4276,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         })),
       }));
     }
+  },
+
+  clearToMinimal: () => {
+    undoManager.push(get().nodes);
+    const uv = instantiateNode(idGenerator.next(), 'uv', getNodeDefinition('uv')!, { x: 100, y: 240 });
+    const out = instantiateNode(idGenerator.next(), 'output', getNodeDefinition('output')!, { x: 820, y: 240 });
+    set({ nodes: [uv, out], looseGroups: [], previewNodeId: null, activeGroupId: null, activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [], nodeProbeValues: null });
+    get().compile();
   },
 
   loadExampleGraph: async (name?: string) => {

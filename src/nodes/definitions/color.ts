@@ -45,7 +45,7 @@ export const PaletteNode: NodeDefinition = {
   type: 'palette',
   label: 'Palette',
   category: 'Color',
-  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it.',
+  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it. `Scale` stretches the Angle and `Speed` scales the offset, so the usual Length → Multiply → Add(Time) → Palette chain is just Length → Palette with Time on Angle offset.',
   // Offset/Amplitude/Frequency/Phase are one vec3 socket each (they used to be twelve
   // per-channel floats); unwired, each falls back to its colour param below. Older graphs keep any
   // per-channel wire they had, and it still drives its channel (see legacyLabels.ts).
@@ -61,7 +61,7 @@ export const PaletteNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color' },
   },
   defaultParams: {
-    value: 0, anim: 0, preset: 'custom',
+    value: 0, anim: 0, scale: 1.0, speed: 1.0, preset: 'custom',
     offset:    [0.5, 0.5, 0.5],
     amplitude: [0.5, 0.5, 0.5],
     freq:      [1.0, 1.0, 1.0],
@@ -75,6 +75,8 @@ export const PaletteNode: NodeDefinition = {
     // of always compiling to a hardcoded 0.0 with nothing to tune.
     value:     { label: 'Angle',        type: 'float', min: 0.0,      max: 1.0,     step: 0.01, hint: 'Where on the palette to sample. 0 → 1 goes once around; wire a gradient or distance here to paint with it.' },
     anim:      { label: 'Angle offset', type: 'float', min: 0.0,      max: 10.0,    step: 0.1,  hint: 'Only added to Angle. Wire Time here to animate.' },
+    scale:     { label: 'Scale',        type: 'float', min: -10.0,    max: 10.0,    step: 0.01, hint: 'Multiplies Angle: how many palette cycles across the wired gradient. 1 leaves it alone.' },
+    speed:     { label: 'Speed',        type: 'float', min: -5.0,     max: 5.0,     step: 0.01, hint: 'Multiplies Angle offset: with Time wired, how fast the colours cycle.' },
     // Named presets bake the four vec3s; Custom exposes them as live pickers.
     preset:    { label: 'Preset',       type: 'select', options: [{ value: 'custom', label: 'Custom' }, ...PALETTE_PRESET_OPTIONS] },
     offset:    { label: 'Offset',       type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The colour at the middle of the wave (per channel).', showWhen: { param: 'preset', value: 'custom' } },
@@ -86,9 +88,12 @@ export const PaletteNode: NodeDefinition = {
   glslFunction: PALETTE_GLSL_FN,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
-    const valVar  = inputVars.value || p(node.params.value, 0);
-    const timeVar = inputVars.anim  || p(node.params.anim, 0);
-    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
+    const valRaw  = inputVars.value || p(node.params.value, 0);
+    const timeRaw = inputVars.anim  || p(node.params.anim, 0);
+    const scale = p(node.params.scale, 1.0), speed = p(node.params.speed, 1.0);
+    const valVar  = scale === '1.0' ? valRaw : `${valRaw} * ${scale}`;
+    const timeVar = speed === '1.0' ? timeRaw : `${timeRaw} * ${speed}`;
+    const tVar = (valRaw === '0.0') ? timeVar : (timeRaw === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     // A wired vec3 socket wins; otherwise a named preset's literal or the live colour param
     // (a `u_p_*` vec3 uniform), with any legacy per-channel wire (`offset_r` …, kept on
     // older graphs) overriding its channel.
@@ -687,3 +692,58 @@ vec3 blackbodyColor(float kelvin) {
 
 // ─── Blend Mode ───────────────────────────────────────────────────────────────
 // Combines two colors via a named blend mode with a mask and strength control.
+
+// ─── OkLab Mix ───────────────────────────────────────────────────────────────
+// Perceptual blend: mixing in OkLab keeps the midpoint bright and colourful where an RGB mix
+// goes grey. OkLab by Björn Ottosson (public domain); the fused mix by Inigo Quilez (MIT).
+
+export const OklabMixNode: NodeDefinition = {
+  type: 'oklabMix',
+  label: 'OkLab Mix',
+  category: 'Color',
+  aliases: ['Perceptual Mix', 'Oklab Blend', 'Lerp Color'],
+  description: 'Blends two colours the way the eye expects: yellow to blue passes through a bright, colourful middle instead of the grey that a plain Mix gives. Colours are taken as sRGB, blended in OkLab (Björn Ottosson, via Inigo Quilez\'s fused version, MIT) and returned as sRGB. Use it wherever Mix joins two colours; `Blend` is the same 0 → 1 as Mix. After Xor\'s GM Shaders Mini: OkLab.',
+  inputs: {
+    a: { type: 'vec3',  label: 'A' },
+    b: { type: 'vec3',  label: 'B' },
+    t: { type: 'float', label: 'Blend', hint: '0 gives A, 1 gives B. Wire a gradient or a distance for a ramp.' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Color' } },
+  defaultParams: { t: 0.5, a: [1.0, 0.85, 0.1], b: [0.1, 0.3, 1.0], gamma: 'srgb', midGain: 0.2 },
+  paramDefs: {
+    t:       { label: 'Blend', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Used when nothing is wired to Blend.' },
+    a:       { label: 'A', type: 'vec3color', hint: 'Start colour when A is unwired.' },
+    b:       { label: 'B', type: 'vec3color', hint: 'End colour when B is unwired.' },
+    gamma:   { label: 'Inputs are', type: 'select', options: [{ value: 'srgb', label: 'sRGB (screen colours)' }, { value: 'linear', label: 'Linear light' }], hint: 'Screen colours are sRGB and get linearised first. Pick Linear if the colours come from lighting maths.' },
+    midGain: { label: 'Mid gain', type: 'float', min: 0, max: 0.5, step: 0.01, hint: 'A little extra brightness at the midpoint (IQ\'s tweak). 0 is strict OkLab.' },
+  },
+  glslFunction: `vec3 oklabMixFn(vec3 lin1, vec3 lin2, float a, float gain) {
+  const mat3 kCONEtoLMS = mat3(0.4121656120, 0.2118591070, 0.0883097947,
+                               0.5362752080, 0.6807189584, 0.2818474174,
+                               0.0514575653, 0.1074065790, 0.6302613616);
+  const mat3 kLMStoCONE = mat3(4.0767245293, -1.2681437731, -0.0041119885,
+                               -3.3072168827, 2.6093323231, -0.7034763098,
+                               0.2307590544, -0.3411344290, 1.7068625689);
+  vec3 lms1 = pow(max(kCONEtoLMS * lin1, 0.0), vec3(1.0 / 3.0));
+  vec3 lms2 = pow(max(kCONEtoLMS * lin2, 0.0), vec3(1.0 / 3.0));
+  vec3 lms = mix(lms1, lms2, a);
+  lms *= 1.0 + gain * a * (1.0 - a);
+  return kLMStoCONE * (lms * lms * lms);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const a = inputVars.a ?? pv3(node.params.a, [1.0, 0.85, 0.1]);
+    const b = inputVars.b ?? pv3(node.params.b, [0.1, 0.3, 1.0]);
+    const t = inputVars.t ?? p(node.params.t, 0.5);
+    const gain = p(node.params.midGain, 0.2);
+    const srgb = node.params.gamma !== 'linear';
+    const lin = (v: string) => srgb ? `pow(max(${v}, 0.0), vec3(2.2))` : v;
+    return {
+      code: [
+        `    vec3 ${id}_lin = oklabMixFn(${lin(a)}, ${lin(b)}, clamp(${t}, 0.0, 1.0), ${gain});\n`,
+        `    vec3 ${id}_result = ${srgb ? `pow(max(${id}_lin, 0.0), vec3(1.0 / 2.2))` : `${id}_lin`};\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result` },
+    };
+  },
+};
