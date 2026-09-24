@@ -516,6 +516,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [showPublish, setShowPublish] = useState(false); // group card → Publish as node
+  // Custom Fn card → Publish as node (code source), or a user node's "open source" for code-backed types
+  const [publishCode, setPublishCode] = useState<{ code: string; entry?: string; label: string; existingId?: string } | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showExprModal, setShowExprModal] = useState(false);
@@ -2757,6 +2759,19 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {node.type === 'customFn' && (
             <CardButton icon="fn" tint="fn" on={showCustomFnModal} label="Open the Custom Function editor" onClick={() => setShowCustomFnModal(v => !v)} />
           )}
+          {node.type === 'customFn' && (
+            <CardButton icon="spark" tint="fn" label="Publish as a node type (this function becomes a reusable node)" onClick={() => {
+              const cfInputs = (node.params.inputs as Array<{ name: string; type: string }> | undefined) ?? [];
+              const outType = typeof node.params.outputType === 'string' ? node.params.outputType : 'float';
+              const body = typeof node.params.body === 'string' ? node.params.body.trim() : '0.0';
+              const helpers = typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions.trim() : '';
+              const fnLabel = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Custom Function';
+              const fnName = fnLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^[^a-z_]+/, '') || 'custom_fn';
+              const bodyCode = /\breturn\b/.test(body) ? body : `return ${body};`;
+              const code = `${helpers ? helpers + '\n\n' : ''}${outType} ${fnName}(${cfInputs.map(i => `${i.type} ${i.name}`).join(', ')}) {\n    ${bodyCode.replace(/\n/g, '\n    ')}\n}`;
+              setPublishCode({ code, entry: fnName, label: fnLabel });
+            }} />
+          )}
           {!['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && <CardDivider />}
           {/* Carry mode — only inside a group with iterations > 1 */}
           {isInsideLoop && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
@@ -3418,6 +3433,43 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           );
         })()}
 
+        {/* ── Image slots (published nodes with sampler2D arguments) ── */}
+        {!collapsed && def.textureSlots && def.textureSlots.length > 0 && (() => {
+          const un = getUserNode(node.type);
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 12px 8px' }} onMouseDown={e => e.stopPropagation()}>
+              {def.textureSlots.map(slot => {
+                const thumb = node.params[`__tex_${slot}_thumb`] as string | undefined;
+                const slotLabel = un?.textures?.find(t => t.key === slot)?.label ?? slot;
+                const slotKey = `${node.id}::${slot}`;
+                return (
+                  <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {thumb ? (
+                      <img src={thumb} alt={slotLabel} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: radius.sm, flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 40, height: 40, borderRadius: radius.sm, flexShrink: 0, background: tk.bg.field, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🖼</div>
+                    )}
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slotLabel}</span>
+                    <label style={{ fontSize: 11.5, color: tk.accent.base, cursor: 'pointer', padding: '4px 8px', borderRadius: radius.md, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
+                      {thumb ? 'Change' : 'Load image'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        loadImageTextureFromFile(file)
+                          .then(({ texture, thumbnailDataUrl }) => {
+                            setNodeTexture(slotKey, texture);
+                            updateNodeParams(node.id, { [`__tex_${slot}_thumb`]: thumbnailDataUrl }, { immediate: true });
+                          })
+                          .catch(err => console.error('Failed to load texture image:', err));
+                      }} />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {/* ── Params (hidden when collapsed) ── */}
         {!collapsed && node.type !== 'matConst' && Object.keys(paramDefs).length > 0 && Object.keys(node.inputs).length > 0 && sectionRule}
         {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => {
@@ -3861,6 +3913,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {showCustomFnModal && node.type === 'customFn' && (
         <CustomFnModal node={node} onClose={() => setShowCustomFnModal(false)} />
       )}
+      {publishCode && (
+        <PublishNodeModal source={{ kind: 'code', code: publishCode.code, entry: publishCode.entry, label: publishCode.label }}
+          existingId={publishCode.existingId} onClose={() => setPublishCode(null)} />
+      )}
 
       {/* ── Comment editor (hidden when collapsed) ── */}
       {showCommentEditor && !collapsed && (
@@ -3921,8 +3977,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           onClick={() => { setShowCommentEditor(v => !v); setShowCommentPreview(false); }} />
         <CardButton icon="code" on={showCode} label={showCode ? 'Hide the generated GLSL' : 'Show the generated GLSL'} onClick={() => setShowCode(v => !v)} />
         {getUserNode(node.type)?.source && (
-          <CardButton icon="layoutGraph" tint="fn" label="Open this node type's source graph (publish it again to update every instance)"
-            onClick={() => openUserNodeSource(node.type, { x: node.position.x, y: node.position.y + 260 })} />
+          <CardButton icon={getUserNode(node.type)?.source?.kind === 'code' ? 'code' : 'layoutGraph'} tint="fn"
+            label={getUserNode(node.type)?.source?.kind === 'code' ? "Edit this node type's GLSL (publishing again updates every instance)" : "Open this node type's source graph (publish it again to update every instance)"}
+            onClick={() => {
+              const un = getUserNode(node.type);
+              if (un?.source?.kind === 'code') setPublishCode({ code: un.source.code, entry: un.source.entry, label: un.label, existingId: un.id });
+              else openUserNodeSource(node.type, { x: node.position.x, y: node.position.y + 260 });
+            }} />
         )}
         {Object.keys(def.paramDefs ?? {}).length > 0 && (
           <CardButton icon="resetParams" label="Reset parameters to defaults"

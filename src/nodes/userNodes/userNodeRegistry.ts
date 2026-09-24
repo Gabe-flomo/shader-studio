@@ -58,7 +58,14 @@ function isValidDefinition(d: unknown): d is UserNodeDefinition {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/** A definition that exists only while a dialog previews it: looked up like any other, never listed or saved. */
+let transient: { def: UserNodeDefinition; compiled: NodeDefinition } | null = null;
+export function setTransientUserNode(def: UserNodeDefinition | null): void {
+  transient = def ? { def, compiled: userNodeToDefinition(def) } : null;
+}
+
 export function getUserNodeDefinition(type: string): NodeDefinition | undefined {
+  if (transient && transient.def.id === type) return transient.compiled;
   ensureLoaded();
   return compiled.get(type);
 }
@@ -223,8 +230,11 @@ export function userNodeToDefinition(def: UserNodeDefinition): NodeDefinition {
   };
   const fnNameFor = (node: GraphNode): string => (iters ? `${def.fnName}_i${iterationCount(node)}` : def.fnName);
 
+  const textures = def.textures ?? [];
   const generateGLSL = (node: GraphNode, inputVars: Record<string, string>) => {
-    const args: string[] = [...def.implicitGlobals];
+    // Order matches the flattened / canonicalised signature:
+    // implicit globals, samplers, inputs, live params, out params.
+    const args: string[] = [...def.implicitGlobals, ...textures.map(t => `u_tex_${node.id}_${t.key}`)];
     for (const port of def.inputs) {
       const wired = inputVars[port.key];
       if (wired) args.push(wired);
@@ -261,6 +271,7 @@ export function userNodeToDefinition(def: UserNodeDefinition): NodeDefinition {
     // single flattened function rides along with the helpers.
     glslFunctions: iters ? [...def.helperFunctions] : [...def.helperFunctions, def.functionCode],
     glslFunctionsFor: iters ? (node) => [iters.functions[String(iterationCount(node))] ?? def.functionCode] : undefined,
+    textureSlots: textures.length ? textures.map(t => t.key) : undefined,
     generateGLSL,
   };
 }

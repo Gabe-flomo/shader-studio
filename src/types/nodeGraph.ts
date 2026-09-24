@@ -134,6 +134,13 @@ export interface NodeDefinition {
    * `glslFunctions` wherever a node is compiled; de-duplicated by name.
    */
   glslFunctionsFor?: (node: GraphNode) => string[];
+  /**
+   * Image slots this node owns. For each slot the assembler declares a
+   * per-instance `uniform sampler2D u_tex_<slug>_<slot>` bound to the texture
+   * stored under `nodeTextures["<nodeId>::<slot>"]`; generateGLSL passes it
+   * as `u_tex_${node.id}_${slot}`.
+   */
+  textureSlots?: string[];
 
   // Default parameter values
   defaultParams?: Record<string, unknown>;

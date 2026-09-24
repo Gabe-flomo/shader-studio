@@ -2583,7 +2583,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   openUserNodeSource: (id, position) => {
     const def = getUserNode(id);
-    if (!def?.source) return null;
+    // Code-backed nodes are edited in the publish dialog (see NodePalette / NodeComponent), not as a group.
+    if (!def?.source || def.source.kind !== 'subgraph') return null;
     const groupId = get().placeSubgraphAsGroup(def.label, def.source.subgraph, position);
     // Remember where the group came from so "Publish" offers to update the
     // existing node type instead of creating a second one.

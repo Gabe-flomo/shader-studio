@@ -159,6 +159,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const exportUserNodes    = useNodeGraphStore(s => s.exportUserNodes);
   const readSavedGraphNodes = useNodeGraphStore(s => s.readSavedGraphNodes);
   const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
+  const [publishExisting, setPublishExisting] = useState<string | undefined>(undefined);
   const [exposeUv, setExposeUv] = useState(true);
   const [exposeTime, setExposeTime] = useState(false);
   const openPublishFor = (nodes: GraphNode[] | null, label: string) => {
@@ -385,9 +386,13 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 </span>
               </label>
             </div>
-            <Button size="sm" variant="primary" icon="spark" style={{ alignSelf: 'flex-start', marginBottom: 6 }}
-              disabled={graphNodes.length === 0}
-              onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+              <Button size="sm" variant="primary" icon="spark"
+                disabled={graphNodes.length === 0}
+                onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
+              <Button size="sm" icon="code" title="Write a GLSL function and publish it as a node"
+                onClick={() => setPublishSource({ kind: 'code', code: '', label: 'My Node' })}>Write GLSL…</Button>
+            </div>
             <TabSectionHeader label="From a saved graph" />
             <FolderableList
               scopeKey="builder:saved"
@@ -419,17 +424,18 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   <ItemRow label={d.label} icon="spark" color={tk.kind.fn}
                     onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode(d.id, {x,y}); onNodeAdded?.(); }}
                     onEdit={d.source ? () => {
+                      if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
                       const x = 200+Math.random()*120, y = 120+Math.random()*200;
                       if (openUserNodeSource(d.id, {x,y})) onNodeAdded?.();
                     } : undefined}
-                    editLabel="Open source graph (publish again to update)"
+                    editLabel={d.source?.kind === 'code' ? 'Edit the GLSL (publish again to update)' : 'Open source graph (publish again to update)'}
                     onExport={async () => reportFileResult(await exportUserNodes([d.id]), { failTitle: `Couldn’t export “${d.label}”` })}
                     onDelete={() => { if (window.confirm(`Delete node type “${d.label}”? Placed instances will stop compiling.`)) deleteUserNode(d.id); }} />
                 );
               }}
               emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes. Or import a .json someone shared.</EmptyHint>}
             />
-            {publishSource && <PublishNodeModal source={publishSource} onClose={() => setPublishSource(null)} />}
+            {publishSource && <PublishNodeModal source={publishSource} existingId={publishExisting} onClose={() => { setPublishSource(null); setPublishExisting(undefined); }} />}
           </>
         );
 

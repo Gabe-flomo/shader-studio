@@ -56,11 +56,17 @@ export interface UserNodeIterations {
   functions: Record<string, string>;
 }
 
-export interface UserNodeSource {
-  kind: 'subgraph';
-  subgraph: SubgraphData;
-  iterations: number;
+/** An image the node samples: a `sampler2D` argument, bound per instance from the card's image picker. */
+export interface UserNodeTexture {
+  key: string;
+  label: string;
+  hint?: string;
 }
+
+export type UserNodeSource =
+  | { kind: 'subgraph'; subgraph: SubgraphData; iterations: number }
+  /** Written directly as GLSL; `entry` is the function whose signature defines the node. */
+  | { kind: 'code'; code: string; entry: string };
 
 export interface UserNodeDefinition {
   /** Unique id; doubles as the registry `type` key. Format: `un_<slug>_<base36 time>`. */
@@ -82,6 +88,8 @@ export interface UserNodeDefinition {
   implicitGlobals: string[];
   /** Present when the iteration count is exposed as a slider; `functionCode` is then the default count's variant. */
   iterations?: UserNodeIterations;
+  /** Image inputs, in argument order (they come right after the implicit globals). */
+  textures?: UserNodeTexture[];
   /** Kept so the node can be re-opened in the builder. Not used by the compiler. */
   source?: UserNodeSource;
   version: 1;

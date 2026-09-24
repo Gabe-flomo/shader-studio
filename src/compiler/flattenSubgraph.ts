@@ -52,7 +52,8 @@ const STATEFUL_TYPES = new Set([
   'prevFrame', 'radianceCascadesApprox',
   'gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'motionBlur', 'depthOfField',
 ]);
-const MEDIA_TYPES = new Set(['textureInput', 'audioInput', 'videoInput']);
+// textureInput is allowed: each one becomes a sampler2D argument (see spec.textures).
+const MEDIA_TYPES = new Set(['audioInput', 'videoInput']);
 const OUTPUT_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
 export interface FlattenSpec {
@@ -66,11 +67,52 @@ export interface FlattenSpec {
   outputs: Array<UserNodePort & { portKey: string }>;
   /** Inner params to expose as live arguments. `sourcePath` is required here. */
   params: Array<UserNodeParam & { sourcePath: string }>;
+  /** Texture Input nodes inside the group, each becoming a `sampler2D in_tex_<key>` argument.
+   *  `sourceId` is the inner node's id. Every textureInput in the group must be listed. */
+  textures?: Array<{ sourceId: string; key: string }>;
 }
 
 export type FlattenResult =
   | { ok: true; functionCode: string; helperFunctions: string[]; implicitGlobals: string[] }
   | { ok: false; error: string };
+
+/** Texture Input nodes anywhere in the subgraph (one level of nesting), in order. */
+export function findTextureInputs(subgraph: SubgraphData): Array<{ id: string; label: string }> {
+  const out: Array<{ id: string; label: string }> = [];
+  const visit = (nodes: GraphNode[], prefix: string) => {
+    for (const n of nodes) {
+      if (n.type === 'textureInput') out.push({ id: n.id, label: (typeof n.params.label === 'string' && n.params.label) || `${prefix}Texture ${out.length + 1}` });
+      if (n.type === 'group') {
+        const inner = n.params.subgraph as SubgraphData | undefined;
+        if (inner) visit(inner.nodes, `${(typeof n.params.label === 'string' && n.params.label) || 'Group'} › `);
+      }
+    }
+  };
+  visit(subgraph.nodes, '');
+  return out;
+}
+
+const TEX_MARK = 'texslot';
+
+/**
+ * Clone the subgraph giving every Texture Input a marker label, so the
+ * sampler identifier the group compiler emits (`u_tex_<prefix>texslot<i>_<n>`)
+ * can be mapped back to its slot after compilation.
+ */
+function markTextureInputs(subgraph: SubgraphData, slotIndex: Map<string, number>): SubgraphData {
+  const mark = (nodes: GraphNode[]): GraphNode[] => nodes.map(n => {
+    if (n.type === 'textureInput') {
+      const idx = slotIndex.get(n.id);
+      return idx === undefined ? n : { ...n, params: { ...n.params, label: `${TEX_MARK}${idx}` } };
+    }
+    if (n.type === 'group') {
+      const inner = n.params.subgraph as SubgraphData | undefined;
+      if (inner) return { ...n, params: { ...n.params, subgraph: { ...inner, nodes: mark(inner.nodes) } } };
+    }
+    return n;
+  });
+  return { ...subgraph, nodes: mark(subgraph.nodes) };
+}
 
 /** Walk the subgraph (and nested groups) and return the first unsupported type, if any. */
 export function findUnsupportedNode(subgraph: SubgraphData, depth = 0): { node: GraphNode; reason: string } | null {
@@ -116,8 +158,16 @@ function escapeRe(s: string): string {
 }
 
 export function flattenSubgraphToFunction(spec: FlattenSpec): FlattenResult {
-  const { subgraph } = spec;
-  if (!subgraph || subgraph.nodes.length === 0) return { ok: false, error: 'The group is empty.' };
+  if (!spec.subgraph || spec.subgraph.nodes.length === 0) return { ok: false, error: 'The group is empty.' };
+
+  // Every Texture Input must have a slot, otherwise its sampler would be an undeclared uniform.
+  const texInputs = findTextureInputs(spec.subgraph);
+  const slotByNode = new Map<string, number>();
+  (spec.textures ?? []).forEach((t, i) => slotByNode.set(t.sourceId, i));
+  for (const t of texInputs) {
+    if (!slotByNode.has(t.id)) return { ok: false, error: `Texture Input "${t.label}" has no image slot on the node. Give it one in the Images section.` };
+  }
+  const subgraph = texInputs.length ? markTextureInputs(spec.subgraph, slotByNode) : spec.subgraph;
   if (spec.outputs.length === 0) return { ok: false, error: 'A node needs at least one output. Add an output port to the group first.' };
 
   const bad = findUnsupportedNode(subgraph);
@@ -190,12 +240,21 @@ export function flattenSubgraphToFunction(spec: FlattenSpec): FlattenResult {
     outVars.push(v);
   }
 
+  // ── Texture Inputs → sampler arguments ───────────────────────────────────────
+  const textures = spec.textures ?? [];
+  body = body.replace(new RegExp(`\\bu_tex_\\w*?${TEX_MARK}(\\d+)_\\d+\\b`, 'g'), (_m, idx: string) => {
+    const t = textures[Number(idx)];
+    return t ? `in_tex_${t.key}` : _m;
+  });
+  if (/\bu_tex_\w+/.test(body)) return { ok: false, error: 'A Texture Input inside the group could not be mapped to an image slot.' };
+
   // ── Hidden main()-scope arguments ────────────────────────────────────────────
   const implicitGlobals = IMPLICIT_GLOBALS.filter(g => new RegExp(`\\b${g.name}\\b`).test(body));
 
   // ── Assemble the function ────────────────────────────────────────────────────
   const args: string[] = [
     ...implicitGlobals.map(g => `${g.type} ${g.name}`),
+    ...textures.map(t => `sampler2D in_tex_${t.key}`),
     ...spec.inputs.map(i => `${i.type} in_${i.key}`),
     ...spec.params.map(p => `float p_${p.key}`),
     ...spec.outputs.slice(1).map(o => `out ${o.type} out_${o.key}`),

@@ -495,6 +495,11 @@ export class ShaderAssembler {
         if (node.type === 'textureInput') {
           this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         }
+        // Nodes with their own image slots (published user nodes): one
+        // sampler per slot, bound from nodeTextures["<id>::<slot>"].
+        def.textureSlots?.forEach(slot => {
+          this.textureUniforms[`u_tex_${nodeSlug}_${slot}`] = `${node.id}::${slot}`;
+        });
         if (node.type === 'audioInput') {
           const rawBands = node.params._bands;
           const bands: unknown[] = Array.isArray(rawBands) ? rawBands : [200];

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData } from '../../types/nodeGraph';
 import type { UserNodeDefinition } from '../../types/userNode';
 import { flattenSubgraphToFunction } from '../flattenSubgraph';
-import { registerUserNode, resetUserNodesForTests, getUserNodeDefinition, exportUserNodes, importUserNodes, getUserNode, unregisterUserNode } from '../../nodes/userNodes/userNodeRegistry';
+import { registerUserNode, resetUserNodesForTests, getUserNodeDefinition, exportUserNodes, importUserNodes, getUserNode, unregisterUserNode, getAllUserNodes } from '../../nodes/userNodes/userNodeRegistry';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { compileGraph } from '../graphCompiler';
 import { buildUserNodeDefinition } from '../../nodes/userNodes/publishUserNode';
@@ -258,5 +258,123 @@ describe('user node registry + compile', () => {
 
     const four = compileGraph({ nodes: graph(4) });
     expect(four.fragmentShader).toContain('= un_loopy_i4(');
+  });
+});
+
+// ── Code-backed nodes and image slots ────────────────────────────────────────
+import { describeSource } from '../../nodes/userNodes/publishUserNode';
+import { setTransientUserNode } from '../../nodes/userNodes/userNodeRegistry';
+
+describe('code-backed user nodes', () => {
+  beforeEach(() => resetUserNodesForTests());
+
+  const CODE = `
+float hash3(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+// entry
+vec3 glow(sampler2D img, vec2 uv, float radius, out float mask) {
+    float d = length(uv) - radius;
+    mask = smoothstep(0.02, 0.0, d);
+    vec3 tex = texture2D(img, uv * 0.5 + 0.5).rgb;
+    return tex * mask + hash3(uv) * 0.01;
+}`;
+
+  it('reads the entry signature into inputs, an image slot, the return and an out param', () => {
+    const d = describeSource({ kind: 'code', code: CODE, entry: 'glow', label: 'Glow' });
+    expect(d.error).toBeUndefined();
+    expect(d.functions?.map(f => f.name)).toEqual(['hash3', 'glow']);
+    expect(d.inputs.map(i => [i.portKey, i.type])).toEqual([['uv', 'vec2'], ['radius', 'float']]);
+    expect(d.textures.map(t => t.sourceKey)).toEqual(['img']);
+    expect(d.outputs.map(o => [o.portKey, o.type])).toEqual([['__return__', 'vec3'], ['mask', 'float']]);
+    // the first function is the default entry when none is named
+    expect(describeSource({ kind: 'code', code: CODE, label: 'x' }).entry).toBe('hash3');
+  });
+
+  it('publishes: functions renamed under the node id, canonical argument order, helper carried, textures as slots', async () => {
+    const built = buildUserNodeDefinition({ kind: 'code', code: CODE, entry: 'glow', label: 'Glow' }, {
+      label: 'Glow', category: 'My Nodes',
+      inputs: [{ portKey: 'uv', key: 'uv', label: 'UV', type: 'vec2' }, { portKey: 'radius', key: 'radius', label: 'Radius', type: 'float', slider: { min: 0, max: 1, default: 0.4 } }],
+      outputs: [{ portKey: '__return__', key: 'color', label: 'Color', type: 'vec3' }, { portKey: 'mask', key: 'mask', label: 'Mask', type: 'float' }],
+      params: [],
+      textures: [{ sourceKey: 'img', key: 'image', label: 'Image' }],
+      existingId: 'un_glow_code',
+    });
+    expect(built.ok, built.ok ? '' : built.error).toBe(true);
+    if (!built.ok) return;
+    const def = built.def;
+    expect(def.functionCode).toMatch(/^vec3 un_glow_code\(sampler2D img, vec2 uv, float radius, out float mask\) \{/);
+    expect(def.functionCode).toContain('un_glow_code_h_hash3(uv)');   // helper call renamed
+    expect(def.helperFunctions[0]).toMatch(/^float un_glow_code_h_hash3\(/);
+    expect(def.textures).toEqual([{ key: 'image', label: 'Image', hint: undefined }]);
+    expect(def.source).toEqual({ kind: 'code', code: CODE, entry: 'glow' });
+
+    await registerUserNode(def, { persist: false });
+    const nd = getNodeDefinition('un_glow_code')!;
+    expect(nd.textureSlots).toEqual(['image']);
+    expect(nd.paramDefs?.radius).toMatchObject({ type: 'float', min: 0, max: 1 });
+
+    const graph: GraphNode[] = [
+      { id: 'a', type: 'un_glow_code', position: { x: 0, y: 0 }, inputs: { uv: { type: 'vec2', label: 'UV' }, radius: { type: 'float', label: 'Radius' } },
+        outputs: { color: { type: 'vec3', label: 'Color' }, mask: { type: 'float', label: 'Mask' } }, params: { radius: 0.4 } },
+      { id: 'out', type: 'output', position: { x: 0, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'a', outputKey: 'color' } } }, outputs: {}, params: {} },
+    ];
+    const r = compileGraph({ nodes: graph });
+    expect(r.success, r.errors?.join()).toBe(true);
+    // one sampler uniform per instance slot, bound to "<id>::<slot>"
+    const [texUniform, boundTo] = Object.entries(r.textureUniforms)[0];
+    expect(texUniform).toMatch(/^u_tex_\w+_image$/);
+    expect(boundTo).toBe('a::image');
+    expect(r.fragmentShader).toContain(`uniform sampler2D ${texUniform};`);
+    expect(r.fragmentShader).toMatch(new RegExp(`un_glow_code\\(${texUniform}, g_uv, u_p_\\w+_radius, \\w+\\)`));
+  });
+
+  it('refuses void entries and unsupported parameter types with a readable message', () => {
+    expect(describeSource({ kind: 'code', code: 'void f(vec2 uv) { }', label: 'x' }).error).toMatch(/void/);
+    expect(describeSource({ kind: 'code', code: 'float f(int n) { return 1.0; }', label: 'x' }).error).toMatch(/int/);
+    expect(describeSource({ kind: 'code', code: 'nothing here', label: 'x' }).error).toMatch(/No GLSL function/);
+  });
+
+  it('a transient definition is visible to the compiler but never listed', async () => {
+    const built = buildUserNodeDefinition({ kind: 'code', code: 'float one(vec2 uv) { return 1.0; }', label: 'One' }, {
+      label: 'One', category: 'My Nodes', inputs: [{ portKey: 'uv', key: 'uv', label: 'UV', type: 'vec2' }],
+      outputs: [{ portKey: '__return__', key: 'v', label: 'V', type: 'float' }], params: [], existingId: 'un_previewtmp',
+    });
+    if (!built.ok) throw new Error(built.error);
+    setTransientUserNode(built.def);
+    expect(getNodeDefinition('un_previewtmp')).toBeDefined();
+    expect(getAllUserNodes().some(d => d.id === 'un_previewtmp')).toBe(false);
+    setTransientUserNode(null);
+    expect(getNodeDefinition('un_previewtmp')).toBeUndefined();
+  });
+});
+
+describe('texture inputs inside a published group', () => {
+  it('become sampler arguments and per-instance uniforms', async () => {
+    resetUserNodesForTests();
+    const sg: SubgraphData = {
+      nodes: [
+        { id: 'tex', type: 'textureInput', position: { x: 0, y: 0 }, inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in0' } } },
+          outputs: { color: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' }, uv: { type: 'vec2', label: 'UV' } }, params: { fit: 'stretch', _imageAspect: 1 } },
+      ],
+      inputPorts: [{ key: 'in0', type: 'vec2', label: 'UV', toNodeId: 'tex', toInputKey: 'uv' }],
+      outputPorts: [{ key: 'out0', type: 'vec3', label: 'Color', fromNodeId: 'tex', fromOutputKey: 'color' }],
+    };
+    const built = buildUserNodeDefinition({ kind: 'subgraph', subgraph: sg, label: 'Sampler' }, {
+      label: 'Sampler', category: 'My Nodes',
+      inputs: [{ portKey: 'in0', key: 'uv', label: 'UV', type: 'vec2' }],
+      outputs: [{ portKey: 'out0', key: 'color', label: 'Color', type: 'vec3' }],
+      params: [], textures: [{ sourceKey: 'tex', key: 'photo', label: 'Photo' }], existingId: 'un_sampler',
+    });
+    expect(built.ok, built.ok ? '' : built.error).toBe(true);
+    if (!built.ok) return;
+    expect(built.def.functionCode).toMatch(/^vec3 un_sampler\(sampler2D in_tex_photo, vec2 in_uv\)/);
+    expect(built.def.functionCode).toContain('texture2D(in_tex_photo,');
+    expect(built.def.functionCode).not.toMatch(/u_tex_/);
+
+    // …and a group with an unassigned Texture Input is refused
+    const bad = buildUserNodeDefinition({ kind: 'subgraph', subgraph: sg, label: 'Sampler' }, {
+      label: 'Sampler', category: 'My Nodes', inputs: [], outputs: [{ portKey: 'out0', key: 'color', label: 'Color', type: 'vec3' }], params: [],
+    });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.error).toMatch(/image slot/);
   });
 });
