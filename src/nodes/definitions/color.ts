@@ -747,3 +747,40 @@ export const OklabMixNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Color (picker) ─────────────────────────────────────────────────────────
+// One colour, chosen in the design-tool picker on the card (hue / saturation /
+// brightness square, hex, RGB, eyedropper). The intuitive replacement for
+// building colours out of three floats with Make Vec3.
+export const ColorPickerNode: NodeDefinition = {
+  type: 'colorPicker',
+  label: 'Color', aliases: ['color picker', 'swatch', 'solid color', 'rgb color', 'make color', 'colour'],
+  category: 'Color', subcategory: 'Build',
+  description:
+    'A single colour from a design-tool picker: drag the square and hue strip, type a hex, or use the eyedropper. ' +
+    'Outputs it as a vec3 plus the three channels. Wire it into any Color input — Fill, Tint, Background, Blend — ' +
+    'instead of assembling it from three floats with Make Vec3. The swatch is a live uniform, so dragging never recompiles.',
+  inputs: {},
+  outputs: {
+    rgb: { type: 'vec3',  label: 'Color', hint: 'The picked colour as a vec3 in 0–1.' },
+    r:   { type: 'float', label: 'R', hint: 'Red channel alone, 0–1.' },
+    g:   { type: 'float', label: 'G', hint: 'Green channel alone, 0–1.' },
+    b:   { type: 'float', label: 'B', hint: 'Blue channel alone, 0–1.' },
+  },
+  defaultParams: { color: [0.96, 0.55, 0.2] },
+  paramDefs: {
+    color: { label: 'Color', type: 'vec3color', hint: 'Click the swatch to open the picker. Hex and RGB fields accept typing; recent picks are kept below the presets.' },
+  },
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id;
+    return {
+      code: [
+        `    vec3 ${id}_rgb = ${pv3(node.params.color, [0.96, 0.55, 0.2])};\n`,
+        `    float ${id}_r = ${id}_rgb.x;\n`,
+        `    float ${id}_g = ${id}_rgb.y;\n`,
+        `    float ${id}_b = ${id}_rgb.z;\n`,
+      ].join(''),
+      outputVars: { rgb: `${id}_rgb`, r: `${id}_r`, g: `${id}_g`, b: `${id}_b` },
+    };
+  },
+};

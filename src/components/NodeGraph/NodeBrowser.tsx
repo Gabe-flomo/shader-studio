@@ -64,6 +64,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Volume',  types: ['volumetricFog', 'phaseHG'] },
   ],
   Color: [
+    { label: 'Build',   types: ['colorPicker', 'makeVec3'] },
     { label: 'Palette', types: ['palette', 'gradient', 'colorRamp', 'blackbody'] },
     { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast'] },
     { label: 'Convert', types: ['hsv', 'normalToColor'] },
