@@ -11,11 +11,14 @@
  *    and a black canvas).
  */
 import { describe, it, expect } from 'vitest';
-import { NODE_REGISTRY } from '../../nodes/definitions';
+import { NODE_REGISTRY, NODE_ALIASES, getNodeDefinition, resolveNodeAliases, aliasParams } from '../../nodes/definitions';
+import { migrateNodeParams } from '../../types/nodeGraph';
+import { loadExampleGraphs } from '../../store/exampleIndex';
 import { compileGraph } from '../graphCompiler';
 import type { GraphNode, NodeDefinition, InputSocket, DataType } from '../../types/nodeGraph';
 import { coerce, coerceLossy, typesCompatible } from '../../lib/typesCompatible';
 import { validateGraph } from '../validate';
+import { pruneUnusedGlslFunctions } from '../shaderAssembler';
 
 const SKIP = new Set(['output', 'vec4Output']);
 
@@ -165,5 +168,112 @@ describe('type promotion (D12)', () => {
     const res = compileGraph({ nodes: [grad, out] });
     expect(res.errors ?? []).toEqual([]);
     expect(res.fragmentShader).toMatch(/gl_FragColor = vec4\([A-Za-z0-9_]+, 1\.0\);/);
+  });
+});
+
+// ── D10: only the helpers a graph reaches are emitted ────────────────────────
+describe('helper pruning (D10)', () => {
+  it('shapeSDF set to circle emits sdCircle2 but not the other 34 shapes', () => {
+    const def = NODE_REGISTRY['shapeSDF'];
+    const n = makeNode('s', 'shapeSDF', def);
+    n.params.shape = 'circle';
+    const res = compileGraph({ nodes: [n, outputNode('s', 'distance')] });
+    expect(res.errors ?? []).toEqual([]);
+    expect(res.fragmentShader).toMatch(/float sdCircle2\(/);
+    for (const fn of ['sdHeart', 'sdStar5', 'sdHyperbola', 'sdStairs', 'sdMoon']) {
+      expect(res.fragmentShader, `${fn} should be pruned`).not.toMatch(new RegExp(`float ${fn}\\(`));
+    }
+    n.params.shape = 'heart';
+    const res2 = compileGraph({ nodes: [n, outputNode('s', 'distance')] });
+    expect(res2.fragmentShader).toMatch(/float sdHeart\(/);
+    expect(res2.fragmentShader).toMatch(/float dot2\(/); // reached through sdHeart
+    expect(res2.fragmentShader).not.toMatch(/float sdCircle2\(/);
+  });
+
+  it('keeps helpers reached only through another helper', () => {
+    const kept = pruneUnusedGlslFunctions(
+      ['float inner(float x) { return x; }\nfloat outer(float x) { return inner(x); }\nfloat unused(float x) { return x; }'],
+      '    float v = outer(1.0);\n',
+    );
+    expect(kept.join('\n')).toMatch(/float inner\(/);
+    expect(kept.join('\n')).toMatch(/float outer\(/);
+    expect(kept.join('\n')).not.toMatch(/float unused\(/);
+  });
+});
+
+// ── D4–D6: merged node types load through aliases ────────────────────────────
+describe('node aliases (D4–D6)', () => {
+  it('every alias points at a registered type with the sockets and params it names', () => {
+    for (const [old, alias] of Object.entries(NODE_ALIASES)) {
+      expect(NODE_REGISTRY[old], `${old} is aliased and must not also be registered`).toBeUndefined();
+      const def = NODE_REGISTRY[alias.to];
+      expect(def, `${old} → ${alias.to}`).toBeTruthy();
+      for (const nk of Object.values(alias.inputs ?? {}))  expect(def.inputs[nk],  `${old}: input ${nk}`).toBeTruthy();
+      for (const nk of Object.values(alias.outputs ?? {})) expect(def.outputs[nk], `${old}: output ${nk}`).toBeTruthy();
+      for (const [k, v] of Object.entries(aliasParams(alias, {}))) {
+        if (v === undefined || k === 'outputType') continue;
+        expect(k in (def.defaultParams ?? {}) || !!def.paramDefs?.[k], `${old}: param ${k}`).toBe(true);
+      }
+    }
+  });
+
+  it('a smoothMin graph loads as sdfUnion with k, and the downstream wire follows the renamed output', () => {
+    const uv = makeNode('u', 'uv', NODE_REGISTRY['uv']);
+    const c1 = makeNode('c1', 'circleSDF', NODE_REGISTRY['circleSDF']);
+    const c2 = makeNode('c2', 'circleSDF', NODE_REGISTRY['circleSDF']);
+    c1.inputs.position.connection = { nodeId: 'u', outputKey: 'uv' };
+    c2.inputs.position.connection = { nodeId: 'u', outputKey: 'uv' };
+    const legacy: GraphNode = {
+      id: 's', type: 'smoothMin', position: { x: 0, y: 0 },
+      inputs: {
+        a: { type: 'float', label: 'A', connection: { nodeId: 'c1', outputKey: 'distance' } },
+        b: { type: 'float', label: 'B', connection: { nodeId: 'c2', outputKey: 'distance' } },
+        smoothness: { type: 'float', label: 'Blend radius' },
+      },
+      outputs: { result: { type: 'float', label: 'Result' } },
+      params: { smoothness: 0.25 },
+    } as GraphNode;
+    const out = outputNode('s', 'result');
+    const nodes = resolveNodeAliases([uv, c1, c2, legacy, out], getNodeDefinition).map(n => migrateNodeParams(n, getNodeDefinition));
+    const s = nodes.find(n => n.id === 's')!;
+    expect(s.type).toBe('sdfUnion');
+    expect(s.params.k).toBe(0.25);
+    expect('smoothness' in s.params).toBe(false);
+    expect(Object.keys(s.inputs).sort()).toEqual(['a', 'b', 'k']);
+    expect(s.outputs.dist).toBeTruthy();
+    expect(nodes.find(n => n.id === 'out')!.inputs.color.connection?.outputKey).toBe('dist');
+    const res = compileGraph({ nodes });
+    expect(res.errors ?? []).toEqual([]);
+    expect(res.fragmentShader).toMatch(/float sdfunion_\d+_dist/);
+  });
+
+  it('every bundled example loads (aliases resolved) with only registered types and compiles', async () => {
+    const graphs = await loadExampleGraphs();
+    const bad: string[] = [];
+    const walk = (nodes: GraphNode[], key: string) => {
+      for (const n of nodes) {
+        if (!NODE_REGISTRY[n.type]) bad.push(`${key}: unregistered type ${n.type}`);
+        const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
+        if (sg?.nodes) walk(sg.nodes, key);
+      }
+    };
+    for (const [key, g] of Object.entries(graphs)) {
+      const nodes = resolveNodeAliases(g.nodes, getNodeDefinition).map(n => migrateNodeParams(n, getNodeDefinition));
+      walk(nodes, key);
+      const res = compileGraph({ nodes });
+      if (res.errors?.length) bad.push(`${key}: ${res.errors[0]}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('a vectorised multiply inside a loop-carry group is pre-declared with its live type', async () => {
+    const graphs = await loadExampleGraphs();
+    const g = graphs['groupCarryFBM'];   // multiplyVec2 → multiply (vec2) inside an accumulating group
+    const nodes = resolveNodeAliases(g.nodes, getNodeDefinition).map(n => migrateNodeParams(n, getNodeDefinition));
+    const res = compileGraph({ nodes });
+    expect(res.errors ?? []).toEqual([]);
+    const decl = res.fragmentShader.match(/^\s*(\w+) (\w+_mul_\d+_result);$/m);
+    expect(decl, 'carry pre-declaration').toBeTruthy();
+    expect(decl![1]).toBe('vec2');
   });
 });

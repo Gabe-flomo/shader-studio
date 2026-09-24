@@ -2,23 +2,44 @@ import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p } from './helpers';
 
 // ─── Sine LFO ─────────────────────────────────────────────────────────────────
-export const SineLFONode: NodeDefinition = {
-  type: 'sineLFO',
-  label: 'Sine LFO',
+// ─── LFO (one node, four waveforms) ──────────────────────────────────────────
+// sineLFO / squareLFO / sawtoothLFO / triangleLFO were the same node with one
+// expression swapped; they load as this node through ./aliases.ts.
+
+const LFO_WAVE = (wave: string, t: string, freq: string, ph: string): string => {
+  switch (wave) {
+    case 'square':   return `sign(sin(${t} * ${freq} * 6.2831853 + ${ph}))`;
+    // fract(t*freq + phase/TWO_PI) is a [0,1] ramp; * 2 - 1 spans [-1,1]
+    case 'sawtooth': return `(fract(${t} * ${freq} + ${ph} / 6.2831853) * 2.0 - 1.0)`;
+    case 'triangle': return `(abs(fract(${t} * ${freq} + ${ph} / 6.2831853) * 2.0 - 1.0) * 2.0 - 1.0)`;
+    default:         return `sin(${t} * ${freq} * 6.2831853 + ${ph})`;
+  }
+};
+
+export const LFONode: NodeDefinition = {
+  type: 'lfo',
+  label: 'LFO',
+  aliases: ['sine', 'square', 'sawtooth', 'triangle', 'oscillator', 'wave'],
   category: 'Animation',
-  description: 'Sine-wave oscillator driven by u_time. Outputs a value in [-amplitude, amplitude] + offset.',
+  description: 'Low-frequency oscillator: a sine, square, sawtooth or triangle wave of Time, scaled by amplitude and shifted by offset.',
   inputs: {
     time: { type: 'float', label: 'Time' },
   },
   outputs: {
     value: { type: 'float', label: 'Value' },
   },
-  defaultParams: { freq: 1.0, phase: 0.0, amplitude: 1.0, offset: 0.0 },
+  defaultParams: { waveform: 'sine', freq: 1.0, phase: 0.0, amplitude: 1.0, offset: 0.0 },
   paramDefs: {
-    freq:      { label: 'Frequency',  type: 'float', min: 0.01, max: 20.0,  step: 0.01 },
+    waveform:  { label: 'Waveform', type: 'select', options: [
+      { value: 'sine',     label: 'Sine' },
+      { value: 'square',   label: 'Square' },
+      { value: 'sawtooth', label: 'Sawtooth' },
+      { value: 'triangle', label: 'Triangle' },
+    ]},
+    freq:      { label: 'Frequency',  type: 'float', min: 0.01, max: 20.0,   step: 0.01 },
     phase:     { label: 'Phase',      type: 'float', min: 0.0,  max: 6.2832, step: 0.01 },
-    amplitude: { label: 'Amplitude',  type: 'float', min: 0.0,  max: 2.0,   step: 0.01 },
-    offset:    { label: 'Offset',     type: 'float', min: -1.0, max: 1.0,   step: 0.01 },
+    amplitude: { label: 'Amplitude',  type: 'float', min: 0.0,  max: 2.0,    step: 0.01 },
+    offset:    { label: 'Offset',     type: 'float', min: -1.0, max: 1.0,    step: 0.01 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -27,109 +48,9 @@ export const SineLFONode: NodeDefinition = {
     const ph   = p(node.params.phase, 0.0);
     const amp  = p(node.params.amplitude, 1.0);
     const off  = p(node.params.offset, 0.0);
+    const wave = typeof node.params.waveform === 'string' ? node.params.waveform : 'sine';
     return {
-      code: `    float ${id}_value = sin(${t} * ${freq} * 6.2831853 + ${ph}) * ${amp} + ${off};\n`,
-      outputVars: { value: `${id}_value` },
-    };
-  },
-};
-
-// ─── Square LFO ───────────────────────────────────────────────────────────────
-export const SquareLFONode: NodeDefinition = {
-  type: 'squareLFO',
-  label: 'Square LFO',
-  category: 'Animation',
-  description: 'Square-wave oscillator. Alternates between -amplitude and +amplitude.',
-  inputs: {
-    time: { type: 'float', label: 'Time' },
-  },
-  outputs: {
-    value: { type: 'float', label: 'Value' },
-  },
-  defaultParams: { freq: 1.0, phase: 0.0, amplitude: 1.0, offset: 0.0 },
-  paramDefs: {
-    freq:      { label: 'Frequency', type: 'float', min: 0.01, max: 20.0,   step: 0.01 },
-    phase:     { label: 'Phase',     type: 'float', min: 0.0,  max: 6.2832, step: 0.01 },
-    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,  max: 2.0,   step: 0.01 },
-    offset:    { label: 'Offset',    type: 'float', min: -1.0, max: 1.0,   step: 0.01 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    const t    = inputVars.time ?? 'u_time';
-    const freq = inputVars.freq ?? p(node.params.freq, 1.0);
-    const ph   = p(node.params.phase, 0.0);
-    const amp  = p(node.params.amplitude, 1.0);
-    const off  = p(node.params.offset, 0.0);
-    return {
-      code: `    float ${id}_value = sign(sin(${t} * ${freq} * 6.2831853 + ${ph})) * ${amp} + ${off};\n`,
-      outputVars: { value: `${id}_value` },
-    };
-  },
-};
-
-// ─── Sawtooth LFO ─────────────────────────────────────────────────────────────
-export const SawtoothLFONode: NodeDefinition = {
-  type: 'sawtoothLFO',
-  label: 'Sawtooth LFO',
-  category: 'Animation',
-  description: 'Sawtooth-wave oscillator — ramps from -1 to +1 linearly per cycle.',
-  inputs: {
-    time: { type: 'float', label: 'Time' },
-  },
-  outputs: {
-    value: { type: 'float', label: 'Value' },
-  },
-  defaultParams: { freq: 1.0, phase: 0.0, amplitude: 1.0, offset: 0.0 },
-  paramDefs: {
-    freq:      { label: 'Frequency', type: 'float', min: 0.01, max: 20.0,   step: 0.01 },
-    phase:     { label: 'Phase',     type: 'float', min: 0.0,  max: 6.2832, step: 0.01 },
-    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,  max: 2.0,   step: 0.01 },
-    offset:    { label: 'Offset',    type: 'float', min: -1.0, max: 1.0,   step: 0.01 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    const t    = inputVars.time ?? 'u_time';
-    const freq = inputVars.freq ?? p(node.params.freq, 1.0);
-    const ph   = p(node.params.phase, 0.0);
-    const amp  = p(node.params.amplitude, 1.0);
-    const off  = p(node.params.offset, 0.0);
-    // fract(t*freq + phase/TWO_PI) gives [0,1] sawtooth; * 2 - 1 gives [-1,1]
-    return {
-      code: `    float ${id}_value = (fract(${t} * ${freq} + ${ph} / 6.2831853) * 2.0 - 1.0) * ${amp} + ${off};\n`,
-      outputVars: { value: `${id}_value` },
-    };
-  },
-};
-
-// ─── Triangle LFO ─────────────────────────────────────────────────────────────
-export const TriangleLFONode: NodeDefinition = {
-  type: 'triangleLFO',
-  label: 'Triangle LFO',
-  category: 'Animation',
-  description: 'Triangle-wave oscillator — linearly ramps up then down each cycle.',
-  inputs: {
-    time: { type: 'float', label: 'Time' },
-  },
-  outputs: {
-    value: { type: 'float', label: 'Value' },
-  },
-  defaultParams: { freq: 1.0, phase: 0.0, amplitude: 1.0, offset: 0.0 },
-  paramDefs: {
-    freq:      { label: 'Frequency', type: 'float', min: 0.01, max: 20.0,   step: 0.01 },
-    phase:     { label: 'Phase',     type: 'float', min: 0.0,  max: 6.2832, step: 0.01 },
-    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,  max: 2.0,   step: 0.01 },
-    offset:    { label: 'Offset',    type: 'float', min: -1.0, max: 1.0,   step: 0.01 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    const t    = inputVars.time ?? 'u_time';
-    const freq = inputVars.freq ?? p(node.params.freq, 1.0);
-    const ph   = p(node.params.phase, 0.0);
-    const amp  = p(node.params.amplitude, 1.0);
-    const off  = p(node.params.offset, 0.0);
-    // abs(fract(t*freq + phase/TWO_PI) * 2 - 1) gives [0,1] triangle; * 2 - 1 gives [-1,1]
-    return {
-      code: `    float ${id}_value = (abs(fract(${t} * ${freq} + ${ph} / 6.2831853) * 2.0 - 1.0) * 2.0 - 1.0) * ${amp} + ${off};\n`,
+      code: `    float ${id}_value = ${LFO_WAVE(wave, t, freq, ph)} * ${amp} + ${off};\n`,
       outputVars: { value: `${id}_value` },
     };
   },

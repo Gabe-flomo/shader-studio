@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, pv3 } from './helpers';
+import { f, p, pv3, vec3Str } from './helpers';
 
 // Shared palette GLSL function — referenced by both PaletteNode and FractalLoopNode
 // so the compiler's Set-based deduplication keeps exactly one copy in the shader.
@@ -7,6 +7,39 @@ export const PALETTE_GLSL_FN = `
 vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
     return offset + amplitude * cos(6.28318 * (freq * t + phase));
 }`;
+
+// ─── Palette Preset data ───────────────────────────────────────────────────────
+
+interface PalettePreset {
+  name: string;
+  offset:    [number, number, number];
+  amplitude: [number, number, number];
+  freq:      [number, number, number];
+  phase:     [number, number, number];
+}
+
+export const PALETTE_PRESETS: PalettePreset[] = [
+  { name: 'IQ Blue-Teal',  offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.1,0.2] },
+  { name: 'IQ Rainbow',    offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.33,0.67] },
+  { name: 'IQ Warm',       offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.3,0.2,0.2] },
+  { name: 'IQ Lemon',      offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,0.5], phase:[0.8,0.9,0.3] },
+  { name: 'Sunset',        offset:[0.5,0.5,0.5], amplitude:[0.4431,0.4235,0.4235], freq:[1.0,0.7,0.4], phase:[0.0,0.15,0.2] },
+  { name: 'Fire',          offset:[0.5,0.5,0.5], amplitude:[0.4431,0.4235,0.4235], freq:[2.0,1.0,0.0], phase:[0.5,0.2,0.25] },
+  { name: 'Forest',        offset:[0.8,0.5,0.4], amplitude:[0.2,0.4,0.2], freq:[2.0,1.0,1.0], phase:[0.0,0.25,0.25] },
+  { name: 'Purple Haze',   offset:[0.721,0.328,0.542], amplitude:[0.659,0.181,0.896], freq:[0.612,0.14,0.196], phase:[0.538,0.978,0.7] },
+  { name: 'Deep Purple',   offset:[0.412,0.102,0.491], amplitude:[0.397,0.13,0.485],  freq:[0.612,0.14,0.196], phase:[0.538,0.978,0.7] },
+  { name: 'Psychedelic',   offset:[0.412,0.202,0.491], amplitude:[0.397,0.13,0.485],  freq:[1.147,1.557,1.197], phase:[1.956,5.039,2.541] },
+];
+
+export const PALETTE_PRESET_OPTIONS = PALETTE_PRESETS.map((p, i) => ({ value: String(i), label: p.name }));
+
+/** The preset a palette node has selected, or null for Custom (live vec3 params). */
+export function paletteNodePreset(value: unknown): PalettePreset | null {
+  if (typeof value !== 'string' || value === 'custom') return null;
+  const idx = parseInt(value, 10);
+  if (!Number.isFinite(idx)) return null;
+  return PALETTE_PRESETS[Math.max(0, Math.min(idx, PALETTE_PRESETS.length - 1))] ?? null;
+}
 
 export const PaletteNode: NodeDefinition = {
   type: 'palette',
@@ -33,7 +66,7 @@ export const PaletteNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color' },
   },
   defaultParams: {
-    value: 0, anim: 0,
+    value: 0, anim: 0, preset: 'custom',
     offset:    [0.5, 0.5, 0.5],
     amplitude: [0.5, 0.5, 0.5],
     freq:      [1.0, 1.0, 1.0],
@@ -47,10 +80,12 @@ export const PaletteNode: NodeDefinition = {
     // of always compiling to a hardcoded 0.0 with nothing to tune.
     value:     { label: 'Value',     type: 'float', min: 0.0,      max: 1.0,     step: 0.01 },
     anim:      { label: 'Time',      type: 'float', min: 0.0,      max: 10.0,    step: 0.1  },
-    offset:    { label: 'Offset',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    amplitude: { label: 'Amplitude', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    freq:      { label: 'Freq',      type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    phase:     { label: 'Phase',     type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
+    // Named presets bake the four vec3s; Custom exposes them as live pickers.
+    preset:    { label: 'Preset',    type: 'select', options: [{ value: 'custom', label: 'Custom' }, ...PALETTE_PRESET_OPTIONS] },
+    offset:    { label: 'Offset',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
+    amplitude: { label: 'Amplitude', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
+    freq:      { label: 'Freq',      type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
+    phase:     { label: 'Phase',     type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
   },
   migrateInputKeys: { t: 'value' },
   glslFunction: PALETTE_GLSL_FN,
@@ -60,10 +95,12 @@ export const PaletteNode: NodeDefinition = {
     const timeVar = inputVars.anim  || p(node.params.anim, 0);
     const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     // Each vec3 is a live uniform (or literal); a wired per-channel input overrides that component.
-    const oV  = pv3(node.params.offset,    [0.5, 0.5, 0.5]);
-    const aV  = pv3(node.params.amplitude, [0.5, 0.5, 0.5]);
-    const fV  = pv3(node.params.freq,      [1.0, 1.0, 1.0]);
-    const phV = pv3(node.params.phase,     [0.0, 0.33, 0.67]);
+    // A named preset bakes its four vec3s as literals (the pickers are hidden); Custom uses the live uniforms.
+    const preset = paletteNodePreset(node.params.preset);
+    const oV  = preset ? vec3Str(preset.offset)    : pv3(node.params.offset,    [0.5, 0.5, 0.5]);
+    const aV  = preset ? vec3Str(preset.amplitude) : pv3(node.params.amplitude, [0.5, 0.5, 0.5]);
+    const fV  = preset ? vec3Str(preset.freq)      : pv3(node.params.freq,      [1.0, 1.0, 1.0]);
+    const phV = preset ? vec3Str(preset.phase)     : pv3(node.params.phase,     [0.0, 0.33, 0.67]);
     const chan = (v: string, r?: string, g?: string, b?: string) =>
       (r || g || b) ? `vec3(${r || `${v}.x`}, ${g || `${v}.y`}, ${b || `${v}.z`})` : v;
     const oExpr = chan(oV,  inputVars.offset_r,    inputVars.offset_g,    inputVars.offset_b);
@@ -76,31 +113,6 @@ export const PaletteNode: NodeDefinition = {
     };
   },
 };
-
-// ─── Palette Preset data ───────────────────────────────────────────────────────
-
-interface PalettePreset {
-  name: string;
-  offset:    [number, number, number];
-  amplitude: [number, number, number];
-  freq:      [number, number, number];
-  phase:     [number, number, number];
-}
-
-export const PALETTE_PRESETS: PalettePreset[] = [
-  { name: 'IQ Blue-Teal',  offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.1,0.2] },
-  { name: 'IQ Rainbow',    offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.0,0.33,0.67] },
-  { name: 'IQ Warm',       offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,1.0], phase:[0.3,0.2,0.2] },
-  { name: 'IQ Lemon',      offset:[0.5,0.5,0.5], amplitude:[0.5,0.5,0.5], freq:[1.0,1.0,0.5], phase:[0.8,0.9,0.3] },
-  { name: 'Sunset',        offset:[0.5,0.5,0.5], amplitude:[0.4431,0.4235,0.4235], freq:[1.0,0.7,0.4], phase:[0.0,0.15,0.2] },
-  { name: 'Fire',          offset:[0.5,0.5,0.5], amplitude:[0.4431,0.4235,0.4235], freq:[2.0,1.0,0.0], phase:[0.5,0.2,0.25] },
-  { name: 'Forest',        offset:[0.8,0.5,0.4], amplitude:[0.2,0.4,0.2], freq:[2.0,1.0,1.0], phase:[0.0,0.25,0.25] },
-  { name: 'Purple Haze',   offset:[0.721,0.328,0.542], amplitude:[0.659,0.181,0.896], freq:[0.612,0.14,0.196], phase:[0.538,0.978,0.7] },
-  { name: 'Deep Purple',   offset:[0.412,0.102,0.491], amplitude:[0.397,0.13,0.485],  freq:[0.612,0.14,0.196], phase:[0.538,0.978,0.7] },
-  { name: 'Psychedelic',   offset:[0.412,0.202,0.491], amplitude:[0.397,0.13,0.485],  freq:[1.147,1.557,1.197], phase:[1.956,5.039,2.541] },
-];
-
-export const PALETTE_PRESET_OPTIONS = PALETTE_PRESETS.map((p, i) => ({ value: String(i), label: p.name }));
 
 // ─── Gradient Node ────────────────────────────────────────────────────────────
 
@@ -165,48 +177,6 @@ export const GradientNode: NodeDefinition = {
   },
 };
 
-export const PalettePresetNode: NodeDefinition = {
-  type: 'palettePreset',
-  label: 'Palette Preset',
-  category: 'Color',
-  description: 'Cosine palette with named presets. Wire a float to Value to pick a position, and optionally wire Time to animate it.',
-  inputs: {
-    value: { type: 'float', label: 'Value', defaultValue: 0 },
-    anim:  { type: 'float', label: 'Time',  defaultValue: 0 },
-  },
-  outputs: {
-    color: { type: 'vec3', label: 'Color' },
-  },
-  defaultParams: { preset: '1' },
-  paramDefs: {
-    preset: { label: 'Preset', type: 'select', options: PALETTE_PRESET_OPTIONS },
-  },
-  migrateInputKeys: { t: 'value' },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_color`;
-    const valVar  = inputVars.value || '0.0';
-    const timeVar = inputVars.anim  || '0.0';
-    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
-    const idx = parseInt((node.params.preset as string) ?? '1', 10);
-    const preset = PALETTE_PRESETS[Math.min(idx, PALETTE_PRESETS.length - 1)] ?? PALETTE_PRESETS[1];
-    const fv = (v: number) => v.toFixed(6);
-    const ov = `vec3(${fv(preset.offset[0])},${fv(preset.offset[1])},${fv(preset.offset[2])})`;
-    const av = `vec3(${fv(preset.amplitude[0])},${fv(preset.amplitude[1])},${fv(preset.amplitude[2])})`;
-    const frv = `vec3(${fv(preset.freq[0])},${fv(preset.freq[1])},${fv(preset.freq[2])})`;
-    const phv = `vec3(${fv(preset.phase[0])},${fv(preset.phase[1])},${fv(preset.phase[2])})`;
-    return {
-      code: [
-        `    vec3 ${outVar};\n`,
-        `    {\n`,
-        `        vec3 _po = ${ov}; vec3 _pa = ${av};\n`,
-        `        vec3 _pf = ${frv}; vec3 _pph = ${phv};\n`,
-        `        ${outVar} = _po + _pa * cos(6.283185 * (_pf * ${tVar} + _pph));\n`,
-        `    }\n`,
-      ].join(''),
-      outputVars: { color: outVar },
-    };
-  },
-};
 
 // ─── HSV ↔ RGB ────────────────────────────────────────────────────────────────
 
@@ -297,28 +267,6 @@ export const InvertNode: NodeDefinition = {
 
 // ─── Desaturate ───────────────────────────────────────────────────────────────
 
-export const DesaturateNode: NodeDefinition = {
-  type: 'desaturate',
-  label: 'Desaturate',
-  category: 'Color',
-  description: 'Blend toward grayscale. Amount=1 → full grayscale, Amount=0 → original color. Wire a Noise Float to Amount for per-pixel variation.',
-  inputs:  { color: { type: 'vec3', label: 'Color' }, amount: { type: 'float', label: 'Amount' } },
-  outputs: { color: { type: 'vec3', label: 'Color' } },
-  defaultParams: { amount: 1.0 },
-  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 1.0, step: 0.01 } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id  = node.id;
-    const c   = inputVars.color  ?? 'vec3(0.5)';
-    const amt = inputVars.amount ?? p(node.params.amount, 1.0);
-    return {
-      code: [
-        `    float ${id}_lum   = dot(${c}, vec3(0.299, 0.587, 0.114));\n`,
-        `    vec3  ${id}_color = mix(${c}, vec3(${id}_lum), ${amt});\n`,
-      ].join(''),
-      outputVars: { color: `${id}_color` },
-    };
-  },
-};
 
 // ─── Hue Range ────────────────────────────────────────────────────────────────
 
@@ -438,7 +386,7 @@ export const BlendModesNode: NodeDefinition = {
     opacity: { type: 'float', label: 'Opacity' },
   },
   outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { mode: 'multiply', opacity: 1.0 },
+  defaultParams: { mode: 'multiply', opacity: 1.0, strength: 1.0 },
   paramDefs: {
     mode: { label: 'Mode', type: 'select', options: [
       { value: 'multiply',    label: 'Multiply' },
@@ -452,8 +400,11 @@ export const BlendModesNode: NodeDefinition = {
       { value: 'burn',        label: 'Color Burn' },
       { value: 'lighten',     label: 'Lighten' },
       { value: 'darken',      label: 'Darken' },
+      { value: 'additive',    label: 'Additive' },
+      { value: 'subtract',    label: 'Subtract' },
     ]},
-    opacity: { label: 'Opacity', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    opacity:  { label: 'Opacity',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'Scales the blend layer before it is applied.' },
   },
   glslFunction: `
 vec3 blendMultiply(vec3 b, vec3 s) { return b * s; }
@@ -472,12 +423,16 @@ vec3 blendExclusion(vec3 b, vec3 s) { return b + s - 2.0*b*s; }
 vec3 blendDodge(vec3 b, vec3 s) { return clamp(b / max(1.0 - s, 0.001), 0.0, 1.0); }
 vec3 blendBurn(vec3 b, vec3 s) { return 1.0 - clamp((1.0 - b) / max(s, 0.001), 0.0, 1.0); }
 vec3 blendLighten(vec3 b, vec3 s) { return max(b, s); }
-vec3 blendDarken(vec3 b, vec3 s) { return min(b, s); }`,
+vec3 blendDarken(vec3 b, vec3 s) { return min(b, s); }
+vec3 blendAdditive(vec3 b, vec3 s) { return b + s; }
+vec3 blendSubtract(vec3 b, vec3 s) { return b - s; }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
     const base    = inputVars.base    || 'vec3(0.5)';
     const blend   = inputVars.blend   || 'vec3(0.5)';
     const opacity = inputVars.opacity || p(node.params.opacity, 1.0);
+    // Strength scales the blend layer before the op (a live uniform like every other slider).
+    const layer   = `(${blend} * ${p(node.params.strength, 1.0)})`;
     const mode    = String(node.params.mode || 'multiply');
     const fnMap: Record<string, string> = {
       multiply:   'blendMultiply',
@@ -491,10 +446,12 @@ vec3 blendDarken(vec3 b, vec3 s) { return min(b, s); }`,
       burn:       'blendBurn',
       lighten:    'blendLighten',
       darken:     'blendDarken',
+      additive:   'blendAdditive',
+      subtract:   'blendSubtract',
     };
     const fn = fnMap[mode] || 'blendMultiply';
     return {
-      code: `    vec3 ${id}_result = mix(${base}, ${fn}(${base}, ${blend}), clamp(${opacity}, 0.0, 1.0));\n`,
+      code: `    vec3 ${id}_result = mix(${base}, ${fn}(${base}, ${layer}), clamp(${opacity}, 0.0, 1.0));\n`,
       outputVars: { result: `${id}_result` },
     };
   },
@@ -733,53 +690,3 @@ vec3 blackbodyColor(float kelvin) {
 
 // ─── Blend Mode ───────────────────────────────────────────────────────────────
 // Combines two colors via a named blend mode with a mask and strength control.
-export const BlendModeNode: NodeDefinition = {
-  type: 'blendMode',
-  label: 'Blend Mode',
-  category: 'Color',
-  description: 'Combines two colors via a named blend mode. mask controls how much blending is applied. Use additive for glow accumulation, multiply for darkening, screen for brightening.',
-  inputs: {
-    colorA: { type: 'vec3',  label: 'Color A' },
-    colorB: { type: 'vec3',  label: 'Color B' },
-    mask:   { type: 'float', label: 'Mask'    },
-  },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { mode: 'additive', strength: 1.0 },
-  paramDefs: {
-    mode: { label: 'Mode', type: 'select', options: [
-      { value: 'multiply',  label: 'Multiply'  },
-      { value: 'additive',  label: 'Additive'  },
-      { value: 'screen',    label: 'Screen'    },
-      { value: 'overlay',   label: 'Overlay'   },
-      { value: 'subtract',  label: 'Subtract'  },
-    ]},
-    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const a        = inputVars.colorA ?? 'vec3(0.0)';
-    const b        = inputVars.colorB ?? 'vec3(0.0)';
-    const mask     = inputVars.mask   ?? '1.0';
-    const strength = p(node.params.strength, 1.0);
-    const mode     = String(node.params.mode ?? 'additive');
-    const s        = `${id}_s`;
-    let blendExpr: string;
-    if (mode === 'multiply') {
-      blendExpr = `${a} * ${s}`;
-    } else if (mode === 'screen') {
-      blendExpr = `1.0 - (1.0 - ${a}) * (1.0 - ${s})`;
-    } else if (mode === 'overlay') {
-      blendExpr = `mix(2.0*${a}*${s}, 1.0 - 2.0*(1.0-${a})*(1.0-${s}), step(0.5, ${a}))`;
-    } else if (mode === 'subtract') {
-      blendExpr = `${a} - ${s}`;
-    } else {
-      blendExpr = `${a} + ${s}`;
-    }
-    return {
-      code: `    vec3 ${s} = ${b} * ${strength};\n` +
-            `    vec3 ${id}_blended = ${blendExpr};\n` +
-            `    vec3 ${id}_result  = mix(${a}, ${id}_blended, clamp(${mask}, 0.0, 1.0));\n`,
-      outputVars: { result: `${id}_result` },
-    };
-  },
-};

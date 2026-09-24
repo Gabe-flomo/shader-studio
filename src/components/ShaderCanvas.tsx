@@ -934,6 +934,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
                 const outSocket = selNode.outputs[outKey];
                 const varType   = outSocket?.type ?? 'float';
 
+                // Skip until the active shader actually declares this variable (see the scope probe).
+                if (!curFs.includes(varName)) continue;
                 // Get or build a probe material for this variable
                 let pm = probeMatCache.get(varName);
                 if (!pm) {
@@ -1000,6 +1002,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
               const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
               if (!outputVars?.value) continue;
               const varName = outputVars.value;
+              // The var map can run ahead of the active shader for a frame or two after a
+              // recompile; a probe built from a shader that doesn't declare the variable
+              // would only surface a bogus "undeclared identifier" error. Wait for the swap.
+              if (!curScopeFs.includes(varName)) continue;
               // Scope node uses min/max params; LFO nodes derive range from offset ± amplitude
               let scopeMin: number;
               let scopeMax: number;
@@ -1065,7 +1071,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
               if (floatOutputKey) {
                 const outputVars = nodeOutputVarMapRef.current.get(previewId);
                 const varName    = outputVars?.[floatOutputKey];
-                if (varName) {
+                if (varName && curFs.includes(varName)) {
                   const cacheKey = `${varName}::-1::1`;
                   let pm = previewScopeMatCache.get(cacheKey);
                   if (!pm) {
@@ -1118,7 +1124,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
                 const upType = upNode.outputs[upKey]?.type;
                 if (!upType) continue;
                 const upVarName = nodeOutputVarMapRef.current.get(upId)?.[upKey];
-                if (!upVarName) continue;
+                if (!upVarName || !curFs.includes(upVarName)) continue;
 
                 const probeKey = `__preview__${upId}:${upKey}`;
 
@@ -1197,7 +1203,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
               for (const [outKey, outSocket] of Object.entries(previewNode.outputs)) {
                 if (outSocket.type !== 'vec2' && outSocket.type !== 'vec3') continue;
                 const ownVarName = nodeOutputVarMapRef.current.get(previewId)?.[outKey];
-                if (!ownVarName) continue;
+                if (!ownVarName || !curFs.includes(ownVarName)) continue;
                 const ownProbeKey = `__preview__${previewId}:${outKey}`;
 
                 if (outSocket.type === 'vec2') {
@@ -1377,7 +1383,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
 
   // Sync probe refs from store so the rAF loop sees updates without re-running the effect
   useEffect(() => {
-    const SCOPE_LIKE = new Set(['scope', 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
+    const SCOPE_LIKE = new Set(['scope', 'lfo']);
     const syncNodes = (nodes: import('../types/nodeGraph').GraphNode[]) => {
       nodesRef.current  = nodes;
       nodeMapRef.current = new Map(nodes.map(n => [n.id, n]));

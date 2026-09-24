@@ -5,6 +5,7 @@ import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
+import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -92,11 +93,14 @@ mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }`;
  * For Expr and CustomFn nodes the output type is stored in `params.outputType`
  * at runtime; their definition hardcodes `float` as a placeholder.
  */
-function getNodeOutputType(node: GraphNode, defType: DataType): DataType {
-  if (node.type === 'expr' || node.type === 'exprNode' || node.type === 'customFn') {
-    const pt = node.params.outputType as string | undefined;
-    if (pt === 'float' || pt === 'vec2' || pt === 'vec3' || pt === 'vec4') return pt as DataType;
-  }
+function getNodeOutputType(node: GraphNode, outKey: string, defType: DataType): DataType {
+  const pt = node.params.outputType as string | undefined;
+  const live = pt === 'float' || pt === 'vec2' || pt === 'vec3' || pt === 'vec4' ? (pt as DataType) : null;
+  if (!live) return defType;
+  if (node.type === 'expr' || node.type === 'exprNode' || node.type === 'customFn') return live;
+  // Vectorizable math (add, sin, mix…): the type pill retypes the primary output;
+  // the definition still says float. Group / loop paths pre-declare from here.
+  if (VECTORIZABLE_NODES[node.type]?.primaryOutput === outKey) return live;
   return defType;
 }
 
@@ -925,7 +929,7 @@ export class ShaderAssembler {
               if (!firstOutEntry) continue;
               const [firstOutKey, firstOutSock] = firstOutEntry;
               // Use the actual runtime output type (Expr/CustomFn store it in params.outputType)
-              const actualOutType = getNodeOutputType(sn, firstOutSock.type);
+              const actualOutType = getNodeOutputType(sn, firstOutKey, firstOutSock.type);
               // Find first input with the same type as the primary output (the carry input).
               // Fall back to the first input for nodes like Expr where definition types
               // don't reflect the actual wired types (all Expr inputs are 'float' in the def).
@@ -989,7 +993,7 @@ export class ShaderAssembler {
               const outVars: Record<string, string> = {};
               for (const [outKey, outSock] of Object.entries(def.outputs)) {
                 // Use the actual runtime type (Expr/CustomFn store it in params.outputType)
-                const actualType = getNodeOutputType(sn, outSock.type);
+                const actualType = getNodeOutputType(sn, outKey, outSock.type);
                 const varName = `${nodeSlug}_ao_${snSlugAcc}_${outKey}`;
                 outVars[outKey] = varName;
                 const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType);
@@ -1406,7 +1410,7 @@ export class ShaderAssembler {
 
             // Track last float output as candidate return value
             for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-              const outType = snDef.outputs[outKey]?.type;
+              const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
               if (outType === 'float') sgLastFloatVar = varName;
             }
           }
@@ -2065,7 +2069,7 @@ export class ShaderAssembler {
 
               // Track last vec3 output as the warp return value
               for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-                const outType = snDef.outputs[outKey]?.type;
+                const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
                 if (outType === 'vec3') mlLastVec3Var = varName;
               }
             }
@@ -2795,7 +2799,7 @@ export class ShaderAssembler {
               this.nodeOutputs.set(sn.id, snResult.outputVars);
 
               for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-                const outType = snDef.outputs[outKey]?.type;
+                const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
                 if (outType === 'vec3') mlLastVec3Var = varName;
               }
             }
@@ -3153,7 +3157,7 @@ export class ShaderAssembler {
 
             // Track last vec3 output as the warp return value
             for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-              const outType = snDef.outputs[outKey]?.type;
+              const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
               if (outType === 'vec3') swLastVec3Var = varName;
             }
           }
@@ -3256,8 +3260,8 @@ export class ShaderAssembler {
             const compOrder = ['x', 'y', 'z', 'w'];
             for (const outKey of Object.keys(result.outputVars)) {
               const outSock = def.outputs[outKey];
-              const actualType = outSock?.type ?? 'float';
-              const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType as DataType);
+              const actualType = getNodeOutputType(node, outKey, outSock?.type ?? 'float');
+              const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType);
               let initExpr: string;
               if (node.assignInit?.trim()) {
                 const raw = node.assignInit.trim();

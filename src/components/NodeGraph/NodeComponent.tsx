@@ -133,7 +133,7 @@ function hzToSlider(hz: number): number {
 
 const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
 let zCounter = 10; // incremented each time a node is brought to front
-const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
+const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
 const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
