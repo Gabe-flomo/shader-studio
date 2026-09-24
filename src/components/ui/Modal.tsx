@@ -37,7 +37,11 @@ export function Modal({
     const opener = document.activeElement as HTMLElement | null;
     panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current(); }
+      // A field with its own open popup (autocomplete) handles Esc itself
+      if (e.key === 'Escape' && !(e.target as HTMLElement | null)?.closest?.('[data-captures-escape]')) {
+        e.stopPropagation();
+        onCloseRef.current();
+      }
     };
     window.addEventListener('keydown', onKey, true);
     return () => {
