@@ -10,6 +10,7 @@ import { isKeyframeBypassed, socketHasKeyframes } from '../compiler/keyframes';
  *   slider runs both ways. A slider with no declared range (Constant, matrix cells, …) uses −1 → 1.
  * - vec3 params: each unwired component in the param's range, or −1 → 1; colours 0 → 1.
  * - Values snap to the slider's step (whole numbers stay whole).
+ * - Keys listed in `node.params.__randExclude` (unticked in the die's right-click list) are left alone.
  */
 export function randomizedParams(node: GraphNode, def: NodeDefinition, rand: () => number = Math.random): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -17,8 +18,9 @@ export function randomizedParams(node: GraphNode, def: NodeDefinition, rand: () 
   const keyframed = (key: string) => socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
   const between = (lo: number, hi: number, pd: ParamDef) => snap(lo + rand() * (hi - lo), pd);
 
+  const excluded = new Set(randomizeExcluded(node));
   for (const [key, pd] of Object.entries(def.paramDefs ?? {})) {
-    if (!isParamVisible(pd, node.params) || wired(key) || keyframed(key)) continue;
+    if (!isParamVisible(pd, node.params) || wired(key) || keyframed(key) || excluded.has(key)) continue;
     if (pd.type === 'float' || pd.type === 'int') {
       const [lo, hi] = floatRange(node, key, pd);
       out[key] = between(lo, hi, pd);
@@ -50,5 +52,16 @@ function snap(v: number, pd: ParamDef): number {
 
 /** Whether the node has anything Randomize would change (to show the button) */
 export function canRandomize(node: GraphNode, def: NodeDefinition): boolean {
-  return Object.keys(randomizedParams(node, def, () => 0.5)).length > 0;
+  return randomizableParams(node, def).length > 0;
+}
+
+/** Keys the user unticked in the die's right-click list */
+export function randomizeExcluded(node: GraphNode): string[] {
+  return Array.isArray(node.params.__randExclude) ? (node.params.__randExclude as unknown[]).filter((k): k is string => typeof k === 'string') : [];
+}
+
+/** Every slider Randomize could change, excluded or not, for the right-click list */
+export function randomizableParams(node: GraphNode, def: NodeDefinition): Array<{ key: string; label: string }> {
+  const all = randomizedParams({ ...node, params: { ...node.params, __randExclude: [] } }, def, () => 0.5);
+  return Object.keys(all).map(key => ({ key, label: def.paramDefs?.[key]?.label ?? key }));
 }

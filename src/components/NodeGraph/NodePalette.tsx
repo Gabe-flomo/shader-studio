@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
@@ -214,6 +214,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const { activeTab } = state;
 
   const refreshSavedNames     = () => setSavedNames(getSavedGraphNames());
+  // Saves and deletes from anywhere (the top bar too) keep this list current
+  useEffect(() => {
+    const onChange = () => setSavedNames(useNodeGraphStore.getState().getSavedGraphNames());
+    window.addEventListener(SAVED_GRAPHS_CHANGED, onChange);
+    return () => window.removeEventListener(SAVED_GRAPHS_CHANGED, onChange);
+  }, []);
   const refreshExprPresets    = () => setExprPresets(loadExprPresets());
   const refreshTransformPresets = () => setTransformPresets(loadTransformPresets());
   const refreshKeyframePresets = () => setKeyframePresets(loadKeyframePresets());

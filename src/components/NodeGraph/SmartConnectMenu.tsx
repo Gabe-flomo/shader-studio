@@ -13,11 +13,13 @@ const MARGIN = 8;
  * node…". 1/2/3 or a click connects, A opens the node search, Esc or a click outside closes.
  * Hovering a row previews its wire (onHover).
  */
-export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNode, onClose }: {
+export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNode, onClose, justAdded = false }: {
   x: number;
   y: number;
   title: string;
   items: Suggestion[];
+  /** Opened on a node just added from search: the footer offers to leave it unconnected instead */
+  justAdded?: boolean;
   onPick: (s: Suggestion) => void;
   onHover: (s: Suggestion | null) => void;
   onAddNode: () => void;
@@ -39,6 +41,8 @@ export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNod
   }, [x, y, items.length]);
 
   const latest = useRef({ items, onPick, onAddNode, onClose });
+  const latestJustAdded = useRef(justAdded);
+  useEffect(() => { latestJustAdded.current = justAdded; }, [justAdded]);
   useEffect(() => { latest.current = { items, onPick, onAddNode, onClose }; });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -47,7 +51,7 @@ export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNod
       const n = Number(e.key);
       // Handled keys stop here, so the canvas shortcuts (A = add node, …) don't also fire
       if (n >= 1 && n <= list.length) { e.preventDefault(); e.stopPropagation(); pick(list[n - 1]); return; }
-      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); e.stopPropagation(); add(); return; }
+      if (!latestJustAdded.current && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); e.stopPropagation(); add(); return; }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         setActive(i => (i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % Math.max(1, list.length));
@@ -111,7 +115,7 @@ export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNod
       })}
       <div
         role="menuitem"
-        onClick={onAddNode}
+        onClick={justAdded ? onClose : onAddNode}
         onMouseEnter={e => { e.currentTarget.style.background = tk.bg.hover; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
         style={{
@@ -119,9 +123,9 @@ export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNod
           borderTop: `1px solid ${tk.border.subtle}`, color: tk.text.muted, cursor: 'pointer',
         }}
       >
-        <Icon name="search" size={14} />
-        <span style={{ flex: 1 }}>Add a new node…</span>
-        {kbd('A', false)}
+        <Icon name={justAdded ? 'close' : 'search'} size={14} />
+        <span style={{ flex: 1 }}>{justAdded ? 'Leave it unconnected' : 'Add a new node…'}</span>
+        {kbd(justAdded ? 'Esc' : 'A', false)}
       </div>
     </div>,
     document.body,

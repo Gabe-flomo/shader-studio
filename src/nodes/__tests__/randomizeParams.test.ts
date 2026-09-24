@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { randomizedParams } from '../randomizeParams';
+import { randomizableParams, randomizedParams } from '../randomizeParams';
 
 const def = {
   paramDefs: {
@@ -38,5 +38,11 @@ describe('randomizedParams', () => {
 
   it('keeps whole-number sliders whole', () => {
     for (let i = 0; i < 20; i++) expect(Number.isInteger(randomizedParams(node(), def).count)).toBe(true);
+  });
+
+  it('leaves excluded sliders alone but still lists them', () => {
+    const n = node({ __randExclude: ['radius', 'count'] });
+    expect(Object.keys(randomizedParams(n, def)).sort()).toEqual(['col', 'free']);
+    expect(randomizableParams(n, def).map(p => p.key).sort()).toEqual(['col', 'count', 'free', 'radius']);
   });
 });

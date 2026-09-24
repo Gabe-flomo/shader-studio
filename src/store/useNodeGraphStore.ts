@@ -147,6 +147,9 @@ const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStorageP
  * Writes to localStorage, optionally to disk, and fires the
  * 'customfn-changed' CustomEvent so NodePalette refreshes.
  */
+/** Fired when a saved graph is added or removed, so every list of them (sidebar, top bar) refreshes */
+export const SAVED_GRAPHS_CHANGED = 'saved-graphs-changed';
+
 export function saveCustomFnPreset(
   data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string; comment?: string },
 ): Promise<FileResult> {
@@ -4107,6 +4110,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
     const dir = getGraphDir();
     if (dir) {
       const path = `${dir}/${labelToSlug(name || 'graph')}.json`;
@@ -4170,6 +4174,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   deleteSavedGraph: (name) => {
     localStorage.removeItem(`shader-studio:${name}`);
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
   },
 
   exportGraph: async () => {
