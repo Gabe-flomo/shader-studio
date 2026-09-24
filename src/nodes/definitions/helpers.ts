@@ -26,14 +26,14 @@ export function p(val: unknown, fallback: number, decimals?: number): string {
   return f(n);
 }
 
-// Helper: emit a vec3 literal
+// Helper: emit a vec3 literal (exact components, integers get a ".0" suffix)
 export function vec3Str(v: number[]): string {
-  return `vec3(${v.map(n => n.toFixed(2)).join(', ')})`;
+  return `vec3(${v.map(f).join(', ')})`;
 }
 
-// Helper: emit a vec4 literal
+// Helper: emit a vec4 literal (exact components, integers get a ".0" suffix)
 export function vec4Str(v: number[]): string {
-  return `vec4(${v.map(n => n.toFixed(2)).join(', ')})`;
+  return `vec4(${v.map(f).join(', ')})`;
 }
 
 // Fallback zero value per type
