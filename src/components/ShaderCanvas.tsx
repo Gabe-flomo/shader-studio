@@ -285,12 +285,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   useEffect(() => {
     const container = canvasRef.current!;
 
-    // 'high-performance' forces the discrete GPU on dual-GPU laptops and hints
-    // max clocks on phones; the preview is one full-screen quad, so 'default'
-    // is plenty, and phones get 'low-power' for battery.
+    // The preview is one full-screen quad, but its fragment shader can be very heavy (raymarching,
+    // fractals). Desktop/tablet ask for the fast GPU: with 'default', dual-GPU Macs can land on the
+    // integrated one, where a heavy shader misses the frame budget and vsync halves it to 30 fps.
+    // Phones keep 'low-power' for battery.
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
-      powerPreference: isMobile(getBreakpoint(window.innerWidth)) ? 'low-power' : 'default',
+      powerPreference: isMobile(getBreakpoint(window.innerWidth)) ? 'low-power' : 'high-performance',
     });
     renderer.setSize(1, 1);
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
@@ -1254,12 +1255,23 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         }
       } else {
         idleFrames++;
+        // Nothing to redraw, but the clock still runs while playing: keep the time readout (and
+        // anything following it) current without drawing.
+        if (playing && ++frameCount % SAMPLE_EVERY === 0) {
+          if (hasTimeNodeRef.current) setCurrentTime(material.uniforms.u_time.value);
+          if (hasTimeTickListeners()) emitTimeTick(material.uniforms.u_time.value);
+        }
       }
 
-      // Keep the loop alive while something is moving or was just drawn; after
-      // a short idle run stop requesting frames until a trigger asks again.
-      if (dynamic || needsRender || idleFrames < IDLE_FRAMES_BEFORE_STOP) scheduleFrame();
-      else loopRunning = false;
+      // Keep the loop alive while something is moving, was just drawn, or the clock is running
+      // (a frame with nothing to draw is cheap); otherwise, after a short idle run, stop
+      // requesting frames until a trigger asks again. Stopping while playing froze the clock:
+      // it only advanced when some store write woke the loop, then jumped.
+      if (dynamic || needsRender || playing || idleFrames < IDLE_FRAMES_BEFORE_STOP) scheduleFrame();
+      else {
+        loopRunning = false;
+        lastRafTime = null; // the next start counts from its own first frame, not across the stop
+      }
     }
     scheduleFrame();
 
