@@ -100,3 +100,28 @@ export function buildNodeErrors(opts: {
 
   return out;
 }
+
+/**
+ * GLSL errors placed on the lines of `code` (the graph's fragment shader, as the code panel shows
+ * it): 0-based line → messages. Error line numbers count from the top of the source the driver
+ * compiled, which three.js prefixes with its own preamble, so the two are aligned on `void main`.
+ */
+export function glslErrorLines(code: string, source: string | null, errors: readonly string[]): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  if (!source || errors.length === 0) return out;
+  const codeLines = code.split('\n');
+  const srcLines = source.split('\n');
+  const anchor = (ls: string[]) => ls.findIndex(l => /^\s*void\s+main\s*\(/.test(l));
+  const offset = anchor(srcLines) - anchor(codeLines);
+  if (anchor(codeLines) < 0 || anchor(srcLines) < 0) return out;
+  for (const raw of errors) {
+    const parsed = parseGlslError(raw);
+    if (!parsed) continue;
+    const idx = parsed.line - 1 - offset;
+    if (idx < 0 || idx >= codeLines.length) continue;
+    const list = out.get(idx) ?? [];
+    list.push(friendlyGlsl(parsed.text));
+    out.set(idx, list);
+  }
+  return out;
+}

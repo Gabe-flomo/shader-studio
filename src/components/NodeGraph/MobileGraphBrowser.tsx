@@ -9,6 +9,8 @@
  * in the graph — never by dragging, always by picking from a list.
  */
 
+import { errorMessage } from '../../utils/fileIO';
+import { toast } from '../ui/toastStore';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
@@ -2129,7 +2131,7 @@ export function MobileGraphBrowser() {
           setNodeTexture(node.id, texture);
           updateNodeParams(node.id, { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect }, { immediate: true });
         })
-        .catch(err => console.error('Failed to load texture image:', err));
+        .catch(err => toast.error('Couldn’t load that image', { message: 'The file may be damaged or in a format the browser can’t read. Your graph wasn’t changed.', details: errorMessage(err) }));
     };
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: tc.base, border: `1px solid ${tc.surface0}`, borderRadius: '8px', padding: '10px' }}>

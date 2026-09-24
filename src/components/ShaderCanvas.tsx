@@ -214,7 +214,53 @@ interface Props {
 }
 export { HIST_BINS };
 
-export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, onHistogram }: Props = {}) {
+/**
+ * The live preview. Wraps the WebGL canvas with its two status overlays (the chip shown while a
+ * broken shader leaves the last working one on screen, and the notice after a GPU reset), and
+ * remounts the canvas when the user restarts the preview.
+ */
+export default function ShaderCanvas(props: Props = {}) {
+  const epoch = useNodeGraphStore(s => s.previewEpoch);
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <ShaderCanvasSurface key={epoch} {...props} />
+      <PreviewStatus />
+    </div>
+  );
+}
+
+function PreviewStatus() {
+  const stale = useNodeGraphStore(s => s.previewStale);
+  const lost = useNodeGraphStore(s => s.glContextLost);
+  const restart = useNodeGraphStore(s => s.restartPreview);
+  if (lost) {
+    return (
+      <div role="alert" style={{
+        position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+        background: 'rgba(13,13,18,0.86)', color: '#e8e9ef', font: '13px system-ui, -apple-system, sans-serif', textAlign: 'center', padding: 20,
+      }}>
+        <b style={{ fontSize: 14 }}>Preview paused</b>
+        <span style={{ color: '#a9abb6' }}>The graphics driver reset. Your graph is fine.</span>
+        <button type="button" onClick={restart} style={{
+          height: 32, padding: '0 14px', border: 0, borderRadius: 8, cursor: 'pointer',
+          background: '#e8e9ef', color: '#0d0d12', font: '600 12.5px system-ui, -apple-system, sans-serif',
+        }}>Restart preview</button>
+      </div>
+    );
+  }
+  if (!stale) return null;
+  return (
+    <div role="status" title="The newest change doesn't compile. See the node with the red ring, or Generated code." style={{
+      position: 'absolute', left: 10, top: 10, zIndex: 5, display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 10px',
+      borderRadius: 8, background: 'rgba(13,13,18,0.78)', color: '#fca5a5', font: '600 11.5px system-ui, -apple-system, sans-serif', pointerEvents: 'auto',
+    }}>
+      <i style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444' }} />
+      Showing the last working version
+    </div>
+  );
+}
+
+function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogram }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -407,7 +453,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     compileScene.add(compileMesh);
     let compileGeneration = 0;
     swapShaderRef.current = async (vsSrc, fsSrc) => {
-      if (material.vertexShader === vsSrc && material.fragmentShader === fsSrc) return true;
+      if (material.vertexShader === vsSrc && material.fragmentShader === fsSrc) {
+        // e.g. an edit that fixed an error, landing back on the shader still on screen
+        useNodeGraphStore.getState().setPreviewStale(false);
+        return true;
+      }
       const gen = ++compileGeneration;
       const next = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
       compileMesh.material = next;
@@ -418,6 +468,19 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         console.warn('[ShaderCanvas] compileAsync rejected', e);
       }
       if (gen !== compileGeneration) { next.dispose(); return false; }
+      // A shader that didn't link would draw nothing: keep drawing the last one that worked and
+      // say so. Read its error log first; disposing it deletes the shader objects the log is on.
+      const gl = renderer.getContext();
+      const linked = (renderer.properties.get(next) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+      if (linked && gl.getProgramParameter(linked, gl.LINK_STATUS) === false) {
+        const errors = flushGlErrors();
+        if (errors.length > 0) useNodeGraphStore.getState().setGlslErrors(errors, glFailedSource());
+        compileMesh.material = material;
+        next.dispose();
+        useNodeGraphStore.getState().setPreviewStale(true);
+        return false;
+      }
+      useNodeGraphStore.getState().setPreviewStale(false);
       const prev = material;
       material = next;
       mesh.material = next;

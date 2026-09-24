@@ -10,6 +10,8 @@ import { WireLayer, type EdgeInfo } from './WireLayer';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { SmartConnectMenu } from './SmartConnectMenu';
+import { askConfirm, askText } from '../ui/dialogStore';
+import { toast } from '../ui/toastStore';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -284,11 +286,14 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     return () => ro.disconnect();
   }, []);
 
-  // Auto-clear disconnected-connection notice after 5s
+  // Wires the app removed itself (a group output changed type) → a toast with Undo
   useEffect(() => {
     if (!disconnectedNotice) return;
-    const t = setTimeout(clearDisconnectedNotice, 5000);
-    return () => clearTimeout(t);
+    toast.warning('Connections removed', {
+      message: `${disconnectedNotice}. They no longer fit the new type.`,
+      action: { label: 'Undo', onClick: () => useNodeGraphStore.getState().undo() },
+    });
+    clearDisconnectedNotice();
   }, [disconnectedNotice, clearDisconnectedNotice]);
 
   // ── Minimap toggle (persisted) ──────────────────────────────────────────────
@@ -1260,26 +1265,6 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
-      {/* Disconnected-connection notice — auto-hides after 5s */}
-      {disconnectedNotice && (
-        <div style={{
-          position: 'absolute',
-          top: compactToolbar ? 80 : 50,
-          left: '50%', transform: 'translateX(-50%)',
-          background: '#2d1b1b', border: `1px solid ${tc.red}55`,
-          color: tc.red, padding: '5px 14px', borderRadius: '8px',
-          fontSize: '11px', zIndex: 25, display: 'flex', alignItems: 'center',
-          gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          whiteSpace: 'nowrap',
-        }}>
-          <span>⚠ {disconnectedNotice}</span>
-          <button
-            onClick={clearDisconnectedNotice}
-            style={{ background: 'none', border: `1px solid ${tc.red}55`, color: tc.red, cursor: 'pointer', fontSize: '10px', padding: '1px 6px', borderRadius: '4px' }}
-          >×</button>
-        </div>
-      )}
-
       {/* Right-click context menu — rendered via portal so it's outside the transformed canvas tree */}
       {contextMenu && createPortal(
         <div
@@ -1379,9 +1364,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       Enter Group
                     </button>
                     <button style={ctxBtnStyle} onClick={() => {
-                      const label = window.prompt('Group name:', typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group');
-                      if (label !== null) updateNodeParams(clickedNode.id, { label });
+                      const id = clickedNode.id;
                       setContextMenu(null);
+                      askText('Rename group', { initial: typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group', confirmLabel: 'Rename' })
+                        .then(label => { if (label) updateNodeParams(id, { label }); });
                     }}>
                       Rename Group
                     </button>
@@ -1393,10 +1379,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       Ungroup
                     </button>
                     <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
-                      if (window.confirm(`Delete group "${typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group'}" and all its nodes?`)) {
-                        removeNode(clickedNode.id);
-                        setContextMenu(null);
-                      }
+                      const id = clickedNode.id;
+                      const name = typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group';
+                      const count = ((clickedNode.params.subgraph as { nodes?: unknown[] } | undefined)?.nodes ?? []).length;
+                      setContextMenu(null);
+                      askConfirm(`Delete “${name}”?`, {
+                        message: `This removes the group and the ${count} node${count === 1 ? '' : 's'} inside it. You can undo it.`,
+                        confirmLabel: 'Delete group', danger: true,
+                      }).then(ok => { if (ok) removeNode(id); });
                     }}>
                       Delete Group
                     </button>

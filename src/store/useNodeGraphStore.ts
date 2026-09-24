@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
+import { askText } from '../components/ui/dialogStore';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
@@ -550,6 +551,12 @@ interface NodeGraphState {
   /** `source` is the shader the errors were reported against (their line numbers point into it) */
   setGlslErrors: (errors: string[], source?: string | null) => void;
   setGlContextLost: (lost: boolean) => void;
+  /** The newest shader failed to compile, so the preview is still drawing the last one that worked */
+  previewStale: boolean;
+  setPreviewStale: (stale: boolean) => void;
+  /** Bumped by restartPreview(); ShaderCanvas remounts on change (a fresh WebGL context) */
+  previewEpoch: number;
+  restartPreview: () => void;
   setPixelSample: (sample: [number, number, number, number] | null) => void;
   setHoveredParamHint: (hint: string | null) => void;
   setCurrentTime: (t: number) => void;
@@ -1117,6 +1124,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   glslErrors: [],
   glslErrorSource: null,
   glContextLost: false,
+  previewStale: false,
+  previewEpoch: 0,
   pixelSample: null,
   hoveredParamHint: null,
   currentTime: 0,
@@ -4052,6 +4061,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   setGlslErrors: (errors, source = null) => set({ glslErrors: errors, glslErrorSource: errors.length ? source : null }),
   setGlContextLost: (lost) => set({ glContextLost: lost }),
+  setPreviewStale: (stale) => set(s => (s.previewStale === stale ? s : { previewStale: stale })),
+  restartPreview: () => set(s => ({ previewEpoch: s.previewEpoch + 1, glContextLost: false, previewStale: false })),
   // These four are written from ShaderCanvas's frame loop (~10 Hz). Zustand
   // notifies every subscriber on any set(), so each one returns the current
   // state object untouched when the value is unchanged — Object.is() on the
@@ -4183,11 +4194,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'shader-graph';
     if (!isTauri) {
-      // prompt() returns null on Cancel — that's a cancel, not a request for
-      // the default name. An empty string (OK with the field cleared) keeps it.
-      const typed = window.prompt('File name:', 'shader-graph');
+      // In-app dialog (window.prompt is unreliable in the desktop webview); null = cancelled
+      const typed = await askText('Export graph', { label: 'File name', initial: 'shader-graph', confirmLabel: 'Export' });
       if (typed === null) return CANCELLED;
-      name = typed.trim() || 'shader-graph';
+      name = typed;
     }
     // saveTextFile never throws: Tauri dialog/write failures come back as a result.
     return saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
