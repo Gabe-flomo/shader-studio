@@ -140,7 +140,7 @@ export function readBaseValues(nodes: GraphNode[], play: PlayRecord): Map<string
 
 /**
  * A copy of `nodes` with each control's value written into its param. Used
- * when exporting an instrument while mappings are driving controls: the file
+ * when exporting a play file while mappings are driving controls: the file
  * then opens looking exactly as the picture did at export time.
  */
 export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: Map<string, number | number[]>): GraphNode[] {

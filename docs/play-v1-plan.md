@@ -6,10 +6,47 @@
 
 ## Where it stands
 
-- **Step 1, the input bus: done.** It also carries Play's param writes now (`param:nodeId::key`, resolved through the compiler's binding map), tells the render loop when a value actually moved, and wakes a sleeping loop when an input arrives.
+- **Step 1, the input bus: done.** It also carries Play's param writes (`param:nodeId::key`, resolved through the compiler's binding map), tells the render loop when a value actually moved, and wakes a sleeping loop when an input arrives.
 - **Step 2, the MIDI Input node: done.** Web MIDI plus the QWERTY stand-in. The Tauri/macOS bridge (`midir`) is still to do.
-- **Step 3, the Play page: done** (`src/components/play/PlayPage.tsx`, `src/lib/playEngine.ts`, `src/play/`). Controls from the candidate list (floats and colours), a mappings drawer with range, curve, smoothing and colour channel, Learn for MIDI and keys, mouse and key sources. Saved under the graph's `play` key. Bool toggles are not offered: a `bool` param bakes into the shader, so it can't be a live control.
+- **Step 3, the Play page: done** (`src/components/play/PlayPage.tsx`, `src/lib/playEngine.ts`, `src/play/`). Controls from the candidate list (floats and colours), a mappings drawer with range, curve, smoothing and colour channel, collapsible rows, Learn. Bool toggles are not offered: a `bool` param bakes into the shader, so it can't be a live control.
+- **Play files.** There is no second file. A graph carries its Play setup under the top-level `play` key, so Save in the top bar, Export, Import and the saved-graphs list all keep the panel and the mappings with the graph. Open a saved graph, go to the Play tab, and the setup is there. "Export play file" on the Play page writes the same graph with a `kind` marker (so importing it opens on Play) and with driven controls baked at their live value, so it opens looking exactly as the picture did.
 - **Steps 4 and 5: not started.**
+
+---
+
+## Sources
+
+A mapping is `source → range → curve → smoothing → control`. Every source reads as 0..1. A source that has never produced a reading (a knob nobody touched) leaves its control alone.
+
+**In, today.** Listed in the order the drop-down shows them: what everyone has first, hardware last.
+
+| Source | Reads | Notes |
+|---|---|---|
+| Mouse X / Y / button | pointer over the window | Play page only |
+| Keyboard key | 1 while held | Play page only; Learn takes the next key |
+| Another control | that control across its range | cross-modulation; chains work, a loop lags a frame |
+| LFO | sine, triangle, saw, square, random-step at a rate in Hz, with a phase offset | runs on the graph clock, so pausing pauses it and offline export is deterministic |
+| Clock (BPM) | the same shapes locked to a tempo, one cycle per N beats | tap tempo on the row |
+| Audio band | one band of an Audio Input node | the node needs a file or the mic playing |
+| Phone tilt | left/right, front/back, compass | iOS asks once; the row shows Enable |
+| Gamepad | a stick axis or a button | polled; Learn takes the first stick moved or button pressed |
+| MIDI CC, note, velocity, gate, bend | Web MIDI or the keyboard stand-in | Learn takes the next message |
+
+**Ableton, TouchOSC, Max, TouchDesigner.** Today the route is MIDI: send from the DAW to a virtual MIDI port (IAC Driver on macOS, loopMIDI on Windows) and it appears as an ordinary MIDI source. Next is an **OSC source**: the app listens on a WebSocket, a tiny bridge (`node tools/osc-bridge.mjs`, or the Tauri shell listening on UDP directly) forwards OSC, and any address becomes a source. That gives Ableton's Max for Live devices and TouchOSC a direct line without MIDI's 7-bit resolution. **Ableton Link** for shared tempo and **MIDI clock** into the Clock source come with it.
+
+**Later.** Multi-touch positions as extra XY pairs; webcam brightness and motion through the Video Input node; envelopes and triggers (step 4).
+
+---
+
+## Layers (after V1)
+
+The picture is a texture. Things drawn over it in JavaScript can feed the bus, and the picture can feed them back.
+
+- **Nulls.** Draggable points on the canvas, animatable along a path or by an LFO. Their X and Y are sources, so "the position of a shape drives a slider" is one mapping.
+- **Text and image layers.** A compositing pass after the output: text or an uploaded image over or under the picture, with blend modes, or using the picture as a matte for the text (and the text as a matte for the picture).
+- **Particles that read the picture.** A small readback of the rendered frame each tick gives brightness per cell; particles steer by its gradient and you get flow fields. Their positions can go back into the shader as uniforms.
+
+All of it sits on the bus and one readback texture. Nothing in V1 has to change for it.
 
 ---
 

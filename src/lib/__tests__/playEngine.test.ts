@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { inputBus } from '../inputBus';
 import { midiEngine } from '../midiEngine';
-import { applyCurve, mapValue, playEngine, bindingKeyOf } from '../playEngine';
+import { applyCurve, clockRate, lfoValue, mapValue, playEngine, bindingKeyOf } from '../playEngine';
 import { emptyPlayRecord, parsePlayRecord, type PlayRecord } from '../../types/play';
 import { bakeControlValues, collectPlayCandidates, readBaseValues, readControlValue, targetParts } from '../../play/playControls';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -58,6 +58,18 @@ describe('mapping math', () => {
     expect(mapValue(0.5, { outMin: 2, outMax: 4, curve: 'linear' })).toBe(3);
     expect(mapValue(1, { outMin: 4, outMax: 2, curve: 'linear' })).toBe(2);
   });
+  it('oscillators run 0..1 over a cycle and a clock follows the tempo', () => {
+    expect(lfoValue('sine', 0)).toBeCloseTo(0);
+    expect(lfoValue('sine', 0.5)).toBeCloseTo(1);
+    expect(lfoValue('triangle', 0.25)).toBeCloseTo(0.5);
+    expect(lfoValue('saw', 0.75)).toBeCloseTo(0.75);
+    expect(lfoValue('square', 0.25)).toBe(1);
+    expect(lfoValue('square', 0.75)).toBe(0);
+    expect(lfoValue('random', 3.2)).toBe(lfoValue('random', 3.9)); // holds within a cycle
+    expect(lfoValue('random', 3)).not.toBe(lfoValue('random', 4));
+    expect(clockRate(120, 4)).toBeCloseTo(0.5); // one bar of 4 at 120 bpm = 2 s
+  });
+
   it('binding key is the last two segments of a target path', () => {
     expect(bindingKeyOf('node_3::value')).toBe('node_3::value');
     expect(bindingKeyOf('group_1::node_3::value')).toBe('node_3::value');
@@ -167,6 +179,20 @@ describe('play engine on the bus', () => {
     expect(inputBus.tick(1 / 60, 0).get(target)).toBeCloseTo(2.5);
   });
 
+  it('drives a control from an LFO on the graph clock', () => {
+    const nodes = [floatNode('node_3', 1), outputNode('node_3', 'value')];
+    const r = compileGraph({ nodes });
+    inputBus.setParamBindings(r.paramBindings);
+    const uniform = r.paramBindings['node_3::value'];
+    playEngine.setRecord({ ...RECORD, controls: [RECORD.controls[0]], mappings: [{ ...RECORD.mappings[0], source: { kind: 'lfo', shape: 'saw', rate: 1, phase: 0 }, outMin: 0, outMax: 10 }] });
+    playEngine.setBaseValues(readBaseValues(nodes, RECORD));
+    expect(inputBus.tick(1 / 60, 0.25).get(uniform)).toBeCloseTo(2.5);
+    expect(inputBus.tick(1 / 60, 1.5).get(uniform)).toBeCloseTo(5);
+    expect(playEngine.readSource({ kind: 'audio', nodeId: 'nope', band: 0 })).toBeNull();
+    expect(playEngine.readSource({ kind: 'tilt', axis: 'gamma' })).toBeNull();
+    expect(playEngine.readSource({ kind: 'gamepad', pad: 0, control: 'axis', index: 0 })).toBeNull();
+  });
+
   it('reads a unit value per source kind', () => {
     midiEngine.handleBytes(0xe0, 0, 64); // bend centre
     expect(playEngine.readSource({ kind: 'midi', signal: 'bend', channel: 0 })).toBeCloseTo(0.5);
@@ -187,7 +213,7 @@ describe('controls and the record', () => {
     expect(readControlValue(nodes, 'node_9::value')).toBeUndefined();
   });
 
-  it('bakes live values into a copy of the graph for an instrument export', () => {
+  it('bakes live values into a copy of the graph for a play file export', () => {
     const nodes = [floatNode('node_3', 1), colorNode('node_4', [0, 0, 0])];
     const baked = bakeControlValues(nodes, RECORD, new Map<string, number | number[]>([['c1', 7], ['c2', [1, 0.5, 0]]]));
     expect(readControlValue(baked, 'node_3::value')).toBe(7);
@@ -220,6 +246,17 @@ describe('controls and the record', () => {
       { id: 'gone', controlId: 'a', source: { kind: 'control', controlId: 'zzz' } },
     ] });
     expect(self.mappings.map(m => m.id)).toEqual(['ok']);
+    const more = parsePlayRecord({ controls: [{ id: 'a', target: 'n::k' }], mappings: [
+      { id: 'l', controlId: 'a', source: { kind: 'lfo', shape: 'bogus', rate: -1 } },
+      { id: 'c', controlId: 'a', source: { kind: 'clock', bpm: 128 } },
+      { id: 'g', controlId: 'a', source: { kind: 'gamepad', control: 'button', index: 3 } },
+      { id: 't', controlId: 'a', source: { kind: 'tilt', axis: 'sideways' } },
+    ] });
+    expect(more.mappings.map(m => m.source)).toEqual([
+      { kind: 'lfo', shape: 'sine', rate: 0.001, phase: 0 },
+      { kind: 'clock', shape: 'sine', bpm: 128, beats: 4 },
+      { kind: 'gamepad', pad: 0, control: 'button', index: 3 },
+    ]);
     expect(messy.mappings[0]).toMatchObject({ id: 'm', curve: 'linear', enabled: true, smoothMs: 0, source: { kind: 'midi', signal: 'cc', channel: 0, cc: 127 } });
   });
 });

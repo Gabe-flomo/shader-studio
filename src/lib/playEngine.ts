@@ -20,7 +20,8 @@
 
 import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
 import { midiEngine, type MidiEvent } from './midiEngine';
-import type { PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
+import { audioEngine } from './audioEngine';
+import type { LfoShape, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { emptyPlayRecord } from '../types/play';
 
 export type ControlValue = number | number[];
@@ -45,6 +46,32 @@ export function applyCurve(u: number, curve: PlayCurve): number {
 export function mapValue(u: number, m: Pick<PlayMapping, 'outMin' | 'outMax' | 'curve'>): number {
   return m.outMin + (m.outMax - m.outMin) * applyCurve(u, m.curve);
 }
+
+/** Deterministic 0..1 per cycle index, for the random (sample-and-hold) shape. */
+function hash01(n: number): number {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** An oscillator's 0..1 value at `t` cycles (fractional part = phase within the cycle). */
+export function lfoValue(shape: LfoShape, t: number): number {
+  const cycle = Math.floor(t);
+  const p = t - cycle;
+  switch (shape) {
+    case 'sine': return 0.5 - 0.5 * Math.cos(p * Math.PI * 2);
+    case 'triangle': return 1 - Math.abs(2 * p - 1);
+    case 'saw': return p;
+    case 'square': return p < 0.5 ? 1 : 0;
+    case 'random': return hash01(cycle);
+  }
+}
+
+/** Cycles per second of a tempo-locked source. */
+export function clockRate(bpm: number, beats: number): number {
+  return bpm / 60 / Math.max(0.0625, beats);
+}
+
+interface PadSnapshot { axes: number[]; buttons: number[] }
 
 function isTypingTarget(el: EventTarget | null): boolean {
   const node = el as HTMLElement | null;
@@ -80,6 +107,18 @@ class PlayEngine implements InputSource {
   private keysHeld = new Set<string>();
   private learnCb: ((source: PlaySource) => void) | null = null;
   private learnOffMidi: (() => void) | null = null;
+  /** Graph clock at the last tick, for LFOs and the drawer's meters. */
+  private time = 0;
+
+  // Phone orientation (Play page only). Null until the first event.
+  private tilt: { alpha: number; beta: number; gamma: number } | null = null;
+  private onOrientation = (e: DeviceOrientationEvent) => {
+    this.tilt = { alpha: e.alpha ?? 0, beta: e.beta ?? 0, gamma: e.gamma ?? 0 };
+    if (this.tiltIsBound) inputBus.wake();
+  };
+  private tiltIsBound = false;
+  private gamepadIsBound = false;
+  private padSnapshots = new Map<number, PadSnapshot>();
 
   private onPointerMove = (e: PointerEvent) => {
     if (typeof window === 'undefined') return;
@@ -120,6 +159,8 @@ class PlayEngine implements InputSource {
     this.controls.clear();
     for (const c of record.controls) this.controls.set(c.id, c);
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
+    this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
+    this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
     // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
     inputBus.wake();
     // Drop state for mappings that are gone; keep the rest so a re-label doesn't jump.
@@ -174,6 +215,28 @@ class PlayEngine implements InputSource {
         return source.axis === 'x' ? this.mouseX : source.axis === 'y' ? this.mouseY : this.mouseDown;
       case 'key':
         return this.keysHeld.has(source.code) ? 1 : 0;
+      case 'lfo':
+        return lfoValue(source.shape, this.time * source.rate + source.phase);
+      case 'clock':
+        return lfoValue(source.shape, this.time * clockRate(source.bpm, source.beats));
+      case 'audio':
+        return audioEngine.bandLevel(source.nodeId, source.band);
+      case 'tilt': {
+        if (!this.tilt) return null;
+        if (source.axis === 'alpha') return ((this.tilt.alpha % 360) + 360) % 360 / 360;
+        const v = Math.max(-90, Math.min(90, source.axis === 'beta' ? this.tilt.beta : this.tilt.gamma));
+        return (v + 90) / 180;
+      }
+      case 'gamepad': {
+        const pad = this.gamepad(source.pad);
+        if (!pad) return null;
+        if (source.control === 'axis') {
+          const a = pad.axes[source.index];
+          return a === undefined ? null : Math.max(0, Math.min(1, (a + 1) / 2));
+        }
+        const b = pad.buttons[source.index];
+        return b === undefined ? null : b.value;
+      }
       case 'control': {
         // Another control, as 0..1 across its range. What was written for it
         // this frame if it is driven (mappings run in list order; a later row
@@ -191,7 +254,16 @@ class PlayEngine implements InputSource {
 
   // ── Per-frame output (InputSource) ────────────────────────────────────────
 
-  tickInputs(dt: number, _time: number, write: InputWriter): void {
+  private gamepad(index: number): Gamepad | null {
+    if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return null;
+    return navigator.getGamepads()[index] ?? null;
+  }
+
+  tickInputs(dt: number, time: number, write: InputWriter): void {
+    this.time = time;
+    if (this.learnCb && this.performing) this.pollGamepadLearn();
+    // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
+    if (this.gamepadIsBound && this.performing) inputBus.wake();
     const driven = new Set<string>();
     // Colour controls start each frame from their base so an un-mapped channel keeps the slider's value.
     for (const m of this.record.mappings) {
@@ -274,6 +346,7 @@ class PlayEngine implements InputSource {
       window.addEventListener('keydown', this.onKeyDown, true);
       window.addEventListener('keyup', this.onKeyUp, true);
       window.addEventListener('blur', this.onBlur);
+      window.addEventListener('deviceorientation', this.onOrientation);
     } else {
       window.removeEventListener('pointermove', this.onPointerMove);
       window.removeEventListener('pointerdown', this.onPointerDown);
@@ -281,8 +354,44 @@ class PlayEngine implements InputSource {
       window.removeEventListener('keydown', this.onKeyDown, true);
       window.removeEventListener('keyup', this.onKeyUp, true);
       window.removeEventListener('blur', this.onBlur);
+      window.removeEventListener('deviceorientation', this.onOrientation);
       this.onBlur();
       this.cancelLearn();
+    }
+  }
+
+  /** iOS asks before sharing orientation; the page shows a button when this is true. */
+  tiltNeedsPermission(): boolean {
+    if (this.tilt) return false;
+    const ctor = typeof DeviceOrientationEvent !== 'undefined' ? (DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }) : undefined;
+    return typeof ctor?.requestPermission === 'function';
+  }
+
+  /** Must be called from a user gesture. Resolves true when orientation events will arrive. */
+  async requestTiltPermission(): Promise<boolean> {
+    const ctor = typeof DeviceOrientationEvent !== 'undefined' ? (DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }) : undefined;
+    if (typeof ctor?.requestPermission !== 'function') return true;
+    try { return (await ctor.requestPermission()) === 'granted'; } catch { return false; }
+  }
+
+  /** While learning: a stick pushed or a button pressed becomes the source. */
+  private pollGamepadLearn(): void {
+    if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return;
+    const pads = navigator.getGamepads();
+    for (let i = 0; i < pads.length; i++) {
+      const pad = pads[i];
+      if (!pad) continue;
+      const prev = this.padSnapshots.get(i);
+      const axes = Array.from(pad.axes);
+      const buttons = pad.buttons.map(b => b.value);
+      this.padSnapshots.set(i, { axes, buttons });
+      if (!prev) continue;
+      for (let a = 0; a < axes.length; a++) {
+        if (Math.abs(axes[a] - (prev.axes[a] ?? 0)) > 0.4) { this.finishLearn({ kind: 'gamepad', pad: i, control: 'axis', index: a }); return; }
+      }
+      for (let b = 0; b < buttons.length; b++) {
+        if (buttons[b] > 0.5 && (prev.buttons[b] ?? 0) <= 0.5) { this.finishLearn({ kind: 'gamepad', pad: i, control: 'button', index: b }); return; }
+      }
     }
   }
 
@@ -301,6 +410,8 @@ class PlayEngine implements InputSource {
   startLearn(cb: (source: PlaySource) => void): () => void {
     this.cancelLearn();
     this.learnCb = cb;
+    this.padSnapshots.clear();
+    if (this.performing) inputBus.wake();
     this.learnOffMidi = midiEngine.subscribe((e: MidiEvent) => {
       switch (e.kind) {
         case 'noteOn': this.finishLearn({ kind: 'midi', signal: 'velocity', channel: e.channel }); break;

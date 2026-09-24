@@ -13,7 +13,7 @@ import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } 
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues } from '../play/playControls';
 
-/** Top-level `kind` an instrument file carries, so importing one opens the Play page. */
+/** Top-level `kind` a play file carries, so importing one opens the Play page. */
 export const PLAY_FILE_KIND = 'shader-studio-play';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
@@ -321,19 +321,19 @@ interface NodeGraphState {
   updateParamUniforms: (updates: Record<string, number | number[]>) => void;
 
   /**
-   * The graph's Play instrument: exposed controls and input mappings (see
+   * The graph's Play setup: exposed controls and input mappings (see
    * types/play.ts). Saved with the graph under `play`. Not part of undo — Play
    * never edits the graph, and its edits are cheap to redo by hand.
    */
   play: PlayRecord;
   setPlay: (next: PlayRecord | ((play: PlayRecord) => PlayRecord)) => void;
   /**
-   * Save the graph and its Play record as one instrument file. Controls a
+   * Save the graph and its Play record as one play file. Controls a
    * mapping is driving right now are written at their live value, so the file
    * opens looking exactly as the picture does at export time.
    */
-  exportInstrument: () => Promise<FileResult>;
-  /** Bumped when an instrument file is imported; App switches to the Play page. */
+  exportPlayFile: () => Promise<FileResult>;
+  /** Bumped when a play file is imported; App switches to the Play page. */
   playOpenRequest: number;
 
   // Runtime debug info (set by ShaderCanvas)
@@ -4245,7 +4245,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return play === state.play ? state : { play };
   }),
 
-  exportInstrument: async () => {
+  exportPlayFile: async () => {
     const { nodes, looseGroups, play } = get();
     const live = new Map<string, number | number[]>();
     for (const c of play.controls) {
@@ -4254,9 +4254,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     const json = JSON.stringify({ kind: PLAY_FILE_KIND, nodes: bakeControlValues(nodes, play, live), looseGroups, play, layout: LAYOUT_VERSION }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    let name = 'instrument';
+    let name = 'play-file';
     if (!isTauri) {
-      const typed = await askText('Export instrument', { label: 'File name', initial: 'instrument', confirmLabel: 'Export' });
+      const typed = await askText('Export play file', { label: 'File name', initial: 'play-file', confirmLabel: 'Export' });
       if (typed === null) return CANCELLED;
       name = typed;
     }
@@ -4430,7 +4430,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: async (name) => {
     const { nodes, looseGroups, play } = get();
-    // `play` is left out when empty so graphs without an instrument look as they always did.
+    // `play` is left out when empty so graphs without a Play setup look as they always did.
     const playField = isPlayRecordEmpty(play) ? {} : { play };
     const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now() });
     // localStorage is the primary store; a quota failure here means nothing
@@ -4527,14 +4527,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     let nodes: GraphNode[];
     let looseGroups: unknown;
     let play: PlayRecord;
-    let isInstrument = false;
+    let isPlayFile = false;
     try {
       const parsed = JSON.parse(json) as { kind?: unknown; nodes?: unknown; looseGroups?: unknown; play?: unknown; layout?: unknown } | null;
       if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
       if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Shader Studio graph file?');
       looseGroups = parsed.looseGroups;
       play = parsePlayRecord(parsed.play);
-      isInstrument = parsed.kind === PLAY_FILE_KIND;
+      isPlayFile = parsed.kind === PLAY_FILE_KIND;
       nodes = upgradeExprNodes(resolveNodeAliases(parsed.nodes as GraphNode[], getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
@@ -4546,7 +4546,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(state => ({
       nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play,
       previewNodeId: null, activeGroupId: null, activeGroupPath: [],
-      ...(isInstrument ? { playOpenRequest: state.playOpenRequest + 1 } : {}),
+      ...(isPlayFile ? { playOpenRequest: state.playOpenRequest + 1 } : {}),
     }));
     get().compile();
     return { ok: true };

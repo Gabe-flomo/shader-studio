@@ -1,5 +1,5 @@
 /**
- * play.ts — the per-graph "instrument" record (docs/play-v1-plan.md, step 3).
+ * play.ts — the per-graph Play record (docs/play-v1-plan.md, step 3).
  *
  * Play never edits the graph. It only turns knobs: every control here points
  * at a float or colour param that the compiler already turns into a live
@@ -35,6 +35,7 @@ export interface PlayControl {
 // ── Sources (what drives a control) ─────────────────────────────────────────
 
 export type MidiSignal = 'note' | 'velocity' | 'gate' | 'bend' | 'cc';
+export type LfoShape = 'sine' | 'triangle' | 'saw' | 'square' | 'random';
 
 export type PlaySource =
   /** A MIDI stream: `channel` 0 = all, `cc` only for the `cc` signal. Outputs 0..1 (bend −1..1). */
@@ -48,7 +49,17 @@ export type PlaySource =
    * reads its brightness). Drag one slider and the mapped one follows, so
    * controls can cross-modulate each other.
    */
-  | { kind: 'control'; controlId: string };
+  | { kind: 'control'; controlId: string }
+  /** A free-running oscillator on the graph clock, 0..1. `phase` offsets the cycle (0..1). */
+  | { kind: 'lfo'; shape: LfoShape; rate: number; phase: number }
+  /** An oscillator locked to a tempo: one cycle every `beats` beats at `bpm`. */
+  | { kind: 'clock'; shape: LfoShape; bpm: number; beats: number }
+  /** One band of an Audio Input node in the graph (amplitude 0..1). */
+  | { kind: 'audio'; nodeId: string; band: number }
+  /** Phone orientation: `beta` front/back, `gamma` left/right, `alpha` compass. Active on the Play page. */
+  | { kind: 'tilt'; axis: 'beta' | 'gamma' | 'alpha' }
+  /** A gamepad stick axis (−1..1 → 0..1) or a button (0..1). `pad` is the slot, `index` the axis or button number. */
+  | { kind: 'gamepad'; pad: number; control: 'axis' | 'button'; index: number };
 
 export type PlayCurve = 'linear' | 'exp' | 'log';
 
@@ -83,6 +94,11 @@ export function emptyPlayRecord(): PlayRecord {
 
 const CURVES: ReadonlySet<string> = new Set<PlayCurve>(['linear', 'exp', 'log']);
 const MIDI_SIGNALS: ReadonlySet<string> = new Set<MidiSignal>(['note', 'velocity', 'gate', 'bend', 'cc']);
+const LFO_SHAPES: ReadonlySet<string> = new Set<LfoShape>(['sine', 'triangle', 'saw', 'square', 'random']);
+
+function shape(v: unknown): LfoShape {
+  return typeof v === 'string' && LFO_SHAPES.has(v) ? (v as LfoShape) : 'sine';
+}
 
 function num(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -115,6 +131,22 @@ function parseSource(raw: unknown): PlaySource | null {
     case 'control': {
       const controlId = str(s.controlId);
       return controlId ? { kind: 'control', controlId } : null;
+    }
+    case 'lfo':
+      return { kind: 'lfo', shape: shape(s.shape), rate: Math.max(0.001, num(s.rate, 0.5)), phase: num(s.phase, 0) };
+    case 'clock':
+      return { kind: 'clock', shape: shape(s.shape), bpm: Math.max(1, num(s.bpm, 120)), beats: Math.max(0.0625, num(s.beats, 4)) };
+    case 'audio': {
+      const nodeId = str(s.nodeId);
+      return nodeId ? { kind: 'audio', nodeId, band: Math.max(0, Math.round(num(s.band, 0))) } : null;
+    }
+    case 'tilt': {
+      const axis = s.axis;
+      return axis === 'beta' || axis === 'gamma' || axis === 'alpha' ? { kind: 'tilt', axis } : null;
+    }
+    case 'gamepad': {
+      const control = s.control === 'button' ? 'button' : 'axis';
+      return { kind: 'gamepad', pad: Math.max(0, Math.round(num(s.pad, 0))), control, index: Math.max(0, Math.round(num(s.index, 0))) };
     }
     default:
       return null;

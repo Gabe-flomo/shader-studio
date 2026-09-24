@@ -3,9 +3,9 @@
  * <select> offers, conversion to and from the record's PlaySource shape, and
  * short labels. Pure; shared by the Play page and the control rows.
  */
-import type { PlayCurve, PlaySource } from '../types/play';
+import type { LfoShape, PlayCurve, PlaySource } from '../types/play';
 
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'control' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'control' | 'lfo' | 'clock' | 'audio' | 'tilt' | 'gamepad' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
 
 /** In the order the drop-down shows them: what everyone has first, MIDI hardware last. */
 export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
@@ -14,6 +14,11 @@ export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
   { value: 'mouse:down', label: 'Mouse button' },
   { value: 'key', label: 'Keyboard key' },
   { value: 'control', label: 'Another control' },
+  { value: 'lfo', label: 'LFO' },
+  { value: 'clock', label: 'Clock (BPM)' },
+  { value: 'audio', label: 'Audio band' },
+  { value: 'tilt', label: 'Phone tilt' },
+  { value: 'gamepad', label: 'Gamepad' },
   { value: 'midi:cc', label: 'MIDI CC' },
   { value: 'midi:note', label: 'MIDI note' },
   { value: 'midi:velocity', label: 'MIDI velocity' },
@@ -56,6 +61,11 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'mouse:down': return { kind: 'mouse', axis: 'down' };
     case 'key': return { kind: 'key', code: prev.kind === 'key' ? prev.code : 'Space' };
     case 'control': return { kind: 'control', controlId: prev.kind === 'control' ? prev.controlId : otherControlId };
+    case 'lfo': return { kind: 'lfo', shape: 'sine', rate: 0.5, phase: 0 };
+    case 'clock': return { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 };
+    case 'audio': return { kind: 'audio', nodeId: prev.kind === 'audio' ? prev.nodeId : '', band: 0 };
+    case 'tilt': return { kind: 'tilt', axis: 'gamma' };
+    case 'gamepad': return { kind: 'gamepad', pad: 0, control: 'axis', index: 0 };
   }
 }
 
@@ -64,6 +74,11 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'mouse') return s.axis === 'down' ? 'Mouse button' : `Mouse ${s.axis.toUpperCase()}`;
   if (s.kind === 'key') return `Key ${keyName(s.code)}`;
   if (s.kind === 'control') return `← ${controls.find(c => c.id === s.controlId)?.label ?? 'control'}`;
+  if (s.kind === 'lfo') return `LFO ${s.shape} ${s.rate} Hz`;
+  if (s.kind === 'clock') return `${s.bpm} bpm · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
+  if (s.kind === 'audio') return `Audio band ${s.band + 1}`;
+  if (s.kind === 'tilt') return `Tilt ${s.axis === 'beta' ? 'front/back' : s.axis === 'gamma' ? 'left/right' : 'compass'}`;
+  if (s.kind === 'gamepad') return `Pad ${s.pad + 1} ${s.control} ${s.index}`;
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
   switch (s.signal) {
     case 'cc': return `CC ${s.cc ?? 1}${ch}`;
@@ -81,3 +96,17 @@ export function keyName(code: string): string {
   return code;
 }
 
+
+export const LFO_SHAPES: { value: LfoShape; label: string }[] = [
+  { value: 'sine', label: 'Sine' },
+  { value: 'triangle', label: 'Triangle' },
+  { value: 'saw', label: 'Saw' },
+  { value: 'square', label: 'Square' },
+  { value: 'random', label: 'Random' },
+];
+
+export const TILT_AXES = [
+  { value: 'gamma', label: 'Left / right' },
+  { value: 'beta', label: 'Front / back' },
+  { value: 'alpha', label: 'Compass' },
+];

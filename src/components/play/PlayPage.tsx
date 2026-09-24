@@ -13,7 +13,8 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, SOURCE_TYPES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, SOURCE_TYPES, TILT_AXES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import type { LfoShape } from '../../types/play';
 import { playEngine, type ControlValue } from '../../lib/playEngine';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
 import {
@@ -108,7 +109,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const nodes = useNodeGraphStore(s => s.nodes);
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
-  const exportInstrument = useNodeGraphStore(s => s.exportInstrument);
+  const exportPlayFile = useNodeGraphStore(s => s.exportPlayFile);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
 
   // Mouse and keyboard sources listen only while this page shows.
@@ -156,6 +157,12 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   }, [update]);
 
   const [drawerOpen, setDrawerOpen] = useState(true);
+  // Audio Input nodes a mapping can read a band from.
+  const audioNodes = useMemo<AudioNodeOption[]>(() => nodes.filter(n => n.type === 'audioInput').map(n => ({
+    id: n.id,
+    label: (typeof n.params.label === 'string' && n.params.label.trim()) || 'Audio Input',
+    bands: Array.isArray(n.params._bands) ? Math.max(1, n.params._bands.length) : 1,
+  })), [nodes]);
 
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
@@ -164,8 +171,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
         extra={(
           <>
-            <IconButton icon="import" label="Import an instrument file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
-            <IconButton icon="export" label="Export this instrument: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportInstrument(), { failTitle: 'Couldn’t export the instrument', success: 'Instrument exported' }); }} />
+            <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
+            <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             <AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />
           </>
         )}
@@ -212,6 +219,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         onUpdate={(id, patch) => update(p => ({ ...p, mappings: p.mappings.map(m => m.id === id ? { ...m, ...patch } : m) }))}
         onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
         compact={compact}
+        audioNodes={audioNodes}
       />
     </div>
   );
@@ -414,7 +422,9 @@ function ColourPad({ value, disabled, onChange }: { value: number[]; disabled: b
 
 // ── Mappings drawer ──────────────────────────────────────────────────────────
 
-function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compact }: {
+interface AudioNodeOption { id: string; label: string; bands: number }
+
+function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compact, audioNodes }: {
   play: PlayRecord;
   open: boolean;
   onToggle: () => void;
@@ -422,6 +432,7 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
   onUpdate: (id: string, patch: Partial<PlayMapping>) => void;
   onRemove: (id: string) => void;
   compact: boolean;
+  audioNodes: AudioNodeOption[];
 }) {
   const tk = useTokens();
   const meters = useSourceMeter(open ? play.mappings : EMPTY_MAPPINGS);
@@ -487,7 +498,7 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
               title="Nothing mapped"
               body={noControls
                 ? 'Add a control first, then map an input onto it.'
-                : `Press Learn and move a knob or a key, or add a row by hand. ${midi.status === 'unsupported' ? 'This browser has no Web MIDI; the keyboard stand-in on a MIDI Input node still works.' : midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : ''}`}
+                : `Press Learn and move a knob or a key, or add a row by hand. ${midi.status === 'unsupported' ? 'This browser has no Web MIDI; the keyboard stand-in on a MIDI Input node still works.' : midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : ''} Ableton and other DAWs: send MIDI to a virtual port (IAC Driver on macOS, loopMIDI on Windows) and it shows up here as MIDI.`}
             />
           ) : play.mappings.map(m => (
             <MappingRow
@@ -495,6 +506,7 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
               mapping={m}
               control={play.controls.find(c => c.id === m.controlId)}
               controls={play.controls}
+              audioNodes={audioNodes}
               meter={meters.get(m.id) ?? 0}
               learning={learnFor === m.id}
               collapsed={collapsed.has(m.id)}
@@ -512,10 +524,11 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
 
 const EMPTY_MAPPINGS: PlayMapping[] = [];
 
-function MappingRow({ mapping: m, control, controls, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
+function MappingRow({ mapping: m, control, controls, audioNodes, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
   control: PlayControl | undefined;
   controls: PlayControl[];
+  audioNodes: AudioNodeOption[];
   meter: number;
   learning: boolean;
   collapsed: boolean;
@@ -586,6 +599,7 @@ function MappingRow({ mapping: m, control, controls, meter, learning, collapsed,
       <div style={{ height: 3, margin: '6px 0 8px 60px', borderRadius: 2, background: tk.bg.field, overflow: 'hidden' }}>
         <div style={{ width: `${Math.round(meter * 100)}%`, height: '100%', background: m.enabled ? tk.accent.base : tk.text.disabled, transition: 'width 60ms linear' }} />
       </div>
+      <SourceOptions source={m.source} audioNodes={audioNodes} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
       {/* Target row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={labelStyle}>Control</span>
@@ -616,4 +630,80 @@ function MappingRow({ mapping: m, control, controls, meter, learning, collapsed,
       )}
     </div>
   );
+}
+
+/** The second row of a mapping: the fields a source kind needs beyond its name. */
+function SourceOptions({ source, audioNodes, numStyle, labelStyle, onChange }: {
+  source: PlaySource;
+  audioNodes: AudioNodeOption[];
+  numStyle: React.CSSProperties;
+  labelStyle: React.CSSProperties;
+  onChange: (source: PlaySource) => void;
+}) {
+  const tk = useTokens();
+  const taps = useRef<number[]>([]);
+  const [tiltAsk, setTiltAsk] = useState(() => playEngine.tiltNeedsPermission());
+  const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
+  const row = (children: ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+      <span style={labelStyle}>Options</span>
+      {children}
+    </div>
+  );
+  switch (source.kind) {
+    case 'lfo':
+      return row(<>
+        <Select ariaLabel="LFO shape" value={source.shape} options={LFO_SHAPES} onChange={v => onChange({ ...source, shape: v as LfoShape })} height={26} />
+        <NumberInput value={source.rate} min={0.01} max={50} step={0.1} title="Cycles per second" onCommit={n => onChange({ ...source, rate: Math.max(0.001, n) })} style={numStyle} />
+        {hint('Hz')}
+        <NumberInput value={source.phase} min={0} max={1} step={0.05} title="Phase offset, 0–1" onCommit={n => onChange({ ...source, phase: n })} style={{ ...numStyle, width: 48 }} />
+        {hint('phase')}
+      </>);
+    case 'clock': {
+      const tap = () => {
+        const now = performance.now();
+        const t = taps.current.filter(x => now - x < 2500);
+        t.push(now);
+        taps.current = t;
+        if (t.length >= 2) {
+          const avg = (t[t.length - 1] - t[0]) / (t.length - 1);
+          onChange({ ...source, bpm: Math.round(60000 / avg) });
+        }
+      };
+      return row(<>
+        <NumberInput value={source.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => onChange({ ...source, bpm: Math.max(1, n) })} style={numStyle} />
+        {hint('bpm')}
+        <Button size="sm" onClick={tap} title="Tap the tempo">Tap</Button>
+        <NumberInput value={source.beats} min={0.0625} max={64} step={1} title="Beats per cycle" onCommit={n => onChange({ ...source, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 48 }} />
+        {hint('beats')}
+        <Select ariaLabel="Clock shape" value={source.shape} options={LFO_SHAPES} onChange={v => onChange({ ...source, shape: v as LfoShape })} height={26} />
+      </>);
+    }
+    case 'audio': {
+      if (audioNodes.length === 0) return row(hint('Add an Audio Input node in the Studio and load a file or the mic.'));
+      const node = audioNodes.find(n => n.id === source.nodeId) ?? audioNodes[0];
+      const bands = Array.from({ length: node.bands }, (_, i) => ({ value: `${i}`, label: `Band ${i + 1}` }));
+      return row(<>
+        <Select ariaLabel="Audio node" value={node.id} options={audioNodes.map(n => ({ value: n.id, label: n.label }))} onChange={v => onChange({ ...source, nodeId: v, band: 0 })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <Select ariaLabel="Band" value={`${Math.min(source.band, node.bands - 1)}`} options={bands} onChange={v => onChange({ ...source, nodeId: node.id, band: parseInt(v, 10) || 0 })} height={26} />
+      </>);
+    }
+    case 'tilt':
+      return row(<>
+        <Select ariaLabel="Tilt axis" value={source.axis} options={TILT_AXES} onChange={v => onChange({ ...source, axis: v as 'beta' | 'gamma' | 'alpha' })} height={26} />
+        {tiltAsk
+          ? <Button size="sm" onClick={async () => { if (await playEngine.requestTiltPermission()) setTiltAsk(false); }}>Enable motion</Button>
+          : hint('Phones and tablets only')}
+      </>);
+    case 'gamepad':
+      return row(<>
+        <NumberInput value={source.pad + 1} min={1} max={4} step={1} title="Which controller" onCommit={n => onChange({ ...source, pad: Math.max(0, Math.round(n) - 1) })} style={{ ...numStyle, width: 40 }} />
+        {hint('pad')}
+        <Select ariaLabel="Axis or button" value={source.control} options={[{ value: 'axis', label: 'Stick axis' }, { value: 'button', label: 'Button' }]} onChange={v => onChange({ ...source, control: v as 'axis' | 'button' })} height={26} />
+        <NumberInput value={source.index} min={0} max={31} step={1} title="Axis or button number" onCommit={n => onChange({ ...source, index: Math.max(0, Math.round(n)) })} style={{ ...numStyle, width: 40 }} />
+        {hint('or press Learn and move it')}
+      </>);
+    default:
+      return null;
+  }
 }

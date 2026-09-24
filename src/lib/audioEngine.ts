@@ -216,6 +216,26 @@ class AudioEngine {
     return result;
   }
 
+  /**
+   * One band's amplitude (0–1) for a Play mapping, whether or not the node is
+   * wired into the shader. `band` is the index into the node's band list.
+   * Null while the node isn't playing or has no such band.
+   */
+  bandLevel(nodeId: string, band: number): number | null {
+    const state = this.nodes.get(nodeId);
+    if (!state || !state.isPlaying) return null;
+    state.analyser.getFloatFrequencyData(state.freqData as Float32Array<ArrayBuffer>);
+    if (state.mode === 'full') return band === 0 ? this.computeBandAmplitude(state.freqData, state.analyser, 0, 0) : null;
+    const center = state.bands[band];
+    if (center === undefined) return null;
+    return this.computeBandAmplitude(state.freqData, state.analyser, center, state.freqRange);
+  }
+
+  /** Ids of the nodes that currently have audio loaded (for the mappings drawer). */
+  loadedNodeIds(): string[] {
+    return [...this.nodes.keys()];
+  }
+
   setMasterVolume(level: number): void {
     this.masterVolume = Math.max(0, Math.min(1, level));
     if (this.masterGainNode) {

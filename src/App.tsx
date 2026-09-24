@@ -418,7 +418,7 @@ function App() {
       }
     });
   }, []);
-  // An imported instrument file opens on the Play page.
+  // An imported play file opens on the Play page.
   useEffect(() => {
     let last = useNodeGraphStore.getState().playOpenRequest;
     return useNodeGraphStore.subscribe(s => {
