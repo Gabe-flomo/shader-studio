@@ -57,6 +57,7 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
+import { timeReadoutRef } from '../../lib/timeTick';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -416,8 +417,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
   const setSwapTargetNodeId = useNodeGraphStore(s => s.setSwapTargetNodeId);
   const isSwapTarget       = swapTargetNodeId === node.id;
-  // currentTime is only needed for the Time node live badge — subscribed below conditionally
-  const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
   // Texture input
   const setNodeTexture     = useNodeGraphStore(s => s.setNodeTexture);
   const nodeTexture        = useNodeGraphStore(s => node.type === 'textureInput' ? s.nodeTextures[node.id] : null);
@@ -3690,10 +3689,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {Object.keys(node.outputs).length > 0 && (Object.keys(node.inputs).length > 0 || (!collapsed && Object.keys(paramDefs).length > 0)) && sectionRule}
         {Object.entries(node.outputs).map(([key, output]) => {
           const isHovered = hoveredOutput === key;
-          // Live value badge: show time for Time node
-          const liveValueBadge = node.type === 'time' && key === 'time'
-            ? (currentTime as number).toFixed(2) + 's'
-            : null;
+          // Live clock on the Time node's output (follows every frame, see timeReadoutRef)
+          const liveValueBadge = node.type === 'time' && key === 'time';
           return (
             <div
               key={key}
@@ -3708,8 +3705,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             >
               {liveValueBadge && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 2, marginRight: 8 }}>
-                  <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.field, borderRadius: 6, padding: '2px 7px', fontVariantNumeric: 'tabular-nums' }}>
-                    {liveValueBadge}
+                  <span ref={timeReadoutRef} style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.field, borderRadius: 6, padding: '2px 7px', fontVariantNumeric: 'tabular-nums' }}>
+                    {(useNodeGraphStore.getState().currentTime ?? 0).toFixed(2)}s
                   </span>
                   <CardButton icon="reset" label="Reset time to 0" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
                 </span>
