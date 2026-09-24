@@ -57,6 +57,7 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
+import type { NodeError } from '../../compiler/nodeErrors';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -103,6 +104,8 @@ interface Props {
   onEnterGroup?: (groupId: string) => void;
   /** Node has a compilation error — show red ring */
   hasError?: boolean;
+  /** Compile problems traced to this node (see compiler/nodeErrors.ts) */
+  errors?: NodeError[];
   /**
    * When inside a group view, the set of this node's input keys that are
    * driven by an external (group-level) connection. These sockets are
@@ -369,7 +372,7 @@ const getZoom = () => getView().zoom;
 // Memoised: NodeGraph re-renders on every pan commit, selection change and
 // store write, and a plain function component would re-render every card each
 // time. All props are stable references or primitives.
-export const NodeComponent = React.memo(function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, activeGroupNode = null, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover }: Props) {
+export const NodeComponent = React.memo(function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, activeGroupNode = null, dimmed = false, onEnterGroup, hasError = false, errors, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const inputStyle_ = inputStyleFor(tc);
@@ -2542,6 +2545,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         <span style={{ color: typeColor }}>▶</span> {input.label} <span style={{ color: tc.surface2 }}>({input.type})</span>
       </span>
     );
+    const inputError = errors?.find(e => e.socket === inputKey);
+    if (inputError) lines.push(<span style={{ color: tk.status.danger, fontWeight: 600, whiteSpace: 'normal' }}>{inputError.message}</span>);
     if (input.connection) {
       // Show what's connected
       const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
@@ -2976,6 +2981,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             input.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, vectorAxes ?? [])
           );
           const kfBypassed = isKeyframed && isKeyframeBypassed(node, key);
+          const socketError = errors?.find(e => e.socket === key);
 
           return (
             <div
@@ -2993,8 +2999,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   borderRadius: isKeyframed ? '3px' : '50%',
                   transform: isKeyframed ? 'rotate(45deg)' : undefined,
                   boxSizing: 'border-box',
-                  background: isKeyframed ? (kfBypassed ? tk.bg.panel : tk.status.warning) : isConnected ? (TYPE_COLORS[input.type] || '#888') : tk.bg.panel,
-                  border: `2px solid ${isKeyframed ? tk.status.warning : (TYPE_COLORS[input.type] || '#888')}`,
+                  background: socketError ? tk.status.danger : isKeyframed ? (kfBypassed ? tk.bg.panel : tk.status.warning) : isConnected ? (TYPE_COLORS[input.type] || '#888') : tk.bg.panel,
+                  border: `2px solid ${socketError ? tk.status.danger : isKeyframed ? tk.status.warning : (TYPE_COLORS[input.type] || '#888')}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
                   marginLeft: socketMarginLeft,
@@ -3885,6 +3891,20 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             }}>
               {codeSnippet || '// (no code generated)'}
             </pre>
+        </div>
+      )}
+
+      {/* ── Compile problems traced to this node ── */}
+      {errors && errors.length > 0 && !collapsed && (
+        <div role="alert" style={{
+          display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 12px', borderTop: `1px solid ${alpha(tk.status.danger, 0.25)}`,
+          background: alpha(tk.status.danger, 0.07), color: tk.status.danger, font: `500 12px/1.45 ${fontFamily.ui}`, userSelect: 'text',
+        }}>
+          <Icon name="alert" size={14} style={{ flexShrink: 0, marginTop: 1.5 }} />
+          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+            {errors[0].message}
+            {errors.length > 1 && <span style={{ opacity: 0.75 }}>{` · ${errors.length - 1} more in the error panel`}</span>}
+          </span>
         </div>
       )}
 

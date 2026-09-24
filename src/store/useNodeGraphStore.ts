@@ -287,6 +287,7 @@ interface NodeGraphState {
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
+  glslErrorSource: string | null; // the source those errors refer to, for mapping them to nodes
   glContextLost: boolean;         // true while the preview's WebGL context is lost (GPU reset / memory pressure)
   pixelSample: [number, number, number, number] | null;  // mouse pixel RGBA 0-255
   hoveredParamHint: string | null;  // param hint shown in status bar on hover
@@ -536,7 +537,8 @@ interface NodeGraphState {
   compile: () => void;
   loadExampleGraph: (name?: string) => Promise<void>;
   autoLayout: () => void;
-  setGlslErrors: (errors: string[]) => void;
+  /** `source` is the shader the errors were reported against (their line numbers point into it) */
+  setGlslErrors: (errors: string[], source?: string | null) => void;
   setGlContextLost: (lost: boolean) => void;
   setPixelSample: (sample: [number, number, number, number] | null) => void;
   setHoveredParamHint: (hint: string | null) => void;
@@ -1103,6 +1105,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   paramUniforms: {},
   paramBindings: {},
   glslErrors: [],
+  glslErrorSource: null,
   glContextLost: false,
   pixelSample: null,
   hoveredParamHint: null,
@@ -4020,7 +4023,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
-  setGlslErrors: (errors) => set({ glslErrors: errors }),
+  setGlslErrors: (errors, source = null) => set({ glslErrors: errors, glslErrorSource: errors.length ? source : null }),
   setGlContextLost: (lost) => set({ glContextLost: lost }),
   // These four are written from ShaderCanvas's frame loop (~10 Hz). Zustand
   // notifies every subscriber on any set(), so each one returns the current

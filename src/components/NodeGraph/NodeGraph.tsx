@@ -7,6 +7,7 @@ import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
+import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -212,18 +213,14 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     return { x: minX, y: midY };
   }, [activeGroupId, displayNodes]);
 
-  const errorNodeIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const err of compilationErrors) {
-      // Format: "Node <id> [source:<sourceId>]: ..." or "Node <id>: ..."
-      const match = err.match(/^Node (\S+?)(?:\s+\[source:(\S+?)\])?:/);
-      if (match) {
-        ids.add(match[1]);
-        if (match[2]) ids.add(match[2]);
-      }
-    }
-    return ids;
-  }, [compilationErrors]);
+  // Compile problems mapped onto the cards that caused them (shown on the card, not only in the error panel)
+  const glslErrors      = useNodeGraphStore(s => s.glslErrors);
+  const glslErrorSource = useNodeGraphStore(s => s.glslErrorSource);
+  const nodeSlugMap     = useNodeGraphStore(s => s.nodeSlugMap);
+  const nodeErrors = useMemo(
+    () => buildNodeErrors({ compilationErrors, glslErrors, glslSource: glslErrorSource, slugs: nodeSlugMap }),
+    [compilationErrors, glslErrors, glslErrorSource, nodeSlugMap],
+  );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
@@ -1406,7 +1403,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             isTouchDevice={isTouchDevice.current}
             dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
             onEnterGroup={enterGroup}
-            hasError={errorNodeIds.has(node.id)}
+            hasError={nodeErrors.has(node.id)}
+            errors={nodeErrors.get(node.id)}
             externalInputKeys={externalPortMap?.get(node.id)}
             externalParamKeys={externalParamMap?.get(node.id)}
             onAltClickSocket={handleAltClickSocket}
