@@ -2,24 +2,29 @@ import { useState, useRef } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
 import type { FnDef } from './useFunctionBuilder';
 import { FunctionEditor } from './FunctionEditor';
-import { ctp } from '../../theme/palette';
+import { errorOwner } from './glslCompiler';
+import { useTokens } from '../../theme/themeStore';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { IconButton } from '../ui/Button';
+import { Toggle } from '../ui/Choice';
+import { Chip } from '../ui/Chip';
+import { Icon } from '../ui/Icon';
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
 function TabBar() {
   const { tabs, activeTabId, addTab, closeTab, switchTab, renameTab } = useFunctionBuilder();
+  const tk = useTokens();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
+  const [hoverId, setHoverId] = useState<string | null>(null);
+
+  const commit = (id: string, fallback: string) => { renameTab(id, editVal.trim() || fallback); setEditingId(null); };
 
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      overflowX: 'auto',
-      flexShrink: 0,
-      borderBottom: `1px solid ${ctp.surface0}`,
-      background: ctp.mantle,
-      scrollbarWidth: 'none',
+      display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px 0 10px', flexShrink: 0,
+      borderBottom: `1px solid ${tk.border.subtle}`, overflowX: 'auto', scrollbarWidth: 'none',
     }}>
       {tabs.map(tab => {
         const active = tab.id === activeTabId;
@@ -27,69 +32,69 @@ function TabBar() {
           <div
             key={tab.id}
             onClick={() => switchTab(tab.id)}
+            onMouseEnter={() => setHoverId(tab.id)}
+            onMouseLeave={() => setHoverId(h => (h === tab.id ? null : h))}
+            title="Double-click to rename"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              borderRight: `1px solid ${ctp.surface0}`,
-              background: active ? ctp.base : 'transparent',
-              borderBottom: active ? `2px solid ${ctp.blue}` : '2px solid transparent',
-              cursor: 'pointer',
-              flexShrink: 0,
-              minWidth: 0,
+              height: 38, display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flexShrink: 0, cursor: 'pointer',
+              boxShadow: active ? `inset 0 -2px 0 ${tk.accent.base}` : 'none',
             }}
           >
             {editingId === tab.id ? (
               <input
                 autoFocus
                 value={editVal}
+                aria-label="Tab name"
                 onChange={e => setEditVal(e.target.value)}
-                onBlur={() => { renameTab(tab.id, editVal || tab.label); setEditingId(null); }}
+                onBlur={() => commit(tab.id, tab.label)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') { renameTab(tab.id, editVal || tab.label); setEditingId(null); }
+                  if (e.key === 'Enter') commit(tab.id, tab.label);
                   if (e.key === 'Escape') setEditingId(null);
                   e.stopPropagation();
                 }}
                 onClick={e => e.stopPropagation()}
                 style={{
-                  background: 'none', border: 'none', outline: 'none',
-                  color: ctp.text, fontSize: '11px', fontFamily: 'monospace',
-                  width: '64px', padding: 0,
+                  width: 80, height: 24, padding: '0 6px', border: 0, outline: 'none', borderRadius: radius.xs,
+                  background: tk.bg.panel, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`,
+                  color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`,
                 }}
               />
             ) : (
               <span
                 onDoubleClick={e => { e.stopPropagation(); setEditingId(tab.id); setEditVal(tab.label); }}
-                style={{ fontSize: '11px', color: active ? ctp.text : ctp.surface2, fontFamily: 'monospace', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                style={{
+                  padding: '0 4px', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  font: `${active ? 600 : 500} 12.5px ${fontFamily.ui}`, color: active ? tk.text.primary : tk.text.muted,
+                }}
               >
                 {tab.label}
               </span>
             )}
             {tabs.length > 1 && (
               <button
+                type="button"
+                aria-label={`Close ${tab.label}`}
                 onClick={e => { e.stopPropagation(); closeTab(tab.id); }}
-                style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '10px', padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
-              >×</button>
+                style={{
+                  width: 18, height: 18, padding: 0, border: 0, borderRadius: radius.xs, background: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: tk.text.faint,
+                  visibility: active || hoverId === tab.id ? 'visible' : 'hidden',
+                }}
+              >
+                <Icon name="close" size={12} />
+              </button>
             )}
           </div>
         );
       })}
-      <button
-        onClick={addTab}
-        title="New tab"
-        style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '14px', padding: '4px 8px', lineHeight: 1, flexShrink: 0 }}
-        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.blue)}
-        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
-      >+</button>
+      <IconButton icon="plus" label="New tab" size="sm" onClick={addTab} />
     </div>
   );
 }
 
 interface Props {
   glslErrors: string[];
+  fnLines: Record<string, [number, number]>;
 }
 
 // ── GLSL palette ──────────────────────────────────────────────────────────────
@@ -168,111 +173,77 @@ interface HelpersPanelProps {
 }
 
 function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertLibraryFn }: HelpersPanelProps) {
+  const tk = useTokens();
   const [open, setOpen] = useState(false);
   const { savedFunctionDefs, deleteSavedFunctionDef } = useFunctionBuilder();
 
-  const chipStyle = (active = false): React.CSSProperties => ({
-    background: ctp.crust,
-    border: `1px solid ${active ? `${ctp.blue}55` : ctp.surface0}`,
-    color: active ? ctp.blue : ctp.overlay0,
-    borderRadius: '3px',
-    padding: '2px 6px',
-    fontSize: '10px',
-    fontFamily: 'monospace',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap' as const,
-  });
+  const groupLabel = (text: string, color: string = tk.text.faint) => (
+    <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color, marginBottom: 6 }}>{text}</div>
+  );
 
   return (
-    <div style={{ flexShrink: 0, borderTop: `1px solid ${ctp.base}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px' }}>
+    <div style={{ flexShrink: 0, borderTop: `1px solid ${tk.border.subtle}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '0 16px 0 10px', height: 44 }}>
         <button
+          type="button"
+          aria-expanded={open}
           onClick={() => setOpen(v => !v)}
           style={{
-            background: 'none', border: 'none', color: ctp.surface1,
-            fontSize: '10px', fontFamily: 'monospace', padding: '5px 4px',
-            textAlign: 'left', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '4px', flex: 1,
+            flex: 1, height: 32, display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px', border: 0, background: 'none',
+            cursor: 'pointer', color: tk.text.muted, font: `600 12.5px ${fontFamily.ui}`, textAlign: 'left',
           }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
         >
-          <span style={{ fontSize: '8px' }}>{open ? '▼' : '▶'}</span>
+          <Icon name={open ? 'chevD' : 'chevR'} size={14} />
           Helpers
         </button>
-        {open && (
-          <button
-            onClick={onToggleAutoWrap}
-            title={autoWrap ? 'Auto-wrap ON — click wraps current expression as first arg' : 'Auto-wrap OFF — click inserts at cursor'}
-            style={{
-              ...chipStyle(autoWrap),
-              fontSize: '9px', padding: '1px 6px',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.blue}88`; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = autoWrap ? `${ctp.blue}55` : ctp.surface0; }}
-          >
-            ⊂ wrap {autoWrap ? 'ON' : 'OFF'}
-          </button>
-        )}
+        {open && <Toggle checked={autoWrap} onChange={onToggleAutoWrap} label="Wrap expression" />}
       </div>
 
       {open && (
-        <div style={{ padding: '2px 10px 8px', maxHeight: '200px', overflowY: 'auto' }}>
-          <p style={{ fontSize: '9px', color: ctp.surface1, margin: '0 0 6px', lineHeight: 1.4 }}>
-            Click to insert at cursor · {isFloat ? 'float mode — vec/SDF hidden' : 'vec mode — all shown'}
+        // preventDefault keeps focus (and the selection to wrap) in the function body
+        <div onMouseDown={e => e.preventDefault()} style={{ padding: '0 16px 12px', maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>
+            {autoWrap ? 'Click wraps the whole body as the first argument.' : 'Click inserts at the cursor, wrapping any selection.'}
+            {isFloat && ' Vector and SDF helpers are hidden for float functions.'}
           </p>
 
           {savedFunctionDefs.length > 0 && (
-            <div style={{ marginBottom: '6px' }}>
-              <div style={{ fontSize: '9px', color: ctp.green, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: '3px' }}>
-                Custom
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+            <div>
+              {groupLabel('Library', tk.kind.fn)}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {savedFunctionDefs.map((fn: FnDef) => {
                   const primaryArg = fn.returnType === 'float' ? 'x' : 'uv';
-                  const call = `${fn.name}(${primaryArg})`;
-                  const sig  = fn.returnType === 'float' ? `(float x)` : fn.returnType === 'vec3' ? `(vec3 uv)` : `(vec2 uv)`;
                   return (
-                    <div key={fn.id} style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
+                    <span key={fn.id} style={{
+                      height: 26, display: 'inline-flex', alignItems: 'center', borderRadius: radius.md - 1,
+                      boxShadow: `inset 0 0 0 1px ${alpha(tk.kind.fn, 0.35)}`, background: tk.bg.panel,
+                    }}>
                       <button
-                        onMouseDown={e => { e.preventDefault(); onInsertLibraryFn(fn); }}
-                        title={`${fn.returnType} ${fn.name}${sig}\nInserts: ${call}`}
+                        type="button"
+                        onClick={() => onInsertLibraryFn(fn)}
+                        title={`${fn.returnType} ${fn.name}(${fn.returnType === 'float' ? 'float x' : 'vec2 uv'}) · inserts ${fn.name}(${primaryArg})`}
                         style={{
-                          background: ctp.crust,
-                          border: `1px solid ${ctp.green}44`,
-                          color: ctp.green,
-                          borderRadius: '3px 0 0 3px',
-                          padding: '2px 6px',
-                          fontSize: '10px',
-                          fontFamily: 'monospace',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap' as const,
+                          height: '100%', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 4px 0 8px', border: 0,
+                          background: 'none', cursor: 'pointer', color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`,
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}aa`; (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}44`; (e.currentTarget as HTMLButtonElement).style.color = ctp.green; }}
                       >
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.kind.fn }} />
                         {fn.name}
-                        <span style={{ color: ctp.surface2, marginLeft: '2px' }}>{fn.returnType}</span>
+                        <span style={{ color: tk.text.faint }}>{fn.returnType}</span>
                       </button>
                       <button
-                        onMouseDown={e => { e.preventDefault(); deleteSavedFunctionDef(fn.id); }}
+                        type="button"
+                        aria-label={`Remove ${fn.name} from the library`}
                         title="Remove from library"
+                        onClick={() => deleteSavedFunctionDef(fn.id)}
                         style={{
-                          background: ctp.crust,
-                          border: `1px solid ${ctp.green}44`,
-                          borderLeft: 'none',
-                          color: ctp.surface1,
-                          borderRadius: '0 3px 3px 0',
-                          padding: '2px 4px',
-                          fontSize: '9px',
-                          cursor: 'pointer',
-                          lineHeight: 1,
+                          width: 22, height: '100%', padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.faint,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.red; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface1; }}
-                      >×</button>
-                    </div>
+                      >
+                        <Icon name="close" size={12} />
+                      </button>
+                    </span>
                   );
                 })}
               </div>
@@ -283,28 +254,11 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
             const entries = PALETTE.filter(e => e.group === group && (isFloat ? e.floatOk : true));
             if (entries.length === 0) return null;
             return (
-              <div key={group} style={{ marginBottom: '6px' }}>
-                <div style={{ fontSize: '9px', color: ctp.surface2, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: '3px' }}>
-                  {group}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+              <div key={group}>
+                {groupLabel(group)}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   {entries.map(entry => (
-                    <button
-                      key={entry.label}
-                      onMouseDown={e => { e.preventDefault(); onInsert(entry.insert); }}
-                      title={`Insert: ${entry.insert}`}
-                      style={chipStyle()}
-                      onMouseEnter={e => {
-                        (e.currentTarget as HTMLButtonElement).style.color = ctp.text;
-                        (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
-                      }}
-                      onMouseLeave={e => {
-                        (e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0;
-                        (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface0;
-                      }}
-                    >
-                      {entry.label}
-                    </button>
+                    <Chip key={entry.label} title={`Insert ${entry.insert}`} onClick={() => onInsert(entry.insert)}>{entry.label}</Chip>
                   ))}
                 </div>
               </div>
@@ -318,7 +272,7 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function FunctionList({ glslErrors }: Props) {
+export function FunctionList({ glslErrors, fnLines }: Props) {
   const { functions, activeId, addFunction, updateFunction } = useFunctionBuilder();
 
   // Track the last-focused textarea for click-to-insert
@@ -387,14 +341,16 @@ export function FunctionList({ glslErrors }: Props) {
     insert(`${fn.name}(${primaryArg})`);
   };
 
+  // An error belongs to the function whose lines it points into; errors outside every function
+  // (e.g. in main, where the curves are called) fall back to matching the function's name.
   const fnErrors = (id: string) => {
     const fn = functions.find(f => f.id === id);
     if (!fn) return [];
     const name = fn.name.toLowerCase();
     return glslErrors.filter(e => {
+      const owner = errorOwner(e, fnLines);
+      if (owner) return owner === id;
       const el = e.toLowerCase();
-      // Match "fnName(" call sites, "'fnName'" quoted in error messages,
-      // or "fnName " at a word boundary (type/var errors)
       return el.includes(`${name}(`) ||
              el.includes(`'${name}'`) ||
              el.includes(`"${name}"`) ||
@@ -405,10 +361,24 @@ export function FunctionList({ glslErrors }: Props) {
   const activeFn = functions.find(f => f.id === activeId);
   const isFloat  = activeFn?.returnType === 'float';
 
+  const tk = useTokens();
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div style={{ padding: '16px 16px 10px', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+        <span style={{ fontWeight: 650, fontSize: 14, color: tk.text.primary }}>Functions</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[['float', 'x, t'], ['vec3', 'uv, t']].map(([type, vars]) => (
+            <span key={type} title={`Variables available in a ${type} function`} style={{
+              padding: '3px 8px', borderRadius: 7, background: tk.bg.field, color: tk.text.muted, font: `500 11.5px ${fontFamily.mono}`,
+            }}>
+              <b style={{ color: tk.text.primary, fontWeight: 600 }}>{type}</b> {vars}
+            </span>
+          ))}
+        </div>
+      </div>
       <TabBar />
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {functions.map((fn, i) => (
           <FunctionEditor
             key={fn.id}
@@ -429,32 +399,30 @@ export function FunctionList({ glslErrors }: Props) {
         onInsertLibraryFn={handleLibraryFnInsert}
       />
 
-      <div style={{ flexShrink: 0, padding: '6px 8px', borderTop: `1px solid ${ctp.surface0}` }}>
-        <button
-          onClick={addFunction}
-          style={{
-            width: '100%',
-            background: ctp.base,
-            border: `1px dashed ${ctp.surface1}`,
-            color: ctp.surface2,
-            borderRadius: '6px',
-            padding: '6px',
-            fontSize: '12px',
-            cursor: 'pointer',
-            transition: 'color 0.15s, border-color 0.15s',
-          }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLButtonElement).style.color = ctp.text;
-            (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.overlay0;
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2;
-            (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
-          }}
-        >
-          + Add Function
-        </button>
+      <div style={{ flexShrink: 0, padding: '4px 16px 16px' }}>
+        <AddFunctionButton onClick={addFunction} />
       </div>
     </div>
+  );
+}
+
+function AddFunctionButton({ onClick }: { onClick: () => void }) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
+        borderRadius: 10, border: `1.5px dashed ${hover ? tk.text.faint : tk.border.strong}`,
+        background: hover ? tk.bg.hover : 'none', color: hover ? tk.text.secondary : tk.text.muted, font: `500 13px ${fontFamily.ui}`,
+      }}
+    >
+      <Icon name="plus" size={15} />
+      Add function
+    </button>
   );
 }

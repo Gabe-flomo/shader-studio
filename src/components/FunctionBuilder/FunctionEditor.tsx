@@ -1,9 +1,15 @@
 import React from 'react';
 import type { FnDef } from './useFunctionBuilder';
 import { useFunctionBuilder, TYPE_DEFAULTS } from './useFunctionBuilder';
-import { CURVE_COLORS } from './glslCompiler';
+import { curveColor } from './glslCompiler';
 import { GlslTextarea } from './GlslTextarea';
-import { ctp } from '../../theme/palette';
+import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Segmented } from '../ui/Choice';
+import { Icon } from '../ui/Icon';
+import { Tooltip } from '../ui/Tooltip';
+import { toast } from '../ui/toastStore';
 
 interface Props {
   fn: FnDef;
@@ -13,14 +19,17 @@ interface Props {
   onTextareaFocus: (el: HTMLTextAreaElement) => void;
 }
 
-const RETURN_TYPES = ['float', 'vec2', 'vec3'] as const;
+const RETURN_TYPES = [
+  { value: 'float', label: 'float' },
+  { value: 'vec2', label: 'vec2' },
+  { value: 'vec3', label: 'vec3' },
+] as const;
 
+/** One function card: colour dot (its curve), name, return type, save-to-library, remove, body. */
 export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }: Props) {
   const { updateFunction, removeFunction, setActiveId, saveFunctionDef } = useFunctionBuilder();
-
-  const [r, g, b] = CURVE_COLORS[index % CURVE_COLORS.length];
-  const dotColor = `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
-
+  const tk = useTokens();
+  const dotColor = curveColor(index, useThemeMode());
   const hasError = errors.length > 0;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -34,98 +43,70 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
     }
   };
 
+  const setReturnType = (newType: FnDef['returnType']) => {
+    const patch: Partial<FnDef> = { returnType: newType };
+    if (Object.values(TYPE_DEFAULTS).includes(fn.body.trim())) patch.body = TYPE_DEFAULTS[newType];
+    updateFunction(fn.id, patch);
+  };
+
+  const ring = hasError ? tk.status.danger : isActive ? tk.accent.base : null;
+
   return (
     <div
       onClick={() => setActiveId(fn.id)}
       style={{
-        border: `1px solid ${isActive ? ctp.surface1 : ctp.surface0}`,
-        borderLeft: `3px solid ${isActive ? dotColor : ctp.surface0}`,
-        borderRadius: '6px',
-        marginBottom: '6px',
-        background: isActive ? ctp.base : ctp.mantle,
-        cursor: 'default',
-        overflow: 'hidden',
-        transition: 'border-color 0.15s',
+        borderRadius: radius.lg, overflow: 'hidden', background: tk.bg.panel, flexShrink: 0,
+        boxShadow: ring
+          ? `0 0 0 1.5px ${ring}, 0 4px 14px ${alpha(ring, 0.1)}`
+          : `0 0 0 1px ${tk.border.default}`,
+        transition: 'box-shadow 0.15s',
       }}
     >
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px', borderBottom: `1px solid ${ctp.surface0}` }}>
-        {/* Left: dot + name (fills remaining space, name capped at 20 chars) */}
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px 8px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
         <input
           value={fn.name}
           maxLength={20}
+          aria-label="Function name"
+          spellCheck={false}
           onChange={e => updateFunction(fn.id, { name: e.target.value })}
           onClick={e => e.stopPropagation()}
           style={{
-            background: 'none', border: 'none', color: ctp.text,
-            fontFamily: 'monospace', fontSize: '13px', fontWeight: 700,
-            flex: 1, minWidth: 0, outline: 'none', padding: 0,
+            flex: 1, minWidth: 0, padding: 0, border: 0, outline: 'none', background: 'none',
+            color: tk.text.primary, font: `600 13px ${fontFamily.mono}`,
           }}
         />
-
-        {/* Right: type dropdown + error + lib + remove — always visible */}
-        {hasError && (
-          <span title={errors[0]} style={{ fontSize: '10px', color: ctp.red, flexShrink: 0 }}>⚠</span>
-        )}
-        <select
-          value={fn.returnType}
-          onChange={e => {
-            const newType = e.target.value as FnDef['returnType'];
-            const patch: Partial<FnDef> = { returnType: newType };
-            if (Object.values(TYPE_DEFAULTS).includes(fn.body.trim())) {
-              patch.body = TYPE_DEFAULTS[newType];
-            }
-            updateFunction(fn.id, patch);
-          }}
-          onClick={e => e.stopPropagation()}
-          style={{
-            background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.subtext0,
-            borderRadius: '4px', fontSize: '11px', fontFamily: 'monospace',
-            padding: '1px 4px', cursor: 'pointer', outline: 'none', flexShrink: 0,
-          }}
-        >
-          {RETURN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <button
-          onClick={e => { e.stopPropagation(); saveFunctionDef(fn); }}
-          title="Save to function library"
-          style={{
-            background: 'none',
-            border: `1px solid ${ctp.green}44`,
-            color: ctp.green,
-            borderRadius: '10px',
-            padding: '1px 7px',
-            fontSize: '10px',
-            fontFamily: 'monospace',
-            cursor: 'pointer',
-            flexShrink: 0,
-            lineHeight: 1.4,
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.green}22`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}88`; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}44`; }}
-        >↓ lib</button>
-        <button
-          onClick={e => { e.stopPropagation(); removeFunction(fn.id); }}
-          style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
-          title="Remove function"
-        >✕</button>
+        <div onClick={e => e.stopPropagation()}>
+          <Segmented size="sm" ariaLabel="Return type" options={RETURN_TYPES} value={fn.returnType} onChange={setReturnType} />
+        </div>
+        <Tooltip label="Save to the function library" description="Library functions can be called from any tab.">
+          <Button
+            size="sm"
+            icon="import"
+            style={{ height: 28, padding: '0 8px', gap: 5 }}
+            onClick={e => { e.stopPropagation(); saveFunctionDef(fn); toast.success(`Saved ${fn.name} to the library`); }}
+          >lib</Button>
+        </Tooltip>
+        <IconButton icon="close" label="Remove function" size="sm" tone="danger" onClick={e => { e.stopPropagation(); removeFunction(fn.id); }} />
       </div>
 
-      {/* Body — syntax-highlighted textarea */}
-      <div onClick={e => e.stopPropagation()}>
+      <div onClick={e => e.stopPropagation()} style={{ background: tk.bg.subtle, minHeight: 60 }}>
         <GlslTextarea
           value={fn.body}
           onChange={val => updateFunction(fn.id, { body: val })}
           onKeyDown={handleKeyDown}
-          onFocus={onTextareaFocus}
+          onFocus={el => { onTextareaFocus(el); setActiveId(fn.id); }}
           hasError={hasError}
         />
       </div>
 
       {hasError && (
-        <div style={{ padding: '3px 10px 5px', fontSize: '10px', color: ctp.red, fontFamily: 'monospace', borderTop: '1px solid #2a1a1a' }}>
-          {errors[0]}
+        <div style={{
+          display: 'flex', gap: 7, padding: '7px 12px', borderTop: `1px solid ${alpha(tk.status.danger, 0.2)}`,
+          background: alpha(tk.status.danger, 0.07), color: tk.status.danger, font: `11.5px/1.45 ${fontFamily.mono}`,
+        }}>
+          <Icon name="alert" size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span style={{ wordBreak: 'break-word' }}>{errors[0].replace(/^ERROR:\s*\d+:\d+:\s*/i, '')}</span>
         </div>
       )}
     </div>

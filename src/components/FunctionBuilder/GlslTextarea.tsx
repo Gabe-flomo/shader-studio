@@ -1,158 +1,7 @@
 import React, { useRef, useCallback, useEffect } from 'react';
-import { ctp } from '../../theme/palette';
-
-// ── Token colour palette (Catppuccin Mocha) ───────────────────────────────────
-const C = {
-  keyword:    ctp.mauve,  // mauve  — return, if, for, …
-  typeFloat:  ctp.red,  // red    — float
-  typeVec2:   ctp.blue,  // blue   — vec2
-  typeVec3:   ctp.green,  // green  — vec3
-  typeVec4:   ctp.lavender,  // lavender — vec4
-  typeInt:    ctp.peach,  // peach  — int, bool
-  typeMat:    ctp.teal,  // teal   — mat2/3/4
-  builtin:    ctp.yellow,  // yellow — sin, cos, mix, …
-  number:     ctp.peach,  // peach  — 1.0, 3.14
-  comment:    ctp.surface1,  // dimmed
-  swizzle:    ctp.blue,  // blue   — .xyz, .rgb
-  operator:   ctp.sky,  // sky    — + - * / = …
-  ident:      ctp.text,  // text   — identifiers
-  punct:      ctp.overlay0,  // overlay0 — ( ) { } , ;
-};
-
-const KEYWORDS = new Set([
-  'if','else','for','while','do','switch','case','default','break','continue',
-  'return','discard','void','uniform','varying','attribute','const',
-  'in','out','inout','layout','precision','mediump','highp','lowp',
-  'struct','true','false',
-]);
-
-const TYPE_COLORS: Record<string, string> = {
-  float: C.typeFloat, double: C.typeFloat,
-  vec2:  C.typeVec2,  dvec2: C.typeVec2,  ivec2: C.typeInt, bvec2: C.typeInt,
-  vec3:  C.typeVec3,  dvec3: C.typeVec3,  ivec3: C.typeInt, bvec3: C.typeInt,
-  vec4:  C.typeVec4,  dvec4: C.typeVec4,  ivec4: C.typeInt, bvec4: C.typeInt,
-  int: C.typeInt, uint: C.typeInt, bool: C.typeInt,
-  mat2: C.typeMat, mat3: C.typeMat, mat4: C.typeMat,
-};
-
-const BUILTINS = new Set([
-  'radians','degrees','sin','cos','tan','asin','acos','atan',
-  'sinh','cosh','tanh','asinh','acosh','atanh',
-  'pow','exp','log','exp2','log2','sqrt','inversesqrt',
-  'abs','sign','floor','trunc','round','ceil','fract',
-  'mod','modf','min','max','clamp','mix','step','smoothstep',
-  'length','distance','dot','cross','normalize','faceforward','reflect','refract',
-  'matrixCompMult','outerProduct','transpose','determinant','inverse',
-  'lessThan','lessThanEqual','greaterThan','greaterThanEqual','equal','notEqual','any','all','not',
-  'texture','texture2D','textureCube','textureProj',
-  'dFdx','dFdy','fwidth',
-]);
-
-interface Token { text: string; color: string; }
-
-function tokenizeLine(line: string): Token[] {
-  const tokens: Token[] = [];
-  let i = 0;
-
-  // Preprocessor
-  const trimmed = line.trimStart();
-  if (trimmed.startsWith('#')) {
-    const leading = line.length - trimmed.length;
-    if (leading) tokens.push({ text: line.slice(0, leading), color: C.ident });
-    tokens.push({ text: line.slice(leading), color: C.comment });
-    return tokens;
-  }
-
-  while (i < line.length) {
-    const ch = line[i];
-
-    // Whitespace
-    if (ch === ' ' || ch === '\t') {
-      let ws = '';
-      while (i < line.length && (line[i] === ' ' || line[i] === '\t')) ws += line[i++];
-      tokens.push({ text: ws, color: C.ident });
-      continue;
-    }
-
-    // Line comment
-    if (line[i] === '/' && line[i + 1] === '/') {
-      tokens.push({ text: line.slice(i), color: C.comment });
-      break;
-    }
-
-    // Block comment
-    if (line[i] === '/' && line[i + 1] === '*') {
-      const end = line.indexOf('*/', i + 2);
-      const commentText = end === -1 ? line.slice(i) : line.slice(i, end + 2);
-      tokens.push({ text: commentText, color: C.comment });
-      i += commentText.length;
-      continue;
-    }
-
-    // Number literal  (int/float, optional exponent)
-    const prevCh = i > 0 ? line[i - 1] : null;
-    const prevIsIdent = prevCh !== null && /[a-zA-Z0-9_]/.test(prevCh);
-    if (!prevIsIdent && /\d/.test(ch)) {
-      const m = line.slice(i).match(/^\d+(\.\d*)?(e[+-]?\d+)?[uUfF]?/);
-      if (m) { tokens.push({ text: m[0], color: C.number }); i += m[0].length; continue; }
-    }
-    // .5 style literals
-    if (ch === '.' && /\d/.test(line[i + 1] ?? '')) {
-      const m = line.slice(i).match(/^\.\d+(e[+-]?\d+)?[fF]?/);
-      if (m) { tokens.push({ text: m[0], color: C.number }); i += m[0].length; continue; }
-    }
-
-    // Dot — swizzle or standalone
-    if (ch === '.') {
-      const swizzleMatch = line.slice(i + 1).match(/^[xyzwrgbastpq]+/);
-      if (swizzleMatch) {
-        tokens.push({ text: '.', color: C.punct });
-        tokens.push({ text: swizzleMatch[0], color: C.swizzle });
-        i += 1 + swizzleMatch[0].length;
-        continue;
-      }
-      tokens.push({ text: '.', color: C.punct });
-      i++;
-      continue;
-    }
-
-    // Identifier / keyword / type / builtin
-    if (/[a-zA-Z_]/.test(ch)) {
-      const m = line.slice(i).match(/^[a-zA-Z_][a-zA-Z0-9_]*/);
-      if (m) {
-        const word = m[0];
-        let color = C.ident;
-        if (KEYWORDS.has(word))     color = C.keyword;
-        else if (TYPE_COLORS[word]) color = TYPE_COLORS[word];
-        else if (BUILTINS.has(word)) color = C.builtin;
-        tokens.push({ text: word, color });
-        i += word.length;
-        continue;
-      }
-    }
-
-    // Operators
-    if (/[+\-*/%=<>!&|^~?]/.test(ch)) {
-      const two = line.slice(i, i + 2);
-      if (['++','--','<=','>=','==','!=','&&','||','+=','-=','*=','/=','<<','>>'].includes(two)) {
-        tokens.push({ text: two, color: C.operator }); i += 2;
-      } else {
-        tokens.push({ text: ch, color: C.operator }); i++;
-      }
-      continue;
-    }
-
-    // Punctuation
-    if (/[(){}\[\],;:]/.test(ch)) {
-      tokens.push({ text: ch, color: C.punct }); i++; continue;
-    }
-
-    // Fallback
-    tokens.push({ text: ch, color: C.ident }); i++;
-  }
-
-  return tokens;
-}
+import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { fontFamily } from '../../theme/tokens';
+import { C, C_LIGHT, tokenizeLine } from '../glslSyntax';
 
 function escHtml(s: string): string {
   return s
@@ -161,10 +10,10 @@ function escHtml(s: string): string {
     .replace(/>/g, '&gt;');
 }
 
-function buildHighlightedHtml(code: string): string {
+function buildHighlightedHtml(code: string, pal: typeof C): string {
   const lines = code.split('\n');
   const result = lines.map(line => {
-    const tokens = tokenizeLine(line);
+    const tokens = tokenizeLine(line, pal);
     return tokens.map(t => `<span style="color:${t.color}">${escHtml(t.text)}</span>`).join('');
   });
   // trailing newline keeps <pre> the same height as <textarea>
@@ -182,10 +31,10 @@ interface Props {
 }
 
 const SHARED: React.CSSProperties = {
-  fontFamily:   'monospace',
-  fontSize:     '12px',
+  fontFamily:   fontFamily.mono,
+  fontSize:     '13px',
   lineHeight:   '1.6',
-  padding:      '6px 10px',
+  padding:      '12px 14px',
   whiteSpace:   'pre',
   overflowWrap: 'normal' as const,
   wordBreak:    'normal' as const,
@@ -219,7 +68,8 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
     ta.style.height = `${ta.scrollHeight}px`;
   }, [value]);
 
-  const html = buildHighlightedHtml(value);
+  const tk = useTokens();
+  const html = buildHighlightedHtml(value, useThemeMode() === 'dark' ? C : C_LIGHT);
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>
@@ -255,7 +105,7 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
           zIndex:      2,
           background:  'transparent',
           color:       'transparent',
-          caretColor:  hasError ? ctp.red : ctp.text,
+          caretColor:  hasError ? tk.status.danger : tk.text.primary,
           resize:      'none',
           display:     'block',
           overflow:    'hidden',

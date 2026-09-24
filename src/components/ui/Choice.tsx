@@ -57,22 +57,27 @@ export interface SegmentOption<T extends string> {
   sub?: ReactNode;
 }
 
-/** 2–5 mutually exclusive options. `fill` stretches the segments across the container. */
+/**
+ * 2–5 mutually exclusive options. `fill` stretches the segments across the container; `sm` is
+ * the compact form for card headers.
+ */
 export function Segmented<T extends string>({
-  options, value, onChange, fill = false, ariaLabel,
+  options, value, onChange, fill = false, size = 'md', ariaLabel,
 }: {
   options: readonly SegmentOption<T>[];
   value: T;
   onChange: (value: T) => void;
   fill?: boolean;
+  size?: 'sm' | 'md';
   ariaLabel?: string;
 }) {
+  const sm = size === 'sm';
   const tk = useTokens();
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      style={{ display: fill ? 'flex' : 'inline-flex', gap: 2, padding: 3, borderRadius: radius.control, background: tk.bg.field }}
+      style={{ display: fill ? 'flex' : 'inline-flex', flexShrink: sm ? 0 : undefined, gap: 2, padding: sm ? 2 : 3, borderRadius: sm ? radius.md : radius.control, background: tk.bg.field }}
     >
       {options.map(o => {
         const on = o.value === value;
@@ -84,9 +89,9 @@ export function Segmented<T extends string>({
             aria-checked={on}
             onClick={() => onChange(o.value)}
             style={{
-              flex: fill ? 1 : undefined, border: 0, borderRadius: 7, padding: o.sub ? '5px 8px' : '4px 10px', cursor: 'pointer',
+              flex: fill ? 1 : undefined, border: 0, borderRadius: sm ? 6 : 7, padding: o.sub ? '5px 8px' : sm ? '3px 7px' : '4px 10px', cursor: 'pointer',
               background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
-              color: on ? tk.text.primary : tk.text.muted, font: `${on ? 600 : 500} 12px ${fontFamily.ui}`,
+              color: on ? tk.text.primary : tk.text.muted, font: `${on ? 600 : 500} ${sm ? 11.5 : 12}px ${fontFamily.ui}`,
               display: 'inline-flex', flexDirection: o.sub ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: o.sub ? 1 : 4,
               whiteSpace: 'nowrap',
             }}

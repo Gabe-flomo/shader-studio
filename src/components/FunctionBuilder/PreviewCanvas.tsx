@@ -26,7 +26,7 @@ void main() {
 
 const FALLBACK_FRAG = `
 precision mediump float;
-void main() { gl_FragColor = vec4(0.07, 0.07, 0.11, 1.0); }
+void main() { gl_FragColor = vec4(0.0); }
 `.trim();
 
 function compileShader(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
@@ -76,18 +76,20 @@ export function PreviewCanvas({ shaderSource, xRange, yRange, onError }: Props) 
   // Keep range ref current without rebuilding shader
   useEffect(() => { rangeRef.current = { xRange, yRange }; }, [xRange, yRange]);
 
-  const buildProgram = useCallback((gl: WebGLRenderingContext, fragSrc: string) => {
+  // `report` is off for the fallback program, whose success must not clear the real shader's errors.
+  const buildProgram = useCallback((gl: WebGLRenderingContext, fragSrc: string, report = true) => {
+    const onError = (errors: string[]) => { if (report) onErrorRef.current(errors); };
     const vs = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SRC);
     if (!vs) return null;
 
     const fsErrors = getShaderError(gl, gl.FRAGMENT_SHADER, fragSrc);
-    if (fsErrors.length > 0) { onErrorRef.current(fsErrors); return null; }
+    if (fsErrors.length > 0) { onError(fsErrors); return null; }
 
     const fs = compileShader(gl, gl.FRAGMENT_SHADER, fragSrc)!;
     const prog = createProgram(gl, vs, fs);
-    if (!prog) { onErrorRef.current(['Program link failed']); return null; }
+    if (!prog) { onError(['Program link failed']); return null; }
 
-    onErrorRef.current([]);
+    onError([]);
     return prog;
   }, []); // no deps — uses stable refs
 
@@ -150,15 +152,15 @@ export function PreviewCanvas({ shaderSource, xRange, yRange, onError }: Props) 
 
     if (progRef.current) gl.deleteProgram(progRef.current);
     const src = shaderSource || FALLBACK_FRAG;
-    // On compile error fall back to a solid-dark program so the canvas clears
+    // On compile error fall back to a transparent program so the canvas clears
     // rather than retaining the last successfully rendered frame.
     const mainProg = buildProgram(gl, src);
-    const prog = mainProg ?? buildProgram(gl, FALLBACK_FRAG) ?? null;
+    const prog = mainProg ?? buildProgram(gl, FALLBACK_FRAG, false) ?? null;
     progRef.current = prog;
-    // If the main shader failed, immediately clear to dark so we don't show a stale frame.
+    // If the main shader failed, clear immediately so we don't show a stale frame.
     if (!mainProg && prog) {
       gl.useProgram(prog);
-      gl.clearColor(0.07, 0.07, 0.11, 1.0);
+      gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
     }
   }, [shaderSource, buildProgram]);

@@ -1,45 +1,46 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
-import { normalizeBodyExpr, emitFunction } from './glslCompiler';
+import { normalizeBodyExpr, emitFunction, curveColor } from './glslCompiler';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { ctp } from '../../theme/palette';
+import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Field } from '../ui/Field';
+import { Icon } from '../ui/Icon';
+import { Popover } from '../ui/Popover';
+import { toast } from '../ui/toastStore';
 
 interface Props {
-  hasErrors: boolean;
   onNavigateToStudio?: () => void;
 }
 
-const inputStyle: React.CSSProperties = {
-  background: ctp.mantle,
-  border: `1px solid ${ctp.surface1}`,
-  borderRadius: '4px',
-  color: ctp.text,
-  fontFamily: 'monospace',
-  fontSize: '11px',
-  padding: '3px 6px',
-  width: '52px',
-  outline: 'none',
-};
+const fmt = (v: number) => String(parseFloat(v.toPrecision(3)));
 
+/** Range bound. Shows the live value (it follows pan and zoom) until focused; commits on blur or Enter. */
 function RangeInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  const [local, setLocal] = useState(String(value));
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    const n = parseFloat(draft ?? '');
+    if (!isNaN(n)) onChange(n);
+    setDraft(null);
+  };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-      <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>{label}</span>
-      <input
-        style={inputStyle}
-        value={local}
-        onChange={e => setLocal(e.target.value)}
-        onBlur={() => {
-          const n = parseFloat(local);
-          if (!isNaN(n)) { onChange(n); } else { setLocal(String(value)); }
-        }}
-        onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
-      />
-    </div>
+    <Field
+      mono
+      height={32}
+      aria-label={label}
+      value={draft ?? fmt(value)}
+      onFocus={e => { setDraft(fmt(value)); e.currentTarget.select(); }}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') { setDraft(null); requestAnimationFrame(() => (e.target as HTMLInputElement).blur()); }
+      }}
+      style={{ width: 58, padding: '0 8px' }}
+    />
   );
 }
-
 
 const GLSL_BUILTINS = new Set([
   'sin','cos','tan','asin','acos','atan','sinh','cosh','tanh',
@@ -66,41 +67,31 @@ function detectFreeVars(expr: string, implicit: Set<string>): string[] {
   return free;
 }
 
-export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
+export function Toolbar({ onNavigateToStudio }: Props) {
   const { functions, activeId, xRange, yRange, setActiveId, setXRange, setYRange, linkedBlockId, savedGroups, saveGroup, loadGroup, deleteGroup, savedFunctionDefs } = useFunctionBuilder();
   const addNode = useNodeGraphStore(s => s.addNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const nodes = useNodeGraphStore(s => s.nodes);
+  const tk = useTokens();
+  const mode = useThemeMode();
 
   const activeFn = functions.find(f => f.id === activeId) ?? functions[0];
+  const activeIndex = Math.max(0, functions.findIndex(f => f.id === activeFn?.id));
 
-  // ── Session save / load state ───────────────────────────────────────────────
-  const [showSaveInput, setShowSaveInput] = useState(false);
+  // ── Group save / sessions ───────────────────────────────────────────────────
+  const [saving, setSaving] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [showSessions, setShowSessions] = useState(false);
-  const sessionsRef = useRef<HTMLDivElement>(null);
-  const saveInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (showSaveInput) saveInputRef.current?.focus();
-  }, [showSaveInput]);
-
-  // Close sessions panel on outside click
-  useEffect(() => {
-    if (!showSessions) return;
-    const handler = (e: MouseEvent) => {
-      if (!sessionsRef.current?.contains(e.target as Node)) setShowSessions(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showSessions]);
+  const sessionsRef = useRef<HTMLSpanElement>(null);
 
   const handleSaveGroup = () => {
-    if (!saveName.trim()) return;
-    saveGroup(saveName.trim());
+    const name = saveName.trim();
+    if (!name) return;
+    saveGroup(name);
+    toast.success(`Saved group “${name}”`);
     setSaveName('');
-    setShowSaveInput(false);
+    setSaving(false);
   };
 
   const handleSave = () => {
@@ -163,174 +154,127 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
     onNavigateToStudio?.();
   };
 
+  const sep = <span style={{ width: 1, height: 20, background: tk.border.default, flexShrink: 0, margin: '0 2px' }} />;
+  const axisLabel = (a: string) => <span style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.muted, marginRight: 2 }}>{a}</span>;
+
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      padding: '6px 10px',
-      borderTop: `1px solid ${ctp.surface0}`,
-      background: ctp.base,
-      flexShrink: 0,
-      flexWrap: 'wrap',
+      height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px',
+      borderTop: `1px solid ${tk.border.default}`, background: tk.bg.panel, overflowX: 'auto', scrollbarWidth: 'none',
     }}>
-      {/* Active function selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>Visualize</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: tk.text.muted }}>Visualize</span>
+      {/* Native select under a styled face, as in TypeSelect */}
+      <span style={{
+        position: 'relative', height: 32, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0 8px 0 10px', flexShrink: 0,
+        borderRadius: radius.control, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel,
+        font: `500 12.5px ${fontFamily.mono}`, color: tk.text.primary,
+      }}>
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: curveColor(activeIndex, mode) }} />
+        {activeFn ? `${activeFn.name} (${activeFn.returnType})` : '—'}
+        <Icon name="chevD" size={14} style={{ color: tk.text.faint }} />
         <select
+          aria-label="Function to visualize"
           value={activeId}
           onChange={e => setActiveId(e.target.value)}
-          style={{
-            background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.text,
-            borderRadius: '4px', fontSize: '11px', fontFamily: 'monospace',
-            padding: '3px 6px', cursor: 'pointer', outline: 'none',
-          }}
+          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', font: 'inherit' }}
         >
-          {functions.map(f => (
-            <option key={f.id} value={f.id}>{f.name} ({f.returnType})</option>
-          ))}
+          {functions.map(f => <option key={f.id} value={f.id}>{f.name} ({f.returnType})</option>)}
         </select>
-      </div>
+      </span>
 
-      <div style={{ width: '1px', height: '16px', background: ctp.surface0, flexShrink: 0 }} />
-
-      {/* X / Y range inputs — float mode only */}
       {activeFn?.returnType === 'float' && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>x</span>
-            <RangeInput label="[" value={xRange[0]} onChange={v => setXRange([v, xRange[1]])} />
-            <RangeInput label="," value={xRange[1]} onChange={v => setXRange([xRange[0], v])} />
-            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>]</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>y</span>
-            <RangeInput label="[" value={yRange[0]} onChange={v => setYRange([v, yRange[1]])} />
-            <RangeInput label="," value={yRange[1]} onChange={v => setYRange([yRange[0], v])} />
-            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>]</span>
-          </div>
-          <div style={{ width: '1px', height: '16px', background: ctp.surface0, flexShrink: 0 }} />
+          {sep}
+          {axisLabel('x')}
+          <RangeInput label="x minimum" value={xRange[0]} onChange={v => setXRange([v, xRange[1]])} />
+          <RangeInput label="x maximum" value={xRange[1]} onChange={v => setXRange([xRange[0], v])} />
+          <span style={{ width: 6 }} />
+          {axisLabel('y')}
+          <RangeInput label="y minimum" value={yRange[0]} onChange={v => setYRange([v, yRange[1]])} />
+          <RangeInput label="y maximum" value={yRange[1]} onChange={v => setYRange([yRange[0], v])} />
+          <IconButton icon="fit" label="Reset view" size="sm" onClick={() => { setXRange([-2, 2]); setYRange([-2, 2]); }} />
         </>
       )}
 
-      {/* ── Session controls ─────────────────────────────────── */}
-      <div style={{ position: 'relative' }} ref={sessionsRef}>
-        {/* Save input */}
-        {showSaveInput ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <input
-              ref={saveInputRef}
-              value={saveName}
-              onChange={e => setSaveName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleSaveGroup(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveName(''); } }}
-              placeholder="Group name…"
-              style={{
-                background: ctp.mantle, border: `1px solid ${ctp.surface1}`, borderRadius: '4px',
-                color: ctp.text, fontSize: '11px', fontFamily: 'monospace',
-                padding: '3px 7px', outline: 'none', width: '110px',
-              }}
-            />
-            <button onClick={handleSaveGroup} style={smallBtn(ctp.green)}>Save</button>
-            <button onClick={() => { setShowSaveInput(false); setSaveName(''); }} style={smallBtn(ctp.surface2)}>✕</button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button
-              onClick={() => { setShowSaveInput(true); setShowSessions(false); }}
-              title="Save current tabs as a named group"
-              style={smallBtn(ctp.green)}
-            >
-              ↑ Save Group
-            </button>
-            <button
-              onClick={() => setShowSessions(v => !v)}
-              title="Open a saved group"
-              style={smallBtn(showSessions ? ctp.mauve : ctp.surface2)}
-            >
-              Sessions {savedGroups.length > 0 ? `(${savedGroups.length})` : ''}
-            </button>
-          </div>
-        )}
+      <span style={{ flex: 1, minWidth: 8 }} />
 
-        {/* Sessions dropdown */}
-        {showSessions && (
-          <div style={{
-            position: 'absolute', bottom: '100%', right: 0, marginBottom: '4px',
-            background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
-            minWidth: '200px', maxHeight: '220px', overflowY: 'auto',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
-          }}>
-            {savedGroups.length === 0 ? (
-              <div style={{ padding: '10px 12px', fontSize: '11px', color: ctp.surface1, fontFamily: 'monospace' }}>
-                No saved groups yet
-              </div>
-            ) : savedGroups.map(g => (
-              <div
-                key={g.id}
-                style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', borderBottom: `1px solid ${ctp.surface0}`, gap: '6px' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '11px', color: ctp.text, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {g.name}
-                  </div>
-                  <div style={{ fontSize: '9px', color: ctp.surface1 }}>
-                    {g.tabs.length} tab{g.tabs.length !== 1 ? 's' : ''} · {new Date(g.savedAt).toLocaleDateString()}
-                  </div>
-                </div>
-                <button
-                  onClick={() => { loadGroup(g); setShowSessions(false); }}
-                  style={smallBtn(ctp.blue)}
-                >Load</button>
-                <button
-                  onClick={() => deleteGroup(g.id)}
-                  style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
-                >✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={{ width: '1px', height: '16px', background: ctp.surface0, flexShrink: 0 }} />
-      <div style={{ flex: 1 }} />
-
-      {hasErrors && (
-        <span style={{ fontSize: '10px', color: ctp.red, fontFamily: 'monospace' }}>⚠ GLSL error</span>
+      {saving ? (
+        <>
+          <Field
+            autoFocus
+            height={30}
+            placeholder="Group name"
+            aria-label="Group name"
+            value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleSaveGroup();
+              if (e.key === 'Escape') { setSaving(false); setSaveName(''); }
+            }}
+            style={{ width: 150 }}
+          />
+          <Button size="sm" disabled={!saveName.trim()} onClick={handleSaveGroup}>Save</Button>
+          <IconButton icon="close" label="Cancel" size="sm" tooltip={false} onClick={() => { setSaving(false); setSaveName(''); }} />
+        </>
+      ) : (
+        <Button size="sm" icon="export" title="Save every tab as a named group" onClick={() => { setSaving(true); setShowSessions(false); }}>
+          Save group
+        </Button>
       )}
 
-      <button
-        onClick={handleSave}
-        style={{
-          background: ctp.blue,
-          border: 'none',
-          color: ctp.base,
-          borderRadius: '5px',
-          padding: '4px 12px',
-          fontSize: '11px',
-          fontWeight: 700,
-          cursor: 'pointer',
-          flexShrink: 0,
-        }}
-      >
-        {linkedBlockId ? 'Update ExprBlock' : 'Save to ExprBlock'}
-      </button>
+      <span ref={sessionsRef} style={{ display: 'inline-flex' }}>
+        <Button size="sm" icon="folder" onClick={() => setShowSessions(v => !v)} style={showSessions ? { background: tk.bg.hover } : undefined}>
+          Sessions{savedGroups.length > 0 && <span style={{ color: tk.text.faint, fontWeight: 500 }}>{savedGroups.length}</span>}
+        </Button>
+      </span>
+      {showSessions && (
+        <Popover anchorRef={sessionsRef} onClose={() => setShowSessions(false)} align="end" width={280} padding={4}>
+          {savedGroups.length === 0 ? (
+            <div style={{ padding: '14px 12px', fontSize: 12.5, lineHeight: 1.45, color: tk.text.muted }}>
+              No saved groups yet. <b style={{ color: tk.text.secondary, fontWeight: 600 }}>Save group</b> keeps every tab together.
+            </div>
+          ) : (
+            <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+              {savedGroups.map(g => (
+                <SessionRow
+                  key={g.id}
+                  name={g.name}
+                  meta={`${g.tabs.length} tab${g.tabs.length !== 1 ? 's' : ''} · ${new Date(g.savedAt).toLocaleDateString()}`}
+                  onLoad={() => { loadGroup(g); setShowSessions(false); }}
+                  onDelete={() => deleteGroup(g.id)}
+                />
+              ))}
+            </div>
+          )}
+        </Popover>
+      )}
+
+      <Button size="sm" variant="primary" onClick={handleSave} title={linkedBlockId ? 'Write these functions back to the Expr Block they came from' : 'Add an Expr Block with this function to the graph'}>
+        {linkedBlockId ? 'Update Expr Block' : 'Save to Expr Block'}
+      </Button>
     </div>
   );
 }
 
-function smallBtn(color: string): React.CSSProperties {
-  return {
-    background: 'none',
-    border: `1px solid ${color}44`,
-    color,
-    borderRadius: '4px',
-    padding: '2px 8px',
-    fontSize: '10px',
-    fontFamily: 'monospace',
-    cursor: 'pointer',
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-  };
+function SessionRow({ name, meta, onLoad, onDelete }: { name: string; meta: string; onLoad: () => void; onDelete: () => void }) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, borderRadius: radius.md, background: hover ? tk.bg.hover : 'transparent' }}
+    >
+      <button
+        type="button"
+        onClick={onLoad}
+        title="Open this group"
+        style={{ flex: 1, minWidth: 0, padding: '8px 10px', border: 0, background: 'none', cursor: 'pointer', textAlign: 'left' }}
+      >
+        <div style={{ font: `500 12.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ fontSize: 11.5, color: tk.text.faint, marginTop: 1 }}>{meta}</div>
+      </button>
+      <IconButton icon="trash" label={`Delete ${name}`} size="sm" tone="danger" tooltip={false} onClick={onDelete} style={{ marginRight: 4, visibility: hover ? 'visible' : 'hidden' }} />
+    </div>
+  );
 }

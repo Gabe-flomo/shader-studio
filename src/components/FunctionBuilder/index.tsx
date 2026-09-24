@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
-import { buildShader } from './glslCompiler';
+import { buildShader, PLOT_THEMES } from './glslCompiler';
 import { FunctionList } from './FunctionList';
 import { PreviewCanvas } from './PreviewCanvas';
 import { Toolbar } from './Toolbar';
-import { ctp } from '../../theme/palette';
+import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { fontFamily } from '../../theme/tokens';
+import { Callout } from '../ui/Callout';
 
 const DEBOUNCE_MS = 150;
 
@@ -59,12 +61,11 @@ function AxisLabels({ xRange, yRange }: { xRange: [number, number]; yRange: [num
     yTicks.push({ v: parseFloat(v.toPrecision(10)), py });
   }
 
-  const labelColor = 'rgba(205,214,244,0.32)';
+  const tk = useTokens();
   const labelStyle: React.CSSProperties = {
     position: 'absolute',
-    fontSize: '9px',
-    color: labelColor,
-    fontFamily: 'monospace',
+    font: `10.5px ${fontFamily.mono}`,
+    color: tk.text.faint,
     userSelect: 'none',
     pointerEvents: 'none',
     lineHeight: 1,
@@ -72,12 +73,12 @@ function AxisLabels({ xRange, yRange }: { xRange: [number, number]; yRange: [num
 
   return (
     <div ref={divRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      {xTicks.map(({ v, px }) => (
+      {xTicks.filter(({ px }) => px > 14 && px < w - 14).map(({ v, px }) => (
         <div key={v} style={{ ...labelStyle, left: px, bottom: 6, transform: 'translateX(-50%)' }}>
           {formatTick(v)}
         </div>
       ))}
-      {yTicks.map(({ v, py }) => (
+      {yTicks.filter(({ py }) => py > 10 && py < h - 24).map(({ v, py }) => (
         <div key={v} style={{ ...labelStyle, left: 6, top: py, transform: 'translateY(-50%)' }}>
           {formatTick(v)}
         </div>
@@ -94,7 +95,10 @@ interface Props {
 
 export function FunctionBuilder({ onNavigateToStudio }: Props) {
   const { functions, activeId, xRange, yRange, savedFunctionDefs } = useFunctionBuilder();
+  const tk = useTokens();
+  const mode = useThemeMode();
   const [shaderSource, setShaderSource] = useState('');
+  const [fnLines, setFnLines]           = useState<Record<string, [number, number]>>({});
   const [glslErrors, setGlslErrors]     = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -102,11 +106,12 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const { source } = buildShader(functions, activeId, xRange, yRange, savedFunctionDefs);
+      const { source, fnLines: lines } = buildShader(functions, activeId, xRange, yRange, savedFunctionDefs, PLOT_THEMES[mode], window.devicePixelRatio || 1);
       setShaderSource(source);
+      setFnLines(lines);
     }, DEBOUNCE_MS);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [functions, activeId, xRange, yRange, savedFunctionDefs]);
+  }, [functions, activeId, xRange, yRange, savedFunctionDefs, mode]);
 
   const handlePreviewError = useCallback((errors: string[]) => {
     setGlslErrors(prev => {
@@ -236,133 +241,65 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
 
   return (
     <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      background: ctp.crust,
-      color: ctp.text,
-      fontFamily: 'system-ui, sans-serif',
-      overflow: 'hidden',
+      display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden',
+      background: tk.bg.panel, color: tk.text.primary, fontFamily: fontFamily.ui,
     }}>
-      {/* Header */}
-      <div style={{
-        height: '36px',
-        flexShrink: 0,
-        background: ctp.base,
-        borderBottom: `1px solid ${ctp.surface0}`,
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 14px',
-        gap: '10px',
-      }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Function Builder
-        </span>
-        <span style={{ fontSize: '10px', color: ctp.surface1 }}>
-          — write named GLSL functions and see them plotted live
-        </span>
-      </div>
-
-      {/* Main body: left panel + right canvas */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-
-        {/* Left: function list */}
         <div style={{
-          width: '340px',
-          minWidth: '240px',
-          maxWidth: '480px',
-          flexShrink: 0,
-          borderRight: `1px solid ${ctp.surface0}`,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
+          width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          background: tk.bg.panel, borderRight: `1px solid ${tk.border.default}`,
         }}>
-          {/* Vars hint */}
-          <div style={{
-            padding: '6px 10px',
-            borderBottom: `1px solid ${ctp.base}`,
-            fontSize: '10px',
-            color: ctp.surface1,
-            fontFamily: 'monospace',
-            flexShrink: 0,
-          }}>
-            float: <span style={{ color: ctp.overlay0 }}>x, t</span>
-            {'  '}vec3: <span style={{ color: ctp.overlay0 }}>uv, t</span>
+          <FunctionList glslErrors={glslErrors} fnLines={fnLines} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          {/* Plot: drag to pan, wheel or pinch to zoom, double-click to reset */}
+          <div
+            ref={canvasWrapRef}
+            style={{ flex: 1, position: 'relative', minHeight: 0, cursor: 'default', background: PLOT_THEMES[mode].bg }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onDoubleClick={handleDoubleClick}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div style={{ position: 'absolute', inset: 0, visibility: hasErrors ? 'hidden' : 'visible' }}>
+              <PreviewCanvas
+                shaderSource={shaderSource}
+                xRange={xRange}
+                yRange={yRange}
+                onError={handlePreviewError}
+              />
+            </div>
+
+            {isFloat && !hasErrors && <AxisLabels xRange={xRange} yRange={yRange} />}
+
+            {hasErrors && (
+              <div
+                onMouseDown={e => e.stopPropagation()}
+                onDoubleClick={e => e.stopPropagation()}
+                style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, cursor: 'auto' }}
+              >
+                <div style={{ width: '100%', maxWidth: 460 }}>
+                  <Callout
+                    title="This function didn’t compile"
+                    details={glslErrors.join('\n')}
+                  >
+                    <span style={{ fontFamily: fontFamily.mono, fontSize: 12 }}>
+                      {glslErrors[0].replace(/^ERROR:\s*\d+:\d+:\s*/i, '').trim()}
+                    </span>
+                  </Callout>
+                </div>
+              </div>
+            )}
           </div>
 
-          <FunctionList glslErrors={glslErrors} />
-        </div>
-
-        {/* Right: preview canvas */}
-        <div
-          ref={canvasWrapRef}
-          style={{ flex: 1, position: 'relative', minWidth: 0, cursor: 'default' }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onDoubleClick={handleDoubleClick}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          <PreviewCanvas
-            shaderSource={shaderSource}
-            xRange={xRange}
-            yRange={yRange}
-            onError={handlePreviewError}
-          />
-
-          {/* Axis labels — only in float (2D plot) mode, hidden when errors */}
-          {isFloat && !hasErrors && <AxisLabels xRange={xRange} yRange={yRange} />}
-
-          {/* Error overlay — centred, covers canvas, cleans up raw GLSL messages */}
-          {hasErrors && (
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              background: 'rgba(11,11,19,0.88)',
-              backdropFilter: 'blur(2px)',
-              padding: '24px',
-              pointerEvents: 'none',
-            }}>
-              <span style={{
-                fontSize: '11px', fontWeight: 700, color: ctp.red,
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-                marginBottom: '4px',
-              }}>
-                ⚠ compile error
-              </span>
-              {glslErrors.slice(0, 5).map((raw, i) => {
-                // Strip "ERROR: 0:N: " prefix from WebGL log lines
-                const msg = raw.replace(/^ERROR:\s*\d+:\d+:\s*/i, '').trim();
-                if (!msg) return null;
-                return (
-                  <div key={i} style={{
-                    fontSize: '11px',
-                    color: `${ctp.red}cc`,
-                    fontFamily: 'monospace',
-                    lineHeight: 1.6,
-                    textAlign: 'center',
-                    maxWidth: '380px',
-                    wordBreak: 'break-word',
-                  }}>
-                    {msg}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <Toolbar onNavigateToStudio={onNavigateToStudio} />
         </div>
       </div>
-
-      {/* Bottom toolbar */}
-      <Toolbar hasErrors={hasErrors} onNavigateToStudio={onNavigateToStudio} />
     </div>
   );
 }
