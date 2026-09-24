@@ -447,6 +447,10 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
 
   const noControls = play.controls.length === 0;
   const midi = midiEngine.webMidi();
+  // Collapsed rows show one line: source → control, the meter and the switch. UI state only.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggleRow = (id: string) => setCollapsed(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const allCollapsed = play.mappings.length > 0 && play.mappings.every(m => collapsed.has(m.id));
 
   return (
     <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', maxHeight: open ? (compact ? '55%' : '50%') : undefined, borderTop: `1px solid ${tk.border.default}` }}>
@@ -457,6 +461,13 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
         onClick={onToggle}
         extra={open && (
           <>
+            {play.mappings.length > 1 && (
+              <IconButton
+                icon={allCollapsed ? 'chevD' : 'chevU'}
+                label={allCollapsed ? 'Expand all mappings' : 'Collapse all mappings'}
+                onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(play.mappings.map(m => m.id)))}
+              />
+            )}
             <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>
@@ -486,6 +497,8 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
               controls={play.controls}
               meter={meters.get(m.id) ?? 0}
               learning={learnFor === m.id}
+              collapsed={collapsed.has(m.id)}
+              onToggle={() => toggleRow(m.id)}
               onLearn={() => setLearnFor(l => (l === m.id ? null : m.id))}
               onUpdate={patch => onUpdate(m.id, patch)}
               onRemove={() => onRemove(m.id)}
@@ -499,12 +512,14 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
 
 const EMPTY_MAPPINGS: PlayMapping[] = [];
 
-function MappingRow({ mapping: m, control, controls, meter, learning, onLearn, onUpdate, onRemove }: {
+function MappingRow({ mapping: m, control, controls, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
   control: PlayControl | undefined;
   controls: PlayControl[];
   meter: number;
   learning: boolean;
+  collapsed: boolean;
+  onToggle: () => void;
   onLearn: () => void;
   onUpdate: (patch: Partial<PlayMapping>) => void;
   onRemove: () => void;
@@ -521,11 +536,34 @@ function MappingRow({ mapping: m, control, controls, meter, learning, onLearn, o
     onUpdate(c ? { controlId: id, outMin: c.min, outMax: c.max, channel: undefined, source } : { controlId: id, source });
   };
 
+  const frame = { marginTop: 6, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${learning ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55 };
+  const chevron = <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
+
+  if (collapsed) {
+    return (
+      <div style={{ ...frame, padding: '4px 10px 6px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}>
+          {chevron}
+          <button type="button" onClick={onToggle} title="Expand" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `500 12px ${fontFamily.ui}`, textAlign: 'left' }}>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls)}</span>
+            <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
+          </button>
+          <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} />
+        </div>
+        <div style={{ height: 3, margin: '2px 0 0 22px', borderRadius: 2, background: tk.bg.field, overflow: 'hidden' }}>
+          <div style={{ width: `${Math.round(meter * 100)}%`, height: '100%', background: m.enabled ? tk.accent.base : tk.text.disabled, transition: 'width 60ms linear' }} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ marginTop: 6, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${learning ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55 }}>
+    <div style={{ ...frame, padding: '8px 10px' }}>
       {/* Source row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={labelStyle}>Source</span>
+        {chevron}
+        <span style={{ ...labelStyle, width: 40 }}>Source</span>
         <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '') })} height={26} style={{ flex: 1, minWidth: 0 }} />
         {m.source.kind === 'control' && (
           otherControls.length === 0
