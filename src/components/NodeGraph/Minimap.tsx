@@ -1,9 +1,10 @@
 import { useRef, useEffect } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
-import { ctp } from '../../theme/palette';
+import { useTokens } from '../../theme/themeStore';
+import { alpha, radius } from '../../theme/tokens';
 
-const NODE_W = 240;
-const NODE_H = 120;
+const NODE_W = 360;
+const NODE_H = 160;
 const PAD    = 200;
 const MAP_W  = 180;
 const MAP_H  = 120;
@@ -19,6 +20,7 @@ interface MinimapProps {
 
 export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPanTo }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const tk = useTokens();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -49,7 +51,7 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
     const toMapY = (wy: number) => (wy - minY) * scale + offsetY;
 
     // Draw node rects
-    ctx.fillStyle = ctp.surface2;
+    ctx.fillStyle = tk.border.strong;
     for (const node of nodes) {
       const x = toMapX(node.position.x);
       const y = toMapY(node.position.y);
@@ -69,13 +71,13 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
     const vw = vpWorldW * scale;
     const vh = vpWorldH * scale;
 
-    ctx.strokeStyle = ctp.mauve;
+    ctx.strokeStyle = tk.accent.base;
     ctx.lineWidth = 1;
     ctx.strokeRect(vx, vy, vw, vh);
     // Subtle tint inside viewport
-    ctx.fillStyle = 'rgba(203, 166, 247, 0.08)';
+    ctx.fillStyle = alpha(tk.accent.base, 0.08);
     ctx.fillRect(vx, vy, vw, vh);
-  }, [nodes, pan, zoom, viewportWidth, viewportHeight]);
+  }, [nodes, pan, zoom, viewportWidth, viewportHeight, tk]);
 
   const panToPointer = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -108,11 +110,10 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
         bottom: 16,
         right: 16,
         zIndex: 10,
-        background: 'rgba(17,17,27,0.85)',
-        border: `1px solid ${ctp.surface1}`,
-        borderRadius: '6px',
+        background: tk.bg.panel,
+        borderRadius: radius.lg - 2,
         overflow: 'hidden',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+        boxShadow: tk.shadow.float,
       }}
     >
       <canvas

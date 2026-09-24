@@ -22,7 +22,7 @@ import { Tooltip } from './Tooltip';
  */
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
-  ariaLabel, touch = false,
+  ariaLabel, touch = false, onType,
 }: {
   value: number;
   min: number;
@@ -37,6 +37,11 @@ export function RulerSlider({
   ariaLabel: string;
   /** Mobile: taller track. */
   touch?: boolean;
+  /**
+   * Takes over a typed value instead of clamping it into range — node params use this to let
+   * a typed value past the range widen it.
+   */
+  onType?: (value: number) => void;
 }) {
   const tk = useTokens();
   const locked = disabled || !!keyframed;
@@ -189,7 +194,7 @@ export function RulerSlider({
         <NumberInput
           value={value}
           format={fmt}
-          onCommit={n => onChange(clampToStep(n, min, max, effectiveStep))}
+          onCommit={n => (onType ? onType(n) : onChange(clampToStep(n, min, max, effectiveStep)))}
           disabled={disabled}
           title={`${ariaLabel} (${min} – ${max})`}
           style={chipStyle}

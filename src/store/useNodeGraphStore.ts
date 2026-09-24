@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
+import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -738,8 +739,8 @@ function estimateNodeHeight(node: GraphNode): number {
   const paramCount = def ? Object.values(def.paramDefs ?? {}).filter(
     pd => pd.type === 'float' || pd.type === 'select' || pd.type === 'vec3'
   ).length : 0;
-  // Header ~36px, each socket row ~22px, each param ~34px, padding 16px
-  return 36 + (inputCount + outputCount) * 22 + paramCount * 34 + 16;
+  // Header 43px, socket rows 26px, param rows 36px, body padding 12px, footer 37px
+  return 43 + (inputCount + outputCount) * 26 + paramCount * 36 + 12 + 37;
 }
 
 // ── Nested-group path helpers ──────────────────────────────────────────────
@@ -3883,8 +3884,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       for (const { rank, nodes: rankNodes } of ranked) {
         let y = START_Y;
         for (const node of rankNodes) {
-          newPositions.set(node.id, { x: START_X + rank * 340, y });
-          y += estimateNodeHeight(node) + 24; // 24px gap between nodes
+          newPositions.set(node.id, { x: START_X + rank * 440, y }); // 360px cards + 80px for wires
+          y += estimateNodeHeight(node) + 32;
         }
       }
       return newPositions;
@@ -3935,10 +3936,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const example = name ?? 'fractalRings';
     const { nodes: rawNodes } = EXAMPLE_GRAPHS[example] ?? EXAMPLE_GRAPHS['fractalRings'];
 
-    const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(
+    const nodes = spreadLegacyLayout(upgradeExprNodes(rawNodes).map(n => migrateNodeParams(
       n.params ? n : { ...n, params: {} },
       getNodeDefinition,
-    ));
+    )));
 
     idGenerator.syncFromGraph(nodes);
     // Example graphs don't carry their own loose groups yet — reset rather
@@ -3983,7 +3984,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: async (name) => {
     const { nodes, looseGroups } = get();
-    const payload = JSON.stringify({ nodes, looseGroups, savedAt: Date.now() });
+    const payload = JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION, savedAt: Date.now() });
     // localStorage is the primary store; a quota failure here means nothing
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
@@ -3992,7 +3993,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (dir) {
       const path = `${dir}/${labelToSlug(name || 'graph')}.json`;
       try {
-        await writeTextFileAtPath(path, JSON.stringify({ nodes, looseGroups }, null, 2));
+        await writeTextFileAtPath(path, JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION }, null, 2));
       } catch (e) {
         console.error('[saveGraph] disk write failed', path, e);
         return { ok: false, error: `Graph "${name}" was saved in the browser, but writing ${path} failed: ${errorMessage(e)}` };
@@ -4023,7 +4024,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     let nodes: GraphNode[];
     let looseGroups: unknown;
     try {
-      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown };
+      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown; layout?: unknown };
       if (!Array.isArray(parsed?.nodes)) throw new Error('missing "nodes" array');
       looseGroups = parsed.looseGroups;
       // Strip in-memory audio state — audio buffers are not persisted, so
@@ -4035,6 +4036,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return n;
       });
       nodes = upgradeExprNodes(sanitized).map(n => migrateNodeParams(n, getNodeDefinition));
+      if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[loadSavedGraph] saved graph is corrupt', name, e);
       return { ok: false, error: `Saved graph "${name}" is corrupt and could not be loaded: ${errorMessage(e)}` };
@@ -4054,7 +4056,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   exportGraph: async () => {
     const { nodes, looseGroups } = get();
-    const json = JSON.stringify({ nodes, looseGroups }, null, 2);
+    const json = JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'shader-graph';
     if (!isTauri) {
@@ -4074,11 +4076,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     let nodes: GraphNode[];
     let looseGroups: unknown;
     try {
-      const parsed = JSON.parse(json) as { nodes?: unknown; looseGroups?: unknown } | null;
+      const parsed = JSON.parse(json) as { nodes?: unknown; looseGroups?: unknown; layout?: unknown } | null;
       if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
       if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Shader Studio graph file?');
       looseGroups = parsed.looseGroups;
       nodes = upgradeExprNodes(parsed.nodes as GraphNode[]).map(n => migrateNodeParams(n, getNodeDefinition));
+      if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[importGraph] invalid graph file', e);
       return { ok: false, error: `Could not import graph: ${errorMessage(e)}` };
