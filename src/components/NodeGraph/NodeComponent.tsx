@@ -493,7 +493,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   // Info tooltip: close on any click outside the tooltip itself or the info
   // button that opened it (button is excluded so its own onClick toggle isn't
   // immediately undone by this — mousedown fires before click).
-  const infoButtonRef = useRef<HTMLButtonElement>(null);
+  const infoButtonRef = useRef<HTMLSpanElement>(null);
   const nodeTooltipRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!showNodeTooltip) return;
@@ -3978,7 +3978,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         onMouseDown={e => e.stopPropagation()}
         style={{ display: 'flex', gap: 2, alignItems: 'center', padding: '5px 8px', borderTop: `1px solid ${tk.border.subtle}` }}
       >
-        <CardButton icon="info" on={showNodeTooltip} label={showNodeTooltip ? 'Hide node info' : 'Node info'} onClick={() => setShowNodeTooltip(v => !v)} />
+        <span ref={infoButtonRef} style={{ display: 'inline-flex' }}>
+          <CardButton icon="info" on={showNodeTooltip} label={showNodeTooltip ? 'Hide node info' : 'Node info'} onClick={() => setShowNodeTooltip(v => !v)} />
+        </span>
         <CardButton icon="comment" tint="success" on={showCommentEditor || !!nodeComment}
           label={nodeComment ? 'Edit comment' : 'Add a comment'}
           onClick={() => { setShowCommentEditor(v => !v); setShowCommentPreview(false); }} />
