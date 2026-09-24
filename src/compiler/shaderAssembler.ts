@@ -1,5 +1,5 @@
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
-import type { GraphNode, DataType, InputSocket, SubgraphData } from '../types/nodeGraph';
+import type { GraphNode, DataType, InputSocket, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { f as formatFloat } from '../nodes/definitions/helpers';
 import { topologicalSort } from './topoSort';
@@ -111,6 +111,30 @@ function getNodeOutputType(node: GraphNode, outKey: string, defType: DataType): 
   // the definition still says float. Group / loop paths pre-declare from here.
   if (VECTORIZABLE_NODES[node.type]?.primaryOutput === outKey) return live;
   return defType;
+}
+
+/**
+ * The float a scene node contributes as the scene distance when nothing names
+ * one explicitly. Combiners (Union, Subtract, Intersect) emit a second float,
+ * Blend, after Distance, so "the last float emitted" picks the wrong one:
+ * prefer `dist`, else the first float output in declaration order.
+ */
+function sceneDistanceVar(def: NodeDefinition, node: GraphNode, outputVars: Record<string, string>): string | undefined {
+  if (outputVars.dist && def.outputs.dist && getNodeOutputType(node, 'dist', def.outputs.dist.type) === 'float') return outputVars.dist;
+  for (const [key, out] of Object.entries(def.outputs)) {
+    if (outputVars[key] && getNodeOutputType(node, key, out.type) === 'float') return outputVars[key];
+  }
+  return undefined;
+}
+
+/**
+ * Legacy scene subgraphs name their return with `outputNodeId` / `outputKey`
+ * instead of output ports. When set, it wins over the heuristic above.
+ */
+function explicitSceneReturn(subgraph: SubgraphData, slugOf: (id: string) => string, nodeOutputs: Map<string, Record<string, string>>): string | undefined {
+  const sg = subgraph as SubgraphData & { outputNodeId?: string; outputKey?: string };
+  if (!sg.outputNodeId || !sg.outputKey) return undefined;
+  return nodeOutputs.get(slugOf(sg.outputNodeId))?.[sg.outputKey];
 }
 
 // ── Shared literal formatter ──────────────────────────────────────────────────
@@ -1451,9 +1475,7 @@ export class ShaderAssembler {
                 const gnResult = gDef.generateGLSL(gn, gnInputVars);
                 sceneFnLines.push(gnResult.code);
                 this.nodeOutputs.set(gn.id, gnResult.outputVars);
-                for (const [outKey, varName] of Object.entries(gnResult.outputVars)) {
-                  if (gDef.outputs[outKey]?.type === 'float') sgLastFloatVar = varName;
-                }
+                { const dv = sceneDistanceVar(gDef, gn, gnResult.outputVars); if (dv) sgLastFloatVar = dv; }
               }
               const grpOutVars: Record<string, string> = {};
               for (const port of (grpSubgraph.outputPorts ?? [])) {
@@ -1505,11 +1527,8 @@ export class ShaderAssembler {
             sceneFnLines.push(snResult.code);
             this.nodeOutputs.set(sn.id, snResult.outputVars);
 
-            // Track last float output as candidate return value
-            for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-              const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
-              if (outType === 'float') sgLastFloatVar = varName;
-            }
+            // Track the latest node's distance as the candidate return value
+            { const dv = sceneDistanceVar(snDef, sn, snResult.outputVars); if (dv) sgLastFloatVar = dv; }
           }
 
           // Populate this.nodeSlugMap for scene group inner nodes
@@ -1523,6 +1542,7 @@ export class ShaderAssembler {
               if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
             }
           }
+          sgLastFloatVar = explicitSceneReturn(subgraph, id => sgPrefix + (sgSubSlugMap.get(id) ?? id), this.nodeOutputs) ?? sgLastFloatVar;
 
           // Emit the GLSL function — with extra params for any external variable references
           const fnBody = sceneFnLines.join('');
@@ -1920,7 +1940,7 @@ export class ShaderAssembler {
                         }
                         const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
                         sceneFnLines.push(gnResult2.code); this.nodeOutputs.set(gn.id, gnResult2.outputVars);
-                        for (const [ok, vn] of Object.entries(gnResult2.outputVars)) { if (gDef.outputs[ok]?.type === 'float') sgLastFloatVar = vn; }
+                        { const dv = sceneDistanceVar(gDef, gn, gnResult2.outputVars); if (dv) sgLastFloatVar = dv; }
                       }
                       const igrpOutVars: Record<string, string> = {};
                       for (const port of (igrpSub.outputPorts ?? [])) {
@@ -1958,9 +1978,7 @@ export class ShaderAssembler {
                     this.nodeOutputs.set(sgn.id, sgnResult.outputVars);
 
                     // Track last float output as candidate return value
-                    for (const [outKey, varName] of Object.entries(sgnResult.outputVars)) {
-                      if (sgnDef.outputs[outKey]?.type === 'float') sgLastFloatVar = varName;
-                    }
+                    { const dv = sceneDistanceVar(sgnDef, sgn, sgnResult.outputVars); if (dv) sgLastFloatVar = dv; }
                   }
 
                   // Check outputPorts for explicit return value
@@ -1971,6 +1989,7 @@ export class ShaderAssembler {
                       if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
                     }
                   }
+                  sgLastFloatVar = explicitSceneReturn(sgSubgraph, id => sgInnerPrefix + (sgInnerSlugMap.get(id) ?? id), this.nodeOutputs) ?? sgLastFloatVar;
 
                   // Emit the GLSL scene function — with extra params for external var references
                   const sgFnBody = sceneFnLines.join('');
@@ -2670,7 +2689,7 @@ export class ShaderAssembler {
                         }
                         const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
                         sceneFnLines.push(gnResult2.code); this.nodeOutputs.set(gn.id, gnResult2.outputVars);
-                        for (const [ok, vn] of Object.entries(gnResult2.outputVars)) { if (gDef.outputs[ok]?.type === 'float') sgLastFloatVar = vn; }
+                        { const dv = sceneDistanceVar(gDef, gn, gnResult2.outputVars); if (dv) sgLastFloatVar = dv; }
                       }
                       const igrpOutVars: Record<string, string> = {};
                       for (const port of (igrpSub.outputPorts ?? [])) {
@@ -2707,9 +2726,7 @@ export class ShaderAssembler {
                     sceneFnLines.push(sgnResult.code);
                     this.nodeOutputs.set(sgn.id, sgnResult.outputVars);
 
-                    for (const [outKey, varName] of Object.entries(sgnResult.outputVars)) {
-                      if (sgnDef.outputs[outKey]?.type === 'float') sgLastFloatVar = varName;
-                    }
+                    { const dv = sceneDistanceVar(sgnDef, sgn, sgnResult.outputVars); if (dv) sgLastFloatVar = dv; }
                   }
 
                   for (const port of (sgSubgraph.outputPorts ?? [])) {
@@ -2719,6 +2736,7 @@ export class ShaderAssembler {
                       if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
                     }
                   }
+                  sgLastFloatVar = explicitSceneReturn(sgSubgraph, id => sgInnerPrefix + (sgInnerSlugMap.get(id) ?? id), this.nodeOutputs) ?? sgLastFloatVar;
 
                   const sgFnBody = sceneFnLines.join('');
                   const sgInlineExtraDecls = sgInlineExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
