@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { scoreNodeDef } from '../../nodes/searchNodes';
 import { createPortal } from 'react-dom';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
@@ -458,22 +459,9 @@ export function NodeBrowser({
 
   if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
-    const scoreNodeDef = (def: import('../../types/nodeGraph').NodeDefinition): number => {
-      const label = def.label.toLowerCase();
-      if (label === trimmed) return 120;
-      if (label.startsWith(trimmed)) return 100;
-      if (label.includes(trimmed)) return 80;
-      if (def.type.toLowerCase().includes(trimmed)) return 60;
-      const cat = (def.category ?? '').toLowerCase();
-      if (cat.split(/[\s\/,]+/).some((w: string) => w.startsWith(trimmed))) return 40;
-      const rawDesc = def.description;
-      const desc = (Array.isArray(rawDesc) ? rawDesc.join(' ') : (rawDesc ?? '')).toLowerCase();
-      if (desc.split(/\W+/).some((w: string) => w === trimmed)) return 20;
-      return 0;
-    };
     const results = Object.values(NODE_REGISTRY)
       .filter(def => !HIDDEN_NODES.has(def.type))
-      .map(def => ({ def, score: scoreNodeDef(def) }))
+      .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
       .map(({ def }) => def);

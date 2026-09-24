@@ -88,7 +88,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const lines: WarpLine[]        = (node.params.lines as WarpLine[] | undefined) ?? [];
   const result: string           = (node.params.result as string | undefined) ?? 'p';
   const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'float';
-  const label = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expr Block';
+  const label = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expression Block';
 
   const [autoWrap, setAutoWrap]             = useState(false);
   const [showSaveInput, setShowSaveInput]   = useState(false);
@@ -179,7 +179,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     saveExprPreset({ label: presetLabel, inputs: customInputs, outputType, lines, result });
     setShowSaveInput(false);
     setSavePresetName('');
-    toast.success(`Saved “${presetLabel}” to Expr Blocks`);
+    toast.success(`Saved “${presetLabel}” to Expression Blocks`);
   };
 
   // ── Migrate from old fixed inputs ─────────────────────────────────────────
@@ -256,7 +256,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   return (
     <Modal
-      title="Expr Block"
+      title="Expression Block"
       subtitle={`${label} · ${customInputs.length} ${customInputs.length === 1 ? 'input' : 'inputs'} → ${outputType}`}
       icon="expr"
       iconColor={tk.kind.expr}
@@ -302,7 +302,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         ) : (
           <>
             <Button icon="export" onClick={() => { setSavePresetName(''); setShowSaveInput(true); }}>Save as preset</Button>
-            <Note>Adds it to Expr Blocks in the sidebar</Note>
+            <Note>Adds it to Expression Blocks in the sidebar</Note>
             <span style={{ flex: 1 }} />
             <Note>Changes apply live</Note>
             <Button variant="primary" onClick={onClose}>Done</Button>

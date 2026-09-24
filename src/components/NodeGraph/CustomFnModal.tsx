@@ -40,7 +40,7 @@ export function CustomFnModal({ node, onClose }: Props) {
   const outputType   = (node.params.outputType as DataType) || 'float';
   const body         = typeof node.params.body === 'string' ? node.params.body : '0.0';
   const glslFns      = typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '';
-  const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Fn';
+  const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Function';
 
   const rawInputs = node.params.inputs;
   const completions = useMemo(
@@ -107,7 +107,7 @@ export function CustomFnModal({ node, onClose }: Props) {
     // Read params directly from the node prop (always up-to-date via controlled inputs)
     // This avoids any store node-lookup issues (e.g. nodes inside group subgraphs).
     saveCustomFnPreset({
-      label:         (node.params.label as string) || 'Custom Fn',
+      label:         (node.params.label as string) || 'Custom Function',
       inputs:        (node.params.inputs as Parameters<typeof saveCustomFnPreset>[0]['inputs']) ?? [],
       outputType:    ((node.params.outputType as string) || 'float') as Parameters<typeof saveCustomFnPreset>[0]['outputType'],
       body:          typeof node.params.body === 'string' ? node.params.body : '0.0',
@@ -198,7 +198,7 @@ export function CustomFnModal({ node, onClose }: Props) {
   return (
     <Modal
       title="Custom Function"
-      subtitle={`${labelParam} · Custom Fn node`}
+      subtitle={`${labelParam} · Custom Function node`}
       icon="fn"
       iconColor={tk.kind.fn}
       width={980}

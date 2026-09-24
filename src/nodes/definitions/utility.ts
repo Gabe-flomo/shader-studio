@@ -6,7 +6,7 @@ void p;
 
 export const ScopeNode: NodeDefinition = {
   type: 'scope',
-  label: 'Scope',
+  label: 'Oscilloscope', aliases: ['Scope'],
   category: 'Utility',
   description: 'Oscilloscope — visualizes a float signal as a rolling waveform. Output is a passthrough of the input value.',
   inputs: {

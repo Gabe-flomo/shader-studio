@@ -249,8 +249,8 @@ export function Toolbar({ onNavigateToStudio }: Props) {
         </Popover>
       )}
 
-      <Button size="sm" variant="primary" onClick={handleSave} title={linkedBlockId ? 'Write these functions back to the Expr Block they came from' : 'Add an Expr Block with this function to the graph'}>
-        {linkedBlockId ? 'Update Expr Block' : 'Save to Expr Block'}
+      <Button size="sm" variant="primary" onClick={handleSave} title={linkedBlockId ? 'Write these functions back to the Expression Block they came from' : 'Add an Expression Block with this function to the graph'}>
+        {linkedBlockId ? 'Update Expression Block' : 'Save to Expression Block'}
       </Button>
     </div>
   );

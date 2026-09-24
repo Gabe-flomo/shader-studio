@@ -40,7 +40,7 @@ export function ImportGlslModal({ onClose }: Props) {
   };
 
   return (
-    <Modal title="Import GLSL function" subtitle="Paste GLSL; the first function becomes a Custom Fn node" icon="import" iconColor={tk.status.success} width={660} onClose={onClose}>
+    <Modal title="Import GLSL function" subtitle="Paste GLSL; the first function becomes a Custom Function node" icon="import" iconColor={tk.status.success} width={660} onClose={onClose}>
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, fontSize: 12.5 }}>
         {/* Description */}
         <div style={{ fontSize: '11px', color: tc.surface2, lineHeight: 1.5 }}>

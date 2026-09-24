@@ -69,14 +69,14 @@ export const FractNode: NodeDefinition = {
   description: 'Tile space using fract with an optional scale multiplier. Wire a float to Scale to animate tile count.',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
-    scale: { type: 'float', label: 'Scale' },
+    scale: { type: 'float', label: 'Tile count' },
   },
   outputs: {
     output: { type: 'vec2', label: 'Output' },
   },
   defaultParams: { scale: 3.0 },
   paramDefs: {
-    scale: { label: 'Scale', type: 'float', min: 0.1, max: 20, step: 0.1 },
+    scale: { label: 'Tile count', type: 'float', min: 0.1, max: 20, step: 0.1, hint: 'How many times the space repeats.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_output`;
@@ -265,14 +265,14 @@ export const Rotate2DNode: NodeDefinition = {
   description: 'Rotate a 2D vector by an angle (radians)',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
-    angle: { type: 'float', label: 'Angle' },
+    angle: { type: 'float', label: 'Angle (rad)' },
   },
   outputs: {
     output: { type: 'vec2', label: 'Output' },
   },
   defaultParams: { angle: 0.0 },
   paramDefs: {
-    angle: { label: 'Angle', type: 'float', min: -6.28, max: 6.28, step: 0.01 },
+    angle: { label: 'Angle (rad)', type: 'float', min: -6.28, max: 6.28, step: 0.01, hint: 'In radians: 3.14 is half a turn.' },
   },
   // rotate() is now a built-in always emitted by shaderAssembler — no glslFunction needed
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -347,7 +347,7 @@ export const UvReciprocalNode: NodeDefinition = {
       { value: '1.0', label: 'Raw'               },
       { value: '2.0', label: 'Circle Inversion'  },
     ]},
-    k: { label: 'k', type: 'float', min: 0.1, max: 20.0, step: 0.1 },
+    k: { label: 'Strength', type: 'float', min: 0.1, max: 20.0, step: 0.1, hint: 'How strongly the space is bent.' },
   },
   glslFunction: `vec2 uvReciprocalFn(vec2 uv, float mode, float k) {
     if (mode < 0.5) {

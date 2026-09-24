@@ -101,6 +101,8 @@ export interface NodeDefinition {
    *  else exactly as before. */
   subcategory?: string;
   description?: string;
+  /** Previous names, still matched by node search after a rename. */
+  aliases?: string[];
 
   inputs: Record<string, InputSocket>;
   outputs: Record<string, OutputSocket>;

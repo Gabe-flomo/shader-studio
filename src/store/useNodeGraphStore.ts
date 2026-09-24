@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
+import { relabelLegacySockets } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -68,11 +69,11 @@ function _upgradeExprNode(node: GraphNode): GraphNode {
   };
 }
 
-/** Recursively upgrades all 'expr' nodes in a flat node list, including those
+/** Recursively upgrades all 'expr' nodes (and renamed socket labels) in a flat node list, including those
  *  nested in subgraph params (groups, SceneGroups, MarchLoopGroups, etc.). */
 function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
   return nodes.map(node => {
-    let n = _upgradeExprNode(node);
+    let n = relabelLegacySockets(_upgradeExprNode(node));
     // Recurse into subgraph if present
     if (n.params?.subgraph) {
       const sg = n.params.subgraph as { nodes?: GraphNode[] };
@@ -148,7 +149,7 @@ export function saveCustomFnPreset(
 ): Promise<FileResult> {
   const preset: CustomFnPreset = {
     id: `cfp_${Date.now()}`,
-    label: data.label || 'Custom Fn',
+    label: data.label || 'Custom Function',
     inputs: data.inputs ?? [],
     outputType: data.outputType ?? 'float',
     body: data.body ?? '0.0',
@@ -4129,10 +4130,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }
       }
     }
-    if (!node || node.type !== 'customFn') return { ok: false, error: 'Node is not a Custom Fn node' };
+    if (!node || node.type !== 'customFn') return { ok: false, error: 'Node is not a Custom Function node' };
     const preset: CustomFnPreset = {
       id: `cfp_${Date.now()}`,
-      label: (node.params.label as string) || 'Custom Fn',
+      label: (node.params.label as string) || 'Custom Function',
       inputs: (node.params.inputs as CustomFnPreset['inputs']) ?? [],
       outputType: (node.params.outputType as CustomFnPreset['outputType']) ?? 'float',
       body: (node.params.body as string) ?? '0.0',

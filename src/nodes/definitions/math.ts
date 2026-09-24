@@ -60,7 +60,7 @@ export const SinNode: NodeDefinition = {
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { freq: 1.0, amp: 1.0 },
-  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
+  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
@@ -74,7 +74,7 @@ export const CosNode: NodeDefinition = {
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { freq: 1.0, amp: 1.0 },
-  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
+  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
@@ -88,7 +88,7 @@ export const TanNode: NodeDefinition = {
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { freq: 1.0, amp: 1.0 },
-  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amplitude', type: 'float', min: 0, max: 5, step: 0.01 } },
+  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
@@ -221,10 +221,10 @@ export const ClampNode: NodeDefinition = {
 
 export const MixNode: NodeDefinition = {
   type: 'mix', label: 'Mix', category: 'Math', subcategory: 'Interpolation', description: 'Linear interpolation: mix(a, b, t).',
-  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, t: { type: 'float', label: 'T' } },
+  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, t: { type: 'float', label: 'Blend' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { t: 0.5 },
-  paramDefs: { t: { label: 'T', type: 'float', min: 0, max: 1, step: 0.01 } },
+  paramDefs: { t: { label: 'Blend', type: 'float', min: 0, max: 1, step: 0.01, hint: '0 gives A, 1 gives B.' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
     const t = inputVars.t || p(node.params.t, 0.5);
@@ -235,10 +235,10 @@ export const MixNode: NodeDefinition = {
 export const MixVec3Node: NodeDefinition = {
   type: 'mixVec3', label: 'Mix (Color)', category: 'Math', subcategory: 'Interpolation',
   description: 'Blend two vec3 colors: mix(a, b, fac). fac=0 → A, fac=1 → B.',
-  inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' }, fac: { type: 'float', label: 'Fac' } },
+  inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' }, fac: { type: 'float', label: 'Blend' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   defaultParams: { fac: 0.5 },
-  paramDefs: { fac: { label: 'Fac', type: 'float', min: 0, max: 1, step: 0.01 } },
+  paramDefs: { fac: { label: 'Blend', type: 'float', min: 0, max: 1, step: 0.01, hint: '0 gives A, 1 gives B.' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_result`;
     const fac = inputVars.fac || p(node.params.fac, 0.5);
@@ -247,7 +247,7 @@ export const MixVec3Node: NodeDefinition = {
 };
 
 export const ModNode: NodeDefinition = {
-  type: 'mod', label: 'Mod', category: 'Math', subcategory: 'Modulo', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
+  type: 'mod', label: 'Modulo (Wrap)', aliases: ['Mod'], category: 'Math', subcategory: 'Modulo', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
   inputs: { input: { type: 'float', label: 'Input' }, period: { type: 'float', label: 'Period' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { period: 1.0 },
@@ -300,7 +300,7 @@ export const ModSelectNode: NodeDefinition = {
 };
 
 export const Atan2Node: NodeDefinition = {
-  type: 'atan2', label: 'Atan2', category: 'Math', subcategory: 'Trigonometry', description: 'Polar angle: atan(y, x).',
+  type: 'atan2', label: 'Vector Angle', aliases: ['Atan2'], category: 'Math', subcategory: 'Trigonometry', description: 'Polar angle: atan(y, x).',
   inputs: { y: { type: 'float', label: 'Y' }, x: { type: 'float', label: 'X' } },
   outputs: { angle: { type: 'float', label: 'Angle' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -310,7 +310,7 @@ export const Atan2Node: NodeDefinition = {
 };
 
 export const CeilNode: NodeDefinition = {
-  type: 'ceil', label: 'Ceil', category: 'Math', subcategory: 'Rounding', description: 'Round up to nearest integer.',
+  type: 'ceil', label: 'Round Up', aliases: ['Ceil'], category: 'Math', subcategory: 'Rounding', description: 'Round up to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
@@ -328,7 +328,7 @@ export const FloorNode: NodeDefinition = {
 };
 
 export const SqrtNode: NodeDefinition = {
-  type: 'sqrt', label: 'Sqrt', category: 'Math', subcategory: 'Arithmetic', description: 'Square root.',
+  type: 'sqrt', label: 'Square Root', aliases: ['Sqrt'], category: 'Math', subcategory: 'Arithmetic', description: 'Square root.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -759,10 +759,10 @@ export const SignNode: NodeDefinition = {
 
 export const StepNode: NodeDefinition = {
   type: 'step', label: 'Step', category: 'Math', subcategory: 'Comparison', description: 'step(edge, x) — 0 if x < edge, else 1',
-  inputs: { edge: { type: 'float', label: 'Edge' }, x: { type: 'float', label: 'X' } },
+  inputs: { edge: { type: 'float', label: 'Threshold' }, x: { type: 'float', label: 'Value' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { edge: 0.5 },
-  paramDefs: { edge: { label: 'Edge', type: 'float', min: -2.0, max: 2.0, step: 0.01 } },
+  paramDefs: { edge: { label: 'Threshold', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Output is 0 below the threshold and 1 at or above it.' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
     const edge = inputVars.edge || p(node.params.edge, 0.5);
@@ -791,10 +791,10 @@ export const WeightedAverageNode: NodeDefinition = {
   },
   defaultParams: { w1: 1.0, w2: 1.0, w3: 0.0, w4: 0.0, inputs_used: '2' },
   paramDefs: {
-    w1:          { label: 'W1',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
-    w2:          { label: 'W2',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
-    w3:          { label: 'W3',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
-    w4:          { label: 'W4',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w1:          { label: 'Weight A',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w2:          { label: 'Weight B',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w3:          { label: 'Weight C',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w4:          { label: 'Weight D',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
     inputs_used: { label: 'Inputs Used', type: 'select', options: [
       { value: '2', label: '2' },
       { value: '3', label: '3' },

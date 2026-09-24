@@ -4,19 +4,19 @@ import { PALETTE_GLSL_FN } from './color';
 
 export const MakeLightNode: NodeDefinition = {
   type: 'makeLight',
-  label: 'Make Light',
+  label: 'Glow from Distance', aliases: ['Make Light'],
   category: 'Effects',
   description: 'Convert an SDF distance to a glow value using exp falloff',
   inputs: {
     distance: { type: 'float', label: 'Distance' },
-    brightness: { type: 'float', label: 'Brightness' },
+    brightness: { type: 'float', label: 'Falloff' },
   },
   outputs: {
     glow: { type: 'float', label: 'Glow' },
   },
   defaultParams: { brightness: 10.0 },
   paramDefs: {
-    brightness: { label: 'Brightness', type: 'float', min: 0.1, max: 100, step: 0.1 },
+    brightness: { label: 'Falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'How fast the glow fades with distance. Higher is tighter and dimmer.' },
   },
   glslFunction: `
 float make_light(float dist, float brightness) {
@@ -262,7 +262,7 @@ export const TemporalGrainNode: NodeDefinition = {
 
 export const LightNode: NodeDefinition = {
   type: 'light',
-  label: 'Light',
+  label: 'Light (Modes)', aliases: ['Light'],
   category: 'Effects',
   description: 'Convert SDF distance to glow. Mode: Glow (exp), Ring (ring_light), Simple (1/d).',
   inputs: {
@@ -325,7 +325,7 @@ export const FractalLoopNode: NodeDefinition = {
     glow:        { type: 'float', label: 'Glow'         },
     glow_pow:    { type: 'float', label: 'Glow Power'   },
     iter_offset: { type: 'float', label: 'Layer Offset' },
-    time_scale:  { type: 'float', label: 'Anim Speed'   },
+    time_scale:  { type: 'float', label: 'Speed'   },
   },
   outputs: {
     color:    { type: 'vec3', label: 'Color'    },
@@ -355,7 +355,7 @@ export const FractalLoopNode: NodeDefinition = {
     glow:        { label: 'Glow',         type: 'float', min: 0.001, max: 0.1,  step: 0.001 },
     glow_pow:    { label: 'Glow Power',   type: 'float', min: 0.5,   max: 5.0,  step: 0.1   },
     iter_offset: { label: 'Layer Offset', type: 'float', min: 0.0,   max: 1.0,  step: 0.01  },
-    time_scale:  { label: 'Anim Speed',   type: 'float', min: 0.0,   max: 2.0,  step: 0.01  },
+    time_scale:  { label: 'Speed',   type: 'float', min: 0.0,   max: 2.0,  step: 0.01  },
     offset:    { label: 'Offset',    type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
     amplitude: { label: 'Amplitude', type: 'vec3', min: 0.0, max: 1.0, step: 0.01 },
     freq:      { label: 'Freq',      type: 'vec3', min: 0.0, max: 2.0, step: 0.01 },
@@ -476,7 +476,7 @@ export const AccumulateLoopNode: NodeDefinition = {
     time:      { type: 'float', label: 'Time'      },
     freq:      { type: 'float', label: 'UV Freq'   },
     glow:      { type: 'float', label: 'Glow'      },
-    time_scale:{ type: 'float', label: 'Time Scale'},
+    time_scale:{ type: 'float', label: 'Speed'},
     pos_scale: { type: 'float', label: 'Pos Scale' },
     pos_freq:  { type: 'float', label: 'Pos Freq'  },
     pos_phase: { type: 'float', label: 'Pos Phase' },
@@ -494,7 +494,7 @@ export const AccumulateLoopNode: NodeDefinition = {
   },
   paramDefs: {
     iterations:    { label: 'Iterations',   type: 'float',  min: 5,       max: 200,  step: 1      },
-    time_scale:    { label: 'Time Scale',   type: 'float',  min: 0.0,     max: 2.0,  step: 0.01   },
+    time_scale:    { label: 'Speed',   type: 'float',  min: 0.0,     max: 2.0,  step: 0.01   },
     freq:          { label: 'UV Freq',      type: 'float',  min: 1.0,     max: 200,  step: 1.0    },
     glow:          { label: 'Glow',         type: 'float',  min: 0.00001, max: 0.01, step: 0.00001 },
     color_phase_r: { label: 'Phase R',      type: 'float',  min: 0.0,     max: 6.28, step: 0.01   },
@@ -654,7 +654,7 @@ export const ForLoopNode: NodeDefinition = {
 
 export const ExprBlockNode: NodeDefinition = {
   type: 'exprNode',
-  label: 'Expr Block',
+  label: 'Expression Block', aliases: ['Expr Block'],
   category: 'Functions',
   description: [
     'Generalized multi-statement GLSL warp block.',
@@ -793,13 +793,13 @@ export const ExprBlockNode: NodeDefinition = {
 
 export const CustomFnNode: NodeDefinition = {
   type: 'customFn',
-  label: 'Custom Fn',
+  label: 'Custom Function', aliases: ['Custom Fn'],
   category: 'Functions',
   description: 'User-defined GLSL function. Define input sockets, output type, and write the GLSL body.',
   inputs: {},
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: {
-    label: 'Custom Fn',
+    label: 'Custom Function',
     inputs: [{ name: 'uv', type: 'vec2', slider: null }] as Array<{ name: string; type: string; slider: null }>,
     outputType: 'float',
     body: '0.0',
@@ -1079,7 +1079,7 @@ export const ScanlinesNode: NodeDefinition = {
   paramDefs: {
     count:     { label: 'Line Count', type: 'float', min: 20.0, max: 600.0, step: 10.0 },
     intensity: { label: 'Intensity',  type: 'float', min: 0.0,  max: 1.0,   step: 0.01 },
-    scroll:    { label: 'Scroll Spd', type: 'float', min: -5.0, max: 5.0,   step: 0.1 },
+    scroll:    { label: 'Speed', type: 'float', min: -5.0, max: 5.0,   step: 0.1 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id  = node.id;
@@ -1270,7 +1270,7 @@ export const ChromaticAberrationAutoNode: NodeDefinition = {
     contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05  },
     angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1     },
     animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
-    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01  },
+    anim_speed: { label: 'Speed', type: 'float', min: 0,   max: 3,    step: 0.01  },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
@@ -1920,7 +1920,7 @@ export const ChromaShiftNode: NodeDefinition = {
     contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05 },
     angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1    },
     animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
-    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01 },
+    anim_speed: { label: 'Speed', type: 'float', min: 0,   max: 3,    step: 0.01 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;

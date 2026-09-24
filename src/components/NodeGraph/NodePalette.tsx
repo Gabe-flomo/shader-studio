@@ -34,7 +34,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
   { id: 'graphs',      label: 'Saved Graphs',    icon: 'graphs',  color: tk => tk.status.success },
   { id: 'presets',     label: 'Presets',         icon: 'presets', color: tk => tk.accent.base },
   { id: 'functions',   label: 'Functions',       icon: 'fn',      color: tk => tk.kind.fn },
-  { id: 'expressions', label: 'Expr Blocks',     icon: 'expr',    color: tk => tk.kind.expr },
+  { id: 'expressions', label: 'Expression Blocks', icon: 'expr',    color: tk => tk.kind.expr },
   { id: 'keyframes',   label: 'Saved Keyframes', icon: 'kf',      color: tk => tk.status.warning },
 ];
 
@@ -374,7 +374,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                     onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }} />
                 );
               }}
-              emptyHint={<EmptyHint>Open a Custom Fn node and save it as a preset.</EmptyHint>}
+              emptyHint={<EmptyHint>Open a Custom Function node and save it as a preset.</EmptyHint>}
             />
           </>
         );
@@ -396,7 +396,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                     onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
                     onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }} />;
             }}
-            emptyHint={<EmptyHint>Open an Expr Block node and save it as a preset.</EmptyHint>}
+            emptyHint={<EmptyHint>Open an Expression Block node and save it as a preset.</EmptyHint>}
           />
         );
 

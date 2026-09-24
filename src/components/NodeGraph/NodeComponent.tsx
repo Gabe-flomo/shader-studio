@@ -2791,7 +2791,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => setPreviewNodeId(isPreviewActive ? null : node.id)} />
           )}
           {node.type === 'exprNode' && (
-            <CardButton icon="expr" tint="expr" on={showExprBlockModal} label="Open the Expr Block editor" onClick={() => setShowExprBlockModal(v => !v)} />
+            <CardButton icon="expr" tint="expr" on={showExprBlockModal} label="Open the Expression Block editor" onClick={() => setShowExprBlockModal(v => !v)} />
           )}
           {node.type === 'transformVec' && (
             <CardButton icon="grid" on={showTransformVecModal} label="Open the Transform Vec editor" onClick={() => setShowTransformVecModal(v => !v)} />

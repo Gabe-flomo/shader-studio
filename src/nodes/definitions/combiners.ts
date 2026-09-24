@@ -11,12 +11,12 @@ export const SmoothMinNode: NodeDefinition = {
   inputs: {
     a: { type: 'float', label: 'A' },
     b: { type: 'float', label: 'B' },
-    smoothness: { type: 'float', label: 'Smoothness' },
+    smoothness: { type: 'float', label: 'Blend radius' },
   },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { smoothness: 0.5 },
   paramDefs: {
-    smoothness: { label: 'Smoothness', type: 'float', min: 0.01, max: 2, step: 0.01 },
+    smoothness: { label: 'Blend radius', type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
   },
   // smin is always available as a built-in (seeded into the functions Set by the assembler)
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -98,12 +98,12 @@ export const SmoothMaxNode: NodeDefinition = {
   inputs: {
     a: { type: 'float', label: 'A' },
     b: { type: 'float', label: 'B' },
-    smoothness: { type: 'float', label: 'Smoothness' },
+    smoothness: { type: 'float', label: 'Blend radius' },
   },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { smoothness: 0.3 },
   paramDefs: {
-    smoothness: { label: 'Smoothness', type: 'float', min: 0.01, max: 2, step: 0.01 },
+    smoothness: { label: 'Blend radius', type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
   },
   glslFunction: `
 float smax(float a, float b, float k) {
@@ -128,12 +128,12 @@ export const SmoothSubtractNode: NodeDefinition = {
   inputs: {
     a: { type: 'float', label: 'Shape' },
     b: { type: 'float', label: 'Cutter' },
-    smoothness: { type: 'float', label: 'Smoothness' },
+    smoothness: { type: 'float', label: 'Blend radius' },
   },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { smoothness: 0.3 },
   paramDefs: {
-    smoothness: { label: 'Smoothness', type: 'float', min: 0.01, max: 2, step: 0.01 },
+    smoothness: { label: 'Blend radius', type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
   },
   glslFunction: `
 float ssubtract(float a, float b, float k) {
@@ -160,12 +160,12 @@ export const BlendNode: NodeDefinition = {
   inputs: {
     a:      { type: 'vec3',  label: 'A' },
     b:      { type: 'vec3',  label: 'B' },
-    factor: { type: 'float', label: 'Factor' },
+    factor: { type: 'float', label: 'Blend' },
   },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   defaultParams: { factor: 0.5 },
   paramDefs: {
-    factor: { label: 'Factor', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    factor: { label: 'Blend', type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: '0 gives A, 1 gives B.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar  = `${node.id}_result`;

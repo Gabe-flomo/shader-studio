@@ -4046,7 +4046,7 @@ function ExprBadgeViz({ node }: { node: GraphNode }) {
   const isCustom = node.type === 'customFn';
   const body = typeof node.params.body === 'string' ? node.params.body.trim() : '';
   const label = isCustom
-    ? (typeof node.params.label === 'string' ? node.params.label : 'Custom Fn')
+    ? (typeof node.params.label === 'string' ? node.params.label : 'Custom Function')
     : (typeof node.params.label === 'string' ? node.params.label : 'Expr');
   const snippet = body.split('\n')[0].slice(0, 48) || (isCustom ? 'no body yet' : 'no expression');
   return (
