@@ -10,6 +10,7 @@ import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
+import { PerfBadge, PerfPanel } from './PerfPanel';
 
 /**
  * Floating toolbar at the top centre of the canvas (desktop redesign): node count for the
@@ -40,6 +41,8 @@ export function CanvasToolbar({
   const { total, insideGroups } = useMemo(() => countNodes(nodes), [nodes]);
   const countRef = useRef<HTMLSpanElement>(null);
   const [statsOpen, setStatsOpen] = useState(false);
+  const perfRef = useRef<HTMLSpanElement>(null);
+  const [perfOpen, setPerfOpen] = useState(false);
 
   const countLabel = selected > 1 ? `${selected} of ${total} selected` : `${total} ${total === 1 ? 'node' : 'nodes'}`;
   const countTip = topLevel
@@ -68,6 +71,16 @@ export function CanvasToolbar({
       {statsOpen && (
         <Popover anchorRef={countRef} onClose={() => setStatsOpen(false)} align="start" width={420} padding={0}>
           <GraphStatsPanel nodes={nodes} topLevel={topLevel} groupName={groupName} onClose={() => setStatsOpen(false)} />
+        </Popover>
+      )}
+      <span ref={perfRef} style={{ display: 'inline-flex' }}>
+        <Tooltip label="Performance: frame time, compiles, cost by node" disabled={perfOpen}>
+          <ToolButton icon="wave" active={perfOpen} onClick={() => setPerfOpen(o => !o)}><PerfBadge /></ToolButton>
+        </Tooltip>
+      </span>
+      {perfOpen && (
+        <Popover anchorRef={perfRef} onClose={() => setPerfOpen(false)} align="start" width={420} padding={0}>
+          <PerfPanel onClose={() => setPerfOpen(false)} />
         </Popover>
       )}
       <Sep />

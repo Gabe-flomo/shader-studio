@@ -19,6 +19,7 @@ import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, imp
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
+import { recordGraphCompile } from '../lib/perfStats';
 import { paramBindingKey } from '../compiler/uniformPatcher';
 import { saveTextFile, openTextFile, pickJsonFiles, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
 import { planGraphImport, type PreviewAspect } from '../utils/graphImportPlan';
@@ -946,7 +947,7 @@ function updateNodeInTree(
 /**
  * Return a new top-level nodes array with the subgraph at `path` replaced by `newSub`.
  */
-function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[]): GraphNode[] | null {
+export function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[]): GraphNode[] | null {
   if (path.length === 0) return newSub;
   if (path.length === 1) {
     return nodes.map(n => {
@@ -4109,7 +4110,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     } else {
       graphNodes = nodes;
     }
+    const compileT0 = performance.now();
     const result = compileGraph({ nodes: graphNodes });
+    recordGraphCompile(performance.now() - compileT0);
 
     // Patch MLG node.outputs with dynamic acc* sockets discovered at compile time.
     // Preserves any existing acc* labels already stored in the graph (e.g. from saved examples).

@@ -8,6 +8,8 @@ import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumR
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
+import { GpuTimer } from '../lib/gpuTimer';
+import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
@@ -401,6 +403,25 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     gl.getExtension('KHR_parallel_shader_compile');
     const { flush: flushGlErrors, failedSource: glFailedSource } = captureGlslErrors(gl);
 
+    // ── Performance counters (see lib/perfStats.ts) ─────────────────────────
+    // GPU pass times come from timer queries; 'cost' queries belong to the
+    // node-cost measurer below and are routed to it instead of the frame history.
+    const gpuTimer = new GpuTimer(gl);
+    setGpuTimerSupport(gpuTimer.supported);
+    const costResults: number[] = [];
+    const pollGpuTimer = () => {
+      for (const r of gpuTimer.poll()) {
+        if (r.name === 'cost') costResults.push(r.ms);
+        else recordGpuPass(r.name, r.ms);
+      }
+    };
+    let readbackCount = 0;
+    const origReadPixels = renderer.readRenderTargetPixels.bind(renderer);
+    renderer.readRenderTargetPixels = ((...args: Parameters<typeof origReadPixels>) => {
+      readbackCount++;
+      return origReadPixels(...args);
+    }) as typeof renderer.readRenderTargetPixels;
+
     // Half-float RT support check — eliminates 8-bit quantization banding in dark areas
     const supportsHalfFloat = renderer.capabilities.isWebGL2 ||
       (!!gl.getExtension('OES_texture_half_float') && !!gl.getExtension('EXT_color_buffer_half_float'));
@@ -475,6 +496,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const gen = ++compileGeneration;
       const next = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
       compileMesh.material = next;
+      const compileT0 = performance.now();
       try {
         await renderer.compileAsync(compileScene, camera);
       } catch (e) {
@@ -495,6 +517,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         return false;
       }
       useNodeGraphStore.getState().setPreviewStale(false);
+      recordGpuCompile(performance.now() - compileT0);
       const prev = material;
       material = next;
       mesh.material = next;
@@ -503,6 +526,56 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       requestRender();
       return true;
     };
+
+    // ── Node cost measurer (Performance panel, see lib/nodeCost.ts) ─────────
+    // Compiles a shader variant off to the side, draws it a few times into an
+    // offscreen target and returns the median GPU ms per draw. Without timer
+    // queries it falls back to CPU time around a gl.finish().
+    const costScene = new THREE.Scene();
+    const costMesh = new THREE.Mesh(geometry, material);
+    costScene.add(costMesh);
+    let costRt: THREE.WebGLRenderTarget | null = null;
+    const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => r()));
+    registerShaderCostMeasurer(async (fsSrc, vsSrc, signal) => {
+      if (glContextLost) return null;
+      const mat = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
+      costMesh.material = mat;
+      const done = () => { costMesh.material = material; mat.dispose(); };
+      try { await renderer.compileAsync(costScene, camera); } catch { done(); return null; }
+      const prog = (renderer.properties.get(mat) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+      if (!prog || gl.getProgramParameter(prog, gl.LINK_STATUS) === false || signal?.aborted) { flushGlErrors(); done(); return null; }
+      if (!costRt || costRt.width !== floatRt.width || costRt.height !== floatRt.height) {
+        costRt?.dispose();
+        costRt = new THREE.WebGLRenderTarget(floatRt.width, floatRt.height, { type: RT_TYPE, depthBuffer: false, stencilBuffer: false });
+      }
+      const WARMUP = 2, RUNS = 8;
+      const samples: number[] = [];
+      costResults.length = 0;
+      for (let i = 0; i < WARMUP + RUNS && !signal?.aborted; i++) {
+        const timed = i >= WARMUP;
+        let t0 = 0;
+        if (timed) { if (!gpuTimer.begin('cost')) t0 = performance.now(); }
+        renderer.setRenderTarget(costRt);
+        renderer.render(costScene, camera);
+        renderer.setRenderTarget(null);
+        if (timed) {
+          if (t0) { gl.finish(); samples.push(performance.now() - t0); }
+          else gpuTimer.end();
+        }
+        await nextFrame();
+      }
+      // Timer results land a few frames later
+      for (let tries = 0; tries < 60 && samples.length + costResults.length < RUNS && !signal?.aborted; tries++) {
+        pollGpuTimer();
+        if (samples.length + costResults.length < RUNS) await nextFrame();
+      }
+      pollGpuTimer();
+      samples.push(...costResults.splice(0));
+      done();
+      if (samples.length === 0) return null;
+      samples.sort((a, b) => a - b);
+      return samples[Math.floor(samples.length / 2)];
+    });
 
     // ── 3D particle scene + perspective camera ────────────────────────────────
     const particleScene = new THREE.Scene();
@@ -885,6 +958,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // While the WebGL context is lost every GL call is a no-op (and the
       // readbacks below would return garbage), so idle until it's restored.
       if (glContextLost) { lastRafTime = now; scheduleFrame(); return; }
+      const frameT0 = performance.now();
+      pollGpuTimer();
 
       // FPS counter — updated every second
       fpsFrameCount++;
@@ -963,6 +1038,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (material.uniforms.u_prevFrame) {
             material.uniforms.u_prevFrame.value = readRT.texture;
           }
+          gpuTimer.begin('main');
           renderer.setRenderTarget(writeRT);
           renderer.render(scene, camera);
           if (echoRef.current) captureEcho(writeRT.texture);
@@ -970,8 +1046,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           blitMat.uniforms.u_seed.value = frameCount * 1.618;
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
+          gpuTimer.end();
           pingPongIdx.current = pingPongIdx.current === 0 ? 1 : 0;
         } else {
+          gpuTimer.begin('main');
           renderer.setRenderTarget(floatRt);
           renderer.render(scene, camera);
           if (echoRef.current) captureEcho(floatRt.texture);
@@ -979,12 +1057,15 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           blitMat.uniforms.u_seed.value = frameCount * 1.618;
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
+          gpuTimer.end();
         }
 
         // ── GPU particles: render additively on top of the blitted background ──
         if (gpuParticlesRef.current.size > 0) {
           renderer.autoClear = false;
+          gpuTimer.begin('particles');
           renderer.render(particleScene, perspCamera);
+          gpuTimer.end();
           renderer.autoClear = true;
         }
 
@@ -993,6 +1074,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         if (newErrors.length > 0) {
           setGlslErrors(newErrors, glFailedSource());
         }
+        // Everything from here to the end of the drawn frame is probes and readbacks
+        const probeT0 = performance.now();
+        readbackCount = 0;
 
         // Throttled updates every N frames while animating. A frame drawn on
         // demand (slider, hover, recompile) may be the only one for a while, so
@@ -1412,6 +1496,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             }
           }
         }
+        recordFrame({
+          cpuMs: performance.now() - frameT0, probeMs: performance.now() - probeT0, readbacks: readbackCount,
+          fps: currentFps, width: gl.drawingBufferWidth, height: gl.drawingBufferHeight,
+        });
       } else {
         idleFrames++;
         // Nothing to redraw, but the clock still runs while playing: keep the time readout (and
@@ -1524,6 +1612,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       sceneRef.current = null;
       const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
       loseCtx?.loseContext();
+      gpuTimer.dispose();
+      costRt?.dispose();
+      registerShaderCostMeasurer(null);
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
