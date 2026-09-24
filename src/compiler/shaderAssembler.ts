@@ -360,6 +360,58 @@ export function dedupeGlslFunctions(blocks: string[]): string[] {
   return out;
 }
 
+// ── Dead helper elimination (D10) ────────────────────────────────────────────
+// Definitions attach whole libraries (`SHAPE_SDF_GLSL` is 35 shapes / 13 KB
+// even when the chosen shape is `circle`). After dedupe, keep only the
+// functions the main body reaches, transitively through the functions it
+// calls. Non-function text (#defines, consts, structs, prototypes) is always
+// kept and counts as a root, so a macro that calls a helper keeps the helper.
+
+const CALL_SITE = /\b([A-Za-z_]\w*)\s*\(/g;
+
+/** Names that appear as `name(` in `text`. */
+function calledNames(text: string): Set<string> {
+  const out = new Set<string>();
+  CALL_SITE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = CALL_SITE.exec(text)) !== null) out.add(m[1]);
+  return out;
+}
+
+/**
+ * Drop top-level function definitions that nothing in `rootText` (the main
+ * body) reaches. Order is preserved, so define-before-use still holds.
+ */
+export function pruneUnusedGlslFunctions(blocks: string[], rootText: string): string[] {
+  const split = blocks.map(splitGlslBlock);
+  const byName = new Map<string, string[]>();
+  for (const chunks of split) for (const c of chunks) {
+    if (c.name) byName.set(c.name, [...(byName.get(c.name) ?? []), c.text]);
+  }
+  if (byName.size === 0) return blocks;
+
+  const live = new Set<string>();
+  const queue: string[] = [];
+  const visit = (text: string) => {
+    for (const n of calledNames(text)) {
+      if (byName.has(n) && !live.has(n)) { live.add(n); queue.push(n); }
+    }
+  };
+  visit(rootText);
+  for (const chunks of split) for (const c of chunks) if (!c.name) visit(c.text);
+  while (queue.length) {
+    const n = queue.pop()!;
+    for (const body of byName.get(n) ?? []) visit(body);
+  }
+
+  const out: string[] = [];
+  for (const chunks of split) {
+    const kept = chunks.filter(c => !c.name || live.has(c.name)).map(c => c.text);
+    if (kept.some(t => t.trim())) out.push(kept.join('\n'));
+  }
+  return out;
+}
+
 // ── Main assembler ────────────────────────────────────────────────────────────
 
 
@@ -3239,7 +3291,8 @@ export class ShaderAssembler {
   }
 
   private buildResult() {
-    const functionCode = dedupeGlslFunctions(Array.from(this.functions)).join('\n');
+    const mainBody = this.mainCode.join('');
+    const functionCode = pruneUnusedGlslFunctions(dedupeGlslFunctions(Array.from(this.functions)), mainBody).join('\n');
     const paramUniformDecls = Object.entries(this.paramUniforms)
       .map(([name, value]) => `uniform ${Array.isArray(value) ? 'vec3' : 'float'} ${name};`)
       .join('\n');
@@ -3274,7 +3327,7 @@ ${functionCode}
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
-${this.mainCode.join('')}}`.trim();
+${mainBody}}`.trim();
 
     return {
       fragmentShader,
