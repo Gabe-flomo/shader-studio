@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
+import { ctp } from '../../theme/palette';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,13 +17,13 @@ interface Handle { key: string; x: number; y: number; color: string }
 function getHandles(node: GraphNode): Handle[] {
   if (node.type === 'cubicBezierShaper') {
     return [
-      { key: 'ab', x: np(node.params.a, 0.25), y: np(node.params.b, 0.1),  color: '#f38ba8' },
-      { key: 'cd', x: np(node.params.c, 0.75), y: np(node.params.d, 1.0),  color: '#89b4fa' },
+      { key: 'ab', x: np(node.params.a, 0.25), y: np(node.params.b, 0.1),  color: ctp.red },
+      { key: 'cd', x: np(node.params.c, 0.75), y: np(node.params.d, 1.0),  color: ctp.blue },
     ];
   }
   // quadBezierShaper
   return [
-    { key: 'ab', x: np(node.params.a, 0.5), y: np(node.params.b, 0.5), color: '#f38ba8' },
+    { key: 'ab', x: np(node.params.a, 0.5), y: np(node.params.b, 0.5), color: ctp.red },
   ];
 }
 
@@ -82,11 +83,11 @@ function drawEditor(
   void fromCanvas; // used externally
 
   // Background
-  ctx.fillStyle = '#11111b';
+  ctx.fillStyle = ctp.crust;
   ctx.fillRect(0, 0, W, H);
 
   // Grid
-  ctx.strokeStyle = '#1e1e2e';
+  ctx.strokeStyle = ctp.base;
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     const gx = mg + (i / 4) * (W - 2 * mg);
@@ -108,20 +109,20 @@ function drawEditor(
   // Control point guide lines
   if (node.type === 'cubicBezierShaper') {
     const [h1, h2] = handles;
-    ctx.strokeStyle = '#f38ba830';
+    ctx.strokeStyle = `${ctp.red}30`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(mg, H - mg); ctx.lineTo(toCanvasX(h1.x), toCanvasY(h1.y)); ctx.stroke();
-    ctx.strokeStyle = '#89b4fa30';
+    ctx.strokeStyle = `${ctp.blue}30`;
     ctx.beginPath(); ctx.moveTo(W - mg, mg); ctx.lineTo(toCanvasX(h2.x), toCanvasY(h2.y)); ctx.stroke();
   } else {
     const [h] = handles;
-    ctx.strokeStyle = '#f38ba830';
+    ctx.strokeStyle = `${ctp.red}30`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(mg, H - mg); ctx.lineTo(toCanvasX(h.x), toCanvasY(h.y)); ctx.lineTo(W - mg, mg); ctx.stroke();
   }
 
   // Curve
-  ctx.strokeStyle = '#89b4fa';
+  ctx.strokeStyle = ctp.blue;
   ctx.lineWidth = 2;
   ctx.beginPath();
   for (let px = 0; px <= W - 2 * mg; px++) {
@@ -145,13 +146,13 @@ function drawEditor(
     ctx.beginPath(); ctx.moveTo(mg, cy); ctx.lineTo(W - mg, cy); ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#11111b';
+    ctx.strokeStyle = ctp.crust;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     // Label
     ctx.font = '10px monospace';
     ctx.textAlign = cx > W / 2 ? 'right' : 'left';
-    ctx.fillStyle = '#cdd6f4';
+    ctx.fillStyle = ctp.text;
     const lx = cx > W / 2 ? cx - 8 : cx + 8;
     ctx.fillText(`(${cursorPos.x.toFixed(3)}, ${yn.toFixed(3)})`, lx, cy - 8);
   }
@@ -161,7 +162,7 @@ function drawEditor(
     const hx = toCanvasX(h.x), hy = toCanvasY(h.y);
     const isActive = dragKey === h.key;
     ctx.fillStyle = isActive ? '#ffffff' : h.color;
-    ctx.strokeStyle = '#11111b';
+    ctx.strokeStyle = ctp.crust;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(hx, hy, isActive ? HANDLE_R + 1 : HANDLE_R, 0, Math.PI * 2);
@@ -169,7 +170,7 @@ function drawEditor(
     // Label
     ctx.font = '9px monospace';
     ctx.textAlign = hx > W / 2 ? 'right' : 'left';
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     const lx2 = hx > W / 2 ? hx - HANDLE_R - 4 : hx + HANDLE_R + 4;
     ctx.fillText(`(${h.x.toFixed(2)}, ${h.y.toFixed(2)})`, lx2, hy);
   });
@@ -297,15 +298,15 @@ export function BezierEditorModal({ node, onClose }: Props) {
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        style={{ background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '10px', width: `${MODAL_W}px`, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.65)', color: '#cdd6f4', fontSize: '12px' }}
+        style={{ background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '10px', width: `${MODAL_W}px`, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.65)', color: ctp.text, fontSize: '12px' }}
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: '#f38ba8' }}>⬡ {title} Editor</span>
+          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.red }}>⬡ {title} Editor</span>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={resetDefaults} style={{ background: 'none', border: '1px solid #45475a55', color: '#6c7086', cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>Reset</button>
-            <button onClick={onClose} style={{ background: 'none', border: '1px solid #f38ba855', color: '#f38ba8', cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
+            <button onClick={resetDefaults} style={{ background: 'none', border: `1px solid ${ctp.surface1}55`, color: ctp.overlay0, cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>Reset</button>
+            <button onClick={onClose} style={{ background: 'none', border: `1px solid ${ctp.red}55`, color: ctp.red, cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
           </div>
         </div>
 
@@ -316,17 +317,17 @@ export function BezierEditorModal({ node, onClose }: Props) {
           height={MODAL_W - 40}
           onMouseDown={handleMouseDown}
           onMouseLeave={handleMouseLeave}
-          style={{ display: 'block', width: '100%', cursor: dragKey ? 'grabbing' : 'crosshair', borderRadius: '6px', border: '1px solid #31324488' }}
+          style={{ display: 'block', width: '100%', cursor: dragKey ? 'grabbing' : 'crosshair', borderRadius: '6px', border: `1px solid ${ctp.surface0}88` }}
         />
 
         {/* Param values */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '10px', color: '#6c7086', fontFamily: 'monospace' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '10px', color: ctp.overlay0, fontFamily: 'monospace' }}>
           {getHandles(node).map(h => (
             <span key={h.key} style={{ color: h.color }}>
               ({h.x.toFixed(3)}, {h.y.toFixed(3)})
             </span>
           ))}
-          <span style={{ marginLeft: 'auto', color: '#45475a' }}>drag handles to edit · hover to read</span>
+          <span style={{ marginLeft: 'auto', color: ctp.surface1 }}>drag handles to edit · hover to read</span>
         </div>
       </div>
     </div>,

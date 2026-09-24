@@ -7,6 +7,7 @@ import { ConnectionLine } from './ConnectionLine';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
+import { ctp } from '../../theme/palette';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 240;
@@ -811,13 +812,13 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         position: 'relative',
         width: '100%',
         height: '100%',
-        background: transparent ? 'transparent' : '#11111b',
+        background: transparent ? 'transparent' : ctp.crust,
         overflow: 'hidden',
         cursor: 'default',
         userSelect: 'none',
         backgroundImage: transparent
           ? 'none'
-          : 'radial-gradient(circle, #313244 1px, transparent 1px)',
+          : `radial-gradient(circle, ${ctp.surface0} 1px, transparent 1px)`,
         backgroundSize: `${gridSize}px ${gridSize}px`,
         backgroundPosition: `${gridOffX}px ${gridOffY}px`,
       }}
@@ -830,9 +831,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             top: 10,
             left: '50%',
             transform: 'translateX(-50%)',
-            background: '#1e1e2e',
-            border: '1px solid #a6e3a155',
-            color: '#a6e3a1',
+            background: ctp.base,
+            border: `1px solid ${ctp.green}55`,
+            color: ctp.green,
             padding: '5px 14px',
             borderRadius: '8px',
             fontSize: '11px',
@@ -849,8 +850,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={() => setPreviewNodeId(null)}
             style={{
               background: 'none',
-              border: '1px solid #a6e3a155',
-              color: '#a6e3a1',
+              border: `1px solid ${ctp.green}55`,
+              color: ctp.green,
               cursor: 'pointer',
               fontSize: '10px',
               padding: '1px 6px',
@@ -871,8 +872,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             left: '50%',
             transform: 'translateX(-50%)',
             background: 'rgba(30,30,46,0.92)',
-            border: `1px solid ${pendingMobileType ? ('#' + (pendingMobileType === 'float' ? 'f0a0aa' : pendingMobileType === 'vec2' ? '0af0f0' : pendingMobileType === 'vec3' ? '00fa80' : 'fa8000')) : '#89b4fa'}55`,
-            color: '#cdd6f4',
+            border: `1px solid ${pendingMobileType ? ('#' + (pendingMobileType === 'float' ? 'f0a0aa' : pendingMobileType === 'vec2' ? '0af0f0' : pendingMobileType === 'vec3' ? '00fa80' : 'fa8000')) : ctp.blue}55`,
+            color: ctp.text,
             padding: '8px 16px',
             borderRadius: '10px',
             fontSize: '12px',
@@ -894,8 +895,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={() => setPendingMobileConnection(null)}
             style={{
               background: 'none',
-              border: '1px solid #45475a',
-              color: '#585b70',
+              border: `1px solid ${ctp.surface1}`,
+              color: ctp.surface2,
               cursor: 'pointer',
               fontSize: '11px',
               padding: '2px 7px',
@@ -926,8 +927,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
             title="Reset zoom to 100%"
             style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -941,7 +942,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               onMouseDown={e => e.stopPropagation()}
               onChange={e => setZoom(Number(e.target.value) / 100)}
               title="Zoom level"
-              style={{ width: '60px', accentColor: '#89b4fa', cursor: 'pointer' }}
+              style={{ width: '60px', accentColor: ctp.blue, cursor: 'pointer' }}
             />
           )}
         </div>
@@ -950,8 +951,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onClick={handleFitView}
           title="Fit all nodes in view"
           style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
         >
           {compactToolbar ? '⊡' : '⊡ Fit'}
         </button>
@@ -961,8 +962,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={autoLayout}
             title="Automatically arrange nodes left-to-right by data flow"
             style={toolbarBtnStyle}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
           >
             ⊞ Auto Layout
           </button>
@@ -973,8 +974,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={toggleMinimap}
             title={showMinimap ? 'Hide minimap' : 'Show minimap'}
             style={{ ...toolbarBtnStyle, opacity: showMinimap ? 1 : 0.45 }}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#45475a')}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
           >
             [M]
           </button>
@@ -987,8 +988,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           position: 'absolute',
           bottom: 16,
           left: '50%', transform: 'translateX(-50%)',
-          background: '#1e1e2e', border: '1px solid #cba6f755',
-          color: '#cba6f7', padding: '5px 14px', borderRadius: '8px',
+          background: ctp.base, border: `1px solid ${ctp.mauve}55`,
+          color: ctp.mauve, padding: '5px 14px', borderRadius: '8px',
           fontSize: '11px', zIndex: 20,
           display: 'flex', alignItems: 'center', gap: '6px',
           userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
@@ -996,7 +997,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         }}>
           <button
             onClick={() => exitToRoot()}
-            style={{ background: 'none', border: 'none', color: '#7f849c', cursor: 'pointer', padding: 0, fontSize: '11px' }}
+            style={{ background: 'none', border: 'none', color: ctp.overlay1, cursor: 'pointer', padding: 0, fontSize: '11px' }}
           >Root</button>
           {activeGroupPath.map((gid, depth) => {
             // Find the group node label
@@ -1013,13 +1014,13 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             const isLast = depth === activeGroupPath.length - 1;
             return (
               <React.Fragment key={gid}>
-                <span style={{ color: '#45475a' }}>›</span>
+                <span style={{ color: ctp.surface1 }}>›</span>
                 {isLast ? (
                   <strong>{lbl}</strong>
                 ) : (
                   <button
                     onClick={() => exitToDepth(depth + 1)}
-                    style={{ background: 'none', border: 'none', color: '#7f849c', cursor: 'pointer', padding: 0, fontSize: '11px' }}
+                    style={{ background: 'none', border: 'none', color: ctp.overlay1, cursor: 'pointer', padding: 0, fontSize: '11px' }}
                   >{lbl}</button>
                 )}
               </React.Fragment>
@@ -1034,8 +1035,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           position: 'absolute',
           top: compactToolbar ? 80 : 50,
           left: '50%', transform: 'translateX(-50%)',
-          background: '#2d1b1b', border: '1px solid #f38ba855',
-          color: '#f38ba8', padding: '5px 14px', borderRadius: '8px',
+          background: '#2d1b1b', border: `1px solid ${ctp.red}55`,
+          color: ctp.red, padding: '5px 14px', borderRadius: '8px',
           fontSize: '11px', zIndex: 25, display: 'flex', alignItems: 'center',
           gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
           whiteSpace: 'nowrap',
@@ -1043,7 +1044,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           <span>⚠ {disconnectedNotice}</span>
           <button
             onClick={clearDisconnectedNotice}
-            style={{ background: 'none', border: '1px solid #f38ba855', color: '#f38ba8', cursor: 'pointer', fontSize: '10px', padding: '1px 6px', borderRadius: '4px' }}
+            style={{ background: 'none', border: `1px solid ${ctp.red}55`, color: ctp.red, cursor: 'pointer', fontSize: '10px', padding: '1px 6px', borderRadius: '4px' }}
           >×</button>
         </div>
       )}
@@ -1055,7 +1056,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onClick={e => e.stopPropagation()}
           style={{
             position: 'fixed', left: contextMenu.x, top: contextMenu.y,
-            background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+            background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
             padding: '4px 0', zIndex: 10000, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
             minWidth: '160px', fontSize: '12px',
           }}
@@ -1076,7 +1077,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       groupNodes(ids, 'Group');
                       setContextMenu(null);
                     }}>
-                      Group Selection <span style={{ color: '#585b70', fontSize: '10px' }}>⌘G</span>
+                      Group Selection <span style={{ color: ctp.surface2, fontSize: '10px' }}>⌘G</span>
                     </button>
                     <button style={ctxBtnStyle} onClick={() => {
                       duplicateNodes(ids);
@@ -1084,7 +1085,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Duplicate Selection
                     </button>
-                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
+                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
                 {isSceneGroup && clickedNode && (
@@ -1093,10 +1094,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Enter Scene Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                      Enter Scene Group <span style={{ color: ctp.surface2, fontSize: '10px' }}>↵</span>
                     </button>
-                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1110,10 +1111,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Enter Space Warp Group <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                      Enter Space Warp Group <span style={{ color: ctp.surface2, fontSize: '10px' }}>↵</span>
                     </button>
-                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1127,10 +1128,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Enter {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'} <span style={{ color: '#585b70', fontSize: '10px' }}>↵</span>
+                      Enter {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'} <span style={{ color: ctp.surface2, fontSize: '10px' }}>↵</span>
                     </button>
-                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1153,14 +1154,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Rename Group
                     </button>
-                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
                       ungroupNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
                       Ungroup
                     </button>
-                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
                       if (window.confirm(`Delete group "${typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group'}" and all its nodes?`)) {
                         removeNode(clickedNode.id);
                         setContextMenu(null);
@@ -1178,8 +1179,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Duplicate
                     </button>
-                    <div style={{ borderTop: '1px solid #313244', margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: '#f38ba8' }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1375,8 +1376,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               left: groupOutputTerminalPos.x,
               top: groupOutputTerminalPos.y,
               width: 180,
-              background: '#1e1e2e',
-              border: '1px solid #cba6f755',
+              background: ctp.base,
+              border: `1px solid ${ctp.mauve}55`,
               borderRadius: '8px',
               overflow: 'hidden',
               userSelect: 'none',
@@ -1386,7 +1387,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             {/* Header */}
             <div style={{
               background: '#2a1f3d', padding: '6px 10px',
-              fontSize: '11px', color: '#cba6f7', fontWeight: 700,
+              fontSize: '11px', color: ctp.mauve, fontWeight: 700,
               letterSpacing: '0.04em',
             }}>
               ⊳ Group Output
@@ -1410,7 +1411,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     padding: '5px 8px 5px 16px',
                     display: 'flex', alignItems: 'center', gap: '5px',
                     position: 'relative',
-                    background: isDraggingCompatible ? '#cba6f711' : 'transparent',
+                    background: isDraggingCompatible ? `${ctp.mauve}11` : 'transparent',
                   }}
                 >
                   {/* Input socket dot */}
@@ -1420,7 +1421,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     style={{
                       position: 'absolute', left: -5,
                       width: 10, height: 10, borderRadius: '50%',
-                      background: port.fromNodeId ? (TYPE_COLORS[port.type] ?? '#888') : '#45475a',
+                      background: port.fromNodeId ? (TYPE_COLORS[port.type] ?? '#888') : ctp.surface1,
                       cursor: 'crosshair',
                       border: isDraggingCompatible ? '2px solid white' : 'none',
                     }}
@@ -1442,16 +1443,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingOutputPortKey(null);
                       }}
-                      style={{ width: '55px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #cba6f7', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                      style={{ width: '55px', fontSize: '10px', background: ctp.base, border: `1px solid ${ctp.mauve}`, color: ctp.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
                     />
                   ) : (
                     <span
-                      style={{ fontSize: '10px', color: '#a6adc8', minWidth: '30px', cursor: 'text', flexShrink: 0 }}
+                      style={{ fontSize: '10px', color: ctp.subtext0, minWidth: '30px', cursor: 'text', flexShrink: 0 }}
                       title="Double-click to rename"
                       onDoubleClick={() => { setEditingOutputPortKey(port.key); setEditingOutputPortLabel(port.label); }}
                     >{port.label}</span>
                   )}
-                  <span style={{ fontSize: '9px', color: port.fromNodeId ? '#585b70' : '#45475a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontStyle: port.fromNodeId ? 'normal' : 'italic' }}>
+                  <span style={{ fontSize: '9px', color: port.fromNodeId ? ctp.surface2 : ctp.surface1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontStyle: port.fromNodeId ? 'normal' : 'italic' }}>
                     {srcLabel}
                   </span>
                   {/* Delete button */}
@@ -1459,9 +1460,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     onMouseDown={e => e.stopPropagation()}
                     onClick={() => activeGroupId && removeGroupOutput(activeGroupId, port.key)}
                     title="Remove output port"
-                    style={{ fontSize: '10px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#f38ba8')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#585b70')}
+                    style={{ fontSize: '10px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
+                    onMouseEnter={e => (e.currentTarget.style.color = ctp.red)}
+                    onMouseLeave={e => (e.currentTarget.style.color = ctp.surface2)}
                   >×</button>
                 </div>
               );
@@ -1474,8 +1475,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                 onClick={() => activeGroupId && addGroupOutput(activeGroupId)}
                 style={{
                   width: '100%', fontSize: '10px', padding: '3px',
-                  background: 'none', border: '1px solid #cba6f755',
-                  color: '#cba6f7', borderRadius: '3px', cursor: 'pointer',
+                  background: 'none', border: `1px solid ${ctp.mauve}55`,
+                  color: ctp.mauve, borderRadius: '3px', cursor: 'pointer',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#2a1f3d')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -1493,8 +1494,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               left: groupInputTerminalPos.x,
               top: groupInputTerminalPos.y,
               width: 180,
-              background: '#1e1e2e',
-              border: '1px solid #89b4fa55',
+              background: ctp.base,
+              border: `1px solid ${ctp.blue}55`,
               borderRadius: '8px',
               overflow: 'hidden',
               userSelect: 'none',
@@ -1504,7 +1505,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             {/* Header */}
             <div style={{
               background: '#1a2035', padding: '6px 10px',
-              fontSize: '11px', color: '#89b4fa', fontWeight: 700,
+              fontSize: '11px', color: ctp.blue, fontWeight: 700,
               letterSpacing: '0.04em',
             }}>
               ⊲ Group Inputs
@@ -1523,7 +1524,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     position: 'relative',
                   }}
                 >
-                  <span style={{ fontSize: '10px', color: '#a6adc8', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
+                  <span style={{ fontSize: '10px', color: ctp.subtext0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
                   <span style={{ fontSize: '9px', color: TYPE_COLORS[port.type] ?? '#888', flexShrink: 0 }}>{port.type}</span>
                   {/* Output socket dot — drag FROM this to an inner node input */}
                   <div
@@ -1542,7 +1543,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             })}
 
             {/* Add input form / button */}
-            <div style={{ borderTop: '1px solid #313244', padding: '4px 8px' }}>
+            <div style={{ borderTop: `1px solid ${ctp.surface0}`, padding: '4px 8px' }}>
               {addingGroupInput ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <input
@@ -1552,8 +1553,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     onChange={e => setAddingGroupInput(prev => prev ? { ...prev, name: e.target.value } : null)}
                     onKeyDown={e => e.stopPropagation()}
                     style={{
-                      fontSize: '10px', background: '#11111b', border: '1px solid #45475a',
-                      color: '#cdd6f4', borderRadius: '3px', padding: '2px 6px', outline: 'none',
+                      fontSize: '10px', background: ctp.crust, border: `1px solid ${ctp.surface1}`,
+                      color: ctp.text, borderRadius: '3px', padding: '2px 6px', outline: 'none',
                     }}
                   />
                   <div style={{ display: 'flex', gap: '3px' }}>
@@ -1563,9 +1564,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                         onClick={() => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
                         style={{
                           fontSize: '9px', padding: '1px 5px', borderRadius: '3px', cursor: 'pointer',
-                          border: '1px solid #45475a',
-                          background: addingGroupInput.type === t ? '#313244' : 'none',
-                          color: addingGroupInput.type === t ? '#cdd6f4' : '#585b70',
+                          border: `1px solid ${ctp.surface1}`,
+                          background: addingGroupInput.type === t ? ctp.surface0 : 'none',
+                          color: addingGroupInput.type === t ? ctp.text : ctp.surface2,
                         }}
                       >{t}</button>
                     ))}
@@ -1578,11 +1579,11 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                         }
                         setAddingGroupInput(null);
                       }}
-                      style={{ flex: 1, fontSize: '10px', padding: '2px', background: '#313244', border: '1px solid #45475a', color: '#a6e3a1', borderRadius: '3px', cursor: 'pointer' }}
+                      style={{ flex: 1, fontSize: '10px', padding: '2px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.green, borderRadius: '3px', cursor: 'pointer' }}
                     >Add</button>
                     <button
                       onClick={() => setAddingGroupInput(null)}
-                      style={{ fontSize: '10px', padding: '2px 6px', background: 'none', border: '1px solid #45475a', color: '#585b70', borderRadius: '3px', cursor: 'pointer' }}
+                      style={{ fontSize: '10px', padding: '2px 6px', background: 'none', border: `1px solid ${ctp.surface1}`, color: ctp.surface2, borderRadius: '3px', cursor: 'pointer' }}
                     >✕</button>
                   </div>
                 </div>
@@ -1591,10 +1592,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                   onClick={() => setAddingGroupInput({ name: '', type: 'float' })}
                   style={{
                     width: '100%', fontSize: '10px', padding: '3px',
-                    background: 'none', border: '1px solid #45475a',
-                    color: '#89b4fa', borderRadius: '3px', cursor: 'pointer',
+                    background: 'none', border: `1px solid ${ctp.surface1}`,
+                    color: ctp.blue, borderRadius: '3px', cursor: 'pointer',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#313244')}
+                  onMouseEnter={e => (e.currentTarget.style.background = ctp.surface0)}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                 >+ Add Input</button>
               )}
@@ -1614,7 +1615,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             style={{
               position: 'fixed',
               left, top, width, height,
-              border: '1px dashed #89b4fa',
+              border: `1px dashed ${ctp.blue}`,
               background: 'rgba(137,180,250,0.05)',
               pointerEvents: 'none',
               zIndex: 50,
@@ -1631,8 +1632,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             left: hoveredWire.midX - 14,
             top:  hoveredWire.midY - 14,
             width: 28, height: 28, borderRadius: '50%',
-            background: '#89b4fa',
-            color: '#1e1e2e',
+            background: ctp.blue,
+            color: ctp.base,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '16px', fontWeight: 700,
             cursor: 'pointer',
@@ -1711,7 +1712,7 @@ const ctxBtnStyle: React.CSSProperties = {
   width: '100%',
   background: 'none',
   border: 'none',
-  color: '#cdd6f4',
+  color: ctp.text,
   padding: '6px 12px',
   textAlign: 'left',
   cursor: 'pointer',
@@ -1719,9 +1720,9 @@ const ctxBtnStyle: React.CSSProperties = {
 };
 
 const toolbarBtnStyle: React.CSSProperties = {
-  background: '#313244',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  background: ctp.surface0,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '6px',
   padding: '5px 10px',
   fontSize: '11px',
@@ -1732,8 +1733,8 @@ const toolbarBtnStyle: React.CSSProperties = {
 // Larger touch target for toolbar buttons on touch devices
 const touchToolbarBtnStyle: React.CSSProperties = {
   background: 'rgba(49,50,68,0.85)',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '8px',
   padding: '10px 14px',
   fontSize: '13px',

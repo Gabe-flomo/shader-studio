@@ -4,6 +4,7 @@ import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition 
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { getAssetTags, saveAssetTags } from '../../utils/assetTags';
 import type { GraphNode } from '../../types/nodeGraph';
+import { ctp } from '../../theme/palette';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
@@ -21,37 +22,37 @@ const HIDDEN_NODES = new Set([
 
 // ── Category colors ───────────────────────────────────────────────────────────
 const CATEGORY_COLORS: Record<string, string> = {
-  Sources:          '#89b4fa',
-  Transforms:       '#a6e3a1',
-  Math:             '#b4befe',
-  Color:            '#fab387',
+  Sources:          ctp.blue,
+  Transforms:       ctp.green,
+  Math:             ctp.lavender,
+  Color:            ctp.peach,
   'Color Grading':  '#f9a86b',
-  Noise:            '#74c7ec',
-  Effects:          '#f38ba8',
-  'Post Processing': '#f38ba8',
-  Loops:            '#89dceb',
-  '2D Primitives':  '#f9e2af',
-  Combiners:        '#cba6f7',
-  Spaces:           '#f2cdcd',
-  Grid:             '#89dceb',
-  Field:            '#74c7ec',
-  Shapers:          '#f9e2af',
-  Science:          '#94e2d5',
-  Fractals:         '#cba6f7',
-  Output:           '#6c7086',
-  '3D Primitives':  '#f5c2e7',
-  '3D Transforms':  '#f5c2e7',
+  Noise:            ctp.sapphire,
+  Effects:          ctp.red,
+  'Post Processing': ctp.red,
+  Loops:            ctp.sky,
+  '2D Primitives':  ctp.yellow,
+  Combiners:        ctp.mauve,
+  Spaces:           ctp.flamingo,
+  Grid:             ctp.sky,
+  Field:            ctp.sapphire,
+  Shapers:          ctp.yellow,
+  Science:          ctp.teal,
+  Fractals:         ctp.mauve,
+  Output:           ctp.overlay0,
+  '3D Primitives':  ctp.pink,
+  '3D Transforms':  ctp.pink,
   '3D Scene':       '#cc88aa',
-  '3D Boolean Ops': '#89dceb',
-  '3D Fractals':    '#f5c2e7',
+  '3D Boolean Ops': ctp.sky,
+  '3D Fractals':    ctp.pink,
   '3D Lighting':    '#f9c468',
-  Animation:        '#b4befe',
-  Conditionals:     '#f2cdcd',
-  Utility:          '#6c7086',
+  Animation:        ctp.lavender,
+  Conditionals:     ctp.flamingo,
+  Utility:          ctp.overlay0,
   Matrix:           '#f5c842',
   Halftone:         '#a6e3d5',
-  Particles:        '#f9e2af',
-  'Particles & Fields': '#f9e2af',
+  Particles:        ctp.yellow,
+  'Particles & Fields': ctp.yellow,
 };
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
@@ -229,7 +230,7 @@ function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
       style={{
         position: 'fixed', left, top,
         width: '380px', maxHeight: 'calc(100vh - 64px)',
-        background: '#1e1e2e', border: '1px solid #45475a',
+        background: ctp.base, border: `1px solid ${ctp.surface1}`,
         borderRadius: '10px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
         display: 'flex', flexDirection: 'column',
         zIndex: 500, overflow: 'hidden',
@@ -237,50 +238,50 @@ function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
       onMouseDown={e => e.stopPropagation()}
     >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {def?.label ?? type}
           </div>
           {def?.description && (
-            <div style={{ fontSize: '10px', color: '#6c7086', marginTop: '2px', lineHeight: 1.4 }}>{def.description}</div>
+            <div style={{ fontSize: '10px', color: ctp.overlay0, marginTop: '2px', lineHeight: 1.4 }}>{def.description}</div>
           )}
         </div>
-        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '10px', background: '#313244', color: '#6c7086', fontFamily: 'monospace', flexShrink: 0 }}>
+        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '10px', background: ctp.surface0, color: ctp.overlay0, fontFamily: 'monospace', flexShrink: 0 }}>
           {def?.category}
         </span>
         <button
           onClick={onClose}
-          style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+          style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
         >✕</button>
       </div>
 
       {/* GLSL source */}
       <pre style={{
         flex: 1, margin: 0, padding: '12px 14px',
-        background: '#11111b', overflowY: 'auto', overflowX: 'auto',
+        background: ctp.crust, overflowY: 'auto', overflowX: 'auto',
         fontSize: '11px', lineHeight: 1.6,
-        color: '#a6adc8', fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+        color: ctp.subtext0, fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
         whiteSpace: 'pre', minHeight: 0,
       }}>
         {source}
       </pre>
 
       {/* Footer actions */}
-      <div style={{ display: 'flex', gap: '6px', padding: '10px 14px', borderTop: '1px solid #313244', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: '6px', padding: '10px 14px', borderTop: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
         <button
           onClick={() => { onInsert?.(source); onClose(); }}
           title="Insert GLSL at cursor position"
           style={{
             flex: 1, padding: '5px 10px',
-            background: '#89b4fa18', border: '1px solid #89b4fa44',
-            borderRadius: '6px', color: '#89b4fa', fontSize: '11px',
+            background: `${ctp.blue}18`, border: `1px solid ${ctp.blue}44`,
+            borderRadius: '6px', color: ctp.blue, fontSize: '11px',
             cursor: 'pointer', fontFamily: 'monospace', fontWeight: 500,
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#89b4fa28'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#89b4fa18'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}28`; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}18`; }}
         >
           ⌥ Insert at cursor
         </button>
@@ -288,10 +289,10 @@ function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
           onClick={copyToClipboard}
           style={{
             padding: '5px 12px',
-            background: copied ? '#a6e3a118' : '#313244',
-            border: `1px solid ${copied ? '#a6e3a144' : '#45475a'}`,
+            background: copied ? `${ctp.green}18` : ctp.surface0,
+            border: `1px solid ${copied ? `${ctp.green}44` : ctp.surface1}`,
             borderRadius: '6px',
-            color: copied ? '#a6e3a1' : '#cdd6f4',
+            color: copied ? ctp.green : ctp.text,
             fontSize: '11px', cursor: 'pointer',
             transition: 'background 0.15s, color 0.15s, border-color 0.15s',
           }}
@@ -329,30 +330,30 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
 
   return (
     <div style={{
-      background: '#181825',
-      border: '1px solid #313244',
+      background: ctp.mantle,
+      border: `1px solid ${ctp.surface0}`,
       borderRadius: '8px',
       padding: '8px',
       marginTop: '6px',
       marginBottom: '2px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: hasViz ? '6px' : '4px' }}>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: '#cdd6f4', flex: 1 }}>{def?.label ?? type}</span>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: ctp.text, flex: 1 }}>{def?.label ?? type}</span>
         <button
           onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(); }}
           title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             padding: '1px 4px', lineHeight: 1, fontSize: '13px',
-            color: isFavorite ? '#f9e2af' : '#45475a',
+            color: isFavorite ? ctp.yellow : ctp.surface1,
             transition: 'color 0.1s',
           }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = isFavorite ? '#fab387' : '#cdd6f4')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = isFavorite ? '#f9e2af' : '#45475a')}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = isFavorite ? ctp.peach : ctp.text)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = isFavorite ? ctp.yellow : ctp.surface1)}
         >★</button>
         <span style={{
           fontSize: '9px', padding: '1px 5px', borderRadius: '10px',
-          background: '#313244', color: '#6c7086', fontFamily: 'monospace',
+          background: ctp.surface0, color: ctp.overlay0, fontFamily: 'monospace',
         }}>{def?.category}</span>
       </div>
 
@@ -366,9 +367,9 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
           title="Double-click to copy"
           style={{
             margin: '0 0 6px', padding: '6px 8px',
-            background: '#11111b', border: '1px solid #252535',
+            background: ctp.crust, border: '1px solid #252535',
             borderRadius: '5px', fontSize: '9px', lineHeight: 1.6,
-            color: '#a6adc8', fontFamily: "'Fira Code', monospace",
+            color: ctp.subtext0, fontFamily: "'Fira Code', monospace",
             overflowX: 'auto', overflowY: 'auto', maxHeight: '90px',
             whiteSpace: 'pre', cursor: 'text',
           }}
@@ -376,7 +377,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
       ) : hasViz ? (
         <NodeInlineViz node={node} />
       ) : def?.description ? (
-        <p style={{ fontSize: '10px', color: '#6c7086', margin: '0 0 6px', lineHeight: 1.5 }}>
+        <p style={{ fontSize: '10px', color: ctp.overlay0, margin: '0 0 6px', lineHeight: 1.5 }}>
           {def.description}
         </p>
       ) : null}
@@ -385,7 +386,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
       {currentTags.length > 0 && !editingTags && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '5px', marginBottom: '2px' }}>
           {currentTags.map(t => (
-            <span key={t} style={{ fontSize: '9px', padding: '1px 6px', background: '#89b4fa22', color: '#89b4fa', borderRadius: '10px' }}>#{t}</span>
+            <span key={t} style={{ fontSize: '9px', padding: '1px 6px', background: `${ctp.blue}22`, color: ctp.blue, borderRadius: '10px' }}>#{t}</span>
           ))}
         </div>
       )}
@@ -404,7 +405,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
             }}
             onBlur={handleSaveTags}
             placeholder="tag1, tag2, tag3…"
-            style={{ width: '100%', background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', outline: 'none', boxSizing: 'border-box' }}
+            style={{ width: '100%', background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
       )}
@@ -417,10 +418,10 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
             title="Insert GLSL at cursor"
             style={{
               flex: 1, padding: '3px 6px',
-              background: copied ? '#a6e3a118' : '#89b4fa18',
-              border: `1px solid ${copied ? '#a6e3a144' : '#89b4fa44'}`,
+              background: copied ? `${ctp.green}18` : `${ctp.blue}18`,
+              border: `1px solid ${copied ? `${ctp.green}44` : `${ctp.blue}44`}`,
               borderRadius: '5px',
-              color: copied ? '#a6e3a1' : '#89b4fa',
+              color: copied ? ctp.green : ctp.blue,
               fontSize: '10px', cursor: 'pointer',
               transition: 'background 0.1s, border-color 0.1s, color 0.1s',
               lineHeight: 1, fontFamily: 'monospace',
@@ -434,13 +435,13 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
             title="Add to Graph"
             style={{
               flex: 1, padding: '3px 6px',
-              background: '#89b4fa18', border: '1px solid #89b4fa44',
-              borderRadius: '5px', color: '#89b4fa', fontSize: '13px',
+              background: `${ctp.blue}18`, border: `1px solid ${ctp.blue}44`,
+              borderRadius: '5px', color: ctp.blue, fontSize: '13px',
               cursor: 'pointer', transition: 'background 0.1s, border-color 0.1s',
               lineHeight: 1,
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#89b4fa28'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#89b4fa77'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#89b4fa18'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#89b4fa44'; }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}28`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.blue}77`; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}18`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.blue}44`; }}
           >
             +
           </button>
@@ -450,16 +451,16 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
           title="Add or edit tags"
           style={{
             padding: '3px 8px',
-            background: editingTags ? '#a6e3a128' : '#a6e3a110',
-            border: `1px solid ${editingTags ? '#a6e3a166' : '#a6e3a133'}`,
+            background: editingTags ? `${ctp.green}28` : `${ctp.green}10`,
+            border: `1px solid ${editingTags ? `${ctp.green}66` : `${ctp.green}33`}`,
             borderRadius: '5px',
-            color: '#a6e3a1',
+            color: ctp.green,
             fontSize: '11px', fontFamily: 'monospace', fontWeight: 600,
             cursor: 'pointer', transition: 'background 0.1s, border-color 0.1s',
             lineHeight: 1,
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#a6e3a128'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a166'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = editingTags ? '#a6e3a128' : '#a6e3a110'; (e.currentTarget as HTMLButtonElement).style.borderColor = editingTags ? '#a6e3a166' : '#a6e3a133'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.green}28`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}66`; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = editingTags ? `${ctp.green}28` : `${ctp.green}10`; (e.currentTarget as HTMLButtonElement).style.borderColor = editingTags ? `${ctp.green}66` : `${ctp.green}33`; }}
         >
           #
         </button>
@@ -483,8 +484,8 @@ function NodePill({
 }) {
   const [hovered, setHovered] = useState(false);
 
-  const activeColor = isHighlighted ? '#89b4fa' : (isSelected || hovered) ? color : undefined;
-  const borderColor = isHighlighted ? '#89b4fa' : isSelected ? color + '88' : hovered ? color + '55' : '#3a3a4e';
+  const activeColor = isHighlighted ? ctp.blue : (isSelected || hovered) ? color : undefined;
+  const borderColor = isHighlighted ? ctp.blue : isSelected ? color + '88' : hovered ? color + '55' : '#3a3a4e';
   const bg = isHighlighted ? '#1a2a3a' : isSelected ? '#252545' : hovered ? '#2a2a3e' : '#252535';
 
   return (
@@ -509,12 +510,12 @@ function NodePill({
           background: bg,
           border: `1px solid ${borderColor}`,
           borderRadius: '20px',
-          color: activeColor ?? '#a6adc8',
+          color: activeColor ?? ctp.subtext0,
           fontSize: '11px', fontWeight: 500,
           cursor: swapMode ? 'pointer' : 'grab',
           userSelect: 'none',
           transition: 'background 0.12s, border-color 0.12s, color 0.12s',
-          boxShadow: isHighlighted ? '0 0 0 2px #89b4fa33' : 'none',
+          boxShadow: isHighlighted ? `0 0 0 2px ${ctp.blue}33` : 'none',
           whiteSpace: 'nowrap',
         }}
       >
@@ -530,7 +531,7 @@ function GroupHeader({ label }: { label: string }) {
     <div style={{
       width: '100%',
       fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em',
-      textTransform: 'uppercase', color: '#45475a',
+      textTransform: 'uppercase', color: ctp.surface1,
       padding: '6px 2px 3px',
       marginTop: '2px',
     }}>
@@ -669,8 +670,8 @@ export function NodeBrowser({
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
       .map(({ def }) => def);
     innerContent = results.length === 0
-      ? <div style={{ color: '#585b70', fontSize: '11px', paddingLeft: '4px' }}>No matches</div>
-      : <div>{renderPills(results, '#89b4fa')}</div>;
+      ? <div style={{ color: ctp.surface2, fontSize: '11px', paddingLeft: '4px' }}>No matches</div>
+      : <div>{renderPills(results, ctp.blue)}</div>;
 
   } else if (path.length === 0) {
     const favCount = favorites.filter(t => NODE_REGISTRY[t] && !HIDDEN_NODES.has(t)).length;
@@ -680,7 +681,7 @@ export function NodeBrowser({
           <CategoryRow
             key="__favorites__"
             cat="★ Favorites"
-            color="#f9e2af"
+            color={ctp.yellow}
             count={favCount}
             onClick={() => { setPath(['__favorites__']); setPreviewType(null); }}
           />
@@ -695,7 +696,7 @@ export function NodeBrowser({
             <div key={section.label}>
               <div style={{
                 fontSize: '8px', fontWeight: 700, letterSpacing: '0.12em',
-                textTransform: 'uppercase', color: '#45475a',
+                textTransform: 'uppercase', color: ctp.surface1,
                 padding: '8px 4px 4px',
               }}>
                 {section.label}
@@ -742,17 +743,17 @@ export function NodeBrowser({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <button
           onClick={() => { setPath([]); setPreviewType(null); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: '4px', color: '#6c7086', fontSize: '11px', textAlign: 'left' }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: '4px', color: ctp.overlay0, fontSize: '11px', textAlign: 'left' }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
         >
           <span style={{ fontSize: '13px' }}>‹</span>
-          <span style={{ color: '#f9e2af', fontWeight: 600, fontSize: '11px', letterSpacing: '0.04em' }}>★ FAVORITES</span>
-          <span style={{ color: '#45475a', marginLeft: 'auto', fontSize: '10px' }}>{favDefs.length}</span>
+          <span style={{ color: ctp.yellow, fontWeight: 600, fontSize: '11px', letterSpacing: '0.04em' }}>★ FAVORITES</span>
+          <span style={{ color: ctp.surface1, marginLeft: 'auto', fontSize: '10px' }}>{favDefs.length}</span>
         </button>
         {favDefs.length === 0
-          ? <div style={{ color: '#45475a', fontSize: '11px', paddingLeft: '4px' }}>No favorites yet</div>
-          : renderPills(favDefs, '#f9e2af')
+          ? <div style={{ color: ctp.surface1, fontSize: '11px', paddingLeft: '4px' }}>No favorites yet</div>
+          : renderPills(favDefs, ctp.yellow)
         }
       </div>
     );
@@ -766,13 +767,13 @@ export function NodeBrowser({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <button
           onClick={() => { setPath([]); setPreviewType(null); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: '4px', color: '#6c7086', fontSize: '11px', textAlign: 'left' }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: '4px', color: ctp.overlay0, fontSize: '11px', textAlign: 'left' }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
         >
           <span style={{ fontSize: '13px' }}>‹</span>
           <span style={{ color, fontWeight: 600, fontSize: '11px', letterSpacing: '0.04em' }}>{cat.toUpperCase()}</span>
-          <span style={{ color: '#45475a', marginLeft: 'auto', fontSize: '10px' }}>{rawNodes.length}</span>
+          <span style={{ color: ctp.surface1, marginLeft: 'auto', fontSize: '10px' }}>{rawNodes.length}</span>
         </button>
         {groups ? (
           groups.map(group => {
@@ -820,21 +821,21 @@ function CategoryRow({ cat, color, count, onClick }: {
       style={{
         display: 'flex', alignItems: 'center', gap: '8px',
         width: '100%', padding: '7px 10px',
-        background: hovered ? '#252535' : '#1e1e2e',
-        border: '1px solid #313244',
+        background: hovered ? '#252535' : ctp.base,
+        border: `1px solid ${ctp.surface0}`,
         borderLeft: `3px solid ${hovered ? color : 'transparent'}`,
         borderRadius: '6px',
-        color: hovered ? color : '#cdd6f4',
+        color: hovered ? color : ctp.text,
         fontSize: '12px', fontWeight: 500,
         cursor: 'pointer', textAlign: 'left',
         transition: 'background 0.1s, border-color 0.1s, color 0.1s',
       }}
     >
       <span style={{ flex: 1 }}>{cat}</span>
-      <span style={{ fontSize: '10px', color: hovered ? color + '88' : '#45475a', fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ fontSize: '10px', color: hovered ? color + '88' : ctp.surface1, fontVariantNumeric: 'tabular-nums' }}>
         {count}
       </span>
-      <span style={{ fontSize: '9px', color: hovered ? color + '88' : '#45475a', flexShrink: 0 }}>›</span>
+      <span style={{ fontSize: '9px', color: hovered ? color + '88' : ctp.surface1, flexShrink: 0 }}>›</span>
     </button>
   );
 }

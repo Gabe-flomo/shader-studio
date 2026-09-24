@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useBreakpoint, isMobile } from '../hooks/useBreakpoint';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { ctp } from '../theme/palette';
 
 export type Page = 'studio' | 'shortcuts' | 'glsl' | 'fn';
 
@@ -35,10 +36,10 @@ export function TopNav({ page, onPageChange, floating = false, onSaveClick, onLo
         flexShrink: 0,
         background: floating
           ? 'rgba(24, 24, 37, 0.85)'
-          : '#181825',
+          : ctp.mantle,
         backdropFilter: floating ? 'blur(12px)' : undefined,
         WebkitBackdropFilter: floating ? 'blur(12px)' : undefined,
-        borderBottom: '1px solid #313244',
+        borderBottom: `1px solid ${ctp.surface0}`,
         display: 'flex',
         alignItems: mobile ? 'flex-end' : 'center',
         paddingLeft: mobile ? 'max(10px, env(safe-area-inset-left, 0px))' : '12px',
@@ -63,7 +64,7 @@ export function TopNav({ page, onPageChange, floating = false, onSaveClick, onLo
           style={{
             fontSize: '12px',
             fontWeight: 600,
-            color: '#585b70',
+            color: ctp.surface2,
             letterSpacing: '0.08em',
             marginRight: '12px',
             fontFamily: 'monospace',
@@ -78,7 +79,7 @@ export function TopNav({ page, onPageChange, floating = false, onSaveClick, onLo
         <span
           style={{
             fontSize: '13px',
-            color: '#585b70',
+            color: ctp.surface2,
             marginRight: '8px',
             fontFamily: 'monospace',
             fontWeight: 700,
@@ -166,9 +167,9 @@ function TabButton({
       title={title}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        background: active ? '#313244' : 'none',
-        border: active ? '1px solid #45475a' : '1px solid transparent',
-        color: active ? '#cdd6f4' : '#585b70',
+        background: active ? ctp.surface0 : 'none',
+        border: active ? `1px solid ${ctp.surface1}` : '1px solid transparent',
+        color: active ? ctp.text : ctp.surface2,
         borderRadius: '5px',
         padding: '4px 14px',
         fontSize: '12px',
@@ -180,10 +181,10 @@ function TabButton({
         touchAction: 'manipulation',
       }}
       onMouseEnter={e => {
-        if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4';
+        if (!active) (e.currentTarget as HTMLButtonElement).style.color = ctp.text;
       }}
       onMouseLeave={e => {
-        if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#585b70';
+        if (!active) (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2;
       }}
     >
       {label}

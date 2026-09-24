@@ -2,11 +2,12 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
 import { PALETTE_PRESETS } from '../../nodes/definitions/color';
 import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
+import { ctp } from '../../theme/palette';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
 const VIZ_CONTAINER: React.CSSProperties = {
-  borderBottom: '1px solid #313244',
+  borderBottom: `1px solid ${ctp.surface0}`,
   overflow: 'hidden',
 };
 
@@ -63,11 +64,11 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -75,7 +76,7 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
     }
 
     // Identity diagonal
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W * 0.5, 0); ctx.stroke();
@@ -83,7 +84,7 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
 
     // Tone curve — sample input 0→2
     const fn = TONE_FNS[mode] ?? TONE_FNS.aces;
-    ctx.strokeStyle = '#a6e3a1';
+    ctx.strokeStyle = ctp.green;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -95,7 +96,7 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Mode label
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(mode, 4, H - 4);
   }, [mode]);
@@ -189,7 +190,7 @@ export function HueRingViz({ node }: { node: GraphNode }) {
     const cx = W / 2, cy = H / 2;
     const R = Math.min(cx, cy) - 4;
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Draw hue ring (64 segments), dim outside selection
@@ -234,7 +235,7 @@ export function HueRingViz({ node }: { node: GraphNode }) {
     ctx.fill();
   }, [hueCtr, hueW]);
 
-  const boostColor = boost > 1.05 ? '#a6e3a1' : boost < 0.95 ? '#f38ba8' : '#6c7086';
+  const boostColor = boost > 1.05 ? ctp.green : boost < 0.95 ? ctp.red : ctp.overlay0;
   const centerDeg  = Math.round(hueCtr * 360);
   const widthDeg   = Math.round(hueW   * 360);
 
@@ -247,12 +248,12 @@ export function HueRingViz({ node }: { node: GraphNode }) {
         style={{ flexShrink: 0, width: '64px', height: '64px' }}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-        <div style={{ fontSize: '9px', color: '#6c7086', fontFamily: 'monospace' }}>
+        <div style={{ fontSize: '9px', color: ctp.overlay0, fontFamily: 'monospace' }}>
           {centerDeg}° ± {widthDeg}°
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ fontSize: '9px', color: '#6c7086', width: '28px' }}>boost</span>
-          <div style={{ flex: 1, height: '5px', background: '#1e1e2e', borderRadius: '3px', position: 'relative' }}>
+          <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px' }}>boost</span>
+          <div style={{ flex: 1, height: '5px', background: ctp.base, borderRadius: '3px', position: 'relative' }}>
             {/* Bar from center: right = boost >1, left = boost <1 */}
             <div style={{
               position: 'absolute',
@@ -262,7 +263,7 @@ export function HueRingViz({ node }: { node: GraphNode }) {
               background: boostColor,
               borderRadius: '3px',
             }} />
-            <div style={{ position: 'absolute', left: '50%', top: 0, width: 1, height: '100%', background: '#45475a' }} />
+            <div style={{ position: 'absolute', left: '50%', top: 0, width: 1, height: '100%', background: ctp.surface1 }} />
           </div>
           <span style={{ fontSize: '9px', color: boostColor, width: '32px', textAlign: 'right', fontFamily: 'monospace' }}>
             ×{boost.toFixed(2)}
@@ -285,25 +286,25 @@ export function StepCurveViz({ node }: { node: GraphNode }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     }
 
     // Identity diagonal reference
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 2]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Staircase
-    ctx.strokeStyle = '#f9e2af';
+    ctx.strokeStyle = ctp.yellow;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -314,7 +315,7 @@ export function StepCurveViz({ node }: { node: GraphNode }) {
     }
     ctx.stroke();
 
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(`${levels} levels`, 4, H - 4);
   }, [levels]);
@@ -367,12 +368,12 @@ export function NoisePatchViz({ node }: { node: GraphNode }) {
     // Bottom bar — left: amount, right: scale readout
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, H - 12, W, 12);
-    ctx.fillStyle = '#a6e3a1';
+    ctx.fillStyle = ctp.green;
     ctx.fillRect(0, H - 12, Math.round(Math.min(1, amount / 0.5) * (W * 0.6)), 12);
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '8px monospace';
     ctx.fillText(`amt ${amount.toFixed(3)}`, 3, H - 2);
-    ctx.fillStyle = '#89b4fa';
+    ctx.fillStyle = ctp.blue;
     ctx.fillText(`×${scale.toFixed(2)}`, W - 36, H - 2);
   }, [amount, scale, mode]);
 
@@ -394,15 +395,15 @@ export function DesaturateBarViz({ node }: { node: GraphNode }) {
   const amount = typeof node.params.amount === 'number' ? node.params.amount : 1.0;
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>desat</span>
-      <div style={{ flex: 1, height: '6px', background: '#11111b', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, #89b4fa, #6c7086)', borderRadius: '3px' }} />
+      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px', flexShrink: 0 }}>desat</span>
+      <div style={{ flex: 1, height: '6px', background: ctp.crust, borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to right, ${ctp.blue}, ${ctp.overlay0})`, borderRadius: '3px' }} />
         <div style={{
           position: 'absolute', top: 0, left: `${amount * 100}%`, right: 0,
-          height: '100%', background: '#11111b', borderRadius: '0 3px 3px 0',
+          height: '100%', background: ctp.crust, borderRadius: '0 3px 3px 0',
         }} />
       </div>
-      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', textAlign: 'right' }}>
+      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px', textAlign: 'right' }}>
         {Math.round(amount * 100)}%
       </span>
     </div>
@@ -433,7 +434,7 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
       Math.round(((Math.log10(Math.max(20, Math.min(20000, hz))) - logMin) / (logMax - logMin)) * W);
 
     // Background gradient
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
     const grad = ctx.createLinearGradient(0, 0, W, 0);
     grad.addColorStop(0.0,  '#1a2a3a');
@@ -452,7 +453,7 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
       ctx.strokeRect(0, 0, W, H);
     } else {
       // Draw each band
-      const BAND_COLORS = ['#89dceb', '#a6e3a1', '#fab387', '#f38ba8', '#cba6f7', '#f9e2af'];
+      const BAND_COLORS = [ctp.sky, ctp.green, ctp.peach, ctp.red, ctp.mauve, ctp.yellow];
       for (let i = 0; i < bands.length; i++) {
         const center = bands[i];
         const lo = Math.max(20, center - freqRange);
@@ -485,7 +486,7 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
     }
 
     // Axis labels
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     const ticks: [number, string][] = [[100, '100'], [1000, '1k'], [5000, '5k'], [10000, '10k']];
     for (const [hz, lbl] of ticks) {
@@ -886,7 +887,7 @@ export function ColorRampViz({ node }: { node: GraphNode }) {
     const W = canvas.width, H = canvas.height;
 
     if (stops.length === 0) {
-      ctx.fillStyle = '#11111b';
+      ctx.fillStyle = ctp.crust;
       ctx.fillRect(0, 0, W, H);
       return;
     }
@@ -991,11 +992,11 @@ export function BrightnessContrastViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -1003,14 +1004,14 @@ export function BrightnessContrastViz({ node }: { node: GraphNode }) {
     }
 
     // Identity diagonal (dashed, dim)
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Actual curve: y = (x - 0.5) * contrast + 0.5 + brightness, clamped [0,1]
-    ctx.strokeStyle = '#fab387';
+    ctx.strokeStyle = ctp.peach;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -1048,7 +1049,7 @@ export function GridViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     const cells = Math.max(1, Math.min(Math.round(scale), 12));
@@ -1069,7 +1070,7 @@ export function GridViz({ node }: { node: GraphNode }) {
     }
 
     // Grid lines
-    ctx.strokeStyle = '#585b70';
+    ctx.strokeStyle = ctp.surface2;
     ctx.lineWidth = lw;
     for (let i = 0; i <= cells; i++) {
       const x = i * cellW;
@@ -1105,10 +1106,10 @@ export function WaveTextureViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = '#89b4fa';
+    ctx.strokeStyle = ctp.blue;
     ctx.lineWidth = 1.5;
 
     if (mode === 'rings') {
@@ -1162,9 +1163,9 @@ export function WaveTextureViz({ node }: { node: GraphNode }) {
 
 // Shared helper: draw a minimal curve plot
 function drawCurveGrid(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  ctx.fillStyle = '#11111b';
+  ctx.fillStyle = ctp.crust;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#1e1e2e';
+  ctx.strokeStyle = ctp.base;
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -1187,7 +1188,7 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
     drawCurveGrid(ctx, W, H);
 
     // Identity line
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.setLineDash([2, 3]);
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
@@ -1195,7 +1196,7 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
 
     // Smoothstep curve (X range: -0.1 to 1.1)
     const xLo = -0.1, xHi = 1.1;
-    ctx.strokeStyle = '#89b4fa';
+    ctx.strokeStyle = ctp.blue;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1209,7 +1210,7 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
 
     // Edge markers
     const toScreenX = (v: number) => ((v - xLo) / (xHi - xLo)) * W;
-    ctx.strokeStyle = '#585b70';
+    ctx.strokeStyle = ctp.surface2;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 2]);
     [edge0, edge1].forEach(e => {
@@ -1221,7 +1222,7 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
     ctx.setLineDash([]);
 
     // Labels
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText(`e0=${edge0.toFixed(2)}`, 3, H - 3);
     ctx.fillText(`e1=${edge1.toFixed(2)}`, W - 60, 9);
@@ -1257,14 +1258,14 @@ export function ClampViz({ node }: { node: GraphNode }) {
     const toY = (v: number) => H - ((v - yLo) / range) * H;
 
     // Identity diagonal (behind)
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.setLineDash([2, 3]);
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(toX(xLo), toY(xLo)); ctx.lineTo(toX(xHi), toY(xHi)); ctx.stroke();
     ctx.setLineDash([]);
 
     // Clamp curve: flat at lo, ramp, flat at hi
-    ctx.strokeStyle = '#a6e3a1';
+    ctx.strokeStyle = ctp.green;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1276,7 +1277,7 @@ export function ClampViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Min/max tick lines
-    ctx.strokeStyle = '#585b70';
+    ctx.strokeStyle = ctp.surface2;
     ctx.setLineDash([2, 2]);
     ctx.lineWidth = 1;
     const loX = toX(lo), hiX = toX(hi);
@@ -1284,7 +1285,7 @@ export function ClampViz({ node }: { node: GraphNode }) {
     if (hiX >= 0 && hiX <= W) { ctx.beginPath(); ctx.moveTo(hiX, 0); ctx.lineTo(hiX, H); ctx.stroke(); }
     ctx.setLineDash([]);
 
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText(`min=${lo.toFixed(2)}`, 3, H - 3);
     ctx.fillText(`max=${hi.toFixed(2)}`, W - 56, 9);
@@ -1309,19 +1310,19 @@ export function MixViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Gradient bar: dark (A) to bright (B)
     const grad = ctx.createLinearGradient(0, 0, W, 0);
-    grad.addColorStop(0, '#313244');
-    grad.addColorStop(1, '#cdd6f4');
+    grad.addColorStop(0, ctp.surface0);
+    grad.addColorStop(1, ctp.text);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 4, W, H - 12);
 
     // Tick line at t
     const tx = t * W;
-    ctx.strokeStyle = '#f9e2af';
+    ctx.strokeStyle = ctp.yellow;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, H); ctx.stroke();
 
@@ -1329,16 +1330,16 @@ export function MixViz({ node }: { node: GraphNode }) {
     const outV = Math.round(t * 255);
     ctx.fillStyle = `rgb(${outV},${outV},${outV})`;
     ctx.beginPath(); ctx.arc(tx, H / 2, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#f9e2af';
+    ctx.strokeStyle = ctp.yellow;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
     // Labels
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText('A', 4, H - 2);
     ctx.fillText('B', W - 11, H - 2);
-    ctx.fillStyle = '#f9e2af';
+    ctx.fillStyle = ctp.yellow;
     ctx.fillText(`t=${t.toFixed(2)}`, tx > W * 0.7 ? tx - 38 : tx + 4, 9);
   }, [t]);
 
@@ -1361,34 +1362,34 @@ export function MixVec3Viz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Gradient bar using default A=black(0,0,0), B=white(1,1,1) as placeholders
     const grad = ctx.createLinearGradient(0, 0, W, 0);
-    grad.addColorStop(0, '#313244');
-    grad.addColorStop(1, '#cdd6f4');
+    grad.addColorStop(0, ctp.surface0);
+    grad.addColorStop(1, ctp.text);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 4, W, H - 12);
 
     // Tick at fac
     const fx = fac * W;
-    ctx.strokeStyle = '#cba6f7';
+    ctx.strokeStyle = ctp.mauve;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, H); ctx.stroke();
 
     const outV = Math.round(fac * 255);
     ctx.fillStyle = `rgb(${outV},${outV},${outV})`;
     ctx.beginPath(); ctx.arc(fx, H / 2, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#cba6f7';
+    ctx.strokeStyle = ctp.mauve;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText('A', 4, H - 2);
     ctx.fillText('B', W - 11, H - 2);
-    ctx.fillStyle = '#cba6f7';
+    ctx.fillStyle = ctp.mauve;
     ctx.fillText(`fac=${fac.toFixed(2)}`, fx > W * 0.7 ? fx - 44 : fx + 4, 9);
   }, [fac]);
 
@@ -1429,7 +1430,7 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
     const toY = (v: number) => H - ((v - yLo) / ySpan) * H;
 
     // Curve
-    ctx.strokeStyle = smooth ? '#cba6f7' : '#f9e2af';
+    ctx.strokeStyle = smooth ? ctp.mauve : ctp.yellow;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1443,7 +1444,7 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // In range markers
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.setLineDash([2, 2]);
     ctx.lineWidth = 1;
     const toX = (v: number) => ((v - xLo) / (xHi - xLo)) * W;
@@ -1453,7 +1454,7 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
     });
     ctx.setLineDash([]);
 
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText(`[${inMin.toFixed(1)},${inMax.toFixed(1)}]→[${outMin.toFixed(1)},${outMax.toFixed(1)}]`, 3, H - 3);
   }, [inMin, inMax, outMin, outMax, smooth]);
@@ -1474,20 +1475,20 @@ export function ScaleColorViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <span style={{ fontSize: '9px', color: '#6c7086', width: '30px', flexShrink: 0, fontFamily: 'monospace' }}>scale</span>
-      <div style={{ flex: 1, height: '8px', background: `linear-gradient(to right, #11111b, hsl(225,40%,${brightness}%))`, borderRadius: '4px', position: 'relative', overflow: 'visible' }}>
+      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '30px', flexShrink: 0, fontFamily: 'monospace' }}>scale</span>
+      <div style={{ flex: 1, height: '8px', background: `linear-gradient(to right, ${ctp.crust}, hsl(225,40%,${brightness}%))`, borderRadius: '4px', position: 'relative', overflow: 'visible' }}>
         <div style={{
           position: 'absolute',
           top: '-3px',
           left: `${Math.min(100, norm * 100)}%`,
           width: '2px',
           height: '14px',
-          background: '#f9e2af',
+          background: ctp.yellow,
           borderRadius: '1px',
           transform: 'translateX(-50%)',
         }} />
       </div>
-      <span style={{ fontSize: '9px', color: '#f9e2af', width: '36px', textAlign: 'right', fontFamily: 'monospace', flexShrink: 0 }}>
+      <span style={{ fontSize: '9px', color: ctp.yellow, width: '36px', textAlign: 'right', fontFamily: 'monospace', flexShrink: 0 }}>
         ×{scale.toFixed(2)}
       </span>
     </div>
@@ -1530,19 +1531,19 @@ export function AddColorsViz({ node }: { node: GraphNode }) {
   }, []);
 
   const scale = typeof node.params.scale === 'number' ? node.params.scale : null;
-  const sw: React.CSSProperties = { width: 22, height: 22, borderRadius: 3, border: '1px solid #45475a', flexShrink: 0, background: '#111' };
+  const sw: React.CSSProperties = { width: 22, height: 22, borderRadius: 3, border: `1px solid ${ctp.surface1}`, flexShrink: 0, background: '#111' };
 
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'monospace' }}>
       <div ref={aRef} style={sw} />
-      <span style={{ fontSize: '9px', color: '#585b70' }}>A</span>
-      <span style={{ fontSize: '12px', color: '#6c7086' }}>+</span>
+      <span style={{ fontSize: '9px', color: ctp.surface2 }}>A</span>
+      <span style={{ fontSize: '12px', color: ctp.overlay0 }}>+</span>
       <div ref={bRef} style={sw} />
-      <span style={{ fontSize: '9px', color: '#585b70' }}>B</span>
-      {scale !== null && <span style={{ fontSize: '9px', color: '#f9e2af' }}>×{scale.toFixed(2)}</span>}
-      <span style={{ fontSize: '12px', color: '#6c7086' }}>=</span>
+      <span style={{ fontSize: '9px', color: ctp.surface2 }}>B</span>
+      {scale !== null && <span style={{ fontSize: '9px', color: ctp.yellow }}>×{scale.toFixed(2)}</span>}
+      <span style={{ fontSize: '12px', color: ctp.overlay0 }}>=</span>
       <div ref={rRef} style={sw} />
-      <span ref={rLabelRef} style={{ fontSize: '9px', color: '#6c7086', marginLeft: 2 }} />
+      <span ref={rLabelRef} style={{ fontSize: '9px', color: ctp.overlay0, marginLeft: 2 }} />
     </div>
   );
 }
@@ -1605,22 +1606,22 @@ export function ParticleEmitterViz({ node }: { node: GraphNode }) {
     <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
       <svg width={48} height={48} style={{ flexShrink: 0, overflow: 'visible' }}>
         {flowMode === 'linear' && (
-          <circle cx={cx} cy={cy} r={3} fill="#cba6f7" opacity={0.9} />
+          <circle cx={cx} cy={cy} r={3} fill={ctp.mauve} opacity={0.9} />
         )}
         {dots.map((d, i) => (
           <circle
             key={i}
             cx={d.x} cy={d.y} r={d.size / 2}
-            fill="#cba6f7"
+            fill={ctp.mauve}
             opacity={d.alpha}
           />
         ))}
       </svg>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <span style={{ fontSize: '12px', color: '#cba6f7', fontFamily: 'monospace', fontWeight: 600 }}>
+        <span style={{ fontSize: '12px', color: ctp.mauve, fontFamily: 'monospace', fontWeight: 600 }}>
           ~{rate} / sec
         </span>
-        <span style={{ fontSize: '9px', color: '#6c7086', lineHeight: 1.3 }}>
+        <span style={{ fontSize: '9px', color: ctp.overlay0, lineHeight: 1.3 }}>
           {modeLabel}
         </span>
       </div>
@@ -1749,10 +1750,10 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     if (n.type === 'quadBezierShaper') {
       const ax = typeof n.params.a === 'number' ? n.params.a : 0.5;
       const ay = typeof n.params.b === 'number' ? n.params.b : 0.5;
-      ctx.strokeStyle = '#f38ba840';
+      ctx.strokeStyle = `${ctp.red}40`;
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.lineTo(W, 0); ctx.stroke();
-      ctx.fillStyle = '#f38ba8';
+      ctx.fillStyle = ctp.red;
       ctx.beginPath(); ctx.arc(ax*W, H - ay*H, 3, 0, Math.PI*2); ctx.fill();
     }
     if (n.type === 'cubicBezierShaper') {
@@ -1760,11 +1761,11 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
       const ay = typeof n.params.b === 'number' ? n.params.b : 0.1;
       const bx = typeof n.params.c === 'number' ? n.params.c : 0.25;
       const by = typeof n.params.d === 'number' ? n.params.d : 1.0;
-      ctx.strokeStyle = '#f38ba840';
+      ctx.strokeStyle = `${ctp.red}40`;
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(W, 0); ctx.lineTo(bx*W, H - by*H); ctx.stroke();
-      ctx.fillStyle = '#f38ba8';
+      ctx.fillStyle = ctp.red;
       [[ax, ay], [bx, by]].forEach(([px, py]) => {
         ctx.beginPath(); ctx.arc(px*W, H - py*H, 3, 0, Math.PI*2); ctx.fill();
       });
@@ -1776,7 +1777,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     // Map pixel x → domain value and domain y → canvas y
     const xFromPx = (px: number) => isBipolar ? (px / W) * 2 - 1 : px / W;
     const yToPy   = (y: number)  => isBipolar ? H / 2 - y * (H / 2) : H - y * H;
-    ctx.strokeStyle = '#89b4fa';
+    ctx.strokeStyle = ctp.blue;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1807,7 +1808,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
       }
       // Dot
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#11111b';
+      ctx.strokeStyle = ctp.crust;
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(dotPx, dotPy, 4, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
@@ -1860,7 +1861,7 @@ const TYPE_COLORS: Record<DataType, string> = {
   mat3:        '#e8a020',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
-  particle:    '#f9e2af',
+  particle:    ctp.yellow,
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {
@@ -1874,7 +1875,7 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     const nodes       = subgraph.nodes       ?? [];
@@ -1885,7 +1886,7 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 
     const getNodeColor = (n: GraphNode): string => {
       const firstOutput = Object.values(n.outputs)[0];
-      return firstOutput ? (TYPE_COLORS[firstOutput.type as DataType] ?? '#6c7086') : '#6c7086';
+      return firstOutput ? (TYPE_COLORS[firstOutput.type as DataType] ?? ctp.overlay0) : ctp.overlay0;
     };
 
     // Build edges from input connections
@@ -1947,13 +1948,13 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
     // Group input → internal node edges
     for (const ip of inputPosArr) {
       const target = positions.get(ip.p.toNodeId);
-      if (target) drawEdge(ip.x, ip.y, target.x, target.y, (TYPE_COLORS[ip.p.type] ?? '#45475a') + '66');
+      if (target) drawEdge(ip.x, ip.y, target.x, target.y, (TYPE_COLORS[ip.p.type] ?? ctp.surface1) + '66');
     }
 
     // Internal node → group output edges
     for (const op of outputPosArr) {
       const source = positions.get(op.p.fromNodeId);
-      if (source) drawEdge(source.x, source.y, op.x, op.y, (TYPE_COLORS[op.p.type] ?? '#45475a') + '66');
+      if (source) drawEdge(source.x, source.y, op.x, op.y, (TYPE_COLORS[op.p.type] ?? ctp.surface1) + '66');
     }
 
     // Internal node dots — circles for regular nodes, diamonds for nested groups
@@ -1986,7 +1987,7 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 
     // Group input triangles (pointing right)
     for (const ip of inputPosArr) {
-      const color = TYPE_COLORS[ip.p.type as DataType] ?? '#6c7086';
+      const color = TYPE_COLORS[ip.p.type as DataType] ?? ctp.overlay0;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.moveTo(ip.x - 4, ip.y - 3); ctx.lineTo(ip.x + 3, ip.y); ctx.lineTo(ip.x - 4, ip.y + 3);
@@ -1995,13 +1996,13 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 
     // Group output squares
     for (const op of outputPosArr) {
-      const color = TYPE_COLORS[op.p.type as DataType] ?? '#6c7086';
+      const color = TYPE_COLORS[op.p.type as DataType] ?? ctp.overlay0;
       ctx.fillStyle = color;
       ctx.fillRect(op.x - 3, op.y - 3, 6, 6);
     }
 
     // Node count label
-    ctx.fillStyle = '#45475a';
+    ctx.fillStyle = ctp.surface1;
     ctx.font = '8px monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`${nodes.length}n`, W - 3, H - 3);
@@ -2048,8 +2049,8 @@ export function SDF3DParamViz({ node }: { node: GraphNode }) {
     }}>
       {entries.map(([k, v]) => (
         <div key={k} style={{ display: 'flex', gap: '4px', alignItems: 'baseline', minWidth: 0 }}>
-          <span style={{ fontSize: '8px', color: '#6c7086', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{k}</span>
-          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtVal(v)}</span>
+          <span style={{ fontSize: '8px', color: ctp.overlay0, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{k}</span>
+          <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtVal(v)}</span>
         </div>
       ))}
     </div>
@@ -2078,17 +2079,17 @@ const SCALAR_FNS: Record<string, ScalarFn> = {
 };
 
 const SCALAR_COLORS: Record<string, string> = {
-  exp: '#fab387', pow: '#f9e2af', sqrt: '#a6e3a1',
-  ceil: '#89dceb', floor: '#89b4fa', negate: '#f38ba8',
-  sign: '#cba6f7', fractRaw: '#f9e2af', mod: '#f9e2af',
-  abs: '#a6e3a1',
-  tanh: '#cba6f7', round: '#89dceb', step: '#f9e2af', atan2: '#a6e3a1',
+  exp: ctp.peach, pow: ctp.yellow, sqrt: ctp.green,
+  ceil: ctp.sky, floor: ctp.blue, negate: ctp.red,
+  sign: ctp.mauve, fractRaw: ctp.yellow, mod: ctp.yellow,
+  abs: ctp.green,
+  tanh: ctp.mauve, round: ctp.sky, step: ctp.yellow, atan2: ctp.green,
 };
 
 export function ScalarFnViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fn = SCALAR_FNS[node.type];
-  const color = SCALAR_COLORS[node.type] ?? '#cdd6f4';
+  const color = SCALAR_COLORS[node.type] ?? ctp.text;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -2097,18 +2098,18 @@ export function ScalarFnViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
     }
     // Axes
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
@@ -2138,7 +2139,7 @@ export function ScalarFnViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Label
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(node.type, 4, H - 4);
   }, [fn, color, node.type, node.params]);
@@ -2157,7 +2158,7 @@ const OP_SYMBOLS: Record<string, string> = {
   add: '+', subtract: '−', multiply: '×', divide: '÷',
 };
 const OP_COLORS: Record<string, string> = {
-  add: '#a6e3a1', subtract: '#f38ba8', multiply: '#89b4fa', divide: '#f9e2af',
+  add: ctp.green, subtract: ctp.red, multiply: ctp.blue, divide: ctp.yellow,
 };
 
 export function ArithmeticOpViz({ node }: { node: GraphNode }) {
@@ -2174,11 +2175,11 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
     const W = canvas.width, H = canvas.height;
     const n = nodeRef.current;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     const op    = OP_SYMBOLS[n.type] ?? '?';
-    const color = OP_COLORS[n.type]  ?? '#cdd6f4';
+    const color = OP_COLORS[n.type]  ?? ctp.text;
 
     const fmt = (v: number) => {
       const s = (Math.round(v * 1000) / 1000).toString();
@@ -2199,10 +2200,10 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
 
     // A
     if (aVal !== null) {
-      ctx.font = '12px monospace'; ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'left';
+      ctx.font = '12px monospace'; ctx.fillStyle = ctp.text; ctx.textAlign = 'left';
       const s = fmt(aVal); ctx.fillText(s, x, cy); x += ctx.measureText(s).width + 8;
     } else {
-      ctx.font = '11px monospace'; ctx.fillStyle = '#585b70'; ctx.textAlign = 'left';
+      ctx.font = '11px monospace'; ctx.fillStyle = ctp.surface2; ctx.textAlign = 'left';
       ctx.fillText('a', x, cy); x += 16;
     }
 
@@ -2212,15 +2213,15 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
 
     // B
     if (bVal !== null) {
-      ctx.font = '12px monospace'; ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'left';
+      ctx.font = '12px monospace'; ctx.fillStyle = ctp.text; ctx.textAlign = 'left';
       ctx.fillText(fmt(bVal), x, cy);
     } else {
-      ctx.font = '11px monospace'; ctx.fillStyle = '#585b70'; ctx.textAlign = 'left';
+      ctx.font = '11px monospace'; ctx.fillStyle = ctp.surface2; ctx.textAlign = 'left';
       ctx.fillText('b', x, cy);
     }
 
     // Result label
-    ctx.font = '9px monospace'; ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
+    ctx.font = '9px monospace'; ctx.fillStyle = ctp.surface1; ctx.textAlign = 'right';
     ctx.fillText('→ result', W - 8, cy);
   }, []);
 
@@ -2241,15 +2242,15 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
 // ─── Viz — Vec2 arrow on grid (length, angleToVec2, vec2Angle) ────────────────
 
 function drawGrid2D(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  ctx.fillStyle = '#11111b';
+  ctx.fillStyle = ctp.crust;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#1e1e2e';
+  ctx.strokeStyle = ctp.base;
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
   }
-  ctx.strokeStyle = '#313244';
+  ctx.strokeStyle = ctp.surface0;
   ctx.setLineDash([2, 2]);
   ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
@@ -2286,14 +2287,14 @@ export function LengthViz({ node }: { node: GraphNode }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
 
     const cx = W / 2, cy = H / 2;
     const mg = 20;
     const axisW = W - mg * 2;
 
     // Axis line
-    ctx.strokeStyle = '#313244'; ctx.lineWidth = 1;
+    ctx.strokeStyle = ctp.surface0; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(mg, cy); ctx.lineTo(W - mg, cy); ctx.stroke();
     // Centre tick
     ctx.beginPath(); ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4); ctx.stroke();
@@ -2309,12 +2310,12 @@ export function LengthViz({ node }: { node: GraphNode }) {
     const barX = Math.min(cx, toX(v));
     const barW = Math.abs(toX(v) - cx);
     const isNeg = v < 0;
-    ctx.fillStyle = isNeg ? '#f38ba844' : '#00ffaa44';
+    ctx.fillStyle = isNeg ? `${ctp.red}44` : '#00ffaa44';
     ctx.fillRect(barX, cy - 6, barW, 12);
 
     // Arrow pointing right (+) or left (-)
     const tipX = toX(v);
-    ctx.strokeStyle = isNeg ? '#f38ba8' : '#00ffaa'; ctx.lineWidth = 2;
+    ctx.strokeStyle = isNeg ? ctp.red : '#00ffaa'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tipX, cy); ctx.stroke();
     // arrowhead
     const dir = isNeg ? -1 : 1;
@@ -2322,17 +2323,17 @@ export function LengthViz({ node }: { node: GraphNode }) {
     ctx.moveTo(tipX, cy);
     ctx.lineTo(tipX - dir * 6, cy - 4);
     ctx.lineTo(tipX - dir * 6, cy + 4);
-    ctx.closePath(); ctx.fillStyle = isNeg ? '#f38ba8' : '#00ffaa'; ctx.fill();
+    ctx.closePath(); ctx.fillStyle = isNeg ? ctp.red : '#00ffaa'; ctx.fill();
 
     // Scale labels
-    ctx.fillStyle = '#45475a'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = ctp.surface1; ctx.font = '8px monospace'; ctx.textAlign = 'center';
     ctx.fillText(`-${range}`, mg, cy - 7);
     ctx.fillText(`${range}`, W - mg, cy - 7);
     ctx.fillText('0', cx, cy - 7);
 
     // Value
     ctx.font = '10px monospace';
-    ctx.fillStyle = val !== undefined ? (isNeg ? '#f38ba8' : '#00ffaa') : '#6c7086';
+    ctx.fillStyle = val !== undefined ? (isNeg ? ctp.red : '#00ffaa') : ctp.overlay0;
     ctx.textAlign = 'left';
     ctx.fillText(val !== undefined ? `|v| = ${val.toFixed(3)}` : '|v|', 4, H - 4);
     ctx.textAlign = 'left';
@@ -2387,7 +2388,7 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
     const toSX = (v: number) => cx + (v / scale) * axisR;
     const toSY = (v: number) => cy - (v / scale) * axisR;
 
-    ctx.fillStyle = '#45475a'; ctx.font = '8px monospace';
+    ctx.fillStyle = ctp.surface1; ctx.font = '8px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(`${scale}`, toSX(scale), cy - 3);
     ctx.fillText(`-${scale}`, toSX(-scale), cy - 3);
@@ -2396,7 +2397,7 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
     ctx.fillText(`-${scale}`, cx + 2, toSY(-scale));
 
     const px = toSX(x), py = toSY(y);
-    ctx.strokeStyle = '#313244'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+    ctx.strokeStyle = ctp.surface0; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px, cy); ctx.lineTo(px, py); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx, py); ctx.lineTo(px, py); ctx.stroke();
     ctx.setLineDash([]);
@@ -2405,7 +2406,7 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
     ctx.fillStyle = '#00aaff';
     ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
 
-    ctx.fillStyle = '#6c7086'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = ctp.overlay0; ctx.font = '9px monospace'; ctx.textAlign = 'left';
     ctx.fillText(`(${x.toFixed(2)}, ${y.toFixed(2)})`, 4, H - 4);
   }, []);
 
@@ -2454,7 +2455,7 @@ export function AngleToVec2Viz({ node }: { node: GraphNode }) {
     const r = Math.min(cx, cy) * 0.75;
 
     // Draw the angle arc
-    ctx.strokeStyle = '#f9e2af44';
+    ctx.strokeStyle = `${ctp.yellow}44`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.35, 0, -angle, angle < 0); ctx.stroke();
 
@@ -2464,10 +2465,10 @@ export function AngleToVec2Viz({ node }: { node: GraphNode }) {
 
     // Angle label
     const deg = ((angle * 180 / Math.PI) % 360 + 360) % 360;
-    ctx.fillStyle = '#f9e2af';
+    ctx.fillStyle = ctp.yellow;
     ctx.font = '9px monospace';
     ctx.fillText(`${deg.toFixed(0)}°`, 4, H - 4);
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.textAlign = 'right';
     ctx.fillText(`(${vx.toFixed(2)}, ${vy.toFixed(2)})`, W - 4, H - 4);
     ctx.textAlign = 'left';
@@ -2500,7 +2501,7 @@ export function Vec2AngleViz({ node: _node }: { node: GraphNode }) {
     drawArrow(ctx, cx, cy, vx, vy, '#00aaff', r);
 
     // Angle arc
-    ctx.strokeStyle = '#f9e2af88';
+    ctx.strokeStyle = `${ctp.yellow}88`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.35, 0, -angle, false); ctx.stroke();
 
@@ -2508,7 +2509,7 @@ export function Vec2AngleViz({ node: _node }: { node: GraphNode }) {
     ctx.fillStyle = '#00aaff';
     ctx.font = '9px monospace';
     ctx.fillText('v →', 4, H - 4);
-    ctx.fillStyle = '#f9e2af';
+    ctx.fillStyle = ctp.yellow;
     ctx.textAlign = 'right';
     ctx.fillText('atan2(y,x)', W - 4, H - 4);
     ctx.textAlign = 'left';
@@ -2529,7 +2530,7 @@ export function SplitVecViz({ node }: { node: GraphNode }) {
   const is3 = node.type === 'splitVec3';
   const is4 = node.type === 'splitVec4';
   const comps = is4 ? ['x','y','z','w'] : is3 ? ['x','y','z'] : ['x','y'];
-  const colors: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
+  const colors: Record<string, string> = { x: ctp.red, y: ctp.green, z: ctp.blue, w: ctp.mauve };
   const nodeRef = useRef(node);
   nodeRef.current = node;
   const rafRef  = useRef(0);
@@ -2556,7 +2557,7 @@ export function SplitVecViz({ node }: { node: GraphNode }) {
       {comps.map((c, i) => (
         <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '1px 0' }}>
           <span style={{ fontSize: '10px', color: colors[c], width: '10px' }}>{c}</span>
-          <span ref={el => { rowRefs.current[i] = el; }} style={{ fontSize: '11px', color: '#cdd6f4' }}>—</span>
+          <span ref={el => { rowRefs.current[i] = el; }} style={{ fontSize: '11px', color: ctp.text }}>—</span>
         </div>
       ))}
     </div>
@@ -2594,9 +2595,9 @@ export function ExtractComponentViz({ node }: { node: GraphNode }) {
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '5px 12px', fontFamily: 'monospace' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ fontSize: '10px', color: isX ? '#f38ba8' : '#a6e3a1' }}>{isX ? 'x' : 'y'}</span>
-        <span ref={valRef} style={{ fontSize: '12px', color: '#cdd6f4', fontWeight: 500 }}>—</span>
-        <span ref={inputRef} style={{ fontSize: '9px', color: '#45475a', marginLeft: 'auto' }}></span>
+        <span style={{ fontSize: '10px', color: isX ? ctp.red : ctp.green }}>{isX ? 'x' : 'y'}</span>
+        <span ref={valRef} style={{ fontSize: '12px', color: ctp.text, fontWeight: 500 }}>—</span>
+        <span ref={inputRef} style={{ fontSize: '9px', color: ctp.surface1, marginLeft: 'auto' }}></span>
       </div>
     </div>
   );
@@ -2630,10 +2631,10 @@ const COMBINER_FNS: Record<string, CombinerFn> = {
 };
 
 const COMBINER_COLORS: Record<string, string> = {
-  smoothMin: '#a6e3a1', smoothMax: '#f38ba8', smoothSubtract: '#89b4fa',
-  sdfSmoothUnion: '#a6e3a1', sdfSmoothSubtract: '#89b4fa', sdfSmoothIntersect: '#f38ba8',
-  min: '#a6e3a1', minMath: '#a6e3a1', max: '#f38ba8',
-  sdfMax: '#f38ba8', sdfSubtract: '#89b4fa', sdfUnion: '#a6e3a1', sdfIntersect: '#f38ba8',
+  smoothMin: ctp.green, smoothMax: ctp.red, smoothSubtract: ctp.blue,
+  sdfSmoothUnion: ctp.green, sdfSmoothSubtract: ctp.blue, sdfSmoothIntersect: ctp.red,
+  min: ctp.green, minMath: ctp.green, max: ctp.red,
+  sdfMax: ctp.red, sdfSubtract: ctp.blue, sdfUnion: ctp.green, sdfIntersect: ctp.red,
 };
 
 const SMOOTH_COMBINER_TYPES = new Set([
@@ -2654,7 +2655,7 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
     const fn = COMBINER_FNS[node.type];
     if (!fn) return;
 
-    const color = COMBINER_COLORS[node.type] ?? '#cdd6f4';
+    const color = COMBINER_COLORS[node.type] ?? ctp.text;
     const isSmooth = SMOOTH_COMBINER_TYPES.has(node.type);
 
     // Fixed B value — for subtract variants, offset so the cutoff is visible
@@ -2682,11 +2683,11 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
     const cb = parseInt(hex.slice(4, 6), 16);
 
     // Background
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Subtle axis grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, toY(0)); ctx.lineTo(W, toY(0)); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(toX(0), 0); ctx.lineTo(toX(0), H); ctx.stroke();
@@ -2759,7 +2760,7 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
 
     // Corner labels
     ctx.font = '9px monospace';
-    ctx.fillStyle = '#45475a';
+    ctx.fillStyle = ctp.surface1;
     ctx.textAlign = 'left';
     ctx.fillText('A', 3, toY(RANGE * 0.78) - 2);
     ctx.fillText('B', 3, toY(fixedB) - 3);
@@ -2804,7 +2805,7 @@ export function NormalizeVec2Viz({ node }: { node: GraphNode }) {
     const pixPerUnit = r / scale;
 
     // Input arrow (dim)
-    ctx.strokeStyle = '#45475a'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = ctp.surface1; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + vx * pixPerUnit, cy - vy * pixPerUnit); ctx.stroke();
 
     // Normalized arrow (bright)
@@ -2812,7 +2813,7 @@ export function NormalizeVec2Viz({ node }: { node: GraphNode }) {
       drawArrow(ctx, cx, cy, vx / len, vy / len, '#00aaff', r);
     }
 
-    ctx.fillStyle = '#6c7086'; ctx.font = '9px monospace';
+    ctx.fillStyle = ctp.overlay0; ctx.font = '9px monospace';
     ctx.textAlign = 'left';
     ctx.fillText(`|v|=${len.toFixed(2)} → unit`, 4, H - 4);
   }, []);
@@ -2864,10 +2865,10 @@ export function DotProductViz({ node }: { node: GraphNode }) {
 
     ctx.font = '11px monospace'; ctx.textBaseline = 'middle';
     if (dotVal !== undefined) {
-      ctx.fillStyle = '#f9e2af'; ctx.textAlign = 'right';
+      ctx.fillStyle = ctp.yellow; ctx.textAlign = 'right';
       ctx.fillText(`A·B = ${dotVal.toFixed(3)}`, W - 6, 12);
     } else {
-      ctx.fillStyle = '#6c7086'; ctx.textAlign = 'left';
+      ctx.fillStyle = ctp.overlay0; ctx.textAlign = 'left';
       ctx.fillText('A · B', 6, 12);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -2938,11 +2939,11 @@ export function Vec2OpViz({ node }: { node: GraphNode }) {
         const out = [v[0] * s, v[1] * s];
         const maxComp = Math.max(Math.abs(v[0]), Math.abs(v[1]), Math.abs(out[0]), Math.abs(out[1]), 0.01);
         const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 6) / sc;
-        drawArrow(ctx, cx, cy, v[0], v[1], '#585b70', r);
+        drawArrow(ctx, cx, cy, v[0], v[1], ctp.surface2, r);
         drawArrow(ctx, cx, cy, out[0], out[1], '#00aaff', r);
-        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
         ctx.fillText(`× ${s.toFixed(2)}`, 4, H - 4);
-        ctx.fillStyle = '#6c7086'; ctx.textAlign = 'right';
+        ctx.fillStyle = ctp.overlay0; ctx.textAlign = 'right';
         ctx.fillText(`(${out[0].toFixed(2)}, ${out[1].toFixed(2)})`, W - 4, H - 4);
       } else {
         // addVec2: triangle viz — B starts from tip of A, result is the diagonal
@@ -2951,14 +2952,14 @@ export function Vec2OpViz({ node }: { node: GraphNode }) {
         const maxComp = Math.max(Math.abs(a[0]), Math.abs(a[1]), Math.abs(b[0]), Math.abs(b[1]), Math.abs(out[0]), Math.abs(out[1]), 0.01);
         const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 8) / sc;
         // A from origin (blue)
-        drawArrow(ctx, cx, cy, a[0], a[1], '#89b4fa', r);
+        drawArrow(ctx, cx, cy, a[0], a[1], ctp.blue, r);
         // B from tip of A (green) — tail-to-tip chaining
-        drawArrow(ctx, cx + a[0] * r, cy - a[1] * r, b[0], b[1], '#a6e3a1', r);
+        drawArrow(ctx, cx + a[0] * r, cy - a[1] * r, b[0], b[1], ctp.green, r);
         // Result from origin (white, dashed-style using lighter color)
-        drawArrow(ctx, cx, cy, out[0], out[1], '#cdd6f4', r);
-        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        drawArrow(ctx, cx, cy, out[0], out[1], ctp.text, r);
+        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
         ctx.fillText('a + b', 4, H - 4);
-        ctx.fillStyle = '#6c7086'; ctx.textAlign = 'right';
+        ctx.fillStyle = ctp.overlay0; ctx.textAlign = 'right';
         ctx.fillText(`(${out[0].toFixed(2)}, ${out[1].toFixed(2)})`, W - 4, H - 4);
       }
       ctx.textAlign = 'left';
@@ -2997,7 +2998,7 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
 
       if (!isMat3) {
         // mat2MulVec: same bar layout as mat3 but with x/y only
-        ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
         const vecConn = n.inputs.vec?.connection;
         const inVec = vecConn
           ? (vectorValueRegistry.get(`__preview__${vecConn.nodeId}:${vecConn.outputKey}`) ?? [0, 0])
@@ -3005,7 +3006,7 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
         const outVec = vectorValueRegistry.get(`__preview__${n.id}:output`) ?? null;
 
         const comps2 = ['x', 'y'];
-        const colors2 = ['#f38ba8', '#a6e3a1'];
+        const colors2 = [ctp.red, ctp.green];
         const barW2 = W - 70;
 
         for (let i = 0; i < 2; i++) {
@@ -3019,33 +3020,33 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
 
           const inNorm = Math.max(-1, Math.min(1, inV));
           const bx = 18, bh = 8;
-          ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx, rowY + 2, barW2 / 2 - 2, bh);
+          ctx.fillStyle = ctp.base; ctx.fillRect(bx, rowY + 2, barW2 / 2 - 2, bh);
           ctx.fillStyle = colors2[i] + '66';
           const fw = Math.abs(inNorm) * (barW2 / 2 - 2) / 2;
           const fx = inNorm >= 0 ? bx + (barW2 / 4 - 1) : bx + (barW2 / 4 - 1) - fw;
           ctx.fillRect(fx, rowY + 2, fw, bh);
-          ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
+          ctx.fillStyle = ctp.surface1; ctx.textAlign = 'right';
           ctx.fillText(inV.toFixed(2), bx + barW2 / 2 - 4, rowY + 10);
 
           if (outV !== null) {
             const bx2 = bx + barW2 / 2 + 4;
             const outNorm = Math.max(-1, Math.min(1, outV));
-            ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx2, rowY + 2, barW2 / 2 - 2, bh);
+            ctx.fillStyle = ctp.base; ctx.fillRect(bx2, rowY + 2, barW2 / 2 - 2, bh);
             ctx.fillStyle = colors2[i];
             const fw2 = Math.abs(outNorm) * (barW2 / 2 - 2) / 2;
             const fx2 = outNorm >= 0 ? bx2 + (barW2 / 4 - 1) : bx2 + (barW2 / 4 - 1) - fw2;
             ctx.fillRect(fx2, rowY + 2, fw2, bh);
-            ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'right';
+            ctx.fillStyle = ctp.text; ctx.textAlign = 'right';
             ctx.fillText(outV.toFixed(2), bx2 + barW2 / 2 - 4, rowY + 10);
           }
         }
 
-        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
         ctx.fillText('in', 18, H - 4);
-        if (outVec) { ctx.fillStyle = '#6c7086'; ctx.fillText('out', 18 + barW2 / 2 + 4, H - 4); }
+        if (outVec) { ctx.fillStyle = ctp.overlay0; ctx.fillText('out', 18 + barW2 / 2 + 4, H - 4); }
       } else {
         // mat3MulVec: show input and output as component bars
-        ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
         const vecConn = n.inputs.vec?.connection;
         const inVec  = vecConn
           ? (vectorValueRegistry.get(`__preview__${vecConn.nodeId}:${vecConn.outputKey}`) ?? [0, 0, 0])
@@ -3053,7 +3054,7 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
         const outVec = vectorValueRegistry.get(`__preview__${n.id}:output`) ?? null;
 
         const comps = ['x', 'y', 'z'];
-        const colors = ['#f38ba8', '#a6e3a1', '#89b4fa'];
+        const colors = [ctp.red, ctp.green, ctp.blue];
         const barW = W - 70;
 
         for (let i = 0; i < 3; i++) {
@@ -3068,31 +3069,31 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
           // Input bar
           const inNorm = Math.max(-1, Math.min(1, inV));
           const bx = 18, bh = 8;
-          ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx, rowY + 2, barW / 2 - 2, bh);
+          ctx.fillStyle = ctp.base; ctx.fillRect(bx, rowY + 2, barW / 2 - 2, bh);
           ctx.fillStyle = colors[i] + '66';
           const fw = Math.abs(inNorm) * (barW / 2 - 2) / 2;
           const fx = inNorm >= 0 ? bx + (barW / 4 - 1) : bx + (barW / 4 - 1) - fw;
           ctx.fillRect(fx, rowY + 2, fw, bh);
-          ctx.fillStyle = '#45475a'; ctx.textAlign = 'right';
+          ctx.fillStyle = ctp.surface1; ctx.textAlign = 'right';
           ctx.fillText(inV.toFixed(2), bx + barW / 2 - 4, rowY + 10);
 
           // Output bar
           if (outV !== null) {
             const bx2 = bx + barW / 2 + 4;
             const outNorm = Math.max(-1, Math.min(1, outV));
-            ctx.fillStyle = '#1e1e2e'; ctx.fillRect(bx2, rowY + 2, barW / 2 - 2, bh);
+            ctx.fillStyle = ctp.base; ctx.fillRect(bx2, rowY + 2, barW / 2 - 2, bh);
             ctx.fillStyle = colors[i];
             const fw2 = Math.abs(outNorm) * (barW / 2 - 2) / 2;
             const fx2 = outNorm >= 0 ? bx2 + (barW / 4 - 1) : bx2 + (barW / 4 - 1) - fw2;
             ctx.fillRect(fx2, rowY + 2, fw2, bh);
-            ctx.fillStyle = '#cdd6f4'; ctx.textAlign = 'right';
+            ctx.fillStyle = ctp.text; ctx.textAlign = 'right';
             ctx.fillText(outV.toFixed(2), bx2 + barW / 2 - 4, rowY + 10);
           }
         }
 
-        ctx.fillStyle = '#45475a'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
         ctx.fillText('in', 18, H - 4);
-        if (outVec) { ctx.fillStyle = '#6c7086'; ctx.fillText('out', 18 + barW / 2 + 4, H - 4); }
+        if (outVec) { ctx.fillStyle = ctp.overlay0; ctx.fillText('out', 18 + barW / 2 + 4, H - 4); }
         ctx.textAlign = 'left';
       }
     };
@@ -3123,25 +3124,25 @@ export function SinCosWaveViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     }
 
     // Zero line
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
 
     // Waveform — fixed display range of 2; wave is proportionally shorter when amp < 2
     const DISP = 2;
-    const color = isCos ? '#89b4fa' : '#a6e3a1';
+    const color = isCos ? ctp.blue : ctp.green;
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -3160,7 +3161,7 @@ export function SinCosWaveViz({ node }: { node: GraphNode }) {
     ctx.beginPath(); ctx.arc(2, py0, 3, 0, Math.PI * 2); ctx.fill();
 
     // Label
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(`${isCos ? 'cos' : 'sin'}  freq:${freq.toFixed(2)}  amp:${amp.toFixed(2)}`, 4, H - 4);
   }, [isCos, freq, amp]);
@@ -3191,18 +3192,18 @@ export function TanWaveViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     }
 
     // Zero / center line
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
@@ -3210,11 +3211,11 @@ export function TanWaveViz({ node }: { node: GraphNode }) {
     // Display: show range -π to π (one full cycle of period π each)
     const DISP = 3.0; // clip at ±3 so steep parts are visible
     const xRange = Math.PI * 2;
-    const color = '#f9e2af';
+    const color = ctp.yellow;
 
     // Asymptote guides at x = ±π/2
     const numPeriods = freq;
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 4]);
     for (let k = -Math.ceil(numPeriods); k <= Math.ceil(numPeriods); k++) {
@@ -3247,7 +3248,7 @@ export function TanWaveViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Label
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(`tan  freq:${freq.toFixed(2)}  amp:${amp.toFixed(2)}`, 4, H - 4);
   }, [freq, amp]);
@@ -3274,10 +3275,10 @@ export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -3285,14 +3286,14 @@ export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
     }
 
     // Identity diagonal
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Tone curve: remap [blacks,whites]→[0,1], apply S-curve blended with linear
     const range = Math.max(0.001, whites - blacks);
-    ctx.strokeStyle = '#cba6f7';
+    ctx.strokeStyle = ctp.mauve;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3308,11 +3309,11 @@ export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
     // Black/white point markers
     const bx = Math.round(blacks * W);
     const wx = Math.round(whites * W);
-    ctx.fillStyle = '#45475a';
+    ctx.fillStyle = ctp.surface1;
     ctx.fillRect(bx - 1, 0, 2, H);
     ctx.fillRect(wx - 1, 0, 2, H);
 
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(`str ${strength.toFixed(2)}`, 4, H - 4);
   }, [blacks, whites, strength]);
@@ -3344,10 +3345,10 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -3355,14 +3356,14 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     }
 
     // Identity
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Transfer curve: luma + shadowMask*shadows + highlightMask*highlights
     const sm = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
-    ctx.strokeStyle = '#cba6f7';
+    ctx.strokeStyle = ctp.mauve;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3376,7 +3377,7 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Shadow mask (blue tint)
-    ctx.strokeStyle = '#89b4fa88';
+    ctx.strokeStyle = `${ctp.blue}88`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3389,7 +3390,7 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Highlight mask (orange tint)
-    ctx.strokeStyle = '#fab38788';
+    ctx.strokeStyle = `${ctp.peach}88`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3401,10 +3402,10 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Labels
-    ctx.fillStyle = '#89b4fa';
+    ctx.fillStyle = ctp.blue;
     ctx.font = '9px monospace';
     ctx.fillText(`shd ${shadows > 0 ? '+' : ''}${shadows.toFixed(2)}`, 4, H - 4);
-    ctx.fillStyle = '#fab387';
+    ctx.fillStyle = ctp.peach;
     ctx.fillText(`hi ${highlights > 0 ? '+' : ''}${highlights.toFixed(2)}`, W - 70, H - 4);
   }, [shadows, highlights, pivot]);
 
@@ -3435,22 +3436,22 @@ export function LiftGammaGainViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
     }
 
-    ctx.strokeStyle = '#45475a';
+    ctx.strokeStyle = ctp.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
-    const COLORS = ['#f38ba8', '#a6e3a1', '#89b4fa'];
+    const COLORS = [ctp.red, ctp.green, ctp.blue];
     for (let ch = 0; ch < 3; ch++) {
       const l = lift[ch]  ?? 0;
       const g = Math.max(0.001, gamma[ch] ?? 1);
@@ -3468,7 +3469,7 @@ export function LiftGammaGainViz({ node }: { node: GraphNode }) {
       ctx.stroke();
     }
 
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText('R  G  B', 4, H - 4);
   }, [lift, gamma, gain]);
@@ -3498,7 +3499,7 @@ export function HueRotateViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     const cx = W / 2, cy = H / 2;
@@ -3521,7 +3522,7 @@ export function HueRotateViz({ node }: { node: GraphNode }) {
     // Inner circle (dark)
     ctx.beginPath();
     ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2);
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fill();
 
     // Arrow at angle (angle in radians, 0=red, clockwise)
@@ -3539,7 +3540,7 @@ export function HueRotateViz({ node }: { node: GraphNode }) {
 
     // Angle label
     const deg = ((angle * 180 / Math.PI) % 360 + 360) % 360;
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(`${deg.toFixed(0)}°`, cx, cy + 4);
@@ -3571,7 +3572,7 @@ export function SaturationViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Gradient strip: sample a rainbow desaturated → saturated by `amount`
@@ -3585,7 +3586,7 @@ export function SaturationViz({ node }: { node: GraphNode }) {
     }
 
     // Border
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.lineWidth = 1;
     ctx.strokeRect(0, barY, W, barH);
 
@@ -3596,7 +3597,7 @@ export function SaturationViz({ node }: { node: GraphNode }) {
     ctx.beginPath(); ctx.moveTo(markerX, barY - 3); ctx.lineTo(markerX, barY + barH + 3); ctx.stroke();
 
     // Labels
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(`sat ×${amount.toFixed(2)}`, 4, H - 4);
   }, [amount]);
@@ -3624,7 +3625,7 @@ export function MatrixGridViz({ node }: { node: GraphNode }) {
   const isInspect = node.type.endsWith('Inspect');
 
   useEffect(() => {
-    const COL_COLORS = ['#89b4fa', '#a6e3a1', '#fab387'];
+    const COL_COLORS = [ctp.blue, ctp.green, ctp.peach];
     const cellW = 52, cellH = 22;
 
     const tick = () => {
@@ -3654,7 +3655,7 @@ export function MatrixGridViz({ node }: { node: GraphNode }) {
         }
       }
 
-      ctx.fillStyle = '#11111b';
+      ctx.fillStyle = ctp.crust;
       ctx.fillRect(0, 0, W, H);
 
       const totalW = size * cellW;
@@ -3692,7 +3693,7 @@ export function MatrixGridViz({ node }: { node: GraphNode }) {
       }
       ctx.textAlign = 'left';
 
-      ctx.fillStyle = '#45475a';
+      ctx.fillStyle = ctp.surface1;
       ctx.font = '9px monospace';
       ctx.fillText(`mat${size}  ${mode}`, 4, H - 4);
     };
@@ -3757,7 +3758,7 @@ function ColorSwatchViz({ node }: { node: GraphNode }) {
       }
 
       ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#11111b';
+      ctx.fillStyle = ctp.crust;
       ctx.fillRect(0, 0, W, H);
 
       // Color swatch bar
@@ -3768,7 +3769,7 @@ function ColorSwatchViz({ node }: { node: GraphNode }) {
       const bHex = Math.round(b * 255).toString(16).padStart(2, '0');
       ctx.fillStyle = `#${rHex}${gHex}${bHex}`;
       ctx.fillRect(8, barY, W - 16, swatchH);
-      ctx.strokeStyle = '#313244';
+      ctx.strokeStyle = ctp.surface0;
       ctx.lineWidth = 1;
       ctx.strokeRect(8.5, barY + 0.5, W - 17, swatchH - 1);
 
@@ -3778,13 +3779,13 @@ function ColorSwatchViz({ node }: { node: GraphNode }) {
       ctx.textAlign = 'center';
       if (isFloat) {
         const v = r;
-        ctx.fillStyle = '#89b4fa';
+        ctx.fillStyle = ctp.blue;
         ctx.fillText(`${v.toFixed(3)}  →  (${v.toFixed(2)}, ${v.toFixed(2)}, ${v.toFixed(2)})`, W / 2, labelY);
       } else {
         const labels = [
-          { text: `r:${r.toFixed(2)}`, color: '#f38ba8', x: W / 4 },
-          { text: `g:${g.toFixed(2)}`, color: '#a6e3a1', x: W / 2 },
-          { text: `b:${b.toFixed(2)}`, color: '#89b4fa', x: (3 * W) / 4 },
+          { text: `r:${r.toFixed(2)}`, color: ctp.red, x: W / 4 },
+          { text: `g:${g.toFixed(2)}`, color: ctp.green, x: W / 2 },
+          { text: `b:${b.toFixed(2)}`, color: ctp.blue, x: (3 * W) / 4 },
         ];
         for (const { text, color, x } of labels) {
           ctx.fillStyle = color;
@@ -3828,27 +3829,27 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
     const W = canvas.width, H = canvas.height;
     const mg = 4;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = '#1e1e2e';
+    ctx.strokeStyle = ctp.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
     }
     // Zero line
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
 
     const COLORS: Record<string, string> = {
-      sineLFO: '#89b4fa', squareLFO: '#cba6f7', sawtoothLFO: '#f9e2af',
-      triangleLFO: '#a6e3a1', bpmSync: '#fab387',
+      sineLFO: ctp.blue, squareLFO: ctp.mauve, sawtoothLFO: ctp.yellow,
+      triangleLFO: ctp.green, bpmSync: ctp.peach,
     };
-    ctx.strokeStyle = COLORS[node.type] ?? '#cdd6f4';
+    ctx.strokeStyle = COLORS[node.type] ?? ctp.text;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
 
@@ -3878,7 +3879,7 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
     }
     ctx.stroke();
 
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText(`f=${freq.toFixed(2)} a=${amplitude.toFixed(2)}`, 3, H - 3);
   }, [node.type, freq, phase, amplitude, offset]);
@@ -3915,8 +3916,8 @@ function UVGradientViz(_props: { node: GraphNode }) {
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, H - 13, W, 13);
     ctx.font = '8px monospace';
-    ctx.fillStyle = '#f38ba8'; ctx.fillText('U', 4, H - 3);
-    ctx.fillStyle = '#a6e3a1'; ctx.fillText('V', 14, H - 3);
+    ctx.fillStyle = ctp.red; ctx.fillText('U', 4, H - 3);
+    ctx.fillStyle = ctp.green; ctx.fillText('V', 14, H - 3);
   }, []);
   return (
     <div style={VIZ_CONTAINER}>
@@ -3936,9 +3937,9 @@ function TimeBadgeViz(_props: { node: GraphNode }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = '#11111b'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
     // sine preview
-    ctx.strokeStyle = '#cba6f7'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = ctp.mauve; ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let x = 0; x < W; x++) {
       const t = x / W;
@@ -3946,7 +3947,7 @@ function TimeBadgeViz(_props: { node: GraphNode }) {
       x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
-    ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#cba6f7';
+    ctx.font = 'bold 10px monospace'; ctx.fillStyle = ctp.mauve;
     ctx.textAlign = 'center';
     ctx.fillText('u_time', W / 2, H - 4);
   }, []);
@@ -3965,8 +3966,8 @@ function MouseBadgeViz(_props: { node: GraphNode }) {
     <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
       <span style={{ fontSize: '18px', lineHeight: 1 }}>⊕</span>
       <div>
-        <div style={{ fontSize: '9px', color: '#6c7086', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mouse position</div>
-        <div style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>u_mouse · vec2(0..1)</div>
+        <div style={{ fontSize: '9px', color: ctp.overlay0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mouse position</div>
+        <div style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace' }}>u_mouse · vec2(0..1)</div>
       </div>
     </div>
   );
@@ -3978,12 +3979,12 @@ function TextureBadgeViz({ node }: { node: GraphNode }) {
   const isPrev = node.type === 'prevFrame';
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <span style={{ fontSize: '18px', lineHeight: 1, color: '#89b4fa' }}>{isPrev ? '⊡' : '⊞'}</span>
+      <span style={{ fontSize: '18px', lineHeight: 1, color: ctp.blue }}>{isPrev ? '⊡' : '⊞'}</span>
       <div>
-        <div style={{ fontSize: '9px', color: '#6c7086', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div style={{ fontSize: '9px', color: ctp.overlay0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {isPrev ? 'Previous frame' : 'Texture input'}
         </div>
-        <div style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>sampler2D</div>
+        <div style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace' }}>sampler2D</div>
       </div>
     </div>
   );
@@ -3997,13 +3998,13 @@ function Vec2ConstViz({ node }: { node: GraphNode }) {
   const toBar = (v: number) => Math.max(0, Math.min(1, (v + 1) / 2));
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
-      {([['x', x, '#f38ba8'], ['y', y, '#a6e3a1']] as [string, number, string][]).map(([label, val, col]) => (
+      {([['x', x, ctp.red], ['y', y, ctp.green]] as [string, number, string][]).map(([label, val, col]) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
           <span style={{ fontSize: '9px', color: col, fontFamily: 'monospace', width: '8px' }}>{label}</span>
-          <div style={{ flex: 1, height: '6px', background: '#1e1e2e', borderRadius: '3px', overflow: 'hidden' }}>
+          <div style={{ flex: 1, height: '6px', background: ctp.base, borderRadius: '3px', overflow: 'hidden' }}>
             <div style={{ width: `${toBar(val) * 100}%`, height: '100%', background: col, opacity: 0.7, borderRadius: '3px' }} />
           </div>
-          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
+          <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
         </div>
       ))}
     </div>
@@ -4019,14 +4020,14 @@ function Vec3ConstViz({ node }: { node: GraphNode }) {
   const hex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
-      <div style={{ height: '20px', background: `#${hex(x)}${hex(y)}${hex(z)}`, borderRadius: '3px', marginBottom: '4px', border: '1px solid #313244' }} />
-      {([['x', x, '#f38ba8'], ['y', y, '#a6e3a1'], ['z', z, '#89b4fa']] as [string, number, string][]).map(([label, val, col]) => (
+      <div style={{ height: '20px', background: `#${hex(x)}${hex(y)}${hex(z)}`, borderRadius: '3px', marginBottom: '4px', border: `1px solid ${ctp.surface0}` }} />
+      {([['x', x, ctp.red], ['y', y, ctp.green], ['z', z, ctp.blue]] as [string, number, string][]).map(([label, val, col]) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
           <span style={{ fontSize: '9px', color: col, fontFamily: 'monospace', width: '8px' }}>{label}</span>
-          <div style={{ flex: 1, height: '5px', background: '#1e1e2e', borderRadius: '3px', overflow: 'hidden' }}>
+          <div style={{ flex: 1, height: '5px', background: ctp.base, borderRadius: '3px', overflow: 'hidden' }}>
             <div style={{ width: `${val * 100}%`, height: '100%', background: col, opacity: 0.7, borderRadius: '3px' }} />
           </div>
-          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
+          <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
         </div>
       ))}
     </div>
@@ -4044,10 +4045,10 @@ function ExprBadgeViz({ node }: { node: GraphNode }) {
   const snippet = body.split('\n')[0].slice(0, 48) || (isCustom ? 'no body yet' : 'no expression');
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
-      <div style={{ fontSize: '9px', color: '#cba6f7', fontFamily: 'monospace', fontWeight: 700, marginBottom: '2px' }}>
+      <div style={{ fontSize: '9px', color: ctp.mauve, fontFamily: 'monospace', fontWeight: 700, marginBottom: '2px' }}>
         {isCustom ? 'ƒ' : '∑'} {label}
       </div>
-      <div style={{ fontSize: '9px', color: '#6c7086', fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div style={{ fontSize: '9px', color: ctp.overlay0, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {snippet}
       </div>
     </div>
@@ -4067,7 +4068,7 @@ export function GridUVViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     const cells = Math.max(2, Math.min(Math.round(scale * 0.5), 8));
@@ -4097,7 +4098,7 @@ export function GridUVViz({ node }: { node: GraphNode }) {
           }
         }
         // Cell border
-        ctx.strokeStyle = '#11111b';
+        ctx.strokeStyle = ctp.crust;
         ctx.lineWidth = 1;
         ctx.strokeRect(px + 0.5, py + 0.5, cellW - 1, cellH - 1);
       }
@@ -4140,8 +4141,8 @@ export function DotMaskViz({ node }: { node: GraphNode }) {
         const dotR = radius * Math.min(cellW, cellH);
         const blur = Math.max(1, softness * Math.min(cellW, cellH) * 20);
         ctx.shadowBlur = blur * 2;
-        ctx.shadowColor = '#cba6f7';
-        ctx.fillStyle = '#cdd6f4';
+        ctx.shadowColor = ctp.mauve;
+        ctx.fillStyle = ctp.text;
         ctx.beginPath();
         ctx.arc(cx, cy, Math.max(1, dotR), 0, Math.PI * 2);
         ctx.fill();
@@ -4225,10 +4226,10 @@ export function LumaRadiusViz({ node }: { node: GraphNode }) {
     const stripH = 16;
     const grad = ctx.createLinearGradient(0, 0, W, 0);
     grad.addColorStop(0, '#111122');
-    grad.addColorStop(1, '#cdd6f4');
+    grad.addColorStop(1, ctp.text);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 4, W, stripH);
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 4, W, stripH);
 
@@ -4250,7 +4251,7 @@ export function LumaRadiusViz({ node }: { node: GraphNode }) {
     }
 
     // Label
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText('luma → radius', 4, H - 2);
   }, [baseRadius, minScale, maxScale]);
@@ -4514,7 +4515,7 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Display up to 20 cols; derive rows to keep cells square-ish (aspect ~1.6)
@@ -4525,7 +4526,7 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
     const pad   = Math.max(1, Math.min(2, cellW * 0.08));
 
     // Cell interiors
-    ctx.fillStyle = '#1e1e2e';
+    ctx.fillStyle = ctp.base;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         ctx.fillRect(
@@ -4538,7 +4539,7 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
     }
 
     // Grid lines
-    ctx.strokeStyle = '#585b70';
+    ctx.strokeStyle = ctp.surface2;
     ctx.lineWidth = 0.75;
     for (let i = 0; i <= cols; i++) {
       const x = i * cellW;
@@ -4550,7 +4551,7 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
     }
 
     // Column count label
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '9px monospace';
     ctx.fillText(`${cols} cols`, 3, H - 3);
   }, [columns]);
@@ -4575,7 +4576,7 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Draw a 3×3 neighborhood grid; center cell highlighted
@@ -4593,7 +4594,7 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
         const w = cellW - gap;
         const h = cellH - gap;
 
-        ctx.fillStyle = isCenter ? '#89b4fa' : '#313244';
+        ctx.fillStyle = isCenter ? ctp.blue : ctp.surface0;
         ctx.fillRect(x, y, w, h);
 
         // Distance line from neighbor to center
@@ -4615,7 +4616,7 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
     }
 
     // Label
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '8px monospace';
     ctx.fillText('3×3 neighborhood', 3, H - 3);
   }, []);
@@ -4641,18 +4642,18 @@ export function PrintFloatViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     const placeholder = decimals > 0 ? '0.' + '0'.repeat(Math.min(decimals, 4)) : '0';
     ctx.font = 'bold 22px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#cdd6f4';
+    ctx.fillStyle = ctp.text;
     ctx.fillText(placeholder, W / 2, H / 2);
 
     ctx.font = '8px monospace';
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.fillText(`float · ${decimals} dec`, W / 2, H - 6);
   }, [decimals]);
 
@@ -4678,7 +4679,7 @@ export function PrintTextViz({ node }: { node: GraphNode }) {
     if (!ctx) return;
     const W = canvas.width, H = canvas.height;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Build display: text + placeholder number
@@ -4701,14 +4702,14 @@ export function PrintTextViz({ node }: { node: GraphNode }) {
     const startX   = (W - totalPx) / 2;
 
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#cdd6f4';
+    ctx.fillStyle = ctp.text;
     ctx.fillText(text, startX, H / 2 - 4);
-    ctx.fillStyle = '#a6e3a1';
+    ctx.fillStyle = ctp.green;
     ctx.fillText(numPlaceholder, startX + textPx, H / 2 - 4);
 
     ctx.font = '8px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.fillText(`"${text.slice(0, 12)}"  +  float`, W / 2, H - 6);
   }, [text, decimals]);
 
@@ -4942,16 +4943,16 @@ export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
     const nVal = freq;
     const mVal = freq * ratio + phase;
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
     ctx.textBaseline = 'middle';
     ctx.font = '11px monospace';
-    ctx.fillStyle = '#cdd6f4';
+    ctx.fillStyle = ctp.text;
     ctx.textAlign = 'left';
     ctx.fillText(`n ${nVal.toFixed(2)}`, 10, H / 2);
     ctx.fillText(`m ${mVal.toFixed(2)}`, 10 + ctx.measureText(`n ${nVal.toFixed(2)}`).width + 14, H / 2);
     ctx.font = '9px monospace';
-    ctx.fillStyle = '#45475a';
+    ctx.fillStyle = ctp.surface1;
     ctx.textAlign = 'right';
     ctx.fillText('→ n, m', W - 8, H / 2);
   }, []);
@@ -4981,7 +4982,7 @@ export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
 export function SwizzleViz({ node }: { node: GraphNode }) {
   const is3 = node.type === 'vec3Swizzle';
   const axes = is3 ? ['x', 'y', 'z'] : ['x', 'y'];
-  const colors: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
+  const colors: Record<string, string> = { x: ctp.red, y: ctp.green, z: ctp.blue, w: ctp.mauve };
   const mode = String(node.params.mode || (is3 ? 'yzx' : 'yx'));
   const nodeRef = useRef(node);
   nodeRef.current = node;
@@ -5014,20 +5015,20 @@ export function SwizzleViz({ node }: { node: GraphNode }) {
   return (
     <div style={{ ...VIZ_CONTAINER, padding: '6px 12px', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: '5px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '9px', color: '#585b70', width: '26px' }}>in</span>
+        <span style={{ fontSize: '9px', color: ctp.surface2, width: '26px' }}>in</span>
         {axes.map((c, i) => (
           <span key={c} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
             <span style={{ fontSize: '9px', color: colors[c] }}>{c}</span>
-            <span ref={el => { inRefs.current[i] = el; }} style={{ fontSize: '10px', color: '#cdd6f4' }}>—</span>
+            <span ref={el => { inRefs.current[i] = el; }} style={{ fontSize: '10px', color: ctp.text }}>—</span>
           </span>
         ))}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '9px', color: '#89b4fa', width: '26px' }}>.{mode}</span>
+        <span style={{ fontSize: '9px', color: ctp.blue, width: '26px' }}>.{mode}</span>
         {mode.split('').map((c, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-            <span style={{ fontSize: '9px', color: colors[c] ?? '#585b70' }}>{c}</span>
-            <span ref={el => { outRefs.current[i] = el; }} style={{ fontSize: '10px', color: '#f9e2af' }}>—</span>
+            <span style={{ fontSize: '9px', color: colors[c] ?? ctp.surface2 }}>{c}</span>
+            <span ref={el => { outRefs.current[i] = el; }} style={{ fontSize: '10px', color: ctp.yellow }}>—</span>
           </span>
         ))}
       </div>
@@ -5056,16 +5057,16 @@ export function QuantizeViz({ node }: { node: GraphNode }) {
     const step = Math.max(0.0001, typeof n.params.step === 'number' ? n.params.step : 1.0);
     const domain = Math.max(step * 4, 1);
 
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = '#313244';
+    ctx.strokeStyle = ctp.surface0;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 2]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
 
     const toY = (v: number) => H / 2 - (v / domain) * (H / 2) * 0.9;
-    ctx.strokeStyle = '#f9e2af';
+    ctx.strokeStyle = ctp.yellow;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -5081,11 +5082,11 @@ export function QuantizeViz({ node }: { node: GraphNode }) {
     if (liveVal != null && Number.isFinite(liveVal)) {
       const qx = ((liveVal + domain) / (domain * 2)) * W;
       const qy = toY(Math.floor(liveVal / step + 0.5) * step);
-      ctx.fillStyle = '#a6e3a1';
+      ctx.fillStyle = ctp.green;
       ctx.beginPath(); ctx.arc(Math.max(0, Math.min(W, qx)), qy, 2.5, 0, Math.PI * 2); ctx.fill();
     }
 
-    ctx.fillStyle = '#6c7086';
+    ctx.fillStyle = ctp.overlay0;
     ctx.font = '8px monospace';
     ctx.fillText(`step ${step.toFixed(3)}`, 4, H - 4);
   }, []);
@@ -5137,7 +5138,7 @@ export function ModSelectViz({ node }: { node: GraphNode }) {
 
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, H - 12, W, 12);
-    ctx.fillStyle = '#a6adc8';
+    ctx.fillStyle = ctp.subtext0;
     ctx.font = '8px monospace';
     ctx.fillText(`period ${per.toFixed(2)}  thr ${threshold.toFixed(2)}`, 4, H - 3);
   }, [period, threshold, softness]);
@@ -5164,7 +5165,7 @@ export function PixelateViz({ node }: { node: GraphNode }) {
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = '#11111b';
+    ctx.fillStyle = ctp.crust;
     ctx.fillRect(0, 0, W, H);
     const cells = Math.max(2, Math.min(24, Math.round(2 / Math.max(0.005, pixelSize))));
     const cellW = W / cells, cellH = H / cells;
@@ -5174,7 +5175,7 @@ export function PixelateViz({ node }: { node: GraphNode }) {
         ctx.fillRect(col * cellW, row * cellH, cellW, cellH);
       }
     }
-    ctx.strokeStyle = '#585b70';
+    ctx.strokeStyle = ctp.surface2;
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= cells; i++) {
       ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, H); ctx.stroke();

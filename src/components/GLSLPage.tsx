@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { tokenizeLine, C } from './CodePanel';
 import { NodePalette } from './NodeGraph/NodePalette';
+import { ctp } from '../theme/palette';
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -367,12 +368,12 @@ export function GLSLPage() {
 
   const btnBase: React.CSSProperties = {
     borderRadius: '4px', padding: '2px 10px',
-    fontSize: '10px', cursor: 'pointer', border: '1px solid #45475a',
+    fontSize: '10px', cursor: 'pointer', border: `1px solid ${ctp.surface1}`,
   };
 
   // ── Fn chip style helpers ─────────────────────────────────────────────────
   const chipStyle = (accent: string): React.CSSProperties => ({
-    background: '#11111b',
+    background: ctp.crust,
     border: `1px solid ${accent}44`,
     color: accent,
     borderRadius: '3px',
@@ -385,17 +386,17 @@ export function GLSLPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '100%', background: '#11111b', fontFamily: 'monospace', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', background: ctp.crust, fontFamily: 'monospace', overflow: 'hidden' }}>
 
       {/* ── Node palette sidebar ──────────────────────────────────────── */}
       {paletteCollapsed ? (
-        <div style={{ width: '28px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e2e', borderRight: '1px solid #313244', cursor: 'pointer' }}
+        <div style={{ width: '28px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ctp.base, borderRight: `1px solid ${ctp.surface0}`, cursor: 'pointer' }}
           onClick={() => setPaletteCollapsed(false)} title="Expand palette">
-          <span style={{ fontSize: '10px', color: '#45475a' }}>▶</span>
+          <span style={{ fontSize: '10px', color: ctp.surface1 }}>▶</span>
         </div>
       ) : (
         <>
-          <div style={{ width: paletteWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid #313244' }}>
+          <div style={{ width: paletteWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: `1px solid ${ctp.surface0}` }}>
             <NodePalette
               context="glsl"
               onGlslInsert={insertAtCursor}
@@ -404,7 +405,7 @@ export function GLSLPage() {
           </div>
           <div
             onMouseDown={handlePaletteResizeStart}
-            style={{ width: '4px', flexShrink: 0, background: 'transparent', cursor: 'col-resize', borderRight: '1px solid #313244' }}
+            style={{ width: '4px', flexShrink: 0, background: 'transparent', cursor: 'col-resize', borderRight: `1px solid ${ctp.surface0}` }}
             onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a5a'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
           />
@@ -412,15 +413,15 @@ export function GLSLPage() {
       )}
 
       {/* ── Editor pane ───────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #313244', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${ctp.surface0}`, minWidth: 0 }}>
 
         {/* Header */}
         <div style={{
           height: '36px', flexShrink: 0,
-          background: '#1e1e2e', borderBottom: '1px solid #313244',
+          background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`,
           display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px',
         }}>
-          <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700 }}>
+          <span style={{ fontSize: '11px', color: ctp.surface2, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700 }}>
             Fragment Shader
           </span>
           <div style={{ flex: 1 }} />
@@ -432,40 +433,40 @@ export function GLSLPage() {
                 onChange={e => setSaveNameVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') commitSave(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveNameVal(''); } }}
                 placeholder="Shader name…"
-                style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #45475a', background: '#181825', color: '#cdd6f4', outline: 'none', width: '130px' }}
+                style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: `1px solid ${ctp.surface1}`, background: ctp.mantle, color: ctp.text, outline: 'none', width: '130px' }}
               />
-              <button onClick={commitSave} disabled={!saveNameVal.trim()} style={{ ...btnBase, background: saveNameVal.trim() ? '#a6e3a1' : '#313244', color: '#1e1e2e', fontWeight: 700 }}>Save</button>
-              <button onClick={() => { setShowSaveInput(false); setSaveNameVal(''); }} style={{ ...btnBase, background: 'none', color: '#585b70' }}>✕</button>
+              <button onClick={commitSave} disabled={!saveNameVal.trim()} style={{ ...btnBase, background: saveNameVal.trim() ? ctp.green : ctp.surface0, color: ctp.base, fontWeight: 700 }}>Save</button>
+              <button onClick={() => { setShowSaveInput(false); setSaveNameVal(''); }} style={{ ...btnBase, background: 'none', color: ctp.surface2 }}>✕</button>
             </>
           ) : (
-            <button onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }} title="Save current shader" style={{ ...btnBase, background: '#1e1e2e', color: '#a6e3a1' }}>
+            <button onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }} title="Save current shader" style={{ ...btnBase, background: ctp.base, color: ctp.green }}>
               + Save
             </button>
           )}
           <button
             onClick={() => setCode(nodeGraphShader || BOILERPLATE)}
             title="Copy compiled node graph into editor"
-            style={{ ...btnBase, background: '#313244', color: '#89b4fa' }}
+            style={{ ...btnBase, background: ctp.surface0, color: ctp.blue }}
           >
             ← From Graph
           </button>
           <button
             onClick={() => setCode(BOILERPLATE)}
-            style={{ ...btnBase, background: 'none', color: '#585b70' }}
+            style={{ ...btnBase, background: 'none', color: ctp.surface2 }}
           >
             Reset
           </button>
           <button
             onClick={() => { setShowFnPanel(v => !v); setShowPanel(false); }}
             title="Toggle GLSL functions reference"
-            style={{ ...btnBase, background: showFnPanel ? '#313244' : 'none', color: showFnPanel ? '#f9e2af' : '#585b70', padding: '2px 8px' }}
+            style={{ ...btnBase, background: showFnPanel ? ctp.surface0 : 'none', color: showFnPanel ? ctp.yellow : ctp.surface2, padding: '2px 8px' }}
           >
             ƒ Functions
           </button>
           <button
             onClick={() => { setShowPanel(v => !v); setShowFnPanel(false); }}
             title={showPanel ? 'Hide shaders panel' : 'Show shaders panel'}
-            style={{ ...btnBase, background: showPanel ? '#313244' : 'none', color: showPanel ? '#cdd6f4' : '#585b70', padding: '2px 8px' }}
+            style={{ ...btnBase, background: showPanel ? ctp.surface0 : 'none', color: showPanel ? ctp.text : ctp.surface2, padding: '2px 8px' }}
           >
             {showPanel ? '▶' : '◀'} Shaders
           </button>
@@ -478,7 +479,7 @@ export function GLSLPage() {
             ref={lineNumRef}
             style={{
               width: '40px', flexShrink: 0,
-              background: '#13131f', borderRight: '1px solid #1e1e2e',
+              background: '#13131f', borderRight: `1px solid ${ctp.base}`,
               overflowY: 'hidden', paddingTop: EDITOR_PADDING.split(' ')[0],
               color: '#3d4059', fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
               textAlign: 'right', paddingRight: '6px',
@@ -529,7 +530,7 @@ export function GLSLPage() {
                 position: 'absolute', inset: 0,
                 background: 'transparent',
                 color: 'transparent',
-                caretColor: '#cdd6f4',
+                caretColor: ctp.text,
                 border: 'none', outline: 'none', resize: 'none',
                 padding: EDITOR_PADDING,
                 fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
@@ -544,9 +545,9 @@ export function GLSLPage() {
 
         {/* Error bar */}
         {glslErrors.length > 0 && (
-          <div style={{ background: '#2d1b1b', borderTop: '1px solid #f38ba833', padding: '6px 12px', maxHeight: '120px', overflowY: 'auto' }}>
+          <div style={{ background: '#2d1b1b', borderTop: `1px solid ${ctp.red}33`, padding: '6px 12px', maxHeight: '120px', overflowY: 'auto' }}>
             {glslErrors.map((err, i) => (
-              <div key={i} style={{ fontSize: '11px', color: '#f38ba8', fontFamily: 'monospace', lineHeight: 1.5 }}>{err}</div>
+              <div key={i} style={{ fontSize: '11px', color: ctp.red, fontFamily: 'monospace', lineHeight: 1.5 }}>{err}</div>
             ))}
           </div>
         )}
@@ -555,18 +556,18 @@ export function GLSLPage() {
       {/* ── Functions reference panel ─────────────────────────────────── */}
       {showFnPanel && (
         <div style={{ width: '240px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#13131f' }}>
-          <div style={{ height: '36px', flexShrink: 0, background: '#1e1e2e', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-            <span style={{ fontSize: '11px', color: '#f9e2af', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
+          <div style={{ height: '36px', flexShrink: 0, background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`, display: 'flex', alignItems: 'center', padding: '0 12px' }}>
+            <span style={{ fontSize: '11px', color: ctp.yellow, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
               Functions
             </span>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-            <div style={{ fontSize: '9px', color: '#585b70', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px solid #1e1e2e' }}>
+            <div style={{ fontSize: '9px', color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px', paddingBottom: '4px', borderBottom: `1px solid ${ctp.base}` }}>
               GLSL Built-ins
             </div>
             {BUILTIN_GROUPS.map(group => (
               <div key={group.name} style={{ marginBottom: '8px' }}>
-                <div style={{ fontSize: '9px', color: '#45475a', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                <div style={{ fontSize: '9px', color: ctp.surface1, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
                   {group.name}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
@@ -576,8 +577,8 @@ export function GLSLPage() {
                       onMouseDown={ev => ev.preventDefault()}
                       onClick={() => insertAtCursor(e.insert)}
                       style={chipStyle(C.builtin)}
-                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#f9e2af18'; }}
-                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#11111b'; }}
+                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${ctp.yellow}18`; }}
+                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = ctp.crust; }}
                       title={`Insert: ${e.insert}`}
                     >
                       {e.label}
@@ -587,12 +588,12 @@ export function GLSLPage() {
               </div>
             ))}
 
-            <div style={{ fontSize: '9px', color: '#585b70', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '10px 0 6px', paddingBottom: '4px', borderBottom: '1px solid #1e1e2e' }}>
+            <div style={{ fontSize: '9px', color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '10px 0 6px', paddingBottom: '4px', borderBottom: `1px solid ${ctp.base}` }}>
               Studio Helpers
             </div>
             {STUDIO_GROUPS.map(group => (
               <div key={group.name} style={{ marginBottom: '8px' }}>
-                <div style={{ fontSize: '9px', color: '#45475a', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                <div style={{ fontSize: '9px', color: ctp.surface1, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
                   {group.name}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
@@ -602,8 +603,8 @@ export function GLSLPage() {
                       onMouseDown={ev => ev.preventDefault()}
                       onClick={() => insertAtCursor(e.insert)}
                       style={chipStyle(C.keyword)}
-                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#cba6f718'; }}
-                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = '#11111b'; }}
+                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${ctp.mauve}18`; }}
+                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = ctp.crust; }}
                       title={`Insert: ${e.insert}`}
                     >
                       {e.label}
@@ -619,23 +620,23 @@ export function GLSLPage() {
       {/* ── Saved shaders panel ───────────────────────────────────────── */}
       {showPanel && (
         <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#13131f' }}>
-          <div style={{ height: '36px', flexShrink: 0, background: '#1e1e2e', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-            <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
+          <div style={{ height: '36px', flexShrink: 0, background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`, display: 'flex', alignItems: 'center', padding: '0 12px' }}>
+            <span style={{ fontSize: '11px', color: ctp.surface2, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
               Shaders
             </span>
-            <span style={{ fontSize: '10px', color: '#45475a' }}>{shaders.length}</span>
+            <span style={{ fontSize: '10px', color: ctp.surface1 }}>{shaders.length}</span>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
             {shaders.length === 0 ? (
-              <div style={{ padding: '12px 8px', fontSize: '11px', color: '#45475a', lineHeight: 1.6 }}>
-                No saved shaders.<br />Click <strong style={{ color: '#585b70' }}>+ Save</strong> to save the current file.
+              <div style={{ padding: '12px 8px', fontSize: '11px', color: ctp.surface1, lineHeight: 1.6 }}>
+                No saved shaders.<br />Click <strong style={{ color: ctp.surface2 }}>+ Save</strong> to save the current file.
               </div>
             ) : shaders.map(s => (
               <div
                 key={s.id}
                 onDoubleClick={() => loadShader(s)}
                 title="Double-click to load"
-                style={{ marginBottom: '4px', borderRadius: '5px', background: '#1e1e2e', border: '1px solid #313244', cursor: 'pointer', overflow: 'hidden' }}
+                style={{ marginBottom: '4px', borderRadius: '5px', background: ctp.base, border: `1px solid ${ctp.surface0}`, cursor: 'pointer', overflow: 'hidden' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', gap: '4px' }}>
                   {renamingId === s.id ? (
@@ -649,13 +650,13 @@ export function GLSLPage() {
                         if (e.key === 'Escape') setRenamingId(null);
                       }}
                       onClick={e => e.stopPropagation()}
-                      style={{ flex: 1, fontSize: '11px', background: '#11111b', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '3px', padding: '1px 4px', outline: 'none' }}
+                      style={{ flex: 1, fontSize: '11px', background: ctp.crust, border: `1px solid ${ctp.blue}`, color: ctp.text, borderRadius: '3px', padding: '1px 4px', outline: 'none' }}
                     />
                   ) : (
                     <span
                       onDoubleClick={e => { e.stopPropagation(); setRenamingId(s.id); setRenameVal(s.name); }}
                       title="Double-click to rename"
-                      style={{ flex: 1, fontSize: '11px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      style={{ flex: 1, fontSize: '11px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                     >
                       {s.name}
                     </span>
@@ -663,10 +664,10 @@ export function GLSLPage() {
                   <button
                     onClick={e => { e.stopPropagation(); deleteShader(s.id); }}
                     title="Delete"
-                    style={{ fontSize: '10px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
+                    style={{ fontSize: '10px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
                   >×</button>
                 </div>
-                <div style={{ padding: '3px 8px 6px', borderTop: '1px solid #313244', fontSize: '10px', color: '#45475a', fontFamily: EDITOR_FONT, whiteSpace: 'pre', overflow: 'hidden', maxHeight: '46px', lineHeight: 1.5 }}>
+                <div style={{ padding: '3px 8px 6px', borderTop: `1px solid ${ctp.surface0}`, fontSize: '10px', color: ctp.surface1, fontFamily: EDITOR_FONT, whiteSpace: 'pre', overflow: 'hidden', maxHeight: '46px', lineHeight: 1.5 }}>
                   {s.code.split('\n').slice(0, 3).join('\n')}
                   {s.code.split('\n').length > 3 ? '\n…' : ''}
                 </div>

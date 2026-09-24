@@ -12,6 +12,7 @@ import {
 } from '../../utils/assetFolders';
 import { AssetContextMenu } from './AssetContextMenu';
 import type { ContextMenuItem } from './AssetContextMenu';
+import { ctp } from '../../theme/palette';
 
 export interface FolderableItem { id: string; label: string; }
 
@@ -35,9 +36,9 @@ function SmallBtn({ children, onClick, title, active }: {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: active || hov ? '#313244' : 'none',
-        border: '1px solid ' + (active || hov ? '#45475a' : '#313244'),
-        color: hov ? '#cdd6f4' : '#6c7086',
+        background: active || hov ? ctp.surface0 : 'none',
+        border: '1px solid ' + (active || hov ? ctp.surface1 : ctp.surface0),
+        color: hov ? ctp.text : ctp.overlay0,
         borderRadius: '4px', fontSize: '10px', padding: '1px 6px',
         cursor: 'pointer', lineHeight: 1.5, flexShrink: 0,
       }}
@@ -201,7 +202,7 @@ export function FolderableList<T extends FolderableItem>({
             }}
             onBlur={confirmNewFolder}
             style={{
-              flex: 1, background: '#11111b', border: `1px solid ${color}`,
+              flex: 1, background: ctp.crust, border: `1px solid ${color}`,
               color, borderRadius: '4px', padding: '2px 7px',
               fontSize: '11px', outline: 'none', minWidth: 0,
             }}
@@ -256,7 +257,7 @@ export function FolderableList<T extends FolderableItem>({
                     e.stopPropagation();
                   }}
                   onClick={e => e.stopPropagation()}
-                  style={{ background: '#11111b', border: `1px solid ${color}`, color, borderRadius: '4px', padding: '1px 6px', fontSize: '11px', outline: 'none', flex: 1, minWidth: 0 }}
+                  style={{ background: ctp.crust, border: `1px solid ${color}`, color, borderRadius: '4px', padding: '1px 6px', fontSize: '11px', outline: 'none', flex: 1, minWidth: 0 }}
                 />
               ) : (
                 <span style={{ fontSize: '11px', color, fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -270,7 +271,7 @@ export function FolderableList<T extends FolderableItem>({
             {!folder.collapsed && (
               <div style={{ paddingLeft: '12px', paddingTop: '3px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                 {children.length === 0
-                  ? <span style={{ fontSize: '10px', color: '#45475a', fontStyle: 'italic' }}>Empty — drag items here</span>
+                  ? <span style={{ fontSize: '10px', color: ctp.surface1, fontStyle: 'italic' }}>Empty — drag items here</span>
                   : children.map(item => renderWrapped(item))
                 }
               </div>

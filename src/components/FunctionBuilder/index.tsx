@@ -4,6 +4,7 @@ import { buildShader } from './glslCompiler';
 import { FunctionList } from './FunctionList';
 import { PreviewCanvas } from './PreviewCanvas';
 import { Toolbar } from './Toolbar';
+import { ctp } from '../../theme/palette';
 
 const DEBOUNCE_MS = 150;
 
@@ -238,8 +239,8 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      background: '#11111b',
-      color: '#cdd6f4',
+      background: ctp.crust,
+      color: ctp.text,
       fontFamily: 'system-ui, sans-serif',
       overflow: 'hidden',
     }}>
@@ -247,17 +248,17 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
       <div style={{
         height: '36px',
         flexShrink: 0,
-        background: '#1e1e2e',
-        borderBottom: '1px solid #313244',
+        background: ctp.base,
+        borderBottom: `1px solid ${ctp.surface0}`,
         display: 'flex',
         alignItems: 'center',
         padding: '0 14px',
         gap: '10px',
       }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
           Function Builder
         </span>
-        <span style={{ fontSize: '10px', color: '#45475a' }}>
+        <span style={{ fontSize: '10px', color: ctp.surface1 }}>
           — write named GLSL functions and see them plotted live
         </span>
       </div>
@@ -271,7 +272,7 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
           minWidth: '240px',
           maxWidth: '480px',
           flexShrink: 0,
-          borderRight: '1px solid #313244',
+          borderRight: `1px solid ${ctp.surface0}`,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -279,14 +280,14 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
           {/* Vars hint */}
           <div style={{
             padding: '6px 10px',
-            borderBottom: '1px solid #1e1e2e',
+            borderBottom: `1px solid ${ctp.base}`,
             fontSize: '10px',
-            color: '#45475a',
+            color: ctp.surface1,
             fontFamily: 'monospace',
             flexShrink: 0,
           }}>
-            float: <span style={{ color: '#6c7086' }}>x, t</span>
-            {'  '}vec3: <span style={{ color: '#6c7086' }}>uv, t</span>
+            float: <span style={{ color: ctp.overlay0 }}>x, t</span>
+            {'  '}vec3: <span style={{ color: ctp.overlay0 }}>uv, t</span>
           </div>
 
           <FunctionList glslErrors={glslErrors} />
@@ -331,7 +332,7 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
               pointerEvents: 'none',
             }}>
               <span style={{
-                fontSize: '11px', fontWeight: 700, color: '#f38ba8',
+                fontSize: '11px', fontWeight: 700, color: ctp.red,
                 letterSpacing: '0.06em', textTransform: 'uppercase',
                 marginBottom: '4px',
               }}>
@@ -344,7 +345,7 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
                 return (
                   <div key={i} style={{
                     fontSize: '11px',
-                    color: '#f38ba8cc',
+                    color: `${ctp.red}cc`,
                     fontFamily: 'monospace',
                     lineHeight: 1.6,
                     textAlign: 'center',

@@ -6,8 +6,8 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   s.id = 'gs-anim';
   s.textContent = `
     @keyframes groupSaveFlash {
-      0%   { background: rgba(166,227,161,0.5); border-color: #a6e3a1; color: #a6e3a1; box-shadow: 0 0 8px #a6e3a166; }
-      100% { background: none; border-color: #585b70; color: #a6adc8; box-shadow: none; }
+      0%   { background: rgba(166,227,161,0.5); border-color: ${ctp.green}; color: ${ctp.green}; box-shadow: 0 0 8px ${ctp.green}66; }
+      100% { background: none; border-color: ${ctp.surface2}; color: ${ctp.subtext0}; box-shadow: none; }
     }
     .group-save-flash { animation: groupSaveFlash 0.7s ease-out forwards; }
     input[type=number]::-webkit-outer-spin-button,
@@ -45,6 +45,7 @@ import { KeyframeEditorModal } from './KeyframeEditorModal';
 import { socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
+import { ctp } from '../../theme/palette';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -124,8 +125,8 @@ const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat']);
 
 const INPUT_STYLE: React.CSSProperties = {
   background: 'transparent',
-  border: '1px solid #31324488',
-  color: '#cdd6f4',
+  border: `1px solid ${ctp.surface0}88`,
+  color: ctp.text,
   padding: '1px 4px',
   borderRadius: '3px',
   fontSize: '11px',
@@ -138,7 +139,7 @@ const INPUT_STYLE: React.CSSProperties = {
 
 const RANGE_STYLE: React.CSSProperties = {
   width: '72px',
-  accentColor: '#89b4fa',
+  accentColor: ctp.blue,
   cursor: 'pointer',
 };
 
@@ -196,7 +197,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       if (type === 'float') {
         const decoded = floatValueRegistry.get(`__preview__${connKey}`);
         if (decoded !== undefined) {
-          return <span style={{ color: '#f9e2af', fontFamily: 'monospace', fontSize: '10px' }}>{decoded.toFixed(3)}</span>;
+          return <span style={{ color: ctp.yellow, fontFamily: 'monospace', fontSize: '10px' }}>{decoded.toFixed(3)}</span>;
         }
       } else if (type === 'vec2' || type === 'vec3') {
         const vals = vectorValueRegistry.get(`__preview__${connKey}`);
@@ -204,13 +205,13 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
           const formatted = type === 'vec2'
             ? `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)})`
             : `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)}, ${vals[2].toFixed(2)})`;
-          return <span style={{ color: '#f9e2af', fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
+          return <span style={{ color: ctp.yellow, fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
         }
       }
-      return <span style={{ color: '#45475a', fontSize: '10px' }}>← {srcLabel ?? src?.type}</span>;
+      return <span style={{ color: ctp.surface1, fontSize: '10px' }}>← {srcLabel ?? src?.type}</span>;
     }
     const formatted = formatVal(sock.defaultValue, type);
-    if (formatted) return <span style={{ color: '#6c7086', fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
+    if (formatted) return <span style={{ color: ctp.overlay0, fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
     return null;
   }
 
@@ -221,14 +222,14 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
         top: '100%',
         left: 0,
         zIndex: 1000,
-        background: '#1e1e2e',
-        border: '1px solid #45475a',
+        background: ctp.base,
+        border: `1px solid ${ctp.surface1}`,
         borderRadius: '8px',
         padding: '10px 12px',
         minWidth: '240px',
         maxWidth: '340px',
         fontSize: '11px',
-        color: '#cdd6f4',
+        color: ctp.text,
         pointerEvents: 'none',
         boxShadow: '0 6px 20px rgba(0,0,0,0.7)',
         marginTop: '2px',
@@ -236,17 +237,17 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
     >
       <div style={{ fontWeight: 700, marginBottom: 5, fontSize: '12px' }}>{def.label}</div>
       {def.description && (
-        <div style={{ color: '#a6adc8', marginBottom: 8, lineHeight: 1.4 }}>{def.description}</div>
+        <div style={{ color: ctp.subtext0, marginBottom: 8, lineHeight: 1.4 }}>{def.description}</div>
       )}
       {inputEntries.length > 0 && (
         <div style={{ marginBottom: 5 }}>
-          <div style={{ color: '#585b70', fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inputs</div>
+          <div style={{ color: ctp.surface2, fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inputs</div>
           {inputEntries.map(([k, s]) => {
             const info = getInputInfo(k, s.type);
             return (
               <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
-                <span style={{ color: '#89b4fa', fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
-                <span style={{ color: '#585b70', fontSize: '10px', minWidth: 34 }}>{s.type}</span>
+                <span style={{ color: ctp.blue, fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
+                <span style={{ color: ctp.surface2, fontSize: '10px', minWidth: 34 }}>{s.type}</span>
                 {info}
               </div>
             );
@@ -255,16 +256,16 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       )}
       {outputEntries.length > 0 && (
         <div style={{ marginBottom: def.glslFunction ? 8 : 0 }}>
-          <div style={{ color: '#585b70', fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Outputs</div>
+          <div style={{ color: ctp.surface2, fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Outputs</div>
           {outputEntries.map(([k, s]) => {
             // Show probed float output value if available
             const probed = s.type === 'float' ? floatValueRegistry.get(`__preview__${node.id}`) : undefined;
             const liveVal = probed !== undefined ? probed.toFixed(3) : null;
             return (
               <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
-                <span style={{ color: '#a6e3a1', fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
-                <span style={{ color: '#585b70', fontSize: '10px', minWidth: 34 }}>{s.type}</span>
-                {liveVal && <span style={{ color: '#f9e2af', fontFamily: 'monospace', fontSize: '10px' }}>{liveVal}</span>}
+                <span style={{ color: ctp.green, fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
+                <span style={{ color: ctp.surface2, fontSize: '10px', minWidth: 34 }}>{s.type}</span>
+                {liveVal && <span style={{ color: ctp.yellow, fontFamily: 'monospace', fontSize: '10px' }}>{liveVal}</span>}
               </div>
             );
           })}
@@ -272,10 +273,10 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       )}
       {def.glslFunction && (
         <div>
-          <div style={{ color: '#585b70', fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>GLSL</div>
+          <div style={{ color: ctp.surface2, fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>GLSL</div>
           <pre style={{
-            background: '#11111b', borderRadius: 4, padding: '6px 8px',
-            fontSize: '9px', color: '#a6e3a1', margin: 0,
+            background: ctp.crust, borderRadius: 4, padding: '6px 8px',
+            fontSize: '9px', color: ctp.green, margin: 0,
             maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre', fontFamily: 'monospace',
           }}>
             {def.glslFunction.slice(0, 500)}
@@ -301,14 +302,14 @@ function SocketTooltip({ lines, side }: TooltipProps) {
         top: '50%',
         transform: 'translateY(-50%)',
         zIndex: 200,
-        background: '#1e1e2e',
-        border: '1px solid #45475a',
+        background: ctp.base,
+        border: `1px solid ${ctp.surface1}`,
         borderRadius: '6px',
         padding: '6px 8px',
         minWidth: '160px',
         maxWidth: '240px',
         fontSize: '10px',
-        color: '#cdd6f4',
+        color: ctp.text,
         pointerEvents: 'none',
         boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
         whiteSpace: 'nowrap',
@@ -592,10 +593,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       left: node.position.x,
       top: node.position.y,
       minWidth: '140px',
-      background: '#1e1e2e',
-      border: `1px solid ${isSelected || isMultiSelected ? '#cba6f7' : '#45475a'}`,
+      background: ctp.base,
+      border: `1px solid ${isSelected || isMultiSelected ? ctp.mauve : ctp.surface1}`,
       borderRadius: '8px',
-      boxShadow: isSelected || isMultiSelected ? '0 0 0 2px #cba6f744' : '0 2px 8px rgba(0,0,0,0.4)',
+      boxShadow: isSelected || isMultiSelected ? `0 0 0 2px ${ctp.mauve}44` : '0 2px 8px rgba(0,0,0,0.4)',
       opacity: dimmed ? 0.3 : 1,
       transition: 'opacity 0.15s',
       cursor: 'default',
@@ -618,27 +619,27 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         }}
       >
         {/* Header */}
-        <div style={{ background: '#181825', borderRadius: '8px 8px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}>
-          <span style={{ fontWeight: 700, fontSize: '11px', color: '#cba6f7', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <div style={{ background: ctp.mantle, borderRadius: '8px 8px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}>
+          <span style={{ fontWeight: 700, fontSize: '11px', color: ctp.mauve, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ fontSize: '10px', opacity: 0.7 }}>⟳</span> Loop Index
           </span>
           {canDeleteLoopIndex ? (
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => removeNode(node.id)}
-              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+              style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
               title="Remove loop index"
             >✕</button>
           ) : (
-            <span style={{ fontSize: '9px', color: '#585b70', fontFamily: 'monospace' }} title="Last loop index in group — cannot delete">🔒</span>
+            <span style={{ fontSize: '9px', color: ctp.surface2, fontFamily: 'monospace' }} title="Last loop index in group — cannot delete">🔒</span>
           )}
         </div>
         {/* Body */}
         <div style={{ padding: '6px 0 4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '3px 0 3px 10px' }}>
-            <span style={{ color: '#a6adc8', fontSize: '11px', marginRight: '6px', fontFamily: 'monospace', opacity: 0.6 }}>float i</span>
+            <span style={{ color: ctp.subtext0, fontSize: '11px', marginRight: '6px', fontFamily: 'monospace', opacity: 0.6 }}>float i</span>
             <div
               data-socket="out"
               ref={el => registerSocket(node.id, 'out', 'i', el)}
@@ -675,8 +676,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         data-node-id={node.id}
         style={{
           position: 'absolute', left: node.position.x, top: node.position.y,
-          background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
-          borderRadius: '8px', width: '200px', color: '#cdd6f4', fontSize: '12px',
+          background: ctp.base, border: isSelected ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
+          borderRadius: '8px', width: '200px', color: ctp.text, fontSize: '12px',
           userSelect: 'none', opacity: dimmed ? 0.2 : 1,
           boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
         }}
@@ -700,20 +701,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             window.addEventListener('mousemove', onMove);
             window.addEventListener('mouseup', onUp);
           }}
-          style={{ background: '#313244', borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+          style={{ background: ctp.surface0, borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
         >
           <span style={{ fontWeight: 600, fontSize: '11px' }}>Texture Input</span>
-          <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+          <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
         </div>
 
         {/* Thumbnail or placeholder */}
         <div style={{ padding: '8px 10px', display: 'flex', gap: '8px', alignItems: 'center' }} onMouseDown={e => e.stopPropagation()}>
           {thumbnailUrl ? (
-            <img src={thumbnailUrl} alt="texture" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: '4px', border: '1px solid #45475a', flexShrink: 0 }} />
+            <img src={thumbnailUrl} alt="texture" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: '4px', border: `1px solid ${ctp.surface1}`, flexShrink: 0 }} />
           ) : (
-            <div style={{ width: 48, height: 48, background: '#313244', borderRadius: '4px', border: '1px dashed #45475a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🖼</div>
+            <div style={{ width: 48, height: 48, background: ctp.surface0, borderRadius: '4px', border: `1px dashed ${ctp.surface1}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🖼</div>
           )}
-          <label style={{ fontSize: '10px', color: '#89b4fa', cursor: 'pointer', border: '1px solid #89b4fa55', borderRadius: '3px', padding: '3px 7px' }}>
+          <label style={{ fontSize: '10px', color: ctp.blue, cursor: 'pointer', border: `1px solid ${ctp.blue}55`, borderRadius: '3px', padding: '3px 7px' }}>
             {nodeTexture ? 'Change' : 'Load Image'}
             <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
           </label>
@@ -723,11 +724,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             (it returns early, above), so unlike most select params this one
             needs its own dropdown here. */}
         <div style={{ padding: '0 10px 8px', display: 'flex', alignItems: 'center', gap: '6px' }} onMouseDown={e => e.stopPropagation()}>
-          <span style={{ color: '#6c7086', fontSize: '10px' }}>Fit</span>
+          <span style={{ color: ctp.overlay0, fontSize: '10px' }}>Fit</span>
           <select
             value={(node.params.fit as string) ?? 'stretch'}
             onChange={e => updateNodeParams(node.id, { fit: e.target.value }, { immediate: true })}
-            style={{ background: '#181825', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '3px', fontSize: '10px', padding: '2px 4px', outline: 'none', cursor: 'pointer', flex: 1 }}
+            style={{ background: ctp.mantle, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '3px', fontSize: '10px', padding: '2px 4px', outline: 'none', cursor: 'pointer', flex: 1 }}
           >
             <option value="stretch">Stretch</option>
             <option value="contain">Fit (no crop)</option>
@@ -755,13 +756,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 touchAction: 'manipulation',
               }}
             />
-            <span style={{ fontSize: '10px', color: '#a6adc8' }}>UV</span>
+            <span style={{ fontSize: '10px', color: ctp.subtext0 }}>UV</span>
           </div>
           {/* Output sockets */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
             {Object.entries(node.outputs).map(([key, out]) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                <span style={{ fontSize: '10px', color: ctp.subtext0 }}>{out.label}</span>
                 <div
                   data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', key, el); }}
@@ -863,8 +864,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         <div
           style={{
             position: 'absolute', left: node.position.x, top: node.position.y,
-            background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
-            borderRadius: '8px', width: '240px', color: '#cdd6f4', fontSize: '12px',
+            background: ctp.base, border: isSelected ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
+            borderRadius: '8px', width: '240px', color: ctp.text, fontSize: '12px',
             userSelect: 'none', opacity: dimmed ? 0.2 : 1,
             boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           }}
@@ -888,7 +889,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               window.addEventListener('mousemove', onMove);
               window.addEventListener('mouseup', onUp);
             }}
-            style={{ background: '#313244', borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+            style={{ background: ctp.surface0, borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               {/* Play/pause button */}
@@ -897,10 +898,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onClick={togglePlay}
                 title={isNodePlaying ? 'Pause' : 'Play'}
                 disabled={!hasFile}
-                style={{ background: 'none', border: 'none', color: !hasFile ? '#45475a' : isNodePlaying ? '#a6e3a1' : '#89dceb', cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
+                style={{ background: 'none', border: 'none', color: !hasFile ? ctp.surface1 : isNodePlaying ? ctp.green : ctp.sky, cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
               >{isNodePlaying ? '⏸' : '▶'}</button>
-              <span style={{ fontWeight: 600, fontSize: '11px', color: '#89dceb' }}>
-                Audio Input{soloedBand >= 0 ? <span style={{ color: '#f9e2af', fontSize: '9px', marginLeft: '4px' }}>SOLO</span> : null}
+              <span style={{ fontWeight: 600, fontSize: '11px', color: ctp.sky }}>
+                Audio Input{soloedBand >= 0 ? <span style={{ color: ctp.yellow, fontSize: '9px', marginLeft: '4px' }}>SOLO</span> : null}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -909,9 +910,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseDown={e => e.stopPropagation()}
                 onClick={() => setShowAudioInputModal(v => !v)}
                 title="Open Audio analyzer"
-                style={{ background: 'none', border: 'none', color: showAudioInputModal ? '#89dceb' : '#585b70', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+                style={{ background: 'none', border: 'none', color: showAudioInputModal ? ctp.sky : ctp.surface2, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
               >◉</button>
-              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
             </div>
           </div>
 
@@ -932,20 +933,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             onClick={() => audioFileInputRef.current?.click()}
             style={{
               padding: '6px 10px',
-              border: '1px dashed #45475a',
+              border: `1px dashed ${ctp.surface1}`,
               borderRadius: '4px',
               margin: '6px 8px',
               textAlign: 'center',
               cursor: 'pointer',
-              background: '#181825',
+              background: ctp.mantle,
             }}
           >
             {hasFile ? (
-              <span style={{ fontSize: '10px', color: '#89dceb', fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '10px', color: ctp.sky, fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 ♫ {fileName}
               </span>
             ) : (
-              <span style={{ fontSize: '10px', color: '#585b70' }}>Click or drop WAV / MP3 / OGG</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2 }}>Click or drop WAV / MP3 / OGG</span>
             )}
           </div>
 
@@ -953,11 +954,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           <div style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '5px' }} onMouseDown={e => e.stopPropagation()}>
             {/* Mode */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '10px', color: '#585b70', width: '60px', flexShrink: 0 }}>Mode</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2, width: '60px', flexShrink: 0 }}>Mode</span>
               <select
                 value={mode}
                 onChange={e => updateNodeParams(node.id, { mode: e.target.value }, { immediate: true })}
-                style={{ flex: 1, background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', fontSize: '10px', borderRadius: '4px', padding: '2px 4px', cursor: 'pointer' }}
+                style={{ flex: 1, background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.text, fontSize: '10px', borderRadius: '4px', padding: '2px 4px', cursor: 'pointer' }}
               >
                 <option value="band">Band</option>
                 <option value="full">Full Spectrum</option>
@@ -965,15 +966,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             </div>
             {/* Shared range */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '10px', color: '#585b70', width: '60px', flexShrink: 0 }}>Range Hz</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2, width: '60px', flexShrink: 0 }}>Range Hz</span>
               <input
                 type="range" min={0} max={10000} step={1}
                 value={freqRange}
                 disabled={mode === 'full'}
                 onChange={e => updateNodeParams(node.id, { freq_range: parseFloat(e.target.value) }, { immediate: true })}
-                style={{ flex: 1, accentColor: '#89dceb', cursor: mode === 'full' ? 'default' : 'pointer', opacity: mode === 'full' ? 0.3 : 1 }}
+                style={{ flex: 1, accentColor: ctp.sky, cursor: mode === 'full' ? 'default' : 'pointer', opacity: mode === 'full' ? 0.3 : 1 }}
               />
-              <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '42px', textAlign: 'right' }}>±{freqRange}</span>
+              <span style={{ fontSize: '10px', color: ctp.overlay0, fontFamily: 'monospace', width: '42px', textAlign: 'right' }}>±{freqRange}</span>
             </div>
             {/* Band list */}
             {mode !== 'full' && bands.map((center, i) => (
@@ -983,13 +984,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   onClick={() => handleRemoveBand(i)}
                   disabled={bands.length <= 1}
                   title="Remove band"
-                  style={{ background: 'none', border: 'none', color: bands.length <= 1 ? '#45475a' : '#585b70', cursor: bands.length <= 1 ? 'default' : 'pointer', fontSize: '11px', padding: '0', lineHeight: 1, flexShrink: 0 }}
+                  style={{ background: 'none', border: 'none', color: bands.length <= 1 ? ctp.surface1 : ctp.surface2, cursor: bands.length <= 1 ? 'default' : 'pointer', fontSize: '11px', padding: '0', lineHeight: 1, flexShrink: 0 }}
                 >×</button>
                 <button
                   onMouseDown={e => e.stopPropagation()}
                   onClick={() => handleSolo(i)}
                   title={soloedBand === i ? 'Un-solo' : 'Solo this band'}
-                  style={{ background: 'none', border: 'none', color: soloedBand === i ? '#f9e2af' : '#45475a', cursor: 'pointer', fontSize: '9px', padding: '0', lineHeight: 1, flexShrink: 0, fontWeight: 700 }}
+                  style={{ background: 'none', border: 'none', color: soloedBand === i ? ctp.yellow : ctp.surface1, cursor: 'pointer', fontSize: '9px', padding: '0', lineHeight: 1, flexShrink: 0, fontWeight: 700 }}
                 >S</button>
                 <input
                   type="range" min={0} max={1000} step={1}
@@ -999,9 +1000,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     const newBands = bands.map((c, idx) => idx === i ? newHz : c);
                     updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
                   }}
-                  style={{ flex: 1, accentColor: '#89dceb', cursor: 'pointer' }}
+                  style={{ flex: 1, accentColor: ctp.sky, cursor: 'pointer' }}
                 />
-                <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '38px', textAlign: 'right' }}>
+                <span style={{ fontSize: '10px', color: ctp.overlay0, fontFamily: 'monospace', width: '38px', textAlign: 'right' }}>
                   {center >= 1000 ? `${(center/1000).toFixed(1)}k` : `${center}`}
                 </span>
               </div>
@@ -1011,7 +1012,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               <button
                 onMouseDown={e => e.stopPropagation()}
                 onClick={handleAddBand}
-                style={{ background: '#313244', border: '1px dashed #45475a', color: '#585b70', fontSize: '10px', borderRadius: '4px', padding: '3px', cursor: 'pointer', width: '100%', marginTop: '2px' }}
+                style={{ background: ctp.surface0, border: `1px dashed ${ctp.surface1}`, color: ctp.surface2, fontSize: '10px', borderRadius: '4px', padding: '3px', cursor: 'pointer', width: '100%', marginTop: '2px' }}
               >+ Add Band</button>
             )}
           </div>
@@ -1023,7 +1024,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           <div style={{ padding: '3px 0 5px', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
             {Object.entries(node.outputs).map(([key, out]) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                <span style={{ fontSize: '10px', color: ctp.subtext0 }}>{out.label}</span>
                 <div
                   data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', key, el); }}
@@ -1092,8 +1093,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           data-node-id={node.id}
           style={{
             position: 'absolute', left: node.position.x, top: node.position.y,
-            background: '#1e1e2e', border: isSelected ? '1px solid #89b4fa' : '1px solid #45475a',
-            borderRadius: '8px', width: '220px', color: '#cdd6f4', fontSize: '12px',
+            background: ctp.base, border: isSelected ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
+            borderRadius: '8px', width: '220px', color: ctp.text, fontSize: '12px',
             userSelect: 'none', opacity: dimmed ? 0.2 : 1,
             boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           }}
@@ -1117,7 +1118,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               window.addEventListener('mousemove', onMove);
               window.addEventListener('mouseup', onUp);
             }}
-            style={{ background: '#313244', borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+            style={{ background: ctp.surface0, borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
@@ -1125,18 +1126,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onClick={toggleVideoPlay}
                 title={isPlaying ? 'Pause' : 'Play'}
                 disabled={!hasFile}
-                style={{ background: 'none', border: 'none', color: !hasFile ? '#45475a' : isPlaying ? '#a6e3a1' : '#cba6f7', cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
+                style={{ background: 'none', border: 'none', color: !hasFile ? ctp.surface1 : isPlaying ? ctp.green : ctp.mauve, cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
               >{isPlaying ? '⏸' : '▶'}</button>
-              <span style={{ fontWeight: 600, fontSize: '11px', color: '#cba6f7' }}>Video Input</span>
+              <span style={{ fontWeight: 600, fontSize: '11px', color: ctp.mauve }}>Video Input</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button
                 onMouseDown={e => e.stopPropagation()}
                 onClick={() => setShowVideoInputModal(v => !v)}
                 title="Open video settings"
-                style={{ background: 'none', border: 'none', color: showVideoInputModal ? '#cba6f7' : '#585b70', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+                style={{ background: 'none', border: 'none', color: showVideoInputModal ? ctp.mauve : ctp.surface2, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
               >◉</button>
-              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
             </div>
           </div>
 
@@ -1157,10 +1158,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             onClick={() => videoFileInputRef.current?.click()}
             style={{
               margin: '6px 8px',
-              border: '1px dashed #45475a',
+              border: `1px dashed ${ctp.surface1}`,
               borderRadius: '4px',
               cursor: 'pointer',
-              background: '#181825',
+              background: ctp.mantle,
               overflow: 'hidden',
               minHeight: '48px',
               display: 'flex',
@@ -1176,14 +1177,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 playsInline
               />
             ) : (
-              <span style={{ fontSize: '10px', color: '#585b70', padding: '10px' }}>Click or drop MP4 / WebM / MOV</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2, padding: '10px' }}>Click or drop MP4 / WebM / MOV</span>
             )}
           </div>
 
           {/* File name */}
           {hasFile && (
             <div style={{ padding: '2px 10px 4px', overflow: 'hidden' }} onMouseDown={e => e.stopPropagation()}>
-              <span style={{ fontSize: '10px', color: '#cba6f7', fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '10px', color: ctp.mauve, fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 ▶ {fileName}
               </span>
             </div>
@@ -1209,13 +1210,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   touchAction: 'manipulation',
                 }}
               />
-              <span style={{ fontSize: '10px', color: '#a6adc8' }}>UV</span>
+              <span style={{ fontSize: '10px', color: ctp.subtext0 }}>UV</span>
             </div>
             {/* Output sockets */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
               {Object.entries(node.outputs).map(([key, out]) => (
                 <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-                  <span style={{ fontSize: '10px', color: '#a6adc8' }}>{out.label}</span>
+                  <span style={{ fontSize: '10px', color: ctp.subtext0 }}>{out.label}</span>
                   <div
                     data-socket="out"
                     ref={el => { registerSocket(node.id, 'out', key, el); }}
@@ -1316,15 +1317,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           position: 'absolute',
           left: node.position.x,
           top: node.position.y,
-          background: '#1e1e2e',
-          border: isSelected ? '1px solid #89b4fa' : '1px solid #444',
+          background: ctp.base,
+          border: isSelected ? `1px solid ${ctp.blue}` : '1px solid #444',
           borderRadius: '8px',
           width: '220px',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
           userSelect: 'none',
           opacity: dimmed ? 0.2 : 1,
-          boxShadow: isSelected ? '0 0 10px #89b4fa33, 0 4px 12px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.4)',
+          boxShadow: isSelected ? `0 0 10px ${ctp.blue}33, 0 4px 12px rgba(0,0,0,0.4)` : '0 4px 12px rgba(0,0,0,0.4)',
         }}
       >
         {/* Header */}
@@ -1332,7 +1333,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           onMouseDown={handleScopeHeaderMouseDown}
           onTouchStart={handleHeaderTouchStart}
           style={{
-            background: '#313244', borderRadius: '6px 6px 0 0',
+            background: ctp.surface0, borderRadius: '6px 6px 0 0',
             padding: '5px 10px', display: 'flex', justifyContent: 'space-between',
             alignItems: 'center', cursor: 'grab',
           }}
@@ -1343,7 +1344,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           <button
             onMouseDown={e => e.stopPropagation()}
             onClick={() => removeNode(node.id)}
-            style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+            style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
           >✕</button>
         </div>
 
@@ -1352,7 +1353,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           ref={scopeCanvasRef}
           width={220}
           height={80}
-          style={{ display: 'block', width: '100%', height: '80px', borderBottom: '1px solid #313244' }}
+          style={{ display: 'block', width: '100%', height: '80px', borderBottom: `1px solid ${ctp.surface0}` }}
         />
 
         {/* Min/Max params */}
@@ -1360,7 +1361,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
              onMouseDown={e => e.stopPropagation()}>
           {(['min', 'max'] as const).map(key => (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
-              <span style={{ color: '#6c7086', fontSize: '10px', minWidth: '22px' }}>{key}</span>
+              <span style={{ color: ctp.overlay0, fontSize: '10px', minWidth: '22px' }}>{key}</span>
               <NumberInput
                 value={typeof node.params[key] === 'number' ? node.params[key] as number : (key === 'min' ? -1 : 1)}
                 step={0.1}
@@ -1391,10 +1392,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 cursor: 'crosshair', flexShrink: 0, marginLeft: '-6px',
               }}
             />
-            <span style={{ fontSize: '10px', color: '#a6adc8' }}>value</span>
+            <span style={{ fontSize: '10px', color: ctp.subtext0 }}>value</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 0 0 10px' }}>
-            <span style={{ fontSize: '10px', color: '#a6adc8' }}>value</span>
+            <span style={{ fontSize: '10px', color: ctp.subtext0 }}>value</span>
             <div
               data-socket="out"
               ref={el => { registerSocket(node.id, 'out', 'value', el); }}
@@ -1447,10 +1448,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   ] as const;
 
   const SOCKET_COLORS: Record<string, string> = {
-    vec3: '#a6e3a1',
-    float: '#f38ba8',
-    vec2: '#89b4fa',
-    vec4: '#fab387',
+    vec3: ctp.green,
+    float: ctp.red,
+    vec2: ctp.blue,
+    vec4: ctp.peach,
   };
 
   const handleAnchorDragMouseDown = (e: React.MouseEvent) => {
@@ -1492,11 +1493,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           position: 'absolute',
           left: node.position.x,
           top: node.position.y,
-          background: '#1e1e2e',
-          border: isSelected ? '1px solid #88aacc' : '1px solid #45475a',
+          background: ctp.base,
+          border: isSelected ? '1px solid #88aacc' : `1px solid ${ctp.surface1}`,
           borderRadius: '8px',
           minWidth: '180px',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
           userSelect: 'none',
           zIndex,
@@ -1508,7 +1509,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {/* Header */}
         <div
           style={{
-            background: '#313244',
+            background: ctp.surface0,
             borderRadius: '7px 7px 0 0',
             padding: '6px 10px',
             fontWeight: 700,
@@ -1529,7 +1530,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {/* Fixed outputs */}
         <div style={{ padding: '6px 0' }}>
           {fixedOutputs.map(({ key, type, label }) => {
-            const color = SOCKET_COLORS[type] ?? '#a6adc8';
+            const color = SOCKET_COLORS[type] ?? ctp.subtext0;
             return (
               <div
                 key={key}
@@ -1537,8 +1538,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseEnter={() => { setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
                 onMouseLeave={() => { setHoveredOutput(null); onSocketHover?.(null); }}
               >
-                <span style={{ fontSize: '10px', color: '#585b70' }}>&#128274;</span>
-                <span style={{ fontSize: '11px', color: '#a6adc8' }}>{label}</span>
+                <span style={{ fontSize: '10px', color: ctp.surface2 }}>&#128274;</span>
+                <span style={{ fontSize: '11px', color: ctp.subtext0 }}>{label}</span>
                 <div
                   ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
                   onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
@@ -1557,7 +1558,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
           {/* User-added extra outputs */}
           {extraInputs.map(({ key, type, label }) => {
-            const color = SOCKET_COLORS[type] ?? '#a6adc8';
+            const color = SOCKET_COLORS[type] ?? ctp.subtext0;
             return (
               <div
                 key={key}
@@ -1568,7 +1569,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 <button
                   onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)}
                   style={{
-                    background: 'none', border: 'none', color: '#585b70', cursor: 'pointer',
+                    background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer',
                     padding: '0 2px', fontSize: '11px', lineHeight: 1,
                   }}
                   title={`Remove ${label}`}
@@ -1587,16 +1588,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                       if (e.key === 'Escape') setEditingPortKey(null);
                     }}
-                    style={{ width: '60px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #88aacc', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                    style={{ width: '60px', fontSize: '10px', background: ctp.base, border: '1px solid #88aacc', color: ctp.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
                   />
                 ) : (
                   <span
-                    style={{ fontSize: '11px', color: '#cdd6f4', cursor: 'text' }}
+                    style={{ fontSize: '11px', color: ctp.text, cursor: 'text' }}
                     title="Double-click to rename"
                     onDoubleClick={() => { setEditingPortKey(`mlgin_${key}`); setEditingPortLabel(label); }}
                   >{label}</span>
                 )}
-                <span style={{ fontSize: '10px', color: '#585b70' }}>({type})</span>
+                <span style={{ fontSize: '10px', color: ctp.surface2 }}>({type})</span>
                 <div
                   ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
                   onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
@@ -1615,7 +1616,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         </div>
 
         {/* Add Input form */}
-        <div style={{ borderTop: '1px solid #31324488', padding: '6px 8px' }}>
+        <div style={{ borderTop: `1px solid ${ctp.surface0}88`, padding: '6px 8px' }}>
           {addingMarchInput ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <input
@@ -1638,9 +1639,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     key={t}
                     onClick={() => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
                     style={{
-                      background: addingMarchInput.type === t ? '#88aacc' : '#31324488',
-                      border: `1px solid ${addingMarchInput.type === t ? '#88aacc' : '#585b70'}`,
-                      borderRadius: 3, color: addingMarchInput.type === t ? '#1e1e2e' : '#a6adc8',
+                      background: addingMarchInput.type === t ? '#88aacc' : `${ctp.surface0}88`,
+                      border: `1px solid ${addingMarchInput.type === t ? '#88aacc' : ctp.surface2}`,
+                      borderRadius: 3, color: addingMarchInput.type === t ? ctp.base : ctp.subtext0,
                       fontSize: '10px', padding: '2px 5px', cursor: 'pointer',
                     }}
                   >{t}</button>
@@ -1658,7 +1659,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 >Add</button>
                 <button
                   onClick={() => setAddingMarchInput(null)}
-                  style={{ flex: 1, background: 'none', border: '1px solid #45475a', borderRadius: 3, color: '#585b70', fontSize: '10px', padding: '3px 0', cursor: 'pointer' }}
+                  style={{ flex: 1, background: 'none', border: `1px solid ${ctp.surface1}`, borderRadius: 3, color: ctp.surface2, fontSize: '10px', padding: '3px 0', cursor: 'pointer' }}
                 >Cancel</button>
               </div>
             </div>
@@ -1666,8 +1667,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <button
               onClick={() => setAddingMarchInput({ name: '', type: 'float' })}
               style={{
-                width: '100%', background: 'none', border: '1px dashed #45475a',
-                borderRadius: 3, color: '#585b70', fontSize: '10px', padding: '3px 0',
+                width: '100%', background: 'none', border: `1px dashed ${ctp.surface1}`,
+                borderRadius: 3, color: ctp.surface2, fontSize: '10px', padding: '3px 0',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               }}
             >
@@ -1687,11 +1688,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           position: 'absolute',
           left: node.position.x,
           top: node.position.y,
-          background: '#1e1e2e',
-          border: isSelected ? '1px solid #88aacc' : '1px solid #45475a',
+          background: ctp.base,
+          border: isSelected ? '1px solid #88aacc' : `1px solid ${ctp.surface1}`,
           borderRadius: '8px',
           minWidth: '200px',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
           userSelect: 'none',
           zIndex,
@@ -1703,7 +1704,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {/* Header */}
         <div
           style={{
-            background: '#313244',
+            background: ctp.surface0,
             borderRadius: '7px 7px 0 0',
             padding: '6px 10px',
             fontWeight: 700,
@@ -1725,7 +1726,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         <div style={{ padding: '6px 0' }}>
           {(() => {
             const posInp = node.inputs.pos;
-            const color = '#a6e3a1';
+            const color = ctp.green;
             const isConnected = !!posInp?.connection;
             return (
               <div
@@ -1745,8 +1746,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     transition: 'background 0.1s',
                   }}
                 />
-                <span style={{ fontSize: '11px', color: '#a6adc8' }}>Position</span>
-                <span style={{ fontSize: '10px', color: '#585b70' }}>&#128274;</span>
+                <span style={{ fontSize: '11px', color: ctp.subtext0 }}>Position</span>
+                <span style={{ fontSize: '10px', color: ctp.surface2 }}>&#128274;</span>
               </div>
             );
           })()}
@@ -1754,14 +1755,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
         {/* Standard outputs toggle section */}
         {activeGroupId && (
-          <div style={{ borderTop: '1px solid #31324488', padding: '6px 8px' }}>
-            <div style={{ fontSize: '10px', color: '#585b70', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div style={{ borderTop: `1px solid ${ctp.surface0}88`, padding: '6px 8px' }}>
+            <div style={{ fontSize: '10px', color: ctp.surface2, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Outputs
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               {MARCH_STANDARD_OUTPUTS.map(({ key, type, label }) => {
                 const isHidden = mlGroupHiddenOutputs.includes(key);
-                const color = SOCKET_COLORS[type] ?? '#a6adc8';
+                const color = SOCKET_COLORS[type] ?? ctp.subtext0;
                 return (
                   <button
                     key={key}
@@ -1769,9 +1770,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     onClick={() => toggleMarchLoopOutputPort(activeGroupId, key)}
                     style={{
                       background: isHidden ? 'none' : `${color}22`,
-                      border: `1px solid ${isHidden ? '#45475a' : color}`,
+                      border: `1px solid ${isHidden ? ctp.surface1 : color}`,
                       borderRadius: 3,
-                      color: isHidden ? '#585b70' : color,
+                      color: isHidden ? ctp.surface2 : color,
                       fontSize: '10px',
                       padding: '2px 5px',
                       cursor: 'pointer',
@@ -1802,7 +1803,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const isSpaceWarpGroup = node.type === 'spaceWarpGroup';
     const isMarchLoopGroup = node.type === 'marchLoopGroup' || node.type === 'giLitMarchGroup';
     // Color per type
-    const groupAccentColor = isSceneGroup ? '#cc88aa' : isSpaceWarpGroup ? '#aa88cc' : isMarchLoopGroup ? '#88aacc' : (hasInnerGroups ? '#cba6f7' : '#89b4fa');
+    const groupAccentColor = isSceneGroup ? '#cc88aa' : isSpaceWarpGroup ? '#aa88cc' : isMarchLoopGroup ? '#88aacc' : (hasInnerGroups ? ctp.mauve : ctp.blue);
 
     const handleGroupHeaderMouseDown = (e: React.MouseEvent) => {
       if (e.button === 2) return;
@@ -1842,11 +1843,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           position: 'absolute',
           left: node.position.x,
           top: node.position.y,
-          background: '#1e1e2e',
+          background: ctp.base,
           border: isMultiSelected ? `2px solid ${groupAccentColor}` : isSelected ? `1px solid ${groupAccentColor}` : `2px dashed ${groupAccentColor}`,
           borderRadius: '8px',
           minWidth: '200px',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
           userSelect: 'none',
           opacity: dimmed ? 0.2 : 1,
@@ -1858,7 +1859,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           onMouseDown={handleGroupHeaderMouseDown}
           onDoubleClick={() => { if (!savingMode) onEnterGroup?.(node.id); }}
           style={{
-            background: '#313244',
+            background: ctp.surface0,
             borderRadius: '6px 6px 0 0',
             padding: '5px 8px 5px 10px',
             display: 'flex',
@@ -1887,7 +1888,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                   if (e.key === 'Escape') setIsEditingTitle(false);
                 }}
-                style={{ background: '#1e1e2e', border: `1px solid ${groupAccentColor}`, color: groupAccentColor, borderRadius: '3px', padding: '0 4px', fontSize: '12px', fontWeight: 600, width: `${Math.max(60, editingTitleValue.length * 8)}px`, outline: 'none' }}
+                style={{ background: ctp.base, border: `1px solid ${groupAccentColor}`, color: groupAccentColor, borderRadius: '3px', padding: '0 4px', fontSize: '12px', fontWeight: 600, width: `${Math.max(60, editingTitleValue.length * 8)}px`, outline: 'none' }}
               />
             ) : (
               <span
@@ -1900,7 +1901,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 style={{ fontWeight: 600, color: groupAccentColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
               >{groupLabel}</span>
             )}
-            <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0 }}>({nodeCount})</span>
+            <span style={{ fontSize: '10px', color: ctp.surface2, flexShrink: 0 }}>({nodeCount})</span>
           </div>
           {/* Action icons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
@@ -1910,9 +1911,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onDoubleClick={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); duplicateGroup(node.id); }}
               title="Duplicate group (independent copy)"
-              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+              style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
               onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = groupAccentColor)}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
             >⧉</button>
             {/* Save preset */}
             <button
@@ -1928,7 +1929,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               className={savedFlash ? 'group-save-flash' : ''}
               style={{
                 background: 'none', border: 'none',
-                color: saveHovered || savedFlash ? '#a6e3a1' : '#585b70',
+                color: saveHovered || savedFlash ? ctp.green : ctp.surface2,
                 cursor: 'pointer', fontSize: '12px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px',
                 transition: 'color 0.15s',
               }}
@@ -1939,9 +1940,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); ungroupNode(node.id); }}
                 title={groupIters > 1 ? 'Ungroup (iterations will be flattened to a single pass)' : 'Ungroup (restore nodes to parent)'}
-                style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a6e3a1'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+                style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.green; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
               >⤴</button>
             )}
             {/* Delete button — all group types */}
@@ -1952,9 +1953,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 removeNode(node.id);
               }}
               title="Delete group and all its nodes"
-              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+              style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
             >✕</button>
           </div>
         </div>
@@ -1963,7 +1964,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         {savingMode && (
           <div
             onMouseDown={e => e.stopPropagation()}
-            style={{ background: '#252536', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px solid #313244' }}
+            style={{ background: '#252536', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '4px', borderBottom: `1px solid ${ctp.surface0}` }}
           >
             <input
               autoFocus
@@ -1971,14 +1972,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onChange={e => setSaveLabel(e.target.value)}
               placeholder="Name…"
               onMouseDown={e => e.stopPropagation()}
-              style={{ flex: 1, minWidth: '70px', background: '#11111b', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
+              style={{ flex: 1, minWidth: '70px', background: ctp.crust, border: `1px solid ${ctp.blue}`, color: ctp.text, borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
             />
             <input
               value={saveDescription}
               onChange={e => setSaveDescription(e.target.value)}
               placeholder="Description…"
               onMouseDown={e => e.stopPropagation()}
-              style={{ flex: 2, minWidth: '60px', background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
+              style={{ flex: 2, minWidth: '60px', background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
             />
             <button
               onMouseDown={e => e.stopPropagation()}
@@ -1990,12 +1991,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }
                 setSavingMode(false);
               }}
-              style={{ background: '#a6e3a1', border: 'none', color: '#1e1e2e', borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer', fontWeight: 700 }}
+              style={{ background: ctp.green, border: 'none', color: ctp.base, borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer', fontWeight: 700 }}
             >✓</button>
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setSavingMode(false)}
-              style={{ background: 'none', border: '1px solid #585b70', color: '#6c7086', borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
+              style={{ background: 'none', border: `1px solid ${ctp.surface2}`, color: ctp.overlay0, borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
             >✕</button>
           </div>
         )}
@@ -2006,8 +2007,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           onDoubleClick={e => e.stopPropagation()}
           style={{ padding: '3px 10px 3px 10px', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid #252536', background: '#252536' }}
         >
-          <span style={{ fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', minWidth: '60px' }}>ITERATIONS</span>
-          <span style={{ fontSize: '10px', color: groupIters > 1 ? groupAccentColor : '#585b70', minWidth: '16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>×{groupIters}</span>
+          <span style={{ fontSize: '9px', color: ctp.surface2, letterSpacing: '0.05em', minWidth: '60px' }}>ITERATIONS</span>
+          <span style={{ fontSize: '10px', color: groupIters > 1 ? groupAccentColor : ctp.surface2, minWidth: '16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>×{groupIters}</span>
           <input
             type="range"
             min={1}
@@ -2047,7 +2048,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         width: 10, height: 10, borderRadius: '50%',
                         background: node.inputs[key]?.connection
                           ? (TYPE_COLORS[input.type] ?? '#888')
-                          : '#1e1e2e',
+                          : ctp.base,
                         border: `2px solid ${TYPE_COLORS[input.type] ?? '#888'}`,
                         cursor: 'crosshair',
                         position: 'relative', left: -14,
@@ -2068,11 +2069,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                           if (e.key === 'Escape') setEditingPortKey(null);
                         }}
-                        style={{ width: '60px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #88aacc', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none', marginLeft: -14 }}
+                        style={{ width: '60px', fontSize: '10px', background: ctp.base, border: '1px solid #88aacc', color: ctp.text, borderRadius: '2px', padding: '0 3px', outline: 'none', marginLeft: -14 }}
                       />
                     ) : (
                       <span
-                        style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14, cursor: isExtraInput ? 'text' : 'default' }}
+                        style={{ fontSize: '10px', color: ctp.subtext0, marginLeft: -14, cursor: isExtraInput ? 'text' : 'default' }}
                         title={isExtraInput ? 'Double-click to rename' : undefined}
                         onDoubleClick={isExtraInput ? e => { e.stopPropagation(); setEditingPortKey(`mlgext_${key}`); setEditingPortLabel(input.label); } : undefined}
                       >{input.label}</span>
@@ -2100,7 +2101,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     width: 10, height: 10, borderRadius: '50%',
                     background: node.inputs[port.key]?.connection
                       ? (TYPE_COLORS[port.type] ?? '#888')
-                      : '#1e1e2e',
+                      : ctp.base,
                     border: `2px solid ${TYPE_COLORS[port.type] ?? '#888'}`,
                     cursor: 'crosshair',
                     position: 'relative', left: -14,
@@ -2123,11 +2124,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                       if (e.key === 'Escape') setEditingPortKey(null);
                     }}
-                    style={{ width: '70px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                    style={{ width: '70px', fontSize: '10px', background: ctp.base, border: `1px solid ${ctp.blue}`, color: ctp.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
                   />
                 ) : (
                   <span
-                    style={{ fontSize: '10px', color: '#a6adc8', marginLeft: -14, cursor: 'text' }}
+                    style={{ fontSize: '10px', color: ctp.subtext0, marginLeft: -14, cursor: 'text' }}
                     title="Double-click to rename"
                     onDoubleClick={e => { e.stopPropagation(); setEditingPortKey(port.key); setEditingPortLabel(port.label); }}
                   >{port.label}</span>
@@ -2151,7 +2152,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               return Object.entries(mergedOuts).filter(([key]) => !hidden.includes(key));
             })().map(([key, output]) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '10px', color: '#a6adc8' }}>{output.label}</span>
+                <span style={{ fontSize: '10px', color: ctp.subtext0 }}>{output.label}</span>
                 <div
                   data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', key, el); }}
@@ -2216,11 +2217,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                       if (e.key === 'Escape') setEditingPortKey(null);
                     }}
-                    style={{ width: '70px', fontSize: '10px', background: '#1e1e2e', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                    style={{ width: '70px', fontSize: '10px', background: ctp.base, border: `1px solid ${ctp.blue}`, color: ctp.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
                   />
                 ) : (
                   <span
-                    style={{ fontSize: '10px', color: '#a6adc8', cursor: 'text' }}
+                    style={{ fontSize: '10px', color: ctp.subtext0, cursor: 'text' }}
                     title="Double-click to rename"
                     onDoubleClick={e => { e.stopPropagation(); setEditingPortKey('out_' + port.key); setEditingPortLabel(port.label); }}
                   >{port.label}</span>
@@ -2268,9 +2269,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               : innerGroupLabel;
 
             return (
-              <div key={innerNode.id} style={{ borderTop: '1px solid #313244' }}>
+              <div key={innerNode.id} style={{ borderTop: `1px solid ${ctp.surface0}` }}>
                 <div
-                  style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px', userSelect: 'none' }}
+                  style={{ padding: '3px 10px 1px', fontSize: '9px', color: ctp.surface2, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px', userSelect: 'none' }}
                   onDoubleClick={e => {
                     e.stopPropagation();
                     setEditingSectionId(innerNode.id);
@@ -2297,12 +2298,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         }
                       }}
                       onMouseDown={e => e.stopPropagation()}
-                      style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #585b70', color: '#a6adc8', fontSize: '9px', letterSpacing: '0.05em', outline: 'none', padding: 0, width: '100%', textTransform: 'uppercase' }}
+                      style={{ background: 'transparent', border: 'none', borderBottom: `1px solid ${ctp.surface2}`, color: ctp.subtext0, fontSize: '9px', letterSpacing: '0.05em', outline: 'none', padding: 0, width: '100%', textTransform: 'uppercase' }}
                     />
                   ) : (
                     <span style={{ flex: 1, cursor: 'text' }}>{sectionLabel.toUpperCase()}</span>
                   )}
-                  <span style={{ color: '#6c7086', fontSize: '9px' }}>⬡</span>
+                  <span style={{ color: ctp.overlay0, fontSize: '9px' }}>⬡</span>
                 </div>
                 {surfacedParams.map(sp => {
                   const innNode = innerGroupSub?.nodes.find(n => n.id === sp.nodeId);
@@ -2336,21 +2337,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                           height: isTouchDevice ? 16 : 8,
                           borderRadius: '50%',
                           background: externallyDriven ? '#f0a' : 'transparent',
-                          border: `1.5px solid ${externallyDriven ? '#f0a' : '#585b70'}`,
+                          border: `1.5px solid ${externallyDriven ? '#f0a' : ctp.surface2}`,
                           cursor: 'crosshair',
                           touchAction: 'manipulation',
                         }}
                       />
-                      <span style={{ color: externallyDriven ? '#a6adc8' : '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
+                      <span style={{ color: externallyDriven ? ctp.subtext0 : ctp.overlay0, fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
                         {sp.label ?? paramDef.label}
                       </span>
                       {externallyDriven ? (
                         <>
-                          <span style={{ flex: 1, fontSize: '10px', color: '#585b70', fontStyle: 'italic' }}>wired</span>
+                          <span style={{ flex: 1, fontSize: '10px', color: ctp.surface2, fontStyle: 'italic' }}>wired</span>
                           <button
                             onMouseDown={e => e.stopPropagation()}
                             onClick={() => disconnectInput(node.id, psKey)}
-                            style={{ fontSize: '9px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                            style={{ fontSize: '9px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
                             title="Disconnect"
                           >×</button>
                         </>
@@ -2363,13 +2364,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                             step={adaptiveStep(currentVal, step)}
                             value={Math.max(effMin, Math.min(baseMax, currentVal))}
                             onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
-                            style={{ flex: 1, accentColor: '#cba6f7', cursor: 'pointer' }}
+                            style={{ flex: 1, accentColor: ctp.mauve, cursor: 'pointer' }}
                           />
                           {editingSliderKey === `sp_${overrideKey}` ? (
                             <input
                               autoFocus
                               type="text"
-                              style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: '1px solid #585b70' }}
+                              style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: `1px solid ${ctp.surface2}` }}
                               value={editingSliderValue}
                               onChange={e => setEditingSliderValue(e.target.value)}
                               onBlur={() => {
@@ -2385,7 +2386,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                           ) : (
                             <span
                               title="Double-click to edit"
-                              style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
+                              style={{ color: ctp.subtext0, fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
                               onDoubleClick={() => { setEditingSliderKey(`sp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
                             >
                               {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
@@ -2434,9 +2435,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             : innerLabel;
 
           return (
-            <div key={innerNode.id} style={{ borderTop: '1px solid #313244' }}>
+            <div key={innerNode.id} style={{ borderTop: `1px solid ${ctp.surface0}` }}>
               <div
-                style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', cursor: 'text', userSelect: 'none' }}
+                style={{ padding: '3px 10px 1px', fontSize: '9px', color: ctp.surface2, letterSpacing: '0.05em', cursor: 'text', userSelect: 'none' }}
                 onDoubleClick={e => {
                   e.stopPropagation();
                   setEditingSectionId(innerNode.id);
@@ -2466,8 +2467,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     style={{
                       background: 'transparent',
                       border: 'none',
-                      borderBottom: '1px solid #585b70',
-                      color: '#a6adc8',
+                      borderBottom: `1px solid ${ctp.surface2}`,
+                      color: ctp.subtext0,
                       fontSize: '9px',
                       letterSpacing: '0.05em',
                       outline: 'none',
@@ -2512,21 +2513,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         height: isTouchDevice ? 16 : 8,
                         borderRadius: '50%',
                         background: externallyDriven ? '#f0a' : 'transparent',
-                        border: `1.5px solid ${externallyDriven ? '#f0a' : '#585b70'}`,
+                        border: `1.5px solid ${externallyDriven ? '#f0a' : ctp.surface2}`,
                         cursor: 'crosshair',
                         touchAction: 'manipulation',
                       }}
                     />
-                    <span style={{ color: externallyDriven ? '#a6adc8' : '#6c7086', fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
+                    <span style={{ color: externallyDriven ? ctp.subtext0 : ctp.overlay0, fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
                       {paramDef.label}
                     </span>
                     {externallyDriven ? (
                       <>
-                        <span style={{ flex: 1, fontSize: '10px', color: '#585b70', fontStyle: 'italic' }}>wired</span>
+                        <span style={{ flex: 1, fontSize: '10px', color: ctp.surface2, fontStyle: 'italic' }}>wired</span>
                         <button
                           onMouseDown={e => e.stopPropagation()}
                           onClick={() => disconnectInput(node.id, psKey)}
-                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                          style={{ fontSize: '9px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
                           title="Disconnect"
                         >×</button>
                       </>
@@ -2540,13 +2541,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                           value={Math.max(effMin, Math.min(effMax, currentVal))}
                           onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
                           onDoubleClick={() => updateNodeParams(node.id, { [overrideKey]: (effMin + effMax) / 2 })}
-                          style={{ flex: 1, accentColor: '#89b4fa', cursor: 'pointer' }}
+                          style={{ flex: 1, accentColor: ctp.blue, cursor: 'pointer' }}
                         />
                         {editingSliderKey === `gp_${overrideKey}` ? (
                           <input
                             autoFocus
                             type="text"
-                            style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: '1px solid #585b70' }}
+                            style={{ ...INPUT_STYLE, width: '40px', fontSize: '10px', border: `1px solid ${ctp.surface2}` }}
                             value={editingSliderValue}
                             onChange={e => setEditingSliderValue(e.target.value)}
                             onBlur={() => {
@@ -2562,7 +2563,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         ) : (
                           <span
                             title="Double-click to edit"
-                            style={{ color: '#a6adc8', fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
+                            style={{ color: ctp.subtext0, fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
                             onDoubleClick={() => { setEditingSliderKey(`gp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
                           >
                             {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
@@ -2585,9 +2586,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           if (outerEntries.length === 0) return null;
           const hidden = node.params.__marchSettingsHidden === true;
           return (
-            <div style={{ borderTop: '1px solid #313244' }} onMouseDown={e => e.stopPropagation()}>
+            <div style={{ borderTop: `1px solid ${ctp.surface0}` }} onMouseDown={e => e.stopPropagation()}>
               <div
-                style={{ padding: '3px 10px 1px', fontSize: '9px', color: '#585b70', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                style={{ padding: '3px 10px 1px', fontSize: '9px', color: ctp.surface2, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
                 onClick={() => updateNodeParams(node.id, { __marchSettingsHidden: !hidden }, { immediate: true })}
               >
                 <span>MARCH SETTINGS</span>
@@ -2598,12 +2599,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   const val = node.params[paramKey] === true;
                   return (
                     <div key={paramKey} style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '9px', color: '#6c7086', minWidth: '70px' }}>{paramDef.label}</span>
+                      <span style={{ fontSize: '9px', color: ctp.overlay0, minWidth: '70px' }}>{paramDef.label}</span>
                       <input
                         type="checkbox"
                         checked={val}
                         onChange={e => updateNodeParams(node.id, { [paramKey]: e.target.checked }, { immediate: true })}
-                        style={{ cursor: 'pointer', accentColor: '#cba6f7' }}
+                        style={{ cursor: 'pointer', accentColor: ctp.mauve }}
                       />
                     </div>
                   );
@@ -2618,7 +2619,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 const effMax = paramDef.max ?? 256;
                 return (
                   <div key={paramKey} style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '9px', color: '#6c7086', minWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paramDef.label}</span>
+                    <span style={{ fontSize: '9px', color: ctp.overlay0, minWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paramDef.label}</span>
                     <input
                       type="range"
                       min={effMin}
@@ -2628,7 +2629,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       onChange={e => updateNodeParams(node.id, { [paramKey]: parseFloat(e.target.value) }, { immediate: true })}
                       style={{ flex: 1, accentColor: '#88aacc', cursor: 'pointer', margin: 0 }}
                     />
-                    <span style={{ fontSize: '10px', color: '#a6adc8', minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontSize: '10px', color: ctp.subtext0, minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
                     </span>
                   </div>
@@ -2659,10 +2660,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
               });
           if (!hasAny) return null;
-          const accentColor = hasInnerGroupNodes ? '#cba6f7' : '#89b4fa';
+          const accentColor = hasInnerGroupNodes ? ctp.mauve : ctp.blue;
           return (
             <div
-              style={{ borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', position: 'relative' }}
+              style={{ borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', position: 'relative' }}
               onMouseDown={e => e.stopPropagation()}
             >
               <button
@@ -2670,7 +2671,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onDoubleClick={e => e.stopPropagation()}
                 style={{
                   fontSize: '10px',
-                  color: showParamPicker ? accentColor : '#585b70',
+                  color: showParamPicker ? accentColor : ctp.surface2,
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
@@ -2678,8 +2679,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   letterSpacing: '0.03em',
                 }}
                 title={hasInnerGroupNodes ? 'Customise which inner-group params appear here' : 'Show or hide params on this group card'}
-                onMouseEnter={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
-                onMouseLeave={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+                onMouseEnter={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = ctp.subtext0; }}
+                onMouseLeave={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
               >
                 ⊕ params
               </button>
@@ -2803,7 +2804,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const lines: React.ReactNode[] = [];
     lines.push(
       <span style={{ fontWeight: 700 }}>
-        <span style={{ color: typeColor }}>▶</span> {input.label} <span style={{ color: '#585b70' }}>({input.type})</span>
+        <span style={{ color: typeColor }}>▶</span> {input.label} <span style={{ color: ctp.surface2 }}>({input.type})</span>
       </span>
     );
     if (input.connection) {
@@ -2813,28 +2814,28 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       const srcOutLabel = srcDef?.outputs[input.connection.outputKey]?.label ?? input.connection.outputKey;
       const srcType = srcDef?.outputs[input.connection.outputKey]?.type;
       lines.push(
-        <span style={{ color: '#585b70', marginTop: '2px', display: 'block' }}>Connected to:</span>
+        <span style={{ color: ctp.surface2, marginTop: '2px', display: 'block' }}>Connected to:</span>
       );
       lines.push(
-        <span style={{ color: srcType ? (TYPE_COLORS[srcType] || '#cdd6f4') : '#cdd6f4', paddingLeft: '6px' }}>
-          {srcDef?.label ?? srcNode?.type} → {srcOutLabel} <span style={{ color: '#585b70' }}>({srcType})</span>
+        <span style={{ color: srcType ? (TYPE_COLORS[srcType] || ctp.text) : ctp.text, paddingLeft: '6px' }}>
+          {srcDef?.label ?? srcNode?.type} → {srcOutLabel} <span style={{ color: ctp.surface2 }}>({srcType})</span>
         </span>
       );
     } else {
       // Show compatible sources
       const sources = getCompatibleSources(nodes, node.id, input.type as DataType);
       if (sources.length > 0) {
-        lines.push(<span style={{ color: '#585b70', marginTop: '2px', display: 'block' }}>Sources in graph:</span>);
+        lines.push(<span style={{ color: ctp.surface2, marginTop: '2px', display: 'block' }}>Sources in graph:</span>);
         for (const s of sources.slice(0, 6)) {
           lines.push(
-            <span style={{ paddingLeft: '6px', color: '#a6adc8' }}>• {s.nodeLabel} → {s.outputLabel}</span>
+            <span style={{ paddingLeft: '6px', color: ctp.subtext0 }}>• {s.nodeLabel} → {s.outputLabel}</span>
           );
         }
         if (sources.length > 6) {
-          lines.push(<span style={{ paddingLeft: '6px', color: '#585b70' }}>...+{sources.length - 6} more</span>);
+          lines.push(<span style={{ paddingLeft: '6px', color: ctp.surface2 }}>...+{sources.length - 6} more</span>);
         }
       } else {
-        lines.push(<span style={{ color: '#585b70', marginTop: '2px', display: 'block' }}>No compatible sources in graph</span>);
+        lines.push(<span style={{ color: ctp.surface2, marginTop: '2px', display: 'block' }}>No compatible sources in graph</span>);
       }
     }
     return lines;
@@ -2848,14 +2849,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const lines: React.ReactNode[] = [];
     lines.push(
       <span style={{ fontWeight: 700 }}>
-        <span style={{ color: typeColor }}>◀</span> {output.label} <span style={{ color: '#585b70' }}>({output.type})</span>
+        <span style={{ color: typeColor }}>◀</span> {output.label} <span style={{ color: ctp.surface2 }}>({output.type})</span>
       </span>
     );
     // List what types this can connect to
     const compatMsg = output.type === 'float'
       ? 'Connects to float or vec3 inputs'
       : `Connects to ${output.type} inputs`;
-    lines.push(<span style={{ color: '#585b70', marginTop: '2px', display: 'block' }}>{compatMsg}</span>);
+    lines.push(<span style={{ color: ctp.surface2, marginTop: '2px', display: 'block' }}>{compatMsg}</span>);
     return lines;
   };
 
@@ -2870,25 +2871,25 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         left: node.position.x,
         top: node.position.y,
         zIndex,
-        background: '#1e1e2e',
-        border: isBypassed ? '1px solid #f9e2af55' : isSwapTarget ? '2px solid #f9e2af' : isPreviewActive ? '1px solid #a6e3a1' : hasError ? '1px solid #f38ba8' : isMultiSelected ? '2px solid #cba6f7' : isSelected ? '1px solid #89b4fa' : '1px solid #444',
+        background: ctp.base,
+        border: isBypassed ? `1px solid ${ctp.yellow}55` : isSwapTarget ? `2px solid ${ctp.yellow}` : isPreviewActive ? `1px solid ${ctp.green}` : hasError ? `1px solid ${ctp.red}` : isMultiSelected ? `2px solid ${ctp.mauve}` : isSelected ? `1px solid ${ctp.blue}` : '1px solid #444',
         borderRadius: '8px',
         minWidth: '270px',
-        color: '#cdd6f4',
+        color: ctp.text,
         fontSize: '12px',
         userSelect: 'none',
         opacity: dimmed ? 0.2 : isBypassed ? 0.55 : 1,
         transition: 'opacity 0.2s ease',
         boxShadow: isSwapTarget
-          ? '0 0 14px #f9e2af66, 0 4px 12px rgba(0,0,0,0.4)'
+          ? `0 0 14px ${ctp.yellow}66, 0 4px 12px rgba(0,0,0,0.4)`
           : isPreviewActive
-          ? '0 0 14px #a6e3a133, 0 4px 12px rgba(0,0,0,0.4)'
+          ? `0 0 14px ${ctp.green}33, 0 4px 12px rgba(0,0,0,0.4)`
           : hasError
-          ? '0 0 12px #f38ba855, 0 4px 12px rgba(0,0,0,0.4)'
+          ? `0 0 12px ${ctp.red}55, 0 4px 12px rgba(0,0,0,0.4)`
           : isMultiSelected
-          ? '0 0 12px #cba6f755, 0 4px 12px rgba(0,0,0,0.4)'
+          ? `0 0 12px ${ctp.mauve}55, 0 4px 12px rgba(0,0,0,0.4)`
           : isSelected
-          ? '0 0 10px #89b4fa33, 0 4px 12px rgba(0,0,0,0.4)'
+          ? `0 0 10px ${ctp.blue}33, 0 4px 12px rgba(0,0,0,0.4)`
           : '0 4px 12px rgba(0,0,0,0.4)',
       }}
     >
@@ -2903,13 +2904,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             left: 0,
             marginBottom: '6px',
             maxWidth: '320px',
-            background: '#181825ee',
-            border: '1px solid #45475a',
+            background: `${ctp.mantle}ee`,
+            border: `1px solid ${ctp.surface1}`,
             borderRadius: '6px',
             padding: '6px 9px',
             fontSize: '11px',
             lineHeight: 1.4,
-            color: '#a6adc899',
+            color: `${ctp.subtext0}99`,
             whiteSpace: 'pre-wrap',
             cursor: 'pointer',
             zIndex: 50,
@@ -2923,7 +2924,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         onMouseDown={handleHeaderMouseDown}
         onTouchStart={handleHeaderTouchStart}
         style={{
-          background: '#313244',
+          background: ctp.surface0,
           borderRadius: showCode ? '8px 8px 0 0' : '8px 8px 0 0',
           padding: isTouchDevice ? '10px 10px' : '6px 10px',
           display: 'flex',
@@ -2964,7 +2965,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                 if (e.key === 'Escape') { setIsEditingTitle(false); }
               }}
-              style={{ background: '#1e1e2e', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '3px', padding: '0 4px', fontSize: '12px', fontWeight: 600, width: `${Math.max(60, editingTitleValue.length * 8)}px`, outline: 'none' }}
+              style={{ background: ctp.base, border: `1px solid ${ctp.blue}`, color: ctp.text, borderRadius: '3px', padding: '0 4px', fontSize: '12px', fontWeight: 600, width: `${Math.max(60, editingTitleValue.length * 8)}px`, outline: 'none' }}
             />
           ) : (
             <span
@@ -2984,10 +2985,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <span title="Anchored — cannot be deleted" style={{ fontSize: '9px', opacity: 0.45, lineHeight: 1 }}>🔒</span>
           )}
           {def.deprecated && (
-            <span style={{ fontSize: '7px', color: '#f9e2af', letterSpacing: '0.06em', opacity: 0.8, fontWeight: 400, border: '1px solid #f9e2af55', borderRadius: '2px', padding: '0 2px' }}>DEPRECATED</span>
+            <span style={{ fontSize: '7px', color: ctp.yellow, letterSpacing: '0.06em', opacity: 0.8, fontWeight: 400, border: `1px solid ${ctp.yellow}55`, borderRadius: '2px', padding: '0 2px' }}>DEPRECATED</span>
           )}
           {isBypassed && (
-            <span style={{ fontSize: '8px', color: '#f9e2af', letterSpacing: '0.06em', opacity: 0.9, fontWeight: 400 }}>BYPASS</span>
+            <span style={{ fontSize: '8px', color: ctp.yellow, letterSpacing: '0.06em', opacity: 0.9, fontWeight: 400 }}>BYPASS</span>
           )}
         </span>
         {showNodeTooltip && <div ref={nodeTooltipRef}><NodeTooltip def={def} node={node} allNodes={nodes} /></div>}
@@ -2999,9 +3000,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => setPreviewNodeId(isPreviewActive ? null : node.id)}
               title={isPreviewActive ? 'Exit preview (restore full graph)' : 'Preview this node in isolation'}
               style={{
-                background: isPreviewActive ? '#a6e3a122' : 'none',
-                border: isPreviewActive ? '1px solid #a6e3a155' : 'none',
-                color: isPreviewActive ? '#a6e3a1' : '#585b70',
+                background: isPreviewActive ? `${ctp.green}22` : 'none',
+                border: isPreviewActive ? `1px solid ${ctp.green}55` : 'none',
+                color: isPreviewActive ? ctp.green : ctp.surface2,
                 cursor: 'pointer',
                 fontSize: '12px',
                 lineHeight: 1,
@@ -3019,9 +3020,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => setShowExprBlockModal(v => !v)}
               title="Open Expr Block editor"
               style={{
-                background: showExprBlockModal ? '#a6e3a122' : 'none',
-                border: showExprBlockModal ? '1px solid #a6e3a155' : 'none',
-                color: showExprBlockModal ? '#a6e3a1' : '#585b70',
+                background: showExprBlockModal ? `${ctp.green}22` : 'none',
+                border: showExprBlockModal ? `1px solid ${ctp.green}55` : 'none',
+                color: showExprBlockModal ? ctp.green : ctp.surface2,
                 cursor: 'pointer',
                 fontSize: '12px',
                 lineHeight: 1,
@@ -3039,9 +3040,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => setShowTransformVecModal(v => !v)}
               title="Open Transform Vec editor"
               style={{
-                background: showTransformVecModal ? '#89b4fa22' : 'none',
-                border: showTransformVecModal ? '1px solid #89b4fa55' : 'none',
-                color: showTransformVecModal ? '#89b4fa' : '#585b70',
+                background: showTransformVecModal ? `${ctp.blue}22` : 'none',
+                border: showTransformVecModal ? `1px solid ${ctp.blue}55` : 'none',
+                color: showTransformVecModal ? ctp.blue : ctp.surface2,
                 cursor: 'pointer', fontSize: '12px', lineHeight: 1, padding: '1px 4px', borderRadius: '3px',
               }}
             >⊞</button>
@@ -3053,9 +3054,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => setShowBezierModal(v => !v)}
               title="Open Bezier editor"
               style={{
-                background: showBezierModal ? '#f38ba822' : 'none',
-                border: showBezierModal ? '1px solid #f38ba855' : 'none',
-                color: showBezierModal ? '#f38ba8' : '#585b70',
+                background: showBezierModal ? `${ctp.red}22` : 'none',
+                border: showBezierModal ? `1px solid ${ctp.red}55` : 'none',
+                color: showBezierModal ? ctp.red : ctp.surface2,
                 cursor: 'pointer',
                 fontSize: '12px',
                 lineHeight: 1,
@@ -3073,9 +3074,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => setShowExprModal(v => !v)}
               title="Open Expr editor"
               style={{
-                background: showExprModal ? '#a6e3a122' : 'none',
-                border: showExprModal ? '1px solid #a6e3a155' : 'none',
-                color: showExprModal ? '#a6e3a1' : '#585b70',
+                background: showExprModal ? `${ctp.green}22` : 'none',
+                border: showExprModal ? `1px solid ${ctp.green}55` : 'none',
+                color: showExprModal ? ctp.green : ctp.surface2,
                 cursor: 'pointer',
                 fontSize: '12px',
                 lineHeight: 1,
@@ -3093,9 +3094,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => setShowCustomFnModal(v => !v)}
               title="Open Custom Function editor"
               style={{
-                background: showCustomFnModal ? '#cba6f722' : 'none',
-                border: showCustomFnModal ? '1px solid #cba6f755' : 'none',
-                color: showCustomFnModal ? '#cba6f7' : '#585b70',
+                background: showCustomFnModal ? `${ctp.mauve}22` : 'none',
+                border: showCustomFnModal ? `1px solid ${ctp.mauve}55` : 'none',
+                color: showCustomFnModal ? ctp.mauve : ctp.surface2,
                 cursor: 'pointer',
                 fontSize: '12px',
                 lineHeight: 1,
@@ -3108,7 +3109,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           )}
           {/* Divider before loop/assign controls */}
           {!['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
-            <span style={{ width: '1px', height: '14px', background: '#45475a88', margin: '0 3px', flexShrink: 0 }} />
+            <span style={{ width: '1px', height: '14px', background: `${ctp.surface1}88`, margin: '0 3px', flexShrink: 0 }} />
           )}
           {/* Carry mode — only shown inside a group with iterations > 1 */}
           {isInsideLoop && !['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
@@ -3117,9 +3118,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => toggleCarryMode(node.id)}
               title={isCarry ? 'Carry mode ON — output feeds back as input each iteration. Click to disable.' : 'Enable carry mode — output feeds back as input each iteration (e.g. UV self-folding)'}
               style={{
-                background: isCarry ? '#a6e3a122' : 'none',
-                border: isCarry ? '1px solid #a6e3a155' : '1px solid #31324466',
-                color: isCarry ? '#a6e3a1' : '#585b70',
+                background: isCarry ? `${ctp.green}22` : 'none',
+                border: isCarry ? `1px solid ${ctp.green}55` : `1px solid ${ctp.surface0}66`,
+                color: isCarry ? ctp.green : ctp.surface2,
                 cursor: 'pointer',
                 fontSize: '12px',
                 lineHeight: 1,
@@ -3141,9 +3142,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onChange={e => setNodeAssignOp(node.id, e.target.value as import('../../types/nodeGraph').GraphNode['assignOp'])}
               title="Assign operator: declare an accumulator and combine this node's output (+= -= *= /=)"
               style={{
-                background: assignOp !== '=' ? '#45475a' : '#1e1e2e',
-                border: assignOp !== '=' ? '1px solid #89b4fa88' : '1px solid #45475a',
-                color: assignOp !== '=' ? '#89b4fa' : '#6c7086',
+                background: assignOp !== '=' ? ctp.surface1 : ctp.base,
+                border: assignOp !== '=' ? `1px solid ${ctp.blue}88` : `1px solid ${ctp.surface1}`,
+                color: assignOp !== '=' ? ctp.blue : ctp.overlay0,
                 cursor: 'pointer',
                 fontSize: '11px',
                 borderRadius: '4px',
@@ -3171,9 +3172,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onClick={() => toggleBypass(node.id)}
               title={isBypassed ? 'Enable node (currently bypassed)' : 'Bypass node (pass input through)'}
               style={{
-                background: isBypassed ? '#f9e2af22' : 'none',
-                border: isBypassed ? '1px solid #f9e2af55' : 'none',
-                color: isBypassed ? '#f9e2af' : '#585b70',
+                background: isBypassed ? `${ctp.yellow}22` : 'none',
+                border: isBypassed ? `1px solid ${ctp.yellow}55` : 'none',
+                color: isBypassed ? ctp.yellow : ctp.surface2,
                 cursor: 'pointer',
                 fontSize: '12px',
                 lineHeight: 1,
@@ -3193,7 +3194,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#f38ba8',
+                color: ctp.red,
                 cursor: 'pointer',
                 fontSize: '14px',
                 lineHeight: 1,
@@ -3215,11 +3216,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             alignItems: 'center',
             gap: '6px',
             padding: '4px 8px',
-            borderBottom: '1px solid #31324488',
-            background: '#1e1e2e88',
+            borderBottom: `1px solid ${ctp.surface0}88`,
+            background: `${ctp.base}88`,
           }}
         >
-          <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, fontFamily: 'monospace' }}>
+          <span style={{ fontSize: '10px', color: ctp.overlay0, flexShrink: 0, fontFamily: 'monospace' }}>
             init
           </span>
           {/* Clickable chip — opens the expression picker modal */}
@@ -3228,10 +3229,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             title="Edit initializer expression — click to open expression picker"
             style={{
               flex: 1,
-              background: node.assignInit ? '#11111b' : 'transparent',
-              border: `1px solid ${node.assignInit ? '#45475a' : '#31324466'}`,
+              background: node.assignInit ? ctp.crust : 'transparent',
+              border: `1px solid ${node.assignInit ? ctp.surface1 : `${ctp.surface0}66`}`,
               borderRadius: '4px',
-              color: node.assignInit ? '#89b4fa' : '#45475a',
+              color: node.assignInit ? ctp.blue : ctp.surface1,
               fontSize: '11px',
               fontFamily: 'monospace',
               padding: '2px 6px',
@@ -3249,7 +3250,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <button
               onClick={() => setNodeAssignInit(node.id, '')}
               title="Clear init expression (revert to neutral element)"
-              style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '12px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+              style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '12px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
             >
               ×
             </button>
@@ -3272,7 +3273,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             width: '100%',
             height: isPreviewActive ? '64px' : '0',
             overflow: 'hidden',
-            borderBottom: isPreviewActive ? '1px solid #313244' : 'none',
+            borderBottom: isPreviewActive ? `1px solid ${ctp.surface0}` : 'none',
           }}
         />
       )}
@@ -3290,19 +3291,19 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         const barLeft  = (a: number, b: number) => toPercent(Math.min(a, b));
         const barWidth = (a: number, b: number) => `${(Math.abs(b - a) / range) * 100}%`;
         const rows: Array<[string, number, number, string]> = [
-          ['In',  inMin,  inMax,  '#89b4fa'],
-          ['Out', outMin, outMax, '#a6e3a1'],
+          ['In',  inMin,  inMax,  ctp.blue],
+          ['Out', outMin, outMax, ctp.green],
         ];
         return (
-          <div style={{ padding: '6px 10px 4px', borderBottom: '1px solid #313244', display: 'flex', flexDirection: 'column', gap: '5px' }}
+          <div style={{ padding: '6px 10px 4px', borderBottom: `1px solid ${ctp.surface0}`, display: 'flex', flexDirection: 'column', gap: '5px' }}
                onMouseDown={e => e.stopPropagation()}>
             {rows.map(([label, mn, mx, color]) => (
               <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '9px', color: '#6c7086', width: '20px', flexShrink: 0 }}>{label}</span>
-                <div style={{ flex: 1, height: '8px', background: '#11111b', borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
+                <span style={{ fontSize: '9px', color: ctp.overlay0, width: '20px', flexShrink: 0 }}>{label}</span>
+                <div style={{ flex: 1, height: '8px', background: ctp.crust, borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', left: barLeft(mn, mx), width: barWidth(mn, mx), height: '100%', background: color, borderRadius: '4px', opacity: 0.7 }} />
                 </div>
-                <span style={{ fontSize: '9px', color: '#6c7086', width: '60px', textAlign: 'right', flexShrink: 0 }}>
+                <span style={{ fontSize: '9px', color: ctp.overlay0, width: '60px', textAlign: 'right', flexShrink: 0 }}>
                   {mn.toFixed(2)} → {mx.toFixed(2)}
                 </span>
               </div>
@@ -3318,7 +3319,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       )}
       {/* Default: shader thumbnail for float-output scope or vec3 render */}
       {isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && !INLINE_VIZ_TYPES.has(node.type) && (
-        <div style={{ width: '100%', borderBottom: '1px solid #313244' }}>
+        <div style={{ width: '100%', borderBottom: `1px solid ${ctp.surface0}` }}>
           {primaryOutputIsFloat && !GRAYSCALE_PREVIEW_TYPES.has(node.type) ? (
             /* Float output → live waveform scope */
             <canvas
@@ -3329,9 +3330,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             />
           ) : (
             /* Vec3/vec4 output → rendered shader thumbnail */
-            <div style={{ width: '100%', height: 160, background: '#11111b', overflow: 'hidden', position: 'relative' }}>
+            <div style={{ width: '100%', height: 160, background: ctp.crust, overflow: 'hidden', position: 'relative' }}>
               {previewLoading && !previewDataUrl ? (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#585b70', fontSize: '12px' }}>
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ctp.surface2, fontSize: '12px' }}>
                   rendering…
                 </div>
               ) : previewDataUrl ? (
@@ -3341,7 +3342,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 />
               ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#585b70', fontSize: '11px' }}>
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ctp.surface2, fontSize: '11px' }}>
                   no preview
                 </div>
               )}
@@ -3417,8 +3418,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   height: socketSize,
                   borderRadius: isKeyframed ? '3px' : '50%',
                   transform: isKeyframed ? 'rotate(45deg)' : undefined,
-                  background: isKeyframed ? '#f9e2af' : isConnected ? (TYPE_COLORS[input.type] || '#888') : '#333',
-                  border: `2px solid ${isKeyframed ? '#f9e2af' : (TYPE_COLORS[input.type] || '#888')}`,
+                  background: isKeyframed ? ctp.yellow : isConnected ? (TYPE_COLORS[input.type] || '#888') : '#333',
+                  border: `2px solid ${isKeyframed ? ctp.yellow : (TYPE_COLORS[input.type] || '#888')}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
                   marginLeft: socketMarginLeft,
@@ -3496,9 +3497,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     left: socketMarginLeft,
                     top: '-8px',
                     zIndex: 200,
-                    background: '#1e1e2e',
-                    border: '1px solid #f9e2af',
-                    color: '#f9e2af',
+                    background: ctp.base,
+                    border: `1px solid ${ctp.yellow}`,
+                    color: ctp.yellow,
                     borderRadius: '4px',
                     padding: '1px 5px',
                     fontSize: '8px',
@@ -3527,7 +3528,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               {(
                 <span
                   style={{
-                    color: isExternal ? '#585b70' : '#a6adc8',
+                    color: isExternal ? ctp.surface2 : ctp.subtext0,
                     fontSize: isTouchDevice ? '13px' : '11px',
                     cursor: isExternal ? 'default' : 'pointer',
                     flex: 1,
@@ -3560,7 +3561,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               )}
               {isConnected && !isExternal && (
                 <span
-                  style={{ marginLeft: 'auto', color: '#585b70', fontSize: isTouchDevice ? '14px' : '10px', padding: isTouchDevice ? '4px 8px' : '0 6px 0 0', cursor: 'pointer', touchAction: 'manipulation' }}
+                  style={{ marginLeft: 'auto', color: ctp.surface2, fontSize: isTouchDevice ? '14px' : '10px', padding: isTouchDevice ? '4px 8px' : '0 6px 0 0', cursor: 'pointer', touchAction: 'manipulation' }}
                   onMouseUp={(e) => { e.stopPropagation(); disconnectInput(node.id, key); }}
                   onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); disconnectInput(node.id, key); }}
                 >
@@ -3568,7 +3569,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 </span>
               )}
               {isConnected && isExternal && (
-                <span style={{ marginLeft: 'auto', color: '#45475a', fontSize: '9px', padding: '0 6px 0 0', fontFamily: 'monospace' }}>
+                <span style={{ marginLeft: 'auto', color: ctp.surface1, fontSize: '9px', padding: '0 6px 0 0', fontFamily: 'monospace' }}>
                   ext
                 </span>
               )}
@@ -3581,10 +3582,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const lines = (node.params.lines as Array<{ lhs: string; op: string; rhs: string }> | undefined) ?? [];
           const result = (node.params.result as string | undefined) ?? 'p';
           const OPS = ['=', '+=', '-=', '*=', '/='];
-          const inputBg = '#11111b';
-          const inputBorder = '1px solid #45475a';
+          const inputBg = ctp.crust;
+          const inputBorder = `1px solid ${ctp.surface1}`;
           const inputStyle: React.CSSProperties = {
-            background: inputBg, border: inputBorder, color: '#cdd6f4',
+            background: inputBg, border: inputBorder, color: ctp.text,
             padding: '2px 5px', borderRadius: '3px', fontSize: '10px',
             fontFamily: 'monospace', outline: 'none',
           };
@@ -3593,7 +3594,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '4px' }}
               onMouseDown={e => e.stopPropagation()}
             >
-              <span style={{ fontSize: '10px', color: '#6c7086', marginBottom: '1px' }}>Warp Lines</span>
+              <span style={{ fontSize: '10px', color: ctp.overlay0, marginBottom: '1px' }}>Warp Lines</span>
 
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
@@ -3603,14 +3604,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       onMouseDown={e => e.stopPropagation()}
                       onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i - 1) })}
                       disabled={i === 0}
-                      style={{ background: 'none', border: 'none', color: i === 0 ? '#313244' : '#6c7086', cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
+                      style={{ background: 'none', border: 'none', color: i === 0 ? ctp.surface0 : ctp.overlay0, cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
                       title="Move up"
                     >▲</button>
                     <button
                       onMouseDown={e => e.stopPropagation()}
                       onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i + 1) })}
                       disabled={i === lines.length - 1}
-                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? '#313244' : '#6c7086', cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
+                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? ctp.surface0 : ctp.overlay0, cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
                       title="Move down"
                     >▼</button>
                   </div>
@@ -3632,7 +3633,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       const next = lines.map((l, j) => j === i ? { ...l, op: e.target.value } : l);
                       updateNodeParams(node.id, { lines: next });
                     }}
-                    style={{ background: inputBg, border: inputBorder, color: '#89b4fa', fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none' }}
+                    style={{ background: inputBg, border: inputBorder, color: ctp.blue, fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none' }}
                   >
                     {OPS.map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
@@ -3645,13 +3646,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       updateNodeParams(node.id, { lines: next });
                     }}
                     placeholder="expression…"
-                    style={{ ...inputStyle, flex: 1, color: '#a6e3a1' }}
+                    style={{ ...inputStyle, flex: 1, color: ctp.green }}
                   />
                   {/* Remove row */}
                   <button
                     onMouseDown={e => e.stopPropagation()}
                     onClick={() => updateNodeParams(node.id, { lines: lines.filter((_, j) => j !== i) })}
-                    style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
+                    style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
                     title="Remove line"
                   >×</button>
                 </div>
@@ -3661,18 +3662,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               <button
                 onMouseDown={e => e.stopPropagation()}
                 onClick={() => updateNodeParams(node.id, { lines: [...lines, { lhs: 'p', op: '=', rhs: '' }] })}
-                style={{ alignSelf: 'flex-start', background: '#313244', border: 'none', color: '#a6adc8', cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '3px', marginTop: '1px' }}
+                style={{ alignSelf: 'flex-start', background: ctp.surface0, border: 'none', color: ctp.subtext0, cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '3px', marginTop: '1px' }}
               >+ line</button>
 
               {/* Return expression */}
               <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginTop: '2px' }}>
-                <span style={{ fontSize: '10px', color: '#6c7086', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>return</span>
+                <span style={{ fontSize: '10px', color: ctp.overlay0, whiteSpace: 'nowrap', fontFamily: 'monospace' }}>return</span>
                 <input
                   type="text"
                   value={result}
                   onChange={e => updateNodeParams(node.id, { result: e.target.value })}
                   placeholder="p"
-                  style={{ ...inputStyle, flex: 1, color: '#89b4fa', border: '1px solid #45475a' }}
+                  style={{ ...inputStyle, flex: 1, color: ctp.blue, border: `1px solid ${ctp.surface1}` }}
                 />
               </div>
             </div>
@@ -3688,16 +3689,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <div onMouseDown={e => e.stopPropagation()}>
               {/* Type pills */}
               <div style={{ padding: '3px 10px 4px', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <span style={{ fontSize: '10px', color: '#45475a', marginRight: '2px' }}>type</span>
+                <span style={{ fontSize: '10px', color: ctp.surface1, marginRight: '2px' }}>type</span>
                 {(['vec2', 'vec3', 'vec4'] as DataType[]).map(t => {
                   const active = type === t;
                   return (
                     <button key={t}
                       onClick={() => changeNodeVectorType(node.id, 'uv', 'result', t)}
                       style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
-                        background: active ? '#89b4fa22' : 'none',
-                        border: `1px solid ${active ? '#89b4fa' : '#45475a44'}`,
-                        color: active ? '#89b4fa' : '#585b70',
+                        background: active ? `${ctp.blue}22` : 'none',
+                        border: `1px solid ${active ? ctp.blue : `${ctp.surface1}44`}`,
+                        color: active ? ctp.blue : ctp.surface2,
                       }}
                     >{t === 'vec2' ? 'v2' : t === 'vec3' ? 'v3' : 'v4'}</button>
                   );
@@ -3709,14 +3710,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 const opk = `expr${c.toUpperCase()}Op`;
                 const val = typeof node.params[pk]  === 'string' ? (node.params[pk]  as string) : c;
                 const op  = typeof node.params[opk] === 'string' ? (node.params[opk] as string) : '=';
-                const compColor = ({ x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#fab387' } as Record<string, string>)[c];
+                const compColor = ({ x: ctp.red, y: ctp.green, z: ctp.blue, w: ctp.peach } as Record<string, string>)[c];
                 return (
                   <div key={c} style={{ padding: '2px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ fontSize: '10px', color: compColor, width: '8px', flexShrink: 0, fontFamily: 'monospace' }}>{c}</span>
                     <select value={op}
                       onChange={e => updateNodeParams(node.id, { [opk]: e.target.value })}
                       onMouseDown={e => e.stopPropagation()}
-                      style={{ background: '#11111b', border: '1px solid #31324488', color: '#89b4fa', fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none', flexShrink: 0 }}
+                      style={{ background: ctp.crust, border: `1px solid ${ctp.surface0}88`, color: ctp.blue, fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none', flexShrink: 0 }}
                     >
                       {(['=', '+=', '-=', '*=', '/='] as const).map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
@@ -3726,8 +3727,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       spellCheck={false}
                       onChange={e => updateNodeParams(node.id, { [pk]: e.target.value })}
                       style={{
-                        flex: 1, background: '#11111b', border: '1px solid #31324488',
-                        color: '#a6e3a1', borderRadius: '3px', padding: '2px 6px',
+                        flex: 1, background: ctp.crust, border: `1px solid ${ctp.surface0}88`,
+                        color: ctp.green, borderRadius: '3px', padding: '2px 6px',
                         fontSize: '10px', fontFamily: 'monospace', outline: 'none',
                       }}
                     />
@@ -3748,7 +3749,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               style={{ padding: '3px 10px 4px', display: 'flex', gap: '4px', alignItems: 'center' }}
               onMouseDown={e => e.stopPropagation()}
             >
-              <span style={{ fontSize: '10px', color: '#45475a', marginRight: '2px' }}>type</span>
+              <span style={{ fontSize: '10px', color: ctp.surface1, marginRight: '2px' }}>type</span>
               {(['float', 'vec2', 'vec3'] as DataType[]).map(t => {
                 const active = current === t;
                 return (
@@ -3757,9 +3758,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     onClick={() => changeNodeVectorType(node.id, info.primaryInput, info.primaryOutput, t)}
                     style={{
                       fontSize: '10px', padding: '1px 6px', borderRadius: '3px', cursor: 'pointer',
-                      background: active ? '#89b4fa22' : 'none',
-                      border: `1px solid ${active ? '#89b4fa' : '#45475a44'}`,
-                      color: active ? '#89b4fa' : '#585b70',
+                      background: active ? `${ctp.blue}22` : 'none',
+                      border: `1px solid ${active ? ctp.blue : `${ctp.surface1}44`}`,
+                      color: active ? ctp.blue : ctp.surface2,
                     }}
                   >
                     {t === 'float' ? 'f' : t === 'vec2' ? 'v2' : 'v3'}
@@ -3778,9 +3779,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const cols = Array.from({ length: dim }, (_, c) => c);
           const cellKey = (r: number, c: number) => `m${r}${c}`;
           const cellStyle: React.CSSProperties = {
-            width: '100%', padding: '2px 4px', background: '#11111b',
-            border: '1px solid #313244', borderRadius: '3px',
-            color: '#cdd6f4', fontSize: '11px', textAlign: 'center',
+            width: '100%', padding: '2px 4px', background: ctp.crust,
+            border: `1px solid ${ctp.surface0}`, borderRadius: '3px',
+            color: ctp.text, fontSize: '11px', textAlign: 'center',
             outline: 'none', boxSizing: 'border-box' as const,
             fontFamily: 'monospace',
           };
@@ -3788,11 +3789,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <div onMouseDown={e => e.stopPropagation()}>
               {/* Size selector */}
               <div style={{ padding: '3px 10px 4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: '#6c7086', fontSize: '11px' }}>Size</span>
+                <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Size</span>
                 <select
                   value={size}
                   onChange={e => updateNodeParams(node.id, { size: e.target.value })}
-                  style={{ background: '#1e1e2e', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '3px', fontSize: '11px', padding: '1px 4px', cursor: 'pointer' }}
+                  style={{ background: ctp.base, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '3px', fontSize: '11px', padding: '1px 4px', cursor: 'pointer' }}
                 >
                   <option value="mat2">2 × 2</option>
                   <option value="mat3">3 × 3</option>
@@ -3840,7 +3841,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 style={{ padding: '3px 10px', display: 'flex', flexDirection: 'column', gap: '4px' }}
                 onMouseDown={e => e.stopPropagation()}
               >
-                <span style={{ color: '#6c7086', fontSize: '11px' }}>{paramDef.label}</span>
+                <span style={{ color: ctp.overlay0, fontSize: '11px' }}>{paramDef.label}</span>
                 {isBody ? (
                   <textarea
                     value={val}
@@ -3848,9 +3849,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     spellCheck={false}
                     rows={8}
                     style={{
-                      background: '#11111b',
-                      border: '1px solid #45475a',
-                      color: '#a6e3a1',
+                      background: ctp.crust,
+                      border: `1px solid ${ctp.surface1}`,
+                      color: ctp.green,
                       padding: '6px 8px',
                       borderRadius: '3px',
                       fontSize: '10px',
@@ -3869,9 +3870,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     onChange={e => updateNodeParams(node.id, { [key]: e.target.value })}
                     spellCheck={false}
                     style={{
-                      background: '#11111b',
-                      border: '1px solid #45475a',
-                      color: '#cdd6f4',
+                      background: ctp.crust,
+                      border: `1px solid ${ctp.surface1}`,
+                      color: ctp.text,
                       padding: '3px 6px',
                       borderRadius: '3px',
                       fontSize: '11px',
@@ -3901,13 +3902,13 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   key={key}
                   style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
+                  <span style={{ color: ctp.surface1, fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
                     {paramDef.label}
                     {isParamExternal && <span style={{ marginLeft: '3px', fontSize: '8px' }}>🔒</span>}
                   </span>
                   <span
                     style={{
-                      color: isParamExternal ? '#45475a' : '#89b4fa',
+                      color: isParamExternal ? ctp.surface1 : ctp.blue,
                       fontSize: '9px',
                       fontFamily: 'monospace',
                       fontStyle: 'normal',
@@ -3932,10 +3933,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   key={key}
                   style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '6px', opacity: 0.4 }}
                 >
-                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
+                  <span style={{ color: ctp.surface1, fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
                     {paramDef.label} <span style={{ fontSize: '8px' }}>🔒</span>
                   </span>
-                  <span style={{ color: '#585b70', fontSize: '10px', fontFamily: 'monospace' }}>{val}</span>
+                  <span style={{ color: ctp.surface2, fontSize: '10px', fontFamily: 'monospace' }}>{val}</span>
                 </div>
               );
             }
@@ -3947,10 +3948,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   key={key}
                   style={{ padding: '3px 10px 3px 16px', display: 'flex', alignItems: 'center', gap: '6px', opacity: 0.4, position: 'relative' }}
                 >
-                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
+                  <span style={{ color: ctp.surface1, fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>
                     {paramDef.label} <span style={{ fontSize: '8px' }}>🔒</span>
                   </span>
-                  <span style={{ color: '#585b70', fontSize: '10px', fontFamily: 'monospace' }}>{val}</span>
+                  <span style={{ color: ctp.surface2, fontSize: '10px', fontFamily: 'monospace' }}>{val}</span>
                 </div>
               );
             }
@@ -3979,15 +3980,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       }}
                     />
                   )}
-                  <span style={{ color: '#45475a', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
-                  <span style={{ color: '#89b4fa', fontSize: '9px', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  <span style={{ color: ctp.surface1, fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
+                  <span style={{ color: ctp.blue, fontSize: '9px', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                     title={srcExpr}>
                     = {srcExpr}
                   </span>
                   <button
                     onMouseDown={e => e.stopPropagation()}
                     onClick={() => disconnectInput(node.id, paramInputKey)}
-                    style={{ fontSize: '9px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                    style={{ fontSize: '9px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
                     title="Disconnect"
                   >×</button>
                 </div>
@@ -4034,14 +4035,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       height: isTouchDevice ? 16 : 8,
                       borderRadius: '50%',
                       background: 'transparent',
-                      border: '1.5px solid #585b70',
+                      border: `1.5px solid ${ctp.surface2}`,
                       cursor: 'crosshair',
                     }}
                   />
                 )}
                 {/* Main slider row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
+                  <span style={{ color: ctp.overlay0, fontSize: '11px', minWidth: '60px', flexShrink: 0 }}>{paramDef.label}</span>
                   <input
                     type="range"
                     style={RANGE_STYLE}
@@ -4059,7 +4060,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     <input
                       autoFocus
                       type="text"
-                      style={{ ...INPUT_STYLE, border: '1px solid #585b70' }}
+                      style={{ ...INPUT_STYLE, border: `1px solid ${ctp.surface2}` }}
                       value={editingSliderValue}
                       onChange={e => setEditingSliderValue(e.target.value)}
                       onBlur={() => {
@@ -4094,7 +4095,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
                       padding: '0 1px', lineHeight: 1, fontSize: '10px',
-                      color: isConfigOpen ? '#cba6f7' : '#585b70',
+                      color: isConfigOpen ? ctp.mauve : ctp.surface2,
                       opacity: hoveredSliderKey === key || isConfigOpen ? 1 : 0,
                       transition: 'opacity 0.15s, color 0.1s',
                       flexShrink: 0,
@@ -4106,8 +4107,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   <div
                     style={{
                       margin: '4px 0 2px',
-                      background: '#181825',
-                      border: '1px solid #313244',
+                      background: ctp.mantle,
+                      border: `1px solid ${ctp.surface0}`,
                       borderRadius: '5px',
                       padding: '6px 8px',
                       display: 'flex',
@@ -4122,21 +4123,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         type="checkbox"
                         checked={bidir}
                         onChange={e => updateNodeParams(node.id, { [`__scBidir_${key}`]: e.target.checked })}
-                        style={{ accentColor: '#cba6f7', cursor: 'pointer' }}
+                        style={{ accentColor: ctp.mauve, cursor: 'pointer' }}
                       />
-                      <span style={{ fontSize: '10px', color: '#a6adc8' }}>Bidirectional</span>
+                      <span style={{ fontSize: '10px', color: ctp.subtext0 }}>Bidirectional</span>
                     </label>
                     {/* Range display + reset */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '9px', color: '#585b70', flex: 1 }}>
+                      <span style={{ fontSize: '9px', color: ctp.surface2, flex: 1 }}>
                         Range: {effMin.toFixed(step < 0.1 ? 2 : 1)} → {effMax.toFixed(step < 0.1 ? 2 : 1)}
                       </span>
                       {customMax != null && (
                         <button
                           onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null })}
-                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '3px', cursor: 'pointer', padding: '1px 5px' }}
-                          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+                          style={{ fontSize: '9px', color: ctp.surface2, background: 'none', border: `1px solid ${ctp.surface0}`, borderRadius: '3px', cursor: 'pointer', padding: '1px 5px' }}
+                          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
+                          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
                           title="Reset to default range"
                         >Reset</button>
                       )}
@@ -4162,7 +4163,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 onMouseDown={e => e.stopPropagation()}
               >
                 <span
-                  style={{ color: '#6c7086', fontSize: '11px', cursor: 'default', userSelect: 'none' }}
+                  style={{ color: ctp.overlay0, fontSize: '11px', cursor: 'default', userSelect: 'none' }}
                   title="Double-click to reset to default"
                   onDoubleClick={() => {
                     const defVal = def?.defaultParams?.[key];
@@ -4174,8 +4175,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   if (compConnected) {
                     return (
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ color: '#45475a', fontSize: '10px', minWidth: '12px' }}>{compLabels[idx]}</span>
-                        <span style={{ color: '#45475a', fontSize: '10px', fontStyle: 'italic' }}>wired ↑</span>
+                        <span style={{ color: ctp.surface1, fontSize: '10px', minWidth: '12px' }}>{compLabels[idx]}</span>
+                        <span style={{ color: ctp.surface1, fontSize: '10px', fontStyle: 'italic' }}>wired ↑</span>
                       </div>
                     );
                   }
@@ -4216,14 +4217,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 onMouseDown={e => e.stopPropagation()}
               >
-                <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '60px' }}>{paramDef.label}</span>
+                <span style={{ color: ctp.overlay0, fontSize: '11px', minWidth: '60px' }}>{paramDef.label}</span>
                 <select
                   value={val}
                   onChange={e => updateNodeParams(node.id, { [key]: e.target.value }, { immediate: true })}
                   style={{
-                    background: '#181825',
-                    border: '1px solid #45475a',
-                    color: '#cdd6f4',
+                    background: ctp.mantle,
+                    border: `1px solid ${ctp.surface1}`,
+                    color: ctp.text,
                     borderRadius: '3px',
                     fontSize: '11px',
                     padding: '2px 4px',
@@ -4251,7 +4252,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 style={{ padding: '3px 10px 5px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 onMouseDown={e => e.stopPropagation()}
               >
-                <span style={{ color: '#6c7086', fontSize: '11px', minWidth: '50px' }}>{paramDef.label}</span>
+                <span style={{ color: ctp.overlay0, fontSize: '11px', minWidth: '50px' }}>{paramDef.label}</span>
                 <input
                   type="color"
                   value={hexValue}
@@ -4262,7 +4263,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     const b = parseInt(hex.slice(5, 7), 16) / 255;
                     updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
                   }}
-                  style={{ width: '32px', height: '20px', border: '1px solid #45475a', borderRadius: '3px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
+                  style={{ width: '32px', height: '20px', border: `1px solid ${ctp.surface1}`, borderRadius: '3px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
                 />
               </div>
             );
@@ -4276,12 +4277,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}
                 onMouseDown={e => e.stopPropagation()}
               >
-                <span style={{ color: '#6c7086', fontSize: '11px' }}>{paramDef.label}</span>
+                <span style={{ color: ctp.overlay0, fontSize: '11px' }}>{paramDef.label}</span>
                 <input
                   type="checkbox"
                   checked={val}
                   onChange={e => updateNodeParams(node.id, { [key]: e.target.checked })}
-                  style={{ cursor: 'pointer', accentColor: '#cba6f7' }}
+                  style={{ cursor: 'pointer', accentColor: ctp.mauve }}
                 />
               </div>
             );
@@ -4310,7 +4311,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 title={isWired ? `${inp.name} is driven by input wire` : undefined}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#6c7086', fontSize: '11px' }}>{inp.name}{isWired ? ' ⟵' : ''}</span>
+                  <span style={{ color: ctp.overlay0, fontSize: '11px' }}>{inp.name}{isWired ? ' ⟵' : ''}</span>
                   <NumberInput
                     disabled={isWired}
                     style={{ ...INPUT_STYLE, width: '56px', opacity: isWired ? 0.5 : 1 }}
@@ -4326,7 +4327,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   step={step}
                   value={val}
                   disabled={isWired}
-                  style={{ width: '100%', accentColor: '#cba6f7', cursor: isWired ? 'default' : 'pointer' }}
+                  style={{ width: '100%', accentColor: ctp.mauve, cursor: isWired ? 'default' : 'pointer' }}
                   onChange={e => {
                     if (!isWired) {
                       const v = parseFloat(e.target.value);
@@ -4335,8 +4336,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#45475a', fontSize: '9px', fontFamily: 'monospace' }}>{sl.min}</span>
-                  <span style={{ color: '#45475a', fontSize: '9px', fontFamily: 'monospace' }}>{sl.max}</span>
+                  <span style={{ color: ctp.surface1, fontSize: '9px', fontFamily: 'monospace' }}>{sl.min}</span>
+                  <span style={{ color: ctp.surface1, fontSize: '9px', fontFamily: 'monospace' }}>{sl.max}</span>
                 </div>
               </div>
             );
@@ -4363,7 +4364,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             >
               {liveValueBadge && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '3px', marginRight: '6px' }}>
-                  <span style={{ color: '#f9e2af', fontSize: '9px', fontFamily: 'monospace', opacity: 0.8 }}>
+                  <span style={{ color: ctp.yellow, fontSize: '9px', fontFamily: 'monospace', opacity: 0.8 }}>
                     {liveValueBadge}
                   </span>
                   <button
@@ -4372,14 +4373,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     title="Reset time to 0"
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      color: '#585b70', fontSize: '9px', padding: '0', lineHeight: 1,
+                      color: ctp.surface2, fontSize: '9px', padding: '0', lineHeight: 1,
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#f9e2af')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#585b70')}
+                    onMouseEnter={e => (e.currentTarget.style.color = ctp.yellow)}
+                    onMouseLeave={e => (e.currentTarget.style.color = ctp.surface2)}
                   >↺</button>
                 </span>
               )}
-              <span style={{ color: '#a6adc8', fontSize: '11px' }}>{output.label}</span>
+              <span style={{ color: ctp.subtext0, fontSize: '11px' }}>{output.label}</span>
               <div
                 data-socket="out"
                 ref={el => registerSocket(node.id, 'out', key, el)}
@@ -4494,8 +4495,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {showCommentEditor && !collapsed && (
         <div
           style={{
-            background: '#181825',
-            borderTop: '1px solid #313244',
+            background: ctp.mantle,
+            borderTop: `1px solid ${ctp.surface0}`,
             borderRadius: '0 0 8px 8px',
             padding: '8px',
           }}
@@ -4514,10 +4515,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               width: '100%',
               minHeight: '54px',
               resize: 'vertical',
-              background: '#11111b',
-              border: '1px solid #313244',
+              background: ctp.crust,
+              border: `1px solid ${ctp.surface0}`,
               borderRadius: '4px',
-              color: '#cdd6f4',
+              color: ctp.text,
               fontSize: '11px',
               lineHeight: 1.4,
               padding: '6px 8px',
@@ -4533,17 +4534,17 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       {showCode && !collapsed && (
         <div
           style={{
-            background: '#181825',
-            borderTop: '1px solid #313244',
+            background: ctp.mantle,
+            borderTop: `1px solid ${ctp.surface0}`,
             borderRadius: '0 0 8px 8px',
             padding: '0',
           }}
           onMouseDown={e => e.stopPropagation()}
         >
           {/* Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderBottom: '1px solid #313244' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderBottom: `1px solid ${ctp.surface0}` }}>
             {hasOverride && (
-              <span style={{ fontSize: '9px', color: '#f9e2af', letterSpacing: '0.05em', marginRight: '4px' }}>✎ OVERRIDDEN</span>
+              <span style={{ fontSize: '9px', color: ctp.yellow, letterSpacing: '0.05em', marginRight: '4px' }}>✎ OVERRIDDEN</span>
             )}
             <button
               onClick={() => {
@@ -4560,9 +4561,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }
               }}
               style={{
-                background: codeEditMode ? '#89b4fa22' : '#313244',
-                border: `1px solid ${codeEditMode ? '#89b4fa55' : '#45475a'}`,
-                color: codeEditMode ? '#89b4fa' : '#cdd6f4',
+                background: codeEditMode ? `${ctp.blue}22` : ctp.surface0,
+                border: `1px solid ${codeEditMode ? `${ctp.blue}55` : ctp.surface1}`,
+                color: codeEditMode ? ctp.blue : ctp.text,
                 borderRadius: '3px',
                 padding: '2px 7px',
                 fontSize: '10px',
@@ -4580,8 +4581,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }}
                 style={{
                   background: 'none',
-                  border: '1px solid #45475a',
-                  color: '#f38ba8',
+                  border: `1px solid ${ctp.surface1}`,
+                  color: ctp.red,
                   borderRadius: '3px',
                   padding: '2px 7px',
                   fontSize: '10px',
@@ -4600,9 +4601,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               spellCheck={false}
               rows={8}
               style={{
-                background: '#11111b',
+                background: ctp.crust,
                 border: 'none',
-                color: '#a6e3a1',
+                color: ctp.green,
                 fontSize: '10px',
                 padding: '6px 10px',
                 margin: 0,
@@ -4619,7 +4620,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             <pre
               style={{
                 background: 'transparent',
-                color: hasOverride ? '#f9e2af' : '#a6e3a1',
+                color: hasOverride ? ctp.yellow : ctp.green,
                 fontSize: '10px',
                 padding: '6px 10px',
                 margin: 0,
@@ -4646,7 +4647,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           alignItems: 'center',
           justifyContent: 'flex-start',
           padding: '3px 6px',
-          borderTop: '1px solid #313244',
+          borderTop: `1px solid ${ctp.surface0}`,
           borderRadius: '0 0 8px 8px',
         }}
       >
@@ -4654,9 +4655,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           onClick={e => { e.stopPropagation(); setShowNodeTooltip(v => !v); }}
           title={showNodeTooltip ? 'Hide node info' : 'Show node info'}
           style={{
-            background: showNodeTooltip ? '#89b4fa22' : 'none',
-            border: showNodeTooltip ? '1px solid #89b4fa55' : 'none',
-            color: showNodeTooltip ? '#89b4fa' : '#585b70',
+            background: showNodeTooltip ? `${ctp.blue}22` : 'none',
+            border: showNodeTooltip ? `1px solid ${ctp.blue}55` : 'none',
+            color: showNodeTooltip ? ctp.blue : ctp.surface2,
             cursor: 'pointer',
             fontSize: '11px',
             lineHeight: 1,
@@ -4670,9 +4671,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           onClick={e => { e.stopPropagation(); setShowCommentEditor(v => !v); setShowCommentPreview(false); }}
           title={nodeComment ? 'Edit comment' : 'Add comment'}
           style={{
-            background: showCommentEditor ? '#a6e3a122' : nodeComment ? '#a6e3a115' : 'none',
-            border: showCommentEditor ? '1px solid #a6e3a155' : 'none',
-            color: showCommentEditor || nodeComment ? '#a6e3a1' : '#585b70',
+            background: showCommentEditor ? `${ctp.green}22` : nodeComment ? `${ctp.green}15` : 'none',
+            border: showCommentEditor ? `1px solid ${ctp.green}55` : 'none',
+            color: showCommentEditor || nodeComment ? ctp.green : ctp.surface2,
             cursor: 'pointer',
             fontSize: '11px',
             lineHeight: 1,
@@ -4686,9 +4687,9 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           onClick={() => setShowCode(v => !v)}
           title={showCode ? 'Hide generated GLSL' : 'Show generated GLSL'}
           style={{
-            background: showCode ? '#89b4fa22' : 'none',
-            border: showCode ? '1px solid #89b4fa55' : 'none',
-            color: showCode ? '#89b4fa' : '#585b70',
+            background: showCode ? `${ctp.blue}22` : 'none',
+            border: showCode ? `1px solid ${ctp.blue}55` : 'none',
+            color: showCode ? ctp.blue : ctp.surface2,
             cursor: 'pointer',
             fontSize: '11px',
             lineHeight: 1,
@@ -4710,7 +4711,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             style={{
               background: 'none',
               border: 'none',
-              color: '#585b70',
+              color: ctp.surface2,
               cursor: 'pointer',
               fontSize: '13px',
               lineHeight: 1,

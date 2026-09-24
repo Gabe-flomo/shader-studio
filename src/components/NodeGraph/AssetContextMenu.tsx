@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
+import { ctp } from '../../theme/palette';
 
 export interface ContextMenuItem {
   label: string;
@@ -48,8 +49,8 @@ export function AssetContextMenu({ x, y, items, onDismiss }: Props) {
         left: clampedX,
         top: clampedY,
         zIndex: 99999,
-        background: '#1e1e2e',
-        border: '1px solid #45475a',
+        background: ctp.base,
+        border: `1px solid ${ctp.surface1}`,
         borderRadius: '6px',
         padding: '4px 0',
         minWidth: '170px',
@@ -60,7 +61,7 @@ export function AssetContextMenu({ x, y, items, onDismiss }: Props) {
       {items.map((item, i) => (
         <React.Fragment key={i}>
           {item.separator && i > 0 && (
-            <div style={{ borderTop: '1px solid #313244', margin: '3px 0' }} />
+            <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '3px 0' }} />
           )}
           <button
             disabled={item.disabled}
@@ -73,13 +74,13 @@ export function AssetContextMenu({ x, y, items, onDismiss }: Props) {
               border: 'none',
               padding: '5px 14px',
               fontSize: '11px',
-              color: item.disabled ? '#45475a' : item.destructive ? '#f38ba8' : '#cdd6f4',
+              color: item.disabled ? ctp.surface1 : item.destructive ? ctp.red : ctp.text,
               cursor: item.disabled ? 'default' : 'pointer',
               letterSpacing: '0.02em',
             }}
             onMouseEnter={e => {
               if (!item.disabled)
-                (e.currentTarget as HTMLButtonElement).style.background = item.destructive ? '#f38ba811' : '#313244';
+                (e.currentTarget as HTMLButtonElement).style.background = item.destructive ? `${ctp.red}11` : ctp.surface0;
             }}
             onMouseLeave={e => {
               (e.currentTarget as HTMLButtonElement).style.background = 'none';

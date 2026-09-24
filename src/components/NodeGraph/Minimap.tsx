@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
+import { ctp } from '../../theme/palette';
 
 const NODE_W = 240;
 const NODE_H = 120;
@@ -48,7 +49,7 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
     const toMapY = (wy: number) => (wy - minY) * scale + offsetY;
 
     // Draw node rects
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     for (const node of nodes) {
       const x = toMapX(node.position.x);
       const y = toMapY(node.position.y);
@@ -68,7 +69,7 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
     const vw = vpWorldW * scale;
     const vh = vpWorldH * scale;
 
-    ctx.strokeStyle = '#cba6f7';
+    ctx.strokeStyle = ctp.mauve;
     ctx.lineWidth = 1;
     ctx.strokeRect(vx, vy, vw, vh);
     // Subtle tint inside viewport
@@ -108,7 +109,7 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
         right: 16,
         zIndex: 10,
         background: 'rgba(17,17,27,0.85)',
-        border: '1px solid #45475a',
+        border: `1px solid ${ctp.surface1}`,
         borderRadius: '6px',
         overflow: 'hidden',
         boxShadow: '0 2px 8px rgba(0,0,0,0.5)',

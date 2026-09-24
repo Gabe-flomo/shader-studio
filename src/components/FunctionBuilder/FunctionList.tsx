@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
 import type { FnDef } from './useFunctionBuilder';
 import { FunctionEditor } from './FunctionEditor';
+import { ctp } from '../../theme/palette';
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
@@ -16,8 +17,8 @@ function TabBar() {
       alignItems: 'center',
       overflowX: 'auto',
       flexShrink: 0,
-      borderBottom: '1px solid #313244',
-      background: '#181825',
+      borderBottom: `1px solid ${ctp.surface0}`,
+      background: ctp.mantle,
       scrollbarWidth: 'none',
     }}>
       {tabs.map(tab => {
@@ -31,9 +32,9 @@ function TabBar() {
               alignItems: 'center',
               gap: '4px',
               padding: '4px 8px',
-              borderRight: '1px solid #313244',
-              background: active ? '#1e1e2e' : 'transparent',
-              borderBottom: active ? '2px solid #89b4fa' : '2px solid transparent',
+              borderRight: `1px solid ${ctp.surface0}`,
+              background: active ? ctp.base : 'transparent',
+              borderBottom: active ? `2px solid ${ctp.blue}` : '2px solid transparent',
               cursor: 'pointer',
               flexShrink: 0,
               minWidth: 0,
@@ -53,14 +54,14 @@ function TabBar() {
                 onClick={e => e.stopPropagation()}
                 style={{
                   background: 'none', border: 'none', outline: 'none',
-                  color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace',
+                  color: ctp.text, fontSize: '11px', fontFamily: 'monospace',
                   width: '64px', padding: 0,
                 }}
               />
             ) : (
               <span
                 onDoubleClick={e => { e.stopPropagation(); setEditingId(tab.id); setEditVal(tab.label); }}
-                style={{ fontSize: '11px', color: active ? '#cdd6f4' : '#585b70', fontFamily: 'monospace', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                style={{ fontSize: '11px', color: active ? ctp.text : ctp.surface2, fontFamily: 'monospace', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
                 {tab.label}
               </span>
@@ -68,9 +69,9 @@ function TabBar() {
             {tabs.length > 1 && (
               <button
                 onClick={e => { e.stopPropagation(); closeTab(tab.id); }}
-                style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '10px', padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+                style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '10px', padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
               >×</button>
             )}
           </div>
@@ -79,9 +80,9 @@ function TabBar() {
       <button
         onClick={addTab}
         title="New tab"
-        style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '14px', padding: '4px 8px', lineHeight: 1, flexShrink: 0 }}
-        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
-        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+        style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '14px', padding: '4px 8px', lineHeight: 1, flexShrink: 0 }}
+        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.blue)}
+        onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
       >+</button>
     </div>
   );
@@ -171,9 +172,9 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
   const { savedFunctionDefs, deleteSavedFunctionDef } = useFunctionBuilder();
 
   const chipStyle = (active = false): React.CSSProperties => ({
-    background: '#11111b',
-    border: `1px solid ${active ? '#89b4fa55' : '#313244'}`,
-    color: active ? '#89b4fa' : '#6c7086',
+    background: ctp.crust,
+    border: `1px solid ${active ? `${ctp.blue}55` : ctp.surface0}`,
+    color: active ? ctp.blue : ctp.overlay0,
     borderRadius: '3px',
     padding: '2px 6px',
     fontSize: '10px',
@@ -183,18 +184,18 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
   });
 
   return (
-    <div style={{ flexShrink: 0, borderTop: '1px solid #1e1e2e' }}>
+    <div style={{ flexShrink: 0, borderTop: `1px solid ${ctp.base}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px' }}>
         <button
           onClick={() => setOpen(v => !v)}
           style={{
-            background: 'none', border: 'none', color: '#45475a',
+            background: 'none', border: 'none', color: ctp.surface1,
             fontSize: '10px', fontFamily: 'monospace', padding: '5px 4px',
             textAlign: 'left', cursor: 'pointer',
             display: 'flex', alignItems: 'center', gap: '4px', flex: 1,
           }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
         >
           <span style={{ fontSize: '8px' }}>{open ? '▼' : '▶'}</span>
           Helpers
@@ -208,8 +209,8 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
               fontSize: '9px', padding: '1px 6px',
               transition: 'all 0.15s',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#89b4fa88'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = autoWrap ? '#89b4fa55' : '#313244'; }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.blue}88`; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = autoWrap ? `${ctp.blue}55` : ctp.surface0; }}
           >
             ⊂ wrap {autoWrap ? 'ON' : 'OFF'}
           </button>
@@ -218,13 +219,13 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
 
       {open && (
         <div style={{ padding: '2px 10px 8px', maxHeight: '200px', overflowY: 'auto' }}>
-          <p style={{ fontSize: '9px', color: '#45475a', margin: '0 0 6px', lineHeight: 1.4 }}>
+          <p style={{ fontSize: '9px', color: ctp.surface1, margin: '0 0 6px', lineHeight: 1.4 }}>
             Click to insert at cursor · {isFloat ? 'float mode — vec/SDF hidden' : 'vec mode — all shown'}
           </p>
 
           {savedFunctionDefs.length > 0 && (
             <div style={{ marginBottom: '6px' }}>
-              <div style={{ fontSize: '9px', color: '#a6e3a1', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: '3px' }}>
+              <div style={{ fontSize: '9px', color: ctp.green, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: '3px' }}>
                 Custom
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
@@ -238,9 +239,9 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
                         onMouseDown={e => { e.preventDefault(); onInsertLibraryFn(fn); }}
                         title={`${fn.returnType} ${fn.name}${sig}\nInserts: ${call}`}
                         style={{
-                          background: '#11111b',
-                          border: '1px solid #a6e3a144',
-                          color: '#a6e3a1',
+                          background: ctp.crust,
+                          border: `1px solid ${ctp.green}44`,
+                          color: ctp.green,
                           borderRadius: '3px 0 0 3px',
                           padding: '2px 6px',
                           fontSize: '10px',
@@ -248,28 +249,28 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
                           cursor: 'pointer',
                           whiteSpace: 'nowrap' as const,
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a1aa'; (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a144'; (e.currentTarget as HTMLButtonElement).style.color = '#a6e3a1'; }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}aa`; (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}44`; (e.currentTarget as HTMLButtonElement).style.color = ctp.green; }}
                       >
                         {fn.name}
-                        <span style={{ color: '#585b70', marginLeft: '2px' }}>{fn.returnType}</span>
+                        <span style={{ color: ctp.surface2, marginLeft: '2px' }}>{fn.returnType}</span>
                       </button>
                       <button
                         onMouseDown={e => { e.preventDefault(); deleteSavedFunctionDef(fn.id); }}
                         title="Remove from library"
                         style={{
-                          background: '#11111b',
-                          border: '1px solid #a6e3a144',
+                          background: ctp.crust,
+                          border: `1px solid ${ctp.green}44`,
                           borderLeft: 'none',
-                          color: '#45475a',
+                          color: ctp.surface1,
                           borderRadius: '0 3px 3px 0',
                           padding: '2px 4px',
                           fontSize: '9px',
                           cursor: 'pointer',
                           lineHeight: 1,
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f38ba8'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#45475a'; }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.red; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface1; }}
                       >×</button>
                     </div>
                   );
@@ -283,7 +284,7 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
             if (entries.length === 0) return null;
             return (
               <div key={group} style={{ marginBottom: '6px' }}>
-                <div style={{ fontSize: '9px', color: '#585b70', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: '3px' }}>
+                <div style={{ fontSize: '9px', color: ctp.surface2, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: '3px' }}>
                   {group}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
@@ -294,12 +295,12 @@ function HelpersPanel({ isFloat, autoWrap, onToggleAutoWrap, onInsert, onInsertL
                       title={`Insert: ${entry.insert}`}
                       style={chipStyle()}
                       onMouseEnter={e => {
-                        (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4';
-                        (e.currentTarget as HTMLButtonElement).style.borderColor = '#45475a';
+                        (e.currentTarget as HTMLButtonElement).style.color = ctp.text;
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
                       }}
                       onMouseLeave={e => {
-                        (e.currentTarget as HTMLButtonElement).style.color = '#6c7086';
-                        (e.currentTarget as HTMLButtonElement).style.borderColor = '#313244';
+                        (e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0;
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface0;
                       }}
                     >
                       {entry.label}
@@ -428,14 +429,14 @@ export function FunctionList({ glslErrors }: Props) {
         onInsertLibraryFn={handleLibraryFnInsert}
       />
 
-      <div style={{ flexShrink: 0, padding: '6px 8px', borderTop: '1px solid #313244' }}>
+      <div style={{ flexShrink: 0, padding: '6px 8px', borderTop: `1px solid ${ctp.surface0}` }}>
         <button
           onClick={addFunction}
           style={{
             width: '100%',
-            background: '#1e1e2e',
-            border: '1px dashed #45475a',
-            color: '#585b70',
+            background: ctp.base,
+            border: `1px dashed ${ctp.surface1}`,
+            color: ctp.surface2,
             borderRadius: '6px',
             padding: '6px',
             fontSize: '12px',
@@ -443,12 +444,12 @@ export function FunctionList({ glslErrors }: Props) {
             transition: 'color 0.15s, border-color 0.15s',
           }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = '#6c7086';
+            (e.currentTarget as HTMLButtonElement).style.color = ctp.text;
+            (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.overlay0;
           }}
           onMouseLeave={e => {
-            (e.currentTarget as HTMLButtonElement).style.color = '#585b70';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = '#45475a';
+            (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2;
+            (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
           }}
         >
           + Add Function

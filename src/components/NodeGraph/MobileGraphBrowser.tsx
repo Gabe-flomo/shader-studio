@@ -31,15 +31,16 @@ import {
 import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/keyframes';
 import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
 import { NumberInput } from './NumberInput';
+import { ctp } from '../../theme/palette';
 
 function nodeDotColor(n: GraphNode): string {
-  if (n.type === 'output') return '#a6e3a1';
+  if (n.type === 'output') return ctp.green;
   // Groups get their own color rather than their first output's type color —
   // a group's output type is often incidental (whatever its last-added port
   // happens to be), and the point of the dot here is "this is a group, a
   // subgraph," not "this outputs a vec3." Same mauve used everywhere else
   // this session for group-related UI (⛓ port chips, Folder rows, etc).
-  if (GROUP_TYPES.has(n.type)) return '#cba6f7';
+  if (GROUP_TYPES.has(n.type)) return ctp.mauve;
   const outType = Object.values(n.outputs)[0]?.type;
   return TYPE_COLORS[outType ?? 'float'] ?? '#888';
 }
@@ -194,7 +195,7 @@ function GraphEdges({ edges }: { edges: ReturnType<typeof computeGraphLayout>['e
           <path
             key={e.key}
             d={`M ${e.x1} ${e.y1} C ${e.x1} ${midY}, ${e.x2} ${midY}, ${e.x2} ${e.y2}`}
-            stroke="#585b70" strokeWidth={1.5} fill="none"
+            stroke={ctp.surface2} strokeWidth={1.5} fill="none"
           />
         );
       })}
@@ -245,7 +246,7 @@ function GraphEdgesHorizontal({ edges }: { edges: ReturnType<typeof computeGraph
           <path
             key={e.key}
             d={`M ${e.x1} ${e.y1} C ${midX} ${e.y1}, ${midX} ${e.y2}, ${e.x2} ${e.y2}`}
-            stroke="#585b70" strokeWidth={1.5} fill="none"
+            stroke={ctp.surface2} strokeWidth={1.5} fill="none"
           />
         );
       })}
@@ -341,16 +342,16 @@ export function MobileNodeGraphOverlay() {
       display: 'flex', flexDirection: 'column',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', flexShrink: 0 }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, color: '#89b4fa', letterSpacing: '0.06em' }}>
+        <span style={{ fontSize: '10px', fontWeight: 700, color: ctp.blue, letterSpacing: '0.06em' }}>
           NODE GRAPH{activeGroupPath.length > 0 ? ' — inside group' : ''} · read-only
         </span>
         <button
           onClick={() => setOpen(false)}
-          style={{ background: 'rgba(24,24,37,0.8)', border: '1px solid #45475a', color: '#a6adc8', borderRadius: '5px', width: '22px', height: '22px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+          style={{ background: 'rgba(24,24,37,0.8)', border: `1px solid ${ctp.surface1}`, color: ctp.subtext0, borderRadius: '5px', width: '22px', height: '22px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
         >✕</button>
       </div>
       {nodes.length === 0 ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#585b70' }}>No nodes yet.</div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: ctp.surface2 }}>No nodes yet.</div>
       ) : (
         <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
@@ -361,7 +362,7 @@ export function MobileNodeGraphOverlay() {
                   <path
                     key={e.key}
                     d={`M ${e.x1} ${e.y1} C ${midX} ${e.y1}, ${midX} ${e.y2}, ${e.x2} ${e.y2}`}
-                    stroke={TYPE_COLORS[e.type] ?? '#585b70'} strokeWidth={1.5} fill="none" opacity={0.85}
+                    stroke={TYPE_COLORS[e.type] ?? ctp.surface2} strokeWidth={1.5} fill="none" opacity={0.85}
                   />
                 );
               })}
@@ -375,22 +376,22 @@ export function MobileNodeGraphOverlay() {
                   key={n.id}
                   style={{
                     position: 'absolute', left: l.x, top: l.y, width: l.w, height: l.h,
-                    background: 'rgba(30,30,46,0.92)', border: '1px solid #45475a', borderRadius: '6px',
+                    background: 'rgba(30,30,46,0.92)', border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
                   }}
                 >
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '5px', height: OVERLAY_TITLE_H, padding: '0 8px',
-                    borderBottom: hasPorts ? '1px solid #313244' : 'none', overflow: 'hidden',
+                    borderBottom: hasPorts ? `1px solid ${ctp.surface0}` : 'none', overflow: 'hidden',
                   }}>
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: nodeDotColor(n), flexShrink: 0 }} />
-                    <span style={{ fontSize: '10px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
+                    <span style={{ fontSize: '10px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
                   </div>
                   {l.inputs.map(p => (
                     <div
                       key={`i-${p.key}`} title={p.label}
                       style={{
                         position: 'absolute', left: -4, top: p.y - 4, width: 8, height: 8, borderRadius: '50%',
-                        background: TYPE_COLORS[p.type] ?? '#888', border: '1px solid #11111b',
+                        background: TYPE_COLORS[p.type] ?? '#888', border: `1px solid ${ctp.crust}`,
                       }}
                     />
                   ))}
@@ -399,7 +400,7 @@ export function MobileNodeGraphOverlay() {
                       key={`o-${p.key}`} title={p.label}
                       style={{
                         position: 'absolute', right: -4, top: p.y - 4, width: 8, height: 8, borderRadius: '50%',
-                        background: TYPE_COLORS[p.type] ?? '#888', border: '1px solid #11111b',
+                        background: TYPE_COLORS[p.type] ?? '#888', border: `1px solid ${ctp.crust}`,
                       }}
                     />
                   ))}
@@ -447,11 +448,11 @@ const dotStyle = (color: string): React.CSSProperties => ({
   width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0,
 });
 const chipStyle: React.CSSProperties = {
-  background: '#313244', border: '1px solid #45475a', borderRadius: '999px',
-  padding: '4px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
+  background: ctp.surface0, border: `1px solid ${ctp.surface1}`, borderRadius: '999px',
+  padding: '4px 10px', fontSize: '12px', color: ctp.text, cursor: 'pointer', touchAction: 'manipulation',
 };
 const addBtnStyle: React.CSSProperties = {
-  marginLeft: 'auto', flexShrink: 0, background: '#313244', border: '1px solid #89b4fa66', color: '#89b4fa',
+  marginLeft: 'auto', flexShrink: 0, background: ctp.surface0, border: `1px solid ${ctp.blue}66`, color: ctp.blue,
   borderRadius: '6px', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: '18px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
 };
@@ -466,7 +467,7 @@ const smallIconBtnStyle = (color: string): React.CSSProperties => ({
 // Back/forward buttons in the node header — dims and becomes inert (but
 // stays in the layout, so the header doesn't jump) when there's nowhere to go.
 const navBtnStyle = (enabled: boolean): React.CSSProperties => ({
-  flexShrink: 0, background: 'none', border: 'none', color: enabled ? '#89b4fa' : '#3a3a52',
+  flexShrink: 0, background: 'none', border: 'none', color: enabled ? ctp.blue : '#3a3a52',
   width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: '17px', lineHeight: 1, cursor: enabled ? 'pointer' : 'default', touchAction: 'manipulation',
 });
@@ -477,7 +478,7 @@ const navBtnStyle = (enabled: boolean): React.CSSProperties => ({
 // brackets ("[XY]", "[XYZ]", "[XYZW]") with each letter in its own axis
 // color, so a socket's shape is readable at a glance instead of just its
 // color. Anything else (bool, sampler2D, mat3, …) falls back to the dot.
-const AXIS_COLORS: Record<string, string> = { x: '#f38ba8', y: '#a6e3a1', z: '#89b4fa', w: '#cba6f7' };
+const AXIS_COLORS: Record<string, string> = { x: ctp.red, y: ctp.green, z: ctp.blue, w: ctp.mauve };
 const ICON_VECTOR_AXES: Record<string, string[]> = { vec2: ['x', 'y'], vec3: ['x', 'y', 'z'], vec4: ['x', 'y', 'z', 'w'] };
 function TypeIcon({ type }: { type: string }) {
   if (type === 'float' || type === 'int') {
@@ -491,9 +492,9 @@ function TypeIcon({ type }: { type: string }) {
   if (axes) {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, fontFamily: 'monospace', fontWeight: 700, fontSize: '10px', whiteSpace: 'nowrap' }}>
-        <span style={{ color: '#585b70' }}>[</span>
+        <span style={{ color: ctp.surface2 }}>[</span>
         {axes.map(a => <span key={a} style={{ color: AXIS_COLORS[a] }}>{a.toUpperCase()}</span>)}
-        <span style={{ color: '#585b70' }}>]</span>
+        <span style={{ color: ctp.surface2 }}>]</span>
       </span>
     );
   }
@@ -565,7 +566,7 @@ export function InlineVizFrame({ node }: { node: GraphNode }) {
     <div
       ref={frameRef}
       style={{
-        background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+        background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px',
         overflow: 'hidden', width: '100%', maxHeight: '60vh',
       }}
     >
@@ -607,7 +608,7 @@ export function GenericPreviewViz({ node, nodes }: { node: GraphNode; nodes: Gra
 
   if (!url) return null;
   return (
-    <div style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid #313244', background: '#11111b' }}>
+    <div style={{ width: '100%', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: `1px solid ${ctp.surface0}`, background: ctp.crust }}>
       <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
     </div>
   );
@@ -622,9 +623,9 @@ const sectionHeaderBtnStyle: React.CSSProperties = {
 // Small pill tab, e.g. the Info/Comment toggle under a node's cards.
 const smallTabBtnStyle = (active: boolean): React.CSSProperties => ({
   padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-  background: active ? '#313244' : 'none',
-  border: active ? '1px solid #89b4fa' : '1px solid #45475a',
-  color: active ? '#89b4fa' : '#6c7086',
+  background: active ? ctp.surface0 : 'none',
+  border: active ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
+  color: active ? ctp.blue : ctp.overlay0,
   cursor: 'pointer', touchAction: 'manipulation',
 });
 
@@ -832,7 +833,7 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
 
     ctx.strokeStyle = '#24243a';
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#585b70';
+    ctx.fillStyle = ctp.surface2;
     ctx.font = '9px monospace';
     const gridStep = Math.max(1, Math.round(maxT / 8));
     for (let gt = 0; gt <= maxT; gt += gridStep) {
@@ -844,7 +845,7 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     ctx.fillText(valueMin.toFixed(1), 2, toY(valueMin));
 
     if (keyframes.length > 0) {
-      ctx.strokeStyle = '#89b4fa';
+      ctx.strokeStyle = ctp.blue;
       ctx.lineWidth = 2;
       ctx.beginPath();
       const steps = 120;
@@ -868,13 +869,13 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       const p0x = segToX(0), p0y = segToY(0), p3x = segToX(1), p3y = segToY(1);
       const p1x = segToX(seg.ease.a), p1y = segToY(seg.ease.b);
       const p2x = segToX(seg.ease.c), p2y = segToY(seg.ease.d);
-      ctx.strokeStyle = '#f38ba888'; ctx.lineWidth = 1;
+      ctx.strokeStyle = `${ctp.red}88`; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke();
-      ctx.strokeStyle = '#89b4fa88';
+      ctx.strokeStyle = `${ctp.blue}88`;
       ctx.beginPath(); ctx.moveTo(p3x, p3y); ctx.lineTo(p2x, p2y); ctx.stroke();
-      [[p1x, p1y, '#f38ba8'], [p2x, p2y, '#89b4fa']].forEach(([hx, hy, color]) => {
+      [[p1x, p1y, ctp.red], [p2x, p2y, ctp.blue]].forEach(([hx, hy, color]) => {
         ctx.fillStyle = color as string;
-        ctx.strokeStyle = '#11111b'; ctx.lineWidth = 1.5;
+        ctx.strokeStyle = ctp.crust; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(hx as number, hy as number, KF_HANDLE_R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       });
     }
@@ -890,9 +891,9 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       const isMarqueed = !!marqueeBounds && x >= marqueeBounds.xMin && x <= marqueeBounds.xMax && y >= marqueeBounds.yMin && y <= marqueeBounds.yMax;
       ctx.beginPath();
       ctx.arc(x, y, isSelected ? 7 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = isMarqueed ? '#f38ba8' : isSelected ? '#f9e2af' : '#fab387';
+      ctx.fillStyle = isMarqueed ? ctp.red : isSelected ? ctp.yellow : ctp.peach;
       ctx.fill();
-      ctx.strokeStyle = '#181825';
+      ctx.strokeStyle = ctp.mantle;
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
@@ -900,7 +901,7 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     if (marqueeBounds) {
       const { xMin, xMax, yMin, yMax } = marqueeBounds;
       ctx.fillStyle = 'rgba(243,139,168,0.12)';
-      ctx.strokeStyle = '#f38ba8';
+      ctx.strokeStyle = ctp.red;
       ctx.lineWidth = 1;
       ctx.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
       ctx.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
@@ -1051,7 +1052,7 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        style={{ display: 'block', borderRadius: '8px', background: '#11111b', border: '1px solid #313244', touchAction: 'none' }}
+        style={{ display: 'block', borderRadius: '8px', background: ctp.crust, border: `1px solid ${ctp.surface0}`, touchAction: 'none' }}
       />
     </div>
   );
@@ -1061,18 +1062,18 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
 const EXPR_TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 const EXPR_OPS = ['=', '+=', '-=', '*=', '/='];
 const exprTextInputStyle: React.CSSProperties = {
-  background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
+  background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text,
   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', fontFamily: 'monospace', outline: 'none', minWidth: 0,
 };
 const exprSelectStyle: React.CSSProperties = {
-  background: '#11111b', border: '1px solid #45475a', color: '#89b4fa',
+  background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.blue,
   borderRadius: '6px', padding: '8px 6px', fontSize: '13px', cursor: 'pointer', outline: 'none',
 };
 // Thin highlight stroke around whichever input/line card currently has focus
 // — makes it obvious which element you're editing on a small screen.
 const exprCardStyle = (focused: boolean): React.CSSProperties => ({
-  background: '#1e1e2e', borderRadius: '8px', padding: '7px 8px',
-  border: focused ? '1px solid #89b4fa' : '1px solid #313244',
+  background: ctp.base, borderRadius: '8px', padding: '7px 8px',
+  border: focused ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface0}`,
   display: 'flex', flexDirection: 'column', gap: '6px',
 });
 type ExprInputDef = { name: string; type: DataType; slider: { min: number; max: number } | null; carry?: boolean };
@@ -1173,8 +1174,8 @@ function GlslExprInput({ value, onChange, placeholder, style, variables = [] }: 
       {open && matches.length > 0 && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', zIndex: 30,
-          display: 'flex', gap: '4px', overflowX: 'auto', background: '#11111b',
-          border: '1px solid #45475a', borderRadius: '6px', padding: '4px',
+          display: 'flex', gap: '4px', overflowX: 'auto', background: ctp.crust,
+          border: `1px solid ${ctp.surface1}`, borderRadius: '6px', padding: '4px',
         }}>
           {matches.map(m => (
             <button
@@ -1182,9 +1183,9 @@ function GlslExprInput({ value, onChange, placeholder, style, variables = [] }: 
               onMouseDown={e => e.preventDefault()}
               onClick={() => applySuggestion(m.insert)}
               style={{
-                flexShrink: 0, background: '#313244', border: '1px solid #45475a', borderRadius: '4px',
+                flexShrink: 0, background: ctp.surface0, border: `1px solid ${ctp.surface1}`, borderRadius: '4px',
                 padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace',
-                color: m.kind === 'variable' ? '#89b4fa' : m.kind === 'global' ? '#cba6f7' : '#a6e3a1',
+                color: m.kind === 'variable' ? ctp.blue : m.kind === 'global' ? ctp.mauve : ctp.green,
                 cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap',
               }}
             >
@@ -1267,13 +1268,13 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
                 onPointerMove={handlePointerMove}
                 onPointerUp={endDrag}
                 onPointerCancel={endDrag}
-                style={{ background: 'none', border: 'none', color: '#6c7086', fontSize: '16px', lineHeight: 1, cursor: 'grab', padding: '4px', touchAction: 'none' }}
+                style={{ background: 'none', border: 'none', color: ctp.overlay0, fontSize: '16px', lineHeight: 1, cursor: 'grab', padding: '4px', touchAction: 'none' }}
                 title="Drag to reorder"
               >☰</button>
-              <span style={{ fontSize: '10px', color: '#585b70', flex: 1 }}>Line {i + 1}</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2, flex: 1 }}>Line {i + 1}</span>
               <button
                 onClick={() => onRemoveLine(i)}
-                style={{ background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                style={{ background: 'none', border: 'none', color: ctp.red, fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
                 title="Remove line"
               >✕</button>
             </div>
@@ -1286,7 +1287,7 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
                 value={line.rhs}
                 onChange={v => onUpdateLine(i, 'rhs', v)}
                 placeholder="expression…"
-                style={{ ...exprTextInputStyle, flex: 1, color: '#a6e3a1' }}
+                style={{ ...exprTextInputStyle, flex: 1, color: ctp.green }}
                 variables={variables}
               />
             </div>
@@ -1985,22 +1986,22 @@ export function MobileGraphBrowser() {
     const canPreview = !['output', 'vec4Output', 'uv', 'time', 'mouse', 'constant'].includes(node.type);
     const canBypass = !['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type);
     return (
-      <div style={{ padding: '12px', borderBottom: '1px solid #313244', display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
+      <div style={{ padding: '12px', borderBottom: `1px solid ${ctp.surface0}`, display: 'flex', alignItems: 'center', gap: '4px', background: '#242438' }}>
         <button style={navBtnStyle(focusStack.length > 0)} disabled={focusStack.length === 0} title="Back" onClick={goBack}>‹</button>
         <button style={navBtnStyle(forwardStack.length > 0)} disabled={forwardStack.length === 0} title="Forward" onClick={goForward}>›</button>
         <div style={{ ...dotStyle(nodeDotColor(node)), marginLeft: '4px' }} />
         <div style={{ fontWeight: 700, fontSize: '16px', color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
         {isBypassed && (
-          <span style={{ fontSize: '9px', color: '#f9e2af', letterSpacing: '0.06em', fontWeight: 700, flexShrink: 0 }}>BYPASS</span>
+          <span style={{ fontSize: '9px', color: ctp.yellow, letterSpacing: '0.06em', fontWeight: 700, flexShrink: 0 }}>BYPASS</span>
         )}
         {canPreview && (
           <button
             onClick={() => setPreviewNodeId(isPreviewActive ? null : node.id)}
             title={isPreviewActive ? 'Exit preview (restore full graph)' : 'Preview this node in isolation'}
             style={{
-              background: isPreviewActive ? '#a6e3a122' : 'none',
-              border: `1px solid ${isPreviewActive ? '#a6e3a155' : '#45475a'}`,
-              color: isPreviewActive ? '#a6e3a1' : '#585b70',
+              background: isPreviewActive ? `${ctp.green}22` : 'none',
+              border: `1px solid ${isPreviewActive ? `${ctp.green}55` : ctp.surface1}`,
+              color: isPreviewActive ? ctp.green : ctp.surface2,
               borderRadius: '6px', width: '30px', height: '30px', fontSize: '14px', cursor: 'pointer', touchAction: 'manipulation',
             }}
           >
@@ -2012,9 +2013,9 @@ export function MobileGraphBrowser() {
             onClick={() => toggleBypass(node.id)}
             title={isBypassed ? 'Enable node (currently bypassed)' : 'Bypass node (pass input through)'}
             style={{
-              background: isBypassed ? '#f9e2af22' : 'none',
-              border: `1px solid ${isBypassed ? '#f9e2af55' : '#45475a'}`,
-              color: isBypassed ? '#f9e2af' : '#585b70',
+              background: isBypassed ? `${ctp.yellow}22` : 'none',
+              border: `1px solid ${isBypassed ? `${ctp.yellow}55` : ctp.surface1}`,
+              color: isBypassed ? ctp.yellow : ctp.surface2,
               borderRadius: '6px', width: '30px', height: '30px', fontSize: '14px', cursor: 'pointer', touchAction: 'manipulation',
             }}
           >
@@ -2024,7 +2025,7 @@ export function MobileGraphBrowser() {
         {canRemove && (
           <button
             onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
-            style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+            style={{ background: 'none', border: `1px solid ${ctp.red}66`, color: ctp.red, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
           >
             Remove
           </button>
@@ -2054,15 +2055,15 @@ export function MobileGraphBrowser() {
         .catch(err => console.error('Failed to load texture image:', err));
     };
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', padding: '10px' }}>
         {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="texture" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: '6px', border: '1px solid #45475a', flexShrink: 0 }} />
+          <img src={thumbnailUrl} alt="texture" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: '6px', border: `1px solid ${ctp.surface1}`, flexShrink: 0 }} />
         ) : (
-          <div style={{ width: 48, height: 48, background: '#313244', borderRadius: '6px', border: '1px dashed #45475a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🖼</div>
+          <div style={{ width: 48, height: 48, background: ctp.surface0, borderRadius: '6px', border: `1px dashed ${ctp.surface1}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🖼</div>
         )}
         <label style={{
-          flex: 1, textAlign: 'center', fontSize: '13px', fontWeight: 600, color: '#89b4fa',
-          background: '#89b4fa18', border: '1px solid #89b4fa55', borderRadius: '8px', padding: '10px', cursor: 'pointer', touchAction: 'manipulation',
+          flex: 1, textAlign: 'center', fontSize: '13px', fontWeight: 600, color: ctp.blue,
+          background: `${ctp.blue}18`, border: `1px solid ${ctp.blue}55`, borderRadius: '8px', padding: '10px', cursor: 'pointer', touchAction: 'manipulation',
         }}>
           {hasTexture ? 'Change Image' : 'Choose Image'}
           <input type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
@@ -2082,7 +2083,7 @@ export function MobileGraphBrowser() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {node.sealed ? (
-          <div style={{ fontSize: '11px', color: '#6c7086', background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '10px' }}>
+          <div style={{ fontSize: '11px', color: ctp.overlay0, background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', padding: '10px' }}>
             🔒 Sealed — compiles as a standalone function, contents aren't editable.
           </div>
         ) : (
@@ -2090,7 +2091,7 @@ export function MobileGraphBrowser() {
             <button
               onClick={() => enterGroup(node.id)}
               style={{
-                flex: 1, background: '#89b4fa18', border: '1px solid #89b4fa55', color: '#89b4fa',
+                flex: 1, background: `${ctp.blue}18`, border: `1px solid ${ctp.blue}55`, color: ctp.blue,
                 borderRadius: '8px', padding: '10px', fontSize: '13px', fontWeight: 600,
                 cursor: 'pointer', touchAction: 'manipulation',
               }}
@@ -2101,7 +2102,7 @@ export function MobileGraphBrowser() {
               <button
                 onClick={() => { setRenamingGroupFor(node.id); setRenameValue(labelFor(node)); }}
                 title="Rename"
-                style={{ background: 'none', border: '1px solid #45475a', color: '#a6adc8', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ background: 'none', border: `1px solid ${ctp.surface1}`, color: ctp.subtext0, borderRadius: '8px', padding: '10px 12px', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
               >✎</button>
             )}
           </div>
@@ -2121,14 +2122,14 @@ export function MobileGraphBrowser() {
             />
             <button
               onClick={() => { updateNodeParams(node.id, { label: renameValue.trim() || undefined }, { immediate: true }); setRenamingGroupFor(null); }}
-              style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px', padding: '0 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+              style={{ background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '6px', padding: '0 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
             >Save</button>
           </div>
         )}
         {isPlainGroup && !node.sealed && (
           <button
             onClick={() => { ungroupNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
-            style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '8px', padding: '8px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+            style={{ background: 'none', border: `1px solid ${ctp.red}66`, color: ctp.red, borderRadius: '8px', padding: '8px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
           >
             Ungroup
           </button>
@@ -2231,28 +2232,28 @@ export function MobileGraphBrowser() {
             <div
               onDoubleClick={e => { e.stopPropagation(); toggleHiddenInput(node, key); }}
               title="Double-tap to hide"
-              style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              style={{ flex: 1, minWidth: 0, fontSize: '12px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             >{inp.label}</div>
             {!isExpanded && upstream && (
-              <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>{labelFor(upstream)}</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>{labelFor(upstream)}</span>
             )}
             {!isExpanded && isPortSourced && (
-              <span style={{ fontSize: '10px', color: '#cba6f7', flexShrink: 0 }}>⛓ {sourcePort?.label ?? inp.connection!.outputKey}</span>
+              <span style={{ fontSize: '10px', color: ctp.mauve, flexShrink: 0 }}>⛓ {sourcePort?.label ?? inp.connection!.outputKey}</span>
             )}
             {!isExpanded && ghostCandidate && (
-              <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>⇢ {labelFor(ghostCandidate.node)}</span>
+              <span style={{ fontSize: '10px', color: ctp.overlay0, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px', whiteSpace: 'nowrap' }}>⇢ {labelFor(ghostCandidate.node)}</span>
             )}
-            <span style={{ fontSize: '9px', color: '#585b70', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+            <span style={{ fontSize: '9px', color: ctp.surface2, flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
           </button>
           {isExpanded && (
             <div style={{ padding: '0 10px 10px 27px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {upstream && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                  <span style={{ color: ctp.surface1, fontSize: '12px' }}>└</span>
                   <button style={pillStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
                   <button
                     onClick={() => disconnectInput(node.id, key)}
-                    style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
+                    style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
                     title="Disconnect"
                   >✕ Disconnect</button>
                 </div>
@@ -2262,13 +2263,13 @@ export function MobileGraphBrowser() {
                   to drill into), but still freely disconnectable. */}
               {isPortSourced && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
-                  <span style={{ ...pillStyle, cursor: 'default', color: '#cba6f7', border: '1px solid #cba6f755' }}>
+                  <span style={{ color: ctp.surface1, fontSize: '12px' }}>└</span>
+                  <span style={{ ...pillStyle, cursor: 'default', color: ctp.mauve, border: `1px solid ${ctp.mauve}55` }}>
                     ⛓ {sourcePort?.label ?? inp.connection!.outputKey}
                   </span>
                   <button
                     onClick={() => disconnectInput(node.id, key)}
-                    style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
+                    style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '11px', cursor: 'pointer', padding: '2px 4px', touchAction: 'manipulation' }}
                     title="Disconnect"
                   >✕ Disconnect</button>
                 </div>
@@ -2276,13 +2277,13 @@ export function MobileGraphBrowser() {
               {!upstream && !isPortSourced && (
                 <>
                   {candidates.length === 0 && (
-                    <div style={{ fontSize: '11px', color: '#585b70' }}>No compatible nodes yet — add a new one below.</div>
+                    <div style={{ fontSize: '11px', color: ctp.surface2 }}>No compatible nodes yet — add a new one below.</div>
                   )}
                   {candidates.map(c => (
                     <div key={c.node.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ color: '#45475a', fontSize: '12px' }}>└</span>
+                      <span style={{ color: ctp.surface1, fontSize: '12px' }}>└</span>
                       <button
-                        style={{ ...pillStyle, border: c.exact ? '1px solid #45475a' : '1px dashed #45475a' }}
+                        style={{ ...pillStyle, border: c.exact ? `1px solid ${ctp.surface1}` : `1px dashed ${ctp.surface1}` }}
                         title={c.exact ? undefined : 'Compatible via type promotion'}
                         onClick={() => { connectNodes(c.node.id, c.outKey, node.id, key); setWireExpandedKey(null); }}
                       >
@@ -2291,13 +2292,13 @@ export function MobileGraphBrowser() {
                     </div>
                   ))}
                   {allCandidates.length > candidates.length && (
-                    <div style={{ fontSize: '10px', color: '#585b70', marginLeft: '18px' }}>
+                    <div style={{ fontSize: '10px', color: ctp.surface2, marginLeft: '18px' }}>
                       +{allCandidates.length - candidates.length} more — search below to find them
                     </div>
                   )}
                   <button
                     onClick={() => setWireAddNewFor(key)}
-                    style={{ alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #45475a', color: '#89b4fa', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+                    style={{ alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: `1px dashed ${ctp.surface1}`, color: ctp.blue, borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
                   >+ Add New Node</button>
                 </>
               )}
@@ -2360,10 +2361,10 @@ export function MobileGraphBrowser() {
         <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: dotColor, flexShrink: 0, opacity: 0.6 }} />
       );
       return (
-        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+        <div key={key} style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={inp.type} />
-            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
             {/* Quick keyframe access right in the header, not just inside
                 the fold — a keyframed row jumps straight into the editor,
                 an eligible-but-static one straight into "add". The fold's
@@ -2381,13 +2382,13 @@ export function MobileGraphBrowser() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0, background: 'none', border: 'none',
                   padding: '2px 4px', cursor: 'pointer', touchAction: 'manipulation',
-                  color: isKeyframed ? '#f9e2af' : '#585b70', fontSize: '9px',
+                  color: isKeyframed ? ctp.yellow : ctp.surface2, fontSize: '9px',
                 }}
               >◆{isKeyframed ? ' animated' : ''}</button>
             )}
           </div>
           {isExternallyDriven && (
-            <div style={{ fontSize: '10px', color: '#6c7086', fontStyle: 'italic' }}>
+            <div style={{ fontSize: '10px', color: ctp.overlay0, fontStyle: 'italic' }}>
               🔒 driven by group input — edit it from outside the group
             </div>
           )}
@@ -2435,22 +2436,22 @@ export function MobileGraphBrowser() {
                     title="Tap for range, bidirectional & keyframe controls"
                     style={{
                       display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
-                      background: isExpanded ? '#313244' : 'none',
-                      border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
+                      background: isExpanded ? ctp.surface0 : 'none',
+                      border: isExpanded ? `1px solid ${ctp.surface1}` : '1px solid transparent',
                       borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
-                      color: isExpanded ? '#cdd6f4' : '#a6adc8',
+                      color: isExpanded ? ctp.text : ctp.subtext0,
                     }}
                   >
                     <span style={{ fontSize: '10px', minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {formatSliderValue(val, pd.step)}
                     </span>
-                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                    <span style={{ fontSize: '8px', color: ctp.surface2 }}>{isExpanded ? '▾' : '▸'}</span>
                   </button>
                 </div>
                 {isExpanded && (
-                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                  <div style={{ background: ctp.mantle, border: `1px solid ${ctp.surface0}`, borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
+                      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px', flexShrink: 0 }}>Value</span>
                       <NumberInput
                         step={pd.step ?? 0.01}
                         value={val}
@@ -2466,12 +2467,12 @@ export function MobileGraphBrowser() {
                         type="checkbox"
                         checked={bidir}
                         onChange={e => updateNodeParams(node.id, { [`__scBidir_${key}`]: e.target.checked }, { immediate: true })}
-                        style={{ accentColor: '#cba6f7' }}
+                        style={{ accentColor: ctp.mauve }}
                       />
-                      <span style={{ fontSize: '9px', color: '#a6adc8' }}>Bidirectional</span>
+                      <span style={{ fontSize: '9px', color: ctp.subtext0 }}>Bidirectional</span>
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Max</span>
+                      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px', flexShrink: 0 }}>Max</span>
                       <NumberInput
                         step={pd.step ?? 0.01}
                         value={effMax}
@@ -2481,11 +2482,11 @@ export function MobileGraphBrowser() {
                       {customMax != null && (
                         <button
                           onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null }, { immediate: true })}
-                          style={{ fontSize: '9px', color: '#585b70', background: 'none', border: '1px solid #313244', borderRadius: '4px', cursor: 'pointer', padding: '3px 6px', touchAction: 'manipulation', flexShrink: 0 }}
+                          style={{ fontSize: '9px', color: ctp.surface2, background: 'none', border: `1px solid ${ctp.surface0}`, borderRadius: '4px', cursor: 'pointer', padding: '3px 6px', touchAction: 'manipulation', flexShrink: 0 }}
                         >Reset</button>
                       )}
                     </div>
-                    <span style={{ fontSize: '9px', color: '#585b70' }}>
+                    <span style={{ fontSize: '9px', color: ctp.surface2 }}>
                       Range: {formatSliderValue(effMin, pd.step)} → {formatSliderValue(effMax, pd.step)}
                     </span>
                     {kfEligible && (
@@ -2496,8 +2497,8 @@ export function MobileGraphBrowser() {
                           setMobileKeyframeTool('add');
                         }}
                         style={{
-                          alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #f9e2af66',
-                          color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+                          alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: `1px dashed ${ctp.yellow}66`,
+                          color: ctp.yellow, borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
                         }}
                       >◆ Add Keyframes</button>
                     )}
@@ -2521,10 +2522,10 @@ export function MobileGraphBrowser() {
                   <EndDot />
                   <div style={{ flex: 1, height: '2px', background: `repeating-linear-gradient(90deg, ${dotColor}88 0 4px, transparent 4px 8px)`, minWidth: 0 }} />
                   <EndDot />
-                  <span style={{ fontSize: '8px', color: '#585b70', flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+                  <span style={{ fontSize: '8px', color: ctp.surface2, flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
                 </button>
                 {isExpanded && (
-                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', gap: '6px' }}>
+                  <div style={{ background: ctp.mantle, border: `1px solid ${ctp.surface0}`, borderRadius: '6px', padding: '6px 8px', display: 'flex', gap: '6px' }}>
                     <button
                       onClick={() => {
                         const axis = kfAxes ? kfAxes[0] : undefined;
@@ -2532,7 +2533,7 @@ export function MobileGraphBrowser() {
                         setMobileKeyframeTool('select');
                       }}
                       style={{
-                        background: 'none', border: '1px solid #f9e2af66', color: '#f9e2af', borderRadius: '6px',
+                        background: 'none', border: `1px solid ${ctp.yellow}66`, color: ctp.yellow, borderRadius: '6px',
                         padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
                       }}
                     >◆ Edit Keyframes</button>
@@ -2553,8 +2554,8 @@ export function MobileGraphBrowser() {
                 setMobileKeyframeTool('add');
               }}
               style={{
-                alignSelf: 'flex-start', background: 'none', border: '1px dashed #f9e2af66',
-                color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
+                alignSelf: 'flex-start', background: 'none', border: `1px dashed ${ctp.yellow}66`,
+                color: ctp.yellow, borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation',
               }}
             >◆ Add Keyframes</button>
           )}
@@ -2563,7 +2564,7 @@ export function MobileGraphBrowser() {
               value={selectVal}
               onChange={e => updateNodeParams(node.id, { [key]: e.target.value }, { immediate: true })}
               style={{
-                background: '#1e1e2e', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px',
+                background: ctp.base, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '6px',
                 padding: '6px 8px', fontSize: '12px', outline: 'none',
               }}
             >
@@ -2585,13 +2586,13 @@ export function MobileGraphBrowser() {
       if (pd.type === 'bool') {
         const val = node.params[key] !== false;
         return (
-          <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-            <span style={{ flex: 1, fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</span>
+          <div key={key} style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <span style={{ flex: 1, fontSize: '12px', color: ctp.text }}>{pd.label}</span>
             <input
               type="checkbox"
               checked={val}
               onChange={e => updateNodeParams(node.id, { [key]: e.target.checked }, { immediate: true })}
-              style={{ width: '18px', height: '18px', accentColor: '#cba6f7', cursor: 'pointer' }}
+              style={{ width: '18px', height: '18px', accentColor: ctp.mauve, cursor: 'pointer' }}
             />
           </div>
         );
@@ -2601,8 +2602,8 @@ export function MobileGraphBrowser() {
         const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
         const hex = `#${toHex(vals[0])}${toHex(vals[1])}${toHex(vals[2])}`;
         return (
-          <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <span style={{ flex: 1, fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</span>
+          <div key={key} style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <span style={{ flex: 1, fontSize: '12px', color: ctp.text }}>{pd.label}</span>
             <input
               type="color"
               value={hex}
@@ -2611,7 +2612,7 @@ export function MobileGraphBrowser() {
                 const r = parseInt(h.slice(1, 3), 16) / 255, g = parseInt(h.slice(3, 5), 16) / 255, b = parseInt(h.slice(5, 7), 16) / 255;
                 updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
               }}
-              style={{ width: '36px', height: '26px', border: '1px solid #45475a', borderRadius: '4px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
+              style={{ width: '36px', height: '26px', border: `1px solid ${ctp.surface1}`, borderRadius: '4px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
             />
           </div>
         );
@@ -2630,10 +2631,10 @@ export function MobileGraphBrowser() {
       const min = pd.min ?? 0;
       const max = pd.max ?? 1;
       const compLabels = ['r', 'g', 'b'];
-      const compColors = ['#f38ba8', '#a6e3a1', '#89b4fa'];
+      const compColors = [ctp.red, ctp.green, ctp.blue];
       return (
-        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-          <div style={{ fontSize: '12px', color: '#cdd6f4', padding: '2px 0 4px' }}>{pd.label}</div>
+        <div key={key} style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+          <div style={{ fontSize: '12px', color: ctp.text, padding: '2px 0 4px' }}>{pd.label}</div>
           {[0, 1, 2].map(idx => {
             const axisLabel = compLabels[idx];
             const axisColor = compColors[idx];
@@ -2657,7 +2658,7 @@ export function MobileGraphBrowser() {
               return (
                 <div key={axisLabel} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', borderBottom: isLast ? 'none' : '1px solid #24243a' }}>
                   <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
-                  <span style={{ fontSize: '11px', color: '#585b70', fontStyle: 'italic' }}>wired ↑</span>
+                  <span style={{ fontSize: '11px', color: ctp.surface2, fontStyle: 'italic' }}>wired ↑</span>
                 </div>
               );
             }
@@ -2669,14 +2670,14 @@ export function MobileGraphBrowser() {
                     style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', touchAction: 'manipulation' }}
                   >
                     <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
-                    <span style={{ fontSize: '10px', color: '#f9e2af', flex: 1, textAlign: 'left' }}>◆ animated</span>
-                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                    <span style={{ fontSize: '10px', color: ctp.yellow, flex: 1, textAlign: 'left' }}>◆ animated</span>
+                    <span style={{ fontSize: '8px', color: ctp.surface2 }}>{isExpanded ? '▾' : '▸'}</span>
                   </button>
                   {isExpanded && (
                     <div style={{ marginTop: '4px', marginLeft: '16px' }}>
                       <button
                         onClick={() => { setMobileKeyframeEditor({ nodeId: node.id, socketKey: compKey }); setMobileKeyframeTool('select'); }}
-                        style={{ background: 'none', border: '1px solid #f9e2af66', color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
+                        style={{ background: 'none', border: `1px solid ${ctp.yellow}66`, color: ctp.yellow, borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
                       >◆ Edit Keyframes</button>
                     </div>
                   )}
@@ -2707,22 +2708,22 @@ export function MobileGraphBrowser() {
                     onClick={() => setOpenSliderConfig(o => o === compKey ? null : compKey)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
-                      background: isExpanded ? '#313244' : 'none',
-                      border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
+                      background: isExpanded ? ctp.surface0 : 'none',
+                      border: isExpanded ? `1px solid ${ctp.surface1}` : '1px solid transparent',
                       borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
-                      color: isExpanded ? '#cdd6f4' : '#a6adc8',
+                      color: isExpanded ? ctp.text : ctp.subtext0,
                     }}
                   >
                     <span style={{ fontSize: '10px', minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {formatSliderValue(val, step)}
                     </span>
-                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                    <span style={{ fontSize: '8px', color: ctp.surface2 }}>{isExpanded ? '▾' : '▸'}</span>
                   </button>
                 </div>
                 {isExpanded && (
-                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: '16px' }}>
+                  <div style={{ background: ctp.mantle, border: `1px solid ${ctp.surface0}`, borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
+                      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px', flexShrink: 0 }}>Value</span>
                       <NumberInput
                         step={step}
                         value={val}
@@ -2737,7 +2738,7 @@ export function MobileGraphBrowser() {
                     {kfEligible && (
                       <button
                         onClick={() => { setMobileKeyframeEditor({ nodeId: node.id, socketKey: compKey }); setMobileKeyframeTool('add'); }}
-                        style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed #f9e2af66', color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
+                        style={{ alignSelf: 'flex-start', background: 'none', border: `1px dashed ${ctp.yellow}66`, color: ctp.yellow, borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
                       >◆ Add Keyframes</button>
                     )}
                   </div>
@@ -2752,11 +2753,11 @@ export function MobileGraphBrowser() {
     const renderOutputCard = (key: string, out: GraphNode['outputs'][string]) => {
       const consumers = downstreamConsumers(node.id, key);
       return (
-        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+        <div key={key} style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={out.type} />
-            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
-            <button style={smallIconBtnStyle('#89b4fa')} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{out.label}</div>
+            <button style={smallIconBtnStyle(ctp.blue)} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key, type: out.type })}>+</button>
           </div>
           {consumers.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
@@ -2808,7 +2809,7 @@ export function MobileGraphBrowser() {
                       <span>{wiringSectionOpen ? '▾' : '▸'} WIRING</span>
                     </button>
                     {wiringSectionOpen && (
-                      <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+                      <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
                         {wireEntries.map(([key, inp], i) => renderWireRow(key, inp, i === wireEntries.length - 1))}
                       </div>
                     )}
@@ -2817,7 +2818,7 @@ export function MobileGraphBrowser() {
                 {node.type === 'group' && (
                   <button
                     onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'input', returnPath: activeGroupPath, stage: 'choose' })}
-                    style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                    style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: `1px dashed ${ctp.surface1}`, background: 'none', color: ctp.blue, fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
                   >+ Add Input</button>
                 )}
                 {hiddenInputEntries.length > 0 && (
@@ -2826,7 +2827,7 @@ export function MobileGraphBrowser() {
                       <span>{hiddenSectionOpen ? '▾' : '▸'} HIDDEN ({hiddenInputEntries.length})</span>
                     </button>
                     {hiddenSectionOpen && (
-                      <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden', marginTop: '6px' }}>
+                      <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden', marginTop: '6px' }}>
                         {hiddenInputEntries.filter(([key]) => key in node.inputs).map(([key, inp], i, arr) => renderWireRow(key, inp, i === arr.length - 1))}
                       </div>
                     )}
@@ -2876,7 +2877,7 @@ export function MobileGraphBrowser() {
               {node.type === 'group' && (
                 <button
                   onClick={() => setGroupPortBuilder({ groupId: node.id, dir: 'output', returnPath: activeGroupPath, stage: 'choose' })}
-                  style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: '1px dashed #45475a', background: 'none', color: '#89b4fa', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                  style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '8px', border: `1px dashed ${ctp.surface1}`, background: 'none', color: ctp.blue, fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
                 >+ Add Output</button>
               )}
             </div>
@@ -2924,7 +2925,7 @@ export function MobileGraphBrowser() {
                     )}
                   </div>
                 )}
-                <div style={{ fontSize: '11px', color: '#585b70', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '11px', color: ctp.surface2, lineHeight: 1.5 }}>
                   {def?.description ?? 'No info for this node.'}
                 </div>
               </div>
@@ -2939,8 +2940,8 @@ export function MobileGraphBrowser() {
                 onChange={e => updateNodeParams(node.id, { __comment: e.target.value }, { immediate: true })}
                 placeholder="Add a note…"
                 style={{
-                  width: '100%', minHeight: '64px', background: '#1e1e2e', border: '1px solid #313244',
-                  borderRadius: '8px', padding: '8px', fontSize: '12px', color: '#cdd6f4',
+                  width: '100%', minHeight: '64px', background: ctp.base, border: `1px solid ${ctp.surface0}`,
+                  borderRadius: '8px', padding: '8px', fontSize: '12px', color: ctp.text,
                   fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box',
                 }}
               />
@@ -2951,15 +2952,15 @@ export function MobileGraphBrowser() {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', color: '#a6adc8' }}>Operator</span>
+                    <span style={{ fontSize: '11px', color: ctp.subtext0 }}>Operator</span>
                     <select
                       value={assignOp}
                       onChange={e => setNodeAssignOp(node.id, e.target.value as GraphNode['assignOp'])}
                       title="Declare an accumulator and combine this node's output (+= -= *= /=) instead of overwriting it"
                       style={{
-                        background: assignOp !== '=' ? '#313244' : '#1e1e2e',
-                        border: `1px solid ${assignOp !== '=' ? '#89b4fa88' : '#45475a'}`,
-                        color: assignOp !== '=' ? '#89b4fa' : '#cdd6f4',
+                        background: assignOp !== '=' ? ctp.surface0 : ctp.base,
+                        border: `1px solid ${assignOp !== '=' ? `${ctp.blue}88` : ctp.surface1}`,
+                        color: assignOp !== '=' ? ctp.blue : ctp.text,
                         borderRadius: '6px', padding: '4px 8px', fontSize: '12px', fontFamily: 'monospace',
                       }}
                     >
@@ -2975,15 +2976,15 @@ export function MobileGraphBrowser() {
                         title={node.carryMode ? 'Carry mode ON — output feeds back as input each iteration. Tap to disable.' : 'Enable carry mode — output feeds back as input each iteration'}
                         style={{
                           marginLeft: 'auto',
-                          background: node.carryMode ? '#a6e3a122' : 'none', border: `1px solid ${node.carryMode ? '#a6e3a155' : '#45475a'}`,
-                          color: node.carryMode ? '#a6e3a1' : '#a6adc8', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', fontFamily: 'monospace',
+                          background: node.carryMode ? `${ctp.green}22` : 'none', border: `1px solid ${node.carryMode ? `${ctp.green}55` : ctp.surface1}`,
+                          color: node.carryMode ? ctp.green : ctp.subtext0, borderRadius: '6px', padding: '4px 8px', fontSize: '12px', fontFamily: 'monospace',
                         }}
                       >⟳ Carry</button>
                     )}
                   </div>
                   {assignOp !== '=' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', color: '#6c7086', flexShrink: 0, fontFamily: 'monospace' }}>init</span>
+                      <span style={{ fontSize: '10px', color: ctp.overlay0, flexShrink: 0, fontFamily: 'monospace' }}>init</span>
                       <input
                         type="text"
                         value={node.assignInit ?? ''}
@@ -2995,7 +2996,7 @@ export function MobileGraphBrowser() {
                         <button
                           onClick={() => setNodeAssignInit(node.id, '')}
                           title="Clear init expression (revert to neutral element)"
-                          style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '12px', padding: '2px' }}
+                          style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '12px', padding: '2px' }}
                         >✕</button>
                       )}
                     </div>
@@ -3077,25 +3078,25 @@ export function MobileGraphBrowser() {
             Clear/Done/axis row above it) stays on screen while you scroll
             through Value/Easing/Playback underneath, instead of scrolling
             away and losing your visual reference to what you're editing. */}
-        <div style={{ flexShrink: 0, padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: '1px solid #313244' }}>
+        <div style={{ flexShrink: 0, padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: `1px solid ${ctp.surface0}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 700, color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 700, color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {input.label}{axis ? ` · ${axis.toUpperCase()}` : ''}
             </div>
             <button
               onClick={() => setKfCanvasCompact(v => !v)}
               title={kfCanvasCompact ? 'Expand the curve view' : 'Shrink the curve view to make more room below'}
-              style={{ background: 'none', border: '1px solid #45475a', color: '#a6adc8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+              style={{ background: 'none', border: `1px solid ${ctp.surface1}`, color: ctp.subtext0, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
             >{kfCanvasCompact ? '⌄' : '⌃'}</button>
             {keyframes.length > 0 && (
               <button
                 onClick={() => writeKeyframes([])}
-                style={{ background: 'none', border: '1px solid #f38ba866', color: '#f38ba8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ background: 'none', border: `1px solid ${ctp.red}66`, color: ctp.red, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
               >Clear</button>
             )}
             <button
               onClick={() => setMobileKeyframeEditor(null)}
-              style={{ background: 'none', border: '1px solid #45475a', color: '#89b4fa', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+              style={{ background: 'none', border: `1px solid ${ctp.surface1}`, color: ctp.blue, borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
             >Done</button>
           </div>
 
@@ -3127,7 +3128,7 @@ export function MobileGraphBrowser() {
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {keyframes.length === 0 && (
-            <div style={{ fontSize: '11px', color: '#585b70' }}>
+            <div style={{ fontSize: '11px', color: ctp.surface2 }}>
               Pick "Add" below, then tap in the canvas to place a keyframe — or "Draw" to sketch a curve freehand.
             </div>
           )}
@@ -3135,7 +3136,7 @@ export function MobileGraphBrowser() {
           {selected && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '11px', color: '#6c7086' }}>Value</span>
+                <span style={{ fontSize: '11px', color: ctp.overlay0 }}>Value</span>
                 <NumberInput
                   step={pd?.step ?? 0.01}
                   value={selected.v}
@@ -3146,7 +3147,7 @@ export function MobileGraphBrowser() {
 
               {hasOutgoingSegment && (
                 <div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '6px' }}>
                     EASING (this keyframe → next)
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
@@ -3164,7 +3165,7 @@ export function MobileGraphBrowser() {
                     >Bezier</button>
                   </div>
                   {!isSelectedLinear && (
-                    <div style={{ fontSize: '10px', color: '#585b70', marginTop: '6px' }}>
+                    <div style={{ fontSize: '10px', color: ctp.surface2, marginTop: '6px' }}>
                       Drag the orange/blue handles on the curve to shape it.
                     </div>
                   )}
@@ -3177,7 +3178,7 @@ export function MobileGraphBrowser() {
               to play back — an empty keyframe list has nothing to loop. */}
           {keyframes.length > 0 && (
             <div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>PLAYBACK</div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '6px' }}>PLAYBACK</div>
               <div style={{ display: 'flex', gap: '6px' }}>
                 {(['once', 'loop', 'interpolate'] as const).map(m => (
                   <button key={m} style={smallTabBtnStyle(mode === m)} onClick={() => setMode(m)}>{m}</button>
@@ -3185,13 +3186,13 @@ export function MobileGraphBrowser() {
               </div>
               {mode === 'interpolate' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                  <span style={{ fontSize: '10px', color: '#6c7086' }}>Loop back over</span>
+                  <span style={{ fontSize: '10px', color: ctp.overlay0 }}>Loop back over</span>
                   <NumberInput
                     min={0.01} step={0.1} value={loopBack}
                     onCommit={n => setLoopBack(Math.max(0.01, n))}
                     style={{ ...exprTextInputStyle, width: '48px', padding: '4px 6px', fontSize: '11px' }}
                   />
-                  <span style={{ fontSize: '10px', color: '#6c7086' }}>sec</span>
+                  <span style={{ fontSize: '10px', color: ctp.overlay0 }}>sec</span>
                 </div>
               )}
               {mode !== 'once' && (
@@ -3201,19 +3202,19 @@ export function MobileGraphBrowser() {
                       type="checkbox"
                       checked={loopCount === null}
                       onChange={e => setLoopCount(e.target.checked ? null : 3)}
-                      style={{ accentColor: '#cba6f7' }}
+                      style={{ accentColor: ctp.mauve }}
                     />
-                    <span style={{ fontSize: '10px', color: '#a6adc8' }}>Loop forever</span>
+                    <span style={{ fontSize: '10px', color: ctp.subtext0 }}>Loop forever</span>
                   </label>
                   {loopCount !== null && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', color: '#6c7086' }}>Repeat</span>
+                      <span style={{ fontSize: '10px', color: ctp.overlay0 }}>Repeat</span>
                       <NumberInput
                         min={1} step={1} value={loopCount}
                         onCommit={n => setLoopCount(Math.max(1, Math.round(n)))}
                         style={{ ...exprTextInputStyle, width: '44px', padding: '4px 6px', fontSize: '11px' }}
                       />
-                      <span style={{ fontSize: '10px', color: '#6c7086' }}>times</span>
+                      <span style={{ fontSize: '10px', color: ctp.overlay0 }}>times</span>
                     </div>
                   )}
                 </div>
@@ -3238,18 +3239,18 @@ export function MobileGraphBrowser() {
             onClick={() => setPending(null)}
             style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40, display: 'flex', alignItems: 'flex-end' }}
           >
-            <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: '#1e1e2e', borderRadius: '16px 16px 0 0', border: '1px solid #45475a', padding: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa', marginBottom: '12px' }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: ctp.base, borderRadius: '16px 16px 0 0', border: `1px solid ${ctp.surface1}`, padding: '16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: ctp.blue, marginBottom: '12px' }}>
                 {pending.dir === 'input' ? 'Feed this input' : 'Consume this output'}
               </div>
               <button
-                style={{ width: '100%', padding: '12px', marginBottom: '8px', background: '#313244', border: '1px solid #45475a', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ width: '100%', padding: '12px', marginBottom: '8px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`, borderRadius: '8px', color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
                 onClick={() => { setConnectPicker(pending); setPending(null); }}
               >
                 Connect Existing Node
               </button>
               <button
-                style={{ width: '100%', padding: '12px', background: '#313244', border: '1px solid #45475a', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ width: '100%', padding: '12px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`, borderRadius: '8px', color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
                 onClick={() => {
                   const socket = pending;
                   setPending({ ...socket, key: `__search__${socket.key}` });
@@ -3280,17 +3281,17 @@ export function MobileGraphBrowser() {
         {/* Connect Existing picker — the graph diagram with the current node
             highlighted; tap any highlighted (compatible) node to wire it up. */}
         {connectPicker && connectPicker.nodeId === node.id && (
-          <div style={{ position: 'absolute', inset: 0, background: '#181825', zIndex: 40, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+          <div style={{ position: 'absolute', inset: 0, background: ctp.mantle, zIndex: 40, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa' }}>Tap a node to connect</div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: ctp.blue }}>Tap a node to connect</div>
                 {connectCandidates.length === 0 && (
-                  <div style={{ fontSize: '11px', color: '#585b70', marginTop: '2px' }}>No compatible nodes yet — try "Add New Node" instead.</div>
+                  <div style={{ fontSize: '11px', color: ctp.surface2, marginTop: '2px' }}>No compatible nodes yet — try "Add New Node" instead.</div>
                 )}
               </div>
               <button
                 onClick={() => setConnectPicker(null)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
                 title="Cancel"
               >✕</button>
             </div>
@@ -3341,16 +3342,16 @@ export function MobileGraphBrowser() {
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {renderNodeHeader(node)}
 
-        <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
           {(['inputs', 'output'] as const).map(mode => (
             <button
               key={mode}
               onClick={() => setExprMode(mode)}
               style={{
                 flex: 1, padding: '8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700,
-                background: exprMode === mode ? '#313244' : 'none',
-                border: exprMode === mode ? '1px solid #89b4fa' : '1px solid #45475a',
-                color: exprMode === mode ? '#89b4fa' : '#6c7086',
+                background: exprMode === mode ? ctp.surface0 : 'none',
+                border: exprMode === mode ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
+                color: exprMode === mode ? ctp.blue : ctp.overlay0,
                 cursor: 'pointer', touchAction: 'manipulation',
               }}
             >
@@ -3363,7 +3364,7 @@ export function MobileGraphBrowser() {
           {exprMode === 'inputs' ? (
             <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {customInputs.length === 0 && (
-                <div style={{ fontSize: '12px', color: '#585b70' }}>No inputs yet — add one below.</div>
+                <div style={{ fontSize: '12px', color: ctp.surface2 }}>No inputs yet — add one below.</div>
               )}
               {customInputs.map((inp, idx) => {
                 const socket = node.inputs[inp.name];
@@ -3389,9 +3390,9 @@ export function MobileGraphBrowser() {
                       </select>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: 'auto' }}>
                         {!upstream && (
-                          <button style={smallIconBtnStyle('#89b4fa')} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key: inp.name, type: inp.type })}>+</button>
+                          <button style={smallIconBtnStyle(ctp.blue)} title="Wire this input" onClick={() => setPending({ dir: 'input', nodeId: node.id, key: inp.name, type: inp.type })}>+</button>
                         )}
-                        <button style={smallIconBtnStyle('#f38ba8')} title="Remove input" onClick={() => removeInput(idx)}>✕</button>
+                        <button style={smallIconBtnStyle(ctp.red)} title="Remove input" onClick={() => removeInput(idx)}>✕</button>
                       </div>
                     </div>
                     {upstream && (
@@ -3399,7 +3400,7 @@ export function MobileGraphBrowser() {
                         <button style={chipStyle} onClick={() => pushFocus(upstream.id)}>{labelFor(upstream)} ›</button>
                         <button
                           onClick={() => disconnectInput(node.id, inp.name)}
-                          style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                          style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '14px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
                           title="Disconnect"
                         >✕</button>
                       </div>
@@ -3409,7 +3410,7 @@ export function MobileGraphBrowser() {
               })}
               <button
                 onClick={addInput}
-                style={{ alignSelf: 'flex-start', background: '#a6e3a111', border: '1px solid #a6e3a133', color: '#a6e3a1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ alignSelf: 'flex-start', background: `${ctp.green}11`, border: `1px solid ${ctp.green}33`, color: ctp.green, borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
               >
                 + Add Input
               </button>
@@ -3417,41 +3418,41 @@ export function MobileGraphBrowser() {
           ) : (
             <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>OUTPUT TYPE</div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '6px' }}>OUTPUT TYPE</div>
                 <select value={outputType} onChange={e => changeOutputType(e.target.value as DataType)} style={{ ...exprSelectStyle, width: '100%' }}>
                   {EXPR_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>LINES</div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '6px' }}>LINES</div>
                 {lines.length === 0 && (
-                  <div style={{ fontSize: '11px', color: '#45475a', fontFamily: 'monospace', marginBottom: '8px' }}>No lines yet.</div>
+                  <div style={{ fontSize: '11px', color: ctp.surface1, fontFamily: 'monospace', marginBottom: '8px' }}>No lines yet.</div>
                 )}
                 <ExprLinesList lines={lines} onReorder={setLines} onUpdateLine={updateLine} onRemoveLine={removeLine} variables={customInputs.map(i => i.name)} />
                 <button
                   onClick={addLine}
-                  style={{ marginTop: '8px', background: '#a6e3a111', border: '1px solid #a6e3a133', color: '#a6e3a1', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                  style={{ marginTop: '8px', background: `${ctp.green}11`, border: `1px solid ${ctp.green}33`, color: ctp.green, borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
                 >
                   + Add Line
                 </button>
               </div>
 
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>RESULT</div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '6px' }}>RESULT</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11px', color: '#6c7086', fontFamily: 'monospace' }}>return</span>
-                  <GlslExprInput value={result} onChange={updateResult} placeholder="p" style={{ ...exprTextInputStyle, flex: 1, color: '#89b4fa' }} variables={customInputs.map(i => i.name)} />
+                  <span style={{ fontSize: '11px', color: ctp.overlay0, fontFamily: 'monospace' }}>return</span>
+                  <GlslExprInput value={result} onChange={updateResult} placeholder="p" style={{ ...exprTextInputStyle, flex: 1, color: ctp.blue }} variables={customInputs.map(i => i.name)} />
                 </div>
               </div>
 
-              <div style={{ borderTop: '1px solid #313244', paddingTop: '10px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '6px' }}>OUTPUT</div>
+              <div style={{ borderTop: `1px solid ${ctp.surface0}`, paddingTop: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '6px' }}>OUTPUT</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                   <div style={dotStyle(TYPE_COLORS[outType] ?? '#888')} />
                   <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', color: '#cdd6f4' }}>Result</div>
-                    <div style={{ fontSize: '10px', color: '#585b70' }}>{outType}</div>
+                    <div style={{ fontSize: '13px', color: ctp.text }}>Result</div>
+                    <div style={{ fontSize: '10px', color: ctp.surface2 }}>{outType}</div>
                   </div>
                   <button style={addBtnStyle} title="Add a consumer for this output" onClick={() => setPending({ dir: 'output', nodeId: node.id, key: 'result', type: outType })}>+</button>
                   {consumers.length > 0 && (
@@ -3489,14 +3490,14 @@ export function MobileGraphBrowser() {
             Input"), not here — so this only shows when there's something
             existing to pick. */}
         {connectPicker.dir === 'input' && activeGroupId && groupPortCandidates.length > 0 && (
-          <div style={{ padding: '10px 12px', borderBottom: '1px solid #313244' }}>
-            <div style={{ fontSize: '10px', color: '#6c7086', marginBottom: '6px', letterSpacing: '0.04em' }}>GROUP INPUTS</div>
+          <div style={{ padding: '10px 12px', borderBottom: `1px solid ${ctp.surface0}` }}>
+            <div style={{ fontSize: '10px', color: ctp.overlay0, marginBottom: '6px', letterSpacing: '0.04em' }}>GROUP INPUTS</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {groupPortCandidates.map(p => (
                 <button
                   key={p.key}
                   onClick={() => commitConnectToGroupPort(p.key)}
-                  style={{ ...chipStyle, fontSize: '11px', color: '#cba6f7', border: '1px solid #cba6f755' }}
+                  style={{ ...chipStyle, fontSize: '11px', color: ctp.mauve, border: `1px solid ${ctp.mauve}55` }}
                 >⛓ {p.label}</button>
               ))}
             </div>
@@ -3519,10 +3520,10 @@ export function MobileGraphBrowser() {
                 style={{
                   position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
                   display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
-                  background: isCurrent ? '#313244' : '#1e1e2e',
-                  border: isCurrent ? '2px solid #89b4fa' : isCandidate ? '1px solid #a6e3a1' : '1px solid #313244',
+                  background: isCurrent ? ctp.surface0 : ctp.base,
+                  border: isCurrent ? `2px solid ${ctp.blue}` : isCandidate ? `1px solid ${ctp.green}` : `1px solid ${ctp.surface0}`,
                   borderRadius: '6px', padding: '0 8px', fontSize: '11px',
-                  color: isCandidate || isCurrent ? '#cdd6f4' : '#45475a',
+                  color: isCandidate || isCurrent ? ctp.text : ctp.surface1,
                   opacity: isCandidate || isCurrent ? 1 : 0.4,
                   cursor: isCandidate ? 'pointer' : 'default', touchAction: 'manipulation',
                 }}
@@ -3547,12 +3548,12 @@ export function MobileGraphBrowser() {
     if (!showGraphOverlay) return null;
     const layout = computeGraphLayout(nodes, rankedRows);
     return (
-      <div style={{ position: 'absolute', inset: 0, background: '#181825', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
-          <div style={{ flex: 1, fontSize: '13px', fontWeight: 700, color: '#89b4fa' }}>Tap a node to jump there</div>
+      <div style={{ position: 'absolute', inset: 0, background: ctp.mantle, zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
+          <div style={{ flex: 1, fontSize: '13px', fontWeight: 700, color: ctp.blue }}>Tap a node to jump there</div>
           <button
             onClick={() => setShowGraphOverlay(false)}
-            style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+            style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
             title="Close"
           >✕</button>
         </div>
@@ -3576,9 +3577,9 @@ export function MobileGraphBrowser() {
                   style={{
                     position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
                     display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
-                    background: isCurrent ? '#313244' : '#1e1e2e',
-                    border: isCurrent ? '2px solid #89b4fa' : '1px solid #313244',
-                    borderRadius: '6px', padding: '0 8px', fontSize: '11px', color: '#cdd6f4',
+                    background: isCurrent ? ctp.surface0 : ctp.base,
+                    border: isCurrent ? `2px solid ${ctp.blue}` : `1px solid ${ctp.surface0}`,
+                    borderRadius: '6px', padding: '0 8px', fontSize: '11px', color: ctp.text,
                     cursor: 'pointer', touchAction: 'manipulation',
                   }}
                 >
@@ -3601,7 +3602,7 @@ export function MobileGraphBrowser() {
   function renderHome() {
     if (nodes.length === 0) {
       return (
-        <div style={{ flex: 1, position: 'relative', padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>
+        <div style={{ flex: 1, position: 'relative', padding: '16px 12px', fontSize: '12px', color: ctp.surface2 }}>
           No nodes yet.
           {renderAddNodeFab()}
         </div>
@@ -3632,9 +3633,9 @@ export function MobileGraphBrowser() {
       const selected = selectMode && selectedIds.includes(n.id);
       return {
         display: 'flex', alignItems: 'center', gap: '6px',
-        background: selected ? '#313244' : '#1e1e2e',
-        border: selected ? '1px solid #cba6f7' : isCodeNode(n) ? '1px solid #f9e2af88' : '1px solid #313244',
-        borderRadius: '8px', padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+        background: selected ? ctp.surface0 : ctp.base,
+        border: selected ? `1px solid ${ctp.mauve}` : isCodeNode(n) ? `1px solid ${ctp.yellow}88` : `1px solid ${ctp.surface0}`,
+        borderRadius: '8px', padding: '8px 10px', fontSize: '12px', color: ctp.text,
         cursor: 'pointer', touchAction: 'manipulation',
       } as React.CSSProperties;
     };
@@ -3675,7 +3676,7 @@ export function MobileGraphBrowser() {
           <button
             onClick={() => viewGroupPorts(n.id)}
             title="View this group's own ports"
-            style={{ background: 'none', border: '1px solid #313244', color: '#585b70', borderRadius: '6px', width: '22px', height: '22px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+            style={{ background: 'none', border: `1px solid ${ctp.surface0}`, color: ctp.surface2, borderRadius: '6px', width: '22px', height: '22px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
           >⚙</button>
         </div>
       );
@@ -3695,13 +3696,13 @@ export function MobileGraphBrowser() {
             onClick={() => viewParentGroupPorts(dir === 'input' ? 'inputs' : 'outputs')}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '8px 10px',
-              background: '#cba6f712', border: '1px dashed #cba6f755', borderRadius: '8px',
-              color: '#cba6f7', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+              background: `${ctp.mauve}12`, border: `1px dashed ${ctp.mauve}55`, borderRadius: '8px',
+              color: ctp.mauve, fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
             }}
           >
             <span style={{ fontSize: '11px' }}>🔒</span>
             <span style={{ flex: 1 }}>{dir === 'input' ? 'Group Inputs' : 'Group Outputs'}</span>
-            <span style={{ color: '#585b70', fontSize: '10px' }}>({count})</span>
+            <span style={{ color: ctp.surface2, fontSize: '10px' }}>({count})</span>
           </button>
         </div>
       );
@@ -3720,24 +3721,24 @@ export function MobileGraphBrowser() {
               onClick={() => toggleLooseGroupCollapsed(g.id)}
               style={{
                 flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px',
-                background: 'none', border: 'none', color: '#cdd6f4', fontSize: '12px',
+                background: 'none', border: 'none', color: ctp.text, fontSize: '12px',
                 cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left', padding: '4px 0',
               }}
             >
-              <span style={{ fontSize: '10px', color: '#585b70', flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2, flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
               <span style={{ flexShrink: 0 }}>📁</span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.label}</span>
-              <span style={{ color: '#585b70', fontSize: '10px', flexShrink: 0 }}>({members.length})</span>
+              <span style={{ color: ctp.surface2, fontSize: '10px', flexShrink: 0 }}>({members.length})</span>
             </button>
             <button
               onClick={() => { setRenamingLooseGroupId(g.id); setRenameLooseGroupValue(g.label); }}
               title="Rename"
-              style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+              style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '12px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
             >✎</button>
             <button
               onClick={() => ungroupLoose(g.id)}
               title="Ungroup (members are unaffected)"
-              style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+              style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '12px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
             >✕</button>
           </div>
           {isRenaming && (
@@ -3755,7 +3756,7 @@ export function MobileGraphBrowser() {
               />
               <button
                 onClick={() => { renameLooseGroup(g.id, renameLooseGroupValue.trim() || g.label); setRenamingLooseGroupId(null); }}
-                style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '6px', padding: '0 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '6px', padding: '0 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
               >Save</button>
             </div>
           )}
@@ -3773,7 +3774,7 @@ export function MobileGraphBrowser() {
     // participate in the connector-line overlay like an ordinary rank row.
     const renderPinnedRow = (tag: 'uv' | 'output', pinnedNodes: GraphNode[]) => (
       <div key={`pinned-${tag}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
-        <div style={{ width: '14px', flexShrink: 0, fontSize: '9px', fontWeight: 700, color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{tag === 'uv' ? 'IN' : 'OUT'}</div>
+        <div style={{ width: '14px', flexShrink: 0, fontSize: '9px', fontWeight: 700, color: ctp.surface1, paddingTop: '9px', textAlign: 'right' }}>{tag === 'uv' ? 'IN' : 'OUT'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
           {pinnedNodes.map(n => renderNodeChip(n, true))}
         </div>
@@ -3784,7 +3785,7 @@ export function MobileGraphBrowser() {
       if (visible.length === 0) return null;
       return (
         <div key={`row-${rank}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderBottom: '1px solid #24243a' }}>
-          <div style={{ width: '14px', flexShrink: 0, fontSize: '10px', color: '#45475a', paddingTop: '9px', textAlign: 'right' }}>{rank}</div>
+          <div style={{ width: '14px', flexShrink: 0, fontSize: '10px', color: ctp.surface1, paddingTop: '9px', textAlign: 'right' }}>{rank}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
             {visible.map(n => renderNodeChip(n, true))}
           </div>
@@ -3835,10 +3836,10 @@ export function MobileGraphBrowser() {
           <div style={{
             position: 'sticky', bottom: 0, left: 0, right: 0, zIndex: 2,
             background: 'rgba(24,24,37,0.95)', backdropFilter: 'blur(8px)',
-            borderTop: '1px solid #313244', padding: '10px 12px',
+            borderTop: `1px solid ${ctp.surface0}`, padding: '10px 12px',
             display: 'flex', alignItems: 'center', gap: '8px',
           }}>
-            <span style={{ flex: 1, fontSize: '11px', color: '#a6adc8' }}>
+            <span style={{ flex: 1, fontSize: '11px', color: ctp.subtext0 }}>
               {selectedIds.length === 0 ? 'Tap nodes to select them' : `${selectedIds.length} selected`}
             </span>
             <button
@@ -3846,9 +3847,9 @@ export function MobileGraphBrowser() {
               disabled={selectedIds.length < 1}
               title="Group into a real node — rewires the graph, has its own inputs/outputs"
               style={{
-                background: selectedIds.length < 1 ? '#313244' : '#89b4fa18',
-                border: `1px solid ${selectedIds.length < 1 ? '#45475a' : '#89b4fa55'}`,
-                color: selectedIds.length < 1 ? '#585b70' : '#89b4fa',
+                background: selectedIds.length < 1 ? ctp.surface0 : `${ctp.blue}18`,
+                border: `1px solid ${selectedIds.length < 1 ? ctp.surface1 : `${ctp.blue}55`}`,
+                color: selectedIds.length < 1 ? ctp.surface2 : ctp.blue,
                 borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 600,
                 cursor: selectedIds.length < 1 ? 'default' : 'pointer', touchAction: 'manipulation',
               }}
@@ -3860,9 +3861,9 @@ export function MobileGraphBrowser() {
               disabled={selectedIds.length < 2}
               title="Cluster visually only — no wiring, no compile effect"
               style={{
-                background: selectedIds.length < 2 ? '#313244' : '#cba6f722',
-                border: `1px solid ${selectedIds.length < 2 ? '#45475a' : '#cba6f766'}`,
-                color: selectedIds.length < 2 ? '#585b70' : '#cba6f7',
+                background: selectedIds.length < 2 ? ctp.surface0 : `${ctp.mauve}22`,
+                border: `1px solid ${selectedIds.length < 2 ? ctp.surface1 : `${ctp.mauve}66`}`,
+                color: selectedIds.length < 2 ? ctp.surface2 : ctp.mauve,
                 borderRadius: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 600,
                 cursor: selectedIds.length < 2 ? 'default' : 'pointer', touchAction: 'manipulation',
               }}
@@ -3889,7 +3890,7 @@ export function MobileGraphBrowser() {
           style={{
             position: 'absolute', right: '14px', bottom: '14px', zIndex: 3,
             width: '44px', height: '44px', borderRadius: '50%',
-            background: '#89b4fa', border: 'none', color: '#181825',
+            background: ctp.blue, border: 'none', color: ctp.mantle,
             fontSize: '22px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
             boxShadow: '0 4px 14px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
@@ -3914,7 +3915,7 @@ export function MobileGraphBrowser() {
   // top-to-bottom or skips rows entirely — never sideways or backwards.
   function renderHomeGraph() {
     if (nodes.length === 0) {
-      return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: '#585b70' }}>No nodes yet.</div>;
+      return <div style={{ flex: 1, padding: '16px 12px', fontSize: '12px', color: ctp.surface2 }}>No nodes yet.</div>;
     }
     const isReal = homeGraphLayoutMode === 'real';
     const layout = isReal ? computeRealLayout(nodes) : computeGraphLayout(nodes, rankedRows);
@@ -3923,16 +3924,16 @@ export function MobileGraphBrowser() {
         {/* Rank (synthetic BFS-depth grid) vs. Real (desktop canvas's actual
             spatial layout, read-only — no dragging, no editing) — tapping a
             node still drills in the same way in either mode. */}
-        <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
           {(['rank', 'real'] as const).map(mode => (
             <button
               key={mode}
               onClick={() => setHomeGraphLayoutMode(mode)}
               style={{
                 padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                background: homeGraphLayoutMode === mode ? '#313244' : 'none',
-                border: `1px solid ${homeGraphLayoutMode === mode ? '#89b4fa' : '#45475a'}`,
-                color: homeGraphLayoutMode === mode ? '#89b4fa' : '#6c7086',
+                background: homeGraphLayoutMode === mode ? ctp.surface0 : 'none',
+                border: `1px solid ${homeGraphLayoutMode === mode ? ctp.blue : ctp.surface1}`,
+                color: homeGraphLayoutMode === mode ? ctp.blue : ctp.overlay0,
                 cursor: 'pointer', touchAction: 'manipulation',
               }}
             >
@@ -3955,8 +3956,8 @@ export function MobileGraphBrowser() {
                   style={{
                     position: 'absolute', left: p.x, top: p.y, width: GRAPH_NODE_W, height: GRAPH_NODE_H,
                     display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden',
-                    background: '#1e1e2e', border: '1px solid #313244', borderRadius: '6px',
-                    padding: '0 8px', fontSize: '11px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
+                    background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '6px',
+                    padding: '0 8px', fontSize: '11px', color: ctp.text, cursor: 'pointer', touchAction: 'manipulation',
                   }}
                 >
                   <div style={dotStyle(nodeDotColor(n))} />
@@ -3971,7 +3972,7 @@ export function MobileGraphBrowser() {
   }
 
   return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: '#181825', color: '#cdd6f4', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: ctp.mantle, color: ctp.text, fontFamily: 'system-ui, sans-serif' }}>
       {/* Breadcrumb — the drill-down path (group ancestry + in-node focus
           trail) is unbounded in principle, so it's collapsed to the 4 most
           recent locations behind Home; anything older sits behind a
@@ -4006,17 +4007,17 @@ export function MobileGraphBrowser() {
 
         return (
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderBottom: '1px solid #313244', overflowX: 'auto' }}>
-              <button onClick={goHome} style={{ background: 'none', border: 'none', color: activeGroupPath.length === 0 && focusStack.length === 0 ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderBottom: `1px solid ${ctp.surface0}`, overflowX: 'auto' }}>
+              <button onClick={goHome} style={{ background: 'none', border: 'none', color: activeGroupPath.length === 0 && focusStack.length === 0 ? ctp.blue : ctp.surface2, fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}>
                 Home
               </button>
               {hiddenPathSegments.length > 0 && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                  <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
+                  <span style={{ color: ctp.surface2, fontSize: '12px' }}>›</span>
                   <button
                     onClick={() => setShowHiddenPath(v => !v)}
                     title={`${hiddenPathSegments.length} more`}
-                    style={{ background: showHiddenPath ? '#313244' : 'none', border: 'none', borderRadius: '4px', color: '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', padding: '0 3px' }}
+                    style={{ background: showHiddenPath ? ctp.surface0 : 'none', border: 'none', borderRadius: '4px', color: ctp.surface2, fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', padding: '0 3px' }}
                   >
                     …
                   </button>
@@ -4024,10 +4025,10 @@ export function MobileGraphBrowser() {
               )}
               {visiblePathSegments.map(seg => (
                 <span key={seg.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                  <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
+                  <span style={{ color: ctp.surface2, fontSize: '12px' }}>›</span>
                   <button
                     onClick={seg.onClick}
-                    style={{ background: 'none', border: 'none', color: seg.isCurrent ? '#89b4fa' : '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+                    style={{ background: 'none', border: 'none', color: seg.isCurrent ? ctp.blue : ctp.surface2, fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
                   >
                     {seg.label}
                   </button>
@@ -4044,10 +4045,10 @@ export function MobileGraphBrowser() {
           if (!n) return null;
           return (
             <span key={`fwd-${id}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, opacity: 0.4 }}>
-              <span style={{ color: '#585b70', fontSize: '12px' }}>›</span>
+              <span style={{ color: ctp.surface2, fontSize: '12px' }}>›</span>
               <button
                 onClick={() => goForwardTo(i)}
-                style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+                style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '12px', fontWeight: 700, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
                 title="Go forward to here"
               >
                 {labelFor(n)}
@@ -4064,7 +4065,7 @@ export function MobileGraphBrowser() {
             onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}
             style={{
               marginLeft: 'auto', flexShrink: 0,
-              background: selectMode ? '#313244' : 'none', border: '1px solid #45475a', color: selectMode ? '#cba6f7' : '#89b4fa',
+              background: selectMode ? ctp.surface0 : 'none', border: `1px solid ${ctp.surface1}`, color: selectMode ? ctp.mauve : ctp.blue,
               borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
             }}
             title="Select nodes to group"
@@ -4076,7 +4077,7 @@ export function MobileGraphBrowser() {
           onClick={() => (focusedNode ? setShowGraphOverlay(true) : setHomeGraphView(v => !v))}
           style={{
             marginLeft: focusedNode || homeGraphView ? 'auto' : 0, flexShrink: 0,
-            background: !focusedNode && homeGraphView ? '#313244' : 'none', border: '1px solid #45475a', color: '#89b4fa',
+            background: !focusedNode && homeGraphView ? ctp.surface0 : 'none', border: `1px solid ${ctp.surface1}`, color: ctp.blue,
             borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation',
           }}
           title="See the flow as a connected graph"
@@ -4089,7 +4090,7 @@ export function MobileGraphBrowser() {
                 <div onClick={() => setShowHiddenPath(false)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
                 <div style={{
                   position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
-                  background: '#1e1e2e', border: '1px solid #45475a', borderTop: 'none',
+                  background: ctp.base, border: `1px solid ${ctp.surface1}`, borderTop: 'none',
                   padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: '6px',
                   boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
                 }}>
@@ -4097,7 +4098,7 @@ export function MobileGraphBrowser() {
                     <button
                       key={seg.key}
                       onClick={() => { seg.onClick(); setShowHiddenPath(false); }}
-                      style={{ background: '#313244', border: '1px solid #45475a', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
+                      style={{ background: ctp.surface0, border: `1px solid ${ctp.surface1}`, borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: ctp.text, cursor: 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}
                     >
                       {seg.label}
                     </button>
@@ -4169,19 +4170,19 @@ export function MobileGraphBrowser() {
     };
     const rowBtnStyle: React.CSSProperties = {
       display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 10px',
-      background: '#181825', border: '1px solid #313244', borderRadius: '8px', marginBottom: '6px',
-      color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+      background: ctp.mantle, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', marginBottom: '6px',
+      color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
     };
     const sectionLabelStyle: React.CSSProperties = {
       fontSize: '10px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
-      color: '#6c7086', margin: '10px 0 6px',
+      color: ctp.overlay0, margin: '10px 0 6px',
     };
     return (
       <div
         onClick={close}
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 46, display: 'flex', alignItems: 'flex-end' }}
       >
-        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '80%', overflowY: 'auto', background: '#1e1e2e', borderRadius: '16px 16px 0 0', border: '1px solid #45475a', padding: '16px' }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '80%', overflowY: 'auto', background: ctp.base, borderRadius: '16px 16px 0 0', border: `1px solid ${ctp.surface1}`, padding: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
             <div style={dotStyle(nodeDotColor(node))} />
             <div style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
@@ -4189,7 +4190,7 @@ export function MobileGraphBrowser() {
           {canDelete && (
             <button
               onClick={() => { removeNode(node.id); close(); }}
-              style={{ ...rowBtnStyle, border: '1px solid #f38ba866', color: '#f38ba8' }}
+              style={{ ...rowBtnStyle, border: `1px solid ${ctp.red}66`, color: ctp.red }}
             >
               🗑 Delete
             </button>
@@ -4230,7 +4231,7 @@ export function MobileGraphBrowser() {
             </>
           )}
           {!canDelete && openInputs.length === 0 && outputs.length === 0 && (
-            <div style={{ fontSize: '11px', color: '#585b70', padding: '4px 0' }}>Nothing available for this node.</div>
+            <div style={{ fontSize: '11px', color: ctp.surface2, padding: '4px 0' }}>Nothing available for this node.</div>
           )}
         </div>
       </div>
@@ -4270,23 +4271,23 @@ export function MobileGraphBrowser() {
         onClick={() => setGroupPortBuilder(null)}
         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 45, display: 'flex', alignItems: 'flex-end' }}
       >
-        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '80%', overflowY: 'auto', background: '#1e1e2e', borderRadius: '16px 16px 0 0', border: '1px solid #45475a', padding: '16px' }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#89b4fa', marginBottom: '4px' }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '80%', overflowY: 'auto', background: ctp.base, borderRadius: '16px 16px 0 0', border: `1px solid ${ctp.surface1}`, padding: '16px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: ctp.blue, marginBottom: '4px' }}>
             Add {dirLabel}
           </div>
           {groupPortBuilder.stage === 'choose' && (
             <>
-              <div style={{ fontSize: '11px', color: '#6c7086', marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', color: ctp.overlay0, marginBottom: '12px' }}>
                 Pick the node {scopeHint} that supplies this port’s value.
               </div>
               <button
-                style={{ width: '100%', padding: '12px', marginBottom: '8px', background: '#313244', border: '1px solid #45475a', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ width: '100%', padding: '12px', marginBottom: '8px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`, borderRadius: '8px', color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
                 onClick={() => setGroupPortBuilder(b => b && { ...b, stage: 'pickExisting' })}
               >
                 Connect Existing Node
               </button>
               <button
-                style={{ width: '100%', padding: '12px', background: '#313244', border: '1px solid #45475a', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
+                style={{ width: '100%', padding: '12px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`, borderRadius: '8px', color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
                 onClick={startGroupPortAddNew}
               >
                 Add New Node
@@ -4300,7 +4301,7 @@ export function MobileGraphBrowser() {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {candidates.length === 0 && (
-                  <div style={{ fontSize: '11px', color: '#585b70', padding: '8px 0' }}>
+                  <div style={{ fontSize: '11px', color: ctp.surface2, padding: '8px 0' }}>
                     {groupPortBuilder.dir === 'output' ? 'No nodes inside this group yet — try "Add New Node" instead.' : 'No compatible nodes yet — try "Add New Node" instead.'}
                   </div>
                 )}
@@ -4311,7 +4312,7 @@ export function MobileGraphBrowser() {
                     <button
                       key={n.id}
                       onClick={() => commitGroupPortFromNode(n.id, outKey, n.outputs[outKey].type, n.outputs[outKey].label)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px', background: '#181825', border: '1px solid #313244', borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px', background: ctp.mantle, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left' }}
                     >
                       <div style={dotStyle(nodeDotColor(n))} />
                       {labelFor(n)}
