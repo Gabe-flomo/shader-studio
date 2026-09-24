@@ -80,6 +80,8 @@ import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
+import { ColorSwatch } from '../ui/ColorPicker';
+import { toRgb } from '../../lib/colorMath';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
 
 function adaptiveStep(value: number, baseStep: number): number {
@@ -3834,32 +3836,17 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           if (paramDef.type === 'vec3color') {
-            // Native colour picker — converts between [r,g,b] 0-1 and hex
-            const vals = Array.isArray(node.params[key]) ? (node.params[key] as number[]) : [0, 0, 0];
-            const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
-            const hexValue = `#${toHex(vals[0])}${toHex(vals[1])}${toHex(vals[2])}`;
+            const vals = toRgb(node.params[key]);
             return (
               <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel>{paramDef.label}</ParamLabel>
-                <label style={{
-                  position: 'relative', width: 44, height: 26, borderRadius: radius.md, cursor: 'pointer', flexShrink: 0,
-                  background: hexValue, boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.12)}`,
-                }}>
-                  <input
-                    type="color"
-                    aria-label={paramDef.label}
-                    value={hexValue}
-                    onChange={e => {
-                      const hex = e.target.value;
-                      const r = parseInt(hex.slice(1, 3), 16) / 255;
-                      const g = parseInt(hex.slice(3, 5), 16) / 255;
-                      const b = parseInt(hex.slice(5, 7), 16) / 255;
-                      updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
-                    }}
-                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-                  />
-                </label>
-                <span style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.muted }}>{hexValue}</span>
+                <ColorSwatch
+                  label={paramDef.label}
+                  value={vals}
+                  size={node.type === 'colorPicker' ? 'lg' : 'md'}
+                  onChange={rgb => updateNodeParams(node.id, { [key]: rgb }, { immediate: true })}
+                  style={{ flex: node.type === 'colorPicker' ? 1 : undefined }}
+                />
               </div>
             );
           }
