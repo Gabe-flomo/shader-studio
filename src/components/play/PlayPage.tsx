@@ -27,6 +27,7 @@ import { Popover } from '../ui/Popover';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
+import { reportFileResult } from '../shell/reportFileResult';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -107,6 +108,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const nodes = useNodeGraphStore(s => s.nodes);
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  const exportInstrument = useNodeGraphStore(s => s.exportInstrument);
+  const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
 
   // Mouse and keyboard sources listen only while this page shows.
   useEffect(() => {
@@ -159,7 +162,13 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
       <PanelHeader
         title="Controls"
         hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
-        extra={<AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />}
+        extra={(
+          <>
+            <IconButton icon="import" label="Import an instrument file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
+            <IconButton icon="export" label="Export this instrument: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportInstrument(), { failTitle: 'Couldn’t export the instrument', success: 'Instrument exported' }); }} />
+            <AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />
+          </>
+        )}
       />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.controls.length === 0 ? (
@@ -178,7 +187,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             exists={controlExists(nodes, c)}
             value={readControlValue(nodes, c.target)}
             live={liveValues.get(c.id)}
-            drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source))}
+            drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls))}
             touch={compact}
             onChange={v => writeControl(c, v)}
             onRename={label => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }))}
@@ -504,9 +513,12 @@ function MappingRow({ mapping: m, control, controls, meter, learning, onLearn, o
   const type = sourceType(m.source);
   const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
   const labelStyle = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' as const, width: 54, flexShrink: 0 };
+  const otherControls = controls.filter(c => c.id !== m.controlId);
   const retarget = (id: string) => {
     const c = controls.find(x => x.id === id);
-    onUpdate(c ? { controlId: id, outMin: c.min, outMax: c.max, channel: undefined } : { controlId: id });
+    // A control can't drive itself: drop a control source that now points at the target.
+    const source = m.source.kind === 'control' && m.source.controlId === id ? { kind: 'control' as const, controlId: controls.find(x => x.id !== id)?.id ?? '' } : m.source;
+    onUpdate(c ? { controlId: id, outMin: c.min, outMax: c.max, channel: undefined, source } : { controlId: id, source });
   };
 
   return (
@@ -514,7 +526,12 @@ function MappingRow({ mapping: m, control, controls, meter, learning, onLearn, o
       {/* Source row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={labelStyle}>Source</span>
-        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source) })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '') })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        {m.source.kind === 'control' && (
+          otherControls.length === 0
+            ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a second control</span>
+            : <Select ariaLabel="Source control" value={m.source.controlId} options={otherControls.map(c => ({ value: c.id, label: c.label }))} onChange={v => onUpdate({ source: { kind: 'control', controlId: v } })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        )}
         {m.source.kind === 'midi' && m.source.signal === 'cc' && (
           <NumberInput value={m.source.cc ?? 1} min={0} max={127} step={1} title="CC number" onCommit={n => onUpdate({ source: { ...m.source, kind: 'midi', signal: 'cc', channel: m.source.kind === 'midi' ? m.source.channel : 0, cc: Math.max(0, Math.min(127, Math.round(n))) } })} style={{ ...numStyle, width: 44 }} />
         )}

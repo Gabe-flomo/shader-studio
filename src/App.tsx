@@ -418,6 +418,13 @@ function App() {
       }
     });
   }, []);
+  // An imported instrument file opens on the Play page.
+  useEffect(() => {
+    let last = useNodeGraphStore.getState().playOpenRequest;
+    return useNodeGraphStore.subscribe(s => {
+      if (s.playOpenRequest !== last) { last = s.playOpenRequest; setPage('play'); }
+    });
+  }, []);
   const [previewFloated, setPreviewFloated] = useState(false);
   const [floatPos, setFloatPos]   = useState({ x: 40, y: 60 });
   const [floatSize, setFloatSize] = useState({ w: 480, h: 360 });

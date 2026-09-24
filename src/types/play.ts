@@ -42,7 +42,13 @@ export type PlaySource =
   /** Pointer position over the window (0..1, `y` up) or 1 while a button is held. Active on the Play page. */
   | { kind: 'mouse'; axis: 'x' | 'y' | 'down' }
   /** 1 while a keyboard key (KeyboardEvent.code) is held. Active on the Play page. */
-  | { kind: 'key'; code: string };
+  | { kind: 'key'; code: string }
+  /**
+   * Another control on the panel, read as 0..1 across its range (a colour
+   * reads its brightness). Drag one slider and the mapped one follows, so
+   * controls can cross-modulate each other.
+   */
+  | { kind: 'control'; controlId: string };
 
 export type PlayCurve = 'linear' | 'exp' | 'log';
 
@@ -106,6 +112,10 @@ function parseSource(raw: unknown): PlaySource | null {
       const code = str(s.code);
       return code ? { kind: 'key', code } : null;
     }
+    case 'control': {
+      const controlId = str(s.controlId);
+      return controlId ? { kind: 'control', controlId } : null;
+    }
     default:
       return null;
   }
@@ -137,6 +147,8 @@ function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null
   const controlId = str(m.controlId);
   const source = parseSource(m.source);
   if (!id || !controlId || !source || !controlIds.has(controlId)) return null;
+  // A control source has to point at a control that exists (and not at its own target).
+  if (source.kind === 'control' && (!controlIds.has(source.controlId) || source.controlId === controlId)) return null;
   const curve = str(m.curve);
   const out: PlayMapping = {
     id, controlId, source,

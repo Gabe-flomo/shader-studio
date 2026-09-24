@@ -9,7 +9,7 @@ import { inputBus } from '../inputBus';
 import { midiEngine } from '../midiEngine';
 import { applyCurve, mapValue, playEngine, bindingKeyOf } from '../playEngine';
 import { emptyPlayRecord, parsePlayRecord, type PlayRecord } from '../../types/play';
-import { collectPlayCandidates, readBaseValues, readControlValue, targetParts } from '../../play/playControls';
+import { bakeControlValues, collectPlayCandidates, readBaseValues, readControlValue, targetParts } from '../../play/playControls';
 import type { GraphNode } from '../../types/nodeGraph';
 
 function floatNode(id: string, value: number): GraphNode {
@@ -145,6 +145,28 @@ describe('play engine on the bus', () => {
     expect(inputBus.tick(1 / 60, 0).get(uniform)).toBeCloseTo(2);
   });
 
+  it('lets one control drive another across its range', () => {
+    const nodes = [floatNode('node_3', 1), floatNode('node_5', 0.5), outputNode('node_3', 'value')];
+    const r = compileGraph({ nodes });
+    inputBus.setParamBindings(r.paramBindings);
+    const target = r.paramBindings['node_3::value'];
+    const record: PlayRecord = {
+      version: 1,
+      controls: [
+        { id: 'a', target: 'node_5::value', kind: 'float', label: 'A', min: 0, max: 1 },
+        { id: 'b', target: 'node_3::value', kind: 'float', label: 'B', min: 0, max: 10 },
+      ],
+      mappings: [{ id: 'm', controlId: 'b', source: { kind: 'control', controlId: 'a' }, outMin: 0, outMax: 10, curve: 'linear', smoothMs: 0, enabled: true }],
+    };
+    playEngine.setRecord(record);
+    playEngine.setBaseValues(readBaseValues(nodes, record));
+    // A's slider sits at 0.5 of its range → B at 5.
+    expect(inputBus.tick(1 / 60, 0).get(target)).toBeCloseTo(5);
+    // Dragging A (a store write → new base values) moves B.
+    playEngine.setBaseValues(new Map([['a', 0.25], ['b', 1]]));
+    expect(inputBus.tick(1 / 60, 0).get(target)).toBeCloseTo(2.5);
+  });
+
   it('reads a unit value per source kind', () => {
     midiEngine.handleBytes(0xe0, 0, 64); // bend centre
     expect(playEngine.readSource({ kind: 'midi', signal: 'bend', channel: 0 })).toBeCloseTo(0.5);
@@ -165,6 +187,15 @@ describe('controls and the record', () => {
     expect(readControlValue(nodes, 'node_9::value')).toBeUndefined();
   });
 
+  it('bakes live values into a copy of the graph for an instrument export', () => {
+    const nodes = [floatNode('node_3', 1), colorNode('node_4', [0, 0, 0])];
+    const baked = bakeControlValues(nodes, RECORD, new Map<string, number | number[]>([['c1', 7], ['c2', [1, 0.5, 0]]]));
+    expect(readControlValue(baked, 'node_3::value')).toBe(7);
+    expect(readControlValue(baked, 'node_4::color0')).toEqual([1, 0.5, 0]);
+    expect(readControlValue(nodes, 'node_3::value')).toBe(1); // the original is untouched
+    expect(bakeControlValues(nodes, RECORD, new Map())).toBe(nodes);
+  });
+
   it('parses a saved record, dropping what is malformed, and round-trips a good one', () => {
     expect(parsePlayRecord(undefined)).toEqual(emptyPlayRecord());
     expect(parsePlayRecord(JSON.parse(JSON.stringify(RECORD)))).toEqual(RECORD);
@@ -182,6 +213,13 @@ describe('controls and the record', () => {
     });
     expect(messy.controls).toEqual([{ id: 'a', target: 'n::k', kind: 'float', label: 'n::k', min: 1, max: 5 }]);
     expect(messy.mappings).toHaveLength(1);
+    // A control source must name another existing control.
+    const self = parsePlayRecord({ controls: [{ id: 'a', target: 'n::k' }, { id: 'b', target: 'n::j' }], mappings: [
+      { id: 'ok', controlId: 'a', source: { kind: 'control', controlId: 'b' } },
+      { id: 'self', controlId: 'a', source: { kind: 'control', controlId: 'a' } },
+      { id: 'gone', controlId: 'a', source: { kind: 'control', controlId: 'zzz' } },
+    ] });
+    expect(self.mappings.map(m => m.id)).toEqual(['ok']);
     expect(messy.mappings[0]).toMatchObject({ id: 'm', curve: 'linear', enabled: true, smoothMs: 0, source: { kind: 'midi', signal: 'cc', channel: 0, cc: 127 } });
   });
 });

@@ -138,6 +138,31 @@ export function readBaseValues(nodes: GraphNode[], play: PlayRecord): Map<string
   return out;
 }
 
+/**
+ * A copy of `nodes` with each control's value written into its param. Used
+ * when exporting an instrument while mappings are driving controls: the file
+ * then opens looking exactly as the picture did at export time.
+ */
+export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: Map<string, number | number[]>): GraphNode[] {
+  if (values.size === 0) return nodes;
+  let out = nodes;
+  for (const c of play.controls) {
+    const v = values.get(c.id);
+    if (v === undefined) continue;
+    const value = Array.isArray(v) ? [v[0], v[1], v[2]] : v;
+    const parts = c.target.split('::');
+    const key = parts[parts.length - 1];
+    out = out.map(n => {
+      if (n.id !== parts[0]) return n;
+      if (parts.length < 3) return { ...n, params: { ...n.params, [key]: value } };
+      const sg = n.params.subgraph as SubgraphData | undefined;
+      const inner = sg ? { ...sg, nodes: sg.nodes.map(sn => sn.id === parts[1] ? { ...sn, params: { ...sn.params, [key]: value } } : sn) } : sg;
+      return { ...n, params: { ...n.params, [`${parts[1]}::${key}`]: value, ...(inner ? { subgraph: inner } : {}) } };
+    });
+  }
+  return out;
+}
+
 let seq = 0;
 /** Ids for controls and mappings: unique within a session, readable in a file. */
 export function playId(prefix: 'ctl' | 'map'): string {

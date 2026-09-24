@@ -174,6 +174,18 @@ class PlayEngine implements InputSource {
         return source.axis === 'x' ? this.mouseX : source.axis === 'y' ? this.mouseY : this.mouseDown;
       case 'key':
         return this.keysHeld.has(source.code) ? 1 : 0;
+      case 'control': {
+        // Another control, as 0..1 across its range. What was written for it
+        // this frame if it is driven (mappings run in list order; a later row
+        // reads the previous frame), else the slider's value.
+        const c = this.controls.get(source.controlId);
+        if (!c) return null;
+        const v = this.live.get(c.id) ?? this.base.get(c.id);
+        if (v === undefined) return null;
+        if (Array.isArray(v)) return (v[0] + v[1] + v[2]) / 3;
+        const span = c.max - c.min;
+        return span > 0 ? Math.max(0, Math.min(1, (v - c.min) / span)) : 0;
+      }
     }
   }
 
