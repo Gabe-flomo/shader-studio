@@ -51,14 +51,16 @@ function _upgradeExprNode(node: GraphNode): GraphNode {
   }
 
   const exprStr = (node.params.expr as string) || '0.0';
+  // The output socket has to match outputType, or wiring it compiles a float into a vec3 slot
+  const outputType = (node.params.outputType as string) || 'float';
   return {
     ...node,
     type: 'exprNode',
     inputs: newInputs,
-    outputs: { result: { type: 'vec3' as DataType, label: 'Result (vec3)' } },
+    outputs: { result: { type: outputType as DataType, label: `Result (${outputType})` } },
     params: {
       inputs: dynamicInputs,
-      outputType: (node.params.outputType as string) || 'float',
+      outputType,
       lines: [],
       result: exprStr,
       expr: exprStr,

@@ -673,11 +673,10 @@ export const ExprBlockNode: NodeDefinition = {
   },
   defaultParams: {
     // Dynamic inputs — each entry becomes a socket + local variable.
-    // New nodes start with one float, one vec2, one vec3 slot (deletable via the modal).
+    // New nodes start with a single float that is also what they return, so a fresh
+    // block compiles as-is; more inputs are added in the editor.
     inputs: [
       { name: 'a', type: 'float', slider: null },
-      { name: 'b', type: 'vec2',  slider: null },
-      { name: 'c', type: 'vec3',  slider: null },
     ] as Array<{ name: string; type: string; slider: { min: number; max: number } | null }>,
     outputType: 'float',
     // Per-line warp statements
