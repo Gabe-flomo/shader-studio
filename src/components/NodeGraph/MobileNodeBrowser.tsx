@@ -128,7 +128,23 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       // Fixed spawn spot, not NodeSearchPalette's randomized one — that
       // exists to keep several quick FAB-adds from stacking exactly on top
       // of each other, not a concern for this one-at-a-time browse flow.
-      const id = addNode(selectedType, { x: 300, y: 200 });
+      let spawnPos = { x: 300, y: 200 };
+      if (!pairing) {
+        // Disconnected: (300, 200) tends to land right in the middle of the
+        // existing wired chain (same row, between two connected nodes),
+        // which visually reads as connected even though it isn't. Land it
+        // in the same column as — and below — the graph's other unwired
+        // nodes (UV, Time, ...) instead, clearly outside the wired flow.
+        const unwired = scopedNodes.filter(n => !Object.values(n.inputs).some(inp => inp?.connection != null));
+        const basis = unwired.length > 0 ? unwired : scopedNodes;
+        if (basis.length > 0) {
+          spawnPos = {
+            x: Math.min(...basis.map(n => n.position.x)),
+            y: Math.max(...basis.map(n => n.position.y)) + 160,
+          };
+        }
+      }
+      const id = addNode(selectedType, spawnPos);
       if (id && pairing && connectTargetId) {
         if (pairing.direction === 'intoNew') connectNodes(connectTargetId, pairing.existingKey, id, pairing.newKey);
         else connectNodes(id, pairing.newKey, connectTargetId, pairing.existingKey);
