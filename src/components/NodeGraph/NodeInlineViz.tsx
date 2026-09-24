@@ -5173,7 +5173,7 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'blendModes':
     case 'lumaKey':
     case 'sdfColorize':
-    case 'sdfOutline':
+    case 'sdfFill':
     case 'mask':
     case 'glowLayer':
     case 'alphaBlend':
@@ -5340,7 +5340,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'swirlSpace', 'kaleidoSpace', 'sphericalSpace', 'rippleSpace', 'infiniteRepeatSpace',
   'shear', 'perspective2d', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D',
   // Color ops
-  'hsv', 'invert', 'blendModes', 'lumaKey', 'sdfColorize', 'sdfOutline',
+  'hsv', 'invert', 'blendModes', 'lumaKey', 'sdfColorize', 'sdfFill',
   'mask', 'glowLayer', 'alphaBlend', 'chromaticAberration',
   // Math
   'luminance', 'compare', 'select', 'reflect', 'crossProduct', 'complexMul', 'complexPow',

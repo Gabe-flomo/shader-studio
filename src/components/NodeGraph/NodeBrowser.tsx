@@ -103,8 +103,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   ],
   SDF: [
     { label: 'Combine', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract'] },
-    { label: 'Modify',  types: ['sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfOutline'] },
-    { label: 'Style',   types: ['sdfColorize'] },
+    { label: 'Modify',  types: ['sdfOffset', 'sdfOnion', 'sdfSharpen'] },
+    { label: 'Style',   types: ['sdfFill', 'sdfColorize'] },
   ],
   '2D Space': [
     { label: 'Basic',   types: ['uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },

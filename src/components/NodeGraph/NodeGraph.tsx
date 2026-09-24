@@ -9,6 +9,7 @@ import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, 
 import { WireLayer, type EdgeInfo } from './WireLayer';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
+import { suggestQuickAdds, type QuickAdd } from './quickAdds';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
@@ -801,7 +802,33 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
     });
   }, [smartConnect, displayNodes, socketWorld]);
+  // New nodes worth adding and wiring straight to the clicked socket (see quickAdds.ts)
+  const smartQuickAdds = useMemo(() => {
+    if (!smartConnect) return [];
+    const origin = displayNodes.find(n => n.id === smartConnect.nodeId);
+    const sock = smartConnect.dir === 'out' ? origin?.outputs[smartConnect.key] : origin?.inputs[smartConnect.key];
+    if (!sock) return [];
+    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key });
+  }, [smartConnect, displayNodes]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
+  const pickQuickAdd = useCallback((q: QuickAdd) => {
+    if (!smartConnect) return;
+    const origin = displayNodesRef.current.find(n => n.id === smartConnect.nodeId);
+    if (!origin) return;
+    // Beside the origin on the side data comes from, level with the clicked socket
+    const sockY = socketWorld(origin.id, smartConnect.dir, smartConnect.key)?.y;
+    const pos = {
+      x: smartConnect.dir === 'in' ? origin.position.x - NODE_WIDTH - 90 : origin.position.x + NODE_WIDTH + 90,
+      y: sockY !== undefined ? sockY - 60 : origin.position.y,
+    };
+    const newId = addNode(q.type, pos);
+    if (newId) {
+      if (smartConnect.dir === 'in') connectNodes(newId, q.key, smartConnect.nodeId, smartConnect.key);
+      else connectNodes(smartConnect.nodeId, smartConnect.key, newId, q.key);
+      useNodeGraphStore.getState().setSelectedNodeId(newId);
+    }
+    closeSmartConnect();
+  }, [smartConnect, addNode, connectNodes, socketWorld, closeSmartConnect]);
   // Add-then-wire: a node just added from search gets Smart connect on its first output, once
   // its socket has been measured, and only when there is something to suggest.
   const smartConnectRequest = useNodeGraphStore(s => s.smartConnectRequest);
@@ -1759,7 +1786,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             y={smartConnect.y}
             title={`${smartConnect.dir === 'out' ? 'CONNECT' : 'FEED'} ${sock.label.toUpperCase()} ${smartConnect.dir === 'out' ? 'TO' : 'FROM'}`}
             items={smartSuggestions}
+            quickAdds={smartQuickAdds}
             onPick={pickSuggestion}
+            onQuickAdd={pickQuickAdd}
             onHover={setGhostSuggestion}
             onAddNode={() => {
               setPendingSocket({ nodeId: smartConnect.nodeId, key: smartConnect.key, dir: smartConnect.dir, type: sock.type, screenX: smartConnect.x, screenY: smartConnect.y });

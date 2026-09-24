@@ -5,26 +5,34 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
 import type { Suggestion } from './smartConnect';
+import type { QuickAdd } from './quickAdds';
 
 const MARGIN = 8;
 
+type Entry = { kind: 'wire'; s: Suggestion } | { kind: 'add'; q: QuickAdd };
+
 /**
- * The Smart connect popover: up to three suggested sockets for the clicked one, then "Add a new
- * node…". 1/2/3 or a click connects, A opens the node search, Esc or a click outside closes.
- * Hovering a row previews its wire (onHover).
+ * The Smart connect popover: the suggested sockets already on the canvas (up to three, plus
+ * the Output node), then new nodes to add and wire in one go, then "Add a new node…".
+ * A number key or a click picks a row, A opens the node search, Esc or a click outside closes.
+ * Hovering a canvas row previews its wire (onHover).
  */
-export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNode, onClose, justAdded = false }: {
+export function SmartConnectMenu({ x, y, title, items, quickAdds = [], onPick, onQuickAdd, onHover, onAddNode, onClose, justAdded = false }: {
   x: number;
   y: number;
   title: string;
   items: Suggestion[];
+  quickAdds?: QuickAdd[];
   /** Opened on a node just added from search: the footer offers to leave it unconnected instead */
   justAdded?: boolean;
   onPick: (s: Suggestion) => void;
+  onQuickAdd?: (q: QuickAdd) => void;
   onHover: (s: Suggestion | null) => void;
   onAddNode: () => void;
   onClose: () => void;
 }) {
+  const entries: Entry[] = [...items.map(s => ({ kind: 'wire', s }) as Entry), ...quickAdds.map(q => ({ kind: 'add', q }) as Entry)];
+  const choose = (e: Entry) => { if (e.kind === 'wire') onPick(e.s); else onQuickAdd?.(e.q); };
   const tk = useTokens();
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
@@ -38,15 +46,15 @@ export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNod
     const r = el.getBoundingClientRect();
     el.style.left = `${Math.max(MARGIN, Math.min(x + 10, window.innerWidth - r.width - MARGIN))}px`;
     el.style.top = `${y + 10 + r.height > window.innerHeight - MARGIN ? Math.max(MARGIN, y - r.height - 10) : y + 10}px`;
-  }, [x, y, items.length]);
+  }, [x, y, entries.length]);
 
-  const latest = useRef({ items, onPick, onAddNode, onClose });
+  const latest = useRef({ entries, choose, onAddNode, onClose });
   const latestJustAdded = useRef(justAdded);
   useEffect(() => { latestJustAdded.current = justAdded; }, [justAdded]);
-  useEffect(() => { latest.current = { items, onPick, onAddNode, onClose }; });
+  useEffect(() => { latest.current = { entries, choose, onAddNode, onClose }; });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { items: list, onPick: pick, onAddNode: add, onClose: close } = latest.current;
+      const { entries: list, choose: pick, onAddNode: add, onClose: close } = latest.current;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
       const n = Number(e.key);
       // Handled keys stop here, so the canvas shortcuts (A = add node, …) don't also fire
@@ -84,32 +92,47 @@ export function SmartConnectMenu({ x, y, title, items, onPick, onHover, onAddNod
       }}
     >
       <div style={{ padding: '7px 8px 6px', color: tk.text.faint, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em' }}>{title}</div>
-      {items.length === 0 && (
+      {entries.length === 0 && (
         <div style={{ padding: '6px 8px 10px', color: tk.text.muted, fontSize: 12 }}>Nothing on the canvas takes this yet.</div>
       )}
-      {items.map((s, i) => {
+      {entries.map((e, i) => {
         const on = i === active;
+        const isAdd = e.kind === 'add';
+        const first = i === 0 || entries[i - 1].kind !== e.kind;
+        const label = isAdd ? e.q.label : e.s.nodeLabel;
+        const sockLabel = isAdd ? e.q.socketLabel : e.s.socketLabel;
+        const type = isAdd ? e.q.type_ : e.s.type;
+        const right = isAdd ? e.q.note : e.s.pinned ? 'always' : `${Math.round(e.s.distance)} px`;
         return (
-          <div
-            key={`${s.nodeId}:${s.key}`}
-            role="menuitem"
-            onMouseEnter={() => { setActive(i); onHover(s); }}
-            onMouseLeave={() => onHover(null)}
-            onClick={() => onPick(s)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 9, height: 40, padding: '0 8px', borderRadius: 8, cursor: 'pointer',
-              background: on ? tk.bg.selected : 'none',
-            }}
-          >
-            {kbd(String(i + 1), on)}
-            <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <b style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nodeLabel}</b>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: tk.text.muted, fontSize: 11.5 }}>
-                <i style={{ width: 7, height: 7, borderRadius: '50%', background: TYPE_COLORS[s.type] ?? tk.text.faint, flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.socketLabel} · {s.type}</span>
+          <div key={isAdd ? `add:${e.q.type}` : `${e.s.nodeId}:${e.s.key}`}>
+            {first && entries.length > 0 && (items.length > 0 && quickAdds.length > 0) && (
+              <div style={{ padding: isAdd ? '8px 8px 3px' : '0 8px 3px', color: tk.text.faint, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>
+                {isAdd ? 'ADD AND WIRE' : 'ON THE CANVAS'}
+              </div>
+            )}
+            <div
+              role="menuitem"
+              onMouseEnter={() => { setActive(i); onHover(isAdd ? null : e.s); }}
+              onMouseLeave={() => onHover(null)}
+              onClick={() => choose(e)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9, height: 40, padding: '0 8px', borderRadius: 8, cursor: 'pointer',
+                background: on ? tk.bg.selected : 'none',
+              }}
+            >
+              {kbd(String(i + 1), on)}
+              <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                <b style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {isAdd && <Icon name="plus" size={11} />}
+                  {label}
+                </b>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: tk.text.muted, fontSize: 11.5 }}>
+                  <i style={{ width: 7, height: 7, borderRadius: '50%', background: TYPE_COLORS[type] ?? tk.text.faint, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isAdd ? 'New · ' : ''}{sockLabel} · {type}</span>
+                </span>
               </span>
-            </span>
-            <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}>{Math.round(s.distance)} px</span>
+              <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>{right}</span>
+            </div>
           </div>
         );
       })}

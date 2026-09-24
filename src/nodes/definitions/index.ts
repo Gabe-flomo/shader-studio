@@ -42,7 +42,7 @@ export { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './s
 
 // Combiners
 export {
-  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
+  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFFillNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 
@@ -174,7 +174,7 @@ import {
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './sdf';
 import {
-  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
+  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFFillNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 import {
@@ -338,7 +338,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   addColor: AddColorNode,
   glowLayer: GlowLayerNode,
   deepGlow: DeepGlowNode,
-  sdfOutline: SDFOutlineNode,
+  sdfFill: SDFFillNode,
   sdfColorize: SDFColorizeNode,
   alphaBlend: AlphaBlendNode,
   light2d: Light2DNode,

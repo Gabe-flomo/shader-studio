@@ -34,7 +34,7 @@ const TYPE_ABBREV: Record<string, string> = {
   // 2D SDF / light
   circleSDF: 'circ', ringSDF: 'ring', shapeSDF: 'shape',
   makeLight: 'light', remap: 'remap', sdfColorize: 'sdfcol',
-  sdBox: 'sbox', sdfOutline: 'outline', glowLayer: 'glow',
+  sdBox: 'sbox', sdfFill: 'fill', glowLayer: 'glow',
   // 2D Warps
   swirlWarp: 'swirl', curlWarp: 'curl', uvWarp: 'uvw', displace: 'disp',
   smoothWarp: 'swrp', swirlSpace: 'swirlsp', polarSpace: 'polar',

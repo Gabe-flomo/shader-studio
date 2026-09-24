@@ -11,6 +11,9 @@ import { typesCompatible } from '../../lib/typesCompatible';
  * 3. Then nearest, in the direction data flows. From an output, only nodes to its right; from an
  *    input, only nodes to its left.
  * 4. Never more than three. Everything else is one step away in "Add a new node…".
+ * 5. From an output, the graph's Output node is always offered as well — pinned after the
+ *    three, wherever it sits and even if something already feeds it — so "just show me
+ *    this" is one keypress away. New nodes to add and wire live in quickAdds.ts.
  */
 
 export interface Suggestion {
@@ -23,7 +26,11 @@ export interface Suggestion {
   exact: boolean;
   /** World-space distance between the two sockets */
   distance: number;
+  /** Offered regardless of ranking (the Output node) */
+  pinned?: boolean;
 }
+
+const OUTPUT_TYPES = new Set(['output', 'vec4Output']);
 
 export const MAX_SUGGESTIONS = 3;
 
@@ -83,5 +90,16 @@ export function suggestConnections(opts: {
     }
   }
   out.sort((a, b) => (a.exact === b.exact ? 0 : a.exact ? -1 : 1) || a.distance - b.distance);
-  return out.slice(0, MAX_SUGGESTIONS);
+  const top = out.slice(0, MAX_SUGGESTIONS);
+
+  if (from.dir === 'out') {
+    const outputNode = nodes.find(n => OUTPUT_TYPES.has(n.type) && n.id !== origin.id && !forbidden.has(n.id));
+    const [key, input] = outputNode ? Object.entries(outputNode.inputs)[0] ?? [] : [];
+    const alreadyThere = outputNode && input?.connection?.nodeId === origin.id && input.connection.outputKey === from.key;
+    if (outputNode && key && input && !alreadyThere && typesCompatible(type, input.type) && !top.some(s => s.nodeId === outputNode.id)) {
+      const p = socketPos(outputNode.id, 'in', key) ?? outputNode.position;
+      top.push({ nodeId: outputNode.id, key, nodeLabel: labelOf(outputNode), socketLabel: input.label, type: input.type, exact: input.type === type, distance: Math.hypot(p.x - originPos.x, p.y - originPos.y), pinned: true });
+    }
+  }
+  return top;
 }
