@@ -817,15 +817,21 @@ export const CustomFnNode: NodeDefinition = {
       body = body.replace(new RegExp(`\\b${escaped}\\b`, 'g'), glslVar);
     }
     const trimmed = body.trim();
-    const isMultiLine = trimmed.includes('\n');
+    // A lone expression, or a lone `return X;`, is inlined as the result.
+    const single = /^return\b\s*([\s\S]*?);?\s*$/.exec(trimmed);
+    const statementCount = trimmed.replace(/;\s*$/, '').split(';').length;
     let code: string;
-    if (isMultiLine) {
-      // Rewrite `return X;` to `${outVar} = X;` so users can write return naturally
-      const rewritten = trimmed.replace(/\breturn\b\s*/g, `${outVar} = `);
-      const indented = rewritten.split('\n').map(l => `        ${l}`).join('\n');
-      code = `    ${outType} ${outVar};\n    {\n${indented}\n    }\n`;
+    if (!trimmed.includes('\n') && statementCount === 1 && !/\breturn\b/.test(single ? single[1] : trimmed)) {
+      code = `    ${outType} ${outVar} = ${single ? single[1].trim() : trimmed};\n`;
     } else {
-      code = `    ${outType} ${outVar} = ${trimmed};\n`;
+      // A block: run it once inside a one-pass loop so every `return X;` can assign the result
+      // and `break` out — early returns keep their meaning (a plain rewrite to an assignment
+      // fell through to the next one). The result starts at zero in case no return runs.
+      const zero = outType === 'float' ? '0.0' : `${outType}(0.0)`;
+      const withEnd = /[;}]\s*$/.test(trimmed) ? trimmed : `${trimmed};`;
+      const rewritten = withEnd.replace(/\breturn\b\s*([^;]+);/g, `{ ${outVar} = $1; break; }`);
+      const indented = rewritten.split('\n').map(l => `            ${l}`).join('\n');
+      code = `    ${outType} ${outVar} = ${zero};\n    for (int ${node.id}_once = 0; ${node.id}_once < 1; ${node.id}_once++) {\n${indented}\n    }\n`;
     }
     return { code, outputVars: { result: outVar } };
   },
