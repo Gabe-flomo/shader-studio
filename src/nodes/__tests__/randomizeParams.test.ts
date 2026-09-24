@@ -45,4 +45,16 @@ describe('randomizedParams', () => {
     expect(Object.keys(randomizedParams(n, def)).sort()).toEqual(['col', 'free']);
     expect(randomizableParams(n, def).map(p => p.key).sort()).toEqual(['col', 'count', 'free', 'radius']);
   });
+
+  it('strength narrows the change to a window around the current value', () => {
+    // radius 0.01–2, current 1.0, strength 10% → window 0.199 wide centred on 1.0
+    const n = node({ radius: 1.0, __randAmount: 0.1 });
+    const lo = randomizedParams(n, def, () => 0).radius as number;
+    const hi = randomizedParams(n, def, () => 0.999999).radius as number;
+    expect(lo).toBeGreaterThanOrEqual(0.9); expect(hi).toBeLessThanOrEqual(1.1);
+    // near an edge the window shifts to stay inside the range
+    const edge = node({ radius: 1.99, __randAmount: 0.1 });
+    expect(randomizedParams(edge, def, () => 0.999999).radius as number).toBeLessThanOrEqual(2);
+    expect(randomizedParams(edge, def, () => 0).radius as number).toBeGreaterThanOrEqual(1.8);
+  });
 });

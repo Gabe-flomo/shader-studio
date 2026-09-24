@@ -4,6 +4,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import { RulerSlider } from '../ui/RulerSlider';
 
 const MARGIN = 8;
 
@@ -12,12 +13,15 @@ const MARGIN = 8;
  * unticked keys are stored on the node (params.__randExclude). Stays open while ticking; Esc or a
  * click outside closes it.
  */
-export function RandomizeMenu({ x, y, params, excluded, onChange, onRandomize, onClose }: {
+export function RandomizeMenu({ x, y, params, excluded, onChange, amount, onAmountChange, onRandomize, onClose }: {
   x: number;
   y: number;
   params: Array<{ key: string; label: string }>;
   excluded: string[];
   onChange: (excluded: string[]) => void;
+  /** Strength 0.01–1: how much of each slider's range a randomize may move it */
+  amount: number;
+  onAmountChange: (amount: number) => void;
   onRandomize: () => void;
   onClose: () => void;
 }) {
@@ -54,7 +58,7 @@ export function RandomizeMenu({ x, y, params, excluded, onChange, onRandomize, o
       data-captures-escape
       onMouseDown={e => e.stopPropagation()}
       style={{
-        position: 'fixed', left: x, top: y, zIndex: 400, width: 240, padding: 4, boxSizing: 'border-box',
+        position: 'fixed', left: x, top: y, zIndex: 400, width: 280, padding: 4, boxSizing: 'border-box',
         background: tk.bg.panel, borderRadius: radius.lg, boxShadow: tk.shadow.popover, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`,
       }}
     >
@@ -66,7 +70,14 @@ export function RandomizeMenu({ x, y, params, excluded, onChange, onRandomize, o
           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `600 11.5px ${fontFamily.ui}` }}
         >{allOn ? 'None' : 'All'}</button>
       </div>
-      <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 8px 8px' }}
+        title="How far a randomize may move each slider: 100% picks anywhere in its range, 10% nudges it around its current value">
+        <span style={{ width: 58, flexShrink: 0, color: tk.text.secondary }}>Strength</span>
+        <RulerSlider value={Math.round(amount * 100)} min={1} max={100} step={1} integer defaultValue={100}
+          onChange={v => onAmountChange(Math.min(1, Math.max(0.01, v / 100)))} ariaLabel="Randomize strength (percent)" />
+        <span style={{ flexShrink: 0, color: tk.text.muted }}>%</span>
+      </div>
+      <div style={{ maxHeight: 300, overflowY: 'auto', borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 4 }}>
         {params.map(p => {
           const on = !off.has(p.key);
           return (

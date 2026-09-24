@@ -205,17 +205,21 @@ function computeGraphLayout(nodes: GraphNode[], rankedRows: Array<{ rank: number
   }
   return { pos, width, height, edges };
 }
-function GraphEdges({ edges }: { edges: ReturnType<typeof computeGraphLayout>['edges'] }) {
+function GraphEdges({ edges, traceId = null }: { edges: ReturnType<typeof computeGraphLayout>['edges']; traceId?: string | null }) {
   const tc = useCtp();
+  const tk = useTokens();
   return (
     <>
       {edges.map(e => {
         const midY = (e.y1 + e.y2) / 2;
+        // Edge keys are `${from}:${out}->${to}:${in}`: lit when the traced node is either end
+        const lit = traceId !== null && (e.key.startsWith(`${traceId}:`) || e.key.includes(`->${traceId}:`));
         return (
           <path
             key={e.key}
             d={`M ${e.x1} ${e.y1} C ${e.x1} ${midY}, ${e.x2} ${midY}, ${e.x2} ${e.y2}`}
-            stroke={tc.surface2} strokeWidth={1.5} fill="none"
+            stroke={lit ? tk.accent.base : tc.surface2} strokeWidth={lit ? 2.25 : 1.5} fill="none"
+            opacity={traceId !== null && !lit ? 0.18 : 1}
           />
         );
       })}
@@ -1587,6 +1591,9 @@ export function MobileGraphBrowser() {
   // (unlike a real Group), any 2+ ids in the current scope are valid — no
   // desktop-side "discover dangling connections" step to mirror here.
   const [selectMode, setSelectMode] = useState(false);
+  // Connections mode on Home: tapping a chip marks it and dims everything it isn't wired to
+  const [traceMode, setTraceMode] = useState(false);
+  const [traceId, setTraceId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [renamingLooseGroupId, setRenamingLooseGroupId] = useState<string | null>(null);
   const [renameLooseGroupValue, setRenameLooseGroupValue] = useState('');
@@ -1673,6 +1680,20 @@ export function MobileGraphBrowser() {
   // it as a plain tap and navigate right after opening the menu.
   const longPressRef = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; fired: boolean; x: number; y: number }>>(new Map());
   const [homeEdges, setHomeEdges] = useState<Array<{ x1: number; y1: number; x2: number; y2: number; key: string }>>([]);
+  // The traced node plus everything wired directly into or out of it
+  const traceNeighbours = useMemo(() => {
+    const set = new Set<string>();
+    if (!traceId) return set;
+    set.add(traceId);
+    for (const n of nodes) {
+      for (const inp of Object.values(n.inputs)) {
+        if (!inp.connection) continue;
+        if (n.id === traceId) set.add(inp.connection.nodeId);
+        if (inp.connection.nodeId === traceId) set.add(n.id);
+      }
+    }
+    return set;
+  }, [nodes, traceId]);
   const [homeSvgSize, setHomeSvgSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
     const container = homeContainerRef.current;
@@ -3658,7 +3679,11 @@ export function MobileGraphBrowser() {
         <button
           key={n.id}
           ref={withRef ? (el => { if (el) homeChipRefs.current.set(n.id, el); else homeChipRefs.current.delete(n.id); }) : undefined}
-          onClick={() => { if (longPressWasFired(n.id)) return; selectMode ? toggleSelected(n.id) : pushFocus(n.id); }}
+          onClick={() => {
+            if (longPressWasFired(n.id)) return;
+            if (traceMode) { setTraceId(cur => (cur === n.id ? null : n.id)); return; }
+            if (selectMode) toggleSelected(n.id); else pushFocus(n.id);
+          }}
           onTouchStart={e => { const t = e.touches[0]; longPressStart(n.id, t.clientX, t.clientY, () => setLongPressMenuFor(n.id)); }}
           onTouchMove={e => { const t = e.touches[0]; longPressMove(n.id, t.clientX, t.clientY); }}
           onTouchEnd={() => longPressClearPending(n.id)}
@@ -3668,7 +3693,14 @@ export function MobileGraphBrowser() {
           onMouseUp={() => longPressClearPending(n.id)}
           onMouseLeave={() => longPressClearPending(n.id)}
           onContextMenu={e => e.preventDefault()}
-          style={{ ...chipStyleFor(n), WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+          style={{
+            ...chipStyleFor(n), WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none',
+            ...(traceMode && traceId !== null ? {
+              opacity: traceNeighbours.has(n.id) ? 1 : 0.3,
+              ...(n.id === traceId ? { boxShadow: `0 0 0 2px ${tk.accent.base}` } : {}),
+              transition: 'opacity 0.15s',
+            } : {}),
+          }}
         >
           <div style={dotStyle(nodeDotColor(n, tc))} />
           {labelFor(n)}{isUnsealedGroup ? ' ›' : ''}
@@ -3678,11 +3710,7 @@ export function MobileGraphBrowser() {
       return (
         <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
           {chip}
-          <button
-            onClick={() => viewGroupPorts(n.id)}
-            title="View this group's own ports"
-            style={{ background: 'none', border: `1px solid ${tc.surface0}`, color: tc.surface2, borderRadius: '6px', width: '22px', height: '22px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
-          >⚙</button>
+          <IconButton icon="nodes" label="View this group's own ports" tooltip={false} onClick={() => viewGroupPorts(n.id)} style={{ width: 36, height: 36 }} />
         </div>
       );
     };
@@ -3834,9 +3862,14 @@ export function MobileGraphBrowser() {
           width={homeSvgSize.width} height={homeSvgSize.height}
           style={{ position: 'absolute', top: 0, left: 0, zIndex: 0, pointerEvents: 'none' }}
         >
-          <GraphEdges edges={homeEdges} />
+          <GraphEdges edges={homeEdges} traceId={traceMode ? traceId : null} />
         </svg>
         <div style={{ position: 'relative', zIndex: 1 }}>
+          {traceMode && (
+            <div style={{ padding: '8px 16px', fontSize: 12.5, color: tk.text.muted, background: tk.bg.selected }}>
+              {traceId ? 'Tap another node, or tap it again to clear.' : 'Tap a node to see what it connects to.'}
+            </div>
+          )}
           {entries.map(e => e.render())}
         </div>
       </div>
@@ -4050,11 +4083,26 @@ export function MobileGraphBrowser() {
             since there's no canvas here to drag-select on. Only makes sense
             on the rank-grid list itself, not the graph diagram or a
             focused node's detail. */}
-        {!focusedNode && !homeGraphView && (
+        {!focusedNode && !homeGraphView && !selectMode && (
+          <button
+            aria-pressed={traceMode}
+            onClick={() => { setTraceMode(v => !v); setTraceId(null); }}
+            style={{
+              marginLeft: 'auto', flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
+              touchAction: 'manipulation', display: 'flex', alignItems: 'center', gap: 5,
+              background: traceMode ? tk.bg.selected : tk.bg.hover, color: traceMode ? tk.accent.text : tk.text.secondary,
+              font: `500 12.5px ${fontFamily.ui}`,
+            }}
+            title="Tap nodes to see what they connect to"
+          >
+            {traceMode ? 'Done' : <><Icon name="graphs" size={13} />Connections</>}
+          </button>
+        )}
+        {!focusedNode && !homeGraphView && !traceMode && (
           <button
             onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}
             style={{
-              marginLeft: 'auto', flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
+              marginLeft: selectMode ? 'auto' : 6, flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
               touchAction: 'manipulation', display: 'flex', alignItems: 'center', gap: 5,
               background: selectMode ? tk.bg.selected : tk.bg.hover, color: selectMode ? tk.accent.text : tk.text.secondary,
               font: `500 12.5px ${fontFamily.ui}`,
