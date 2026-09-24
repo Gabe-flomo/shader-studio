@@ -38,7 +38,7 @@ export { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNod
 
 // Combiners
 export {
-  SmoothMinNode, MinNode, MaxNode2, SubtractNode2,
+  SmoothMinNode, MinNode, MaxNode2,
   SmoothMaxNode, SmoothSubtractNode,
   BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
   GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
@@ -655,10 +655,11 @@ export function getNodeDefinition(type: string): NodeDefinition | undefined {
   return NODE_REGISTRY[type];
 }
 
+/** Nodes offered for adding: deprecated ones stay in the registry (saved graphs still load) but aren't listed. */
 export function getNodesByCategory(category: string): NodeDefinition[] {
-  return Object.values(NODE_REGISTRY).filter(n => n.category === category);
+  return Object.values(NODE_REGISTRY).filter(n => n.category === category && !n.deprecated);
 }
 
 export function getAllCategories(): string[] {
-  return [...new Set(Object.values(NODE_REGISTRY).map(n => n.category))];
+  return [...new Set(Object.values(NODE_REGISTRY).filter(n => !n.deprecated).map(n => n.category))];
 }

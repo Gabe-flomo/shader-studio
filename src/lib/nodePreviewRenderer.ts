@@ -27,9 +27,17 @@ interface CacheEntry {
   sourceHash: string;
 }
 
+/** Thumbnails kept; the oldest is evicted past this. */
+const MAX_CACHE_ENTRIES = 100;
+
 class NodePreviewRenderer {
   private renderer: THREE.WebGLRenderer | null = null;
   private renderTarget: THREE.WebGLRenderTarget | null = null;
+  // Set by the context-lost event on the offscreen canvas. Mobile browsers
+  // reclaim contexts under memory pressure; while lost, renders are skipped
+  // (the cached thumbnail, if any, is returned) and Three.js re-initialises
+  // its GL state on the matching restore event.
+  private contextLost = false;
   private scene = new THREE.Scene();
   private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
   private geometry = new THREE.PlaneGeometry(2, 2);
@@ -46,7 +54,18 @@ class NodePreviewRenderer {
 
   private getRenderer(size: number): THREE.WebGLRenderer {
     if (!this.renderer) {
-      this.renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+      // Pixels are read from the render target, never from the canvas, so no
+      // preserveDrawingBuffer (it costs a buffer copy on every present).
+      this.renderer = new THREE.WebGLRenderer({ antialias: false });
+      const el = this.renderer.domElement;
+      el.addEventListener('webglcontextlost', e => {
+        e.preventDefault(); // allow the browser to restore it
+        this.contextLost = true;
+        console.warn('[nodePreviewRenderer] WebGL context lost — previews paused until restored');
+      });
+      el.addEventListener('webglcontextrestored', () => {
+        this.contextLost = false;
+      });
       this.renderTarget = new THREE.WebGLRenderTarget(size, size, {
         type: THREE.UnsignedByteType,
         format: THREE.RGBAFormat,
@@ -90,9 +109,14 @@ class NodePreviewRenderer {
     size = 80,
   ): Promise<string> {
     const cacheKey = `${nodeId}@${size}`;
-    const sourceHash = djb2(fragmentShader) + '|' + Object.entries(uniforms).map(([k, v]) => `${k}:${v.value}`).join(',');
+    // u_time changes every frame, so keying on it meant the cache never hit;
+    // a thumbnail is a snapshot and doesn't need to track the clock.
+    const sourceHash = djb2(fragmentShader) + '|' + Object.entries(uniforms)
+      .filter(([k]) => k !== 'u_time')
+      .map(([k, v]) => `${k}:${v.value}`).join(',');
     const cached = this.cache.get(cacheKey);
     if (cached?.sourceHash === sourceHash) return cached.dataUrl;
+    if (this.contextLost) return cached?.dataUrl ?? '';
 
     await this.acquireSlot();
     try {
@@ -139,7 +163,15 @@ class NodePreviewRenderer {
       ctx.putImageData(imgData, 0, 0);
 
       const dataUrl = offscreen.toDataURL('image/jpeg', 0.85);
+      // Re-insert so the entry moves to the end (Map keeps insertion order);
+      // evict from the front once over the cap.
+      this.cache.delete(cacheKey);
       this.cache.set(cacheKey, { dataUrl, sourceHash });
+      while (this.cache.size > MAX_CACHE_ENTRIES) {
+        const oldest = this.cache.keys().next().value;
+        if (oldest === undefined) break;
+        this.cache.delete(oldest);
+      }
       return dataUrl;
     } finally {
       this.releaseSlot();

@@ -1,6 +1,7 @@
-import { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { ctp } from '../../theme/palette';
+import { getView, subscribeView, type Pt } from './socketRegistry';
 
 const NODE_W = 240;
 const NODE_H = 120;
@@ -10,64 +11,58 @@ const MAP_H  = 120;
 
 interface MinimapProps {
   nodes: GraphNode[];
-  pan: { x: number; y: number };
-  zoom: number;
   viewportWidth: number;
   viewportHeight: number;
   onPanTo: (worldX: number, worldY: number) => void;
 }
 
-export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPanTo }: MinimapProps) {
+/** World-rect → minimap mapping shared by the draw and the click handler. */
+function mapping(nodes: GraphNode[]) {
+  const minX = Math.min(...nodes.map(n => n.position.x)) - PAD;
+  const minY = Math.min(...nodes.map(n => n.position.y)) - PAD;
+  const maxX = Math.max(...nodes.map(n => n.position.x + NODE_W)) + PAD;
+  const maxY = Math.max(...nodes.map(n => n.position.y + NODE_H)) + PAD;
+  const worldW = maxX - minX;
+  const worldH = maxY - minY;
+  const scale  = Math.min(MAP_W / worldW, MAP_H / worldH);
+  const offsetX = (MAP_W - worldW * scale) / 2;
+  const offsetY = (MAP_H - worldH * scale) / 2;
+  return { minX, minY, scale, offsetX, offsetY };
+}
+
+/**
+ * Minimap: node rects plus the viewport. The viewport follows pan/zoom
+ * through the layout registry's view publisher — imperatively, one rAF at a
+ * time — rather than through props, so a pan gesture doesn't re-render this
+ * component (or its parent) on every mousemove.
+ */
+export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewportHeight, onPanTo }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
+  const draw = useCallback((view: { pan: Pt; zoom: number }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     ctx.clearRect(0, 0, MAP_W, MAP_H);
-
-    // Compute world bounding box of all nodes (padded)
     if (nodes.length === 0) return;
-    const minX = Math.min(...nodes.map(n => n.position.x)) - PAD;
-    const minY = Math.min(...nodes.map(n => n.position.y)) - PAD;
-    const maxX = Math.max(...nodes.map(n => n.position.x + NODE_W)) + PAD;
-    const maxY = Math.max(...nodes.map(n => n.position.y + NODE_H)) + PAD;
-    const worldW = maxX - minX;
-    const worldH = maxY - minY;
-
-    // Scale to fit minimap preserving aspect ratio
-    const scaleX = MAP_W / worldW;
-    const scaleY = MAP_H / worldH;
-    const scale  = Math.min(scaleX, scaleY);
-    // Center the world rect in the minimap
-    const offsetX = (MAP_W - worldW * scale) / 2;
-    const offsetY = (MAP_H - worldH * scale) / 2;
-
+    const { minX, minY, scale, offsetX, offsetY } = mapping(nodes);
     const toMapX = (wx: number) => (wx - minX) * scale + offsetX;
     const toMapY = (wy: number) => (wy - minY) * scale + offsetY;
 
     // Draw node rects
     ctx.fillStyle = ctp.surface2;
     for (const node of nodes) {
-      const x = toMapX(node.position.x);
-      const y = toMapY(node.position.y);
-      const w = Math.max(2, NODE_W * scale);
-      const h = Math.max(2, NODE_H * scale);
-      ctx.fillRect(x, y, w, h);
+      ctx.fillRect(toMapX(node.position.x), toMapY(node.position.y), Math.max(2, NODE_W * scale), Math.max(2, NODE_H * scale));
     }
 
     // Draw viewport rect — invert the pan/zoom to get world-space viewport
-    const vpWorldX = -pan.x / zoom;
-    const vpWorldY = -pan.y / zoom;
-    const vpWorldW = viewportWidth  / zoom;
-    const vpWorldH = viewportHeight / zoom;
-
-    const vx = toMapX(vpWorldX);
-    const vy = toMapY(vpWorldY);
-    const vw = vpWorldW * scale;
-    const vh = vpWorldH * scale;
+    const { pan, zoom } = view;
+    const vx = toMapX(-pan.x / zoom);
+    const vy = toMapY(-pan.y / zoom);
+    const vw = (viewportWidth  / zoom) * scale;
+    const vh = (viewportHeight / zoom) * scale;
 
     ctx.strokeStyle = ctp.mauve;
     ctx.lineWidth = 1;
@@ -75,30 +70,28 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
     // Subtle tint inside viewport
     ctx.fillStyle = 'rgba(203, 166, 247, 0.08)';
     ctx.fillRect(vx, vy, vw, vh);
-  }, [nodes, pan, zoom, viewportWidth, viewportHeight]);
+  }, [nodes, viewportWidth, viewportHeight]);
+
+  // Redraw when nodes / viewport size change, and follow the live view.
+  useEffect(() => { draw(getView()); }, [draw]);
+  useEffect(() => {
+    let raf: number | null = null;
+    const unsub = subscribeView(v => {
+      if (raf !== null) return;
+      raf = requestAnimationFrame(() => { raf = null; draw(v); });
+    });
+    return () => { unsub(); if (raf !== null) cancelAnimationFrame(raf); };
+  }, [draw]);
 
   const panToPointer = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas || nodes.length === 0) return;
-
     const rect = canvas.getBoundingClientRect();
     const mx = clientX - rect.left;
     const my = clientY - rect.top;
-
-    // Recompute the same mapping as in the draw effect
-    const minX = Math.min(...nodes.map(n => n.position.x)) - PAD;
-    const minY = Math.min(...nodes.map(n => n.position.y)) - PAD;
-    const maxX = Math.max(...nodes.map(n => n.position.x + NODE_W)) + PAD;
-    const maxY = Math.max(...nodes.map(n => n.position.y + NODE_H)) + PAD;
-    const worldW = maxX - minX;
-    const worldH = maxY - minY;
-    const scale  = Math.min(MAP_W / worldW, MAP_H / worldH);
-    const offsetX = (MAP_W - worldW * scale) / 2;
-    const offsetY = (MAP_H - worldH * scale) / 2;
-
-    const worldX = (mx - offsetX) / scale + minX;
-    const worldY = (my - offsetY) / scale + minY;
-    onPanTo(worldX, worldY);
+    const { minX, minY, scale, offsetX, offsetY } = mapping(nodes);
+    // Invert the mapping to get the world position under the pointer
+    onPanTo((mx - offsetX) / scale + minX, (my - offsetY) / scale + minY);
   };
 
   return (
@@ -136,4 +129,4 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
       />
     </div>
   );
-}
+});

@@ -38,6 +38,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
         errors: validation.errors,
         nodeOutputVars: EMPTY_OUTPUT_VARS,
         paramUniforms: {},
+        paramBindings: {},
         textureUniforms: {},
         audioUniforms: {},
         videoUniforms: {},
@@ -49,7 +50,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
     const sortedNodes = topologicalSort(nodes);
 
     // 3. Assemble fragment shader
-    const { fragmentShader, nodeOutputVars, paramUniforms, textureUniforms, audioUniforms, videoUniforms, isStateful, nodeSlugMap, mlgDynamicOutputs } =
+    const { fragmentShader, nodeOutputVars, paramUniforms, paramBindings, textureUniforms, audioUniforms, videoUniforms, isStateful, nodeSlugMap, mlgDynamicOutputs } =
       generateFragmentShader(sortedNodes, nodes);
 
     // 4. Compile GPU particle chains (pInit → … → pRender)
@@ -58,6 +59,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
     // Merge particle param uniforms into the main paramUniforms so sliders work
     for (const ps of particleSystems) {
       Object.assign(paramUniforms, ps.paramUniforms);
+      Object.assign(paramBindings, ps.paramBindings);
     }
 
     return {
@@ -66,6 +68,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       success: true,
       nodeOutputVars,
       paramUniforms,
+      paramBindings,
       textureUniforms,
       audioUniforms,
       videoUniforms,
@@ -82,6 +85,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       errors: [error instanceof Error ? error.message : 'Unknown compilation error'],
       nodeOutputVars: EMPTY_OUTPUT_VARS,
       paramUniforms: {},
+      paramBindings: {},
       textureUniforms: {},
       audioUniforms: {},
       videoUniforms: {},
