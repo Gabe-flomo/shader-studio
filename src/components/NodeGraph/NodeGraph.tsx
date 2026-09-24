@@ -236,8 +236,21 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     screenX: number; screenY: number;
   } | null>(null);
 
-  // ── Shift+socket spotlight ──────────────────────────────────────────────────
-  const [hoveredSocket, setHoveredSocket] = useState<{ nodeId: string; key: string; dir: 'in' | 'out' } | null>(null);
+  // ── Socket spotlight ────────────────────────────────────────────────────────
+  // Hovering a wired socket lights its wires and the nodes at their other end and dims the rest.
+  // Plain hover waits a beat (settledSocket) so sweeping the pointer across a graph doesn't
+  // flicker; with Shift held it's immediate and works on any socket.
+  type HoveredSocket = { nodeId: string; key: string; dir: 'in' | 'out' };
+  const [hoveredSocket, setHoveredSocket] = useState<HoveredSocket | null>(null);
+  const [settledSocket, setSettledSocket] = useState<HoveredSocket | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSocketHover = useCallback((sock: HoveredSocket | null) => {
+    setHoveredSocket(sock);
+    if (settleTimer.current) { clearTimeout(settleTimer.current); settleTimer.current = null; }
+    if (!sock) { setSettledSocket(null); return; }
+    settleTimer.current = setTimeout(() => setSettledSocket(sock), 120);
+  }, []);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
   const [shiftHeld, setShiftHeld] = useState(false);
 
   // ── Feature 2: Wire hover → + badge ────────────────────────────────────────
@@ -718,6 +731,17 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     applyView({ x: -worldX * z + vw / 2, y: -worldY * z + vh / 2 }, z, 'now');
   }, [applyView]);
 
+  // Centre on a node picked from a group card (store.revealNode) once it is in the displayed level
+  const focusRequest = useNodeGraphStore(s => s.focusRequest);
+  useEffect(() => {
+    if (!focusRequest) return;
+    const target = displayNodes.find(n => n.id === focusRequest.nodeId);
+    if (!target) return;
+    const size = getCardSize(target.id) ?? { w: 360, h: 200 };
+    handleMinimapPanTo(target.position.x + size.w / 2, target.position.y + size.h / 2);
+    useNodeGraphStore.getState().clearFocusRequest();
+  }, [focusRequest, displayNodes, handleMinimapPanTo]);
+
   const handleMouseUp = () => {
     if (dragRafRef.current !== null) {
       cancelAnimationFrame(dragRafRef.current);
@@ -838,9 +862,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
 
   // ── Shift+socket spotlight — which edges are highlighted ─────────────────────
   // Each entry is { fromNodeId, fromOutputKey, toNodeId, toInputKey }
+  const spotSocket = dragConnection ? null : shiftHeld ? hoveredSocket : settledSocket;
   const spotlightEdges = React.useMemo<Set<string>>(() => {
-    if (!shiftHeld || !hoveredSocket) return new Set();
-    const { nodeId, key, dir } = hoveredSocket;
+    if (!spotSocket) return new Set();
+    const { nodeId, key, dir } = spotSocket;
     const result = new Set<string>();
     for (const node of displayNodes) {
       for (const [inputKey, input] of Object.entries(node.inputs)) {
@@ -851,13 +876,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       }
     }
     return result;
-  }, [shiftHeld, hoveredSocket, displayNodes]);
+  }, [spotSocket, displayNodes]);
+  // Without Shift, only a socket that actually has wires spotlights
+  const spotlightOn = spotSocket !== null && (shiftHeld || spotlightEdges.size > 0);
 
   // ── Highlight filter — compute which node IDs match the current filter ───────
   const highlightedIds: Set<string> | null = React.useMemo(() => {
-    // Shift+socket spotlight takes priority over type filter
-    if (shiftHeld && hoveredSocket) {
-      const { nodeId, key, dir } = hoveredSocket;
+    // Socket spotlight takes priority over type filter
+    if (spotlightOn && spotSocket) {
+      const { nodeId, key, dir } = spotSocket;
       const lit = new Set<string>([nodeId]);
       for (const node of displayNodes) {
         for (const [inputKey, input] of Object.entries(node.inputs)) {
@@ -882,7 +909,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       }
     }
     return matching;
-  }, [nodeHighlightFilter, nodes, shiftHeld, hoveredSocket, displayNodes]);
+  }, [nodeHighlightFilter, nodes, spotlightOn, spotSocket, displayNodes]);
 
   // ── Viewport culling ─────────────────────────────────────────────────────
   // Cards fully outside the visible world rect (plus a margin) aren't mounted.
@@ -1384,7 +1411,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             externalParamKeys={externalParamMap?.get(node.id)}
             onAltClickSocket={handleAltClickSocket}
             isConnectionDragging={dragConnection !== null}
-            onSocketHover={setHoveredSocket}
+            onSocketHover={handleSocketHover}
           />
         ))}
 

@@ -312,6 +312,11 @@ interface NodeGraphState {
   /** Live-sampled values for the selected node: outputKey → number[] (1–4 components) */
   nodeProbeValues: Record<string, number[]> | null;
   setSelectedNodeId: (id: string | null) => void;
+  /** Open `groupPath` (group ids from the current level inward), select `nodeId` there and ask the canvas to centre on it. */
+  revealNode: (groupPath: string[], nodeId: string) => void;
+  /** Set by revealNode; NodeGraph centres on the node once it is on screen, then clears it. */
+  focusRequest: { nodeId: string; seq: number } | null;
+  clearFocusRequest: () => void;
   setNodeProbeValues: (values: Record<string, number[]> | null) => void;
   /** Live-sampled normalized [0,1] values for all scope nodes: nodeId → number */
   scopeProbeValues: Record<string, number>;
@@ -4031,6 +4036,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setCurrentTime: (t) => set(state => state.currentTime === t ? state : { currentTime: t }),
   setTimePlaying: (playing) => set(state => state.timePlaying === playing ? state : { timePlaying: playing }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
+  revealNode: (groupPath, nodeId) => {
+    for (const groupId of groupPath) get().enterGroup(groupId);
+    set(s => ({
+      selectedNodeId: nodeId, nodeProbeValues: null, selectedNodeIds: [],
+      focusRequest: { nodeId, seq: (s.focusRequest?.seq ?? 0) + 1 },
+    }));
+  },
+  focusRequest: null,
+  clearFocusRequest: () => set({ focusRequest: null }),
   setNodeProbeValues: (values) => set(state => {
     const cur = state.nodeProbeValues;
     if (cur === values) return state;

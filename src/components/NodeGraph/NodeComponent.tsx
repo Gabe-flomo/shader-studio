@@ -394,6 +394,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const setHoveredParamHint  = useNodeGraphStore(s => s.setHoveredParamHint);
   const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
+  const revealNode         = useNodeGraphStore(s => s.revealNode);
+  const revealTimer        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
   const isSelected         = selectedNodeId === node.id;
 
@@ -1766,10 +1768,30 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
     const groupIcon = isSceneGroup ? 'presets' : isSpaceWarpGroup ? 'loop' : isMarchLoopGroup ? 'wave' : 'nodes';
 
+    /**
+     * Section header on a group card: click opens that inner node in the group, double-click renames
+     * the section. The click waits out the double-click window so a rename doesn't also navigate.
+     */
+    const sectionClick = (innerId: string, startRename: () => void) => ({
+      onClick: (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (editingSectionId === innerId || e.detail > 1) return;
+        if (revealTimer.current) clearTimeout(revealTimer.current);
+        revealTimer.current = setTimeout(() => { revealTimer.current = null; revealNode([node.id], innerId); }, 220);
+      },
+      onDoubleClick: (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (revealTimer.current) { clearTimeout(revealTimer.current); revealTimer.current = null; }
+        startRename();
+      },
+    });
+
     /** One exposed inner param: typed socket on the card edge, label, and a ruler (or the wire). */
     const groupParamRow = (o: {
       rowKey: string; psKey: string; label: string; value: number; min: number; max: number; step: number;
       overrideKey: string; defaultValue?: number;
+      /** Clicking the label opens the node this param belongs to */
+      reveal?: { path: string[]; nodeId: string };
     }) => {
       const wired = !!node.inputs[o.psKey]?.connection;
       const wire = node.inputs[o.psKey]?.connection;
@@ -1779,7 +1801,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <ParamSocket color={TYPE_COLORS.float} wired={wired} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', o.psKey, el); }}
             onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, o.psKey); }} />
-          <ParamLabel muted={wired}>{o.label}</ParamLabel>
+          {o.reveal ? (
+            <ParamLabel muted={wired} title="Open this node in the group" onClick={() => revealNode(o.reveal!.path, o.reveal!.nodeId)}>{o.label}</ParamLabel>
+          ) : (
+            <ParamLabel muted={wired}>{o.label}</ParamLabel>
+          )}
           {wired && wire ? (
             <>
               <WiredChip expr={getSourceExpr(shaderLines, wire.nodeId, wire.outputKey) || 'wired from outside'} />
@@ -2202,13 +2228,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             return (
               <div key={innerNode.id} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingBottom: 4 }}>
                 <div
-                  title="Double-click to rename this section"
-                  style={sectionHeadStyle}
-                  onDoubleClick={e => {
-                    e.stopPropagation();
-                    setEditingSectionId(innerNode.id);
-                    setEditingSectionLabel(sectionLabel);
-                  }}
+                  title="Click to open it in the group · double-click to rename"
+                  style={{ ...sectionHeadStyle, cursor: 'pointer' }}
+                  {...sectionClick(innerNode.id, () => { setEditingSectionId(innerNode.id); setEditingSectionLabel(sectionLabel); })}
                 >
                   {editingSectionId === innerNode.id ? (
                     <input
@@ -2233,7 +2255,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       style={sectionInputStyle}
                     />
                   ) : (
-                    <span style={{ flex: 1, cursor: 'text' }}>{sectionLabel}</span>
+                    <span style={{ flex: 1 }}>{sectionLabel}</span>
                   )}
                   <Icon name="nodes" size={12} />
                 </div>
@@ -2251,6 +2273,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     rowKey: `${sp.nodeId}::${sp.paramKey}`, psKey, label: sp.label ?? paramDef.label, value: currentVal,
                     min: paramDef.min ?? 0, max: paramDef.max ?? 1, step: paramDef.step ?? 0.01, overrideKey,
                     defaultValue: typeof innDef?.defaultParams?.[sp.paramKey] === 'number' ? innDef.defaultParams[sp.paramKey] as number : undefined,
+                    reveal: { path: [node.id, innerNode.id], nodeId: sp.nodeId },
                   });
                 })}
               </div>
@@ -2295,13 +2318,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           return (
             <div key={innerNode.id} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingBottom: 4 }}>
               <div
-                title="Double-click to rename this section"
-                style={{ ...sectionHeadStyle, cursor: 'text' }}
-                onDoubleClick={e => {
-                  e.stopPropagation();
-                  setEditingSectionId(innerNode.id);
-                  setEditingSectionLabel(displayLabel);
-                }}
+                title="Click to open this node in the group · double-click to rename"
+                style={{ ...sectionHeadStyle, cursor: 'pointer' }}
+                {...sectionClick(innerNode.id, () => { setEditingSectionId(innerNode.id); setEditingSectionLabel(displayLabel); })}
               >
                 {editingSectionId === innerNode.id ? (
                   <input

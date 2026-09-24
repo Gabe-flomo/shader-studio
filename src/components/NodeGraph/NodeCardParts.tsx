@@ -63,13 +63,21 @@ export function CardBadge({ children, tone = 'warning' }: { children: ReactNode;
 }
 
 /** Param name at the start of a row: fixed 66px so the rulers line up. */
-export function ParamLabel({ children, title, muted = false }: { children: ReactNode; title?: string; muted?: boolean }) {
+export function ParamLabel({ children, title, muted = false, onClick }: { children: ReactNode; title?: string; muted?: boolean; onClick?: () => void }) {
   const tk = useTokens();
   return (
-    <span title={title} style={{
-      width: 66, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      color: muted ? tk.text.faint : tk.text.secondary, fontSize: 12.5,
-    }}>{children}</span>
+    <span
+      title={title}
+      role={onClick ? 'link' : undefined}
+      onClick={onClick ? e => { e.stopPropagation(); onClick(); } : undefined}
+      onMouseEnter={onClick ? e => { e.currentTarget.style.textDecoration = 'underline'; } : undefined}
+      onMouseLeave={onClick ? e => { e.currentTarget.style.textDecoration = 'none'; } : undefined}
+      style={{
+        width: 66, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        color: muted ? tk.text.faint : tk.text.secondary, fontSize: 12.5, cursor: onClick ? 'pointer' : undefined,
+        textUnderlineOffset: 2,
+      }}
+    >{children}</span>
   );
 }
 
