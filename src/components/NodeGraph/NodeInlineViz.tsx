@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
-import { PALETTE_PRESETS } from '../../nodes/definitions/color';
+import { paletteNodePreset } from '../../nodes/definitions/color';
 import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
 import { ctp } from '../../theme/palette';
 import { useCtp } from '../../theme/nodePalette';
@@ -148,9 +148,8 @@ export function GradientStripViz({ node }: { node: GraphNode }) {
       grad.addColorStop(1, `rgb(${bV.map(c => Math.round(c*255)).join(',')})`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, W, H);
-    } else if (node.type === 'palettePreset') {
-      const idx = parseInt((node.params.preset as string) ?? '1', 10);
-      const preset = PALETTE_PRESETS[Math.min(idx, PALETTE_PRESETS.length - 1)] ?? PALETTE_PRESETS[1];
+    } else if (paletteNodePreset(node.params.preset)) {
+      const preset = paletteNodePreset(node.params.preset)!;
       drawCosinePalette(ctx, W, H, [...preset.offset], [...preset.amplitude], [...preset.freq], [...preset.phase]);
     } else {
       // palette
@@ -392,24 +391,6 @@ export function NoisePatchViz({ node }: { node: GraphNode }) {
 
 // ─── Viz 6 — Desaturate Bar (desaturate) ─────────────────────────────────────
 
-export function DesaturateBarViz({ node }: { node: GraphNode }) {
-  const amount = typeof node.params.amount === 'number' ? node.params.amount : 1.0;
-  return (
-    <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px', flexShrink: 0 }}>desat</span>
-      <div style={{ flex: 1, height: '6px', background: ctp.crust, borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to right, ${ctp.blue}, ${ctp.overlay0})`, borderRadius: '3px' }} />
-        <div style={{
-          position: 'absolute', top: 0, left: `${amount * 100}%`, right: 0,
-          height: '100%', background: ctp.crust, borderRadius: '0 3px 3px 0',
-        }} />
-      </div>
-      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px', textAlign: 'right' }}>
-        {Math.round(amount * 100)}%
-      </span>
-    </div>
-  );
-}
 
 // ─── Viz N — Audio Freq Range (audioInput) ────────────────────────────────────
 
@@ -534,11 +515,6 @@ function evalSDF(px: number, py: number, type: string, params: Record<string, un
     const ox = n('posX', 0), oy = n('posY', 0);
     const bx = n('width', 0.3) / 2, by = n('height', 0.3) / 2;
     const qx = Math.abs(px - ox) - bx, qy = Math.abs(py - oy) - by;
-    return _len(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0);
-  }
-  if (type === 'sdBox') {
-    const bx = n('rx', 0.3), by = n('ry', 0.3);
-    const qx = Math.abs(px) - bx, qy = Math.abs(py) - by;
     return _len(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0);
   }
   if (type === 'sdEllipse') {
@@ -844,7 +820,7 @@ function renderSDF(
   }
 }
 
-const SDF_TYPES = new Set(['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdBox', 'sdEllipse']);
+const SDF_TYPES = new Set(['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdEllipse']);
 
 export function SdfPreviewViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1353,54 +1329,6 @@ export function MixViz({ node }: { node: GraphNode }) {
 }
 
 // ── Mix Vec3 (color) ───────────────────────────────────────────────────────────
-export function MixVec3Viz({ node }: { node: GraphNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fac = typeof node.params.fac === 'number' ? node.params.fac : 0.5;
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-
-    ctx.fillStyle = ctp.crust;
-    ctx.fillRect(0, 0, W, H);
-
-    // Gradient bar using default A=black(0,0,0), B=white(1,1,1) as placeholders
-    const grad = ctx.createLinearGradient(0, 0, W, 0);
-    grad.addColorStop(0, ctp.surface0);
-    grad.addColorStop(1, ctp.text);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 4, W, H - 12);
-
-    // Tick at fac
-    const fx = fac * W;
-    ctx.strokeStyle = ctp.mauve;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, H); ctx.stroke();
-
-    const outV = Math.round(fac * 255);
-    ctx.fillStyle = `rgb(${outV},${outV},${outV})`;
-    ctx.beginPath(); ctx.arc(fx, H / 2, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = ctp.mauve;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
-    ctx.fillText('A', 4, H - 2);
-    ctx.fillText('B', W - 11, H - 2);
-    ctx.fillStyle = ctp.mauve;
-    ctx.fillText(`fac=${fac.toFixed(2)}`, fx > W * 0.7 ? fx - 44 : fx + 4, 9);
-  }, [fac]);
-
-  return (
-    <div style={VIZ_CONTAINER}>
-      <canvas ref={canvasRef} width={240} height={36} style={{ display: 'block', width: '100%', height: '36px' }} />
-    </div>
-  );
-}
 
 // ── Map Range ─────────────────────────────────────────────────────────────────
 export function MapRangeViz({ node }: { node: GraphNode }) {
@@ -1469,33 +1397,6 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
 }
 
 // ─── Viz — Scale Color (multiplyVec3) ─────────────────────────────────────────
-export function ScaleColorViz({ node }: { node: GraphNode }) {
-  const scale = typeof node.params.scale === 'number' ? node.params.scale : 1.0;
-  const MAX = 4;
-  const norm = Math.max(0, Math.min(1, scale / MAX));
-  const brightness = Math.round(20 + norm * 60);
-
-  return (
-    <div style={{ ...VIZ_CONTAINER, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <span style={{ fontSize: '9px', color: ctp.overlay0, width: '30px', flexShrink: 0, fontFamily: 'monospace' }}>scale</span>
-      <div style={{ flex: 1, height: '8px', background: `linear-gradient(to right, ${ctp.crust}, hsl(225,40%,${brightness}%))`, borderRadius: '4px', position: 'relative', overflow: 'visible' }}>
-        <div style={{
-          position: 'absolute',
-          top: '-3px',
-          left: `${Math.min(100, norm * 100)}%`,
-          width: '2px',
-          height: '14px',
-          background: ctp.yellow,
-          borderRadius: '1px',
-          transform: 'translateX(-50%)',
-        }} />
-      </div>
-      <span style={{ fontSize: '9px', color: ctp.yellow, width: '36px', textAlign: 'right', fontFamily: 'monospace', flexShrink: 0 }}>
-        ×{scale.toFixed(2)}
-      </span>
-    </div>
-  );
-}
 
 // ─── Viz — Add Colors (addVec3, addColor) ─────────────────────────────────────
 export function AddColorsViz({ node }: { node: GraphNode }) {
@@ -2570,87 +2471,45 @@ export function SplitVecViz({ node }: { node: GraphNode }) {
   );
 }
 
-export function ExtractComponentViz({ node }: { node: GraphNode }) {
-  const isX = node.type === 'extractX';
-  const nodeRef  = useRef(node);
-  nodeRef.current = node;
-  const rafRef   = useRef(0);
-  const valRef   = useRef<HTMLSpanElement>(null);
-  const inputRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    const tick = () => {
-      rafRef.current = requestAnimationFrame(tick);
-      const n = nodeRef.current;
-      // Own output float value
-      const own = floatValueRegistry.get(`__preview__${n.id}`);
-      if (valRef.current) valRef.current.textContent = own != null ? own.toFixed(3) : '—';
-      // Input vec2 for context
-      const conn = n.inputs.v?.connection;
-      if (conn && inputRef.current) {
-        const vec = vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`);
-        if (vec) {
-          inputRef.current.textContent = `[${vec[0]?.toFixed(3)}, ${vec[1]?.toFixed(3)}]`;
-        }
-      }
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, []);
-
-  return (
-    <div style={{ ...VIZ_CONTAINER, padding: '5px 12px', fontFamily: 'monospace' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ fontSize: '10px', color: isX ? ctp.red : ctp.green }}>{isX ? 'x' : 'y'}</span>
-        <span ref={valRef} style={{ fontSize: '12px', color: ctp.text, fontWeight: 500 }}>—</span>
-        <span ref={inputRef} style={{ fontSize: '9px', color: ctp.surface1, marginLeft: 'auto' }}></span>
-      </div>
-    </div>
-  );
-}
 
 // ─── Viz — Combiner curve (min, max, smoothMin, smoothMax, sdfSubtract …) ────
 
+// Same polynomial blend the SDF combine nodes emit (k = 0 is the hard op).
+const _clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 function _smin(a: number, b: number, k: number) {
-  const h = Math.max(k - Math.abs(a - b), 0) / k;
-  return Math.min(a, b) - h * h * h * k / 6;
+  if (k <= 0) return Math.min(a, b);
+  const h = _clamp01(0.5 + 0.5 * (b - a) / k);
+  return b * (1 - h) + a * h - k * h * (1 - h);
 }
-function _smax(a: number, b: number, k: number) { return -_smin(-a, -b, k); }
-function _ssub(a: number, b: number, k: number) { return _smax(a, -b, k); }
+function _smax(a: number, b: number, k: number) {
+  if (k <= 0) return Math.max(a, b);
+  const h = _clamp01(0.5 - 0.5 * (b - a) / k);
+  return b * (1 - h) + a * h + k * h * (1 - h);
+}
+function _ssub(a: number, b: number, k: number) {
+  if (k <= 0) return Math.max(a, -b);
+  const h = _clamp01(0.5 - 0.5 * (a + b) / k);
+  return a * (1 - h) - b * h + k * h * (1 - h);
+}
 
 type CombinerFn = (a: number, b: number, k: number) => number;
 
 const COMBINER_FNS: Record<string, CombinerFn> = {
-  smoothMin:         _smin,
-  smoothMax:         _smax,
-  smoothSubtract:    _ssub,
-  sdfSmoothUnion:    _smin,
-  sdfSmoothSubtract: _ssub,
-  sdfSmoothIntersect:(a, b, k) => _smax(a, b, k),
-  min:               (a, b) => Math.min(a, b),
-  minMath:           (a, b) => Math.min(a, b),
-  max:               (a, b) => Math.max(a, b),
-  sdfMax:            (a, b) => Math.max(a, b),
-  sdfSubtract:       (a, b) => Math.max(a, -b),
-  sdfUnion:          (a, b) => Math.min(a, b),
-  sdfIntersect:      (a, b) => Math.max(a, b),
+  sdfUnion:     _smin,
+  sdfIntersect: _smax,
+  sdfSubtract:  _ssub,
+  minMath:      (a, b) => Math.min(a, b),
+  max:          (a, b) => Math.max(a, b),
 };
 
 const COMBINER_COLORS: Record<string, string> = {
-  smoothMin: ctp.green, smoothMax: ctp.red, smoothSubtract: ctp.blue,
-  sdfSmoothUnion: ctp.green, sdfSmoothSubtract: ctp.blue, sdfSmoothIntersect: ctp.red,
-  min: ctp.green, minMath: ctp.green, max: ctp.red,
-  sdfMax: ctp.red, sdfSubtract: ctp.blue, sdfUnion: ctp.green, sdfIntersect: ctp.red,
+  sdfUnion: ctp.green, sdfIntersect: ctp.red, sdfSubtract: ctp.blue,
+  minMath: ctp.green, max: ctp.red,
 };
-
-const SMOOTH_COMBINER_TYPES = new Set([
-  'smoothMin','smoothMax','smoothSubtract',
-  'sdfSmoothUnion','sdfSmoothSubtract','sdfSmoothIntersect',
-]);
 
 export function CombinerCurveViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const k = typeof node.params.smoothness === 'number' ? node.params.smoothness : 0.3;
+  const k = typeof node.params.k === 'number' ? node.params.k : 0;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -2662,10 +2521,10 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
     if (!fn) return;
 
     const color = COMBINER_COLORS[node.type] ?? ctp.text;
-    const isSmooth = SMOOTH_COMBINER_TYPES.has(node.type);
+    const isSmooth = k > 0 && node.type in COMBINER_COLORS && node.type !== 'minMath' && node.type !== 'max';
 
-    // Fixed B value — for subtract variants, offset so the cutoff is visible
-    const isSubtract = node.type.includes('Subtract') || node.type === 'sdfSubtract';
+    // Fixed B value — for subtract, offset so the cutoff is visible
+    const isSubtract = node.type === 'sdfSubtract';
     const fixedB = isSubtract ? -0.25 : 0;
 
     // World space: a ∈ [-0.85, 0.85], result ∈ same
@@ -2677,8 +2536,8 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
 
     // Sharp reference function for smooth types
     const sharpFn = isSmooth ? (a: number): number => {
-      if (node.type.includes('Min') || node.type === 'sdfSmoothUnion') return Math.min(a, fixedB);
-      if (node.type.includes('Subtract') || node.type === 'sdfSmoothSubtract') return Math.max(a, -fixedB);
+      if (node.type === 'sdfUnion') return Math.min(a, fixedB);
+      if (node.type === 'sdfSubtract') return Math.max(a, -fixedB);
       return Math.max(a, fixedB); // intersect / max
     } : null;
 
@@ -2902,86 +2761,6 @@ export function DotProductViz({ node }: { node: GraphNode }) {
   );
 }
 
-export function Vec2OpViz({ node }: { node: GraphNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef    = useRef(0);
-  const nodeRef   = useRef(node);
-  nodeRef.current = node;
-
-  useEffect(() => {
-    const loop = () => {
-      const n = nodeRef.current;
-      const canvas = canvasRef.current;
-      if (!canvas) { rafRef.current = requestAnimationFrame(loop); return; }
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { rafRef.current = requestAnimationFrame(loop); return; }
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2;
-
-      const getVec = (key: string) => {
-        const conn = n.inputs[key]?.connection;
-        if (conn) return vectorValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`) ?? [0, 0];
-        const dv = n.inputs[key]?.defaultValue;
-        if (Array.isArray(dv)) return dv as number[];
-        // Palette preview fallbacks — show something meaningful
-        if (key === 'a') return [0.6, 0.2];
-        if (key === 'b') return [0.1, 0.5];
-        if (key === 'v') return [0.65, 0.35];
-        return [0.5, 0.3];
-      };
-      const getFloat = (key: string): number => {
-        const conn = n.inputs[key]?.connection;
-        if (conn) {
-          const v = floatValueRegistry.get(`__preview__${conn.nodeId}:${conn.outputKey}`);
-          if (v !== undefined) return v;
-        }
-        return typeof n.params[key] === 'number' ? n.params[key] as number : 1;
-      };
-
-      drawGrid2D(ctx, W, H);
-
-      if (n.type === 'multiplyVec2') {
-        const v = getVec('v'), s = getFloat('scale');
-        const out = [v[0] * s, v[1] * s];
-        const maxComp = Math.max(Math.abs(v[0]), Math.abs(v[1]), Math.abs(out[0]), Math.abs(out[1]), 0.01);
-        const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 6) / sc;
-        drawArrow(ctx, cx, cy, v[0], v[1], ctp.surface2, r);
-        drawArrow(ctx, cx, cy, out[0], out[1], '#00aaff', r);
-        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-        ctx.fillText(`× ${s.toFixed(2)}`, 4, H - 4);
-        ctx.fillStyle = ctp.overlay0; ctx.textAlign = 'right';
-        ctx.fillText(`(${out[0].toFixed(2)}, ${out[1].toFixed(2)})`, W - 4, H - 4);
-      } else {
-        // addVec2: triangle viz — B starts from tip of A, result is the diagonal
-        const a = getVec('a'), b = getVec('b');
-        const out = [a[0] + b[0], a[1] + b[1]];
-        const maxComp = Math.max(Math.abs(a[0]), Math.abs(a[1]), Math.abs(b[0]), Math.abs(b[1]), Math.abs(out[0]), Math.abs(out[1]), 0.01);
-        const sc = niceGridScale(maxComp), r = (Math.min(cx, cy) - 8) / sc;
-        // A from origin (blue)
-        drawArrow(ctx, cx, cy, a[0], a[1], ctp.blue, r);
-        // B from tip of A (green) — tail-to-tip chaining
-        drawArrow(ctx, cx + a[0] * r, cy - a[1] * r, b[0], b[1], ctp.green, r);
-        // Result from origin (white, dashed-style using lighter color)
-        drawArrow(ctx, cx, cy, out[0], out[1], ctp.text, r);
-        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-        ctx.fillText('a + b', 4, H - 4);
-        ctx.fillStyle = ctp.overlay0; ctx.textAlign = 'right';
-        ctx.fillText(`(${out[0].toFixed(2)}, ${out[1].toFixed(2)})`, W - 4, H - 4);
-      }
-      ctx.textAlign = 'left';
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [node.id]);
-
-  return (
-    <div style={VIZ_CONTAINER}>
-      <canvas ref={canvasRef} width={240} height={80}
-        style={{ display: 'block', width: '100%', height: '80px' }} />
-    </div>
-  );
-}
 
 // ─── Viz — Matrix × Vector (mat2MulVec, mat3MulVec) ──────────────────────────
 
@@ -3851,9 +3630,7 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
 
-    const COLORS: Record<string, string> = {
-      sineLFO: ctp.blue, squareLFO: ctp.mauve, sawtoothLFO: ctp.yellow,
-      triangleLFO: ctp.green, bpmSync: ctp.peach,
+    const COLORS: Record<string, string> = { lfo: ctp.blue, bpmSync: ctp.peach,
     };
     ctx.strokeStyle = COLORS[node.type] ?? ctp.text;
     ctx.lineWidth = 1.5;
@@ -3865,14 +3642,15 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
       const t = (px / W) * 2; // 0..2 cycles
       const phase_t = t * freq * TWO_PI + phase;
       let y = 0;
-      if (node.type === 'sineLFO') {
+      const wave = node.type === 'lfo' ? (typeof node.params.waveform === 'string' ? node.params.waveform : 'sine') : 'bpm';
+      if (wave === 'sine') {
         y = Math.sin(phase_t) * amplitude + offset;
-      } else if (node.type === 'squareLFO') {
+      } else if (wave === 'square') {
         y = Math.sign(Math.sin(phase_t)) * amplitude + offset;
-      } else if (node.type === 'sawtoothLFO') {
+      } else if (wave === 'sawtooth') {
         y = ((t * freq + phase / TWO_PI) % 1 + 1) % 1 * 2 - 1;
         y = y * amplitude + offset;
-      } else if (node.type === 'triangleLFO') {
+      } else if (wave === 'triangle') {
         const ph = ((t * freq + phase / TWO_PI) % 1 + 1) % 1;
         y = (Math.abs(ph * 2 - 1) * 2 - 1) * amplitude + offset;
       } else {
@@ -3888,7 +3666,7 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
     ctx.fillStyle = ctp.surface2;
     ctx.font = '8px monospace';
     ctx.fillText(`f=${freq.toFixed(2)} a=${amplitude.toFixed(2)}`, 3, H - 3);
-  }, [node.type, freq, phase, amplitude, offset]);
+  }, [node.params.waveform, node.type, freq, phase, amplitude, offset]);
 
   return (
     <div style={VIZ_CONTAINER}>
@@ -4019,26 +3797,6 @@ function Vec2ConstViz({ node }: { node: GraphNode }) {
 
 // ─── Vec3 Const Viz ───────────────────────────────────────────────────────────
 
-function Vec3ConstViz({ node }: { node: GraphNode }) {
-  const x = Math.max(0, Math.min(1, typeof node.params.x === 'number' ? node.params.x : 0));
-  const y = Math.max(0, Math.min(1, typeof node.params.y === 'number' ? node.params.y : 0));
-  const z = Math.max(0, Math.min(1, typeof node.params.z === 'number' ? node.params.z : 0));
-  const hex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
-  return (
-    <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
-      <div style={{ height: '20px', background: `#${hex(x)}${hex(y)}${hex(z)}`, borderRadius: '3px', marginBottom: '4px', border: `1px solid ${ctp.surface0}` }} />
-      {([['x', x, ctp.red], ['y', y, ctp.green], ['z', z, ctp.blue]] as [string, number, string][]).map(([label, val, col]) => (
-        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-          <span style={{ fontSize: '9px', color: col, fontFamily: 'monospace', width: '8px' }}>{label}</span>
-          <div style={{ flex: 1, height: '5px', background: ctp.base, borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ width: `${val * 100}%`, height: '100%', background: col, opacity: 0.7, borderRadius: '3px' }} />
-          </div>
-          <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ─── Expr / Custom Fn Badge ───────────────────────────────────────────────────
 
@@ -5203,14 +4961,10 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
   switch (node.type) {
     case 'toneMap':        return <ToneCurveViz          node={node} />;
     case 'palette':
-    case 'palettePreset':
     case 'gradient':       return <GradientStripViz      node={node} />;
     case 'hueRange':       return <HueRingViz             node={node} />;
     case 'posterize':      return <StepCurveViz           node={node} />;
-    case 'grain':
-    case 'lumaGrain':
-    case 'temporalGrain':  return <NoisePatchViz          node={node} />;
-    case 'desaturate':     return <DesaturateBarViz       node={node} />;
+    case 'grain':          return <NoisePatchViz          node={node} />;
     case 'audioInput':     return <AudioFreqRangeViz      node={node} />;
     case 'colorRamp':      return <ColorRampViz           node={node} />;
     case 'blackbody':      return <BlackbodyViz           node={node} />;
@@ -5224,10 +4978,7 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'smoothstep':     return <SmoothstepViz          node={node} />;
     case 'clamp':          return <ClampViz               node={node} />;
     case 'mix':            return <MixViz                 node={node} />;
-    case 'mixVec3':        return <MixVec3Viz             node={node} />;
     case 'mapRange':       return <MapRangeViz            node={node} />;
-    case 'multiplyVec3':   return <ScaleColorViz          node={node} />;
-    case 'addVec3':
     case 'addColor':       return <AddColorsViz           node={node} />;
     case 'particleEmitter': return <ParticleEmitterViz   node={node} />;
     case 'expEase':
@@ -5244,10 +4995,7 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'sin':
     case 'cos':            return <SinCosWaveViz          node={node} />;
     case 'tan':            return <TanWaveViz              node={node} />;
-    case 'sineLFO':
-    case 'squareLFO':
-    case 'sawtoothLFO':
-    case 'triangleLFO':
+    case 'lfo':
     case 'bpmSync':        return <LFOWaveViz             node={node} />;
     case 'toneCurve':      return <ToneCurveNodeViz       node={node} />;
     case 'shadowsHighlights': return <ShadowsHighlightsViz node={node} />;
@@ -5300,7 +5048,6 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'polarRepeat3D':
     case 'displace3D':
     // 3D boolean ops (param display only)
-    case 'sdfRound':
     case 'sdfOnion':
     // Effects / post-process nodes — show params instead of blank preview
     case 'vignette':
@@ -5340,22 +5087,12 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'remap':            return <MapRangeViz             node={node} />;
     // Color combiners
     case 'combineRGB':       return <ColorSwatchViz          node={node} />;
-    case 'blend':
-    case 'screenBlend':      return <AddColorsViz            node={node} />;
     // Param display
     case 'constant':
     case 'weightedAverage':  return <SDF3DParamViz           node={node} />;
     // Combiners
-    case 'smoothMin':
-    case 'smoothMax':
-    case 'smoothSubtract':
-    case 'sdfSmoothUnion':
-    case 'sdfSmoothSubtract':
-    case 'sdfSmoothIntersect':
-    case 'min':
     case 'minMath':
     case 'max':
-    case 'sdfMax':
     case 'sdfSubtract':
     case 'sdfUnion':
     case 'sdfIntersect':     return <CombinerCurveViz        node={node} />;
@@ -5363,16 +5100,12 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'length':           return <LengthViz               node={node} />;
     case 'angleToVec2':      return <AngleToVec2Viz          node={node} />;
     case 'vec2Angle':        return <Vec2AngleViz            node={node} />;
-    case 'extractX':
-    case 'extractY':         return <ExtractComponentViz     node={node} />;
     case 'splitVec2':
     case 'splitVec3':
     case 'splitVec4':        return <SplitVecViz             node={node} />;
     case 'makeVec2':         return <MakeVec2Viz             node={node} />;
     case 'normalizeVec2':    return <NormalizeVec2Viz        node={node} />;
     case 'dot':              return <DotProductViz           node={node} />;
-    case 'addVec2':
-    case 'multiplyVec2':     return <Vec2OpViz               node={node} />;
     case 'makeVec3':
     case 'floatToVec3':      return <ColorSwatchViz          node={node} />;
     // ── Halftone nodes ────────────────────────────────────────────────────────
@@ -5387,7 +5120,6 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'boxSDF':
     case 'ringSDF':
     case 'shapeSDF':
-    case 'sdBox':
     case 'sdEllipse':        return <SdfPreviewViz           node={node} />;
 
     // ── Sources ──────────────────────────────────────────────────────────────
@@ -5398,7 +5130,6 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     case 'prevFrame':
     case 'textureInput':     return <TextureBadgeViz         node={node} />;
     case 'vec2Const':        return <Vec2ConstViz            node={node} />;
-    case 'vec3Const':        return <Vec3ConstViz            node={node} />;
     case 'matConst':         return <MatrixGridViz           node={node} />;
 
     // ── Expr / custom fn ─────────────────────────────────────────────────────
@@ -5459,8 +5190,6 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
 
     // ── 2D SDF missing ────────────────────────────────────────────────────────
     case 'sdSegment':
-    case 'opRepeat':
-    case 'opRepeatPolar':
     case 'simpleSDF':        return <SDF3DParamViz           node={node} />;
 
     // ── 3D SDF missing ────────────────────────────────────────────────────────
@@ -5477,7 +5206,6 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
     // ── Lighting ──────────────────────────────────────────────────────────────
     case 'blinnPhong':       return <BlinnPhongViz           node={node} />;
     case 'spectralDispersion': return <SpectralDispersionViz node={node} />;
-    case 'makeLight':
     case 'light':
     case 'light2d':
     case 'multiLight':
@@ -5550,12 +5278,11 @@ export const INLINE_VIZ_TYPES = new Set([
   // 3D Lighting
   'blinnPhong', 'spectralDispersion',
   // Glass
-  'toneMap', 'palette', 'palettePreset', 'gradient',
-  'posterize', 'desaturate', 'grain', 'lumaGrain', 'temporalGrain',
-  'hueRange', 'audioInput',
+  'toneMap', 'palette', 'gradient',
+  'posterize', 'grain', 'hueRange', 'audioInput',
   'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'printFloat', 'printText', 'waveTexture',
-  'smoothstep', 'clamp', 'mix', 'mixVec3', 'mapRange',
-  'multiplyVec3', 'addVec3', 'addColor',
+  'smoothstep', 'clamp', 'mix', 'mapRange',
+  'addColor',
   'particleEmitter',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
@@ -5575,7 +5302,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D',
   'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D',
   // 3D boolean ops
-  'sdfRound', 'sdfOnion',
+  'sdfOnion',
   // Effects / post-process
   'vignette', 'scanlines', 'sobel', 'chromaticAberrationAuto',
   'gaussianBlur', 'radialBlur', 'tiltShiftBlur', 'lensBlur',
@@ -5588,25 +5315,20 @@ export const INLINE_VIZ_TYPES = new Set([
   // Range mapping
   'remap',
   // LFOs — deliberately excluded: they have a live scope canvas in NodeComponent
-  // 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO', 'bpmSync',
+  // 'lfo', 'bpmSync',
   // Color combiners
-  'combineRGB', 'blend', 'screenBlend',
-  // Param display
+  'combineRGB', // Param display
   'constant', 'weightedAverage',
   // Combiners (2D + 3D)
-  'smoothMin', 'smoothMax', 'smoothSubtract',
-  'sdfSmoothUnion', 'sdfSmoothSubtract', 'sdfSmoothIntersect',
-  'min', 'minMath', 'max', 'sdfMax', 'sdfSubtract', 'sdfUnion', 'sdfIntersect',
+  'minMath', 'max', 'sdfSubtract', 'sdfUnion', 'sdfIntersect',
   // Vec2 / split
-  'length', 'angleToVec2', 'vec2Angle', 'extractX', 'extractY',
-  'splitVec2', 'splitVec3', 'splitVec4',
-  'makeVec2', 'normalizeVec2', 'dot', 'addVec2', 'multiplyVec2',
-  'makeVec3', 'floatToVec3',
+  'length', 'angleToVec2', 'vec2Angle', 'splitVec2', 'splitVec3', 'splitVec4',
+  'makeVec2', 'normalizeVec2', 'dot', 'makeVec3', 'floatToVec3',
   // 2D SDF
-  'circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdBox', 'sdEllipse',
+  'circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdEllipse',
   // Sources
   'uv', 'pixelUV', 'time', 'mouse', 'prevFrame', 'textureInput',
-  'vec2Const', 'vec3Const', 'matConst',
+  'vec2Const', 'matConst',
   // Expr / custom fn
   'exprNode', 'customFn',
   // Noise — excluded: float outputs render as grayscale shader thumbnails
@@ -5623,13 +5345,13 @@ export const INLINE_VIZ_TYPES = new Set([
   // Math
   'luminance', 'compare', 'select', 'reflect', 'crossProduct', 'complexMul', 'complexPow',
   // 2D SDF missing
-  'sdSegment', 'opRepeat', 'opRepeatPolar', 'simpleSDF',
+  'sdSegment', 'simpleSDF',
   // 3D SDF missing
   'sdCross3D', 'mengerSponge', 'mandelboxDE', 'kifsTetra', 'mandelbulb',
   // 3D transforms missing
   'mirroredRepeat3D', 'spiralWarp3D',
   // Lighting
-  'makeLight', 'light', 'light2d', 'multiLight', 'fresnel3d', 'sdfAo', 'softShadow',
+  'light', 'light2d', 'multiLight', 'fresnel3d', 'sdfAo', 'softShadow',
   // 2D Fractals / Patterns / Physics
   'mandelbrot', 'ifs', 'newtonFractal', 'lyapunov', 'apollonian',
   'truchet', 'metaballs', 'lissajous',

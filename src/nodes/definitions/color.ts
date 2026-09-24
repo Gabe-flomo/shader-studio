@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, vec3Str } from './helpers';
+import { f, p, pv3, vec3Str } from './helpers';
 
 // Shared palette GLSL function — referenced by both PaletteNode and FractalLoopNode
 // so the compiler's Set-based deduplication keeps exactly one copy in the shader.
@@ -7,66 +7,6 @@ export const PALETTE_GLSL_FN = `
 vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
     return offset + amplitude * cos(6.28318 * (freq * t + phase));
 }`;
-
-export const PaletteNode: NodeDefinition = {
-  type: 'palette',
-  label: 'Palette',
-  category: 'Color',
-  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it.',
-  // Offset/Amplitude/Frequency/Phase are one vec3 socket each (they used to be twelve
-  // per-channel floats); unwired, each falls back to its colour param below. Older graphs keep any
-  // per-channel wire they had, and it still drives its channel (see legacyLabels.ts).
-  inputs: {
-    value:     { type: 'float', label: 'Angle', defaultValue: 0 },
-    anim:      { type: 'float', label: 'Angle offset', defaultValue: 0 },
-    offset:    { type: 'vec3', label: 'Offset' },
-    amplitude: { type: 'vec3', label: 'Amplitude' },
-    freq:      { type: 'vec3', label: 'Frequency' },
-    phase:     { type: 'vec3', label: 'Phase' },
-  },
-  outputs: {
-    color: { type: 'vec3', label: 'Color' },
-  },
-  defaultParams: {
-    value: 0, anim: 0,
-    offset:    [0.5, 0.5, 0.5],
-    amplitude: [0.5, 0.5, 0.5],
-    freq:      [1.0, 1.0, 1.0],
-    phase:     [0.0, 0.33, 0.67],
-  },
-  paramDefs: {
-    // Static fallbacks for Value/Time when neither is wired — lets their
-    // sliders actually preview the palette (0..1 covers one full cosine
-    // cycle for Value; Time is a plain bounded stand-in for u_time, since
-    // wiring the real Time node is how you'd animate this for real) instead
-    // of always compiling to a hardcoded 0.0 with nothing to tune.
-    value:     { label: 'Angle',        type: 'float', min: 0.0,      max: 1.0,     step: 0.01, hint: 'Where on the palette to sample. 0 → 1 goes once around; wire a gradient or distance here to paint with it.' },
-    anim:      { label: 'Angle offset', type: 'float', min: 0.0,      max: 10.0,    step: 0.1,  hint: 'Only added to Angle. Wire Time here to animate.' },
-    offset:    { label: 'Offset',       type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The colour at the middle of the wave (per channel).' },
-    amplitude: { label: 'Amplitude',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How far each channel swings either side of Offset.' },
-    freq:      { label: 'Frequency',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How many times each channel cycles as Angle goes 0 → 1.' },
-    phase:     { label: 'Phase',        type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'Shifts each channel along the cycle; spreading r/g/b gives the rainbow.' },
-  },
-  migrateInputKeys: { t: 'value' },
-  glslFunction: PALETTE_GLSL_FN,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_color`;
-    const valVar  = inputVars.value || p(node.params.value, 0);
-    const timeVar = inputVars.anim  || p(node.params.anim, 0);
-    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
-    // A wired vec3 socket wins; otherwise the colour param, with any legacy per-channel wire
-    // (`offset_r` …, kept on older graphs) overriding its channel.
-    const vec = (key: 'offset' | 'amplitude' | 'freq' | 'phase', fallback: number[]) => {
-      if (inputVars[key]) return inputVars[key];
-      const v = Array.isArray(node.params[key]) ? node.params[key] as number[] : fallback;
-      return `vec3(${['r', 'g', 'b'].map((c, i) => inputVars[`${key}_${c}`] || f(v[i] ?? fallback[i])).join(',')})`;
-    };
-    return {
-      code: `    vec3 ${outVar} = palette(${tVar}, ${vec('offset', [0.5, 0.5, 0.5])}, ${vec('amplitude', [0.5, 0.5, 0.5])}, ${vec('freq', [1.0, 1.0, 1.0])}, ${vec('phase', [0.0, 0.33, 0.67])});\n`,
-      outputVars: { color: outVar },
-    };
-  },
-};
 
 // ─── Palette Preset data ───────────────────────────────────────────────────────
 
@@ -92,6 +32,84 @@ export const PALETTE_PRESETS: PalettePreset[] = [
 ];
 
 export const PALETTE_PRESET_OPTIONS = PALETTE_PRESETS.map((p, i) => ({ value: String(i), label: p.name }));
+
+/** The preset a palette node has selected, or null for Custom (live vec3 params). */
+export function paletteNodePreset(value: unknown): PalettePreset | null {
+  if (typeof value !== 'string' || value === 'custom') return null;
+  const idx = parseInt(value, 10);
+  if (!Number.isFinite(idx)) return null;
+  return PALETTE_PRESETS[Math.max(0, Math.min(idx, PALETTE_PRESETS.length - 1))] ?? null;
+}
+
+export const PaletteNode: NodeDefinition = {
+  type: 'palette',
+  label: 'Palette',
+  category: 'Color',
+  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it.',
+  // Offset/Amplitude/Frequency/Phase are one vec3 socket each (they used to be twelve
+  // per-channel floats); unwired, each falls back to its colour param below. Older graphs keep any
+  // per-channel wire they had, and it still drives its channel (see legacyLabels.ts).
+  inputs: {
+    value:     { type: 'float', label: 'Angle', defaultValue: 0 },
+    anim:      { type: 'float', label: 'Angle offset', defaultValue: 0 },
+    offset:    { type: 'vec3', label: 'Offset' },
+    amplitude: { type: 'vec3', label: 'Amplitude' },
+    freq:      { type: 'vec3', label: 'Frequency' },
+    phase:     { type: 'vec3', label: 'Phase' },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+  },
+  defaultParams: {
+    value: 0, anim: 0, preset: 'custom',
+    offset:    [0.5, 0.5, 0.5],
+    amplitude: [0.5, 0.5, 0.5],
+    freq:      [1.0, 1.0, 1.0],
+    phase:     [0.0, 0.33, 0.67],
+  },
+  paramDefs: {
+    // Static fallbacks for Value/Time when neither is wired — lets their
+    // sliders actually preview the palette (0..1 covers one full cosine
+    // cycle for Value; Time is a plain bounded stand-in for u_time, since
+    // wiring the real Time node is how you'd animate this for real) instead
+    // of always compiling to a hardcoded 0.0 with nothing to tune.
+    value:     { label: 'Angle',        type: 'float', min: 0.0,      max: 1.0,     step: 0.01, hint: 'Where on the palette to sample. 0 → 1 goes once around; wire a gradient or distance here to paint with it.' },
+    anim:      { label: 'Angle offset', type: 'float', min: 0.0,      max: 10.0,    step: 0.1,  hint: 'Only added to Angle. Wire Time here to animate.' },
+    // Named presets bake the four vec3s; Custom exposes them as live pickers.
+    preset:    { label: 'Preset',       type: 'select', options: [{ value: 'custom', label: 'Custom' }, ...PALETTE_PRESET_OPTIONS] },
+    offset:    { label: 'Offset',       type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The colour at the middle of the wave (per channel).', showWhen: { param: 'preset', value: 'custom' } },
+    amplitude: { label: 'Amplitude',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How far each channel swings either side of Offset.', showWhen: { param: 'preset', value: 'custom' } },
+    freq:      { label: 'Frequency',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How many times each channel cycles as Angle goes 0 → 1.', showWhen: { param: 'preset', value: 'custom' } },
+    phase:     { label: 'Phase',        type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'Shifts each channel along the cycle; spreading r/g/b gives the rainbow.', showWhen: { param: 'preset', value: 'custom' } },
+  },
+  migrateInputKeys: { t: 'value' },
+  glslFunction: PALETTE_GLSL_FN,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const outVar = `${node.id}_color`;
+    const valVar  = inputVars.value || p(node.params.value, 0);
+    const timeVar = inputVars.anim  || p(node.params.anim, 0);
+    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
+    // A wired vec3 socket wins; otherwise a named preset's literal or the live colour param
+    // (a `u_p_*` vec3 uniform), with any legacy per-channel wire (`offset_r` …, kept on
+    // older graphs) overriding its channel.
+    const preset = paletteNodePreset(node.params.preset);
+    const vec = (key: 'offset' | 'amplitude' | 'freq' | 'phase', fallback: number[]) => {
+      if (inputVars[key]) return inputVars[key];
+      const raw = preset ? preset[key] : node.params[key];
+      const isUniform = typeof raw === 'string';
+      const lit = Array.isArray(raw) && raw.length >= 3 && raw.every(n => typeof n === 'number') ? raw as number[] : fallback;
+      const base = isUniform ? raw : vec3Str(lit);
+      const chans = ['r', 'g', 'b'].map(c => inputVars[`${key}_${c}`]);
+      if (!chans.some(Boolean)) return base;
+      const comp = (i: number) => chans[i] || (isUniform ? `${base}.${'xyz'[i]}` : f(lit[i]));
+      return `vec3(${comp(0)},${comp(1)},${comp(2)})`;
+    };
+    return {
+      code: `    vec3 ${outVar} = palette(${tVar}, ${vec('offset', [0.5, 0.5, 0.5])}, ${vec('amplitude', [0.5, 0.5, 0.5])}, ${vec('freq', [1.0, 1.0, 1.0])}, ${vec('phase', [0.0, 0.33, 0.67])});\n`,
+      outputVars: { color: outVar },
+    };
+  },
+};
 
 // ─── Gradient Node ────────────────────────────────────────────────────────────
 
@@ -146,10 +164,8 @@ export const GradientNode: NodeDefinition = {
     const modeStr  = (node.params.mode as string) ?? 'linear_x';
     const modeMap: Record<string, number> = { linear_x: 0, linear_y: 1, radial: 2, angular: 3, diagonal: 4 };
     const modeInt  = modeMap[modeStr] ?? 0;
-    const aV = Array.isArray(node.params.color_a) ? node.params.color_a as number[] : [1.0, 0.2, 0.2];
-    const bV = Array.isArray(node.params.color_b) ? node.params.color_b as number[] : [0.2, 0.2, 1.0];
-    const colorA = inputVars.color_a ?? vec3Str(aV);
-    const colorB = inputVars.color_b ?? vec3Str(bV);
+    const colorA = inputVars.color_a ?? pv3(node.params.color_a, [1.0, 0.2, 0.2]);
+    const colorB = inputVars.color_b ?? pv3(node.params.color_b, [0.2, 0.2, 1.0]);
     const outVar = `${id}_color`;
     return {
       code: `    vec3 ${outVar} = gradientBlend(${uvVar}, ${colorA}, ${colorB}, ${modeInt}, ${tOffset});\n`,
@@ -158,48 +174,6 @@ export const GradientNode: NodeDefinition = {
   },
 };
 
-export const PalettePresetNode: NodeDefinition = {
-  type: 'palettePreset',
-  label: 'Palette Preset',
-  category: 'Color',
-  description: 'Cosine palette with named presets. Wire a float to Value to pick a position, and optionally wire Time to animate it.',
-  inputs: {
-    value: { type: 'float', label: 'Value', defaultValue: 0 },
-    anim:  { type: 'float', label: 'Time',  defaultValue: 0 },
-  },
-  outputs: {
-    color: { type: 'vec3', label: 'Color' },
-  },
-  defaultParams: { preset: '1' },
-  paramDefs: {
-    preset: { label: 'Preset', type: 'select', options: PALETTE_PRESET_OPTIONS },
-  },
-  migrateInputKeys: { t: 'value' },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_color`;
-    const valVar  = inputVars.value || '0.0';
-    const timeVar = inputVars.anim  || '0.0';
-    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
-    const idx = parseInt((node.params.preset as string) ?? '1', 10);
-    const preset = PALETTE_PRESETS[Math.min(idx, PALETTE_PRESETS.length - 1)] ?? PALETTE_PRESETS[1];
-    const fv = (v: number) => v.toFixed(6);
-    const ov = `vec3(${fv(preset.offset[0])},${fv(preset.offset[1])},${fv(preset.offset[2])})`;
-    const av = `vec3(${fv(preset.amplitude[0])},${fv(preset.amplitude[1])},${fv(preset.amplitude[2])})`;
-    const frv = `vec3(${fv(preset.freq[0])},${fv(preset.freq[1])},${fv(preset.freq[2])})`;
-    const phv = `vec3(${fv(preset.phase[0])},${fv(preset.phase[1])},${fv(preset.phase[2])})`;
-    return {
-      code: [
-        `    vec3 ${outVar};\n`,
-        `    {\n`,
-        `        vec3 _po = ${ov}; vec3 _pa = ${av};\n`,
-        `        vec3 _pf = ${frv}; vec3 _pph = ${phv};\n`,
-        `        ${outVar} = _po + _pa * cos(6.283185 * (_pf * ${tVar} + _pph));\n`,
-        `    }\n`,
-      ].join(''),
-      outputVars: { color: outVar },
-    };
-  },
-};
 
 // ─── HSV ↔ RGB ────────────────────────────────────────────────────────────────
 
@@ -290,28 +264,6 @@ export const InvertNode: NodeDefinition = {
 
 // ─── Desaturate ───────────────────────────────────────────────────────────────
 
-export const DesaturateNode: NodeDefinition = {
-  type: 'desaturate',
-  label: 'Desaturate',
-  category: 'Color',
-  description: 'Blend toward grayscale. Amount=1 → full grayscale, Amount=0 → original color. Wire a Noise Float to Amount for per-pixel variation.',
-  inputs:  { color: { type: 'vec3', label: 'Color' }, amount: { type: 'float', label: 'Amount' } },
-  outputs: { color: { type: 'vec3', label: 'Color' } },
-  defaultParams: { amount: 1.0 },
-  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 1.0, step: 0.01 } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id  = node.id;
-    const c   = inputVars.color  ?? 'vec3(0.5)';
-    const amt = inputVars.amount ?? p(node.params.amount, 1.0);
-    return {
-      code: [
-        `    float ${id}_lum   = dot(${c}, vec3(0.299, 0.587, 0.114));\n`,
-        `    vec3  ${id}_color = mix(${c}, vec3(${id}_lum), ${amt});\n`,
-      ].join(''),
-      outputVars: { color: `${id}_color` },
-    };
-  },
-};
 
 // ─── Hue Range ────────────────────────────────────────────────────────────────
 
@@ -391,22 +343,19 @@ export const ColorRampNode: NodeDefinition = {
     stops:  { label: 'Stops',   type: 'select', options: [2,3,4,5,6,7,8].map(n => ({ value: String(n), label: String(n) })) },
     color0: { label: 'Stop 0',  type: 'vec3color' },
     color1: { label: 'Stop 1',  type: 'vec3color' },
-    color2: { label: 'Stop 2',  type: 'vec3color' },
-    color3: { label: 'Stop 3',  type: 'vec3color' },
-    color4: { label: 'Stop 4',  type: 'vec3color' },
-    color5: { label: 'Stop 5',  type: 'vec3color' },
-    color6: { label: 'Stop 6',  type: 'vec3color' },
-    color7: { label: 'Stop 7',  type: 'vec3color' },
+    // Stops beyond the selected count are hidden (and not read by the shader).
+    color2: { label: 'Stop 2',  type: 'vec3color', showWhen: { param: 'stops', value: ['3','4','5','6','7','8'] } },
+    color3: { label: 'Stop 3',  type: 'vec3color', showWhen: { param: 'stops', value: ['4','5','6','7','8'] } },
+    color4: { label: 'Stop 4',  type: 'vec3color', showWhen: { param: 'stops', value: ['5','6','7','8'] } },
+    color5: { label: 'Stop 5',  type: 'vec3color', showWhen: { param: 'stops', value: ['6','7','8'] } },
+    color6: { label: 'Stop 6',  type: 'vec3color', showWhen: { param: 'stops', value: ['7','8'] } },
+    color7: { label: 'Stop 7',  type: 'vec3color', showWhen: { param: 'stops', value: ['8'] } },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
     const t      = inputVars.t || '0.0';
     const stops  = Math.max(2, Math.min(8, Number(node.params.stops) || 3));
-    const colors = Array.from({ length: stops }, (_, i) => {
-      const raw = node.params[`color${i}`];
-      const arr = Array.isArray(raw) ? raw as number[] : [0.0, 0.0, 0.0];
-      return vec3Str(arr);
-    });
+    const colors = Array.from({ length: stops }, (_, i) => pv3(node.params[`color${i}`], [0.0, 0.0, 0.0]));
     // Build chain: for N stops there are N-1 segments evenly in [0,1]
     const lines: string[] = [];
     // Declare all stop colors
@@ -434,7 +383,7 @@ export const BlendModesNode: NodeDefinition = {
     opacity: { type: 'float', label: 'Opacity' },
   },
   outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { mode: 'multiply', opacity: 1.0 },
+  defaultParams: { mode: 'multiply', opacity: 1.0, strength: 1.0 },
   paramDefs: {
     mode: { label: 'Mode', type: 'select', options: [
       { value: 'multiply',    label: 'Multiply' },
@@ -448,8 +397,11 @@ export const BlendModesNode: NodeDefinition = {
       { value: 'burn',        label: 'Color Burn' },
       { value: 'lighten',     label: 'Lighten' },
       { value: 'darken',      label: 'Darken' },
+      { value: 'additive',    label: 'Additive' },
+      { value: 'subtract',    label: 'Subtract' },
     ]},
-    opacity: { label: 'Opacity', type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    opacity:  { label: 'Opacity',  type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'Scales the blend layer before it is applied.' },
   },
   glslFunction: `
 vec3 blendMultiply(vec3 b, vec3 s) { return b * s; }
@@ -468,12 +420,16 @@ vec3 blendExclusion(vec3 b, vec3 s) { return b + s - 2.0*b*s; }
 vec3 blendDodge(vec3 b, vec3 s) { return clamp(b / max(1.0 - s, 0.001), 0.0, 1.0); }
 vec3 blendBurn(vec3 b, vec3 s) { return 1.0 - clamp((1.0 - b) / max(s, 0.001), 0.0, 1.0); }
 vec3 blendLighten(vec3 b, vec3 s) { return max(b, s); }
-vec3 blendDarken(vec3 b, vec3 s) { return min(b, s); }`,
+vec3 blendDarken(vec3 b, vec3 s) { return min(b, s); }
+vec3 blendAdditive(vec3 b, vec3 s) { return b + s; }
+vec3 blendSubtract(vec3 b, vec3 s) { return b - s; }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
     const base    = inputVars.base    || 'vec3(0.5)';
     const blend   = inputVars.blend   || 'vec3(0.5)';
     const opacity = inputVars.opacity || p(node.params.opacity, 1.0);
+    // Strength scales the blend layer before the op (a live uniform like every other slider).
+    const layer   = `(${blend} * ${p(node.params.strength, 1.0)})`;
     const mode    = String(node.params.mode || 'multiply');
     const fnMap: Record<string, string> = {
       multiply:   'blendMultiply',
@@ -487,10 +443,12 @@ vec3 blendDarken(vec3 b, vec3 s) { return min(b, s); }`,
       burn:       'blendBurn',
       lighten:    'blendLighten',
       darken:     'blendDarken',
+      additive:   'blendAdditive',
+      subtract:   'blendSubtract',
     };
     const fn = fnMap[mode] || 'blendMultiply';
     return {
-      code: `    vec3 ${id}_result = mix(${base}, ${fn}(${base}, ${blend}), clamp(${opacity}, 0.0, 1.0));\n`,
+      code: `    vec3 ${id}_result = mix(${base}, ${fn}(${base}, ${layer}), clamp(${opacity}, 0.0, 1.0));\n`,
       outputVars: { result: `${id}_result` },
     };
   },
@@ -547,12 +505,9 @@ export const LiftGammaGainNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const c  = inputVars.color ?? 'vec3(0.5)';
-    const lv = Array.isArray(node.params.lift)  ? node.params.lift  as number[] : [0, 0, 0];
-    const gv = Array.isArray(node.params.gamma) ? node.params.gamma as number[] : [1, 1, 1];
-    const kv = Array.isArray(node.params.gain)  ? node.params.gain  as number[] : [1, 1, 1];
-    const lt = inputVars.lift  ?? `vec3(${f(lv[0])}, ${f(lv[1])}, ${f(lv[2])})`;
-    const gm = inputVars.gamma ?? `vec3(${f(gv[0])}, ${f(gv[1])}, ${f(gv[2])})`;
-    const gn = inputVars.gain  ?? `vec3(${f(kv[0])}, ${f(kv[1])}, ${f(kv[2])})`;
+    const lt = inputVars.lift  ?? pv3(node.params.lift,  [0, 0, 0]);
+    const gm = inputVars.gamma ?? pv3(node.params.gamma, [1, 1, 1]);
+    const gn = inputVars.gain  ?? pv3(node.params.gain,  [1, 1, 1]);
     return {
       code: [
         `    vec3 ${id}_g = max(${gm}, vec3(0.001));\n`,
@@ -732,53 +687,3 @@ vec3 blackbodyColor(float kelvin) {
 
 // ─── Blend Mode ───────────────────────────────────────────────────────────────
 // Combines two colors via a named blend mode with a mask and strength control.
-export const BlendModeNode: NodeDefinition = {
-  type: 'blendMode',
-  label: 'Blend Mode',
-  category: 'Color',
-  description: 'Combines two colors via a named blend mode. mask controls how much blending is applied. Use additive for glow accumulation, multiply for darkening, screen for brightening.',
-  inputs: {
-    colorA: { type: 'vec3',  label: 'Color A' },
-    colorB: { type: 'vec3',  label: 'Color B' },
-    mask:   { type: 'float', label: 'Mask'    },
-  },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { mode: 'additive', strength: 1.0 },
-  paramDefs: {
-    mode: { label: 'Mode', type: 'select', options: [
-      { value: 'multiply',  label: 'Multiply'  },
-      { value: 'additive',  label: 'Additive'  },
-      { value: 'screen',    label: 'Screen'    },
-      { value: 'overlay',   label: 'Overlay'   },
-      { value: 'subtract',  label: 'Subtract'  },
-    ]},
-    strength: { label: 'Strength', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const a        = inputVars.colorA ?? 'vec3(0.0)';
-    const b        = inputVars.colorB ?? 'vec3(0.0)';
-    const mask     = inputVars.mask   ?? '1.0';
-    const strength = p(node.params.strength, 1.0);
-    const mode     = String(node.params.mode ?? 'additive');
-    const s        = `${id}_s`;
-    let blendExpr: string;
-    if (mode === 'multiply') {
-      blendExpr = `${a} * ${s}`;
-    } else if (mode === 'screen') {
-      blendExpr = `1.0 - (1.0 - ${a}) * (1.0 - ${s})`;
-    } else if (mode === 'overlay') {
-      blendExpr = `mix(2.0*${a}*${s}, 1.0 - 2.0*(1.0-${a})*(1.0-${s}), step(0.5, ${a}))`;
-    } else if (mode === 'subtract') {
-      blendExpr = `${a} - ${s}`;
-    } else {
-      blendExpr = `${a} + ${s}`;
-    }
-    return {
-      code: `    vec3 ${s} = ${b} * ${strength};\n` +
-            `    vec3 ${id}_blended = ${blendExpr};\n` +
-            `    vec3 ${id}_result  = mix(${a}, ${id}_blended, clamp(${mask}, 0.0, 1.0));\n`,
-      outputVars: { result: `${id}_result` },
-    };
-  },
-};

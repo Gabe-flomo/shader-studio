@@ -3,163 +3,16 @@ import { p } from './helpers';
 
 // ── Basic SDF combiners ───────────────────────────────────────────────────────
 
-export const SmoothMinNode: NodeDefinition = {
-  type: 'smoothMin',
-  label: 'Smooth Min',
-  category: '2D SDF Ops', subcategory: 'Combine',
-  description: 'Smooth minimum of two SDF values — merges two shapes with a rounded blend seam. K controls how wide the blend zone is.',
-  inputs: {
-    a: { type: 'float', label: 'A' },
-    b: { type: 'float', label: 'B' },
-    smoothness: { type: 'float', label: 'Blend radius' },
-  },
-  outputs: { result: { type: 'float', label: 'Result' } },
-  defaultParams: { smoothness: 0.5 },
-  paramDefs: {
-    smoothness: { label: 'Blend radius', type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
-  },
-  // smin is always available as a built-in (seeded into the functions Set by the assembler)
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_result`;
-    const aVar = inputVars.a || '0.0';
-    const bVar = inputVars.b || '0.0';
-    const kVar = inputVars.smoothness || p(node.params.smoothness, 0.5);
-    return {
-      code: `    float ${outVar} = smin(${aVar}, ${bVar}, ${kVar});\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
-export const MinNode: NodeDefinition = {
-  type: 'min',
-  label: 'Min (Union)',
-  category: '2D SDF Ops', subcategory: 'Combine',
-  description: 'SDF union — minimum of two distance fields. Combines two shapes into one.',
-  inputs: {
-    a: { type: 'float', label: 'A' },
-    b: { type: 'float', label: 'B' },
-  },
-  outputs: { result: { type: 'float', label: 'Result' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_result`;
-    return {
-      code: `    float ${outVar} = min(${inputVars.a || '0.0'}, ${inputVars.b || '0.0'});\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
 // ── New SDF combiners ─────────────────────────────────────────────────────────
 
-export const MaxNode2: NodeDefinition = {
-  type: 'sdfMax',
-  label: 'Max (Intersect)',
-  category: '2D SDF Ops', subcategory: 'Combine',
-  description: 'SDF intersection — maximum of two distance fields. Keeps only the region where both shapes overlap.',
-  inputs: {
-    a: { type: 'float', label: 'A' },
-    b: { type: 'float', label: 'B' },
-  },
-  outputs: { result: { type: 'float', label: 'Result' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_result`;
-    return {
-      code: `    float ${outVar} = max(${inputVars.a || '0.0'}, ${inputVars.b || '0.0'});\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
 
-export const SmoothMaxNode: NodeDefinition = {
-  type: 'smoothMax',
-  label: 'Smooth Max',
-  category: '2D SDF Ops', subcategory: 'Combine',
-  description: 'Smooth intersection — blended maximum of two SDFs. Like Smooth Min but keeps the overlap region with a soft edge.',
-  inputs: {
-    a: { type: 'float', label: 'A' },
-    b: { type: 'float', label: 'B' },
-    smoothness: { type: 'float', label: 'Blend radius' },
-  },
-  outputs: { result: { type: 'float', label: 'Result' } },
-  defaultParams: { smoothness: 0.3 },
-  paramDefs: {
-    smoothness: { label: 'Blend radius', type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
-  },
-  glslFunction: `
-float smax(float a, float b, float k) {
-    float h = max(k - abs(a - b), 0.0) / k;
-    return max(a, b) + h * h * h * k * (1.0 / 6.0);
-}`,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_result`;
-    const kVar = inputVars.smoothness || p(node.params.smoothness, 0.3);
-    return {
-      code: `    float ${outVar} = smax(${inputVars.a || '0.0'}, ${inputVars.b || '0.0'}, ${kVar});\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
-export const SmoothSubtractNode: NodeDefinition = {
-  type: 'smoothSubtract',
-  label: 'Smooth Subtract',
-  category: '2D SDF Ops', subcategory: 'Combine',
-  description: 'Smooth SDF subtraction — cuts shape B from A with a rounded chamfered edge.',
-  inputs: {
-    a: { type: 'float', label: 'Shape' },
-    b: { type: 'float', label: 'Cutter' },
-    smoothness: { type: 'float', label: 'Blend radius' },
-  },
-  outputs: { result: { type: 'float', label: 'Result' } },
-  defaultParams: { smoothness: 0.3 },
-  paramDefs: {
-    smoothness: { label: 'Blend radius', type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
-  },
-  glslFunction: `
-float ssubtract(float a, float b, float k) {
-    float h = max(k - abs(-b - a), 0.0) / k;
-    return max(a, -b) + h * h * h * k * (1.0 / 6.0);
-}`,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_result`;
-    const kVar = inputVars.smoothness || p(node.params.smoothness, 0.3);
-    return {
-      code: `    float ${outVar} = ssubtract(${inputVars.a || '0.0'}, ${inputVars.b || '0.0'}, ${kVar});\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
 // ── Color / value combiners ───────────────────────────────────────────────────
 
-export const BlendNode: NodeDefinition = {
-  type: 'blend',
-  label: 'Blend',
-  category: 'Combiners',
-  description: 'Blend two vec3 colors or values by a factor (0=A, 1=B). Wire an SDF or mask to Factor for shape-driven blending.',
-  inputs: {
-    a:      { type: 'vec3',  label: 'A' },
-    b:      { type: 'vec3',  label: 'B' },
-    factor: { type: 'float', label: 'Blend' },
-  },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { factor: 0.5 },
-  paramDefs: {
-    factor: { label: 'Blend', type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: '0 gives A, 1 gives B.' },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar  = `${node.id}_result`;
-    const aVar    = inputVars.a      || 'vec3(0.0)';
-    const bVar    = inputVars.b      || 'vec3(1.0)';
-    const tVar    = inputVars.factor || p(node.params.factor, 0.5);
-    return {
-      code: `    vec3 ${outVar} = mix(${aVar}, ${bVar}, clamp(${tVar}, 0.0, 1.0));\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
 export const MaskNode: NodeDefinition = {
   type: 'mask',
@@ -223,26 +76,6 @@ export const AddColorNode: NodeDefinition = {
   },
 };
 
-export const ScreenBlendNode: NodeDefinition = {
-  type: 'screenBlend',
-  label: 'Screen Blend',
-  category: 'Combiners',
-  description: 'Screen blend mode: 1-(1-A)*(1-B). Lightens without blowing out — perfect for layering glows and light effects.',
-  inputs: {
-    a: { type: 'vec3', label: 'A' },
-    b: { type: 'vec3', label: 'B' },
-  },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_result`;
-    const aVar   = inputVars.a || 'vec3(0.0)';
-    const bVar   = inputVars.b || 'vec3(0.0)';
-    return {
-      code: `    vec3 ${outVar} = 1.0 - (1.0 - ${aVar}) * (1.0 - ${bVar});\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
 // ── Compound / smart combiners ────────────────────────────────────────────────
 
@@ -333,7 +166,7 @@ vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float sat
 export const SDFOutlineNode: NodeDefinition = {
   type: 'sdfOutline',
   label: 'SDF Outline',
-  category: '2D SDF Ops', subcategory: 'Modify',
+  category: 'SDF', subcategory: 'Modify',
   description: 'Draws a colored filled shape + optional outline from a single SDF. Fill color inside, stroke color at the edge band, transparent outside.',
   inputs: {
     d:           { type: 'float', label: 'SDF' },
@@ -517,7 +350,7 @@ export const Light2DNode: NodeDefinition = {
 export const SDFColorizeNode: NodeDefinition = {
   type: 'sdfColorize',
   label: 'SDF Colorize',
-  category: '2D SDF Ops', subcategory: 'Style',
+  category: 'SDF', subcategory: 'Style',
   description: 'Turn a raw SDF float into a visualized color — fills inside with one color, outside with another, anti-aliased edge. Good for quickly visualizing any distance field.',
   inputs: {
     d:       { type: 'float', label: 'SDF' },

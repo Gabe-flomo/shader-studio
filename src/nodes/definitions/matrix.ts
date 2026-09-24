@@ -27,28 +27,6 @@ export const Vec2ConstNode: NodeDefinition = {
 
 // ─── Vec3 Const ───────────────────────────────────────────────────────────────
 
-export const Vec3ConstNode: NodeDefinition = {
-  type: 'vec3Const',
-  label: 'Vec3 Const',
-  category: 'Math',
-  subcategory: 'Vector Build/Split',
-  description: 'A constant vec3 — type in X, Y, Z directly, no inputs.',
-  inputs: {},
-  outputs: { val: { type: 'vec3', label: 'Vec3' } },
-  defaultParams: { x: 0, y: 0, z: 0 },
-  paramDefs: {
-    x: { label: 'X', type: 'float', step: 0.01 },
-    y: { label: 'Y', type: 'float', step: 0.01 },
-    z: { label: 'Z', type: 'float', step: 0.01 },
-  },
-  generateGLSL: (node: GraphNode) => {
-    const id = node.id;
-    return {
-      code: `    vec3 ${id}_val = vec3(${p(node.params.x, 0)}, ${p(node.params.y, 0)}, ${p(node.params.z, 0)});\n`,
-      outputVars: { val: `${id}_val` },
-    };
-  },
-};
 
 // ─── Matrix Const ─────────────────────────────────────────────────────────────
 

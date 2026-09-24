@@ -1,38 +1,7 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, vec3Str } from './helpers';
+import { f, p, pv3 } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
 
-export const MakeLightNode: NodeDefinition = {
-  type: 'makeLight',
-  label: 'SDF Glow', aliases: ['Make Light', 'Glow from Distance'],
-  category: 'Effects',
-  description: 'Convert an SDF distance to a glow value using exp falloff',
-  inputs: {
-    distance: { type: 'float', label: 'Distance' },
-    brightness: { type: 'float', label: 'Falloff' },
-  },
-  outputs: {
-    glow: { type: 'float', label: 'Glow' },
-  },
-  defaultParams: { brightness: 10.0 },
-  paramDefs: {
-    brightness: { label: 'Falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'How fast the glow fades with distance. Higher is tighter and dimmer.' },
-  },
-  glslFunction: `
-float make_light(float dist, float brightness) {
-    brightness = clamp(brightness, 0.1, 100.0);
-    return exp(-brightness * dist);
-}`,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_glow`;
-    const distVar = inputVars.distance || '0.0';
-    const brightVar = inputVars.brightness || p(node.params.brightness, 10.0);
-    return {
-      code: `    float ${outVar} = make_light(${distVar}, ${brightVar});\n`,
-      outputVars: { glow: outVar },
-    };
-  },
-};
 
 export const AbsNode: NodeDefinition = {
   type: 'abs',
@@ -223,48 +192,13 @@ vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
 
 // ─── Legacy grain variants (hidden from palette, kept for backward compat) ────
 
-export const LumaGrainNode: NodeDefinition = {
-  type: 'lumaGrain', label: 'Luma Grain', category: 'Effects', deprecated: true,
-  description: 'Legacy — use Grain node (Luma mode) instead.',
-  inputs: { color: { type: 'vec3', label: 'Color' }, uv: { type: 'vec2', label: 'UV' }, seed: { type: 'float', label: 'Seed' } },
-  outputs: { color: { type: 'vec3', label: 'Color' } },
-  defaultParams: { amount: 0.06, seed: 0.0 },
-  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 }, seed: { label: 'Seed', type: 'float', min: 0.0, max: 1.0, step: 0.01 } },
-  glslFunction: `vec3 applyLumaGrain(vec3 color, vec2 uv, float amount, float seed) {
-  float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  float w = 1.0 - luma;
-  float n = fract(sin(dot(uv * 1234.5678 + seed, vec2(12.9898, 78.233))) * 43758.5453);
-  return clamp(color + vec3(mix(-amount, amount, n) * w), 0.0, 1.0);
-}`,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
-    return { code: `    vec3 ${id}_color = applyLumaGrain(${inputVars.color ?? 'vec3(0.0)'}, ${inputVars.uv ?? 'vec2(0.0)'}, ${p(node.params.amount, 0.06)}, ${inputVars.seed ?? p(node.params.seed, 0.0)});\n`, outputVars: { color: `${id}_color` } };
-  },
-};
 
-export const TemporalGrainNode: NodeDefinition = {
-  type: 'temporalGrain', label: 'Temporal Grain', category: 'Effects', deprecated: true,
-  description: 'Legacy — use Grain node (Temporal mode) instead.',
-  inputs: { color: { type: 'vec3', label: 'Color' }, uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' } },
-  outputs: { color: { type: 'vec3', label: 'Color' } },
-  defaultParams: { amount: 0.05 },
-  paramDefs: { amount: { label: 'Amount', type: 'float', min: 0.0, max: 0.5, step: 0.005 } },
-  glslFunction: `vec3 applyTemporalGrain(vec3 color, vec2 uv, float amount, float time) {
-  vec2 uvt = uv + fract(time * 0.123456);
-  float n = fract(sin(dot(uvt, vec2(127.1, 311.7))) * 43758.5453);
-  return clamp(color + vec3(mix(-amount, amount, n)), 0.0, 1.0);
-}`,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
-    return { code: `    vec3 ${id}_color = applyTemporalGrain(${inputVars.color ?? 'vec3(0.0)'}, ${inputVars.uv ?? 'vec2(0.0)'}, ${p(node.params.amount, 0.05)}, ${inputVars.time ?? 'iTime'});\n`, outputVars: { color: `${id}_color` } };
-  },
-};
 
 export const LightNode: NodeDefinition = {
   type: 'light',
-  label: 'Light (Modes)', aliases: ['Light'],
+  label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light'],
+  description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Ring adds concentric rings; Simple is 1/d.',
   category: 'Effects',
-  description: 'Convert SDF distance to glow. Mode: Glow (exp), Ring (ring_light), Simple (1/d).',
   inputs: {
     distance:   { type: 'float', label: 'Distance'   },
     brightness: { type: 'float', label: 'Brightness' },
@@ -282,7 +216,7 @@ export const LightNode: NodeDefinition = {
         { value: 'simple', label: 'Simple (1/d)'  },
       ],
     },
-    brightness: { label: 'Brightness', type: 'float', min: 0.1, max: 100, step: 0.1 },
+    brightness: { label: 'Falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'How fast the glow fades with distance. Higher is tighter and dimmer.' },
     ringFreq:   { label: 'Ring Freq',  type: 'float', min: 1.0, max: 30,  step: 0.5, showWhen: { param: 'mode', value: 'ring' } },
   },
   glslFunction: `float ringLight(float d, float brightness, float freq) {
@@ -305,7 +239,8 @@ float simpleLight(float d, float brightness) {
     } else if (mode === 'simple') {
       code = `    float ${outVar} = simpleLight(${distVar}, ${brightVar});\n`;
     } else {
-      code = `    float ${outVar} = exp(-${brightVar} * max(${distVar}, 0.0));\n`;
+      // Same curve the old makeLight node emitted (unclamped distance: the inside of a shape glows > 1).
+      code = `    float ${outVar} = exp(-clamp(${brightVar}, 0.1, 100.0) * ${distVar});\n`;
     }
     return { code, outputVars: { glow: outVar } };
   },
@@ -373,10 +308,10 @@ export const FractalLoopNode: NodeDefinition = {
     const glowPow   = inputVars.glow_pow    ?? p(node.params.glow_pow, 1.0);
     const iterOff   = inputVars.iter_offset ?? p(node.params.iter_offset, 0.4);
     const timeScale = inputVars.time_scale  ?? p(node.params.time_scale, 0.4);
-    const a = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
-    const b = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
-    const c = Array.isArray(node.params.freq)      ? node.params.freq      as number[] : [1.0, 1.0, 1.0];
-    const d = Array.isArray(node.params.phase)     ? node.params.phase     as number[] : [0.0, 0.33, 0.67];
+    const a = pv3(node.params.offset,    [0.5, 0.5, 0.5]);
+    const b = pv3(node.params.amplitude, [0.5, 0.5, 0.5]);
+    const c = pv3(node.params.freq,      [1.0, 1.0, 1.0]);
+    const d = pv3(node.params.phase,     [0.0, 0.33, 0.67]);
     const scaleExpr = (scaleExp === '1.0' || scaleExp === '1') ? scale : `(${scale} * pow(${scaleExp}, ${id}_i))`;
     const glowExpr = (glowPow === '1.0' || glowPow === '1')
       ? `${glow} / max(${id}_d, 0.0001)`
@@ -389,7 +324,7 @@ export const FractalLoopNode: NodeDefinition = {
       `        ${id}_uv = fract(${id}_uv * ${scaleExpr}) - 0.5;\n`,
       `        float ${id}_d = length(${id}_uv) * exp(-length(${id}_uv0));\n`,
       `        float ${id}_t = length(${id}_uv0) + ${id}_i * ${iterOff} + ${timeVar} * ${timeScale};\n`,
-      `        vec3 ${id}_col = palette(${id}_t, ${vec3Str(a)}, ${vec3Str(b)}, ${vec3Str(c)}, ${vec3Str(d)});\n`,
+      `        vec3 ${id}_col = palette(${id}_t, ${a}, ${b}, ${c}, ${d});\n`,
       `        ${id}_d = sin(${id}_d * ${freq} + ${timeVar}) / ${freq};\n`,
       `        ${id}_d = abs(${id}_d);\n`,
       `        ${id}_d = ${glowExpr};\n`,

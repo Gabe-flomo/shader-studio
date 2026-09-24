@@ -1,6 +1,11 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p, zeroFor } from './helpers';
 
+/** A scalar param broadcast to the node's vector type (`vec3(u_p_x_b)`), or the scalar itself for floats. */
+function bcast(t: string, expr: string): string {
+  return t === 'float' ? expr : `${t}(${expr})`;
+}
+
 // ── Vector-type helper ────────────────────────────────────────────────────────
 // Returns 'float'|'vec2'|'vec3' from params, defaulting to 'float'.
 function ot(node: GraphNode): string {
@@ -8,38 +13,47 @@ function ot(node: GraphNode): string {
 }
 
 export const AddNode: NodeDefinition = {
-  type: 'add', label: 'Add', category: 'Math', subcategory: 'Arithmetic', description: 'Add two float values (a + b)',
+  type: 'add', label: 'Add', category: 'Math', subcategory: 'Arithmetic', description: 'Add two values (a + b). Works on floats, vec2 and vec3 — pick the type on the card.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node);
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '0.0'} + ${inputVars.b || p(node.params.b, 0.0)};\n`, outputVars: { result: o } };
+    const a = inputVars.a || zeroFor(t);
+    const b = inputVars.b || bcast(t, p(node.params.b, 0.0));
+    return { code: `    ${t} ${o} = ${a} + ${b};\n`, outputVars: { result: o } };
   },
 };
 
 export const SubtractNode: NodeDefinition = {
-  type: 'subtract', label: 'Subtract', category: 'Math', subcategory: 'Arithmetic', description: 'Subtract b from a (a - b)',
+  type: 'subtract', label: 'Subtract', category: 'Math', subcategory: 'Arithmetic', description: 'Subtract b from a (a - b). Works on floats, vec2 and vec3.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node);
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '0.0'} - ${inputVars.b || p(node.params.b, 0.0)};\n`, outputVars: { result: o } };
+    const a = inputVars.a || zeroFor(t);
+    const b = inputVars.b || bcast(t, p(node.params.b, 0.0));
+    return { code: `    ${t} ${o} = ${a} - ${b};\n`, outputVars: { result: o } };
   },
 };
 
 export const MultiplyNode: NodeDefinition = {
-  type: 'multiply', label: 'Multiply', category: 'Math', subcategory: 'Arithmetic', description: 'Multiply two float values (a × b).',
+  type: 'multiply', label: 'Multiply', category: 'Math', subcategory: 'Arithmetic', description: 'Multiply two values (a × b). Works on floats, vec2 and vec3 — scale a colour by wiring it to A.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 1.0 },
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node);
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '1.0'} * ${inputVars.b || p(node.params.b, 1.0)};\n`, outputVars: { result: o } };
+    const a = inputVars.a || bcast(t, '1.0');
+    const b = inputVars.b || bcast(t, p(node.params.b, 1.0));
+    return { code: `    ${t} ${o} = ${a} * ${b};\n`, outputVars: { result: o } };
   },
 };
 
@@ -50,8 +64,11 @@ export const DivideNode: NodeDefinition = {
   defaultParams: { b: 1.0 },
   paramDefs: { b: { label: 'B (divisor)', type: 'float', min: 0.0001, max: 10, step: 0.001 } },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node);
     const o = `${node.id}_result`;
-    return { code: `    float ${o} = ${inputVars.a || '0.0'} / max(${inputVars.b || p(node.params.b, 1.0)}, 0.0001);\n`, outputVars: { result: o } };
+    const a = inputVars.a || zeroFor(t);
+    const b = inputVars.b || bcast(t, p(node.params.b, 1.0));
+    return { code: `    ${t} ${o} = ${a} / max(${b}, ${bcast(t, '0.0001')});\n`, outputVars: { result: o } };
   },
 };
 
@@ -166,28 +183,7 @@ export const LengthNode: NodeDefinition = {
   },
 };
 
-export const MultiplyVec3Node: NodeDefinition = {
-  type: 'multiplyVec3', label: 'Scale Color', category: 'Math', subcategory: 'Vector Ops', description: 'Scale a vec3 color by a float intensity.',
-  inputs: { color: { type: 'vec3', label: 'Color' }, scale: { type: 'float', label: 'Scale' } },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { scale: 1.0 },
-  paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    const s = inputVars.scale || p(node.params.scale, 1.0);
-    return { code: `    vec3 ${o} = ${inputVars.color || 'vec3(1.0)'} * ${s};\n`, outputVars: { result: o } };
-  },
-};
 
-export const AddVec3Node: NodeDefinition = {
-  type: 'addVec3', label: 'Add Colors', category: 'Math', subcategory: 'Vector Ops', description: 'Add two vec3 colors together.',
-  inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' } },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    return { code: `    vec3 ${o} = ${inputVars.a || 'vec3(0.0)'} + ${inputVars.b || 'vec3(0.0)'};\n`, outputVars: { result: o } };
-  },
-};
 
 export const TanhNode: NodeDefinition = {
   type: 'tanh', label: 'Tanh', category: 'Math', subcategory: 'Trigonometry', description: 'Hyperbolic tangent.',
@@ -238,31 +234,19 @@ export const ClampNode: NodeDefinition = {
 };
 
 export const MixNode: NodeDefinition = {
-  type: 'mix', label: 'Mix', category: 'Math', subcategory: 'Interpolation', description: 'Linear interpolation: mix(a, b, t).',
+  type: 'mix', label: 'Mix', category: 'Math', subcategory: 'Interpolation', description: 'Linear interpolation: mix(a, b, t). Works on floats, vec2 and vec3 (colours).',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, t: { type: 'float', label: 'Blend' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { t: 0.5 },
   paramDefs: { t: { label: 'Blend', type: 'float', min: 0, max: 1, step: 0.01, hint: '0 gives A, 1 gives B.' } },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = ot(node);
     const o = `${node.id}_result`;
-    const t = inputVars.t || p(node.params.t, 0.5);
-    return { code: `    float ${o} = mix(${inputVars.a || '0.0'}, ${inputVars.b || '1.0'}, ${t});\n`, outputVars: { result: o } };
+    const f = inputVars.t || p(node.params.t, 0.5);
+    return { code: `    ${t} ${o} = mix(${inputVars.a || zeroFor(t)}, ${inputVars.b || bcast(t, '1.0')}, ${f});\n`, outputVars: { result: o } };
   },
 };
 
-export const MixVec3Node: NodeDefinition = {
-  type: 'mixVec3', label: 'Mix (Color)', category: 'Math', subcategory: 'Interpolation',
-  description: 'Blend two vec3 colors: mix(a, b, fac). fac=0 → A, fac=1 → B.',
-  inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' }, fac: { type: 'float', label: 'Blend' } },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { fac: 0.5 },
-  paramDefs: { fac: { label: 'Blend', type: 'float', min: 0, max: 1, step: 0.01, hint: '0 gives A, 1 gives B.' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    const fac = inputVars.fac || p(node.params.fac, 0.5);
-    return { code: `    vec3 ${o} = mix(${inputVars.a || 'vec3(0.0)'}, ${inputVars.b || 'vec3(1.0)'}, ${fac});\n`, outputVars: { result: o } };
-  },
-};
 
 export const ModNode: NodeDefinition = {
   type: 'mod', label: 'Modulo (Wrap)', aliases: ['Mod'], category: 'Math', subcategory: 'Modulo', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
@@ -415,23 +399,7 @@ export const MakeVec2Node: NodeDefinition = {
   },
 };
 
-export const ExtractXNode: NodeDefinition = {
-  type: 'extractX', label: 'Extract X', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract the X component (.x) from a vec2.',
-  inputs: { v: { type: 'vec2', label: 'Vec2' } }, outputs: { x: { type: 'float', label: 'X' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_x`;
-    return { code: `    float ${o} = (${inputVars.v || 'vec2(0.0)'}).x;\n`, outputVars: { x: o } };
-  },
-};
 
-export const ExtractYNode: NodeDefinition = {
-  type: 'extractY', label: 'Extract Y', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract the Y component (.y) from a vec2.',
-  inputs: { v: { type: 'vec2', label: 'Vec2' } }, outputs: { y: { type: 'float', label: 'Y' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_y`;
-    return { code: `    float ${o} = (${inputVars.v || 'vec2(0.0)'}).y;\n`, outputVars: { y: o } };
-  },
-};
 
 export const SplitVec2Node: NodeDefinition = {
   type: 'splitVec2', label: 'Split Vec2', category: 'Math', subcategory: 'Vector Build/Split', description: 'Extract X and Y float components from a vec2.',
@@ -523,28 +491,7 @@ export const SmoothstepNode: NodeDefinition = {
   },
 };
 
-export const AddVec2Node: NodeDefinition = {
-  type: 'addVec2', label: 'Add Vec2', category: 'Math', subcategory: 'Vector Ops', description: 'Add two vec2 values.',
-  inputs: { a: { type: 'vec2', label: 'A' }, b: { type: 'vec2', label: 'B' } },
-  outputs: { result: { type: 'vec2', label: 'Result' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    return { code: `    vec2 ${o} = (${inputVars.a || 'vec2(0.0)'}) + (${inputVars.b || 'vec2(0.0)'});\n`, outputVars: { result: o } };
-  },
-};
 
-export const MultiplyVec2Node: NodeDefinition = {
-  type: 'multiplyVec2', label: 'Scale Vec2', category: 'Math', subcategory: 'Vector Ops', description: 'Scale a vec2 by a float.',
-  inputs: { v: { type: 'vec2', label: 'Vec2' }, scale: { type: 'float', label: 'Scale' } },
-  outputs: { result: { type: 'vec2', label: 'Result' } },
-  defaultParams: { scale: 1.0 },
-  paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    const s = inputVars.scale || p(node.params.scale, 1.0);
-    return { code: `    vec2 ${o} = (${inputVars.v || 'vec2(0.0)'}) * ${s};\n`, outputVars: { result: o } };
-  },
-};
 
 export const NormalizeVec2Node: NodeDefinition = {
   type: 'normalizeVec2', label: 'Normalize Vec2', category: 'Math', subcategory: 'Vector Ops', description: 'Normalize a vec2 to unit length.',
@@ -1099,7 +1046,14 @@ export const TransformVecNode: NodeDefinition = {
 // ── Vectorizable node registry ────────────────────────────────────────────────
 // Nodes that support component-wise operation on vec2/vec3 inputs.
 // primaryInput / primaryOutput are the socket keys that change type.
-export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryOutput: string }> = {
+export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryOutput: string; alsoInputs?: string[] }> = {
+  // Arithmetic (D5): both operands follow the chosen type; the old addVec2 /
+  // addVec3 / multiplyVec2 / multiplyVec3 / mixVec3 / blend nodes are aliases.
+  add:      { primaryInput: 'a', primaryOutput: 'result', alsoInputs: ['b'] },
+  subtract: { primaryInput: 'a', primaryOutput: 'result', alsoInputs: ['b'] },
+  multiply: { primaryInput: 'a', primaryOutput: 'result', alsoInputs: ['b'] },
+  divide:   { primaryInput: 'a', primaryOutput: 'result', alsoInputs: ['b'] },
+  mix:      { primaryInput: 'a', primaryOutput: 'result', alsoInputs: ['b'] },
   sin:      { primaryInput: 'input', primaryOutput: 'output' },
   cos:      { primaryInput: 'input', primaryOutput: 'output' },
   exp:      { primaryInput: 'input', primaryOutput: 'output' },

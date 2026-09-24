@@ -1,4 +1,7 @@
 // ─── Node Definitions — thin aggregator ──────────────────────────────────────
+import { NODE_ALIASES } from './aliases';
+export { NODE_ALIASES, resolveNodeAliases, resolveSubgraphAliases, aliasParams } from './aliases';
+export type { NodeAlias } from './aliases';
 // Each category lives in its own file. This module re-exports everything and
 // builds the unified NODE_REGISTRY consumed by the rest of the app.
 
@@ -20,7 +23,7 @@ export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToL
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 
 // Matrix
-export { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+export { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 
 // Spaces
 export {
@@ -35,20 +38,17 @@ export {
 export { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 
 // SDF (IQ)
-export { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode, SdfOffsetNode, SdfSharpenNode, Sdf2dSmoothUnionNode, Sdf2dOnionNode } from './sdf';
+export { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './sdf';
 
 // Combiners
 export {
-  SmoothMinNode, MinNode, MaxNode2,
-  SmoothMaxNode, SmoothSubtractNode,
-  BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
-  GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
+  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 
 // Effects / Loops
 export {
-  MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
+  AbsNode, ToneMapNode, GrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
@@ -93,8 +93,7 @@ export {
   LinkSDF3DNode, PyramidSDF3DNode, HexPrismSDF3DNode, TriPrismSDF3DNode,
   CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode, VerticalCapsuleSDF3DNode,
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
-  SDFSmoothUnionNode, SDFSmoothSubtractNode, SDFSmoothIntersectNode,
-  SDFRoundNode, SDFOnionNode,
+  SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
   MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
@@ -107,9 +106,9 @@ export {
 export { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode } from './scene3d';
 
 // Color
-export { PALETTE_GLSL_FN, PaletteNode, PalettePresetNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
+export { PALETTE_GLSL_FN, PaletteNode, PALETTE_PRESET_OPTIONS, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
-  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, BlendModeNode } from './color';
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
 
 // Output
 export { OutputNode, Vec4OutputNode } from './output';
@@ -119,7 +118,7 @@ export { ScopeNode } from './utility';
 export { PrintFloatNode, PrintTextNode } from './text';
 
 // Animation
-export { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
+export { LFONode, BPMSyncNode } from './animations';
 
 // Halftone
 export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
@@ -134,12 +133,11 @@ export { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNo
 export {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
-  MultiplyVec3Node, AddVec3Node,
-  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode, ModSelectNode,
+  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, ModNode, ModSelectNode,
   Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode, QuantizeNode,
-  MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
+  MakeVec2Node, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
-  AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
+  NormalizeVec2Node,
   RemapNode,
   CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
@@ -174,16 +172,13 @@ import {
   MirroredRepeat2DNode, LimitedRepeat2DNode, AngularRepeat2DNode,
 } from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
-import { SdBoxNode, SdSegmentNode, SdEllipseNode, OpRepeatNode, OpRepeatPolarNode, SdfOffsetNode, SdfSharpenNode, Sdf2dSmoothUnionNode, Sdf2dOnionNode } from './sdf';
+import { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './sdf';
 import {
-  SmoothMinNode, MinNode, MaxNode2,
-  SmoothMaxNode, SmoothSubtractNode,
-  BlendNode, MaskNode, AddColorNode, ScreenBlendNode,
-  GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
+  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFOutlineNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 import {
-  MakeLightNode, AbsNode, ToneMapNode, GrainNode, LumaGrainNode, TemporalGrainNode, LightNode,
+  AbsNode, ToneMapNode, GrainNode, LightNode,
   FractalLoopNode, RotatingLinesLoopNode, AccumulateLoopNode, ForLoopNode,
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
@@ -211,8 +206,7 @@ import {
   LinkSDF3DNode, PyramidSDF3DNode, HexPrismSDF3DNode, TriPrismSDF3DNode,
   CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode, VerticalCapsuleSDF3DNode,
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
-  SDFSmoothUnionNode, SDFSmoothSubtractNode, SDFSmoothIntersectNode,
-  SDFRoundNode, SDFOnionNode,
+  SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
   MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
@@ -221,24 +215,23 @@ import {
   MirrorFold3DNode, DomainWarp3DNode,
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode } from './scene3d';
-import { PaletteNode, PalettePresetNode, GradientNode, HSVNode, PosterizeNode, InvertNode, DesaturateNode, HueRangeNode,
+import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
-  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, BlendModeNode } from './color';
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
 import { PrintFloatNode, PrintTextNode } from './text';
-import { Vec2ConstNode, Vec3ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
-import { SineLFONode, SquareLFONode, SawtoothLFONode, TriangleLFONode, BPMSyncNode } from './animations';
+import { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+import { LFONode, BPMSyncNode } from './animations';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
   SinNode, CosNode, TanNode, ExpNode, PowNode, NegateNode, LengthNode,
-  MultiplyVec3Node, AddVec3Node,
-  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, MixVec3Node, ModNode, ModSelectNode,
+  TanhNode, MinMathNode, MaxNode, ClampNode, MixNode, ModNode, ModSelectNode,
   Atan2Node, CeilNode, FloorNode, SqrtNode, RoundNode, DotNode, QuantizeNode,
-  MakeVec2Node, ExtractXNode, ExtractYNode, MakeVec3Node, FloatToVec3Node,
+  MakeVec2Node, MakeVec3Node, FloatToVec3Node,
   FractRawNode, SmoothstepNode,
-  AddVec2Node, MultiplyVec2Node, NormalizeVec2Node,
+  NormalizeVec2Node,
   RemapNode,
   CrossProductNode, ReflectNode, RefractDirNode, ComplexMulNode, ComplexPowNode,
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
@@ -285,7 +278,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   uvReciprocal: UvReciprocalNode,
   // Matrix
   vec2Const: Vec2ConstNode,
-  vec3Const: Vec3ConstNode,
   matConst: MatConstNode,
   mat2Construct: Mat2ConstructNode,
   mat3Construct: Mat3ConstructNode,
@@ -336,26 +328,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   shapeSDF: ShapeSDFNode,
   simpleSDF: SimpleSDFNode,
   // SDF (IQ)
-  sdBox: SdBoxNode,
   sdSegment: SdSegmentNode,
   sdEllipse: SdEllipseNode,
-  opRepeat: OpRepeatNode,
-  opRepeatPolar: OpRepeatPolarNode,
   // SDF 2D Ops
   sdfOffset: SdfOffsetNode,
   sdfSharpen: SdfSharpenNode,
-  sdf2dSmoothUnion: Sdf2dSmoothUnionNode,
-  sdf2dOnion: Sdf2dOnionNode,
   // Combiners
-  smoothMin: SmoothMinNode,
-  min: MinNode,
-  sdfMax: MaxNode2,
-  smoothMax: SmoothMaxNode,
-  smoothSubtract: SmoothSubtractNode,
-  blend: BlendNode,
   mask: MaskNode,
   addColor: AddColorNode,
-  screenBlend: ScreenBlendNode,
   glowLayer: GlowLayerNode,
   deepGlow: DeepGlowNode,
   sdfOutline: SDFOutlineNode,
@@ -363,12 +343,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   alphaBlend: AlphaBlendNode,
   light2d: Light2DNode,
   // Effects
-  makeLight: MakeLightNode,
   abs: AbsNode,
   toneMap: ToneMapNode,
   grain: GrainNode,
-  lumaGrain: LumaGrainNode,
-  temporalGrain: TemporalGrainNode,
   light: LightNode,
   fractalLoop: FractalLoopNode,
   rotatingLinesLoop: RotatingLinesLoopNode,
@@ -486,10 +463,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sdfUnion: SDFUnionNode,
   sdfSubtract: SDFSubtractNode,
   sdfIntersect: SDFIntersectNode,
-  sdfSmoothUnion: SDFSmoothUnionNode,
-  sdfSmoothSubtract: SDFSmoothSubtractNode,
-  sdfSmoothIntersect: SDFSmoothIntersectNode,
-  sdfRound: SDFRoundNode,
   sdfOnion: SDFOnionNode,
   // 3D Transforms
   translate3D: Translate3DNode,
@@ -541,14 +514,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   marchSceneDist: MarchSceneDistNode,
   giLitMarchGroup: GILitMarchGroupNode,
   // Color
-  blendMode: BlendModeNode,
   palette: PaletteNode,
-  palettePreset: PalettePresetNode,
   gradient: GradientNode,
   hsv: HSVNode,
   posterize: PosterizeNode,
   invert: InvertNode,
-  desaturate: DesaturateNode,
   hueRange: HueRangeNode,
   colorRamp: ColorRampNode,
   blendModes: BlendModesNode,
@@ -579,14 +549,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   pow: PowNode,
   negate: NegateNode,
   length: LengthNode,
-  multiplyVec3: MultiplyVec3Node,
-  addVec3: AddVec3Node,
   tanh: TanhNode,
   minMath: MinMathNode,
   max: MaxNode,
   clamp: ClampNode,
   mix: MixNode,
-  mixVec3: MixVec3Node,
   mod: ModNode,
   modSelect: ModSelectNode,
   atan2: Atan2Node,
@@ -597,8 +564,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   dot: DotNode,
   quantize: QuantizeNode,
   makeVec2: MakeVec2Node,
-  extractX: ExtractXNode,
-  extractY: ExtractYNode,
   splitVec2: SplitVec2Node,
   splitVec3: SplitVec3Node,
   splitVec4: SplitVec4Node,
@@ -607,8 +572,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   floatToVec3: FloatToVec3Node,
   fractRaw: FractRawNode,
   smoothstep: SmoothstepNode,
-  addVec2: AddVec2Node,
-  multiplyVec2: MultiplyVec2Node,
   normalizeVec2: NormalizeVec2Node,
   remap: RemapNode,
   // Shapers
@@ -647,16 +610,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   rgbToCMYK:    RGBToCMYKNode,
   cmykHalftone: CMYKHalftoneNode,
   // Animation
-  sineLFO: SineLFONode,
-  squareLFO: SquareLFONode,
-  sawtoothLFO: SawtoothLFONode,
-  triangleLFO: TriangleLFONode,
+  lfo: LFONode,
   bpmSync: BPMSyncNode,
 };
 
 /** Built-ins first, then user-published node types (see nodes/userNodes/userNodeRegistry.ts). */
 export function getNodeDefinition(type: string): NodeDefinition | undefined {
-  return NODE_REGISTRY[type] ?? getUserNodeDefinition(type);
+  // Built-ins, then user-published nodes, then merged (aliased) types — see ./aliases.ts.
+  return NODE_REGISTRY[type] ?? getUserNodeDefinition(type) ?? (NODE_ALIASES[type] ? NODE_REGISTRY[NODE_ALIASES[type].to] : undefined);
 }
 
 /** Every definition that can be offered for adding: built-ins plus user nodes.

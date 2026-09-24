@@ -368,7 +368,7 @@ export const RippleSpaceNode: NodeDefinition = {
 
 export const InfiniteRepeatSpaceNode: NodeDefinition = {
   type: 'infiniteRepeatSpace',
-  label: 'Infinite Repeat',
+  label: 'Infinite Repeat', aliases: ['repeat space', 'grid', 'tile', 'opRepeat'],
   category: '2D Space', subcategory: 'Repeat',
   description: 'Tiles space infinitely using modulo, keeping the origin at the center of each cell. Perfect for SDF repetition. Also outputs the integer Cell ID for per-cell variation.',
   inputs: {
@@ -391,10 +391,12 @@ export const InfiniteRepeatSpaceNode: NodeDefinition = {
     const cX    = inputVars.cellX || p(node.params.cellX, 1.0);
     const cY    = inputVars.cellY || p(node.params.cellY, 1.0);
     const cell  = `vec2(${cX}, ${cY})`;
+    // A cell is centred on the origin, so a shape drawn at (0,0) tiles whole rather than split across four cells.
     return {
       code: [
-        `    vec2 ${id}_cellID = floor(${inVar} / ${cell});\n`,
-        `    vec2 ${id}_output = mod(${inVar}, ${cell}) - ${cell} * 0.5;\n`,
+        `    vec2 ${id}_cell   = ${cell};\n`,
+        `    vec2 ${id}_cellID = floor((${inVar} + ${id}_cell * 0.5) / ${id}_cell);\n`,
+        `    vec2 ${id}_output = mod(${inVar} + ${id}_cell * 0.5, ${id}_cell) - ${id}_cell * 0.5;\n`,
       ].join(''),
       outputVars: { output: `${id}_output`, cellID: `${id}_cellID` },
     };
@@ -725,7 +727,7 @@ export const LimitedRepeat2DNode: NodeDefinition = {
  */
 export const AngularRepeat2DNode: NodeDefinition = {
   type: 'angularRepeat2D',
-  label: 'Angular Repeat',
+  label: 'Angular Repeat', aliases: ['radial repeat', 'polar repeat', 'opRepeatPolar'],
   category: '2D Space', subcategory: 'Repeat',
   description: 'Repeats UV space N times radially around the origin — creates ring/gear/petal arrangements. Feed into any SDF or pattern. sectorID output identifies which copy (0..N-1).',
   inputs: {

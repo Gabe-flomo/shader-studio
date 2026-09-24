@@ -887,126 +887,87 @@ export const VerticalCapsuleSDF3DNode: NodeDefinition = {
 
 // ─── SDF Boolean Ops ──────────────────────────────────────────────────────────
 
+// ─── SDF combine ops — one canonical set for 2D and 3D (audit D4) ────────────
+// Union / Intersect / Subtract each take a blend radius k; k = 0 is the hard
+// min / max. The old duplicates (min, smoothMin, sdfSmoothUnion,
+// sdf2dSmoothUnion, sdfMax, smoothMax, sdfSmoothIntersect, smoothSubtract,
+// sdfSmoothSubtract, sdfRound, sdf2dOnion) load through ./aliases.ts.
+
+const BLEND_K = {
+  label: 'Blend radius', type: 'float' as const, min: 0.0, max: 1.0, step: 0.005,
+  hint: '0 is a hard edge. Larger values blend the shapes where they meet.',
+};
+/** `max(k, 1e-5)` keeps the polynomial smooth-min well defined at k = 0 (where it equals the hard op). */
+const kExpr = (id: string, k: string) => `    float ${id}_k = max(${k}, 1e-5);\n`;
+
 export const SDFUnionNode: NodeDefinition = {
-  type: 'sdfUnion', label: 'SDF Union', category: '3D Boolean Ops',
-  description: 'Nearest of two distances — standard union. Equivalent to min(a, b).',
-  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: {},
-  paramDefs: {},
+  type: 'sdfUnion', label: 'Union', category: 'SDF', subcategory: 'Combine', aliases: ['min', 'smooth min', 'smooth union', 'merge'],
+  description: 'Union of two SDFs (min). A blend radius above 0 gives a smooth union; Blend is the 0–1 mix factor between the shapes.',
+  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend radius' } },
+  outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
+  defaultParams: { k: 0.0 },
+  paramDefs: { k: BLEND_K },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
     const a = inputVars.a || '0.0';
     const b = inputVars.b || '0.0';
-    return { code: `    float ${id}_dist = min(${a}, ${b});\n`, outputVars: { dist: `${id}_dist` } };
-  },
-};
-
-export const SDFSubtractNode: NodeDefinition = {
-  type: 'sdfSubtract', label: 'SDF Subtract', category: '2D SDF Ops', subcategory: 'Combine',
-  description: 'Carve "cut" out of "base". cut=shape being removed, base=main shape.',
-  inputs: { cut: { type: 'float', label: 'Cut' }, base: { type: 'float', label: 'Base' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: {},
-  paramDefs: {},
-  generateGLSL: (node, inputVars) => {
-    const id = node.id;
-    const cut  = inputVars.cut  || '0.0';
-    const base = inputVars.base || '0.0';
-    return { code: `    float ${id}_dist = max(-${cut}, ${base});\n`, outputVars: { dist: `${id}_dist` } };
+    const k = inputVars.k || p(node.params.k, 0.0);
+    return {
+      code: kExpr(id, k) +
+            `    float ${id}_blend = clamp(0.5 + 0.5*(${b}-${a})/${id}_k, 0.0, 1.0);\n` +
+            `    float ${id}_dist  = mix(${b}, ${a}, ${id}_blend) - ${id}_k*${id}_blend*(1.0-${id}_blend);\n`,
+      outputVars: { dist: `${id}_dist`, blend: `${id}_blend` },
+    };
   },
 };
 
 export const SDFIntersectNode: NodeDefinition = {
-  type: 'sdfIntersect', label: 'SDF Intersect', category: '3D Boolean Ops',
-  description: 'Keep only where both shapes overlap.',
-  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: {},
-  paramDefs: {},
-  generateGLSL: (node, inputVars) => {
-    const id = node.id;
-    const a = inputVars.a || '0.0';
-    const b = inputVars.b || '0.0';
-    return { code: `    float ${id}_dist = max(${a}, ${b});\n`, outputVars: { dist: `${id}_dist` } };
-  },
-};
-
-export const SDFSmoothUnionNode: NodeDefinition = {
-  type: 'sdfSmoothUnion', label: 'Smooth Union', category: '3D Boolean Ops',
-  description: 'Blend two shapes together with a smooth transition of width k. k=0.1 tight, k=0.5 blobby.',
+  type: 'sdfIntersect', label: 'Intersect', category: 'SDF', subcategory: 'Combine', aliases: ['max', 'smooth max', 'smooth intersect'],
+  description: 'Intersection of two SDFs (max). A blend radius above 0 rounds the crease where the shapes meet.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend radius' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { k: 0.15 },
-  paramDefs: { k: { label: 'Blend radius', type: 'float', min: 0.001, max: 1.0, step: 0.005, hint: 'How far apart shapes start to merge. 0 is a hard edge.' } },
+  outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
+  defaultParams: { k: 0.0 },
+  paramDefs: { k: BLEND_K },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
     const a = inputVars.a || '0.0';
     const b = inputVars.b || '0.0';
-    const k = inputVars.k || p(node.params.k, 0.15);
+    const k = inputVars.k || p(node.params.k, 0.0);
     return {
-      code: `    float ${id}_h = clamp(0.5 + 0.5*(${b}-${a})/${k}, 0.0, 1.0);\n    float ${id}_dist = mix(${b}, ${a}, ${id}_h) - ${k}*${id}_h*(1.0-${id}_h);\n`,
-      outputVars: { dist: `${id}_dist` },
+      code: kExpr(id, k) +
+            `    float ${id}_blend = clamp(0.5 - 0.5*(${b}-${a})/${id}_k, 0.0, 1.0);\n` +
+            `    float ${id}_dist  = mix(${b}, ${a}, ${id}_blend) + ${id}_k*${id}_blend*(1.0-${id}_blend);\n`,
+      outputVars: { dist: `${id}_dist`, blend: `${id}_blend` },
     };
   },
 };
 
-export const SDFSmoothSubtractNode: NodeDefinition = {
-  type: 'sdfSmoothSubtract', label: 'Smooth Subtract', category: '3D Boolean Ops',
-  description: 'Smooth subtraction — rounds the carved edge. cut=shape removed, base=main.',
-  inputs: { cut: { type: 'float', label: 'Cut' }, base: { type: 'float', label: 'Base' }, k: { type: 'float', label: 'Blend radius' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { k: 0.1 },
-  paramDefs: { k: { label: 'Blend radius', type: 'float', min: 0.001, max: 1.0, step: 0.005, hint: 'How far apart shapes start to merge. 0 is a hard edge.' } },
-  generateGLSL: (node, inputVars) => {
-    const id = node.id;
-    const cut  = inputVars.cut  || '0.0';
-    const base = inputVars.base || '0.0';
-    const k    = inputVars.k    || p(node.params.k, 0.1);
-    return {
-      code: `    float ${id}_h = clamp(0.5 - 0.5*(${base}+${cut})/${k}, 0.0, 1.0);\n    float ${id}_dist = mix(${base}, -${cut}, ${id}_h) + ${k}*${id}_h*(1.0-${id}_h);\n`,
-      outputVars: { dist: `${id}_dist` },
-    };
-  },
-};
-
-export const SDFSmoothIntersectNode: NodeDefinition = {
-  type: 'sdfSmoothIntersect', label: 'Smooth Intersect', category: '3D Boolean Ops',
-  description: 'Smooth intersection — rounds the overlap edge.',
-  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend radius' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { k: 0.1 },
-  paramDefs: { k: { label: 'Blend radius', type: 'float', min: 0.001, max: 1.0, step: 0.005, hint: 'How far apart shapes start to merge. 0 is a hard edge.' } },
+export const SDFSubtractNode: NodeDefinition = {
+  type: 'sdfSubtract', label: 'Subtract', category: 'SDF', subcategory: 'Combine', aliases: ['cut', 'smooth subtract', 'difference'],
+  description: 'Cuts B out of A (max(a, -b)). A blend radius above 0 softens the cut edge.',
+  inputs: { a: { type: 'float', label: 'Shape' }, b: { type: 'float', label: 'Cutter' }, k: { type: 'float', label: 'Blend radius' } },
+  outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
+  defaultParams: { k: 0.0 },
+  paramDefs: { k: BLEND_K },
+  // Saved graphs from the 3D-only node wired `base` / `cut`.
+  migrateInputKeys: { base: 'a', cut: 'b' },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
     const a = inputVars.a || '0.0';
     const b = inputVars.b || '0.0';
-    const k = inputVars.k || p(node.params.k, 0.1);
+    const k = inputVars.k || p(node.params.k, 0.0);
     return {
-      code: `    float ${id}_h = clamp(0.5 - 0.5*(${b}-${a})/${k}, 0.0, 1.0);\n    float ${id}_dist = mix(${b}, ${a}, ${id}_h) + ${k}*${id}_h*(1.0-${id}_h);\n`,
-      outputVars: { dist: `${id}_dist` },
+      code: kExpr(id, k) +
+            `    float ${id}_blend = clamp(0.5 - 0.5*(${a}+${b})/${id}_k, 0.0, 1.0);\n` +
+            `    float ${id}_dist  = mix(${a}, -${b}, ${id}_blend) + ${id}_k*${id}_blend*(1.0-${id}_blend);\n`,
+      outputVars: { dist: `${id}_dist`, blend: `${id}_blend` },
     };
-  },
-};
-
-export const SDFRoundNode: NodeDefinition = {
-  type: 'sdfRound', label: 'SDF Round', category: '3D Boolean Ops',
-  description: 'Inflate any SDF outward by r. Applied after the SDF node.',
-  inputs: { dist: { type: 'float', label: 'Distance' }, r: { type: 'float', label: 'Radius' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { r: 0.05 },
-  paramDefs: { r: { label: 'Round Radius', type: 'float', min: 0.0, max: 1.0, step: 0.005 } },
-  generateGLSL: (node, inputVars) => {
-    const id = node.id;
-    const d = inputVars.dist || '0.0';
-    const r = inputVars.r || p(node.params.r, 0.05);
-    return { code: `    float ${id}_dist = ${d} - ${r};\n`, outputVars: { dist: `${id}_dist` } };
   },
 };
 
 export const SDFOnionNode: NodeDefinition = {
-  type: 'sdfOnion', label: 'SDF Onion', category: '3D Boolean Ops',
-  description: 'Makes any solid SDF into a hollow shell. Combine with Intersect+Plane to reveal interior.',
+  type: 'sdfOnion', label: 'Onion', category: 'SDF', subcategory: 'Modify', aliases: ['shell', 'outline', 'ring'],
+  description: 'Turns a solid SDF into a shell of the given thickness (abs(d) - r).',
   inputs: { dist: { type: 'float', label: 'Distance' }, r: { type: 'float', label: 'Thickness' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { r: 0.05 },

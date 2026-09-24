@@ -147,7 +147,7 @@ function hzToSlider(hz: number): number {
 
 const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
 let zCounter = 10; // incremented each time a node is brought to front
-const LFO_TYPES    = new Set(['sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
+const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
 const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
@@ -2396,7 +2396,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             : [];
           const visibleParams = paramEntries.filter(([paramKey, pd]) => {
             // Same showWhen gate as the node's own card (a vec3 Constant has no Value slider)
-            if (!isParamVisible(pd, innerNode.params)) return false;
+            if (!isParamVisible(pd, innerNode.params, getNodeDefinition(innerNode.type)?.defaultParams)) return false;
             if (innerNode.inputs[`__param_${paramKey}`]?.connection) return false;
             const matchingInput = Object.entries(innerNode.inputs).find(
               ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
@@ -3569,7 +3569,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => {
           // showWhen — conditionally hide params based on another param's value
           if (paramDef.showWhen) {
-            const watchedVal = node.params[paramDef.showWhen.param] as string;
+            // A gate param an older save never had reads as its default (same rule as isParamVisible)
+            const watchedVal = (node.params[paramDef.showWhen.param] ?? def?.defaultParams?.[paramDef.showWhen.param]) as string;
             const allowed = Array.isArray(paramDef.showWhen.value)
               ? paramDef.showWhen.value
               : [paramDef.showWhen.value];

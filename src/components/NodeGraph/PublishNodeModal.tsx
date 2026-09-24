@@ -266,7 +266,7 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
       if (!r.success) { setPreview({ error: (r.errors ?? ['Compile failed']).join('\n'), busy: false }); return; }
       setPreview(p => ({ ...p, busy: true }));
       try {
-        const uniforms: Record<string, { value: number }> = { u_time: { value: 1.0 } };
+        const uniforms: Record<string, { value: number | number[] }> = { u_time: { value: 1.0 } };
         for (const [k, v] of Object.entries(r.paramUniforms)) uniforms[k] = { value: v };
         const url = await nodePreviewRenderer.renderNodePreview(PREVIEW_ID, r.fragmentShader, uniforms, PREVIEW_SIZE);
         if (gen !== previewGen.current) return;

@@ -14,7 +14,6 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Loops:           ctp.sky,
   '2D Primitives': ctp.yellow,
   SDF:             ctp.pink,
-  '2D SDF Ops':    ctp.pink,
   '2D Space':      ctp.flamingo,
   Combiners:       ctp.mauve,
   Spaces:          ctp.flamingo,

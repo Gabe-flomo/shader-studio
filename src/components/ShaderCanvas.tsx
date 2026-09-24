@@ -1091,6 +1091,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 const varType   = outSocket?.type ?? 'float';
                 if (!fsDeclares(curFs, varName)) continue; // map and shader out of step; next frame
 
+                // Skip until the active shader actually declares this variable (see the scope probe).
+                if (!curFs.includes(varName)) continue;
                 // Get or build a probe material for this variable
                 let pm = probeMatCache.get(varName);
                 if (!pm) {
@@ -1545,7 +1547,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
 
   // Sync probe refs from store so the rAF loop sees updates without re-running the effect
   useEffect(() => {
-    const SCOPE_LIKE = new Set(['scope', 'sineLFO', 'squareLFO', 'sawtoothLFO', 'triangleLFO']);
+    const SCOPE_LIKE = new Set(['scope', 'lfo']);
     const syncNodes = (nodes: import('../types/nodeGraph').GraphNode[]) => {
       nodesRef.current  = nodes;
       nodeMapRef.current = new Map(nodes.map(n => [n.id, n]));
@@ -1698,7 +1700,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       geo.setAttribute('a_normDist',  new THREE.BufferAttribute(normDists, 1, false));
 
       // Build initial uniforms from paramUniforms + u_time
-      const uniforms: Record<string, { value: number }> = { u_time: { value: 0 } };
+      const uniforms: Record<string, { value: number | number[] }> = { u_time: { value: 0 } };
       for (const [name, value] of Object.entries(pUniforms)) {
         uniforms[name] = { value };
       }
