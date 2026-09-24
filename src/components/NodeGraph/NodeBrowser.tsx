@@ -67,7 +67,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Palette', types: ['palette', 'gradient', 'colorRamp', 'blackbody'] },
     { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast'] },
     { label: 'Convert', types: ['hsv', 'normalToColor'] },
-    { label: 'Blend',   types: ['blendModes'] },
+    { label: 'Blend',   types: ['blendModes', 'oklabMix'] },
   ],
   Math: [
     { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
@@ -109,7 +109,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   '2D Space': [
     { label: 'Basic',   types: ['uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
-    { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
+    { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
     { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace'] },
     { label: 'Pattern', types: ['waveTexture', 'magicTexture'] },
   ],

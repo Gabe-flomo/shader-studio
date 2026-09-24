@@ -108,6 +108,8 @@ const SPACE_MAPS: Record<string, SpaceMap> = {
   },
   hyperbolicSpace: ([x, y], n) => { const f = 2 / Math.max(1 + num(n, 'curvature', 0.7) * (x * x + y * y), 0.001); return [x * f, y * f]; },
   rippleSpace: ([x, y], n) => [x + Math.sin(y * num(n, 'freqY', 5)) * num(n, 'ampX', 0.1), y + Math.sin(x * num(n, 'freqX', 5)) * num(n, 'ampY', 0.1)],
+  lensDistortion: ([x, y], n) => { const r2 = x * x + y * y; const f = (1 + num(n, 'k1', 0.25) * r2 + num(n, 'k2', 0) * r2 * r2) / num(n, 'zoom', 1); return [x * f, y * f]; },
+  crtScreen: ([x, y], n) => { const k = num(n, 'curvature', 0.06); const f = 1 + (x * x + y * y - 1) * k; return [x * f, y * f]; },
   perspective2d: ([x, y], n) => {
     const ratio = num(n, 'ratio', 1), axis = str(n, 'axis', 'y'), sign = str(n, 'flip', 'false') === 'true' ? -1 : 1;
     const denom = Math.max(axis === 'x' ? 1 - x * ratio : axis === 'xy' ? 1 - (x + y) * 0.5 * ratio : 1 - sign * y * ratio, 0.001);

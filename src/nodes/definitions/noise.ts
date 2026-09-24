@@ -567,14 +567,26 @@ export const NoiseFloatNode: NodeDefinition = {
     outMax: { label: 'Out Max', type: 'float', min: -10.0, max: 10.0, step: 0.01, hint: 'Value output when the noise is at its highest.' },
     speed: { label: 'Speed', type: 'float', min: 0.0, max: 5.0,  step: 0.01, hint: 'How fast the noise evolves. Needs Time wired.' },
     mode:  {
-      label: 'Mode', type: 'select', hint: 'Smooth is soft organic blobs; Hash is per-pixel static grain.',
+      label: 'Mode', type: 'select', hint: 'Smooth is soft value noise; Perlin interpolates random gradients for a more natural, less blobby look; Hash is per-pixel static grain.',
       options: [
         { value: 'smooth', label: 'Smooth (value noise)' },
+        { value: 'perlin', label: 'Perlin (gradient noise)' },
         { value: 'hash',   label: 'Hash (grain-like)'    },
       ],
     },
   },
-  // noiseHash1/valueNoise are in the shader preamble — no glslFunction needed
+  // noiseHash1/valueNoise are in the shader preamble; Perlin is this node's own helper
+  // (Xor's GM Shaders Mini: Noise — quintic-interpolated gradient noise, remapped to 0–1).
+  glslFunction: `vec2 perlinHash2(vec2 p) { return normalize(fract(sin(p * mat2(0.129898, 0.78233, 0.81314, 0.15926)) * 43758.5453) - 0.5); }
+float perlinNoise2(vec2 p) {
+  vec2 cell = floor(p), sub = p - cell;
+  vec2 q = sub * sub * sub * (10.0 + sub * (-15.0 + 6.0 * sub));
+  float g00 = dot(perlinHash2(cell), sub);
+  float g10 = dot(perlinHash2(cell + vec2(1.0, 0.0)), sub - vec2(1.0, 0.0));
+  float g01 = dot(perlinHash2(cell + vec2(0.0, 1.0)), sub - vec2(0.0, 1.0));
+  float g11 = dot(perlinHash2(cell + vec2(1.0, 1.0)), sub - vec2(1.0, 1.0));
+  return mix(mix(g00, g10, q.x), mix(g01, g11, q.x), q.y) * 0.3535534 + 0.5;
+}`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
     const uv      = inputVars.uv   || 'vec2(0.0)';
@@ -585,7 +597,9 @@ export const NoiseFloatNode: NodeDefinition = {
 
     const sampleExpr = mode === 'hash'
       ? `noiseHash1(${uv} * ${scale} + ${timeVar} * ${speed})`
-      : `valueNoise(${uv} * ${scale} + ${timeVar} * ${speed})`;
+      : mode === 'perlin'
+        ? `perlinNoise2(${uv} * ${scale} + ${timeVar} * ${speed})`
+        : `valueNoise(${uv} * ${scale} + ${timeVar} * ${speed})`;
 
     return {
       code: [
