@@ -45,7 +45,7 @@ export const PaletteNode: NodeDefinition = {
   type: 'palette',
   label: 'Palette',
   category: 'Color',
-  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it.',
+  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it. `Scale` stretches the Angle and `Speed` scales the offset, so the usual Length → Multiply → Add(Time) → Palette chain is just Length → Palette with Time on Angle offset.',
   // Offset/Amplitude/Frequency/Phase are one vec3 socket each (they used to be twelve
   // per-channel floats); unwired, each falls back to its colour param below. Older graphs keep any
   // per-channel wire they had, and it still drives its channel (see legacyLabels.ts).
@@ -61,7 +61,7 @@ export const PaletteNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color' },
   },
   defaultParams: {
-    value: 0, anim: 0, preset: 'custom',
+    value: 0, anim: 0, scale: 1.0, speed: 1.0, preset: 'custom',
     offset:    [0.5, 0.5, 0.5],
     amplitude: [0.5, 0.5, 0.5],
     freq:      [1.0, 1.0, 1.0],
@@ -75,6 +75,8 @@ export const PaletteNode: NodeDefinition = {
     // of always compiling to a hardcoded 0.0 with nothing to tune.
     value:     { label: 'Angle',        type: 'float', min: 0.0,      max: 1.0,     step: 0.01, hint: 'Where on the palette to sample. 0 → 1 goes once around; wire a gradient or distance here to paint with it.' },
     anim:      { label: 'Angle offset', type: 'float', min: 0.0,      max: 10.0,    step: 0.1,  hint: 'Only added to Angle. Wire Time here to animate.' },
+    scale:     { label: 'Scale',        type: 'float', min: -10.0,    max: 10.0,    step: 0.01, hint: 'Multiplies Angle: how many palette cycles across the wired gradient. 1 leaves it alone.' },
+    speed:     { label: 'Speed',        type: 'float', min: -5.0,     max: 5.0,     step: 0.01, hint: 'Multiplies Angle offset: with Time wired, how fast the colours cycle.' },
     // Named presets bake the four vec3s; Custom exposes them as live pickers.
     preset:    { label: 'Preset',       type: 'select', options: [{ value: 'custom', label: 'Custom' }, ...PALETTE_PRESET_OPTIONS] },
     offset:    { label: 'Offset',       type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The colour at the middle of the wave (per channel).', showWhen: { param: 'preset', value: 'custom' } },
@@ -86,9 +88,12 @@ export const PaletteNode: NodeDefinition = {
   glslFunction: PALETTE_GLSL_FN,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
-    const valVar  = inputVars.value || p(node.params.value, 0);
-    const timeVar = inputVars.anim  || p(node.params.anim, 0);
-    const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
+    const valRaw  = inputVars.value || p(node.params.value, 0);
+    const timeRaw = inputVars.anim  || p(node.params.anim, 0);
+    const scale = p(node.params.scale, 1.0), speed = p(node.params.speed, 1.0);
+    const valVar  = scale === '1.0' ? valRaw : `${valRaw} * ${scale}`;
+    const timeVar = speed === '1.0' ? timeRaw : `${timeRaw} * ${speed}`;
+    const tVar = (valRaw === '0.0') ? timeVar : (timeRaw === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     // A wired vec3 socket wins; otherwise a named preset's literal or the live colour param
     // (a `u_p_*` vec3 uniform), with any legacy per-channel wire (`offset_r` …, kept on
     // older graphs) overriding its channel.

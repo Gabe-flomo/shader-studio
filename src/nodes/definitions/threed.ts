@@ -1909,16 +1909,24 @@ export const PhaseHGNode: NodeDefinition = {
   label: 'Phase (HG)',
   category: '3D Lighting',
   description: 'Henyey-Greenstein phase function. Weights in-scattered light by the angle between view and light directions. Wire cosTheta = dot(-rd, lightDir). g=0: isotropic fog. g≈0.8: forward-scattering cloud. g<0: backlit haze.',
-  inputs: { cosTheta: { type: 'float', label: 'cos(θ)' } },
+  inputs: {
+    cosTheta: { type: 'float', label: 'cos(θ)', hint: 'Wire this, or wire Ray Dir (and a Light Dir) below and it is computed for you.' },
+    rayDir:   { type: 'vec3',  label: 'Ray Dir', hint: 'The camera ray direction. With Light Dir, replaces the Dot node.' },
+    lightDir: { type: 'vec3',  label: 'Light Dir', hint: 'Direction to the light. Unwired, the Light Dir sliders are used.' },
+  },
   outputs: { phase: { type: 'float', label: 'Phase' } },
-  defaultParams: { g: 0.0 },
+  defaultParams: { g: 0.0, lightDir: [0.5, 0.8, 0.3] },
   paramDefs: {
     g: { label: 'Anisotropy (g)', type: 'float', min: -0.99, max: 0.99, step: 0.01,
          hint: 'Scattering asymmetry. 0 = isotropic fog. +0.8 = forward-scattering cloud. -0.3 = backlit haze.' },
+    lightDir: { label: 'Light Dir', type: 'vec3', min: -1.0, max: 1.0, step: 0.01, hint: 'Where the light comes from, used when Ray Dir is wired but Light Dir is not.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
-    const cosTheta = inputVars.cosTheta || '0.0';
+    const lightDir = inputVars.lightDir ?? pv3(node.params.lightDir, [0.5, 0.8, 0.3]);
+    const cosTheta = inputVars.rayDir
+      ? `dot(-normalize(${inputVars.rayDir}), normalize(${lightDir}))`
+      : (inputVars.cosTheta || '0.0');
     const g        = p(node.params.g, 0.0);
     return {
       code: [
@@ -1937,7 +1945,11 @@ export const FresnelSchlickNode: NodeDefinition = {
   label: 'Fresnel (Schlick)',
   category: '3D Lighting',
   description: 'Physical Schlick Fresnel approximation. Splits energy between reflection and refraction based on IOR and view angle. reflectW + refractW = 1. Wire cosTheta = dot(normal, -rd).',
-  inputs: { cosTheta: { type: 'float', label: 'cos(θ)' } },
+  inputs: {
+    cosTheta: { type: 'float', label: 'cos(θ)', hint: 'Wire this, or wire Normal and Ray Dir below and it is computed for you.' },
+    normal:   { type: 'vec3',  label: 'Normal', hint: 'Surface normal from the March Loop Group. With Ray Dir wired, replaces the Dot node.' },
+    rayDir:   { type: 'vec3',  label: 'Ray Dir', hint: 'The camera ray direction.' },
+  },
   outputs: {
     reflectW: { type: 'float', label: 'Reflect Weight' },
     refractW: { type: 'float', label: 'Refract Weight' },
@@ -1949,7 +1961,9 @@ export const FresnelSchlickNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
-    const cosTheta = inputVars.cosTheta || '0.0';
+    const cosTheta = inputVars.normal && inputVars.rayDir
+      ? `clamp(dot(normalize(${inputVars.normal}), -normalize(${inputVars.rayDir})), 0.0, 1.0)`
+      : (inputVars.cosTheta || '0.0');
     const ior      = p(node.params.ior, 1.5);
     return {
       code: [

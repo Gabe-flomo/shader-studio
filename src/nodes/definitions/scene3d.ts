@@ -365,6 +365,38 @@ export const MarchSceneDistNode: NodeDefinition = {
 // ray march loop. Receives ro/rd from a MarchCamera and a scene3d SDF function.
 // Double-click to enter the subgraph; MarchPos pre-populated inside.
 
+/**
+ * Volume Glow — the inside-the-loop half of every volumetric example:
+ * Scene Distance → (Abs → Max) → Divide as one node, safe to accumulate with +=.
+ */
+export const VolumeGlowNode: NodeDefinition = {
+  type: 'volumeGlow', label: 'Volume Glow', category: '3D Scene',
+  aliases: ['Volumetric Glow', 'Density'],
+  description: 'Inside a March Loop Group: turns the scene distance at this step into a glow contribution, `density / (1 + falloff × max(d, 0))`, finite at d = 0 so it is safe to accumulate with `+=`. `Shell` hollows the shape so only a skin of the given thickness glows. Use with Scene Distance before it and Glow to Color after the loop. Replaces the Abs → Max → Divide chain.',
+  inputs: {
+    dist: { type: 'float', label: 'Distance', hint: 'Wire Scene Distance (raw distance) from this step.' },
+  },
+  outputs: { glow: { type: 'float', label: 'Glow' } },
+  defaultParams: { density: 0.02, falloff: 8.0, shell: 0.0 },
+  paramDefs: {
+    density: { label: 'Density', type: 'float', min: 0.001, max: 1.0,  step: 0.001, hint: 'Brightness added per step inside or near the shape.' },
+    falloff: { label: 'Falloff', type: 'float', min: 0.1,   max: 60.0, step: 0.1,   hint: 'How quickly the glow dies off with distance from the surface.' },
+    shell:   { label: 'Shell',   type: 'float', min: 0.0,   max: 1.0,  step: 0.005, hint: '0 glows the whole interior; above 0 only a skin this thick glows.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const d = inputVars.dist ?? '0.0';
+    const density = p(node.params.density, 0.02), falloff = p(node.params.falloff, 8.0), shell = p(node.params.shell, 0.0);
+    return {
+      code: [
+        `    float ${id}_sd = ${shell} > 0.0 ? abs(${d}) - ${shell} : ${d};\n`,
+        `    float ${id}_glow = ${density} / (1.0 + ${falloff} * max(${id}_sd, 0.0));\n`,
+      ].join(''),
+      outputVars: { glow: `${id}_glow` },
+    };
+  },
+};
+
 export const MarchLoopGroupNode: NodeDefinition = {
   type: 'marchLoopGroup', label: 'March Loop Group', category: '3D Scene',
   description: 'Composable ray march loop. Connect MarchCamera (ro/rd), then double-click to build the loop body. Place a SceneGroup inside the body subgraph with MarchPos → [warps] → SceneGroup.pos. MarchDist gives the accumulated ray distance for depth-dependent effects.',

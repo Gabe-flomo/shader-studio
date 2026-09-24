@@ -197,17 +197,20 @@ vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
 export const LightNode: NodeDefinition = {
   type: 'light',
   label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light'],
-  description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Ring adds concentric rings; Simple is 1/d.',
+  description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Ring adds concentric rings; Simple is 1/d. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node — it replaces the SDF Glow → Palette → Multiply chain.',
   category: 'Effects',
   inputs: {
     distance:   { type: 'float', label: 'Distance'   },
     brightness: { type: 'float', label: 'Brightness' },
+    tint:       { type: 'vec3',  label: 'Tint', hint: 'Colour of the Tinted output. Wire a Palette for a gradient, or pick a colour below.' },
   },
   outputs: {
-    glow: { type: 'float', label: 'Glow' },
+    glow:   { type: 'float', label: 'Glow' },
+    tinted: { type: 'vec3',  label: 'Tinted', hint: 'Glow × Tint, ready for the Output.' },
   },
-  defaultParams: { mode: 'glow', brightness: 10.0, ringFreq: 8.0 },
+  defaultParams: { mode: 'glow', brightness: 10.0, ringFreq: 8.0, tint: [1.0, 0.85, 0.6] },
   paramDefs: {
+    tint: { label: 'Tint', type: 'vec3color', hint: 'Colour of the Tinted output when nothing is wired to Tint.' },
     mode: {
       label: 'Mode', type: 'select',
       options: [
@@ -232,6 +235,7 @@ float simpleLight(float d, float brightness) {
     const brightVar = inputVars.brightness ?? p(node.params.brightness, 10.0);
     const mode     = (node.params.mode as string) ?? 'glow';
     const ringFreq = p(node.params.ringFreq, 8.0);
+    const tintVar  = inputVars.tint ?? pv3(node.params.tint, [1.0, 0.85, 0.6]);
 
     let code: string;
     if (mode === 'ring') {
@@ -242,7 +246,67 @@ float simpleLight(float d, float brightness) {
       // Same curve the old makeLight node emitted (unclamped distance: the inside of a shape glows > 1).
       code = `    float ${outVar} = exp(-clamp(${brightVar}, 0.1, 100.0) * ${distVar});\n`;
     }
-    return { code, outputVars: { glow: outVar } };
+    code += `    vec3 ${outVar}_tinted = ${tintVar} * ${outVar};\n`;
+    return { code, outputVars: { glow: outVar, tinted: `${outVar}_tinted` } };
+  },
+};
+
+/**
+ * Glow to Color — the "after the loop" half of every volumetric example:
+ * Multiply(exposure) → Tanh → Make Vec3 → Multiply(tint) as one node.
+ */
+export const GlowToColorNode: NodeDefinition = {
+  type: 'glowToColor',
+  label: 'Glow to Color',
+  category: 'Effects',
+  aliases: ['Tanh Color', 'Exposure Tint'],
+  description: 'Turns an accumulated glow (any float, often the carry out of a March Loop Group) into a colour: `tint × tanh(glow × exposure)`. Tanh keeps bright cores from blowing out to white. Replaces the Multiply → Tanh → Make Vec3 → Multiply chain.',
+  inputs: {
+    glow: { type: 'float', label: 'Glow', hint: 'Accumulated brightness, any range.' },
+    tint: { type: 'vec3',  label: 'Tint' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { exposure: 1.0, tint: [1.0, 0.6, 0.3] },
+  paramDefs: {
+    exposure: { label: 'Exposure', type: 'float', min: 0.01, max: 20.0, step: 0.01, hint: 'Multiplies the glow before the tanh. Higher saturates sooner.' },
+    tint:     { label: 'Tint', type: 'vec3color', hint: 'Colour of the glow when nothing is wired to Tint.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const glow = inputVars.glow ?? '0.0';
+    const tint = inputVars.tint ?? pv3(node.params.tint, [1.0, 0.6, 0.3]);
+    const exposure = p(node.params.exposure, 1.0);
+    return {
+      code: `    vec3 ${id}_color = ${tint} * tanh(clamp(${glow} * ${exposure}, 0.0, 40.0));\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+/**
+ * Normal to Color — Multiply(0.5) → Add(0.5) in one node, for showing normals, positions or any
+ * signed vec3 as a colour.
+ */
+export const NormalToColorNode: NodeDefinition = {
+  type: 'normalToColor',
+  label: 'Normal to Color',
+  category: 'Color',
+  aliases: ['Signed to Color', 'Vec3 to Color'],
+  description: 'Maps a signed vec3 (a normal, a position, a direction) onto colours: `v × 0.5 + 0.5`, so −1 → 0 and +1 → 1. `Abs` mode uses |v| instead. Replaces the Multiply(0.5) → Add(0.5) chain.',
+  inputs: { v: { type: 'vec3', label: 'Vector' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { mode: 'remap' },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', hint: 'Remap puts −1…1 onto 0…1; Abs mirrors negative values up.', options: [
+      { value: 'remap', label: 'Remap −1…1 → 0…1' },
+      { value: 'abs',   label: 'Absolute value' },
+    ] },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v = inputVars.v ?? 'vec3(0.0)';
+    const expr = node.params.mode === 'abs' ? `abs(${v})` : `${v} * 0.5 + 0.5`;
+    return { code: `    vec3 ${id}_color = ${expr};\n`, outputVars: { color: `${id}_color` } };
   },
 };
 

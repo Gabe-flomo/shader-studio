@@ -66,7 +66,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Color: [
     { label: 'Palette', types: ['palette', 'gradient', 'colorRamp', 'blackbody'] },
     { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast'] },
-    { label: 'Convert', types: ['hsv'] },
+    { label: 'Convert', types: ['hsv', 'normalToColor'] },
     { label: 'Blend',   types: ['blendModes'] },
   ],
   Math: [
@@ -92,7 +92,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Effects: [
     { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
     { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
-    { label: 'Lighting', types: ['light', 'light2d', 'radianceCascadesApprox'] },
+    { label: 'Lighting', types: ['light', 'glowToColor', 'light2d', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
     { label: 'Other',    types: ['particleEmitter'] },
   ],
