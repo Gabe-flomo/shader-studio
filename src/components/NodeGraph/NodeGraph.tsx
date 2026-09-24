@@ -415,11 +415,23 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     };
   }, []);
 
-  // ── Prevent browser-level pinch-zoom / ctrl+wheel zoom over the canvas ──────
+  // ── Keep the browser's own wheel gestures off the canvas ──────────────────
+  // Pinch / ctrl+wheel would zoom the page, and a sideways two-finger pan would trigger swipe-back
+  // navigation (leaving the app). The canvas pans itself (handleWheel), so it cancels the default,
+  // except inside something that scrolls sideways on its own (a code block on a card).
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
-    const prevent = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    const scrollsSideways = (target: EventTarget | null) => {
+      for (let n = target as HTMLElement | null; n && n !== el; n = n.parentElement) {
+        if (n.scrollWidth > n.clientWidth && /auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
+      }
+      return false;
+    };
+    const prevent = (e: WheelEvent) => {
+      if (e.ctrlKey) { e.preventDefault(); return; }
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && !scrollsSideways(e.target)) e.preventDefault();
+    };
     el.addEventListener('wheel', prevent, { passive: false });
     return () => el.removeEventListener('wheel', prevent);
   }, []);
