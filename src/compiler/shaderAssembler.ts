@@ -311,6 +311,9 @@ export class ShaderAssembler {
   private functions = new Set<string>();
   private mainCode: string[] = [];
   private paramUniforms: Record<string, number> = {};
+  // `${originalNodeId}::${paramKey}` → uniform name, for every param that
+  // became a uniform. The store's slider fast path looks its param up here.
+  private paramBindings: Record<string, string> = {};
   private textureUniforms: Record<string, string> = {};
   private audioUniforms: Record<string, string> = {};
   private videoUniforms: Record<string, string> = {};
@@ -335,7 +338,7 @@ export class ShaderAssembler {
     this.functions.add(GLSL_OP_REPEAT_POLAR);
   }
 
-  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
     this.detectStateful();
     for (const node of this.sortedNodes) {
       this.compileNode(node);
@@ -533,8 +536,12 @@ export class ShaderAssembler {
                 // 2-level: node.params["nestedOrigId::inn.id::paramKey"] (outer group's surfaced param overrides)
                 // nestedOrigId here is the ORIGINAL id of the inner group node (before slugging)
                 const nestedOrigId = subgraph.nodes.find(sn => subSlugMap.get(sn.id) === nestedSlug)?.id ?? nestedSlug;
+                // Prefixed inner id → original inner id, so uniform bindings are
+                // keyed by the id the store edits (see patchNodeParamsForUniforms).
+                const innOrigIds = new Map<string, string>();
                 const innerPrefixedNodes: GraphNode[] = innerSubgraph.nodes.map(inn => {
                   const innSlug = innerSlugMap.get(inn.id)!;
+                  innOrigIds.set(innerPrefix + innSlug, inn.id);
                   const override1Prefix = `${inn.id}::`;
                   const override2Prefix = `${nestedOrigId}::${inn.id}::`;
                   const innOverrides: Record<string, unknown> = {};
@@ -605,8 +612,9 @@ export class ShaderAssembler {
                       if (fb) innInputVars[k] = fb;
                     }
                   }
-                  const { patchedNode: patchedInn, uniforms: innUniforms } = patchNodeParamsForUniforms(inn, innDef, fn => this.functions.add(fn));
+                  const { patchedNode: patchedInn, uniforms: innUniforms, bindings: innBindings } = patchNodeParamsForUniforms(inn, innDef, fn => this.functions.add(fn), innOrigIds.get(inn.id) ?? inn.id);
                   Object.assign(this.paramUniforms, innUniforms);
+                  Object.assign(this.paramBindings, innBindings);
                   const innResult = innDef.generateGLSL(patchedInn, innInputVars);
                   this.mainCode.push(innResult.code);
                   this.nodeOutputs.set(inn.id, innResult.outputVars);
@@ -699,8 +707,9 @@ export class ShaderAssembler {
                 }
               }
 
-              const { patchedNode: patchedSub, uniforms: subUniforms } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn));
+              const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);
+              Object.assign(this.paramBindings, subBindings);
               const subResult = subDef.generateGLSL(patchedSub, subInputVars);
               // For carry-mode nodes: strip the type from the declaration so we get
               // `    varName = f(varName);` instead of `    T varName = f(varName);`
@@ -3121,8 +3130,9 @@ export class ShaderAssembler {
           for (const line of nodeComment.split('\n')) this.mainCode.push(`    // ${line}\n`);
         }
         const sluggedNode = { ...node, id: nodeSlug };
-        const { patchedNode, uniforms: nodeUniforms } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn));
+        const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), node.id);
         Object.assign(this.paramUniforms, nodeUniforms);
+        Object.assign(this.paramBindings, nodeBindings);
 
         const override = typeof node.params.__codeOverride === 'string'
           ? (node.params.__codeOverride as string).trim()
@@ -3229,6 +3239,7 @@ ${this.mainCode.join('')}}`.trim();
       fragmentShader,
       nodeOutputVars: this.nodeOutputs,
       paramUniforms: this.paramUniforms,
+      paramBindings: this.paramBindings,
       textureUniforms: this.textureUniforms,
       audioUniforms: this.audioUniforms,
       videoUniforms: this.videoUniforms,
@@ -3242,6 +3253,6 @@ ${this.mainCode.join('')}}`.trim();
 export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
   return new ShaderAssembler(sortedNodes, allNodes).assemble();
 }

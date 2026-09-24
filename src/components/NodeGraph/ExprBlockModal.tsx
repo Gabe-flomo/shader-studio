@@ -97,7 +97,8 @@ interface Props {
 type Snapshot = { lines: WarpLine[]; result: string };
 
 export function ExprBlockModal({ node, onClose }: Props) {
-  const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
+  const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
 
   // Read current params
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];

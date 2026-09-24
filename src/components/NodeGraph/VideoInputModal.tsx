@@ -16,7 +16,7 @@ interface Props {
 }
 
 export function VideoInputModal({ node, onClose }: Props) {
-  const { updateNodeParams } = useNodeGraphStore();
+  const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
 
   const fileName  = (node.params._fileName as string) || '';
   const hasFile   = !!(node.params._hasFile);

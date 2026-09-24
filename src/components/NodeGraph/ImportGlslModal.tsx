@@ -19,7 +19,7 @@ const BTN: React.CSSProperties = {
 };
 
 export function ImportGlslModal({ onClose }: Props) {
-  const { addNode } = useNodeGraphStore();
+  const addNode = useNodeGraphStore(s => s.addNode);
   const [code, setCode] = useState('');
 
   // Live parse

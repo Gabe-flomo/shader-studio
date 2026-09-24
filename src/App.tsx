@@ -15,6 +15,7 @@ import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuil
 import type { Page } from './components/TopNav';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { MobileNodeBrowser } from './components/NodeGraph/MobileNodeBrowser';
+import { useShallow } from 'zustand/react/shallow';
 import { useNodeGraphStore, EXAMPLE_GRAPHS, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
@@ -258,32 +259,109 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
   );
 }
 
+// ── Per-frame readouts ────────────────────────────────────────────────────────
+// ShaderCanvas writes pixelSample / nodeProbeValues / hoveredParamHint into the
+// store up to ~10× a second while the mouse is over the canvas or a node is
+// selected. These leaves are the only components that subscribe to those
+// keys, so App — and the entire graph under it — no longer re-renders on
+// every sample.
+
+type PixelSample = NonNullable<ReturnType<typeof useNodeGraphStore.getState>['pixelSample']>;
+
+function PixelSwatch({ sample, size, digits, title }: { sample: PixelSample; size: number; digits: number; title?: string }) {
+  return (
+    <div title={title} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ width: `${size}px`, height: `${size}px`, borderRadius: '2px', flexShrink: 0, background: `rgb(${sample[0]},${sample[1]},${sample[2]})`, border: `1px solid ${ctp.surface1}` }} />
+      <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(sample[0]/255).toFixed(digits)}</span>
+      <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(sample[1]/255).toFixed(digits)}</span>
+      <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(sample[2]/255).toFixed(digits)}</span>
+    </div>
+  );
+}
+
+/** Mobile: param hint or pixel colour, pinned to the top-right of the canvas pane. */
+function CanvasHintOverlay() {
+  const pixelSample      = useNodeGraphStore(s => s.pixelSample);
+  const hoveredParamHint = useNodeGraphStore(s => s.hoveredParamHint);
+  if (!hoveredParamHint && !pixelSample) return null;
+  return (
+    <div style={{
+      position: 'absolute', top: 8, right: 8, zIndex: 22,
+      background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
+      borderRadius: '6px', padding: '4px 8px',
+      display: 'flex', alignItems: 'center', gap: '6px',
+      fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2,
+      border: `1px solid ${ctp.surface0}`,
+      maxWidth: '320px',
+    }}>
+      {hoveredParamHint ? (
+        <>
+          <span style={{ color: ctp.mauve, fontSize: '11px', flexShrink: 0 }}>?</span>
+          <span style={{ color: ctp.text, whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
+        </>
+      ) : pixelSample ? (
+        <PixelSwatch sample={pixelSample} size={10} digits={2} />
+      ) : null}
+    </div>
+  );
+}
+
+const PROBE_COLOR_MAP: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
+
+/** Status-bar readout: pixel colour under the cursor, else the selected node's probe values. */
+function StatusReadout({ swatchSize, probeGap, emptyText, swatchTitle }: { swatchSize: number; probeGap: number; emptyText: string; swatchTitle?: string }) {
+  const pixelSample     = useNodeGraphStore(s => s.pixelSample);
+  const selectedNodeId  = useNodeGraphStore(s => s.selectedNodeId);
+  const selectedNode    = useNodeGraphStore(s => s.selectedNodeId ? s.nodes.find(n => n.id === s.selectedNodeId) ?? null : null);
+  const nodeProbeValues = useNodeGraphStore(s => s.nodeProbeValues);
+  if (pixelSample) return <PixelSwatch sample={pixelSample} size={swatchSize} digits={3} title={swatchTitle} />;
+  if (selectedNode && nodeProbeValues) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: `${probeGap}px`, overflow: 'hidden' }}>
+        {Object.entries(nodeProbeValues).map(([outKey, vals]) => {
+          const outSocket = selectedNode.outputs[outKey];
+          const label = outSocket?.label ?? outKey;
+          const col = PROBE_COLOR_MAP[outSocket?.type ?? 'float'] || ctp.text;
+          return (
+            <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+              <span style={{ color: col, fontWeight: 700 }}>{label}</span>
+              <span style={{ color: ctp.text }}>{vals.map(v => v.toFixed(3)).join(', ')}</span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+  return <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : emptyText}</span>;
+}
+
 function App() {
+  // Pick only what App itself renders with. A bare `useNodeGraphStore()`
+  // subscribes to the whole store, so every per-frame write (pixel sample,
+  // probe values, current time) re-rendered App and everything under it.
+  // Actions are stable references, so selecting them is free; the per-frame
+  // readouts live in StatusReadout / CanvasHintOverlay above.
   const {
-    loadExampleGraph, compilationErrors, glslErrors, pixelSample, hoveredParamHint, fragmentShader,
+    loadExampleGraph, compilationErrors, glslErrors, fragmentShader,
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
     addNode, setNodeHighlightFilter, _fitViewCallback, undo,
-    nodeProbeValues, selectedNodeId, nodes: graphNodes,
+    selectedNodeId,
     groupNodes, deselectAll,
     searchPaletteOpen, setSearchPaletteOpen,
     nodeSlugMap,
     mobileKeyframeEditor, mobileKeyframeTool, setMobileKeyframeTool,
     mobileNodeOverlayOpen, setMobileNodeOverlayOpen,
-  } = useNodeGraphStore();
-
-  // Build probe display for selected node — shown in status bar instead of "hover for color"
-  const selectedNode = selectedNodeId ? graphNodes.find(n => n.id === selectedNodeId) : null;
-  const probeDisplay = selectedNode && nodeProbeValues
-    ? Object.entries(nodeProbeValues).map(([outKey, vals]) => {
-        const outSocket = selectedNode.outputs[outKey];
-        const label = outSocket?.label ?? outKey;
-        const type  = outSocket?.type ?? 'float';
-        const COLOR_MAP: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
-        const col = COLOR_MAP[type] || ctp.text;
-        const formatted = vals.map(v => v.toFixed(3)).join(', ');
-        return { label, col, formatted, type };
-      })
-    : null;
+  } = useNodeGraphStore(useShallow(s => ({
+    loadExampleGraph: s.loadExampleGraph, compilationErrors: s.compilationErrors, glslErrors: s.glslErrors, fragmentShader: s.fragmentShader,
+    saveGraph: s.saveGraph, getSavedGraphNames: s.getSavedGraphNames, loadSavedGraph: s.loadSavedGraph, deleteSavedGraph: s.deleteSavedGraph, exportGraph: s.exportGraph, importGraphFromFile: s.importGraphFromFile,
+    addNode: s.addNode, setNodeHighlightFilter: s.setNodeHighlightFilter, _fitViewCallback: s._fitViewCallback, undo: s.undo,
+    selectedNodeId: s.selectedNodeId,
+    groupNodes: s.groupNodes, deselectAll: s.deselectAll,
+    searchPaletteOpen: s.searchPaletteOpen, setSearchPaletteOpen: s.setSearchPaletteOpen,
+    nodeSlugMap: s.nodeSlugMap,
+    mobileKeyframeEditor: s.mobileKeyframeEditor, mobileKeyframeTool: s.mobileKeyframeTool, setMobileKeyframeTool: s.setMobileKeyframeTool,
+    mobileNodeOverlayOpen: s.mobileNodeOverlayOpen, setMobileNodeOverlayOpen: s.setMobileNodeOverlayOpen,
+  })));
 
   const bp = useBreakpoint();
   const mobile = isMobile(bp);
@@ -696,31 +774,7 @@ function App() {
               </div>
 
               {/* Pixel color info / param hint, pinned to the canvas pane */}
-              {(hoveredParamHint || pixelSample) && (
-                <div style={{
-                  position: 'absolute', top: 8, right: 8, zIndex: 22,
-                  background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
-                  borderRadius: '6px', padding: '4px 8px',
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2,
-                  border: `1px solid ${ctp.surface0}`,
-                  maxWidth: '320px',
-                }}>
-                  {hoveredParamHint ? (
-                    <>
-                      <span style={{ color: ctp.mauve, fontSize: '11px', flexShrink: 0 }}>?</span>
-                      <span style={{ color: ctp.text, whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
-                    </>
-                  ) : pixelSample ? (
-                    <>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}`, flexShrink: 0 }} />
-                      <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(2)}</span>
-                      <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(2)}</span>
-                      <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(2)}</span>
-                    </>
-                  ) : null}
-                </div>
-              )}
+              <CanvasHintOverlay />
 
               {/* Play/pause + reset, bottom-center of the canvas pane —
                   mobile has no side dock to float this beside (unlike
@@ -1173,23 +1227,7 @@ function App() {
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '28px', flexShrink: 0 }}>
-              {pixelSample ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
-                  <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                  <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                  <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
-                </div>
-              ) : probeDisplay ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                  {probeDisplay.map(({ label, col, formatted }) => (
-                    <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-                      <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                      <span style={{ color: ctp.text }}>{formatted}</span>
-                    </span>
-                  ))}
-                </div>
-              ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover for color · click node to probe'}</span>}
+              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" />
               <div style={{ flex: 1 }} />
               {errorBadge}
             </div>
@@ -1330,23 +1368,7 @@ function App() {
             </div>
             {/* Status bar */}
             <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '28px', flexShrink: 0 }}>
-              {pixelSample ? (
-                <div title="Pixel color under cursor (0.0–1.0)" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
-                  <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                  <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                  <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
-                </div>
-              ) : probeDisplay ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                  {probeDisplay.map(({ label, col, formatted }) => (
-                    <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-                      <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                      <span style={{ color: ctp.text }}>{formatted}</span>
-                    </span>
-                  ))}
-                </div>
-              ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover for color · click node to probe'}</span>}
+              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" swatchTitle="Pixel color under cursor (0.0–1.0)" />
               <div style={{ flex: 1 }} />
               {errorBadge}
             </div>
@@ -1421,23 +1443,7 @@ function App() {
 
           {/* Status bar */}
           <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '24px', flexShrink: 0 }}>
-            {pixelSample ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
-                <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
-              </div>
-            ) : probeDisplay ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                {probeDisplay.map(({ label, col, formatted }) => (
-                  <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-                    <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                    <span style={{ color: ctp.text }}>{formatted}</span>
-                  </span>
-                ))}
-              </div>
-            ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover to probe'}</span>}
+            <StatusReadout swatchSize={10} probeGap={8} emptyText="hover to probe" />
             <div style={{ flex: 1 }} />
             {errorBadge}
           </div>

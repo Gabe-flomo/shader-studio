@@ -1180,11 +1180,14 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       nodeMapRef.current = new Map(nodes.map(n => [n.id, n]));
       scopeIdsRef.current = new Set(nodes.filter(n => SCOPE_LIKE.has(n.type)).map(n => n.id));
     };
+    // This fires on *every* store write, including the ~10 Hz frame-loop
+    // writes above, so rebuilding the node Map/Set is gated on the `nodes`
+    // reference actually changing.
     const unsub = useNodeGraphStore.subscribe(state => {
       selectedNodeIdRef.current   = state.selectedNodeId;
       previewNodeIdRef.current    = state.previewNodeId;
       nodeOutputVarMapRef.current = state.nodeOutputVarMap;
-      syncNodes(state.nodes);
+      if (state.nodes !== nodesRef.current) syncNodes(state.nodes);
     });
     // Initialize immediately
     const s = useNodeGraphStore.getState();

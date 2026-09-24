@@ -179,11 +179,18 @@ interface ContentPaneProps {
 }
 
 function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
-  const {
-    addNode, saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph,
-    deleteCustomFn, exportCustomFns, importCustomFnsFromFile, loadCustomFnsFromDisk,
-    swapTargetNodeId, setSwapTargetNodeId, swapNode,
-  } = useNodeGraphStore();
+  const addNode                 = useNodeGraphStore(s => s.addNode);
+  const saveGraph               = useNodeGraphStore(s => s.saveGraph);
+  const getSavedGraphNames      = useNodeGraphStore(s => s.getSavedGraphNames);
+  const loadSavedGraph          = useNodeGraphStore(s => s.loadSavedGraph);
+  const deleteSavedGraph        = useNodeGraphStore(s => s.deleteSavedGraph);
+  const deleteCustomFn          = useNodeGraphStore(s => s.deleteCustomFn);
+  const exportCustomFns         = useNodeGraphStore(s => s.exportCustomFns);
+  const importCustomFnsFromFile = useNodeGraphStore(s => s.importCustomFnsFromFile);
+  const loadCustomFnsFromDisk   = useNodeGraphStore(s => s.loadCustomFnsFromDisk);
+  const swapTargetNodeId        = useNodeGraphStore(s => s.swapTargetNodeId);
+  const setSwapTargetNodeId     = useNodeGraphStore(s => s.setSwapTargetNodeId);
+  const swapNode                = useNodeGraphStore(s => s.swapNode);
   const graphNodes        = useNodeGraphStore(s => s.nodes);
   const groupPresets      = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
@@ -574,7 +581,9 @@ function mkPane(activeTab: TabId = 'nodes'): ContentPaneState {
 
 export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, onGlslInsert }: NodePaletteProps) {
   // All hooks must be at the top — no hooks after conditional returns
-  const { addNode, swapTargetNodeId, swapNode } = useNodeGraphStore();
+  const addNode          = useNodeGraphStore(s => s.addNode);
+  const swapTargetNodeId = useNodeGraphStore(s => s.swapTargetNodeId);
+  const swapNode         = useNodeGraphStore(s => s.swapNode);
   const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
 
   const [favorites, setFavorites] = useState<string[]>(() => {

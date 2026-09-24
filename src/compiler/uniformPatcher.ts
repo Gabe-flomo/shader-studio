@@ -56,18 +56,27 @@ export function defaultGlslVal(type: DataType | string): string {
  * @param registerFn - sink for keyframe curve-evaluator GLSL functions
  *   (`this.functions.add`, same convention resolveInputVars uses). Omit to
  *   uniform-patch only, e.g. call sites that don't need keyframe support.
+ * @param bindingId - the node's ORIGINAL graph id (before slugging / group
+ *   prefixing). `node.id` at this point is usually the slug the uniform name
+ *   is derived from, which the store never sees; the binding map is keyed by
+ *   the id the store does know so the slider fast path can find its uniform
+ *   without re-deriving the compiler's naming. Defaults to `node.id`.
  *
- * Returns `{ patchedNode, uniforms }` where `uniforms` maps name → current value.
+ * Returns `{ patchedNode, uniforms, bindings }` where `uniforms` maps uniform
+ * name → current value and `bindings` maps `${bindingId}::${paramKey}` →
+ * uniform name for every param that became a uniform.
  */
 export function patchNodeParamsForUniforms(
   node: GraphNode,
   def: NodeDefinition,
   registerFn?: (glsl: string) => void,
-): { patchedNode: GraphNode; uniforms: Record<string, number> } {
+  bindingId: string = node.id,
+): { patchedNode: GraphNode; uniforms: Record<string, number>; bindings: Record<string, string> } {
   const uniforms: Record<string, number> = {};
+  const bindings: Record<string, string> = {};
 
   if (SKIP_UNIFORM_TYPES.has(node.type) || !def.paramDefs) {
-    return { patchedNode: node, uniforms };
+    return { patchedNode: node, uniforms, bindings };
   }
 
   // Sanitize node IDs: underscores in IDs create double-underscore sequences
@@ -93,7 +102,18 @@ export function patchNodeParamsForUniforms(
     const uniformName = `u_p_${safeId}_${key}`;
     patchedParams[key] = uniformName;
     uniforms[uniformName] = val;
+    bindings[paramBindingKey(bindingId, key)] = uniformName;
   }
 
-  return { patchedNode: { ...node, params: patchedParams }, uniforms };
+  return { patchedNode: { ...node, params: patchedParams }, uniforms, bindings };
+}
+
+/**
+ * Key of the param → uniform binding map: `${nodeId}::${paramKey}`. For a
+ * node inside a group, `nodeId` is the inner node's own id, which is also how
+ * the group node stores its overrides (`params["innerId::paramKey"]`), so the
+ * same key works for both editing inside the group and editing the override.
+ */
+export function paramBindingKey(nodeId: string, paramKey: string): string {
+  return `${nodeId}::${paramKey}`;
 }

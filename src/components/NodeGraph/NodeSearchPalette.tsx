@@ -100,7 +100,7 @@ interface Props {
 }
 
 export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputType, filterInputType, onNodePlaced }: Props) {
-  const { addNode } = useNodeGraphStore();
+  const addNode = useNodeGraphStore(s => s.addNode);
   const groupPresets = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);

@@ -40,7 +40,9 @@ function getSocketPos(
 const ZOOM_MIN = 0.15;
 const ZOOM_MAX = 2.5;
 
-export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
+// Memoised so a parent re-render (App) doesn't re-render the whole graph;
+// NodeGraph reads everything it needs from the store with selectors.
+export const NodeGraph = React.memo(function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
   const compactToolbar = canvasWidth < 700;
   const nodes                 = useNodeGraphStore(s => s.nodes);
@@ -718,8 +720,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     setZoom(newZoom);
   }, [displayNodes]);
 
-  // Register fitView with the store so shortcuts / App.tsx can call it
-  useEffect(() => { registerFitView(handleFitView); }, [registerFitView, handleFitView]);
+  // Register fitView with the store so shortcuts / App.tsx can call it.
+  // handleFitView is re-created whenever displayNodes changes (every drag
+  // mousemove), and registerFitView is a store write, so registering it
+  // directly meant one extra full-tree render per mousemove. Register a
+  // stable trampoline once and keep the live callback in a ref.
+  const handleFitViewRef = useRef(handleFitView);
+  handleFitViewRef.current = handleFitView;
+  useEffect(() => { registerFitView(() => handleFitViewRef.current()); }, [registerFitView]);
 
   useEffect(() => {
     registerViewportCenterGetter(() => {
@@ -1705,7 +1713,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       })()}
     </div>
   );
-}
+});
 
 const ctxBtnStyle: React.CSSProperties = {
   display: 'block',

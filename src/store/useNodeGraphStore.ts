@@ -8,6 +8,7 @@ import type { GroupPreset } from '../types/groupPreset';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
+import { paramBindingKey } from '../compiler/uniformPatcher';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
 import { EXAMPLE_GRAPHS } from './exampleGraphs';
@@ -245,6 +246,18 @@ let _historyParamPending = false;
 // Stored outside Zustand state so pushing snapshots never triggers a re-render.
 const undoManager = new UndoManager();
 
+/** Shallow-deep equality for probe readouts: same output keys, same numbers. */
+function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[]>): boolean {
+  const ak = Object.keys(a);
+  if (ak.length !== Object.keys(b).length) return false;
+  for (const k of ak) {
+    const av = a[k], bv = b[k];
+    if (!bv || av.length !== bv.length) return false;
+    for (let i = 0; i < av.length; i++) if (av[i] !== bv[i]) return false;
+  }
+  return true;
+}
+
 interface NodeGraphState {
   // Graph data
   nodes: GraphNode[];
@@ -262,6 +275,8 @@ interface NodeGraphState {
    * Updated in-place (without recompile) when sliders change eligible float params.
    */
   paramUniforms: Record<string, number>;
+  /** `${nodeId}::${paramKey}` → uniform name, from the last compile. See CompilationResult.paramBindings. */
+  paramBindings: Record<string, string>;
   /** Push param uniform value changes to ShaderCanvas without triggering a recompile. */
   updateParamUniforms: (updates: Record<string, number>) => void;
 
@@ -1072,6 +1087,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   compilationErrors: [],
   particleSystems: [],
   paramUniforms: {},
+  paramBindings: {},
   glslErrors: [],
   glContextLost: false,
   pixelSample: null,
@@ -3111,21 +3127,23 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Optimisation: if every changed param already has a compiled uniform entry,
     // push the new values directly to ShaderCanvas via paramUniforms — no recompile.
+    //
+    // The uniform name comes from the compiler's binding map, never rebuilt
+    // here: the compiler names uniforms from the node's *slug* (`u_p_fbmx49_scale`),
+    // not its id, and a hand-built name from the id silently never matched, so
+    // every slider tick used to take the full-recompile path below.
     if (options?.immediate) {
-      const currentUniforms = get().paramUniforms;
+      const { paramUniforms: currentUniforms, paramBindings } = get();
       const uniformUpdates: Record<string, number> = {};
       let allAreUniforms = true;
       for (const [key, val] of Object.entries(params)) {
         if (typeof val !== 'number') { allAreUniforms = false; break; }
-        // Group inner-node overrides are stored as `innerNodeId::paramKey` on the group node.
-        // The assembler prefixes the inner node as `groupNodeId_g_innerNodeId`, so the
-        // compiled uniform name is `u_p_groupNodeId_g_innerNodeId_paramKey`.
-        // Sanitize IDs: underscores create __ sequences which are reserved in GLSL ES.
-        const safeNodeId = nodeId.replace(/_/g, 'x');
-        const uniformName = key.includes('::')
-          ? `u_p_${safeNodeId}_g_${key.replace('::', '_').replace(/_/g, 'x')}`
-          : `u_p_${safeNodeId}_${key}`;
-        if (!(uniformName in currentUniforms)) { allAreUniforms = false; break; }
+        // Editing inside a group passes the inner node's own id with a plain key.
+        // Editing a group node's override passes the group id with an
+        // `innerNodeId::paramKey` key — which is already the binding key.
+        const bindingKey = key.includes('::') ? key : paramBindingKey(nodeId, key);
+        const uniformName = paramBindings[bindingKey];
+        if (!uniformName || !(uniformName in currentUniforms)) { allAreUniforms = false; break; }
         uniformUpdates[uniformName] = val;
       }
       if (allAreUniforms && Object.keys(uniformUpdates).length > 0) {
@@ -3773,6 +3791,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   compile: () => {
+    // A structural compile supersedes any debounced one still on the timer;
+    // without this the timer fires later and runs an identical second compile.
+    compilationService.cancelPending();
     const { nodes, previewNodeId, activeGroupId } = get();
     let graphNodes: GraphNode[];
     if (previewNodeId) {
@@ -3795,7 +3816,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Patch MLG node.outputs with dynamic acc* sockets discovered at compile time.
     // Preserves any existing acc* labels already stored in the graph (e.g. from saved examples).
-    let patchedForAcc = get().nodes;
+    // Every subscriber to `nodes` (each node card, the graph, App) re-renders
+    // when the array reference changes, so the map passes below only produce
+    // a new array when some element actually changed; otherwise `nodes` is
+    // left out of the set() entirely.
+    const prevNodes = get().nodes;
+    let patchedForAcc = prevNodes;
+    let nodesChanged = false;
     if (result.mlgDynamicOutputs && result.mlgDynamicOutputs.size > 0) {
       patchedForAcc = patchedForAcc.map(node => {
         const dynSockets = result.mlgDynamicOutputs!.get(node.id);
@@ -3809,6 +3836,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         for (const key of Object.keys(mergedOutputs)) {
           if (key.startsWith('acc') && !dynSockets[key]) { delete mergedOutputs[key]; changed = true; }
         }
+        if (changed) nodesChanged = true;
         return changed ? { ...node, outputs: mergedOutputs } : node;
       });
     } else {
@@ -3820,6 +3848,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const hasAcc = Object.keys(node.outputs).some(k => k.startsWith('acc'));
         if (!hasAcc) return node;
         strippedMlgIds.add(node.id);
+        nodesChanged = true;
         const mergedOutputs = Object.fromEntries(Object.entries(node.outputs).filter(([k]) => !k.startsWith('acc')));
         return { ...node, outputs: mergedOutputs };
       });
@@ -3835,26 +3864,30 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             })
           );
           const changed = Object.keys(newInputs).some(k => newInputs[k] !== node.inputs[k]);
+          if (changed) nodesChanged = true;
           return changed ? { ...node, inputs: newInputs } : node;
         });
       }
     }
 
+    const shaderChanged = result.fragmentShader !== get().fragmentShader;
     set({
-      nodes: patchedForAcc,
+      ...(nodesChanged ? { nodes: patchedForAcc } : {}),
       vertexShader: result.vertexShader,
       fragmentShader: result.fragmentShader,
       compilationErrors: result.errors ?? [],
       nodeOutputVarMap: result.nodeOutputVars,
       paramUniforms: result.paramUniforms,
+      paramBindings: result.paramBindings,
       textureUniforms: result.textureUniforms,
       audioUniforms: result.audioUniforms,
       videoUniforms: result.videoUniforms,
       isStateful: result.isStateful,
       particleSystems: result.particleSystems ?? [],
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
-      // Clear stale probe values when graph recompiles
-      nodeProbeValues: null,
+      // Probe values are read from the compiled program, so they only go
+      // stale when the shader itself changed.
+      ...(shaderChanged ? { nodeProbeValues: null } : {}),
     });
   },
 
@@ -3953,12 +3986,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   setGlslErrors: (errors) => set({ glslErrors: errors }),
   setGlContextLost: (lost) => set({ glContextLost: lost }),
-  setPixelSample: (sample) => set({ pixelSample: sample }),
-  setHoveredParamHint: (hint) => set({ hoveredParamHint: hint }),
-  setCurrentTime: (t) => set({ currentTime: t }),
-  setTimePlaying: (playing) => set({ timePlaying: playing }),
+  // These four are written from ShaderCanvas's frame loop (~10 Hz). Zustand
+  // notifies every subscriber on any set(), so each one returns the current
+  // state object untouched when the value is unchanged — Object.is() on the
+  // state then skips the notification and nothing re-renders while idle.
+  setPixelSample: (sample) => set(state => {
+    const cur = state.pixelSample;
+    if (cur === sample) return state;
+    if (cur && sample && cur[0] === sample[0] && cur[1] === sample[1] && cur[2] === sample[2] && cur[3] === sample[3]) return state;
+    return { pixelSample: sample };
+  }),
+  setHoveredParamHint: (hint) => set(state => state.hoveredParamHint === hint ? state : { hoveredParamHint: hint }),
+  setCurrentTime: (t) => set(state => state.currentTime === t ? state : { currentTime: t }),
+  setTimePlaying: (playing) => set(state => state.timePlaying === playing ? state : { timePlaying: playing }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
-  setNodeProbeValues: (values) => set({ nodeProbeValues: values }),
+  setNodeProbeValues: (values) => set(state => {
+    const cur = state.nodeProbeValues;
+    if (cur === values) return state;
+    if (cur && values && probeValuesEqual(cur, values)) return state;
+    return { nodeProbeValues: values };
+  }),
   setScopeProbeValues: (vals) => set({ scopeProbeValues: vals }),
 
   selectNode: (id, addToSelection = false) => set(state => {
