@@ -18,6 +18,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Spaces:          ctp.flamingo,
   Science:         ctp.teal,
   'Group Presets': ctp.yellow,
+  'My Nodes':      ctp.sky,
   Output:          ctp.teal,
 };
 

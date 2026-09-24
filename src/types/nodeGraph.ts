@@ -40,7 +40,8 @@ export interface GraphNode {
   params: Record<string, unknown>;
   /** When true the node is skipped — inputs are passed through to outputs */
   bypassed?: boolean;
-  /** When true the node is a sealed group preset — compiles as a standalone GLSL function; double-click to enter is disabled */
+  /** When true the group can't be entered (double-click disabled). Compilation is unchanged — it still inlines.
+   *  To get a real standalone GLSL function, publish the group as a node type (see nodes/userNodes). */
   sealed?: boolean;
   /**
    * Assignment operator applied to this node's output via an accumulator variable.

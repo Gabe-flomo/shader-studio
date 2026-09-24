@@ -373,6 +373,11 @@ export function dedupeGlslFunctions(blocks: string[]): string[] {
 // ── Main assembler ────────────────────────────────────────────────────────────
 
 
+export interface ShaderAssemblerOptions {
+  /** Output variables for node ids that exist outside the compiled node list. */
+  seedOutputs?: Map<string, Record<string, string>>;
+}
+
 export class ShaderAssembler {
   private nodeMap: Map<string, GraphNode>;
   private functions = new Set<string>();
@@ -393,16 +398,55 @@ export class ShaderAssembler {
   private sortedNodes: GraphNode[];
   private allNodes: GraphNode[];
 
-  constructor(sortedNodes: GraphNode[], allNodes: GraphNode[]) {
+  constructor(sortedNodes: GraphNode[], allNodes: GraphNode[], opts?: ShaderAssemblerOptions) {
     this.sortedNodes = sortedNodes;
     this.allNodes = allNodes;
     this.nodeMap = new Map(sortedNodes.map(n => [n.id, n]));
+    // Pre-resolved outputs for nodes that aren't in the graph (see
+    // flattenSubgraph.ts: a phantom node whose "outputs" are the parameters
+    // of the function being built). resolveInputVars finds them like any
+    // other source; topologicalSort ignores connections to unknown ids.
+    if (opts?.seedOutputs) {
+      for (const [id, vars] of opts.seedOutputs) this.nodeOutputs.set(id, { ...vars });
+    }
     this.functions.add(GLSL_SMIN);
     this.functions.add(GLSL_SD_BOX);
     this.functions.add(GLSL_SD_SEGMENT);
     this.functions.add(GLSL_SD_ELLIPSE);
     this.functions.add(GLSL_OP_REPEAT);
     this.functions.add(GLSL_OP_REPEAT_POLAR);
+  }
+
+  /**
+   * Compile the nodes and return the pieces of the shader separately, without
+   * wrapping them in a fragment shader: the `main()`-scope body the nodes
+   * emitted, the de-duplicated helper blocks, and the uniform tables. Used to
+   * flatten a subgraph into a standalone GLSL function.
+   */
+  assembleParts(): {
+    body: string;
+    helperBlocks: string[];
+    nodeOutputVars: Map<string, Record<string, string>>;
+    paramUniforms: Record<string, number>;
+    textureUniforms: Record<string, string>;
+    audioUniforms: Record<string, string>;
+    videoUniforms: Record<string, string>;
+    isStateful: boolean;
+  } {
+    this.detectStateful();
+    for (const node of this.sortedNodes) {
+      this.compileNode(node);
+    }
+    return {
+      body: this.mainCode.join(''),
+      helperBlocks: dedupeGlslFunctions(Array.from(this.functions)),
+      nodeOutputVars: this.nodeOutputs,
+      paramUniforms: this.paramUniforms,
+      textureUniforms: this.textureUniforms,
+      audioUniforms: this.audioUniforms,
+      videoUniforms: this.videoUniforms,
+      isStateful: this.isStateful,
+    };
   }
 
   assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {

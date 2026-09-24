@@ -7,6 +7,9 @@ import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPres
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
+import type { SubgraphData } from '../types/nodeGraph';
+import { buildUserNodeDefinition, type PublishUserNodeSpec } from '../nodes/userNodes/publishUserNode';
+import { registerUserNode, unregisterUserNode, getUserNode } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
@@ -562,6 +565,15 @@ interface NodeGraphState {
   saveGroupPreset: (groupNodeId: string, label?: string, description?: string) => Promise<FileResult>;
   deleteGroupPreset: (presetId: string) => void;
   instantiateGroupPreset: (presetId: string, position?: { x: number; y: number }) => string | null;
+  /** Place a copy of `subgraph` as a new group node (fresh ids). Shared by presets and user-node sources. */
+  placeSubgraphAsGroup: (label: string, subgraph: SubgraphData, position?: { x: number; y: number }) => string | null;
+
+  // User-published node types (see nodes/userNodes)
+  /** Flatten the group node into a GLSL function and register it as a node type. */
+  publishUserNode: (groupNodeId: string, spec: PublishUserNodeSpec) => Promise<FileResult>;
+  deleteUserNode: (id: string) => void;
+  /** Re-open a published node's source subgraph as an editable group. */
+  openUserNodeSource: (id: string, position?: { x: number; y: number }) => string | null;
 }
 
 // ─── Example graph data ───────────────────────────────────────────────────────
@@ -2436,9 +2448,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   instantiateGroupPreset: (presetId, position) => {
-    const { nodes } = get();
     const preset = get().groupPresets.find(p => p.id === presetId);
     if (!preset) return null;
+    return get().placeSubgraphAsGroup(preset.label, preset.subgraph, position);
+  },
+
+  placeSubgraphAsGroup: (label, subgraph, position) => {
+    const { nodes } = get();
+    const preset = { label, subgraph };
     undoManager.push(nodes);
 
     // Re-ID all subgraph nodes to avoid collisions
@@ -2519,6 +2536,34 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       set(state => ({ nodes: [...state.nodes, groupNode] }));
     }
     get().compile();
+    return groupId;
+  },
+
+  publishUserNode: async (groupNodeId, spec) => {
+    const { nodes, activeGroupPath } = get();
+    const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const groupNode = scope.find(n => n.id === groupNodeId && n.type === 'group');
+    if (!groupNode) return { ok: false, error: 'Group node not found' };
+    const built = buildUserNodeDefinition(groupNode, spec);
+    if (!built.ok) return { ok: false, error: built.error };
+    const result = await registerUserNode(built.def);
+    // Instances of a re-published node pick up the new function on the next compile.
+    get().compile();
+    return result;
+  },
+
+  deleteUserNode: (id) => {
+    unregisterUserNode(id);
+    get().compile();
+  },
+
+  openUserNodeSource: (id, position) => {
+    const def = getUserNode(id);
+    if (!def?.source) return null;
+    const groupId = get().placeSubgraphAsGroup(def.label, def.source.subgraph, position);
+    // Remember where the group came from so "Publish" offers to update the
+    // existing node type instead of creating a second one.
+    if (groupId) get().updateNodeParams(groupId, { __userNodeId: id, iterations: def.source.iterations }, { immediate: true });
     return groupId;
   },
 

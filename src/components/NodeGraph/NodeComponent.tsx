@@ -39,6 +39,8 @@ const BezierEditorModal   = lazyWithSuspense<PropsOf<typeof BezierEditorModalT>>
 const TransformVecModal   = lazyWithSuspense<PropsOf<typeof TransformVecModalT>>(() => import('./TransformVecModal').then(m => ({ default: m.TransformVecModal })));
 const AssignInitModal     = lazyWithSuspense<PropsOf<typeof AssignInitModalT>>(() => import('./AssignInitModal').then(m => ({ default: m.AssignInitModal })));
 const KeyframeEditorModal = lazyWithSuspense<PropsOf<typeof KeyframeEditorModalT>>(() => import('./KeyframeEditorModal').then(m => ({ default: m.KeyframeEditorModal })));
+import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
+const PublishNodeModal    = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
@@ -484,6 +486,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const isCarry = !!node.carryMode;
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
+  const [showPublish, setShowPublish] = useState(false); // group card → Publish as node
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showExprModal, setShowExprModal] = useState(false);
@@ -1889,6 +1892,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               setSavingMode(true);
             }} />
             {node.type === 'group' && (
+              <CardButton icon="spark" tint="fn" label="Publish as a node type (flattens the group into one GLSL function)" onClick={() => setShowPublish(true)} />
+            )}
+            {node.type === 'group' && (
               <CardButton icon="unlink"
                 label={groupIters > 1 ? 'Ungroup (iterations flatten to a single pass)' : 'Ungroup (put the nodes back in the graph)'}
                 onClick={() => ungroupNode(node.id)} />
@@ -2446,6 +2452,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   outerNode={node}
                   onClose={() => setShowParamPicker(false)}
                 />
+              )}
+              {showPublish && (
+                <PublishNodeModal groupNode={node} onClose={() => setShowPublish(false)} />
               )}
             </div>
           );

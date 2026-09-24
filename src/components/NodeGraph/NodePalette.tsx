@@ -7,6 +7,7 @@ import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
+import { useUserNodes } from '../../nodes/userNodes/useUserNodes';
 import type { TransformPreset } from '../../types/transformPreset';
 import type { KeyframePreset } from '../../types/keyframePreset';
 import { useTokens } from '../../theme/themeStore';
@@ -39,11 +40,14 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDelete, onRename }: {
+function ItemRow({ label, icon, color, onClick, onDelete, onRename, onEdit, editLabel = 'Edit' }: {
   label: string; icon: IconName; color: string;
   onClick: () => void;
   onDelete?: () => void;
   onRename?: () => void;
+  /** Open the item for editing (distinct from renaming). */
+  onEdit?: () => void;
+  editLabel?: string;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
@@ -63,6 +67,7 @@ function ItemRow({ label, icon, color, onClick, onDelete, onRename }: {
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}
       >{label}</button>
+      {hovered && onEdit && <IconButton icon="layoutGraph" label={editLabel} size="sm" onClick={e => { e.stopPropagation(); onEdit(); }} />}
       {hovered && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
       {hovered && onDelete && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
     </div>
@@ -137,6 +142,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const groupPresets      = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
+  const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
+  const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
+  const userNodes          = useUserNodes();
   const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
   const loadExampleGraph  = useNodeGraphStore(s => s.loadExampleGraph);
 
@@ -326,6 +334,27 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
       case 'presets':
         return (
           <>
+            <TabSectionHeader label="My nodes" />
+            <FolderableList
+              scopeKey="presets:usernodes"
+              color={tabColor('presets')}
+              items={userNodes.map(d => ({ id: d.id, label: d.label }))}
+              renderItem={(item) => {
+                const d = userNodes.find(u => u.id === item.id);
+                if (!d) return null;
+                return (
+                  <ItemRow label={d.label} icon="spark" color={tk.kind.fn}
+                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode(d.id, {x,y}); onNodeAdded?.(); }}
+                    onEdit={d.source ? () => {
+                      const x = 200+Math.random()*120, y = 120+Math.random()*200;
+                      if (openUserNodeSource(d.id, {x,y})) onNodeAdded?.();
+                    } : undefined}
+                    editLabel="Open source graph (publish again to update)"
+                    onDelete={() => { if (window.confirm(`Delete node type “${d.label}”? Placed instances will stop compiling.`)) deleteUserNode(d.id); }} />
+                );
+              }}
+              emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes.</EmptyHint>}
+            />
             <TabSectionHeader label="Group presets" />
             <FolderableList
               scopeKey="presets:group"

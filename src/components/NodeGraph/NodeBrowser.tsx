@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { scoreNodeDef } from '../../nodes/searchNodes';
 import { createPortal } from 'react-dom';
-import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
+import { getAllCategories, getNodesByCategory, getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
+import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
@@ -29,7 +30,7 @@ const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
   { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces', 'Grid', 'Field'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Transforms', 'Conditionals'] },
-  { label: 'Functions',    categories: ['Functions'] },
+  { label: 'Functions',    categories: ['My Nodes', 'Functions'] },
   { label: 'Utility',      categories: ['Utility', 'Output'] },
 ];
 
@@ -366,6 +367,7 @@ export function NodeBrowser({
 
   const isSearching = searchQuery.trim().length > 0;
 
+  useUserNodesVersion(); // re-render when a node type is published or deleted
   const allCats = getAllCategories();
   const categories = [
     ...CATEGORY_ORDER.filter(c => allCats.includes(c)),
@@ -375,7 +377,7 @@ export function NodeBrowser({
   useEffect(() => {
     const handler = (e: Event) => {
       const { nodeType } = (e as CustomEvent<{ nodeType: string }>).detail;
-      const def = NODE_REGISTRY[nodeType];
+      const def = getNodeDefinition(nodeType);
       if (!def) return;
       setPath([def.category]);
       setPreviewType(nodeType);
@@ -459,8 +461,8 @@ export function NodeBrowser({
 
   if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
-    const results = Object.values(NODE_REGISTRY)
-      .filter(def => !HIDDEN_NODES.has(def.type) && !def.deprecated)
+    const results = getOfferedDefinitions()
+      .filter(def => !HIDDEN_NODES.has(def.type))
       .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
@@ -470,7 +472,7 @@ export function NodeBrowser({
       : <div>{renderPills(results)}</div>;
 
   } else if (path.length === 0) {
-    const favCount = favorites.filter(t => NODE_REGISTRY[t] && !HIDDEN_NODES.has(t)).length;
+    const favCount = favorites.filter(t => getNodeDefinition(t) && !HIDDEN_NODES.has(t)).length;
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {favCount > 0 && (
@@ -517,7 +519,7 @@ export function NodeBrowser({
 
   } else if (path[0] === '__favorites__') {
     const favDefs = favorites
-      .map(t => NODE_REGISTRY[t])
+      .map(t => getNodeDefinition(t))
       .filter((d): d is NonNullable<typeof d> => !!d && !HIDDEN_NODES.has(d.type));
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
