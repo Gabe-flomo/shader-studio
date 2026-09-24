@@ -3149,8 +3149,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         if (typeof val !== 'number') { allAreUniforms = false; break; }
         // Editing inside a group passes the inner node's own id with a plain key.
         // Editing a group node's override passes the group id with an
-        // `innerNodeId::paramKey` key — which is already the binding key.
-        const bindingKey = key.includes('::') ? key : paramBindingKey(nodeId, key);
+        // `innerNodeId::paramKey` key — which is already the binding key. A param
+        // surfaced from a nested group uses `nestedGroupId::innerNodeId::paramKey`;
+        // the compiler binds it by the inner node's own id, i.e. the last two parts.
+        const bindingKey = key.includes('::') ? key.split('::').slice(-2).join('::') : paramBindingKey(nodeId, key);
         const uniformName = paramBindings[bindingKey];
         if (!uniformName || !(uniformName in currentUniforms)) { allAreUniforms = false; break; }
         uniformUpdates[uniformName] = val;
