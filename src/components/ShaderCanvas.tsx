@@ -75,6 +75,15 @@ export interface OfflineRenderHandle {
   /** Pixel dimensions of the export render target */
   width: number;
   height: number;
+  /**
+   * Render the live canvas at `scale`× its CSS size (1 = normal preview).
+   * Used for high-resolution export: the canvas's drawing buffer, u_resolution
+   * and every internal RT are resized so the shader is actually evaluated at
+   * the higher resolution rather than upscaled. Returns the drawing-buffer
+   * size the GPU actually allocated — browsers silently clamp oversized
+   * buffers, so callers should compare it against what they asked for.
+   */
+  setRenderScale: (scale: number) => { width: number; height: number };
 }
 
 // Font texture: 16×16 grid of ASCII chars (codes 0-255), 64×64 px per cell.
@@ -238,6 +247,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
 
     const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     renderer.setSize(1, 1);
+    // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
+    // exporting at 2×/4× (see OfflineRenderHandle.setRenderScale).
+    let renderScale = 1;
+    let cssW = 1;
+    let cssH = 1;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
     onCanvasReady?.(renderer.domElement);
@@ -339,6 +353,16 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       const handle: OfflineRenderHandle = {
         get width()  { ensureRT(); return exportW; },
         get height() { ensureRT(); return exportH; },
+        setRenderScale: (scale: number) => {
+          // Free export RTs sized for the previous scale — at 4× they can be
+          // hundreds of MB, which matters on mobile GPUs.
+          exportRT?.dispose(); exportRT = null;
+          exportReadbackRT?.dispose(); exportReadbackRT = null;
+          exportW = 0; exportH = 0;
+          renderScale = scale;
+          applySize();
+          return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+        },
         renderAtTime: (time: number) => {
           material.uniforms.u_time.value = time;
           renderer.setRenderTarget(exportRT);
@@ -451,20 +475,31 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         `  gl_FragColor = vec4(hpnx, hpny, 0.0, 1.0);\n}`;
     };
 
-    const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width === 0 || height === 0) return;
-      renderer.setSize(width, height);
-      material.uniforms.u_resolution.value.set(width, height);
-      rt.setSize(width, height);
-      floatRt.setSize(width, height);
-      perspCamera.aspect = width / height;
+    // CSS size is floored so the drawing buffer at render scale N is exactly
+    // N× the 1× buffer — the export modal predicts output size that way.
+    const applySize = () => {
+      renderer.setPixelRatio(renderScale);
+      renderer.setSize(cssW, cssH);
+      const w = renderer.domElement.width;
+      const h = renderer.domElement.height;
+      material.uniforms.u_resolution.value.set(w, h);
+      rt.setSize(w, h);
+      floatRt.setSize(w, h);
+      perspCamera.aspect = w / h;
       perspCamera.updateProjectionMatrix();
       // Resize ping-pong RTs and reset state
       if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
       pingPongIdx.current = 0;
       if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = null;
+    };
+
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      if (width < 1 || height < 1) return;
+      cssW = Math.floor(width);
+      cssH = Math.floor(height);
+      applySize();
     });
     ro.observe(container);
 
@@ -998,10 +1033,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
 
     const handleMouseMove = (e: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      // Drawing-buffer pixels, so u_mouse matches gl_FragCoord at any render scale
+      const x = (e.clientX - rect.left) * renderScale;
+      const y = (e.clientY - rect.top) * renderScale;
       // Update u_mouse uniform (WebGL coords: 0 = bottom-left)
-      material.uniforms.u_mouse.value.set(x, rect.height - y);
+      material.uniforms.u_mouse.value.set(x, rect.height * renderScale - y);
       // Track for pixel readback (DOM coords: 0 = top-left)
       mousePosRef.current = { x, y };
     };
