@@ -776,6 +776,36 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     });
   }, [smartConnect, displayNodes, socketWorld]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
+  // Add-then-wire: a node just added from search gets Smart connect on its first output, once
+  // its socket has been measured, and only when there is something to suggest.
+  const smartConnectRequest = useNodeGraphStore(s => s.smartConnectRequest);
+  useEffect(() => {
+    if (!smartConnectRequest) return;
+    const { nodeId, at } = smartConnectRequest;
+    let tries = 0;
+    let raf = 0;
+    const attempt = () => {
+      if (Date.now() - at > 2000) { useNodeGraphStore.getState().requestSmartConnect(null); return; }
+      const node = displayNodesRef.current.find(n => n.id === nodeId);
+      const key = node ? Object.keys(node.outputs)[0] : undefined;
+      const pos = node && key ? socketWorld(node.id, 'out', key) : null;
+      if (!pos || !node || !key) { if (tries++ < 30) raf = requestAnimationFrame(attempt); return; }
+      useNodeGraphStore.getState().requestSmartConnect(null);
+      const suggestions = suggestConnections({
+        nodes: displayNodesRef.current, from: { nodeId, key, dir: 'out' }, socketPos: socketWorld,
+        labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
+      });
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (suggestions.length === 0 || !rect) return;
+      setSmartConnect({
+        nodeId, key, dir: 'out',
+        x: rect.left + pos.x * zoomRef.current + panRef.current.x,
+        y: rect.top + pos.y * zoomRef.current + panRef.current.y,
+      });
+    };
+    raf = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(raf);
+  }, [smartConnectRequest, socketWorld]);
   const pickSuggestion = useCallback((s: Suggestion) => {
     if (!smartConnect) return;
     if (smartConnect.dir === 'out') connectNodes(smartConnect.nodeId, smartConnect.key, s.nodeId, s.key);

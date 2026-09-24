@@ -319,6 +319,9 @@ interface NodeGraphState {
   /** Set by revealNode; NodeGraph centres on the node once it is on screen, then clears it. */
   focusRequest: { nodeId: string; seq: number } | null;
   clearFocusRequest: () => void;
+  /** After a node is added from search, NodeGraph opens Smart connect on its first output */
+  smartConnectRequest: { nodeId: string; at: number } | null;
+  requestSmartConnect: (nodeId: string | null) => void;
   setNodeProbeValues: (values: Record<string, number[]> | null) => void;
   /** Live-sampled normalized [0,1] values for all scope nodes: nodeId → number */
   scopeProbeValues: Record<string, number>;
@@ -4050,6 +4053,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
   focusRequest: null,
   clearFocusRequest: () => set({ focusRequest: null }),
+  smartConnectRequest: null,
+  requestSmartConnect: (nodeId) => set({ smartConnectRequest: nodeId ? { nodeId, at: Date.now() } : null }),
   setNodeProbeValues: (values) => set(state => {
     const cur = state.nodeProbeValues;
     if (cur === values) return state;

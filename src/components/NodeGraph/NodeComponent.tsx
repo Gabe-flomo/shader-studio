@@ -531,6 +531,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Comment text lives in node.params.__comment — same "__-prefixed metadata,
   // not a real shader param" convention already used by __codeOverride.
   const nodeComment = typeof node.params.__comment === 'string' ? (node.params.__comment as string) : '';
+  // Close the comment editor; a comment that's only whitespace is removed rather than kept
+  const finishComment = () => {
+    if (typeof node.params.__comment === 'string' && !node.params.__comment.trim()) updateNodeParams(node.id, { __comment: undefined });
+    setShowCommentEditor(false);
+  };
 
   // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
   const scopeCanvasRef        = useRef<HTMLCanvasElement>(null);
@@ -3867,7 +3872,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onChange={e => updateNodeParams(node.id, { __comment: e.target.value })}
             onKeyDown={e => {
               e.stopPropagation();
-              if (e.key === 'Escape') setShowCommentEditor(false);
+              if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); finishComment(); }
             }}
             style={{
               width: '100%', minHeight: 58, boxSizing: 'border-box', resize: 'vertical', border: 0, outline: 'none',
@@ -3875,6 +3880,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               font: `12.5px/1.45 ${fontFamily.ui}`,
             }}
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+            {nodeComment && (
+              <Button size="sm" variant="ghost" icon="trash" style={{ color: tk.status.danger }}
+                onClick={() => { updateNodeParams(node.id, { __comment: undefined }); setShowCommentEditor(false); }}>Delete</Button>
+            )}
+            <span style={{ flex: 1 }} />
+            <Button size="sm" variant="primary" onClick={finishComment} title="Done (⌘↵)">Done</Button>
+          </div>
         </div>
       )}
 
