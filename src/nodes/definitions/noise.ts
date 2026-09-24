@@ -25,7 +25,7 @@ export const FBMNode: NodeDefinition = {
   description: 'Fractal Brownian Motion — layered value noise returning a float in [0,1]. Use as a texture, displacement, or color driver.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
-    time:      { type: 'float', label: 'Time'      },
+    time:      { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the noise is frozen.' },
     scale:     { type: 'float', label: 'Frequency'     },
     time_scale:{ type: 'float', label: 'Speed'},
   },
@@ -36,11 +36,11 @@ export const FBMNode: NodeDefinition = {
   glslFunction: FBM_GLSL,
   defaultParams: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 1.0, time_scale: 0.0 },
   paramDefs: {
-    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 8,   step: 1    },
-    lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01 },
-    gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01 },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 8,   step: 1, hint: 'Layers of detail. 1 is smooth blobs, 6+ adds fine grain; each costs GPU time.' },
+    lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01, hint: 'Frequency jump between layers. 2 is standard; higher = finer detail sooner.' },
+    gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'How much each finer layer contributes. 0.5 is natural; higher = rougher.' },
     scale:      { label: 'Frequency',      type: 'float', min: 0.1, max: 10.0,step: 0.1, hint: 'Bigger means smaller, busier features.'  },
-    time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+    time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'How fast the noise drifts. Needs Time wired.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id         = node.id;
@@ -91,7 +91,7 @@ export const VoronoiNode: NodeDefinition = {
   description: 'Worley (cell) noise — returns distance to nearest cell center. Great for organic patterns, cracked textures, and cell-glow effects.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
-    time:      { type: 'float', label: 'Time'      },
+    time:      { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the cells are frozen.' },
     scale:     { type: 'float', label: 'Cell density'     },
     jitter:    { type: 'float', label: 'Randomness'    },
     time_scale:{ type: 'float', label: 'Speed'},
@@ -105,7 +105,7 @@ export const VoronoiNode: NodeDefinition = {
   paramDefs: {
     scale:      { label: 'Cell density',      type: 'float', min: 0.5,  max: 20.0, step: 0.1, hint: 'Cells per unit.'  },
     jitter:     { label: 'Randomness',     type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: '0 is a regular grid, 1 is fully random.' },
-    time_scale: { label: 'Speed', type: 'float', min: 0.0,  max: 2.0,  step: 0.01 },
+    time_scale: { label: 'Speed', type: 'float', min: 0.0,  max: 2.0,  step: 0.01, hint: 'How fast the cells move. Needs Time wired.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -154,7 +154,7 @@ export const DomainWarpNode: NodeDefinition = {
   description: 'Domain warp — distorts UV using layered noise. Produces organic swirling, fluid, and marble-like effects when used before SDFs or fractal loops.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
-    time:      { type: 'float', label: 'Time'      },
+    time:      { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the warp is frozen.' },
     strength:  { type: 'float', label: 'Strength'  },
     scale:     { type: 'float', label: 'Scale'     },
     time_scale:{ type: 'float', label: 'Speed'},
@@ -166,12 +166,12 @@ export const DomainWarpNode: NodeDefinition = {
   glslFunction: DOMAIN_WARP_FULL_GLSL,
   defaultParams: { strength: 0.5, scale: 1.0, octaves: 3, lacunarity: 2.0, gain: 0.5, time_scale: 0.0 },
   paramDefs: {
-    strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 3.0, step: 0.01 },
-    scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1  },
-    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 4,   step: 1    },
-    lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01 },
-    gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+    strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 3.0, step: 0.01, hint: 'How far the noise pushes UV. 0.5 is marbled, 2+ is soup.' },
+    scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1, hint: 'Frequency of the warp noise. Higher = smaller swirls.' },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 4,   step: 1, hint: 'Noise layers in the warp. More = more detailed distortion.' },
+    lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01, hint: 'Frequency jump between layers. 2 is standard.' },
+    gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Contribution of each finer layer. 0.5 is natural.' },
+    time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'How fast the warp drifts. Needs Time wired.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -255,7 +255,7 @@ export const FlowFieldNode: NodeDefinition = {
   description: 'Tyler Hobbs-style flow field — curves march step-by-step through a grid of noise-derived angles. field_mode: perlin (smooth), curl (swirling loops), quantized (rocky angular). Adjust curves, steps, and line_width for fur → long fluid strokes.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'   },
-    time:  { type: 'float', label: 'Time' },
+    time:  { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the field is frozen.' },
   },
   outputs: {
     color:    { type: 'vec3',  label: 'Color'      },
@@ -280,27 +280,27 @@ export const FlowFieldNode: NodeDefinition = {
     palette_d: [0.0, 0.33, 0.67],
   },
   paramDefs: {
-    curves:        { label: 'Curves',        type: 'float',  min: 4,    max: 150,  step: 1     },
-    steps:         { label: 'Steps/Curve',   type: 'float',  min: 2,    max: 64,   step: 1     },
-    step_size:     { label: 'Step Size',     type: 'float',  min: 0.002,max: 0.15, step: 0.002 },
-    noise_scale:   { label: 'Noise Scale',   type: 'float',  min: 0.1,  max: 8.0,  step: 0.05  },
-    speed:         { label: 'Speed',    type: 'float',  min: 0.0,  max: 1.0,  step: 0.005 },
-    line_width:    { label: 'Line Width',    type: 'float',  min: 0.001,max: 0.05, step: 0.001 },
-    line_softness: { label: 'Line Softness', type: 'float',  min: 0.5,  max: 6.0,  step: 0.1   },
+    curves:        { label: 'Curves',        type: 'float',  min: 4,    max: 150,  step: 1, hint: 'Number of curves marched. More = denser strokes, more GPU cost.' },
+    steps:         { label: 'Steps/Curve',   type: 'float',  min: 2,    max: 64,   step: 1, hint: 'Segments per curve. More = longer, smoother strokes.' },
+    step_size:     { label: 'Step Size',     type: 'float',  min: 0.002,max: 0.15, step: 0.002, hint: 'Length of each segment. Larger = longer, coarser strokes.' },
+    noise_scale:   { label: 'Noise Scale',   type: 'float',  min: 0.1,  max: 8.0,  step: 0.05, hint: 'Frequency of the angle field. Higher = tighter, curlier paths.' },
+    speed:         { label: 'Speed',    type: 'float',  min: 0.0,  max: 1.0,  step: 0.005, hint: 'How fast the field evolves. Needs Time wired.' },
+    line_width:    { label: 'Line Width',    type: 'float',  min: 0.001,max: 0.05, step: 0.001, hint: 'Thickness of each stroke.' },
+    line_softness: { label: 'Line Softness', type: 'float',  min: 0.5,  max: 6.0,  step: 0.1, hint: 'Edge falloff of each stroke. Higher = blurrier lines.' },
     field_mode:    {
-      label: 'Field Mode', type: 'select',
+      label: 'Field Mode', type: 'select', hint: 'Perlin flows smoothly, Curl makes closed loops, Quantized snaps to fixed angles.',
       options: [
         { value: 'perlin',    label: 'Perlin (smooth)'   },
         { value: 'curl',      label: 'Curl (loops)'      },
         { value: 'quantized', label: 'Quantized (rocky)' },
       ],
     },
-    quant_steps:   { label: 'Quant Steps',   type: 'float',  min: 2,    max: 32,   step: 1     },
-    palette_offset:{ label: 'Color Phase',   type: 'float',  min: 0.0,  max: 6.28, step: 0.01  },
-    palette_a:     { label: 'Palette A',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01  },
-    palette_b:     { label: 'Palette B',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01  },
-    palette_c:     { label: 'Palette C',     type: 'vec3',   min: 0.0,  max: 2.0,  step: 0.01  },
-    palette_d:     { label: 'Palette D',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01  },
+    quant_steps:   { label: 'Quant Steps',   type: 'float',  min: 2,    max: 32,   step: 1, hint: 'Number of allowed angles in Quantized mode. 4 is boxy, 8 is octagonal.' },
+    palette_offset:{ label: 'Color Phase',   type: 'float',  min: 0.0,  max: 6.28, step: 0.01, hint: 'Rotates the palette phase, in radians.' },
+    palette_a:     { label: 'Palette A',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette base color (cosine palette a).' },
+    palette_b:     { label: 'Palette B',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette amplitude per channel (cosine palette b).' },
+    palette_c:     { label: 'Palette C',     type: 'vec3',   min: 0.0,  max: 2.0,  step: 0.01, hint: 'Palette frequency per channel (cosine palette c).' },
+    palette_d:     { label: 'Palette D',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette phase per channel (cosine palette d).' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id         = node.id;
@@ -397,7 +397,7 @@ export const CirclePackNode: NodeDefinition = {
   description: 'Tyler Hobbs-style brute-force circle packing. Hash-placed circles with collision avoidance. circle_mode: flat, gradient (radial falloff), ring (stroke), or noise-filled. Great as a standalone design or as starting positions for a Flow Field.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Wire Time to pulse the circles (with Pulse Speed above 0).' },
   },
   outputs: {
     color:    { type: 'vec3',  label: 'Color'    },
@@ -421,12 +421,12 @@ export const CirclePackNode: NodeDefinition = {
     palette_d: [0.0, 0.33, 0.67],
   },
   paramDefs: {
-    circles:       { label: 'Circles',       type: 'float',  min: 4,    max: 200,  step: 1     },
-    min_radius:    { label: 'Min Radius',    type: 'float',  min: 0.005,max: 0.3,  step: 0.005 },
-    max_radius:    { label: 'Max Radius',    type: 'float',  min: 0.01, max: 0.5,  step: 0.005 },
-    padding:       { label: 'Padding',       type: 'float',  min: 0.0,  max: 0.1,  step: 0.002 },
+    circles:       { label: 'Circles',       type: 'float',  min: 4,    max: 200,  step: 1, hint: 'Number of circles attempted. More = denser packing, more GPU cost.' },
+    min_radius:    { label: 'Min Radius',    type: 'float',  min: 0.005,max: 0.3,  step: 0.005, hint: 'Smallest circle allowed.' },
+    max_radius:    { label: 'Max Radius',    type: 'float',  min: 0.01, max: 0.5,  step: 0.005, hint: 'Largest circle allowed.' },
+    padding:       { label: 'Padding',       type: 'float',  min: 0.0,  max: 0.1,  step: 0.002, hint: 'Gap kept between neighboring circles.' },
     circle_mode:   {
-      label: 'Circle Mode', type: 'select',
+      label: 'Circle Mode', type: 'select', hint: 'Flat is solid, Gradient fades outward, Ring is an outline, Noise fills with texture.',
       options: [
         { value: 'flat',     label: 'Flat (solid)'        },
         { value: 'gradient', label: 'Gradient (radial)'   },
@@ -434,13 +434,13 @@ export const CirclePackNode: NodeDefinition = {
         { value: 'noise',    label: 'Noise fill'          },
       ],
     },
-    edge_softness: { label: 'Edge Softness', type: 'float',  min: 0.1,  max: 6.0,  step: 0.1   },
-    animate:       { label: 'Pulse Speed',   type: 'float',  min: 0.0,  max: 2.0,  step: 0.05  },
-    palette_offset:{ label: 'Color Phase',   type: 'float',  min: 0.0,  max: 6.28, step: 0.01  },
-    palette_a:     { label: 'Palette A',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01  },
-    palette_b:     { label: 'Palette B',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01  },
-    palette_c:     { label: 'Palette C',     type: 'vec3',   min: 0.0,  max: 2.0,  step: 0.01  },
-    palette_d:     { label: 'Palette D',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01  },
+    edge_softness: { label: 'Edge Softness', type: 'float',  min: 0.1,  max: 6.0,  step: 0.1, hint: 'Edge falloff of each circle. Higher = blurrier.' },
+    animate:       { label: 'Pulse Speed',   type: 'float',  min: 0.0,  max: 2.0,  step: 0.05, hint: 'How fast circles pulse in size. 0 is still. Needs Time wired.' },
+    palette_offset:{ label: 'Color Phase',   type: 'float',  min: 0.0,  max: 6.28, step: 0.01, hint: 'Rotates the palette phase, in radians.' },
+    palette_a:     { label: 'Palette A',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette base color (cosine palette a).' },
+    palette_b:     { label: 'Palette B',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette amplitude per channel (cosine palette b).' },
+    palette_c:     { label: 'Palette C',     type: 'vec3',   min: 0.0,  max: 2.0,  step: 0.01, hint: 'Palette frequency per channel (cosine palette c).' },
+    palette_d:     { label: 'Palette D',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette phase per channel (cosine palette d).' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id         = node.id;
@@ -554,7 +554,7 @@ export const NoiseFloatNode: NodeDefinition = {
   description: 'Outputs a float noise value (0–1) based on UV position and time. Wire into any float input — radius, brightness, angle, mix amount — to inject per-pixel randomness. Smooth=value noise (organic), Hash=raw hash (grain-like).',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the noise is frozen.' },
   },
   outputs: {
     value: { type: 'float', label: 'Value (0–1)' },
@@ -562,10 +562,10 @@ export const NoiseFloatNode: NodeDefinition = {
   },
   defaultParams: { scale: 4.0, speed: 0.5, mode: 'smooth' },
   paramDefs: {
-    scale: { label: 'Scale', type: 'float', min: 0.1, max: 40.0, step: 0.1 },
-    speed: { label: 'Speed', type: 'float', min: 0.0, max: 5.0,  step: 0.01 },
+    scale: { label: 'Scale', type: 'float', min: 0.1, max: 40.0, step: 0.1, hint: 'Frequency of the noise. Higher = smaller, busier features.' },
+    speed: { label: 'Speed', type: 'float', min: 0.0, max: 5.0,  step: 0.01, hint: 'How fast the noise evolves. Needs Time wired.' },
     mode:  {
-      label: 'Mode', type: 'select',
+      label: 'Mode', type: 'select', hint: 'Smooth is soft organic blobs; Hash is per-pixel static grain.',
       options: [
         { value: 'smooth', label: 'Smooth (value noise)' },
         { value: 'hash',   label: 'Hash (grain-like)'    },
@@ -686,9 +686,9 @@ export const ScatterNode: NodeDefinition = {
   description: 'Generic organic jitter — perturbs a float Value and/or a vec2 Field with time-varying noise. Frequency is how fast the scatter evolves per second; Amplitude is how far it displaces things (raise it to exaggerate a small scatter). Field defaults to UV when unwired, so wiring just UV+Time reproduces the old inline turbulence look. Note: perturbing a POSITION that feeds a high-frequency function (like Chladni\'s n/m) with the Grainy/Jump modes will alias into full-frame static at almost any amplitude — that\'s not a bug to tune away, it\'s what per-pixel-incoherent noise does to a fast-oscillating function. For a literal sand-grain texture, apply Grain or Luma Grain to the final density/color instead of scattering the input position.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'    },
-    time:  { type: 'float', label: 'Time'  },
-    value: { type: 'float', label: 'Value' },
-    field: { type: 'vec2',  label: 'Field' },
+    time:  { type: 'float', label: 'Time', hint: 'Wire Time to animate the scatter; unwired it is a fixed offset.' },
+    value: { type: 'float', label: 'Value', hint: 'Float to jitter. Leave empty if you only need Field.' },
+    field: { type: 'vec2',  label: 'Field', hint: 'Vec2 to jitter. Defaults to UV when unwired.' },
   },
   outputs: {
     value: { type: 'float', label: 'Scattered Value' },
@@ -705,7 +705,7 @@ export const ScatterNode: NodeDefinition = {
     frequency: { label: 'Frequency', type: 'float', min: 0.0, max: 5.0, step: 0.01,  hint: 'How fast the scatter drifts, CC Scatter-style — higher moves faster. Only reads as continuous "speed" in Smooth/Fractal/Swirl modes; Grainy and Jump reshuffle per-frame/per-step by design, so frequency mostly changes how often they reshuffle rather than how fast they glide.' },
     amplitude: { label: 'Amplitude', type: 'float', min: 0.0, max: 2.0, step: 0.001, hint: 'How far the scatter displaces Value/Field — exaggerates the effect.' },
     noise_mode: {
-      label: 'Noise Mode', type: 'select',
+      label: 'Noise Mode', type: 'select', hint: 'Smooth/Fractal/Swirl drift continuously; Clumpy is cellular; Grainy and Jump stutter.',
       options: [
         { value: 'value',   label: 'Smooth (organic drift)' },
         { value: 'fbm',     label: 'Fractal (detailed drift)' },

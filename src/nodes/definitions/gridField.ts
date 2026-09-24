@@ -9,18 +9,18 @@ export const GaussianFieldNode: NodeDefinition = {
   type: 'gaussianField',
   label: 'Gaussian Field',
   category: 'Field',
-  description: 'Computes a single Gaussian field emission: exp(-d²·k). 1.0 at center, falls off smoothly. Use with += carry in a looped group to accumulate from multiple sources.',
+  description: 'Computes a single Gaussian field emission: exp(-d²·k). 1.0 at center, falls off smoothly. Use with += carry in a looped group to accumulate from multiple sources. Use with Loop Carry (float, adding each pass) inside an iterated group, then Metaball Threshold.',
   inputs: {
-    pos:    { type: 'vec2', label: 'Position' },
-    center: { type: 'vec2', label: 'Center' },
+    pos:    { type: 'vec2', label: 'Position', hint: 'Pixel position in world space; defaults to UV.' },
+    center: { type: 'vec2', label: 'Center', hint: 'Source point of the blob. Try Animated Cell Center.' },
   },
   outputs: {
     field: { type: 'float', label: 'Field' },
   },
   defaultParams: { k: 2.5, gridSize: 8.0 },
   paramDefs: {
-    k:        { label: 'Tightness', type: 'float', min: 0.5,  max: 8.0,  step: 0.05 },
-    gridSize: { label: 'Grid Size', type: 'float', min: 1.0,  max: 24.0, step: 1.0  },
+    k:        { label: 'Tightness', type: 'float', min: 0.5,  max: 8.0,  step: 0.05, hint: 'How quickly the field falls off. Higher = smaller, sharper blob.' },
+    gridSize: { label: 'Grid Size', type: 'float', min: 1.0,  max: 24.0, step: 1.0, hint: 'Scales distances so a blob spans about one grid cell at this column count.' },
   },
   glslFunction: `float gaussianFieldFn(vec2 pos, vec2 center, float k, float gridSize) {
     vec2 d = (pos - center) * gridSize;
@@ -73,20 +73,20 @@ export const FieldAccumulateNode: NodeDefinition = {
   type: 'fieldAccumulate',
   label: 'Field Accumulate',
   category: 'Field',
-  description: 'Sums Gaussian field contributions from a 3×3 or 5×5 grid neighborhood. Quick metaball setup. For animated positions use a looped group + Gaussian Field instead.',
+  description: 'Sums Gaussian field contributions from a 3×3 or 5×5 grid neighborhood. Quick metaball setup. For animated positions use a looped group + Gaussian Field instead. Use with Grid (Cell ID) and Metaball Threshold.',
   inputs: {
-    worldPos:  { type: 'vec2', label: 'World Pos' },
-    cellID:    { type: 'vec2', label: 'Cell ID'   },
-    dotOffset: { type: 'vec2', label: 'Dot Offset' },
+    worldPos:  { type: 'vec2', label: 'World Pos', hint: 'Pixel position in world space; defaults to UV.' },
+    cellID:    { type: 'vec2', label: 'Cell ID', hint: 'Wire Cell ID from Grid.' },
+    dotOffset: { type: 'vec2', label: 'Dot Offset', hint: 'Shifts every blob off its cell center, in cell units.' },
   },
   outputs: {
     totalField: { type: 'float', label: 'Total Field' },
   },
   defaultParams: { gridSize: 8.0, k: 2.5, neighborRadius: 2 },
   paramDefs: {
-    gridSize:       { label: 'Grid Size',  type: 'float',  min: 1.0, max: 24.0, step: 1.0 },
-    k:              { label: 'Tightness',  type: 'float',  min: 0.5, max: 6.0,  step: 0.05 },
-    neighborRadius: { label: 'Radius',     type: 'select', options: [
+    gridSize:       { label: 'Grid Size',  type: 'float',  min: 1.0, max: 24.0, step: 1.0, hint: 'Must match the Grid column count so neighbors line up.' },
+    k:              { label: 'Tightness',  type: 'float',  min: 0.5, max: 6.0,  step: 0.05, hint: 'How quickly each blob falls off. Higher = tighter blobs, less merging.' },
+    neighborRadius: { label: 'Radius',     type: 'select', hint: 'Cells sampled around the current one. 5x5 avoids seams with loose blobs.', options: [
       { value: '1', label: '1 (3×3)' },
       { value: '2', label: '2 (5×5)' },
     ]},
@@ -117,9 +117,9 @@ export const MetaballThresholdNode: NodeDefinition = {
   type: 'metaballThreshold',
   label: 'Metaball Threshold',
   category: 'Field',
-  description: 'Converts summed Gaussian field into a blob fill and edge ring. Wire threshold to an LFO for pulsing blobs. Edge output drives neon outline effects.',
+  description: 'Converts summed Gaussian field into a blob fill and edge ring. Wire threshold to an LFO for pulsing blobs. Edge output drives neon outline effects. Use with Field Accumulate or Gaussian Field (Field input).',
   inputs: {
-    field:     { type: 'float', label: 'Field' },
+    field:     { type: 'float', label: 'Field', hint: 'Wire Total Field from Field Accumulate or a summed Gaussian Field.' },
     threshold: { type: 'float', label: 'Threshold' },
   },
   outputs: {
@@ -128,8 +128,8 @@ export const MetaballThresholdNode: NodeDefinition = {
   },
   defaultParams: { threshold: 0.7, softness: 0.06 },
   paramDefs: {
-    threshold: { label: 'Threshold', type: 'float', min: 0.2, max: 1.5,  step: 0.01  },
-    softness:  { label: 'Softness',  type: 'float', min: 0.01, max: 0.2, step: 0.005 },
+    threshold: { label: 'Threshold', type: 'float', min: 0.2, max: 1.5,  step: 0.01, hint: 'Field level where blobs turn solid. Lower merges more.' },
+    softness:  { label: 'Softness',  type: 'float', min: 0.01, max: 0.2, step: 0.005, hint: 'Blur on the blob edge and width of the Edge ring.' },
   },
   glslFunction: `vec2 metaballThresholdFn(float field, float thresh, float soft) {
     float blob = smoothstep(thresh - soft, thresh + soft, field);
@@ -162,11 +162,11 @@ export const FieldToLinesNode: NodeDefinition = {
   type: 'fieldToLines',
   label: 'Field to Lines',
   category: 'Field',
-  description: 'Draws the zero-crossing of any scalar field as an anti-aliased nodal line (fwidth-based). This is the exact technique the Chladni node uses internally — generalized so it works on any float field, not just Chladni sums. Width Jitter + Grain give it a scattered, hand-drawn/sand-like texture — crank Width Jitter well past 1 for a fully dust-like edge. Grain alone controls both how much and how sporadically it reshuffles: 0 is fully static/off, and raising it makes the grain both more visible and more restless. Grain is multiplied onto the already-computed density, so it can only ever appear where the line already is — the "mask" is automatic.',
+  description: 'Draws the zero-crossing of any scalar field as an anti-aliased nodal line (fwidth-based). This is the exact technique the Chladni node uses internally — generalized so it works on any float field, not just Chladni sums. Width Jitter + Grain give it a scattered, hand-drawn/sand-like texture — crank Width Jitter well past 1 for a fully dust-like edge. Grain alone controls both how much and how sporadically it reshuffles: 0 is fully static/off, and raising it makes the grain both more visible and more restless. Grain is multiplied onto the already-computed density, so it can only ever appear where the line already is — the "mask" is automatic. Use with any float field: Chladni sums, Fractal Noise (FBM), Field Accumulate or an SDF.',
   inputs: {
-    field:        { type: 'float', label: 'Field' },
-    uv:           { type: 'vec2',  label: 'UV (for texture)' },
-    time:         { type: 'float', label: 'Time (for grain animation)' },
+    field:        { type: 'float', label: 'Field', hint: 'Any float field; the line is drawn where it crosses zero.' },
+    uv:           { type: 'vec2',  label: 'UV (for texture)', hint: 'Position for the jitter and grain textures. Falls back to a field-derived value.' },
+    time:         { type: 'float', label: 'Time (for grain animation)', hint: 'Drives the grain shimmer. Unwired the grain is static.' },
     line_width:   { type: 'float', label: 'Line Width' },
     aa:           { type: 'float', label: 'AA Smooth' },
     brightness:   { type: 'float', label: 'Brightness' },
@@ -187,9 +187,9 @@ export const FieldToLinesNode: NodeDefinition = {
     grain:        0.0,
   },
   paramDefs: {
-    line_width:   { label: 'Line Width',   type: 'float', min: 0.1, max: 8.0,  step: 0.05 },
-    aa:           { label: 'AA Smooth',    type: 'float', min: 0.0, max: 4.0,  step: 0.1  },
-    brightness:   { label: 'Brightness',   type: 'float', min: 0.1, max: 5.0,  step: 0.05 },
+    line_width:   { label: 'Line Width',   type: 'float', min: 0.1, max: 8.0,  step: 0.05, hint: 'Thickness of the line, in pixels roughly.' },
+    aa:           { label: 'AA Smooth',    type: 'float', min: 0.0, max: 4.0,  step: 0.1, hint: 'Anti-alias width. 1 is a pixel-fit edge; 0 is a hard edge.' },
+    brightness:   { label: 'Brightness',   type: 'float', min: 0.1, max: 5.0,  step: 0.05, hint: 'Multiplies the output color.' },
     width_jitter: { label: 'Width Jitter', type: 'float', min: 0.0, max: 20.0, step: 0.05, hint: 'Organic line-thickness wobble via coherent noise sampled at UV. Push well past 1 for a scattered, dust-like edge rather than a clean line. Needs UV wired.' },
     jitter_scale: { label: 'Jitter Scale', type: 'float', min: 0.5, max: 30.0, step: 0.5,  hint: 'Spatial frequency of the width-jitter noise.' },
     grain:        { label: 'Grain',        type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Sand-like dropout on the finished density. 0 = off/static; raising it makes the grain both more visible AND more sporadic — it reshuffles faster as you turn it up. Needs UV+Time wired for real animated per-pixel grain.' },
@@ -249,14 +249,14 @@ export const DistanceFalloffNode: NodeDefinition = {
   },
   defaultParams: { mode: 'bounded_inv_sq', k: 5.0, power: 2.0 },
   paramDefs: {
-    mode: { label: 'Mode', type: 'select', options: [
+    mode: { label: 'Mode', type: 'select', hint: 'Bounded Inv2 stays finite; Gaussian is soft; Linear is a cone; Wyvill a smooth bump.', options: [
       { value: 'bounded_inv_sq', label: 'Bounded Inv²' },
       { value: 'gaussian',       label: 'Gaussian'      },
       { value: 'linear',         label: 'Linear'        },
       { value: 'wyvill',         label: 'Wyvill'        },
     ]},
-    k:     { label: 'Rate',  type: 'float', min: 0.1, max: 20.0, step: 0.1 },
-    power: { label: 'Power', type: 'float', min: 1.0, max: 4.0,  step: 0.1, showWhen: { param: 'mode', value: 'bounded_inv_sq' } },
+    k:     { label: 'Rate',  type: 'float', min: 0.1, max: 20.0, step: 0.1, hint: 'How fast the falloff decays. Higher = smaller glow.' },
+    power: { label: 'Power', type: 'float', min: 1.0, max: 4.0,  step: 0.1, showWhen: { param: 'mode', value: 'bounded_inv_sq' }, hint: 'Exponent on distance. 2 is inverse-square; higher falls off harder.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -299,9 +299,9 @@ export const GlowFalloffNode: NodeDefinition = {
   },
   defaultParams: { brightness: 0.5, k: 20.0, power: 2.0 },
   paramDefs: {
-    brightness: { label: 'Brightness', type: 'float', min: 0.001, max: 2.0,  step: 0.01 },
+    brightness: { label: 'Brightness', type: 'float', min: 0.001, max: 2.0,  step: 0.01, hint: 'Peak glow at distance 0.' },
     k:          { label: 'Falloff rate',          type: 'float', min: 0.5,   max: 50.0, step: 0.5, hint: 'Higher fades faster.'  },
-    power:      { label: 'Power',      type: 'float', min: 1.0,   max: 4.0,  step: 0.1  },
+    power:      { label: 'Power',      type: 'float', min: 1.0,   max: 4.0,  step: 0.1, hint: 'Exponent on distance. 2 is inverse-square; higher falls off harder.' },
   },
   glslFunction: `float glowFalloffFn(float dist, float brightness, float k, float power) {
     return brightness / (1.0 + pow(max(dist, 0.0), power) * k);
@@ -365,20 +365,20 @@ export const NoisyGridSDFNode: NodeDefinition = {
   category: 'Field',
   description: 'Smooth-min of noise-displaced circle SDFs over a 3×3 or 5×5 neighborhood. SDF is negative inside circles, zero at edges. Circles merge organically when noise brings them close. Connect sdf → smoothstep for fill; smoothstep(0.5,−0.3,sdf) → palette for inner glow.',
   inputs: {
-    gridPos: { type: 'vec2',  label: 'Grid Pos' },
-    cellID:  { type: 'vec2',  label: 'Cell ID'  },
-    time:    { type: 'float', label: 'Time'     },
+    gridPos: { type: 'vec2',  label: 'Grid Pos', hint: 'Wire Grid Pos from Grid.' },
+    cellID:  { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid.' },
+    time:    { type: 'float', label: 'Time', hint: 'Falls back to the global clock when unwired.' },
   },
   outputs: {
     sdf: { type: 'float', label: 'SDF' },
   },
   defaultParams: { radius: 0.30, noiseAmt: 0.28, speed: 0.4, smoothK: 0.20, neighborRadius: 2 },
   paramDefs: {
-    radius:         { label: 'Radius',    type: 'float', min: 0.05, max: 0.49, step: 0.01  },
-    noiseAmt:       { label: 'Noise Amt', type: 'float', min: 0.0,  max: 0.5,  step: 0.01  },
-    speed:          { label: 'Speed',     type: 'float', min: 0.0,  max: 2.0,  step: 0.05  },
+    radius:         { label: 'Radius',    type: 'float', min: 0.05, max: 0.49, step: 0.01, hint: 'Circle size as a fraction of a cell.' },
+    noiseAmt:       { label: 'Noise Amt', type: 'float', min: 0.0,  max: 0.5,  step: 0.01, hint: 'How far circles are pushed off their cell centers. 0 is a regular grid.' },
+    speed:          { label: 'Speed',     type: 'float', min: 0.0,  max: 2.0,  step: 0.05, hint: 'How fast circles wobble. 0 is still.' },
     smoothK:        { label: 'Blend radius',   type: 'float', min: 0.01, max: 0.5,  step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.'  },
-    neighborRadius: { label: 'Neighbors', type: 'select', options: [
+    neighborRadius: { label: 'Neighbors', type: 'select', hint: 'Cells sampled around the current one. 5x5 avoids seams with large offsets.', options: [
       { value: '1', label: '1 (3×3)' },
       { value: '2', label: '2 (5×5)' },
     ]},

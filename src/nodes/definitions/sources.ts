@@ -11,7 +11,7 @@ export const LoopIndexNode: NodeDefinition = {
   type: 'loopIndex',
   label: 'Loop Index',
   category: 'Sources',
-  description: 'Current iteration index (float i) — place inside a group with iterations > 1',
+  description: 'Current iteration index (float i) — place inside a group with iterations > 1. Use with an iterated group or Loop Carry; outside a loop it always outputs 0.',
   inputs: {},
   outputs: {
     i: { type: 'float', label: 'i' },
@@ -154,9 +154,9 @@ export const PrevFrameNode: NodeDefinition = {
   type: 'prevFrame',
   label: 'Previous Frame (Feedback)', aliases: ['Prev Frame'],
   category: 'Post Processing',
-  description: 'Samples the previous frame\'s rendered output. Enables stateful effects like trails, reaction-diffusion, and fluid simulation.',
+  description: 'Samples the previous frame\'s rendered output. Enables stateful effects like trails, reaction-diffusion, and fluid simulation. Use with Mix or Max to blend it under the current frame for trails; requires the stateful feedback pass.',
   inputs: {
-    uv: { type: 'vec2', label: 'UV' },
+    uv: { type: 'vec2', label: 'UV', hint: 'Where to sample last frame. Warp it slightly to make trails drift.' },
   },
   outputs: {
     color: { type: 'vec3',  label: 'Color' },
@@ -194,7 +194,7 @@ export const TextureInputNode: NodeDefinition = {
   },
   defaultParams: { fit: 'stretch', _imageAspect: 1 },
   paramDefs: {
-    fit: { label: 'Fit', type: 'select', options: [
+    fit: { label: 'Fit', type: 'select', hint: 'Stretch fills exactly, Fit shows the whole image with padding, Fill crops to cover.', options: [
       { value: 'stretch', label: 'Stretch' },
       { value: 'contain', label: 'Fit (no crop)' },
       { value: 'cover',   label: 'Fill (crop)' },
@@ -248,7 +248,7 @@ export const AudioInputNode: NodeDefinition = {
   category: 'Sources',
   description: 'Load an audio file and output per-band frequency amplitudes as floats (0–1). Add multiple bands or use Full Spectrum mode for overall volume.',
   inputs: {
-    band_0_center: { type: 'float', label: 'Band 0 Hz' },
+    band_0_center: { type: 'float', label: 'Band 0 Hz', hint: 'Wire a float to move the band\'s center frequency live.' },
   },
   outputs: {
     amplitude_0: { type: 'float', label: 'Band 0' },
@@ -262,8 +262,8 @@ export const AudioInputNode: NodeDefinition = {
     _hasFile: false,
   },
   paramDefs: {
-    freq_range: { label: 'Freq Range (Hz)', type: 'float', min: 0, max: 10000, step: 1 },
-    mode: { label: 'Mode', type: 'select', options: [
+    freq_range: { label: 'Freq Range (Hz)', type: 'float', min: 0, max: 10000, step: 1, hint: 'Frequency in Hz the band listens to. Bass sits near 60-250, highs above 4000.' },
+    mode: { label: 'Mode', type: 'select', hint: 'Frequency Band reads one band; Full Spectrum outputs overall loudness.', options: [
       { value: 'band', label: 'Frequency Band' },
       { value: 'full', label: 'Full Spectrum'  },
     ]},
@@ -326,7 +326,7 @@ export const ConstantNode: NodeDefinition = {
   category: 'Sources',
   description: 'A constant value — float, or a vec2/vec3/vec4 built from sliders (pick the type on the card). Wire the input to override.',
   inputs: {
-    value: { type: 'float', label: 'Value' },
+    value: { type: 'float', label: 'Value', hint: 'Overrides the slider when wired.' },
   },
   outputs: {
     value: { type: 'float', label: 'Value' },
@@ -341,11 +341,11 @@ export const ConstantNode: NodeDefinition = {
   migrateParams: (params, fromVersion) =>
     fromVersion < 2 && typeof params.outputType !== 'string' ? { ...params, outputType: 'float' } : params,
   paramDefs: {
-    value: { label: 'Value', type: 'float', step: 0.01, showWhen: { param: 'outputType', value: 'float' } },
-    x:     { label: 'X',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec2', 'vec3', 'vec4'] } },
-    y:     { label: 'Y',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec2', 'vec3', 'vec4'] } },
-    z:     { label: 'Z',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec3', 'vec4'] } },
-    w:     { label: 'W',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: 'vec4' } },
+    value: { label: 'Value', type: 'float', step: 0.01, showWhen: { param: 'outputType', value: 'float' }, hint: 'The output when nothing is wired to the input.' },
+    x:     { label: 'X',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec2', 'vec3', 'vec4'] }, hint: 'First component of the vector.' },
+    y:     { label: 'Y',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec2', 'vec3', 'vec4'] }, hint: 'Second component of the vector.' },
+    z:     { label: 'Z',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec3', 'vec4'] }, hint: 'Third component of the vector.' },
+    w:     { label: 'W',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: 'vec4' }, hint: 'Fourth component of the vector. Often alpha.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_value`;

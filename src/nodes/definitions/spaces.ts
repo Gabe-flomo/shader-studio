@@ -28,8 +28,8 @@ export const PolarSpaceNode: NodeDefinition = {
   },
   defaultParams: { twist: 0.0, radialScale: 1.0 },
   paramDefs: {
-    twist:       { label: 'Twist',        type: 'float', min: -5.0, max: 5.0, step: 0.01 },
-    radialScale: { label: 'Radial Scale', type: 'float', min: 0.1,  max: 5.0, step: 0.01 },
+    twist:       { label: 'Twist',        type: 'float', min: -5.0, max: 5.0, step: 0.01, hint: 'Spins the angle more the further from center. 0 is plain polar.' },
+    radialScale: { label: 'Radial Scale', type: 'float', min: 0.1,  max: 5.0, step: 0.01, hint: 'Multiplies the radius. Above 1 pushes rings outward faster.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
@@ -73,7 +73,7 @@ export const LogPolarSpaceNode: NodeDefinition = {
   },
   defaultParams: { scale: 1.0 },
   paramDefs: {
-    scale: { label: 'Scale', type: 'float', min: 0.1, max: 5.0, step: 0.05 },
+    scale: { label: 'Scale', type: 'float', min: 0.1, max: 5.0, step: 0.05, hint: 'Stretches the log-radius axis; higher packs more rings toward the center.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
@@ -111,7 +111,7 @@ export const HyperbolicSpaceNode: NodeDefinition = {
   },
   defaultParams: { curvature: 0.7 },
   paramDefs: {
-    curvature: { label: 'Curvature', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+    curvature: { label: 'Curvature', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'How bent the space is. 0 is flat, negative bows the other way.' },
   },
   glslFunction: `
 vec2 hyperbolicSpace(vec2 p, float k) {
@@ -145,7 +145,7 @@ export const InversionSpaceNode: NodeDefinition = {
   },
   defaultParams: { radius: 1.0 },
   paramDefs: {
-    radius: { label: 'Radius', type: 'float', min: 0.1, max: 3.0, step: 0.01 },
+    radius: { label: 'Radius', type: 'float', min: 0.1, max: 3.0, step: 0.01, hint: 'Circle of inversion. Points on it stay put; inside and outside swap.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
@@ -179,9 +179,9 @@ export const MobiusSpaceNode: NodeDefinition = {
   },
   defaultParams: { poleX: 0.5, poleY: 0.0, angle: 0.0 },
   paramDefs: {
-    poleX: { label: 'Pole X', type: 'float', min: -1.5, max: 1.5,  step: 0.01 },
-    poleY: { label: 'Pole Y', type: 'float', min: -1.5, max: 1.5,  step: 0.01 },
-    angle: { label: 'Angle',  type: 'float', min: -3.14, max: 3.14, step: 0.01 },
+    poleX: { label: 'Pole X', type: 'float', min: -1.5, max: 1.5,  step: 0.01, hint: 'Where the warp concentrates, horizontally.' },
+    poleY: { label: 'Pole Y', type: 'float', min: -1.5, max: 1.5,  step: 0.01, hint: 'Where the warp concentrates, vertically.' },
+    angle: { label: 'Angle',  type: 'float', min: -3.14, max: 3.14, step: 0.01, hint: 'Rotation in complex space, in radians. 3.14 is half a turn.' },
   },
   glslFunction: `
 vec2 cMul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
@@ -225,8 +225,8 @@ export const SwirlSpaceNode: NodeDefinition = {
   },
   defaultParams: { strength: 2.0, falloff: 1.0 },
   paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: -10.0, max: 10.0, step: 0.1 },
-    falloff:  { label: 'Falloff',  type: 'float', min: 0.1,   max: 5.0,  step: 0.1 },
+    strength: { label: 'Strength', type: 'float', min: -10.0, max: 10.0, step: 0.1, hint: 'Total twist in radians at the center. Negative spins the other way.' },
+    falloff:  { label: 'Falloff',  type: 'float', min: 0.1,   max: 5.0,  step: 0.1, hint: 'How fast the twist fades with distance. Higher keeps it near the center.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -263,8 +263,8 @@ export const KaleidoSpaceNode: NodeDefinition = {
   },
   defaultParams: { segments: 6.0, rotate: 0.0 },
   paramDefs: {
-    segments: { label: 'Segments', type: 'float', min: 1.0, max: 24.0, step: 1.0 },
-    rotate:   { label: 'Rotate',   type: 'float', min: -3.14, max: 3.14, step: 0.01 },
+    segments: { label: 'Segments', type: 'float', min: 1.0, max: 24.0, step: 1.0, hint: 'Number of mirror wedges. 6 gives a snowflake, 8 a classic kaleidoscope.' },
+    rotate:   { label: 'Rotate',   type: 'float', min: -3.14, max: 3.14, step: 0.01, hint: 'Spins the wedge pattern, in radians.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -300,7 +300,7 @@ export const SphericalSpaceNode: NodeDefinition = {
   },
   defaultParams: { strength: 0.5 },
   paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: -1.0, max: 1.0, step: 0.01 },
+    strength: { label: 'Strength', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Positive bulges outward (fisheye), negative pinches inward (pincushion).' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -333,17 +333,17 @@ export const RippleSpaceNode: NodeDefinition = {
     freqY: { type: 'float', label: 'Freq Y' },
     ampX:  { type: 'float', label: 'Amp X' },
     ampY:  { type: 'float', label: 'Amp Y' },
-    time:  { type: 'float', label: 'Time' },
+    time:  { type: 'float', label: 'Time', hint: 'Wire Time to animate the ripples; unwired they stand still.' },
   },
   outputs: {
     output: { type: 'vec2', label: 'Rippled UV' },
   },
   defaultParams: { freqX: 5.0, freqY: 5.0, ampX: 0.1, ampY: 0.1 },
   paramDefs: {
-    freqX: { label: 'Freq X', type: 'float', min: 0.0, max: 20.0, step: 0.1 },
-    freqY: { label: 'Freq Y', type: 'float', min: 0.0, max: 20.0, step: 0.1 },
-    ampX:  { label: 'Amp X',  type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
-    ampY:  { label: 'Amp Y',  type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+    freqX: { label: 'Freq X', type: 'float', min: 0.0, max: 20.0, step: 0.1, hint: 'Number of waves across the width. Higher = tighter ripples.' },
+    freqY: { label: 'Freq Y', type: 'float', min: 0.0, max: 20.0, step: 0.1, hint: 'Number of waves across the height. Higher = tighter ripples.' },
+    ampX:  { label: 'Amp X',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'How far pixels shift sideways. 0.1 is a gentle wobble.' },
+    ampY:  { label: 'Amp Y',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'How far pixels shift up and down. 0.1 is a gentle wobble.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
@@ -382,8 +382,8 @@ export const InfiniteRepeatSpaceNode: NodeDefinition = {
   },
   defaultParams: { cellX: 1.0, cellY: 1.0 },
   paramDefs: {
-    cellX: { label: 'Cell W', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
-    cellY: { label: 'Cell H', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
+    cellX: { label: 'Cell W', type: 'float', min: 0.1, max: 10.0, step: 0.05, hint: 'Width of each tile. Smaller = more copies.' },
+    cellY: { label: 'Cell H', type: 'float', min: 0.1, max: 10.0, step: 0.05, hint: 'Height of each tile. Smaller = more copies.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
@@ -413,21 +413,21 @@ export const WaveTextureNode: NodeDefinition = {
     uv:    { type: 'vec2',  label: 'UV' },
     scale: { type: 'float', label: 'Scale' },
     speed: { type: 'float', label: 'Speed' },
-    time:  { type: 'float', label: 'Time' },
+    time:  { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the waves are frozen.' },
   },
   outputs: { value: { type: 'float', label: 'Value' } },
   defaultParams: { mode: 'bands', scale: 5.0, speed: 1.0, distortion: 0.0 },
   paramDefs: {
-    mode: { label: 'Mode', type: 'select', options: [
+    mode: { label: 'Mode', type: 'select', hint: 'Bands are diagonal stripes, rings are concentric circles, X/Y/Diagonal are straight waves.', options: [
       { value: 'bands',    label: 'Bands' },
       { value: 'rings',    label: 'Rings' },
       { value: 'x',       label: 'X Axis' },
       { value: 'y',       label: 'Y Axis' },
       { value: 'diagonal',label: 'Diagonal' },
     ]},
-    scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 20.0, step: 0.1 },
-    speed:      { label: 'Speed',      type: 'float', min: -5.0, max: 5.0, step: 0.1 },
-    distortion: { label: 'Distortion', type: 'float', min: 0.0, max: 5.0, step: 0.05 },
+    scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 20.0, step: 0.1, hint: 'Number of waves per unit. Higher = thinner stripes.' },
+    speed:      { label: 'Speed',      type: 'float', min: -5.0, max: 5.0, step: 0.1, hint: 'How fast the waves travel. Negative reverses direction. Needs Time wired.' },
+    distortion: { label: 'Distortion', type: 'float', min: 0.0, max: 5.0, step: 0.05, hint: 'Bends the waves with a sine wobble before drawing. 0 is straight.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -462,14 +462,14 @@ export const MagicTextureNode: NodeDefinition = {
   inputs: {
     uv:    { type: 'vec2',  label: 'UV' },
     scale: { type: 'float', label: 'Scale' },
-    time:  { type: 'float', label: 'Time' },
+    time:  { type: 'float', label: 'Time', hint: 'Wire Time to make the pattern drift; unwired it is static.' },
   },
   outputs: { color: { type: 'vec3', label: 'Color' } },
   defaultParams: { scale: 4.0, depth: 4, distortion: 1.0 },
   paramDefs: {
-    scale:      { label: 'Scale',      type: 'float', min: 0.5, max: 20.0, step: 0.1 },
-    depth:      { label: 'Depth',      type: 'select', options: [1,2,3,4,5,6].map(n => ({ value: String(n), label: String(n) })) },
-    distortion: { label: 'Distortion', type: 'float', min: 0.0, max: 5.0, step: 0.1 },
+    scale:      { label: 'Scale',      type: 'float', min: 0.5, max: 20.0, step: 0.1, hint: 'Zoom of the interference pattern. Higher = busier.' },
+    depth:      { label: 'Depth',      type: 'select', options: [1,2,3,4,5,6].map(n => ({ value: String(n), label: String(n) })), hint: 'Number of sine folds. More depth = more intricate, more chaotic.' },
+    distortion: { label: 'Distortion', type: 'float', min: 0.0, max: 5.0, step: 0.1, hint: 'How strongly each fold feeds back. 1 is Blender\'s default; higher gets wild.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -510,8 +510,8 @@ export const GridNode: NodeDefinition = {
   },
   defaultParams: { scale: 4.0, lineWidth: 0.05 },
   paramDefs: {
-    scale:     { label: 'Scale',      type: 'float', min: 0.5, max: 20.0, step: 0.1 },
-    lineWidth: { label: 'Line Width', type: 'float', min: 0.0, max: 0.5,  step: 0.005 },
+    scale:     { label: 'Scale',      type: 'float', min: 0.5, max: 20.0, step: 0.1, hint: 'Cells per unit. Higher = smaller cells.' },
+    lineWidth: { label: 'Line Width', type: 'float', min: 0.0, max: 0.5,  step: 0.005, hint: 'Thickness of grid lines as a fraction of a cell. 0 hides them.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id  = node.id;
@@ -549,8 +549,8 @@ export const ShearNode: NodeDefinition = {
   outputs: { uv: { type: 'vec2', label: 'UV' } },
   defaultParams: { shearX: 0.5, shearY: 0.0 },
   paramDefs: {
-    shearX: { label: 'Shear X', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
-    shearY: { label: 'Shear Y', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+    shearX: { label: 'Shear X', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Slides X by this fraction of Y. 0.5 leans squares into parallelograms.' },
+    shearY: { label: 'Shear Y', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Slides Y by this fraction of X.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
@@ -584,13 +584,13 @@ export const Perspective2DNode: NodeDefinition = {
   },
   defaultParams: { ratio: 1.0, axis: 'y', flip: 'false' },
   paramDefs: {
-    ratio: { label: 'Ratio', type: 'float', min: 0.0, max: 5.0, step: 0.05 },
-    axis:  { label: 'Axis',  type: 'select', options: [
+    ratio: { label: 'Ratio', type: 'float', min: 0.0, max: 5.0, step: 0.05, hint: 'Strength of the vanishing-point squeeze. 0 flat, 1 mild, 2+ dramatic.' },
+    axis:  { label: 'Axis',  type: 'select', hint: 'Which direction recedes: Y for a floor, X for a wall, XY for a tunnel.', options: [
       { value: 'y',  label: 'Y (floor)'  },
       { value: 'x',  label: 'X (wall)'   },
       { value: 'xy', label: 'XY (tunnel)'},
     ]},
-    flip:  { label: 'Flip',  type: 'select', options: [
+    flip:  { label: 'Flip',  type: 'select', hint: 'Swaps which edge is near and which is far (Y axis only).', options: [
       { value: 'false', label: 'Off' },
       { value: 'true',  label: 'On'  },
     ]},
@@ -649,8 +649,8 @@ export const MirroredRepeat2DNode: NodeDefinition = {
   },
   defaultParams: { cellX: 1.0, cellY: 1.0 },
   paramDefs: {
-    cellX: { label: 'Cell W', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
-    cellY: { label: 'Cell H', type: 'float', min: 0.1, max: 10.0, step: 0.05 },
+    cellX: { label: 'Cell W', type: 'float', min: 0.1, max: 10.0, step: 0.05, hint: 'Width of each tile. Every other tile is mirrored.' },
+    cellY: { label: 'Cell H', type: 'float', min: 0.1, max: 10.0, step: 0.05, hint: 'Height of each tile. Every other tile is mirrored.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
@@ -695,10 +695,10 @@ export const LimitedRepeat2DNode: NodeDefinition = {
   },
   defaultParams: { cellX: 0.5, cellY: 0.5, countX: 5.0, countY: 3.0 },
   paramDefs: {
-    cellX:  { label: 'Cell W',  type: 'float', min: 0.05, max: 10.0, step: 0.05 },
-    cellY:  { label: 'Cell H',  type: 'float', min: 0.05, max: 10.0, step: 0.05 },
-    countX: { label: 'Count X', type: 'float', min: 1.0,  max: 40.0, step: 1.0  },
-    countY: { label: 'Count Y', type: 'float', min: 1.0,  max: 40.0, step: 1.0  },
+    cellX:  { label: 'Cell W',  type: 'float', min: 0.05, max: 10.0, step: 0.05, hint: 'Width of each tile.' },
+    cellY:  { label: 'Cell H',  type: 'float', min: 0.05, max: 10.0, step: 0.05, hint: 'Height of each tile.' },
+    countX: { label: 'Count X', type: 'float', min: 1.0,  max: 40.0, step: 1.0, hint: 'How many tiles across. Beyond the last one the space stops repeating.' },
+    countY: { label: 'Count Y', type: 'float', min: 1.0,  max: 40.0, step: 1.0, hint: 'How many tiles up. Beyond the last one the space stops repeating.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -740,7 +740,7 @@ export const AngularRepeat2DNode: NodeDefinition = {
   },
   defaultParams: { count: 6.0 },
   paramDefs: {
-    count: { label: 'Count', type: 'float', min: 2.0, max: 32.0, step: 1.0 },
+    count: { label: 'Count', type: 'float', min: 2.0, max: 32.0, step: 1.0, hint: 'Number of copies around the circle. 6 makes a hexagonal flower.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;

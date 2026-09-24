@@ -885,6 +885,11 @@ export class ShaderAssembler {
                 }
               }
 
+              // Sampler uniforms for nodes inside the group — Texture Input and published nodes with
+              // image slots — named the way their generateGLSL emits them (by the sub node's slugged id)
+              // and bound from the original node's textures, exactly as at the top level.
+              if (subNode.type === 'textureInput') this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);
               Object.assign(this.paramBindings, subBindings);
