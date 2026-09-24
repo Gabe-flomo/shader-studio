@@ -503,6 +503,40 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     });
     ro.observe(container);
 
+    // ── WebGL context loss / restore ─────────────────────────────────────────
+    // The GPU can drop our context under memory pressure (4× exports on
+    // mobile), after a driver reset, or when the tab is backgrounded on some
+    // devices. Without preventDefault() on 'webglcontextlost' the browser
+    // never fires 'webglcontextrestored', so the canvas would stay black
+    // for good. Three.js already re-initialises its own GL state on restore
+    // and lazily re-uploads textures/buffers; what's left for us is our
+    // sized resources (render targets, ping-pong buffers, u_resolution) —
+    // applySize() rebuilds exactly those, so restore goes through it rather
+    // than duplicating that logic here.
+    //
+    // NOTE: no stopPropagation() — ExportModal listens for 'webglcontextlost'
+    // on this same canvas during an export to abort with a GPU-memory error.
+    let glContextLost = false;
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      glContextLost = true;
+      console.error('[ShaderCanvas] WebGL context lost — rendering paused until the browser restores it');
+      useNodeGraphStore.getState().setGlContextLost(true);
+    };
+    const handleContextRestored = () => {
+      glContextLost = false;
+      console.warn('[ShaderCanvas] WebGL context restored — rebuilding GPU resources');
+      // Stale render targets / ping-pong buffers are disposed and re-created at
+      // the current CSS size × renderScale; shader programs rebuild on the
+      // next render because Three.js reset its program cache.
+      applySize();
+      material.needsUpdate = true;
+      lastRafTime = null; // don't count the lost interval as one giant dt
+      useNodeGraphStore.getState().setGlContextLost(false);
+    };
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
+    renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
+
     // Helper to lazily create ping-pong targets at current canvas size
     const ensurePingPong = () => {
       const w = renderer.domElement.width  || 1;
@@ -538,6 +572,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       // Skip entirely when the browser tab is not visible. Still track
       // lastRafTime so the next visible frame doesn't see a huge dt jump.
       if (document.hidden) { lastRafTime = now; return; }
+      // While the WebGL context is lost every GL call is a no-op (and the
+      // readbacks below would return garbage), so idle until it's restored.
+      if (glContextLost) { lastRafTime = now; return; }
 
       // FPS counter — updated every second
       fpsFrameCount++;
@@ -1081,6 +1118,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       ro.disconnect();
+      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
+      if (glContextLost) useNodeGraphStore.getState().setGlContextLost(false);
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('reset-time', handleResetTime);

@@ -38,6 +38,8 @@ import { moveItem } from '../../lib/reorder';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
+import { errorMessage } from '../../utils/fileIO';
+import type { FileResult } from '../../utils/fileIO';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { AssetContextMenu } from './AssetContextMenu';
@@ -819,16 +821,36 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
     const audioFileInputRef = useRef<HTMLInputElement>(null);
 
-    const loadAudioFile = (file: File) => {
-      if (!file.name.match(/\.(wav|mp3|ogg|aac|flac)$/i)) return;
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const arrayBuffer = ev.target?.result as ArrayBuffer;
-        await audioEngine.loadAudio(node.id, arrayBuffer, file.name);
-        audioEngine.startAudio(node.id);
-        updateNodeParams(node.id, { _fileName: file.name, _hasFile: true, _isPlaying: true }, { immediate: true });
-      };
-      reader.readAsArrayBuffer(file);
+    // Resolves (never rejects) with the outcome so a UI can report it; the
+    // node's params are only updated once the audio has actually decoded.
+    const loadAudioFile = (file: File): Promise<FileResult> => {
+      if (!file.name.match(/\.(wav|mp3|ogg|aac|flac)$/i)) {
+        const error = `"${file.name}" is not a supported audio file (wav, mp3, ogg, aac, flac)`;
+        console.error('[AudioInput]', error);
+        return Promise.resolve({ ok: false, error });
+      }
+      return new Promise<FileResult>((resolve) => {
+        const reader = new FileReader();
+        reader.onerror = () => {
+          const error = `Could not read "${file.name}": ${reader.error?.message || 'unknown read error'}`;
+          console.error('[AudioInput]', error, reader.error);
+          resolve({ ok: false, error });
+        };
+        reader.onload = async (ev) => {
+          const arrayBuffer = ev.target?.result as ArrayBuffer;
+          try {
+            await audioEngine.loadAudio(node.id, arrayBuffer, file.name);
+          } catch (e) {
+            // audioEngine.loadAudio already logged the decode failure.
+            resolve({ ok: false, error: errorMessage(e) });
+            return;
+          }
+          audioEngine.startAudio(node.id);
+          updateNodeParams(node.id, { _fileName: file.name, _hasFile: true, _isPlaying: true }, { immediate: true });
+          resolve({ ok: true });
+        };
+        reader.readAsArrayBuffer(file);
+      });
     };
 
     const handleAudioDrop = (e: React.DragEvent) => {
@@ -1051,9 +1073,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     const fileName     = (node.params._fileName as string) || '';
     const videoFileInputRef = React.useRef<HTMLInputElement>(null);
 
-    const loadVideoFile = async (file: File) => {
-      if (!file.name.match(/\.(mp4|webm|mov|ogg|mkv)$/i)) return;
-      await videoEngine.loadVideo(node.id, file);
+    // Resolves (never rejects) with the outcome; a video that fails to decode
+    // or times out leaves the node's params untouched instead of hanging.
+    const loadVideoFile = async (file: File): Promise<FileResult> => {
+      if (!file.name.match(/\.(mp4|webm|mov|ogg|mkv)$/i)) {
+        const error = `"${file.name}" is not a supported video file (mp4, webm, mov, ogg, mkv)`;
+        console.error('[VideoInput]', error);
+        return { ok: false, error };
+      }
+      try {
+        await videoEngine.loadVideo(node.id, file);
+      } catch (e) {
+        // videoEngine.loadVideo already logged the failure.
+        return { ok: false, error: errorMessage(e) };
+      }
       const tex = videoEngine.getTexture(node.id);
       setVideoTexture(node.id, tex);
       videoEngine.play(node.id);
@@ -1062,6 +1095,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         _fileName: file.name, _hasFile: true, _isPlaying: true,
         _thumbnailUrl: thumbUrl,
       }, { immediate: true });
+      return { ok: true };
     };
 
     const handleVideoDrop = (e: React.DragEvent) => {

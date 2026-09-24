@@ -36,9 +36,25 @@ class AudioEngine {
     return this.ctx;
   }
 
+  /**
+   * Decode `arrayBuffer` and register it for `nodeId`. Rejects with a
+   * descriptive Error when the browser can't decode the data (unsupported
+   * codec, corrupt file); the previous audio for the node is left untouched
+   * in that case.
+   */
   async loadAudio(nodeId: string, arrayBuffer: ArrayBuffer, fileName: string): Promise<void> {
     const audioCtx = this.getCtx();
-    const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+    let buffer: AudioBuffer;
+    try {
+      buffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+      // decodeAudioData rejects with a DOMException whose message is often
+      // empty, so name the file and the likely cause ourselves.
+      const detail = e instanceof Error && e.message ? e.message : 'unsupported or corrupt audio data';
+      const error = new Error(`Could not decode audio "${fileName}": ${detail}`);
+      console.error('[audioEngine]', error.message, e);
+      throw error;
+    }
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;              // 1024 frequency bins
     analyser.smoothingTimeConstant = 0.8; // temporal smoothing for smooth shader animation

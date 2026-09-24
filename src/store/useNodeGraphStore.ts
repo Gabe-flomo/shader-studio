@@ -8,7 +8,8 @@ import type { GroupPreset } from '../types/groupPreset';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
-import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath } from '../utils/fileIO';
+import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
+import type { FileResult } from '../utils/fileIO';
 import { EXAMPLE_GRAPHS } from './exampleGraphs';
 import { groupNodesByRank } from './graphLayout';
 import { typesCompatible } from '../lib/typesCompatible';
@@ -141,7 +142,7 @@ const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStorageP
  */
 export function saveCustomFnPreset(
   data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string },
-): void {
+): Promise<FileResult> {
   const preset: CustomFnPreset = {
     id: `cfp_${Date.now()}`,
     label: data.label || 'Custom Fn',
@@ -151,7 +152,7 @@ export function saveCustomFnPreset(
     glslFunctions: data.glslFunctions ?? '',
     savedAt: Date.now(),
   };
-  customFnPresetManager.save(preset);
+  return customFnPresetManager.save(preset);
 }
 
 /** Read all saved custom-fn presets from localStorage. */
@@ -161,13 +162,13 @@ export function loadCustomFns(): CustomFnPreset[] {
 
 // ── Expr preset helpers ────────────────────────────────────────────────────────
 
-export function saveExprPreset(data: Omit<ExprPreset, 'id' | 'savedAt'>): void {
+export function saveExprPreset(data: Omit<ExprPreset, 'id' | 'savedAt'>): Promise<FileResult> {
   const preset: ExprPreset = {
     id: `ep_${Date.now()}`,
     ...data,
     savedAt: Date.now(),
   };
-  exprPresetManager.save(preset);
+  return exprPresetManager.save(preset);
 }
 
 export function loadExprPresets(): ExprPreset[] {
@@ -184,13 +185,13 @@ export function renameExprPreset(id: string, newLabel: string): void {
 
 // ── Keyframe preset helpers ─────────────────────────────────────────────────
 
-export function saveKeyframePreset(data: Omit<KeyframePreset, 'id' | 'savedAt'>): void {
+export function saveKeyframePreset(data: Omit<KeyframePreset, 'id' | 'savedAt'>): Promise<FileResult> {
   const preset: KeyframePreset = {
     id: `kfp_${Date.now()}`,
     ...data,
     savedAt: Date.now(),
   };
-  keyframePresetManager.save(preset);
+  return keyframePresetManager.save(preset);
 }
 
 export function loadKeyframePresets(): KeyframePreset[] {
@@ -207,9 +208,9 @@ export function renameKeyframePreset(id: string, newLabel: string): void {
 
 // ── Transform Vec preset helpers ──────────────────────────────────────────────
 
-export function saveTransformPreset(data: Omit<TransformPreset, 'id' | 'savedAt'>): void {
+export function saveTransformPreset(data: Omit<TransformPreset, 'id' | 'savedAt'>): Promise<FileResult> {
   const preset: TransformPreset = { id: `tp_${Date.now()}`, ...data, savedAt: Date.now() };
-  transformPresetManager.save(preset);
+  return transformPresetManager.save(preset);
 }
 
 export function loadTransformPresets(): TransformPreset[] {
@@ -266,6 +267,7 @@ interface NodeGraphState {
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
+  glContextLost: boolean;         // true while the preview's WebGL context is lost (GPU reset / memory pressure)
   pixelSample: [number, number, number, number] | null;  // mouse pixel RGBA 0-255
   hoveredParamHint: string | null;  // param hint shown in status bar on hover
   currentTime: number;            // current u_time uniform value (seconds)
@@ -506,6 +508,7 @@ interface NodeGraphState {
   loadExampleGraph: (name?: string) => void;
   autoLayout: () => void;
   setGlslErrors: (errors: string[]) => void;
+  setGlContextLost: (lost: boolean) => void;
   setPixelSample: (sample: [number, number, number, number] | null) => void;
   setHoveredParamHint: (hint: string | null) => void;
   setCurrentTime: (t: number) => void;
@@ -513,16 +516,16 @@ interface NodeGraphState {
   toggleBypass: (nodeId: string) => void;
 
   // Save / Load
-  saveGraph: (name: string) => void;
+  saveGraph: (name: string) => Promise<FileResult>;
   getSavedGraphNames: () => string[];
-  loadSavedGraph: (name: string) => void;
+  loadSavedGraph: (name: string) => FileResult;
   deleteSavedGraph: (name: string) => void;
-  exportGraph: () => Promise<void>;
-  importGraph: (json: string) => void;
-  importGraphFromFile: () => Promise<void>;
+  exportGraph: () => Promise<FileResult>;
+  importGraph: (json: string) => FileResult;
+  importGraphFromFile: () => Promise<FileResult>;
 
   // Custom-fn presets
-  saveCustomFn: (nodeId: string) => void;
+  saveCustomFn: (nodeId: string) => Promise<FileResult>;
   deleteCustomFn: (id: string) => void;
   exportCustomFns: () => Promise<void>;
   importCustomFns: (json: string) => void;
@@ -532,7 +535,7 @@ interface NodeGraphState {
 
   // Group presets
   groupPresets: GroupPreset[];
-  saveGroupPreset: (groupNodeId: string, label?: string, description?: string) => void;
+  saveGroupPreset: (groupNodeId: string, label?: string, description?: string) => Promise<FileResult>;
   deleteGroupPreset: (presetId: string) => void;
   instantiateGroupPreset: (presetId: string, position?: { x: number; y: number }) => string | null;
 }
@@ -1070,6 +1073,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   particleSystems: [],
   paramUniforms: {},
   glslErrors: [],
+  glContextLost: false,
   pixelSample: null,
   hoveredParamHint: null,
   currentTime: 0,
@@ -2379,15 +2383,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ nodes: newNodes, looseGroups: newTopLoose });
   },
 
-  saveGroupPreset: (groupNodeId, label, description) => {
+  saveGroupPreset: async (groupNodeId, label, description) => {
     const { nodes, activeGroupPath } = get();
     const searchNodes = activeGroupPath.length > 0
       ? (getActiveNodes(nodes, activeGroupPath) ?? nodes)
       : nodes;
     const groupNode = searchNodes.find(n => n.id === groupNodeId && n.type === 'group');
-    if (!groupNode) return;
+    if (!groupNode) return { ok: false, error: 'Group node not found' };
     const subgraph = groupNode.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-    if (!subgraph) return;
+    if (!subgraph) return { ok: false, error: 'Group node has no subgraph to save' };
     const preset: GroupPreset = {
       id: `gp_${Date.now()}`,
       label: label ?? (typeof groupNode.params.label === 'string' ? groupNode.params.label : 'Group'),
@@ -2395,8 +2399,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       subgraph,
       savedAt: Date.now(),
     };
-    groupPresetManager.save(preset);
+    // save() writes localStorage synchronously, so re-reading here sees the new preset.
+    const result = groupPresetManager.save(preset);
     set({ groupPresets: loadGroupPresets() });
+    return result;
   },
 
   deleteGroupPreset: (presetId) => {
@@ -3946,6 +3952,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   setGlslErrors: (errors) => set({ glslErrors: errors }),
+  setGlContextLost: (lost) => set({ glContextLost: lost }),
   setPixelSample: (sample) => set({ pixelSample: sample }),
   setHoveredParamHint: (hint) => set({ hoveredParamHint: hint }),
   setCurrentTime: (t) => set({ currentTime: t }),
@@ -3971,15 +3978,24 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
-  saveGraph: (name) => {
+  saveGraph: async (name) => {
     const { nodes, looseGroups } = get();
     const payload = JSON.stringify({ nodes, looseGroups, savedAt: Date.now() });
-    localStorage.setItem(`shader-studio:${name}`, payload);
+    // localStorage is the primary store; a quota failure here means nothing
+    // was saved, so stop before the (optional) disk mirror.
+    const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
+    if (!stored.ok) return stored;
     const dir = getGraphDir();
     if (dir) {
-      const slug = labelToSlug(name || 'graph');
-      writeTextFileAtPath(`${dir}/${slug}.json`, JSON.stringify({ nodes, looseGroups }, null, 2));
+      const path = `${dir}/${labelToSlug(name || 'graph')}.json`;
+      try {
+        await writeTextFileAtPath(path, JSON.stringify({ nodes, looseGroups }, null, 2));
+      } catch (e) {
+        console.error('[saveGraph] disk write failed', path, e);
+        return { ok: false, error: `Graph "${name}" was saved in the browser, but writing ${path} failed: ${errorMessage(e)}` };
+      }
     }
+    return { ok: true };
   },
 
   getSavedGraphNames: () =>
@@ -3993,28 +4009,40 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       .sort(),
 
   loadSavedGraph: (name) => {
-    undoManager.clear();
     const raw = localStorage.getItem(`shader-studio:${name}`);
-    if (!raw) return;
+    if (!raw) {
+      const error = `No saved graph named "${name}"`;
+      console.error('[loadSavedGraph]', error);
+      return { ok: false, error };
+    }
+    // Same shape as importGraph: parse + migrate first, and only touch the
+    // undo history / live graph once the saved data is known to be usable.
+    let nodes: GraphNode[];
+    let looseGroups: unknown;
     try {
-      const { nodes: rawNodes, looseGroups } = JSON.parse(raw) as { nodes: GraphNode[]; looseGroups?: import('../types/nodeGraph').LooseGroup[] };
-      if (Array.isArray(rawNodes)) {
-        // Strip in-memory audio state — audio buffers are not persisted, so
-        // _isPlaying / _hasFile would crash the audio engine on load.
-        const sanitized = rawNodes.map(n => {
-          if (n.type === 'audioInput') {
-            return { ...n, params: { ...n.params, _isPlaying: false, _hasFile: false, _fileName: '' } };
-          }
-          return n;
-        });
-        const nodes = upgradeExprNodes(sanitized).map(n => migrateNodeParams(n, getNodeDefinition));
-        idGenerator.syncFromGraph(nodes);
-        // Reset group navigation so a saved graph that was captured inside a
-        // subgraph doesn't leave the editor stranded in a non-existent group.
-        set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
-        get().compile();
-      }
-    } catch {}
+      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown };
+      if (!Array.isArray(parsed?.nodes)) throw new Error('missing "nodes" array');
+      looseGroups = parsed.looseGroups;
+      // Strip in-memory audio state — audio buffers are not persisted, so
+      // _isPlaying / _hasFile would crash the audio engine on load.
+      const sanitized = (parsed.nodes as GraphNode[]).map(n => {
+        if (n.type === 'audioInput') {
+          return { ...n, params: { ...n.params, _isPlaying: false, _hasFile: false, _fileName: '' } };
+        }
+        return n;
+      });
+      nodes = upgradeExprNodes(sanitized).map(n => migrateNodeParams(n, getNodeDefinition));
+    } catch (e) {
+      console.error('[loadSavedGraph] saved graph is corrupt', name, e);
+      return { ok: false, error: `Saved graph "${name}" is corrupt and could not be loaded: ${errorMessage(e)}` };
+    }
+    undoManager.clear();
+    idGenerator.syncFromGraph(nodes);
+    // Reset group navigation so a saved graph that was captured inside a
+    // subgraph doesn't leave the editor stranded in a non-existent group.
+    set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    get().compile();
+    return { ok: true };
   },
 
   deleteSavedGraph: (name) => {
@@ -4025,31 +4053,55 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const { nodes, looseGroups } = get();
     const json = JSON.stringify({ nodes, looseGroups }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    const name = isTauri ? 'shader-graph.json' : (window.prompt('File name:', 'shader-graph') ?? 'shader-graph');
-    await saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
+    let name = 'shader-graph';
+    if (!isTauri) {
+      // prompt() returns null on Cancel — that's a cancel, not a request for
+      // the default name. An empty string (OK with the field cleared) keeps it.
+      const typed = window.prompt('File name:', 'shader-graph');
+      if (typed === null) return CANCELLED;
+      name = typed.trim() || 'shader-graph';
+    }
+    // saveTextFile never throws: Tauri dialog/write failures come back as a result.
+    return saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
   },
 
   importGraph: (json: string) => {
-    undoManager.clear();
+    // Parse and migrate before touching any state: a malformed file must
+    // leave the current graph and its undo history exactly as they were.
+    let nodes: GraphNode[];
+    let looseGroups: unknown;
     try {
-      const { nodes: rawNodes, looseGroups } = JSON.parse(json) as { nodes: GraphNode[]; looseGroups?: import('../types/nodeGraph').LooseGroup[] };
-      if (Array.isArray(rawNodes)) {
-        const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(n, getNodeDefinition));
-        idGenerator.syncFromGraph(nodes);
-        set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
-        get().compile();
-      }
-    } catch {}
+      const parsed = JSON.parse(json) as { nodes?: unknown; looseGroups?: unknown } | null;
+      if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
+      if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Shader Studio graph file?');
+      looseGroups = parsed.looseGroups;
+      nodes = upgradeExprNodes(parsed.nodes as GraphNode[]).map(n => migrateNodeParams(n, getNodeDefinition));
+    } catch (e) {
+      console.error('[importGraph] invalid graph file', e);
+      return { ok: false, error: `Could not import graph: ${errorMessage(e)}` };
+    }
+    undoManager.clear();
+    idGenerator.syncFromGraph(nodes);
+    set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    get().compile();
+    return { ok: true };
   },
 
   importGraphFromFile: async () => {
-    const json = await openTextFile('.json');
-    if (json) get().importGraph(json);
+    let json: string | null;
+    try {
+      json = await openTextFile('.json');
+    } catch (e) {
+      // openTextFile already logged the underlying dialog/read error.
+      return { ok: false, error: errorMessage(e) };
+    }
+    if (json === null) return CANCELLED;
+    return get().importGraph(json);
   },
 
   // ─── Custom-fn presets ──────────────────────────────────────────────────────
 
-  saveCustomFn: (nodeId) => {
+  saveCustomFn: async (nodeId) => {
     // Search top-level nodes first
     let node = get().nodes.find(n => n.id === nodeId);
     // If not found at top level, search inside group subgraphs
@@ -4063,7 +4115,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }
       }
     }
-    if (!node || node.type !== 'customFn') return;
+    if (!node || node.type !== 'customFn') return { ok: false, error: 'Node is not a Custom Fn node' };
     const preset: CustomFnPreset = {
       id: `cfp_${Date.now()}`,
       label: (node.params.label as string) || 'Custom Fn',
@@ -4074,7 +4126,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       savedAt: Date.now(),
     };
     // Always save to localStorage (belt-and-suspenders), and to disk if configured
-    customFnPresetManager.save(preset);
+    return customFnPresetManager.save(preset);
   },
 
   deleteCustomFn: (id) => {
@@ -4115,7 +4167,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   importCustomFnsFromFile: async () => {
-    const json = await openTextFile('.json');
+    let json: string | null;
+    try {
+      json = await openTextFile('.json');
+    } catch (e) {
+      console.error('[importCustomFnsFromFile] open failed', e);
+      return;
+    }
     if (json) get().importCustomFns(json);
   },
 
