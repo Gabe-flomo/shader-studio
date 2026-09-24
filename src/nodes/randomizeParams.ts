@@ -26,7 +26,7 @@ export function randomizedParams(node: GraphNode, def: NodeDefinition, rand: () 
 
   const excluded = new Set(randomizeExcluded(node));
   for (const [key, pd] of Object.entries(def.paramDefs ?? {})) {
-    if (!isParamVisible(pd, node.params) || wired(key) || keyframed(key) || excluded.has(key)) continue;
+    if (!isParamVisible(pd, node.params, def.defaultParams) || wired(key) || keyframed(key) || excluded.has(key)) continue;
     if (pd.type === 'float' || pd.type === 'int') {
       const [lo, hi] = floatRange(node, key, pd);
       out[key] = between(lo, hi, pd, node.params[key]);
@@ -104,7 +104,7 @@ function groupRandomRows(group: GraphNode): GroupRow[] {
     }
     const def = getNodeDefinition(inner.type);
     for (const [key, pd] of Object.entries(def?.paramDefs ?? {})) {
-      if (pd.type !== 'float' || pd.step === 1 || !isParamVisible(pd, inner.params)) continue;
+      if (pd.type !== 'float' || pd.step === 1 || !isParamVisible(pd, inner.params, def?.defaultParams)) continue;
       if (inner.inputs[`__param_${key}`]?.connection) continue;
       if (Object.entries(inner.inputs).some(([k, inp]) => k.toLowerCase() === key.toLowerCase() && inp.connection)) continue;
       if (hidden.includes(`${inner.id}::${key}`) || group.inputs[`ps_${inner.id}_${key}`]?.connection) continue;

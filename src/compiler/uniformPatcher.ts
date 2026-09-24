@@ -32,10 +32,15 @@ export const SKIP_UNIFORM_TYPES = new Set([
  * value isn't used by the emitted GLSL either (the gate mirrors the code
  * branch), so it shouldn't become a uniform.
  */
-export function isParamVisible(paramDef: ParamDef, params: Record<string, unknown>): boolean {
+export function isParamVisible(
+  paramDef: ParamDef,
+  params: Record<string, unknown>,
+  defaults?: Record<string, unknown>,
+): boolean {
   const sw = paramDef.showWhen;
   if (!sw) return true;
-  const v = String(params[sw.param]);
+  // A gate param an older save never had (e.g. palette's `preset`) reads as its default.
+  const v = String(params[sw.param] ?? defaults?.[sw.param]);
   return Array.isArray(sw.value) ? sw.value.includes(v) : sw.value === v;
 }
 
@@ -102,7 +107,7 @@ export function patchNodeParamsForUniforms(
   const patchedParams = { ...node.params };
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
     if (paramDef.compileTime) continue;        // baked by declaration (loop bounds…)
-    if (!isParamVisible(paramDef, node.params)) continue; // hidden by showWhen → not read by the GLSL
+    if (!isParamVisible(paramDef, node.params, def.defaultParams)) continue; // hidden by showWhen → not read by the GLSL
     // vec3 / vec3color → a vec3 uniform, so a colour-picker drag is a uniform
     // write, not a recompile. The definition reads it through pv3().
     if (paramDef.type === 'vec3' || paramDef.type === 'vec3color') {

@@ -38,7 +38,7 @@ function labelOf(node: GraphNode): string {
 
 function eligible(node: GraphNode, key: string, pd: ParamDef): boolean {
   if (pd.type !== 'float' || pd.step === 1 || pd.compileTime) return false;
-  if (!isParamVisible(pd, node.params)) return false;
+  if (!isParamVisible(pd, node.params, getNodeDefinition(node.type)?.defaultParams)) return false;
   // Driven from inside the group by a wire → not a free param
   if (node.inputs[`__param_${key}`]?.connection) return false;
   const sameNamed = Object.entries(node.inputs).find(([k, inp]) => k.toLowerCase() === key.toLowerCase() && inp.connection);

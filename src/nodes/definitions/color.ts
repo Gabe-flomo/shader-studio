@@ -95,9 +95,14 @@ export const PaletteNode: NodeDefinition = {
     const preset = paletteNodePreset(node.params.preset);
     const vec = (key: 'offset' | 'amplitude' | 'freq' | 'phase', fallback: number[]) => {
       if (inputVars[key]) return inputVars[key];
-      const v = preset ? vec3Str(preset[key]) : pv3(node.params[key], fallback);
-      const [r, g, b] = ['r', 'g', 'b'].map(c => inputVars[`${key}_${c}`]);
-      return (r || g || b) ? `vec3(${r || `${v}.x`}, ${g || `${v}.y`}, ${b || `${v}.z`})` : v;
+      const raw = preset ? preset[key] : node.params[key];
+      const isUniform = typeof raw === 'string';
+      const lit = Array.isArray(raw) && raw.length >= 3 && raw.every(n => typeof n === 'number') ? raw as number[] : fallback;
+      const base = isUniform ? raw : vec3Str(lit);
+      const chans = ['r', 'g', 'b'].map(c => inputVars[`${key}_${c}`]);
+      if (!chans.some(Boolean)) return base;
+      const comp = (i: number) => chans[i] || (isUniform ? `${base}.${'xyz'[i]}` : f(lit[i]));
+      return `vec3(${comp(0)},${comp(1)},${comp(2)})`;
     };
     return {
       code: `    vec3 ${outVar} = palette(${tVar}, ${vec('offset', [0.5, 0.5, 0.5])}, ${vec('amplitude', [0.5, 0.5, 0.5])}, ${vec('freq', [1.0, 1.0, 1.0])}, ${vec('phase', [0.0, 0.33, 0.67])});\n`,
