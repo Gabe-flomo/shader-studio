@@ -427,6 +427,8 @@ interface NodeGraphState {
 
   // Stateful rendering — true when a PrevFrame node exists in the graph
   isStateful: boolean;
+  /** Echo nodes present: snapshot ring the preview must keep (see nodes/definitions/echo.ts). */
+  echoConfig: { copies: number; delay: number } | null;
 
   /** Maps nodeId → GLSL slug, e.g. "node_49" → "cos_49". Used for code-panel highlighting. */
   nodeSlugMap: Map<string, string>;
@@ -1194,6 +1196,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   audioMasterVolume: 0.7,
   nodePreviews: {},
   isStateful: false,
+  echoConfig: null,
   nodeSlugMap: new Map(),
   rawGlslShader: null,
   previewAspect: ((): PreviewAspect => {
@@ -4166,6 +4169,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       audioUniforms: result.audioUniforms,
       videoUniforms: result.videoUniforms,
       isStateful: result.isStateful,
+      echoConfig: result.echo ?? null,
       particleSystems: result.particleSystems ?? [],
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go

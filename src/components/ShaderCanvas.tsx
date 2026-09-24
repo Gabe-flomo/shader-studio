@@ -287,6 +287,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const pingPongIdx = useRef<0 | 1>(0);  // 0 = A is read target, B is write; 1 = vice versa
   // Ref mirrors for stateful flag so rAF loop sees latest without re-boot
   const isStatefulRef = useRef(false);
+  const echoRef = useRef<{ copies: number; delay: number } | null>(null);
   // Track mouse pixel position in canvas — null when mouse is not over canvas
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
   // Ref mirror for onHistogram so rAF loop sees latest without re-boot
@@ -312,6 +313,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const videoUniforms      = useNodeGraphStore((state) => state.videoUniforms);
   const videoTextures      = useNodeGraphStore((state) => state.videoTextures);
   const isStateful         = useNodeGraphStore((state) => state.isStateful);
+  const echoConfig         = useNodeGraphStore((state) => state.echoConfig);
+  useEffect(() => { echoRef.current = echoConfig; }, [echoConfig]);
   const particleSystems    = useNodeGraphStore((state) => state.particleSystems);
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
@@ -431,6 +434,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       u_resolution:  { value: new THREE.Vector2(1, 1) },
       u_mouse:       { value: new THREE.Vector2(0, 0) },
       u_prevFrame:   { value: null },
+      // Echo snapshot ring (see nodes/definitions/echo.ts); the shader declares only the ones it uses.
+      ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
       u_fontTexture: { value: FONT_TEXTURE },
     };
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
@@ -733,6 +738,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
       pingPongIdx.current = 0;
+      disposeEchoRing();
       if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = null;
       requestRender();
     };
@@ -793,6 +799,42 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderer.setRenderTarget(pingPongA.current); renderer.clear();
         renderer.setRenderTarget(pingPongB.current); renderer.clear();
         renderer.setRenderTarget(null);
+      }
+    };
+
+    // ── Echo snapshot ring ────────────────────────────────────────────────
+    // `echoRing[i]` holds the picture (i + 1) × delay frames ago. Every `delay`
+    // frames the ring rotates (the oldest slot becomes the newest) and the
+    // frame just rendered is copied into slot 0 — one extra full-screen copy
+    // per `delay` frames, and copies × one frame of GPU memory.
+    let echoRing: THREE.WebGLRenderTarget[] = [];
+    let echoFrame = 0;
+    const disposeEchoRing = () => { for (const rt of echoRing) rt.dispose(); echoRing = []; echoFrame = 0; };
+    const captureEcho = (frameTex: THREE.Texture) => {
+      const cfg = echoRef.current;
+      if (!cfg) { if (echoRing.length) disposeEchoRing(); return; }
+      const w = renderer.domElement.width || 1, h = renderer.domElement.height || 1;
+      if (echoRing.length !== cfg.copies || (echoRing[0] && (echoRing[0].width !== w || echoRing[0].height !== h))) {
+        disposeEchoRing();
+        for (let i = 0; i < cfg.copies; i++) {
+          const rt = new THREE.WebGLRenderTarget(w, h, { type: RT_TYPE, format: THREE.RGBAFormat, depthBuffer: false });
+          renderer.setRenderTarget(rt); renderer.clear();
+          echoRing.push(rt);
+        }
+        renderer.setRenderTarget(null);
+      }
+      echoFrame++;
+      if (echoFrame % Math.max(1, cfg.delay) === 0) {
+        echoRing.unshift(echoRing.pop()!);              // oldest slot becomes the newest
+        blitMat.uniforms.tInput.value = frameTex;
+        blitMat.uniforms.u_seed.value = 0;
+        renderer.setRenderTarget(echoRing[0]);
+        renderer.render(blitScene, camera);
+        renderer.setRenderTarget(null);
+      }
+      for (let i = 0; i < echoRing.length; i++) {
+        const u = material.uniforms[`u_echo${i}`];
+        if (u) u.value = echoRing[i].texture;
       }
     };
 
@@ -904,7 +946,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
       const dynamic = renderKeepAlive.active() || (playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
-        audioAmps.size > 0 || videoActive || isStatefulRef.current ||
+        audioAmps.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
       ));
       const doRender = dynamic || needsRender;
@@ -923,6 +965,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           }
           renderer.setRenderTarget(writeRT);
           renderer.render(scene, camera);
+          if (echoRef.current) captureEcho(writeRT.texture);
           blitMat.uniforms.tInput.value = writeRT.texture;
           blitMat.uniforms.u_seed.value = frameCount * 1.618;
           renderer.setRenderTarget(null);
@@ -931,6 +974,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         } else {
           renderer.setRenderTarget(floatRt);
           renderer.render(scene, camera);
+          if (echoRef.current) captureEcho(floatRt.texture);
           blitMat.uniforms.tInput.value = floatRt.texture;
           blitMat.uniforms.u_seed.value = frameCount * 1.618;
           renderer.setRenderTarget(null);

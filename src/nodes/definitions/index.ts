@@ -161,6 +161,7 @@ export {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
+import { EchoNode } from './echo';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
@@ -268,6 +269,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mouse: MouseNode,
   textureInput: TextureInputNode,
   prevFrame: PrevFrameNode,
+  echo: EchoNode,
   loopIndex: LoopIndexNode,
   audioInput: AudioInputNode,
   videoInput: VideoInputNode,

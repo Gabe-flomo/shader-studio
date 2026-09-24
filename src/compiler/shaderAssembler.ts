@@ -395,6 +395,8 @@ export class ShaderAssembler {
   private mlgDynamicOutputs = new Map<string, Record<string, { type: string; label: string }>>();
   private sceneFnExtraParams = new Map<string, Array<{ name: string; type: string }>>();
   private isStateful = false;
+  /** Echo nodes anywhere in the graph (incl. group subgraphs): snapshot ring size and spacing. */
+  private echo: { copies: number; delay: number } | null = null;
   private usedSlugs = new Set<string>();
   private nodeSlugMap = new Map<string, string>();
   private sortedNodes: GraphNode[];
@@ -451,7 +453,7 @@ export class ShaderAssembler {
     };
   }
 
-  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; echo: { copies: number; delay: number } | null; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
     this.detectStateful();
     for (const node of this.sortedNodes) {
       this.compileNode(node);
@@ -459,7 +461,24 @@ export class ShaderAssembler {
     return this.buildResult();
   }
 
+  private detectEcho(): void {
+    let copies = 0; let delay = 0;
+    const visit = (nodes: GraphNode[]) => {
+      for (const n of nodes) {
+        if (n.type === 'echo') {
+          copies = Math.max(copies, Math.max(1, Math.min(6, Math.round(Number(n.params.copies ?? 3)))));
+          if (!delay) delay = Math.max(1, Math.round(Number(n.params.delay ?? 6)));
+        }
+        const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
+        if (sg?.nodes) visit(sg.nodes);
+      }
+    };
+    visit(this.allNodes);
+    this.echo = copies > 0 ? { copies, delay } : null;
+  }
+
   private detectStateful(): void {
+    this.detectEcho();
     for (const node of this.allNodes) {
       if (node.type === 'prevFrame' || node.type === 'radianceCascadesApprox' ||
           node.type === 'gaussianBlur' || node.type === 'bloom' || node.type === 'radialBlur' ||
@@ -3337,6 +3356,7 @@ export class ShaderAssembler {
     const textureUniformDecls = [
       ...Object.keys(this.textureUniforms).map(name => `uniform sampler2D ${name};`),
       ...(this.isStateful ? ['uniform sampler2D u_prevFrame;'] : []),
+      ...(this.echo ? Array.from({ length: this.echo.copies }, (_, i) => `uniform sampler2D u_echo${i};`) : []),
     ].join('\n');
     const audioUniformDecls = Object.keys(this.audioUniforms)
       .map(name => `uniform float ${name};`)
@@ -3376,6 +3396,7 @@ ${this.mainCode.join('')}}`.trim();
       audioUniforms: this.audioUniforms,
       videoUniforms: this.videoUniforms,
       isStateful: this.isStateful,
+      echo: this.echo,
       nodeSlugMap: this.nodeSlugMap,
       mlgDynamicOutputs: this.mlgDynamicOutputs,
     };
@@ -3385,6 +3406,6 @@ ${this.mainCode.join('')}}`.trim();
 export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; echo: { copies: number; delay: number } | null; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
   return new ShaderAssembler(sortedNodes, allNodes).assemble();
 }

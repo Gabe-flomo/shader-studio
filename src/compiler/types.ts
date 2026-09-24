@@ -56,6 +56,11 @@ export interface CompilationResult {
    */
   isStateful: boolean;
   /**
+   * Echo nodes: how many snapshot frames the preview must keep (`copies`) and
+   * how many frames apart they are captured (`delay`). Null when none.
+   */
+  echo?: { copies: number; delay: number } | null;
+  /**
    * Maps nodeId → short GLSL slug (e.g. "node_49" → "cos_49").
    * Used by CodePanel to highlight the lines belonging to a selected node.
    * Absent on validation-failure results.

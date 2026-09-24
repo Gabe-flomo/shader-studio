@@ -49,7 +49,7 @@ const IMPLICIT_GLOBALS: Array<{ name: string; type: string }> = [
  * sampler uniforms (media inputs). A clear refusal beats a broken shader.
  */
 const STATEFUL_TYPES = new Set([
-  'prevFrame', 'radianceCascadesApprox',
+  'prevFrame', 'echo', 'radianceCascadesApprox',
   'gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'motionBlur', 'depthOfField',
 ]);
 // textureInput is allowed: each one becomes a sampler2D argument (see spec.textures).
