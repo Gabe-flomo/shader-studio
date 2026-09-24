@@ -4,12 +4,21 @@ import App from './App.tsx'
 import { Toaster } from './components/ui/Toaster'
 import { DialogHost } from './components/ui/DialogHost'
 import { useNodeGraphStore } from './store/useNodeGraphStore'
+import { compileGraph } from './compiler/graphCompiler'
+import { nodePreviewRenderer } from './lib/nodePreviewRenderer'
+import { loadExampleGraphs } from './store/exampleIndex'
+import { resolveNodeAliases } from './nodes/definitions/aliases'
+import { getNodeDefinition } from './nodes/definitions'
 
 const root = createRoot(document.getElementById('root')!)
 
 // Dev-only: the store on window, so scripted checks (and the in-app browser) can load examples and
 // read state without clicking through the UI. Not bundled in production.
-if (import.meta.env.DEV) (window as unknown as { __shaderStudio?: unknown }).__shaderStudio = useNodeGraphStore
+if (import.meta.env.DEV) {
+  const w = window as unknown as { __shaderStudio?: unknown; __shaderStudioDev?: unknown }
+  w.__shaderStudio = useNodeGraphStore
+  w.__shaderStudioDev = { compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition }
+}
 
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.

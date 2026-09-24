@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 
 // Inject save-flash keyframe once
 if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
@@ -2646,6 +2646,17 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const generatedCode = showCode ? (extractNodeCodeFromShader(shaderLines, node) || def.generateGLSL(node, {}).code) : '';
   const hasOverride = typeof node.params?.__codeOverride === 'string' && (node.params.__codeOverride as string).trim().length > 0;
   const codeSnippet = hasOverride ? (node.params.__codeOverride as string) : generatedCode;
+  // The helper functions this node's line calls (circleSDF, palette, …), so the panel can show
+  // what the node actually computes above how this instance calls it.
+  const helperFunctions = useMemo(() => {
+    if (!showCode) return [] as string[];
+    const all = [...(def.glslFunction ? [def.glslFunction] : []), ...(def.glslFunctions ?? []), ...(def.glslFunctionsFor?.(node) ?? [])];
+    if (all.length === 0) return [] as string[];
+    const called = new Set([...codeSnippet.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]));
+    const nameOf = (fn: string) => /^\s*(?:[a-z0-9]+\s+)?([A-Za-z_]\w*)\s*\(/m.exec(fn)?.[1];
+    const used = all.filter(fn => { const n = nameOf(fn); return n && called.has(n); });
+    return (used.length ? used : all).map(fn => fn.trim());
+  }, [showCode, def, node, codeSnippet]);
 
   // ─── Build tooltip for an input socket ─────────────────────────────────────
   const buildInputTooltip = (inputKey: string): React.ReactNode[] => {
@@ -4084,6 +4095,18 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               </Button>
             )}
           </div>
+            {helperFunctions.length > 0 && (
+              <>
+                <div style={{ padding: '6px 12px 0', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>WHAT IT COMPUTES</div>
+                <pre style={{
+                  margin: 0, padding: '4px 12px 8px', maxHeight: 260, overflow: 'auto', whiteSpace: 'pre',
+                  color: tk.text.muted, font: `11px/1.55 ${fontFamily.mono}`, borderBottom: `1px solid ${tk.border.subtle}`,
+                }}>
+                  {helperFunctions.join('\n\n')}
+                </pre>
+                <div style={{ padding: '6px 12px 0', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>HOW THIS NODE USES IT</div>
+              </>
+            )}
             <pre style={{
               margin: 0, padding: '8px 12px', maxHeight: 400, overflow: 'auto', whiteSpace: 'pre',
               color: hasOverride ? tk.status.warningText : tk.text.secondary, font: `11.5px/1.55 ${fontFamily.mono}`,
