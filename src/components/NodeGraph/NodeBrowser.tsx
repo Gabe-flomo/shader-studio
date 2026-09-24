@@ -664,7 +664,7 @@ export function NodeBrowser({
       return 0;
     };
     const results = Object.values(NODE_REGISTRY)
-      .filter(def => !HIDDEN_NODES.has(def.type))
+      .filter(def => !HIDDEN_NODES.has(def.type) && !def.deprecated)
       .map(def => ({ def, score: scoreNodeDef(def) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))

@@ -21,7 +21,8 @@ interface SearchEntry {
 }
 
 const ALL_ENTRIES: SearchEntry[] = Object.entries(NODE_REGISTRY)
-  .filter(([type]) => !HIDDEN_TYPES.has(type))
+  // Deprecated nodes stay loadable from saved graphs but aren't offered for new ones.
+  .filter(([type, def]) => !HIDDEN_TYPES.has(type) && !def.deprecated)
   .map(([type, def]) => ({
     type,
     def,

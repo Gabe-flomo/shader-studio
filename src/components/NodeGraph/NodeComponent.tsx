@@ -43,7 +43,7 @@ import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
-import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
+import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
 import { moveItem } from '../../lib/reorder';
@@ -3696,7 +3696,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               onMouseDown={e => e.stopPropagation()}
             >
               <span style={{ fontSize: '10px', color: ctp.surface1, marginRight: '2px' }}>type</span>
-              {(['float', 'vec2', 'vec3'] as DataType[]).map(t => {
+              {(VEC4_CAPABLE_NODES.has(node.type) ? ['float', 'vec2', 'vec3', 'vec4'] as DataType[] : ['float', 'vec2', 'vec3'] as DataType[]).map(t => {
                 const active = current === t;
                 return (
                   <button
@@ -3709,7 +3709,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       color: active ? ctp.blue : ctp.surface2,
                     }}
                   >
-                    {t === 'float' ? 'f' : t === 'vec2' ? 'v2' : 'v3'}
+                    {t === 'float' ? 'f' : t === 'vec2' ? 'v2' : t === 'vec3' ? 'v3' : 'v4'}
                   </button>
                 );
               })}

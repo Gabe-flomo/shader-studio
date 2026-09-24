@@ -1,4 +1,4 @@
-import type { GraphNode, NodeDefinition, DataType } from '../types/nodeGraph';
+import type { GraphNode, NodeDefinition, DataType, ParamDef } from '../types/nodeGraph';
 import { getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed } from './keyframes';
 
 /** Node types whose params must remain as baked compile-time constants.
@@ -22,7 +22,22 @@ export const SKIP_UNIFORM_TYPES = new Set([
   // between field-flow mode (backward trace) and spawn-point mode (different GLSL branches).
   // Slider changes trigger a full recompile; use input sockets for real-time animation.
   'particleEmitter',
+  // scope: min/max are read by ShaderCanvas (JS) to scale the waveform probe; the
+  // node emits no GLSL of its own, so a uniform would be declared and never read.
+  'scope',
 ]);
+
+/**
+ * Is a param currently visible, per its `showWhen` gate? A hidden param's
+ * value isn't used by the emitted GLSL either (the gate mirrors the code
+ * branch), so it shouldn't become a uniform.
+ */
+export function isParamVisible(paramDef: ParamDef, params: Record<string, unknown>): boolean {
+  const sw = paramDef.showWhen;
+  if (!sw) return true;
+  const v = String(params[sw.param]);
+  return Array.isArray(sw.value) ? sw.value.includes(v) : sw.value === v;
+}
 
 /** Default GLSL zero literal for a given type. */
 export function defaultGlslVal(type: DataType | string): string {
@@ -85,7 +100,9 @@ export function patchNodeParamsForUniforms(
   const patchedParams = { ...node.params };
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
     if (paramDef.type !== 'float') continue;  // only scalar floats
+    if (paramDef.compileTime) continue;        // baked by declaration (loop bounds…)
     if (paramDef.step === 1) continue;         // integer param — keep baked
+    if (!isParamVisible(paramDef, node.params)) continue; // hidden by showWhen → not read by the GLSL
     if (!(key in node.inputs) && registerFn && !isKeyframeBypassed(node, key)) {
       const kfCfg = getKeyframeConfig(node, key);
       if (kfCfg) {

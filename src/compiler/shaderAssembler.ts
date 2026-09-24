@@ -77,8 +77,10 @@ float valueNoise(vec2 p) {
                mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
 }
 vec2 rotate(vec2 v, float angle) {
-    return vec2(v.x * cos(angle) - v.y * sin(angle),
-                v.x * sin(angle) + v.y * cos(angle));
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
 }
 mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }`;
 
@@ -188,6 +190,10 @@ export function resolveInputVars(
       inputVars[inputKey] = formatGlslLiteral(input.defaultValue as number | number[], input.type);
     } else if (input.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) {
       inputVars[inputKey] = 'g_uv';
+    } else if (input.type === 'float' && inputKey === 't' && typeof node.params.t === 'number') {
+      // A node with its own `t` slider (mix) keeps it: left unresolved here so
+      // the definition falls back to p(node.params.t) — a live uniform. The
+      // implicit clock below is for `t` sockets with no fallback of their own.
     } else if (input.type === 'float' && (inputKey === 'time' || inputKey === 't')) {
       inputVars[inputKey] = 'u_time';
     }
@@ -261,6 +267,7 @@ function resolveInputFallback(
   }
   if (inp.defaultValue !== undefined) return formatGlslLiteral(inp.defaultValue as number | number[], inp.type);
   if (inp.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) return 'g_uv';
+  if (inp.type === 'float' && inputKey === 't' && typeof node.params.t === 'number') return undefined; // own slider wins (see resolveInputVars)
   if (inp.type === 'float' && (inputKey === 'time' || inputKey === 't')) return 'u_time';
   return undefined;
 }
@@ -301,6 +308,66 @@ function resolveGroupPortOverrides(
     }
   }
   return overrides;
+}
+
+// ── Helper-function de-duplication ───────────────────────────────────────────
+// `this.functions` is a Set of helper *blocks* keyed by exact text, so two
+// nodes that each carry their own copy of, say, `hash3` inside a differently
+// worded block both get emitted — and GLSL rejects the redefinition, which
+// showed up as a black canvas for specific node pairs (raymarch3d + domainWarp3D,
+// mandelbrot + newtonFractal, uvWarp + smoothWarp…). This pass splits every
+// block into its top-level function definitions and emits each *name* once
+// (first definition wins); non-function text (#defines, consts, structs) is
+// kept per block.
+
+const FN_HEADER = /\b(?:float|vec[234]|mat[234]|int|ivec[234]|bool|bvec[234]|void)\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/g;
+
+/** Split a GLSL block into top-level chunks; function chunks carry their name. */
+function splitGlslBlock(block: string): Array<{ name?: string; text: string }> {
+  const chunks: Array<{ name?: string; text: string }> = [];
+  let cursor = 0;
+  FN_HEADER.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = FN_HEADER.exec(block)) !== null) {
+    // Only headers at brace depth 0 count as definitions (not nested text).
+    let depth = 0;
+    for (let i = cursor; i < m.index; i++) { const c = block[i]; if (c === '{') depth++; else if (c === '}') depth--; }
+    if (depth !== 0) continue;
+    // Find the matching close brace for this function body.
+    let d = 0, end = -1;
+    for (let i = m.index + m[0].length - 1; i < block.length; i++) {
+      const c = block[i];
+      if (c === '{') d++;
+      else if (c === '}') { d--; if (d === 0) { end = i + 1; break; } }
+    }
+    if (end === -1) break; // unbalanced — leave the rest as-is
+    if (m.index > cursor) chunks.push({ text: block.slice(cursor, m.index) });
+    chunks.push({ name: m[1], text: block.slice(m.index, end) });
+    cursor = end;
+    FN_HEADER.lastIndex = end;
+  }
+  if (cursor < block.length) chunks.push({ text: block.slice(cursor) });
+  return chunks;
+}
+
+/** Emit each helper function name once across all blocks (first definition wins). */
+export function dedupeGlslFunctions(blocks: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const block of blocks) {
+    const kept: string[] = [];
+    for (const chunk of splitGlslBlock(block)) {
+      if (chunk.name) {
+        if (seen.has(chunk.name)) continue;
+        seen.add(chunk.name);
+      } else if (!chunk.text.trim()) {
+        continue;
+      }
+      kept.push(chunk.text);
+    }
+    if (kept.length) out.push(kept.join('\n'));
+  }
+  return out;
 }
 
 // ── Main assembler ────────────────────────────────────────────────────────────
@@ -3198,7 +3265,7 @@ export class ShaderAssembler {
   }
 
   private buildResult() {
-    const functionCode = Array.from(this.functions).join('\n');
+    const functionCode = dedupeGlslFunctions(Array.from(this.functions)).join('\n');
     const paramUniformDecls = Object.keys(this.paramUniforms)
       .map(name => `uniform float ${name};`)
       .join('\n');
