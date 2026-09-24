@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
+import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
@@ -490,6 +491,8 @@ interface NodeGraphState {
   removeNodes: (nodeIds: string[]) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
+  /** New random values for the node's free sliders (see nodes/randomizeParams.ts); one undo step per call */
+  randomizeNodeParams: (nodeId: string) => void;
   updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
   updateNodeInputs: (nodeId: string, inputs: Record<string, import('../types/nodeGraph').InputSocket>) => void;
   setPreviewNodeId: (id: string | null) => void;
@@ -3189,6 +3192,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       // String fields (GLSL body, expr formula): debounce to avoid compile-on-every-keystroke
       compilationService.scheduleCompile(() => get().compile(), 500);
     }
+  },
+
+  randomizeNodeParams: (nodeId) => {
+    const { nodes, activeGroupPath } = get();
+    const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const node = scope.find(n => n.id === nodeId);
+    const def = node ? getNodeDefinition(node.type) : undefined;
+    if (!node || !def) return;
+    const patch = randomizedParams(node, def);
+    if (Object.keys(patch).length === 0) return;
+    // Its own undo step, even when clicked again right away (the param-edit burst would merge them)
+    undoManager.push(nodes);
+    _historyParamPending = true;
+    get().updateNodeParams(nodeId, patch, { immediate: true });
+    if (_historyParamTimer) { clearTimeout(_historyParamTimer); _historyParamTimer = null; }
+    _historyParamPending = false;
   },
 
   updateNodeOutputs: (nodeId, outputs) => {
