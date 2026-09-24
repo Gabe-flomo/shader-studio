@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
-import { subscribeTimeTick } from '../../lib/timeTick';
+import { timeReadoutRef } from '../../lib/timeTick';
 
 // Header and footer bars for the shader preview. The preview is a render surface, so callers
 // render these under ThemeOverrideContext 'dark' — they look the same in both app themes.
@@ -78,9 +78,7 @@ export function PreviewFooter({ idleHint }: { idleHint: string }) {
 
 function TimeReadout() {
   const tk = useTokens();
-  const [time, setTime] = useState(0);
-  useEffect(() => subscribeTimeTick(setTime), []);
-  return <span style={{ margin: '0 4px 0 6px', color: tk.text.primary, fontVariantNumeric: 'tabular-nums' }}>{time.toFixed(2)}s</span>;
+  return <span ref={timeReadoutRef} style={{ margin: '0 4px 0 6px', color: tk.text.primary, fontVariantNumeric: 'tabular-nums' }}>0.00s</span>;
 }
 
 /** "● N errors" — opens the graph and GLSL compile errors. Hidden when there are none. */

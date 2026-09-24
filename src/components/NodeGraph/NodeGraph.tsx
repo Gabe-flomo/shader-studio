@@ -558,7 +558,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   // ── Connection drag ─────────────────────────────────────────────────────────
   // A press on an output socket, to tell a click (→ Smart connect) from a drag (→ wire)
   const socketPressRef = useRef<{ nodeId: string; key: string; x: number; y: number; t: number } | null>(null);
-  const [smartConnect, setSmartConnect] = useState<{ nodeId: string; key: string; dir: 'in' | 'out'; x: number; y: number } | null>(null);
+  const [smartConnect, setSmartConnect] = useState<{ nodeId: string; key: string; dir: 'in' | 'out'; x: number; y: number; justAdded?: boolean } | null>(null);
   const dragRafRef = useRef<number | null>(null);
 
   const [dragConnection, setDragConnection] = useState<{
@@ -791,6 +791,10 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       const pos = node && key ? socketWorld(node.id, 'out', key) : null;
       if (!pos || !node || !key) { if (tries++ < 30) raf = requestAnimationFrame(attempt); return; }
       useNodeGraphStore.getState().requestSmartConnect(null);
+      // Show the node that was just added: select it and bring it to the middle of the view
+      useNodeGraphStore.getState().setSelectedNodeId(nodeId);
+      const size = getCardSize(nodeId) ?? { w: 360, h: 200 };
+      handleMinimapPanTo(node.position.x + size.w / 2, node.position.y + size.h / 2);
       const suggestions = suggestConnections({
         nodes: displayNodesRef.current, from: { nodeId, key, dir: 'out' }, socketPos: socketWorld,
         labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
@@ -798,14 +802,14 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       const rect = canvasRef.current?.getBoundingClientRect();
       if (suggestions.length === 0 || !rect) return;
       setSmartConnect({
-        nodeId, key, dir: 'out',
+        nodeId, key, dir: 'out', justAdded: true,
         x: rect.left + pos.x * zoomRef.current + panRef.current.x,
         y: rect.top + pos.y * zoomRef.current + panRef.current.y,
       });
     };
     raf = requestAnimationFrame(attempt);
     return () => cancelAnimationFrame(raf);
-  }, [smartConnectRequest, socketWorld]);
+  }, [smartConnectRequest, socketWorld, handleMinimapPanTo]);
   const pickSuggestion = useCallback((s: Suggestion) => {
     if (!smartConnect) return;
     if (smartConnect.dir === 'out') connectNodes(smartConnect.nodeId, smartConnect.key, s.nodeId, s.key);
@@ -1748,6 +1752,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               closeSmartConnect();
             }}
             onClose={closeSmartConnect}
+            justAdded={smartConnect.justAdded}
           />
         );
       })()}

@@ -57,6 +57,9 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
+import { canRandomize, randomizableParams, randomizeExcluded } from '../../nodes/randomizeParams';
+import { RandomizeMenu } from './RandomizeMenu';
+import { timeReadoutRef } from '../../lib/timeTick';
 import type { NodeError } from '../../compiler/nodeErrors';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
@@ -387,6 +390,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams       = useNodeGraphStore(s => s.updateNodeParams);
+  const randomizeNodeParams    = useNodeGraphStore(s => s.randomizeNodeParams);
+  const [randomizeMenu, setRandomizeMenu] = useState<{ x: number; y: number } | null>(null);
   const changeNodeVectorType   = useNodeGraphStore(s => s.changeNodeVectorType);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
@@ -422,8 +427,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const swapTargetNodeId   = useNodeGraphStore(s => s.swapTargetNodeId);
   const setSwapTargetNodeId = useNodeGraphStore(s => s.setSwapTargetNodeId);
   const isSwapTarget       = swapTargetNodeId === node.id;
-  // currentTime is only needed for the Time node live badge — subscribed below conditionally
-  const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
   // Texture input
   const setNodeTexture     = useNodeGraphStore(s => s.setNodeTexture);
   const nodeTexture        = useNodeGraphStore(s => node.type === 'textureInput' ? s.nodeTextures[node.id] : null);
@@ -1817,7 +1820,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {wired && wire ? (
             <>
-              <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey) || 'wired from outside'} />
+              <WiredChip source={wire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
               <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, o.psKey)} />
             </>
           ) : (
@@ -3482,7 +3485,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               return (
                 <div key={key} style={rowStyle}>
                   <ParamLabel muted>{paramDef.label}{isParamExternal && lockIcon}</ParamLabel>
-                  <WiredChip expr={srcExpr} locked={isParamExternal} />
+                  <WiredChip source={socketConn!} expr={srcExpr} locked={isParamExternal} />
                 </div>
               );
             }
@@ -3508,7 +3511,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
                   )}
                   <ParamLabel muted>{paramDef.label}</ParamLabel>
-                  <WiredChip expr={srcExpr} />
+                  <WiredChip source={paramInputConn!} expr={srcExpr} />
                   <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, paramInputKey)} />
                 </div>
               );
@@ -3595,14 +3598,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 >{paramDef.label}</span>
                 {/* The whole vec3 wired (Palette's Offset, …): one chip instead of three rulers */}
                 {node.inputs[key]?.connection ? (
-                  <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, node.inputs[key].connection!.nodeId, node.inputs[key].connection!.outputKey)} />
+                  <WiredChip source={node.inputs[key].connection!} expr={getSourceExpr(shaderLines, nodeOutputVarMap, node.inputs[key].connection!.nodeId, node.inputs[key].connection!.outputKey)} />
                 ) : [0, 1, 2].map(idx => {
                   const conn = node.inputs[compKeys[idx]]?.connection;
                   return (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
                       <span style={{ width: 10, flexShrink: 0, textAlign: 'center', font: `600 11px ${fontFamily.mono}`, color: compColors[idx] }}>{compLabels[idx]}</span>
                       {conn
-                        ? <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, conn.nodeId, conn.outputKey)} />
+                        ? <WiredChip source={conn} expr={getSourceExpr(shaderLines, nodeOutputVarMap, conn.nodeId, conn.outputKey)} />
                         : (
                           <RulerSlider
                             value={vals[idx] ?? 0}
@@ -3704,7 +3707,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               >
                 <ParamLabel muted={isWired}>{inp.name}</ParamLabel>
                 {isWired && wire
-                  ? <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
+                  ? <WiredChip source={wire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
                   : (
                     <RulerSlider
                       value={val}
@@ -3727,10 +3730,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {Object.keys(node.outputs).length > 0 && (Object.keys(node.inputs).length > 0 || (!collapsed && Object.keys(paramDefs).length > 0)) && sectionRule}
         {Object.entries(node.outputs).map(([key, output]) => {
           const isHovered = hoveredOutput === key;
-          // Live value badge: show time for Time node
-          const liveValueBadge = node.type === 'time' && key === 'time'
-            ? (currentTime as number).toFixed(2) + 's'
-            : null;
+          // Live clock on the Time node's output (follows every frame, see timeReadoutRef)
+          const liveValueBadge = node.type === 'time' && key === 'time';
           return (
             <div
               key={key}
@@ -3745,8 +3746,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             >
               {liveValueBadge && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 2, marginRight: 8 }}>
-                  <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.field, borderRadius: 6, padding: '2px 7px', fontVariantNumeric: 'tabular-nums' }}>
-                    {liveValueBadge}
+                  <span ref={timeReadoutRef} style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.field, borderRadius: 6, padding: '2px 7px', fontVariantNumeric: 'tabular-nums' }}>
+                    {(useNodeGraphStore.getState().currentTime ?? 0).toFixed(2)}s
                   </span>
                   <CardButton icon="reset" label="Reset time to 0" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
                 </span>
@@ -3945,7 +3946,24 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <CardButton icon="resetParams" label="Reset parameters to defaults"
             onClick={() => { if (def.defaultParams) updateNodeParams(node.id, def.defaultParams as Record<string, unknown>, { immediate: true }); }} />
         )}
+        {canRandomize(node, def) && (
+          <CardButton icon="dice" on={randomizeExcluded(node).length > 0}
+            label={randomizeExcluded(node).length > 0 ? 'Randomize the ticked sliders (right-click to choose)' : 'Randomize values (right-click to choose which)'}
+            onClick={() => randomizeNodeParams(node.id)}
+            onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
+        )}
       </div>
+      {randomizeMenu && (
+        <RandomizeMenu
+          x={randomizeMenu.x}
+          y={randomizeMenu.y}
+          params={randomizableParams(node, def)}
+          excluded={randomizeExcluded(node)}
+          onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
+          onRandomize={() => randomizeNodeParams(node.id)}
+          onClose={() => setRandomizeMenu(null)}
+        />
+      )}
     </div>
   );
 });

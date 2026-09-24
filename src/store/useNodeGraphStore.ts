@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
+import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
@@ -146,6 +147,9 @@ const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStorageP
  * Writes to localStorage, optionally to disk, and fires the
  * 'customfn-changed' CustomEvent so NodePalette refreshes.
  */
+/** Fired when a saved graph is added or removed, so every list of them (sidebar, top bar) refreshes */
+export const SAVED_GRAPHS_CHANGED = 'saved-graphs-changed';
+
 export function saveCustomFnPreset(
   data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string; comment?: string },
 ): Promise<FileResult> {
@@ -490,6 +494,8 @@ interface NodeGraphState {
   removeNodes: (nodeIds: string[]) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
+  /** New random values for the node's free sliders (see nodes/randomizeParams.ts); one undo step per call */
+  randomizeNodeParams: (nodeId: string) => void;
   updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
   updateNodeInputs: (nodeId: string, inputs: Record<string, import('../types/nodeGraph').InputSocket>) => void;
   setPreviewNodeId: (id: string | null) => void;
@@ -3191,6 +3197,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
   },
 
+  randomizeNodeParams: (nodeId) => {
+    const { nodes, activeGroupPath } = get();
+    const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const node = scope.find(n => n.id === nodeId);
+    const def = node ? getNodeDefinition(node.type) : undefined;
+    if (!node || !def) return;
+    const patch = randomizedParams(node, def);
+    if (Object.keys(patch).length === 0) return;
+    // Its own undo step, even when clicked again right away (the param-edit burst would merge them)
+    undoManager.push(nodes);
+    _historyParamPending = true;
+    get().updateNodeParams(nodeId, patch, { immediate: true });
+    if (_historyParamTimer) { clearTimeout(_historyParamTimer); _historyParamTimer = null; }
+    _historyParamPending = false;
+  },
+
   updateNodeOutputs: (nodeId, outputs) => {
     set(state => ({
       nodes: state.nodes.map(n =>
@@ -4088,6 +4110,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
     const dir = getGraphDir();
     if (dir) {
       const path = `${dir}/${labelToSlug(name || 'graph')}.json`;
@@ -4151,6 +4174,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   deleteSavedGraph: (name) => {
     localStorage.removeItem(`shader-studio:${name}`);
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
   },
 
   exportGraph: async () => {
