@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
-import { ConnectionLine } from './ConnectionLine';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
-import { socketRegistry, registerSocket } from './socketRegistry';
+import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
+import { WireLayer, type EdgeInfo } from './WireLayer';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -20,32 +20,14 @@ import { SelectionBar } from '../shell/SelectionBar';
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
 
-// Returns socket position in *world space* (pre-transform canvas coords),
-// accounting for the current pan/zoom so connection lines stay accurate.
-function getSocketPos(
-  nodeId: string,
-  dir: 'in' | 'out',
-  key: string,
-  canvasEl: HTMLElement | null,
-  zoom: number,
-  pan: { x: number; y: number },
-): { x: number; y: number } | null {
-  const el = socketRegistry.get(`${nodeId}:${dir}:${key}`);
-  if (!el || !canvasEl) return null;
-  const elRect    = el.getBoundingClientRect();
-  const canvasRect = canvasEl.getBoundingClientRect();
-  // Screen-space position relative to canvas origin
-  const sx = elRect.left + elRect.width  / 2 - canvasRect.left;
-  const sy = elRect.top  + elRect.height / 2 - canvasRect.top;
-  // Unproject to world space: world = (screen - pan) / zoom
-  return {
-    x: (sx - pan.x) / zoom,
-    y: (sy - pan.y) / zoom,
-  };
-}
-
 // ─── Pan/zoom constants ───────────────────────────────────────────────────────
 const ZOOM_MIN = 0.15;
+// How long a pan/zoom gesture may run before React state catches up (culling, zoom readout).
+const VIEW_COMMIT_MS = 120;
+// Viewport culling: graphs smaller than this render every card; larger ones
+// skip cards further than CULL_MARGIN_PX (screen px) outside the viewport.
+const CULL_MIN_NODES = 30;
+const CULL_MARGIN_PX = 300;
 const ZOOM_MAX = 2.5;
 
 function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
@@ -54,7 +36,9 @@ function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
     : gn.type === 'marchLoopGroup' ? 'March Loop Group' : gn.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
 }
 
-export function NodeGraph({ transparent = false, redesignToolbar = false }: {
+// Memoised so a parent re-render (App) doesn't re-render the whole graph;
+// NodeGraph reads everything it needs from the store with selectors.
+export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false }: {
   transparent?: boolean;
   /** Desktop redesign: the top-centre CanvasToolbar (node count, zoom, fit, layout, minimap, clear) replaces the legacy corner toolbar. */
   redesignToolbar?: boolean;
@@ -81,7 +65,8 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
     width: 100, height: 24, padding: '0 6px', border: 0, outline: 'none', borderRadius: 6,
     background: tk.bg.panel, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`,
   };
-  const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
+  const [canvasWidth, setCanvasWidth]   = useState(window.innerWidth);
+  const [canvasHeight, setCanvasHeight] = useState(window.innerHeight);
   const compactToolbar = canvasWidth < 700;
   const nodes                 = useNodeGraphStore(s => s.nodes);
   const compilationErrors     = useNodeGraphStore(s => s.compilationErrors);
@@ -276,29 +261,16 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
   const wireLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
-  // canvasEl is stored in state so getSocketPos always has a stable reference.
-  // It's set once after mount via useEffect and never changes.
-  const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
-  const [, setTick] = useState(0);
-
   useEffect(() => {
-    setCanvasEl(canvasRef.current);
     if (!canvasRef.current) return;
     const ro = new ResizeObserver(entries => {
-      setTick(t => t + 1);
-      const w = entries[0].contentRect.width;
+      const { width: w, height: h } = entries[0].contentRect;
       if (w > 0) setCanvasWidth(w);
+      if (h > 0) setCanvasHeight(h);
     });
     ro.observe(canvasRef.current);
     return () => ro.disconnect();
   }, []);
-
-  // After nodes change, wait one rAF for the browser to paint new DOM positions,
-  // then trigger a re-render so connection lines read fresh getBoundingClientRect.
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setTick(t => t + 1));
-    return () => cancelAnimationFrame(id);
-  }, [nodes]);
 
   // Auto-clear disconnected-connection notice after 5s
   useEffect(() => {
@@ -322,24 +294,52 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
 
 
   // ── Pan / zoom state ────────────────────────────────────────────────────────
+  // `pan` / `zoom` state is what React renders with (grid, zoom readout,
+  // culling). During a gesture the transform is applied to the DOM directly
+  // through applyView() and the refs are the live truth; the state commit is
+  // throttled so a pan doesn't re-render the graph on every mousemove.
   const [zoom, setZoom] = useState(1);
   const [pan,  setPan]  = useState({ x: 0, y: 0 });
-  // Refs mirror state so event handlers always see current values without stale closure
   const zoomRef = useRef(zoom);
   const panRef  = useRef(pan);
-  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  useEffect(() => { panRef.current  = pan;  }, [pan]);
+  const worldRef = useRef<HTMLDivElement>(null);
+  const viewCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitView = useCallback(() => {
+    if (viewCommitTimer.current) { clearTimeout(viewCommitTimer.current); viewCommitTimer.current = null; }
+    const p = panRef.current, z = zoomRef.current;
+    setPan(prev => (prev.x === p.x && prev.y === p.y) ? prev : p);
+    setZoom(z);
+  }, []);
+  const applyView = useCallback((p: Pt, z: number, commit: 'now' | 'throttle') => {
+    panRef.current = p;
+    zoomRef.current = z;
+    if (worldRef.current) worldRef.current.style.transform = `translate(${p.x}px, ${p.y}px) scale(${z})`;
+    const c = canvasRef.current;
+    if (c && !transparent) {
+      const g = 24 * z;
+      c.style.backgroundSize = `${g}px ${g}px`;
+      c.style.backgroundPosition = `${p.x % g}px ${p.y % g}px`;
+    }
+    publishView(p, z);
+    if (commit === 'now') commitView();
+    else if (!viewCommitTimer.current) viewCommitTimer.current = setTimeout(commitView, VIEW_COMMIT_MS);
+  }, [commitView, transparent]);
+  useEffect(() => {
+    // The layout registry converts screen measurements to world units with the live zoom.
+    setLayoutZoomGetter(() => zoomRef.current);
+    publishView(panRef.current, zoomRef.current);
+  }, []);
 
   // Toolbar zoom buttons zoom around the middle of the visible canvas (the wheel zooms around the cursor).
   const zoomAroundCentre = useCallback((target: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     const oldZoom = zoomRef.current;
     const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, target));
-    if (!rect) { setZoom(newZoom); return; }
-    const cx = rect.width / 2, cy = rect.height / 2, p = panRef.current;
-    setZoom(newZoom);
-    setPan({ x: cx - (cx - p.x) * (newZoom / oldZoom), y: cy - (cy - p.y) * (newZoom / oldZoom) });
-  }, []);
+    const p = panRef.current;
+    if (!rect) { applyView(p, newZoom, 'now'); return; }
+    const cx = rect.width / 2, cy = rect.height / 2;
+    applyView({ x: cx - (cx - p.x) * (newZoom / oldZoom), y: cy - (cy - p.y) * (newZoom / oldZoom) }, newZoom, 'now');
+  }, [applyView]);
 
   // ── Pan mode tracking ───────────────────────────────────────────────────────
   // Pan is triggered by: middle-mouse drag, Space+drag, or Option+drag (Ableton-style)
@@ -415,15 +415,15 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
       e.preventDefault();
       if (e.touches.length === 1 && touchPanStart.current) {
         const t = e.touches[0];
-        setPan({
+        applyView({
           x: touchPanOrigin.current.x + (t.clientX - touchPanStart.current.x),
           y: touchPanOrigin.current.y + (t.clientY - touchPanStart.current.y),
-        });
+        }, zoomRef.current, 'throttle');
       }
     };
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     return () => el.removeEventListener('touchmove', onTouchMove);
-  }, [setPan]);
+  }, [applyView]);
 
   // ── Shift key tracking for socket spotlight ──────────────────────────────
   useEffect(() => {
@@ -452,20 +452,19 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
       const delta   = -e.deltaY * (e.deltaMode === 0 ? 0.008 : 0.3);
       const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, oldZoom * (1 + delta)));
       const oldPan  = panRef.current;
-      setZoom(newZoom);
-      setPan({
+      applyView({
         x: mx - (mx - oldPan.x) * (newZoom / oldZoom),
         y: my - (my - oldPan.y) * (newZoom / oldZoom),
-      });
+      }, newZoom, 'throttle');
     } else {
       // Two-finger scroll → pan (translate directly in screen space)
       const oldPan = panRef.current;
-      setPan({
+      applyView({
         x: oldPan.x - e.deltaX,
         y: oldPan.y - e.deltaY,
-      });
+      }, zoomRef.current, 'throttle');
     }
-  }, []);
+  }, [applyView]);
 
   // ── Canvas mouse down — pan on middle-click, space+drag, or option+drag; box select otherwise ──
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
@@ -483,13 +482,14 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
 
       const onMove = (ev: MouseEvent) => {
         if (!isPanning.current) return;
-        setPan({
+        applyView({
           x: panOrigin.current.x + (ev.clientX - panStart.current.x),
           y: panOrigin.current.y + (ev.clientY - panStart.current.y),
-        });
+        }, zoomRef.current, 'throttle');
       };
       const onUp = () => {
         isPanning.current = false;
+        applyView(panRef.current, zoomRef.current, 'now');
         document.body.style.userSelect = '';
         (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = '';
         window.removeEventListener('mousemove', onMove);
@@ -541,7 +541,7 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
         window.addEventListener('mouseup', onUp);
       }
     }
-  }, [deselectAll]);
+  }, [deselectAll, applyView]);
 
   // ── Connection drag ─────────────────────────────────────────────────────────
   const dragRafRef = useRef<number | null>(null);
@@ -579,39 +579,55 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
         ?.outputs[pendingMobileConnection.sourceOutputKey]?.type ?? null)
     : null;
 
+  // The handlers below are passed to every (memoised) NodeComponent, so they
+  // read changing values through refs and keep a stable identity.
+  const displayNodesRef = useRef(displayNodes);
+  displayNodesRef.current = displayNodes;
+  const pendingMobileConnectionRef = useRef(pendingMobileConnection);
+  pendingMobileConnectionRef.current = pendingMobileConnection;
+  const groupOutputTerminalPosRef = useRef(groupOutputTerminalPos);
+  groupOutputTerminalPosRef.current = groupOutputTerminalPos;
+  const groupInputTerminalPosRef = useRef(groupInputTerminalPos);
+  groupInputTerminalPosRef.current = groupInputTerminalPos;
+
+  /** World-space centre of a socket: card position (live if dragging) + measured offset. */
+  const socketWorld = useCallback((nodeId: string, dir: 'in' | 'out', key: string): Pt | null => {
+    const n = displayNodesRef.current.find(nd => nd.id === nodeId);
+    const p = getDragPosition(nodeId) ?? n?.position
+      ?? (nodeId === '__group_output__' ? groupOutputTerminalPosRef.current
+        : nodeId === '__group_input__' ? groupInputTerminalPosRef.current : null);
+    const o = getSocketOffset(nodeId, dir, key);
+    if (!p || !o) return null;
+    return { x: p.x + o.x, y: p.y + o.y };
+  }, []);
+
   const handleTapOutputSocket = useCallback((nodeId: string, outputKey: string) => {
+    const pending = pendingMobileConnectionRef.current;
     // Tapping same source again cancels
-    if (
-      pendingMobileConnection?.sourceNodeId === nodeId &&
-      pendingMobileConnection?.sourceOutputKey === outputKey
-    ) {
+    if (pending?.sourceNodeId === nodeId && pending?.sourceOutputKey === outputKey) {
       setPendingMobileConnection(null);
       return;
     }
-    const canvas = canvasRef.current;
-    let fromPos = getSocketPos(nodeId, 'out', outputKey, canvas, zoomRef.current, panRef.current);
+    let fromPos = socketWorld(nodeId, 'out', outputKey);
     if (!fromPos) {
-      const nd = nodes.find(n => n.id === nodeId);
+      const nd = displayNodesRef.current.find(n => n.id === nodeId);
       if (!nd) return;
       fromPos = { x: nd.position.x + NODE_WIDTH, y: nd.position.y + 80 };
     }
     setPendingMobileConnection({ sourceNodeId: nodeId, sourceOutputKey: outputKey, fromPos });
-  }, [pendingMobileConnection, nodes]);
+  }, [socketWorld]);
 
   const handleTapInputSocket = useCallback((targetNodeId: string, targetInputKey: string) => {
-    if (!pendingMobileConnection) return;
-    if (targetNodeId === '__group_output__' && activeGroupId) {
-      setGroupOutput(activeGroupId, targetInputKey, pendingMobileConnection.sourceNodeId, pendingMobileConnection.sourceOutputKey);
+    const pending = pendingMobileConnectionRef.current;
+    if (!pending) return;
+    const groupId = useNodeGraphStore.getState().activeGroupId;
+    if (targetNodeId === '__group_output__' && groupId) {
+      setGroupOutput(groupId, targetInputKey, pending.sourceNodeId, pending.sourceOutputKey);
     } else {
-      connectNodes(
-        pendingMobileConnection.sourceNodeId,
-        pendingMobileConnection.sourceOutputKey,
-        targetNodeId,
-        targetInputKey,
-      );
+      connectNodes(pending.sourceNodeId, pending.sourceOutputKey, targetNodeId, targetInputKey);
     }
     setPendingMobileConnection(null);
-  }, [pendingMobileConnection, connectNodes, setGroupOutput, activeGroupId]);
+  }, [connectNodes, setGroupOutput]);
 
   // Touch pan state (single finger on canvas background)
   const touchPanStart  = useRef<{ x: number; y: number } | null>(null);
@@ -627,16 +643,15 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
     };
   }, []);
 
-  const handleStartConnection = (
+  const handleStartConnection = useCallback((
     nodeId: string,
     outputKey: string,
     event: React.MouseEvent
   ) => {
     event.stopPropagation();
-    const canvas = canvasRef.current;
-    let fromPos = getSocketPos(nodeId, 'out', outputKey, canvas, zoomRef.current, panRef.current);
+    let fromPos = socketWorld(nodeId, 'out', outputKey);
     if (!fromPos) {
-      const node = nodes.find(n => n.id === nodeId);
+      const node = displayNodesRef.current.find(n => n.id === nodeId);
       if (!node) return;
       fromPos = { x: node.position.x + NODE_WIDTH, y: node.position.y + 80 };
     }
@@ -646,7 +661,7 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
       fromPos,
       mousePos: screenToWorld(event.clientX, event.clientY),
     });
-  };
+  }, [socketWorld, screenToWorld]);
 
   const handleMouseMove = (event: React.MouseEvent) => {
     if (boxSelect) {
@@ -662,18 +677,46 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
     });
   };
 
-  const handleEndConnection = (targetNodeId: string, targetInputKey: string) => {
-    if (dragConnection) {
-      if (targetNodeId === '__group_output__' && activeGroupId) {
-        setGroupOutput(activeGroupId, targetInputKey, dragConnection.sourceNodeId, dragConnection.sourceOutputKey);
-      } else if (dragConnection.sourceNodeId === '__group_input__' && activeGroupId) {
-        rerouteGroupInput(activeGroupId, dragConnection.sourceOutputKey, targetNodeId, targetInputKey);
-      } else {
-        connectNodes(dragConnection.sourceNodeId, dragConnection.sourceOutputKey, targetNodeId, targetInputKey);
-      }
-      setDragConnection(null);
+  const dragConnectionRef = useRef(dragConnection);
+  dragConnectionRef.current = dragConnection;
+  const handleEndConnection = useCallback((targetNodeId: string, targetInputKey: string) => {
+    const dc = dragConnectionRef.current;
+    if (!dc) return;
+    const groupId = useNodeGraphStore.getState().activeGroupId;
+    if (targetNodeId === '__group_output__' && groupId) {
+      setGroupOutput(groupId, targetInputKey, dc.sourceNodeId, dc.sourceOutputKey);
+    } else if (dc.sourceNodeId === '__group_input__' && groupId) {
+      rerouteGroupInput(groupId, dc.sourceOutputKey, targetNodeId, targetInputKey);
+    } else {
+      connectNodes(dc.sourceNodeId, dc.sourceOutputKey, targetNodeId, targetInputKey);
     }
-  };
+    setDragConnection(null);
+  }, [setGroupOutput, rerouteGroupInput, connectNodes]);
+
+  // Wire hover → badge. WireLayer reports the wire's world midpoint; convert
+  // to screen here with the live view so the badge lands on the wire even
+  // mid-gesture.
+  const handleEdgeEnter = useCallback((edge: EdgeInfo, mid: Pt) => {
+    if (wireLeaveTimerRef.current) { clearTimeout(wireLeaveTimerRef.current); wireLeaveTimerRef.current = null; }
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setHoveredWire({
+      ...edge,
+      midX: mid.x * zoomRef.current + panRef.current.x + rect.left,
+      midY: mid.y * zoomRef.current + panRef.current.y + rect.top,
+    });
+  }, []);
+  const handleEdgeLeave = useCallback(() => {
+    wireLeaveTimerRef.current = setTimeout(() => setHoveredWire(null), 120);
+  }, []);
+
+  const handleMinimapPanTo = useCallback((worldX: number, worldY: number) => {
+    const c = canvasRef.current;
+    const vw = c?.clientWidth  ?? 800;
+    const vh = c?.clientHeight ?? 600;
+    const z = zoomRef.current;
+    applyView({ x: -worldX * z + vw / 2, y: -worldY * z + vh / 2 }, z, 'now');
+  }, [applyView]);
 
   const handleMouseUp = () => {
     if (dragRafRef.current !== null) {
@@ -701,8 +744,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!target.closest('[data-node-id]') && !target.closest('[data-socket]')) {
       setPendingMobileConnection(null);
     }
+    if (touchPanStart.current) applyView(panRef.current, zoomRef.current, 'now');
     touchPanStart.current = null;
-  }, []);
+  }, [applyView]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -764,15 +808,20 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
       Math.min(cw / (maxX - minX), ch / (maxY - minY))
     ));
-    setPan({
+    applyView({
       x: (cw - (maxX + minX) * newZoom) / 2,
       y: (ch - (maxY + minY) * newZoom) / 2,
-    });
-    setZoom(newZoom);
-  }, [displayNodes]);
+    }, newZoom, 'now');
+  }, [displayNodes, applyView]);
 
-  // Register fitView with the store so shortcuts / App.tsx can call it
-  useEffect(() => { registerFitView(handleFitView); }, [registerFitView, handleFitView]);
+  // Register fitView with the store so shortcuts / App.tsx can call it.
+  // handleFitView is re-created whenever displayNodes changes (every drag
+  // mousemove), and registerFitView is a store write, so registering it
+  // directly meant one extra full-tree render per mousemove. Register a
+  // stable trampoline once and keep the live callback in a ref.
+  const handleFitViewRef = useRef(handleFitView);
+  handleFitViewRef.current = handleFitView;
+  useEffect(() => { registerFitView(() => handleFitViewRef.current()); }, [registerFitView]);
 
   useEffect(() => {
     registerViewportCenterGetter(() => {
@@ -834,6 +883,42 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     }
     return matching;
   }, [nodeHighlightFilter, nodes, shiftHeld, hoveredSocket, displayNodes]);
+
+  // ── Viewport culling ─────────────────────────────────────────────────────
+  // Cards fully outside the visible world rect (plus a margin) aren't mounted.
+  // Their wires still draw: the layout registry keeps socket offsets after a
+  // card unmounts — which is also why a card is never culled before it has
+  // been mounted and measured once (a fresh graph renders everything on its
+  // first frame, then culls as the sizes arrive). Selected / previewed /
+  // dragging cards are always kept, and small graphs skip culling entirely.
+  const selectedNodeId  = useNodeGraphStore(s => s.selectedNodeId);
+  const selectedNodeIds = useNodeGraphStore(s => s.selectedNodeIds);
+  const [cardSizeVersion, bumpCardSizes] = useState(0);
+  useEffect(() => subscribeCardSizes(() => bumpCardSizes(v => v + 1)), []);
+  const visibleNodes = useMemo(() => {
+    void cardSizeVersion; // re-cull when card sizes become known / change
+    if (displayNodes.length < CULL_MIN_NODES) return displayNodes;
+    const margin = CULL_MARGIN_PX / zoom;
+    const left   = -pan.x / zoom - margin;
+    const top    = -pan.y / zoom - margin;
+    const right  = (canvasWidth  - pan.x) / zoom + margin;
+    const bottom = (canvasHeight - pan.y) / zoom + margin;
+    return displayNodes.filter(n => {
+      if (n.id === selectedNodeId || n.id === previewNodeId || selectedNodeIds.includes(n.id) || isDragging(n.id)) return true;
+      const size = getCardSize(n.id);
+      if (!size) return true; // never measured — mount once so its sockets get offsets
+      const p = n.position;
+      return p.x + size.w >= left && p.x <= right && p.y + size.h >= top && p.y <= bottom;
+    });
+  }, [displayNodes, pan, zoom, canvasWidth, canvasHeight, selectedNodeId, selectedNodeIds, previewNodeId, cardSizeVersion]);
+
+  // Drop layout memory for nodes that left the graph.
+  const knownIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const now = new Set(nodes.map(n => n.id));
+    for (const id of knownIdsRef.current) if (!now.has(id)) forgetNodeLayout(id);
+    knownIdsRef.current = now;
+  }, [nodes]);
 
   // Dot grid background size scales with zoom
   // Dot grid: 24 world units apart, doubling when zoomed out so it never turns into a haze
@@ -947,7 +1032,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           groupName={activeGroupNode ? groupLabel(activeGroupNode) : undefined}
           zoom={zoom}
           onZoom={zoomAroundCentre}
-          onResetZoom={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+          onResetZoom={() => applyView({ x: 0, y: 0 }, 1, 'now')}
           onFit={handleFitView}
           onAutoLayout={autoLayout}
           showMinimap={showMinimap}
@@ -973,7 +1058,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         {/* Zoom control: click to reset, drag slider to zoom */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <button
-            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            onClick={() => applyView({ x: 0, y: 0 }, 1, 'now')}
             title="Reset zoom to 100%"
             style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
             onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}
@@ -989,7 +1074,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               step={5}
               value={Math.round(zoom * 100)}
               onMouseDown={e => e.stopPropagation()}
-              onChange={e => setZoom(Number(e.target.value) / 100)}
+              onChange={e => applyView(panRef.current, Number(e.target.value) / 100, 'now')}
               title="Zoom level"
               style={{ width: '60px', accentColor: tc.blue, cursor: 'pointer' }}
             />
@@ -1244,23 +1329,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {showMinimap && !isTouchDevice.current && (
         <Minimap
           nodes={nodes}
-          pan={pan}
-          zoom={zoom}
-          viewportWidth={canvasEl?.clientWidth ?? 800}
-          viewportHeight={canvasEl?.clientHeight ?? 600}
-          onPanTo={(worldX, worldY) => {
-            const vw = canvasEl?.clientWidth  ?? 800;
-            const vh = canvasEl?.clientHeight ?? 600;
-            setPan({
-              x: -worldX * zoom + vw / 2,
-              y: -worldY * zoom + vh / 2,
-            });
-          }}
+          viewportWidth={canvasWidth}
+          viewportHeight={canvasHeight}
+          onPanTo={handleMinimapPanTo}
         />
       )}
 
       {/* ── World-space container — receives pan+zoom transform ── */}
       <div
+        ref={worldRef}
         style={{
           position: 'absolute',
           top: 0,
@@ -1271,127 +1348,27 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         }}
       >
-        {/* SVG overlay for connection lines — drawn in world space */}
-        <svg
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100000px',
-            height: '100000px',
-            overflow: 'visible',
-          }}
-        >
-          {displayNodes.map(node =>
-            Object.entries(node.inputs).map(([inputKey, input]) => {
-              if (!input.connection) return null;
-              const sourceNode = displayNodes.find(n => n.id === input.connection!.nodeId);
-              if (!sourceNode) return null;
+        {/* Wires — data-derived from node positions + measured socket offsets */}
+        <WireLayer
+          displayNodes={displayNodes}
+          activeSubgraph={activeSubgraph}
+          groupOutputTerminalPos={groupOutputTerminalPos}
+          groupInputTerminalPos={groupInputTerminalPos}
+          spotlightEdges={spotlightEdges}
+          dragConnection={dragConnection}
+          draggingType={draggingType}
+          pendingMobileConnection={pendingMobileConnection}
+          pendingMobileType={pendingMobileType}
+          onEdgeEnter={handleEdgeEnter}
+          onEdgeLeave={handleEdgeLeave}
+        />
 
-              const fromPos = getSocketPos(input.connection.nodeId, 'out', input.connection.outputKey, canvasEl, zoom, pan);
-              const toPos   = getSocketPos(node.id, 'in', inputKey, canvasEl, zoom, pan);
-              if (!fromPos || !toPos) return null;
-
-              const srcDef   = getNodeDefinition(sourceNode.type);
-              // For group nodes the static def has empty outputs (they're dynamic);
-              // fall back to the live node's outputs so wires get the right colour.
-              const lineType = srcDef?.outputs[input.connection.outputKey]?.type
-                ?? sourceNode.outputs[input.connection.outputKey]?.type;
-              const toType   = input.type as string;
-              const fromNodeId    = input.connection.nodeId;
-              const fromOutputKey = input.connection.outputKey;
-              const canvasRect    = canvasEl?.getBoundingClientRect();
-
-              const edgeKey = `${fromNodeId}:${fromOutputKey}→${node.id}:${inputKey}`;
-              return (
-                <ConnectionLine
-                  key={`${node.id}-${inputKey}`}
-                  from={fromPos}
-                  to={toPos}
-                  dataType={lineType}
-                  dimmed={spotlightEdges.size > 0 && !spotlightEdges.has(edgeKey)}
-                  onWireEnter={() => {
-                    if (wireLeaveTimerRef.current) { clearTimeout(wireLeaveTimerRef.current); wireLeaveTimerRef.current = null; }
-                    if (!canvasRect) return;
-                    const midWorldX = (fromPos.x + toPos.x) / 2;
-                    const midWorldY = (fromPos.y + toPos.y) / 2;
-                    setHoveredWire({
-                      fromNodeId, fromOutputKey,
-                      toNodeId: node.id, toInputKey: inputKey,
-                      fromType: lineType ?? 'float', toType,
-                      midX: midWorldX * zoom + pan.x + canvasRect.left,
-                      midY: midWorldY * zoom + pan.y + canvasRect.top,
-                    });
-                  }}
-                  onWireLeave={() => {
-                    wireLeaveTimerRef.current = setTimeout(() => setHoveredWire(null), 120);
-                  }}
-                />
-              );
-            })
-          )}
-
-          {/* Group output port edges — drawn from inner node outputs to the terminal */}
-          {activeSubgraph && (activeSubgraph.outputPorts ?? []).map(port => {
-            const fromPos = getSocketPos(port.fromNodeId, 'out', port.fromOutputKey, canvasEl, zoom, pan);
-            const toPos   = getSocketPos('__group_output__', 'in', port.key, canvasEl, zoom, pan);
-            if (!fromPos || !toPos) return null;
-            const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
-            const lineType = srcNode?.outputs[port.fromOutputKey]?.type;
-            return (
-              <ConnectionLine
-                key={`gout-${port.key}`}
-                from={fromPos}
-                to={toPos}
-                dataType={lineType}
-              />
-            );
-          })}
-
-          {/* Group input port edges — drawn from the terminal to each routed inner node */}
-          {activeSubgraph && (activeSubgraph.inputPorts ?? []).filter(p => p.toNodeId && p.toInputKey).map(port => {
-            const fromPos = getSocketPos('__group_input__', 'out', port.key, canvasEl, zoom, pan);
-            const toPos   = getSocketPos(port.toNodeId, 'in', port.toInputKey, canvasEl, zoom, pan);
-            if (!fromPos || !toPos) return null;
-            return (
-              <ConnectionLine
-                key={`gin-${port.key}`}
-                from={fromPos}
-                to={toPos}
-                dataType={port.type}
-              />
-            );
-          })}
-
-          {dragConnection && (
-            <ConnectionLine
-              from={dragConnection.fromPos}
-              to={dragConnection.mousePos}
-              dataType={draggingType ?? undefined}
-            />
-          )}
-
-          {/* Pending mobile connection — static line to a ghost endpoint near the source */}
-          {pendingMobileConnection && !dragConnection && (() => {
-            const toPos = {
-              x: pendingMobileConnection.fromPos.x + 60,
-              y: pendingMobileConnection.fromPos.y,
-            };
-            return (
-              <ConnectionLine
-                from={pendingMobileConnection.fromPos}
-                to={toPos}
-                dataType={pendingMobileType ?? undefined}
-              />
-            );
-          })()}
-        </svg>
-
-        {/* Node cards — positioned in world space */}
-        {displayNodes.map(node => (
+        {/* Node cards — positioned in world space; off-screen cards are culled */}
+        {visibleNodes.map(node => (
           <NodeComponent
             key={node.id}
             node={node}
+            activeGroupNode={activeGroupNode}
             onStartConnection={handleStartConnection}
             onEndConnection={handleEndConnection}
             onTapOutputSocket={handleTapOutputSocket}
@@ -1400,7 +1377,6 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             pendingMobileType={pendingMobileType}
             draggingType={draggingType}
             isTouchDevice={isTouchDevice.current}
-            zoom={zoom}
             dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
             onEnterGroup={enterGroup}
             hasError={errorNodeIds.has(node.id)}
@@ -1674,7 +1650,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       })()}
     </div>
   );
-}
+});
 
 const ctxBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
   display: 'block',

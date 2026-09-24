@@ -3,6 +3,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { fontFamily } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
+import { subscribeTimeTick } from '../../lib/timeTick';
 
 /**
  * Floating pill at the bottom of the phone preview: play/pause, reset, the time, and the
@@ -12,11 +13,7 @@ export function MobilePreviewPill({ overlayOpen, onToggleOverlay }: { overlayOpe
   const timePlaying = useNodeGraphStore(s => s.timePlaying);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
   const [time, setTime] = useState(0);
-  useEffect(() => {
-    const onTick = (e: Event) => setTime((e as CustomEvent<{ time: number }>).detail.time);
-    window.addEventListener('time-tick', onTick);
-    return () => window.removeEventListener('time-tick', onTick);
-  }, []);
+  useEffect(() => subscribeTimeTick(setTime), []);
 
   const btn = (icon: IconName, label: string, onClick: () => void, on = false) => (
     <button

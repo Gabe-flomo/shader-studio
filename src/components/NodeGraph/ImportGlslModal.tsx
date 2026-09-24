@@ -24,7 +24,7 @@ export function ImportGlslModal({ onClose }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const BTN = BTNFor(tc);
-  const { addNode } = useNodeGraphStore();
+  const addNode = useNodeGraphStore(s => s.addNode);
   const [code, setCode] = useState('');
 
   // Live parse
