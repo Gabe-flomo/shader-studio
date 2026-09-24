@@ -149,8 +149,10 @@ void main() {
 // has finished compiling — which defeats KHR_parallel_shader_compile. So the
 // wrapper only records the shader, and the per-frame flush polls
 // COMPLETION_STATUS_KHR and reads the log once the compile is actually done.
-function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): () => string[] {
+function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): { flush: () => string[]; failedSource: () => string | null } {
   const errors: string[] = [];
+  // Source of the last shader that failed: error line numbers point into it
+  let lastFailedSource: string | null = null;
   const pending: WebGLShader[] = [];
   const parallel = gl.getExtension('KHR_parallel_shader_compile') as { COMPLETION_STATUS_KHR: number } | null;
   const origCompile = gl.compileShader.bind(gl);
@@ -158,7 +160,7 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
     origCompile(shader);
     pending.push(shader);
   };
-  return () => {
+  const flush = () => {
     for (let i = pending.length - 1; i >= 0; i--) {
       const sh = pending[i];
       // Three.js deletes shader objects once their program linked — nothing to report.
@@ -169,6 +171,7 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
         const log = gl.getShaderInfoLog(sh);
         // ANGLE terminates the log with a NUL byte; drop it along with blank lines.
         if (log) errors.push(...log.split('\n').map(l => l.replace(/\0/g, '')).filter(l => l.trim()));
+        lastFailedSource = gl.getShaderSource(sh);
       }
     }
     if (errors.length === 0) return NO_ERRORS;
@@ -176,6 +179,7 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
     errors.length = 0;
     return copy;
   };
+  return { flush, failedSource: () => lastFailedSource };
 }
 const NO_ERRORS: string[] = [];
 
@@ -336,7 +340,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     // Enable parallel shader compilation — keeps previous frame rendering while new shader compiles
     const gl = renderer.getContext();
     gl.getExtension('KHR_parallel_shader_compile');
-    const flushGlErrors = captureGlslErrors(gl);
+    const { flush: flushGlErrors, failedSource: glFailedSource } = captureGlslErrors(gl);
 
     // Half-float RT support check — eliminates 8-bit quantization banding in dark areas
     const supportsHalfFloat = renderer.capabilities.isWebGL2 ||
@@ -834,7 +838,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();
         if (newErrors.length > 0) {
-          setGlslErrors(newErrors);
+          setGlslErrors(newErrors, glFailedSource());
         }
 
         // Throttled updates every N frames while animating. A frame drawn on
