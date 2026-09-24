@@ -297,25 +297,35 @@ export const SphericalSpaceNode: NodeDefinition = {
   },
   outputs: {
     output: { type: 'vec2', label: 'Projected UV' },
+    height: { type: 'float', label: 'Height', hint: 'sqrt(1 − r²): 1 at the centre, 0 at the unit circle, 0 outside. Multiply your colour by it to shade the dome, or use it as a mask.' },
   },
-  defaultParams: { strength: 0.5 },
+  defaultParams: { strength: 0.5, mode: 'fisheye' },
   paramDefs: {
+    mode: { label: 'Mode', type: 'select', hint: 'Fisheye bends the whole plane. Dome maps the unit disc as a hemisphere seen from inside: the pattern stretches toward the rim (the Shield shader).', options: [
+      { value: 'fisheye', label: 'Fisheye' },
+      { value: 'dome',    label: 'Dome'    },
+    ]},
     strength: { label: 'Strength', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Positive bulges outward (fisheye), negative pinches inward (pincushion).' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
     const inVar    = inputVars.input    || 'vec2(0.0)';
     const strength = inputVars.strength || p(node.params.strength, 0.5);
+    const mode     = (node.params.mode as string) ?? 'fisheye';
+    const proj = mode === 'dome'
+      ? `    float ${id}_f = 1.0 / max(1.0 - ${id}_k * (1.0 - ${id}_h), 0.05);\n`
+      : `    float ${id}_f = ${id}_r > 0.0001 && abs(${id}_k) > 0.0001\n` +
+        `        ? atan(${id}_r * ${id}_k * 1.5708) / (${id}_r * ${id}_k * 1.5708)\n` +
+        `        : 1.0;\n`;
     return {
       code: [
         `    float ${id}_r = length(${inVar});\n`,
         `    float ${id}_k = ${strength};\n`,
-        `    float ${id}_f = ${id}_r > 0.0001 && abs(${id}_k) > 0.0001\n`,
-        `        ? atan(${id}_r * ${id}_k * 1.5708) / (${id}_r * ${id}_k * 1.5708)\n`,
-        `        : 1.0;\n`,
+        `    float ${id}_h = sqrt(max(1.0 - ${id}_r * ${id}_r, 0.0));\n`,
+        proj,
         `    vec2 ${id}_output = ${inVar} * ${id}_f;\n`,
       ].join(''),
-      outputVars: { output: `${id}_output` },
+      outputVars: { output: `${id}_output`, height: `${id}_h` },
     };
   },
 };
@@ -380,23 +390,27 @@ export const InfiniteRepeatSpaceNode: NodeDefinition = {
     output: { type: 'vec2', label: 'Cell UV' },
     cellID: { type: 'vec2', label: 'Cell ID' },
   },
-  defaultParams: { cellX: 1.0, cellY: 1.0 },
+  defaultParams: { cellX: 1.0, cellY: 1.0, stagger: 0.0 },
   paramDefs: {
     cellX: { label: 'Cell W', type: 'float', min: 0.1, max: 10.0, step: 0.05, hint: 'Width of each tile. Smaller = more copies.' },
     cellY: { label: 'Cell H', type: 'float', min: 0.1, max: 10.0, step: 0.05, hint: 'Height of each tile. Smaller = more copies.' },
+    stagger: { label: 'Stagger', type: 'float', min: -0.5, max: 0.5, step: 0.01, hint: 'Shifts every other column up by this fraction of a cell: 0.5 gives brickwork (the Shield shader\'s fract(ceil(x)·0.5) trick).' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const inVar = inputVars.input || 'vec2(0.0)';
     const cX    = inputVars.cellX || p(node.params.cellX, 1.0);
     const cY    = inputVars.cellY || p(node.params.cellY, 1.0);
+    const stagger = p(node.params.stagger, 0.0);
     const cell  = `vec2(${cX}, ${cY})`;
     // A cell is centred on the origin, so a shape drawn at (0,0) tiles whole rather than split across four cells.
     return {
       code: [
         `    vec2 ${id}_cell   = ${cell};\n`,
-        `    vec2 ${id}_cellID = floor((${inVar} + ${id}_cell * 0.5) / ${id}_cell);\n`,
-        `    vec2 ${id}_output = mod(${inVar} + ${id}_cell * 0.5, ${id}_cell) - ${id}_cell * 0.5;\n`,
+        `    vec2 ${id}_in     = ${inVar};\n`,
+        `    ${id}_in.y += mod(floor((${id}_in.x + ${id}_cell.x * 0.5) / ${id}_cell.x), 2.0) * ${stagger} * ${id}_cell.y;\n`,
+        `    vec2 ${id}_cellID = floor((${id}_in + ${id}_cell * 0.5) / ${id}_cell);\n`,
+        `    vec2 ${id}_output = mod(${id}_in + ${id}_cell * 0.5, ${id}_cell) - ${id}_cell * 0.5;\n`,
       ].join(''),
       outputVars: { output: `${id}_output`, cellID: `${id}_cellID` },
     };
@@ -816,6 +830,139 @@ export const CrtScreenNode: NodeDefinition = {
 };
 
 // ─── Lens Distortion ────────────────────────────────────────────────────────
+
+// ─── Turbulence (Xor) ───────────────────────────────────────────────────────
+// Xor's turbulence loop (mini.gmshaders.com/p/turbulence, seen in 'atlantic'
+// and 'main frame' on FragCoord): every octave adds sin(rotated p · d) / d,
+// with d growing each pass. Cheaper than FBM domain warp and far more fluid.
+export const TurbulenceNode: NodeDefinition = {
+  type: 'turbulence',
+  label: 'Turbulence', aliases: ['xor warp', 'sine warp loop', 'fluid warp'],
+  category: '2D Space', subcategory: 'Warp',
+  description:
+    'Xor-style turbulence: p += strength · sin(rotate(p, d·rotate) · d · frequency + time) / d for a few octaves, d growing each pass. ' +
+    'Fluid, wavy distortion; replaces a Loop Index group full of Rotate 2D + Sin. Feed the warped UV into an SDF, FBM or Palette.',
+  inputs: {
+    input:    { type: 'vec2',  label: 'UV' },
+    time:     { type: 'float', label: 'Time', hint: 'Wire Time so the waves flow.' },
+    strength: { type: 'float', label: 'Strength' },
+  },
+  outputs: {
+    output: { type: 'vec2', label: 'Warped UV' },
+  },
+  defaultParams: { octaves: 6, strength: 0.3, frequency: 1.0, decay: 0.7, rotate: 1.0 },
+  paramDefs: {
+    octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1,    hint: 'How many sine layers. 6–10 looks like water; each one costs a sin().' },
+    strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d). 0.3 ripples, 0.8 melts.' },
+    frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 8.0,  step: 0.1,  hint: 'Wave frequency of the first octave. Higher = finer waves.' },
+    decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= decay each octave: 0.7 doubles the frequency roughly every two octaves.' },
+    rotate:    { label: 'Rotate',    type: 'float', min: 0.0, max: 3.14, step: 0.01, hint: 'Radians of rotation per unit d. 0 keeps every octave axis-aligned (streaky); ~1 tangles them.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const inVar = inputVars.input    || 'vec2(0.0)';
+    const t     = inputVars.time     || '0.0';
+    const str   = inputVars.strength || p(node.params.strength, 0.3);
+    const freq  = p(node.params.frequency, 1.0);
+    const decay = p(node.params.decay, 0.7);
+    const rot   = p(node.params.rotate, 1.0);
+    const oct   = Math.max(1, Math.min(12, Math.round(Number(node.params.octaves) || 6)));
+    return {
+      code: [
+        `    vec2 ${id}_output = ${inVar};\n`,
+        `    float ${id}_d = 1.0;\n`,
+        `    for (int ${id}_k = 0; ${id}_k < ${oct}; ${id}_k++) {\n`,
+        `        ${id}_output += ${str} * sin(rotate(${id}_output, ${id}_d * ${rot}) * ${id}_d * ${freq} + ${t}) / ${id}_d;\n`,
+        `        ${id}_d /= ${decay};\n`,
+        `    }\n`,
+      ].join(''),
+      outputVars: { output: `${id}_output` },
+    };
+  },
+};
+
+// ─── Chaos Layers (Xor, "Efficient Chaos") ──────────────────────────────────
+// mini.gmshaders.com/p/efficient-chaos: a tiled grid of cell points, repeated
+// as a few layers that are golden-angle rotated, shifted and scaled so the
+// tiling disappears. Cheaper than Worley noise and it parallax-scrolls.
+export const ChaosLayersNode: NodeDefinition = {
+  type: 'chaosLayers',
+  label: 'Chaos Layers', aliases: ['efficient chaos', 'starfield', 'scatter layers', 'xor stars'],
+  category: '2D Space', subcategory: 'Pattern',
+  description:
+    'Xor\'s Efficient Chaos: N layers of a 2-unit cell grid, each rotated by the golden angle, shifted and scaled, ' +
+    'summed as small point lights. Reads as random stars, rain or dust for the cost of a few length() calls. ' +
+    'Waves bend the grid axes, Cutout drops random cells, Parallax scrolls far layers slower. Feed Glow into Glow to Color or a Palette.',
+  inputs: {
+    uv:   { type: 'vec2',  label: 'UV' },
+    time: { type: 'float', label: 'Time', hint: 'Drives Parallax scrolling. Leave empty for a still field.' },
+  },
+  outputs: {
+    glow:  { type: 'float', label: 'Glow', hint: 'Summed light of every layer: (1 − d) / d per cell point, clipped to the cell.' },
+    layer: { type: 'float', label: 'Layer', hint: 'Which layer the brightest point came from (0 = nearest). Colour by depth with a Palette.' },
+  },
+  defaultParams: { layers: 5, scale: 0.1, brightness: 0.04, shift: 2.618, layerScale: 0.6, waves: 0.2, cutout: 0.0, parallaxX: 2.0, parallaxY: 1.0, size: 1.0 },
+  paramDefs: {
+    layers:     { label: 'Layers',      type: 'float', min: 1,    max: 8,   step: 1,     hint: '3–5 hides the grid; 1–2 shows axis lines unless Waves is up.' },
+    scale:      { label: 'Scale',       type: 'float', min: 0.02, max: 1.0, step: 0.005, hint: 'Cell size relative to the screen height. Smaller = denser, more points.' },
+    brightness: { label: 'Brightness',  type: 'float', min: 0.0,  max: 0.5, step: 0.005, hint: 'Multiplies the summed glow.' },
+    size:       { label: 'Point Size',  type: 'float', min: 0.1,  max: 1.0, step: 0.01,  hint: 'Radius of each point light inside its cell (1 = touches the cell edge).' },
+    shift:      { label: 'Layer Shift', type: 'float', min: 0.0,  max: 5.0, step: 0.01,  hint: 'Offset added per layer so points don\'t stack. 2.618 (golden) is Xor\'s pick; 0 stacks them.' },
+    layerScale: { label: 'Layer Scale', type: 'float', min: 0.0,  max: 2.0, step: 0.01,  hint: 'Each layer is 1 + this × i larger. Breaks the tiling; also gives the depth look.' },
+    waves:      { label: 'Waves',       type: 'float', min: 0.0,  max: 1.0, step: 0.01,  hint: 'p += waves·sin(p.yx): bends the grid axes. 0.2 is enough to hide lines on two layers; 1 is mush.' },
+    cutout:     { label: 'Cutout',      type: 'float', min: 0.0,  max: 0.9, step: 0.01,  hint: 'Fraction of cells dropped by a white-noise sample per cell. Kills repetition when zoomed out.' },
+    parallaxX:  { label: 'Parallax X',  type: 'float', min: -5.0, max: 5.0, step: 0.05,  hint: 'Scroll velocity, scaled by layer depth so far layers move slower. Needs Time wired.' },
+    parallaxY:  { label: 'Parallax Y',  type: 'float', min: -5.0, max: 5.0, step: 0.05,  hint: 'Vertical scroll velocity per layer.' },
+  },
+  glslFunction: `
+float chaosHash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const uv    = inputVars.uv   || 'g_uv';
+    const t     = inputVars.time || '0.0';
+    const n     = Math.max(1, Math.min(8, Math.round(Number(node.params.layers) || 5)));
+    const sc    = p(node.params.scale, 0.1);
+    const br    = p(node.params.brightness, 0.04);
+    const size  = p(node.params.size, 1.0);
+    const shift = p(node.params.shift, 2.618);
+    const lsc   = p(node.params.layerScale, 0.6);
+    const wav   = p(node.params.waves, 0.2);
+    const cut   = p(node.params.cutout, 0.0);
+    const par   = `vec2(${p(node.params.parallaxX, 2.0)}, ${p(node.params.parallaxY, 1.0)})`;
+    return {
+      code: [
+        `    float ${id}_glow = 0.0;\n`,
+        `    float ${id}_layer = 0.0;\n`,
+        `    float ${id}_best = 0.0;\n`,
+        `    {\n`,
+        `        vec2 c = ${uv} / ${sc};\n`,
+        `        mat2 orient = mat2(1.0);\n`,
+        `        const mat2 gold = mat2(0.22252093, -0.97492791, 0.97492791, 0.22252093);\n`,
+        `        for (int k = 0; k < ${n}; k++) {\n`,
+        `            float i = (float(k) + 0.5) / ${n}.0;\n`,
+        `            orient *= gold;\n`,
+        `            vec2 pp = c * orient;\n`,
+        `            pp += ${shift} * i;\n`,
+        `            pp /= 1.0 + ${lsc} * i;\n`,
+        `            pp += ${t} * (i + 1.0) * (${par} * orient);\n`,
+        `            pp += ${wav} * sin(pp.yx);\n`,
+        `            float keep = step(${cut}, chaosHash(floor(pp / 2.0) + i));\n`,
+        `            float len = length(mod(pp, 2.0) - 1.0) / ${size};\n`,
+        `            float att = keep * max(1.0 - len, 0.0) / max(len, 1e-4);\n`,
+        `            ${id}_glow += att;\n`,
+        `            if (att > ${id}_best) { ${id}_best = att; ${id}_layer = float(k); }\n`,
+        `        }\n`,
+        `    }\n`,
+        `    ${id}_glow *= ${br};\n`,
+      ].join(''),
+      outputVars: { glow: `${id}_glow`, layer: `${id}_layer` },
+    };
+  },
+};
 
 export const LensDistortionNode: NodeDefinition = {
   type: 'lensDistortion',

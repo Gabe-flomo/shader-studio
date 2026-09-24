@@ -45,6 +45,7 @@ export const ToneMapNode: NodeDefinition = {
         { value: 'hable',      label: 'Hable'      },
         { value: 'unreal',     label: 'Unreal'     },
         { value: 'tanh',       label: 'Tanh'       },
+        { value: 'tanh2',      label: 'Tanh (squared)' },
         { value: 'reinhard2',  label: 'Reinhard2'  },
         { value: 'lottes',     label: 'Lottes'     },
         { value: 'uchimura',   label: 'Uchimura'   },
@@ -65,6 +66,9 @@ vec3 toneTanh(vec3 c) {
   c = clamp(c, -40.0, 40.0);
   vec3 e = exp(c); vec3 em = exp(-c);
   return (e-em)/(e+em);
+}
+vec3 toneTanhSq(vec3 c) {
+  return toneTanh(c * c);
 }
 vec3 toneReinhard2(vec3 c) {
   float Lw = 4.0;
@@ -106,7 +110,7 @@ vec3 toneAgX(vec3 c) {
     const colorVar = inputVars.color ?? 'vec3(0.0)';
     const mode = (node.params.mode as string) ?? 'aces';
     const fnMap: Record<string, string> = {
-      aces: 'toneACES', hable: 'toneHable', unreal: 'toneUnreal', tanh: 'toneTanh',
+      aces: 'toneACES', hable: 'toneHable', unreal: 'toneUnreal', tanh: 'toneTanh', tanh2: 'toneTanhSq',
       reinhard2: 'toneReinhard2', lottes: 'toneLottes', uchimura: 'toneUchimura', agx: 'toneAgX',
     };
     const fn = fnMap[mode] ?? 'toneACES';
@@ -1362,13 +1366,19 @@ export const GaussianBlurNode: NodeDefinition = {
   outputs: {
     result: { type: 'vec3', label: 'Result' },
   },
-  defaultParams: { radius: 4.0, quality: 'standard' },
+  defaultParams: { radius: 4.0, quality: 'standard', direction: 'both' },
   paramDefs: {
     radius:  { label: 'Radius (px)', type: 'float', min: 0.5, max: 20.0, step: 0.5 },
+    direction: { label: 'Direction', type: 'select', hint: 'Both is the full 2D kernel. Horizontal / Vertical are the separable passes from the blur articles (Blur X, Blur Y) — cheaper, and a stretched blur on their own.', options: [
+      { value: 'both',       label: 'Both (2D)'  },
+      { value: 'horizontal', label: 'Horizontal' },
+      { value: 'vertical',   label: 'Vertical'   },
+    ]},
     quality: { label: 'Quality', type: 'select', options: [
       { value: 'fast',     label: 'Fast (3×3)'     },
       { value: 'standard', label: 'Standard (5×5)' },
       { value: 'high',     label: 'High (7×7)'     },
+      { value: 'kawase',   label: 'Kawase (4 taps)' },
     ]},
   },
   glslFunction: `
@@ -1383,6 +1393,24 @@ float gaussBlurWeight(float x, float y, float sigma) {
     const quality = (node.params.quality as string) ?? 'standard';
     const half_n  = quality === 'fast' ? 1 : quality === 'high' ? 3 : 2;
     const sigma   = half_n === 1 ? '1.0' : half_n === 3 ? '2.0' : '1.5';
+    const dir     = (node.params.direction as string) ?? 'both';
+    if (quality === 'kawase') {
+      // Kawase (GDC 2003): four taps on the half-pixel diagonals at distance radius, averaged with the centre.
+      // One pass of the multi-pass filter from Intel's fast-blur investigation; cheap and soft.
+      const taps = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sy]) =>
+        `    ${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(sx)}, ${f(sy)}) * ${id}_px * (${radius} + 0.5), 0.0, 1.0)).rgb; ${id}_wsum += 1.0;\n`);
+      return {
+        code: [
+          `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
+          `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
+          `    vec3  ${id}_acc  = ${col};\n`,
+          `    float ${id}_wsum = 1.0;\n`,
+          ...taps,
+          `    vec3 ${id}_result = ${id}_acc / ${id}_wsum;\n`,
+        ].join(''),
+        outputVars: { result: `${id}_result` },
+      };
+    }
 
     const lines: string[] = [
       `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
@@ -1394,6 +1422,8 @@ float gaussBlurWeight(float x, float y, float sigma) {
     for (let gx = -half_n; gx <= half_n; gx++) {
       for (let gy = -half_n; gy <= half_n; gy++) {
         if (gx === 0 && gy === 0) continue;
+        if (dir === 'horizontal' && gy !== 0) continue;
+        if (dir === 'vertical'   && gx !== 0) continue;
         const w = `gaussBlurWeight(${f(gx)}, ${f(gy)}, ${sigma})`;
         lines.push(
           `    { float ${id}_w = ${w}; ` +
@@ -1437,14 +1467,47 @@ export const BloomNode: NodeDefinition = {
     intensity: { type: 'float', label: 'Intensity' },
   },
   outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { threshold: 0.3, intensity: 1.5, radius: 40.0 },
+  defaultParams: { threshold: 0.3, intensity: 1.5, radius: 40.0, select: 'rgb', softness: 0.2, kernel: 'spiral' },
   paramDefs: {
+    select: { label: 'Select', type: 'select', hint: 'RGB clips each channel above Threshold (classic). Luma follows Xor\'s bloom article: smoothstep(Threshold, Threshold + Softness, luma) so highlights fade in instead of clipping.', options: [
+      { value: 'rgb',  label: 'RGB above threshold' },
+      { value: 'luma', label: 'Luma smoothstep' },
+    ]},
+    softness: { label: 'Softness', type: 'float', min: 0.01, max: 1.0, step: 0.01, showWhen: { param: 'select', value: 'luma' }, hint: 'Width of the luma ramp above Threshold: 0.2 means a pixel 0.2 brighter than the cutoff blooms fully.' },
+    kernel: { label: 'Kernel', type: 'select', hint: 'Spiral is a 28-tap inverse-square disc (tight core, long tail). Layered sums four box blurs at growing step sizes, early layers stronger — Xor\'s additive multi-pass bloom in one pass, richer around big shapes.', options: [
+      { value: 'spiral',  label: 'Spiral disc' },
+      { value: 'layered', label: 'Layered boxes' },
+    ]},
     threshold: { label: 'Threshold', type: 'float', min: 0.0, max: 2.0,   step: 0.01, hint: 'Brightness cutoff before a pixel contributes to the bloom. Raise it so only the brightest highlights glow. There is a hard floor of 0.05 even at 0 — without one, imperceptibly faint residual brightness never fully dies out and slowly diffuses across the entire frame over a few seconds, since this reads its own previous output back every frame.' },
     intensity: { label: 'Intensity', type: 'float', min: 0.0, max: 5.0,   step: 0.05 },
     radius:    { label: 'Radius (px)', type: 'float', min: 1.0, max: 400.0, step: 1.0, hint: 'Full reach of the falloff, in pixels — most of the weight is still near the source (inverse-square), so raising this mainly extends how far the soft tail bleeds rather than uniformly brightening everything inside it.' },
   },
   glslFunction: `
-vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float jitter) {
+vec3 bloomBright(vec3 tap, float threshold, float softness, float lumaMode) {
+  float effThreshold = max(threshold, 0.05);
+  vec3 clipped = max(tap - vec3(effThreshold), 0.0);
+  float luma = dot(tap, vec3(0.2126, 0.7152, 0.0722));
+  vec3 soft = tap * smoothstep(effThreshold, effThreshold + softness, luma);
+  return mix(clipped, soft, lumaMode);
+}
+vec3 bloomLayered(vec2 uv01, vec2 px, float radius, float threshold, float softness, float lumaMode) {
+  vec3 acc = vec3(0.0);
+  float wsum = 0.0;
+  for (int L = 1; L <= 4; L++) {
+    float stepPx = radius * float(L) * 0.25;
+    float lw = 1.0 / float(L);
+    for (int x = -1; x <= 1; x++) {
+      for (int y = -1; y <= 1; y++) {
+        vec2 offset = vec2(float(x), float(y)) * stepPx * px;
+        vec3 tap = min(texture2D(u_prevFrame, clamp(uv01 + offset, 0.0, 1.0)).rgb, vec3(4.0));
+        acc += bloomBright(tap, threshold, softness, lumaMode) * lw;
+        wsum += lw;
+      }
+    }
+  }
+  return acc / max(wsum, 0.0001);
+}
+vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float softness, float lumaMode, float jitter) {
   vec3 acc = vec3(0.0);
   float wsum = 0.0;
   // Never let Threshold fully reach 0 — otherwise even imperceptibly faint
@@ -1452,7 +1515,6 @@ vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float jitter
   // previous output back every frame slowly diffuses that residue across the
   // entire frame over a few seconds (confirmed live: Threshold=0 washed the
   // whole screen to flat gray well away from the actual bright source).
-  float effThreshold = max(threshold, 0.05);
   for (int i = 0; i < 28; i++) {
     // Uniform-density disk sampling (radius ~ sqrt(i)) with a golden-angle
     // angular step — far better distributed than a few concentric rings, so
@@ -1467,7 +1529,7 @@ vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float jitter
     // unclamped) would otherwise compound frame over frame into a runaway
     // feedback loop that saturates to solid white.
     vec3 tap = min(texture2D(u_prevFrame, clamp(uv01 + offset, 0.0, 1.0)).rgb, vec3(4.0));
-    vec3 bright = max(tap - vec3(effThreshold), 0.0);
+    vec3 bright = bloomBright(tap, threshold, softness, lumaMode);
     // Inverse-square falloff weight by this sample's actual distance — this
     // is what gives a continuous tight-core/soft-tail gradient (a weighted
     // AVERAGE, so it stays bounded and doesn't scale with sample count).
@@ -1485,12 +1547,18 @@ vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float jitter
     const threshold = inputVars.threshold || p(node.params.threshold, 0.3);
     const intensity = inputVars.intensity || p(node.params.intensity, 1.5);
     const radius    = p(node.params.radius, 40.0);
+    const softness  = p(node.params.softness, 0.2);
+    const lumaMode  = (node.params.select as string) === 'luma' ? '1.0' : '0.0';
+    const layered   = (node.params.kernel as string) === 'layered';
+    const kernelCall = layered
+      ? `bloomLayered(${id}_uv01, ${id}_px, ${radius}, ${threshold}, ${softness}, ${lumaMode})`
+      : `bloomKernel(${id}_uv01, ${id}_px, ${radius}, ${threshold}, ${softness}, ${lumaMode}, ${id}_jitter)`;
 
     const lines: string[] = [
       `    vec2  ${id}_uv01   = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
       `    vec2  ${id}_px     = 1.0 / u_resolution;\n`,
       `    float ${id}_jitter = noiseHash1(gl_FragCoord.xy) * 6.28318530718;\n`,
-      `    vec3  ${id}_glow   = bloomKernel(${id}_uv01, ${id}_px, ${radius}, ${threshold}, ${id}_jitter);\n`,
+      `    vec3  ${id}_glow   = ${kernelCall};\n`,
       `    vec3  ${id}_hdr    = ${col} + ${id}_glow * ${intensity};\n`,
       // Reinhard tonemap — without this the feedback loop above has no
       // ceiling and visibly converges to flat white within a few frames.

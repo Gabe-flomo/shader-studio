@@ -94,6 +94,12 @@ mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }`;
  * For Expr and CustomFn nodes the output type is stored in `params.outputType`
  * at runtime; their definition hardcodes `float` as a placeholder.
  */
+/** Neutral start value for an accumulator of the given GLSL type (0 for +=/−=, 1 for *=//=). */
+function accNeutral(type: string, multiply: boolean): string {
+  const v = multiply ? '1.0' : '0.0';
+  return type === 'float' ? v : `${type}(${v})`;
+}
+
 function getNodeOutputType(node: GraphNode, outKey: string, defType: DataType): DataType {
   const pt = node.params.outputType as string | undefined;
   const live = pt === 'float' || pt === 'vec2' || pt === 'vec3' || pt === 'vec4' ? (pt as DataType) : null;
@@ -1564,7 +1570,7 @@ export class ShaderAssembler {
           // Extra params needed by marchBody_* for main()-scope vars referenced inside
           let mlBodyExtraParams: Array<{name: string; type: string}> = [];
           // Inout accumulator vars for body nodes with assignOp != '=' (declared outside if block for scope)
-          let mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string; label: string }> = [];
+          const mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string; label: string }> = [];
 
           if (subgraph && subgraph.nodes.length > 0) {
             const warpFnName = `marchBody_${nodeSlug}`;
@@ -1686,11 +1692,12 @@ export class ShaderAssembler {
               const snSlugAcc = mlSubSlugMap.get(sn.id) ?? sn.id;
               const isMultiplyAcc = op === '*=' || op === '/=';
               for (const [outKey, outSock] of Object.entries(snDefAcc.outputs)) {
-                if (outSock.type !== 'float') continue;
+                const accType = getNodeOutputType(sn, outKey, outSock.type);
+                if (accType !== 'float' && accType !== 'vec2' && accType !== 'vec3') continue;
                 const accVar = `${nodeSlug}_mlgacc_${snSlugAcc}_${outKey}`;
-                const neutral = isMultiplyAcc ? '1.0' : '0.0';
+                const neutral = accNeutral(accType, isMultiplyAcc);
                 const initExpr = sn.assignInit?.trim() || neutral;
-                mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
+                mlBodyAccumulators.push({ varName: accVar, type: accType, initExpr, label: outSock.label });
               }
             }
             // Also pre-scan accumulator nodes nested inside group nodes within the MLG body.
@@ -1708,11 +1715,12 @@ export class ShaderAssembler {
                 const isMultiplyAcc = op === '*=' || op === '/=';
                 const safeInnerNodeId = innerGn.id.replace(/[^a-zA-Z0-9]/g, '');
                 for (const [outKey, outSock] of Object.entries(innerDef.outputs)) {
-                  if (outSock.type !== 'float') continue;
+                  const accType = getNodeOutputType(innerGn, outKey, outSock.type);
+                  if (accType !== 'float' && accType !== 'vec2' && accType !== 'vec3') continue;
                   const accVar = `${nodeSlug}_mlgacc_${outerSlugForAcc}_ng_${safeInnerNodeId}_${outKey}`;
-                  const neutral = isMultiplyAcc ? '1.0' : '0.0';
+                  const neutral = accNeutral(accType, isMultiplyAcc);
                   const initExpr = innerGn.assignInit?.trim() || neutral;
-                  mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
+                  mlBodyAccumulators.push({ varName: accVar, type: accType, initExpr, label: outSock.label });
                 }
               }
             }
@@ -2338,7 +2346,7 @@ export class ShaderAssembler {
           let warpBodyFn = '';
           let sceneFnName = '';
           let mlBodyExtraParams: Array<{name: string; type: string}> = [];
-          let mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string; label: string }> = [];
+          const mlBodyAccumulators: Array<{ varName: string; type: string; initExpr: string; label: string }> = [];
 
           if (subgraph && subgraph.nodes.length > 0) {
             const warpFnName = `marchBody_${nodeSlug}`;
@@ -2451,11 +2459,12 @@ export class ShaderAssembler {
               const snSlugAcc = mlSubSlugMap.get(sn.id) ?? sn.id;
               const isMultiplyAcc = op === '*=' || op === '/=';
               for (const [outKey, outSock] of Object.entries(snDefAcc.outputs)) {
-                if (outSock.type !== 'float') continue;
+                const accType = getNodeOutputType(sn, outKey, outSock.type);
+                if (accType !== 'float' && accType !== 'vec2' && accType !== 'vec3') continue;
                 const accVar = `${nodeSlug}_mlgacc_${snSlugAcc}_${outKey}`;
-                const neutral = isMultiplyAcc ? '1.0' : '0.0';
+                const neutral = accNeutral(accType, isMultiplyAcc);
                 const initExpr = sn.assignInit?.trim() || neutral;
-                mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
+                mlBodyAccumulators.push({ varName: accVar, type: accType, initExpr, label: outSock.label });
               }
             }
             for (const outerGrpSn of subgraph.nodes) {
@@ -2471,11 +2480,12 @@ export class ShaderAssembler {
                 const isMultiplyAcc = op === '*=' || op === '/=';
                 const safeInnerNodeId = innerGn.id.replace(/[^a-zA-Z0-9]/g, '');
                 for (const [outKey, outSock] of Object.entries(innerDef.outputs)) {
-                  if (outSock.type !== 'float') continue;
+                  const accType = getNodeOutputType(innerGn, outKey, outSock.type);
+                  if (accType !== 'float' && accType !== 'vec2' && accType !== 'vec3') continue;
                   const accVar = `${nodeSlug}_mlgacc_${outerSlugForAcc}_ng_${safeInnerNodeId}_${outKey}`;
-                  const neutral = isMultiplyAcc ? '1.0' : '0.0';
+                  const neutral = accNeutral(accType, isMultiplyAcc);
                   const initExpr = innerGn.assignInit?.trim() || neutral;
-                  mlBodyAccumulators.push({ varName: accVar, type: 'float', initExpr, label: outSock.label });
+                  mlBodyAccumulators.push({ varName: accVar, type: accType, initExpr, label: outSock.label });
                 }
               }
             }
