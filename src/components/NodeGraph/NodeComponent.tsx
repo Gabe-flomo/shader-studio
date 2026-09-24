@@ -180,6 +180,7 @@ function formatVal(v: number | number[] | undefined, type: string): string | nul
 
 function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: GraphNode; allNodes: GraphNode[] }) {
   const tc = useCtp();
+  const tk = useTokens();
   const inputEntries  = Object.entries(def.inputs);
   const outputEntries = Object.entries(def.outputs);
 
@@ -196,7 +197,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       if (type === 'float') {
         const decoded = floatValueRegistry.get(`__preview__${connKey}`);
         if (decoded !== undefined) {
-          return <span style={{ color: tc.yellow, fontFamily: 'monospace', fontSize: '10px' }}>{decoded.toFixed(3)}</span>;
+          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{decoded.toFixed(3)}</span>;
         }
       } else if (type === 'vec2' || type === 'vec3') {
         const vals = vectorValueRegistry.get(`__preview__${connKey}`);
@@ -204,13 +205,13 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
           const formatted = type === 'vec2'
             ? `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)})`
             : `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)}, ${vals[2].toFixed(2)})`;
-          return <span style={{ color: tc.yellow, fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
+          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{formatted}</span>;
         }
       }
       return <span style={{ color: tc.surface1, fontSize: '10px' }}>← {srcLabel ?? src?.type}</span>;
     }
     const formatted = formatVal(sock.defaultValue, type);
-    if (formatted) return <span style={{ color: tc.overlay0, fontFamily: 'monospace', fontSize: '10px' }}>{formatted}</span>;
+    if (formatted) return <span style={{ color: tc.overlay0, fontFamily: fontFamily.mono, fontSize: 11 }}>{formatted}</span>;
     return null;
   }
 
@@ -221,32 +222,31 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
         top: '100%',
         left: 0,
         zIndex: 1000,
-        background: tc.base,
-        border: `1px solid ${tc.surface1}`,
-        borderRadius: '8px',
-        padding: '10px 12px',
-        minWidth: '240px',
-        maxWidth: '340px',
-        fontSize: '11px',
-        color: tc.text,
+        background: tk.bg.panel,
+        borderRadius: radius.lg,
+        padding: '12px 14px',
+        width: 340,
+        boxSizing: 'border-box',
+        font: `12px/1.45 ${fontFamily.ui}`,
+        color: tk.text.primary,
         pointerEvents: 'none',
-        boxShadow: '0 6px 20px rgba(0,0,0,0.7)',
-        marginTop: '2px',
+        boxShadow: tk.shadow.popover,
+        marginTop: 6,
       }}
     >
-      <div style={{ fontWeight: 700, marginBottom: 5, fontSize: '12px' }}>{def.label}</div>
+      <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13.5 }}>{def.label}</div>
       {def.description && (
         <div style={{ color: tc.subtext0, marginBottom: 8, lineHeight: 1.4 }}>{def.description}</div>
       )}
       {inputEntries.length > 0 && (
         <div style={{ marginBottom: 5 }}>
-          <div style={{ color: tc.surface2, fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inputs</div>
+          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Inputs</div>
           {inputEntries.map(([k, s]) => {
             const info = getInputInfo(k, s.type);
             return (
               <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
-                <span style={{ color: tc.blue, fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
-                <span style={{ color: tc.surface2, fontSize: '10px', minWidth: 34 }}>{s.type}</span>
+                <span style={{ color: tc.blue, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
+                <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
                 {info}
               </div>
             );
@@ -255,16 +255,16 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       )}
       {outputEntries.length > 0 && (
         <div style={{ marginBottom: def.glslFunction ? 8 : 0 }}>
-          <div style={{ color: tc.surface2, fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Outputs</div>
+          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Outputs</div>
           {outputEntries.map(([k, s]) => {
             // Show probed float output value if available
             const probed = s.type === 'float' ? floatValueRegistry.get(`__preview__${node.id}`) : undefined;
             const liveVal = probed !== undefined ? probed.toFixed(3) : null;
             return (
               <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
-                <span style={{ color: tc.green, fontFamily: 'monospace', fontSize: '10px', minWidth: 60 }}>{s.label}</span>
-                <span style={{ color: tc.surface2, fontSize: '10px', minWidth: 34 }}>{s.type}</span>
-                {liveVal && <span style={{ color: tc.yellow, fontFamily: 'monospace', fontSize: '10px' }}>{liveVal}</span>}
+                <span style={{ color: tc.green, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
+                <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
+                {liveVal && <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{liveVal}</span>}
               </div>
             );
           })}
@@ -272,11 +272,11 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       )}
       {def.glslFunction && (
         <div>
-          <div style={{ color: tc.surface2, fontSize: '10px', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>GLSL</div>
+          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>GLSL</div>
           <pre style={{
-            background: tc.crust, borderRadius: 4, padding: '6px 8px',
-            fontSize: '9px', color: tc.green, margin: 0,
-            maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre', fontFamily: 'monospace',
+            background: tk.bg.field, borderRadius: radius.sm, padding: '6px 8px',
+            fontSize: 10.5, color: tk.text.secondary, margin: 0,
+            maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre', fontFamily: fontFamily.mono,
           }}>
             {def.glslFunction.slice(0, 500)}
           </pre>
@@ -293,25 +293,24 @@ interface TooltipProps {
 }
 
 function SocketTooltip({ lines, side }: TooltipProps) {
-  const tc = useCtp();
+  const tk = useTokens();
   return (
     <div
       style={{
         position: 'absolute',
-        [side === 'left' ? 'left' : 'right']: '20px',
+        [side === 'left' ? 'left' : 'right']: '22px',
         top: '50%',
         transform: 'translateY(-50%)',
         zIndex: 200,
-        background: tc.base,
-        border: `1px solid ${tc.surface1}`,
-        borderRadius: '6px',
-        padding: '6px 8px',
-        minWidth: '160px',
-        maxWidth: '240px',
-        fontSize: '10px',
-        color: tc.text,
+        background: tk.bg.panel,
+        borderRadius: radius.md,
+        padding: '8px 10px',
+        minWidth: 180,
+        maxWidth: 280,
+        font: `11.5px/1.5 ${fontFamily.ui}`,
+        color: tk.text.primary,
         pointerEvents: 'none',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        boxShadow: tk.shadow.popover,
         whiteSpace: 'nowrap',
       }}
     >
@@ -580,6 +579,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
   if (!def) return null;
 
+  /** Shell shared by the special cards (loop index, media inputs, scope, march loop ends). */
+  const specialCardStyle = (extra?: React.CSSProperties): React.CSSProperties => ({
+    position: 'absolute', left: node.position.x, top: node.position.y, width: 360, boxSizing: 'border-box',
+    background: tk.bg.panel, borderRadius: radius.card, color: tk.text.primary, fontSize: 12.5, fontFamily: fontFamily.ui,
+    userSelect: 'none', opacity: dimmed ? 0.2 : 1, transition: 'opacity 0.15s, box-shadow 0.15s',
+    boxShadow: isMultiSelected ? `0 0 0 2px ${tk.accent.base}, ${tk.shadow.card}`
+      : isSelected ? `0 0 0 1.5px ${tk.accent.base}, ${tk.shadow.card}` : tk.shadow.card,
+    ...extra,
+  });
+  const specialHeadStyle: React.CSSProperties = {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '8px 8px 8px 14px',
+    borderBottom: `1px solid ${tk.border.subtle}`, cursor: 'grab',
+  };
+
   // ── Loop Index node special card ─────────────────────────────────────────────
   if (node.type === 'loopIndex') {
     // Deletable if: in the main graph (no active group), OR inside a group with 2+ loop index nodes
@@ -591,20 +604,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     })();
     const canDeleteLoopIndex = !activeGroupId || loopIndexSiblingCount > 1;
 
-    const nodeStyle: React.CSSProperties = {
-      position: 'absolute',
-      left: node.position.x,
-      top: node.position.y,
-      minWidth: '140px',
-      background: tc.base,
-      border: `1px solid ${isSelected || isMultiSelected ? tc.mauve : tc.surface1}`,
-      borderRadius: '8px',
-      boxShadow: isSelected || isMultiSelected ? `0 0 0 2px ${tc.mauve}44` : '0 2px 8px rgba(0,0,0,0.4)',
-      opacity: dimmed ? 0.3 : 1,
-      transition: 'opacity 0.15s',
-      cursor: 'default',
-      userSelect: 'none',
-    };
+    const nodeStyle = specialCardStyle({ cursor: 'default' });
     return (
       <div
         data-node-id={node.id}
@@ -622,8 +622,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         }}
       >
         {/* Header */}
-        <div style={{ background: tc.mantle, borderRadius: '8px 8px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}>
-          <span style={{ fontWeight: 700, fontSize: '11px', color: tc.mauve, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <div style={specialHeadStyle}>
+          <span style={{ fontWeight: 600, fontSize: 13.5, color: tc.mauve, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ fontSize: '10px', opacity: 0.7 }}>⟳</span> Loop Index
           </span>
           {canDeleteLoopIndex ? (
@@ -677,13 +677,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     return (
       <div
         data-node-id={node.id}
-        style={{
-          position: 'absolute', left: node.position.x, top: node.position.y,
-          background: tc.base, border: isSelected ? `1px solid ${tc.blue}` : `1px solid ${tc.surface1}`,
-          borderRadius: '8px', width: '200px', color: tc.text, fontSize: '12px',
-          userSelect: 'none', opacity: dimmed ? 0.2 : 1,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-        }}
+        style={specialCardStyle()}
       >
         {/* Header */}
         <div
@@ -704,7 +698,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             window.addEventListener('mousemove', onMove);
             window.addEventListener('mouseup', onUp);
           }}
-          style={{ background: tc.surface0, borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+          style={specialHeadStyle}
         >
           <span style={{ fontWeight: 600, fontSize: '11px' }}>Texture Input</span>
           <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
@@ -885,13 +879,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     return (
       <>
         <div
-          style={{
-            position: 'absolute', left: node.position.x, top: node.position.y,
-            background: tc.base, border: isSelected ? `1px solid ${tc.blue}` : `1px solid ${tc.surface1}`,
-            borderRadius: '8px', width: '240px', color: tc.text, fontSize: '12px',
-            userSelect: 'none', opacity: dimmed ? 0.2 : 1,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          }}
+          style={specialCardStyle()}
         >
           {/* Header */}
           <div
@@ -912,7 +900,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               window.addEventListener('mousemove', onMove);
               window.addEventListener('mouseup', onUp);
             }}
-            style={{ background: tc.surface0, borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+            style={specialHeadStyle}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               {/* Play/pause button */}
@@ -1126,13 +1114,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       <>
         <div
           data-node-id={node.id}
-          style={{
-            position: 'absolute', left: node.position.x, top: node.position.y,
-            background: tc.base, border: isSelected ? `1px solid ${tc.blue}` : `1px solid ${tc.surface1}`,
-            borderRadius: '8px', width: '220px', color: tc.text, fontSize: '12px',
-            userSelect: 'none', opacity: dimmed ? 0.2 : 1,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          }}
+          style={specialCardStyle()}
         >
           {/* Header */}
           <div
@@ -1153,7 +1135,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               window.addEventListener('mousemove', onMove);
               window.addEventListener('mouseup', onUp);
             }}
-            style={{ background: tc.surface0, borderRadius: '6px 6px 0 0', padding: '5px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'grab' }}
+            style={specialHeadStyle}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
@@ -1348,27 +1330,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     return (
       <div
         data-node-id={node.id}
-        style={{
-          position: 'absolute',
-          left: node.position.x,
-          top: node.position.y,
-          background: tc.base,
-          border: isSelected ? `1px solid ${tc.blue}` : '1px solid #444',
-          borderRadius: '8px',
-          width: '220px',
-          color: tc.text,
-          fontSize: '12px',
-          userSelect: 'none',
-          opacity: dimmed ? 0.2 : 1,
-          boxShadow: isSelected ? `0 0 10px ${tc.blue}33, 0 4px 12px rgba(0,0,0,0.4)` : '0 4px 12px rgba(0,0,0,0.4)',
-        }}
+        style={specialCardStyle()}
       >
         {/* Header */}
         <div
           onMouseDown={handleScopeHeaderMouseDown}
           onTouchStart={handleHeaderTouchStart}
           style={{
-            background: tc.surface0, borderRadius: '6px 6px 0 0',
+            borderBottom: `1px solid ${tk.border.subtle}`,
             padding: '5px 10px', display: 'flex', justifyContent: 'space-between',
             alignItems: 'center', cursor: 'grab',
           }}
@@ -1520,28 +1489,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     return (
       <div
         data-node-id={node.id}
-        style={{
-          position: 'absolute',
-          left: node.position.x,
-          top: node.position.y,
-          background: tc.base,
-          border: isSelected ? '1px solid #88aacc' : `1px solid ${tc.surface1}`,
-          borderRadius: '8px',
-          minWidth: '180px',
-          color: tc.text,
-          fontSize: '12px',
-          userSelect: 'none',
-          zIndex,
-          opacity: dimmed ? 0.2 : 1,
-        }}
+        style={specialCardStyle({ zIndex })}
         onMouseDown={() => { setZIndex(++zCounter); }}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
       >
         {/* Header */}
         <div
           style={{
-            background: tc.surface0,
-            borderRadius: '7px 7px 0 0',
+            borderBottom: `1px solid ${tk.border.subtle}`,
             padding: '6px 10px',
             fontWeight: 700,
             fontSize: '11px',
@@ -1715,28 +1670,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     return (
       <div
         data-node-id={node.id}
-        style={{
-          position: 'absolute',
-          left: node.position.x,
-          top: node.position.y,
-          background: tc.base,
-          border: isSelected ? '1px solid #88aacc' : `1px solid ${tc.surface1}`,
-          borderRadius: '8px',
-          minWidth: '200px',
-          color: tc.text,
-          fontSize: '12px',
-          userSelect: 'none',
-          zIndex,
-          opacity: dimmed ? 0.2 : 1,
-        }}
+        style={specialCardStyle({ zIndex })}
         onMouseDown={() => { setZIndex(++zCounter); }}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
       >
         {/* Header */}
         <div
           style={{
-            background: tc.surface0,
-            borderRadius: '7px 7px 0 0',
+            borderBottom: `1px solid ${tk.border.subtle}`,
             padding: '6px 10px',
             fontWeight: 700,
             fontSize: '11px',
