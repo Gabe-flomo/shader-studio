@@ -42,8 +42,9 @@ export interface CompilationResult {
    */
   textureUniforms: Record<string, string>;
   /**
-   * Maps float uniform name (e.g. "u_audio_nodeId") → nodeId.
-   * ShaderCanvas pushes amplitude values each animation frame for AudioInput nodes.
+   * Maps float uniform name (e.g. "u_audio_audio_5_0": `u_audio_<slug>_<band>`,
+   * see audioUniformNames.ts) → nodeId. ShaderCanvas hands this to the audio
+   * engine, which pushes one amplitude per band into these names each frame.
    */
   audioUniforms: Record<string, string>;
   /**
