@@ -1,3 +1,4 @@
+import { renderKeepAlive } from '../lib/renderKeepAlive';
 /**
  * CanvasRecorder — adapted from the provided CanvasRecorder.js
  * Supports two browser-native formats:
@@ -49,6 +50,7 @@ export class CanvasRecorder {
   frames: { index: number; data: string; timestamp: number }[] = [];
   private recordedChunks: Blob[] = [];
   private mediaRecorder: MediaRecorder | null = null;
+  private releaseRenderLease: (() => void) | null = null;
   private mediaStopResolve: (() => void) | null = null;
   private stopPromise: Promise<void> | null = null;
 
@@ -84,6 +86,10 @@ export class CanvasRecorder {
     if (this.config.format === 'mediarecorder') {
       await this._initMediaRecorder();
     }
+    // captureStream() only emits a video frame when the canvas repaints, and
+    // ShaderCanvas skips repaints while the picture is static — so hold a
+    // lease that keeps it drawing every frame for the whole recording.
+    this.releaseRenderLease = renderKeepAlive.acquire();
     this._log(`started ${this.config.format} @ ${this.config.fps}fps`);
   }
 
@@ -114,6 +120,8 @@ export class CanvasRecorder {
     if (!this.isRecording) { console.warn('[CanvasRecorder] not recording'); return this.whenStopped(); }
     this.isRecording = false;
     this._log(`stopping — ${this.frameCount} frames captured`);
+    this.releaseRenderLease?.();
+    this.releaseRenderLease = null;
     this.stopPromise = (async () => {
       if (this.config.format === 'png') {
         await this._finishPng();
