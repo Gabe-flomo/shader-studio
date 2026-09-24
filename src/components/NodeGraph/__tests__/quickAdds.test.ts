@@ -14,7 +14,7 @@ describe('suggestQuickAdds', () => {
   });
 
   it('treats a vec3 input as a colour, unless it is a position or normal', () => {
-    expect(suggestQuickAdds({ type: 'vec3', dir: 'in', label: 'Color A' }).map(q => q.type)).toEqual(['palette', 'makeVec3', 'colorRamp']);
+    expect(suggestQuickAdds({ type: 'vec3', dir: 'in', label: 'Color A' }).map(q => q.type)).toEqual(['colorPicker', 'palette', 'colorRamp']);
     expect(suggestQuickAdds({ type: 'vec3', dir: 'in', label: 'Position' })).toEqual([]);
   });
 

@@ -109,6 +109,17 @@ const SPACE_MAPS: Record<string, SpaceMap> = {
   hyperbolicSpace: ([x, y], n) => { const f = 2 / Math.max(1 + num(n, 'curvature', 0.7) * (x * x + y * y), 0.001); return [x * f, y * f]; },
   rippleSpace: ([x, y], n) => [x + Math.sin(y * num(n, 'freqY', 5)) * num(n, 'ampX', 0.1), y + Math.sin(x * num(n, 'freqX', 5)) * num(n, 'ampY', 0.1)],
   lensDistortion: ([x, y], n) => { const r2 = x * x + y * y; const f = (1 + num(n, 'k1', 0.25) * r2 + num(n, 'k2', 0) * r2 * r2) / num(n, 'zoom', 1); return [x * f, y * f]; },
+  turbulence: ([x, y], n) => {
+    let px = x, py = y, d = 1;
+    const str = num(n, 'strength', 0.3), fr = num(n, 'frequency', 1), dec = num(n, 'decay', 0.7), rot = num(n, 'rotate', 1);
+    const oct = Math.max(1, Math.min(12, Math.round(num(n, 'octaves', 6))));
+    for (let k = 0; k < oct; k++) {
+      const a = d * rot, c = Math.cos(a), sn = Math.sin(a);
+      const rx = px * c - py * sn, ry = px * sn + py * c;
+      px += str * Math.sin(rx * d * fr) / d; py += str * Math.sin(ry * d * fr) / d; d /= dec;
+    }
+    return [px, py];
+  },
   crtScreen: ([x, y], n) => { const k = num(n, 'curvature', 0.06); const f = 1 + (x * x + y * y - 1) * k; return [x * f, y * f]; },
   perspective2d: ([x, y], n) => {
     const ratio = num(n, 'ratio', 1), axis = str(n, 'axis', 'y'), sign = str(n, 'flip', 'false') === 'true' ? -1 : 1;
