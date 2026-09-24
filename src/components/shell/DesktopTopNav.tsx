@@ -1,5 +1,9 @@
-import { useRef, useState } from 'react';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useEffect, useRef, useState } from 'react';
+import { SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { getMembership, loadFolders, toggleFolderCollapsed } from '../../utils/assetFolders';
+
+/** The folder scope the sidebar's Saved Graphs list uses (FolderableList scopeKey) */
+const GRAPH_FOLDER_SCOPE = 'graphs';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
@@ -164,43 +168,86 @@ export function SaveGraphButton() {
   );
 }
 
+/**
+ * The saved-graphs menu: the same list as the sidebar's Saved Graphs, in the same folders (shared
+ * folder state, so collapsing one here collapses it there too).
+ */
 export function LoadGraphButton() {
   const tk = useTokens();
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const loadSavedGraph = useNodeGraphStore(s => s.loadSavedGraph);
   const deleteSavedGraph = useNodeGraphStore(s => s.deleteSavedGraph);
   const anchor = useRef<HTMLSpanElement>(null);
-  const [names, setNames] = useState<string[] | null>(null);
-  const toggle = () => setNames(n => (n ? null : getSavedGraphNames()));
+  const [open, setOpen] = useState(false);
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const refresh = () => bump(n => n + 1);
+    window.addEventListener(SAVED_GRAPHS_CHANGED, refresh);
+    window.addEventListener('assetbrowser-folders-changed', refresh);
+    return () => { window.removeEventListener(SAVED_GRAPHS_CHANGED, refresh); window.removeEventListener('assetbrowser-folders-changed', refresh); };
+  }, []);
+
+  const names = open ? getSavedGraphNames() : [];
+  const folders = open ? loadFolders(GRAPH_FOLDER_SCOPE) : [];
+  const membership = open ? getMembership(GRAPH_FOLDER_SCOPE) : {};
+  const inFolder = (folderId: string) => names.filter(n => membership[n] === folderId);
+  const loose = names.filter(n => !membership[n] || !folders.some(f => f.id === membership[n]));
+  const row = (n: string, indent: boolean) => (
+    <LoadRow
+      key={n}
+      name={n}
+      indent={indent}
+      onLoad={() => { reportFileResult(loadSavedGraph(n), { failTitle: `Couldn’t open “${n}”` }); setOpen(false); }}
+      onDelete={() => deleteSavedGraph(n)}
+    />
+  );
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon="folder" label="Load a saved graph" active={!!names} tooltip={!names} onClick={toggle} />
-      {names && (
-        <Popover anchorRef={anchor} onClose={() => setNames(null)} align="end" width={260}>
+      <IconButton icon="folder" label="Load a saved graph" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+      {open && (
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={280}>
           {names.length === 0 ? (
             <div style={{ padding: '10px 10px', color: tk.text.faint }}>No saved graphs yet.</div>
-          ) : names.map(n => (
-            <LoadRow
-              key={n}
-              name={n}
-              onLoad={() => { reportFileResult(loadSavedGraph(n), { failTitle: `Couldn’t open “${n}”` }); setNames(null); }}
-              onDelete={() => { deleteSavedGraph(n); setNames(getSavedGraphNames()); }}
-            />
-          ))}
+          ) : (
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {folders.map(f => {
+                const items = inFolder(f.id);
+                return (
+                  <div key={f.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggleFolderCollapsed(GRAPH_FOLDER_SCOPE, f.id)}
+                      style={{
+                        width: '100%', height: 32, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 0 4px', border: 0,
+                        borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `600 12.5px ${fontFamily.ui}`,
+                      }}
+                    >
+                      <Icon name={f.collapsed ? 'chevR' : 'chevD'} size={14} style={{ color: tk.text.faint }} />
+                      <Icon name="folder" size={15} style={{ color: tk.status.success }} />
+                      <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: tk.text.faint }}>{items.length}</span>
+                    </button>
+                    {!f.collapsed && items.map(n => row(n, true))}
+                  </div>
+                );
+              })}
+              {loose.map(n => row(n, false))}
+            </div>
+          )}
         </Popover>
       )}
     </span>
   );
 }
 
-function LoadRow({ name, onLoad, onDelete }: { name: string; onLoad: () => void; onDelete: () => void }) {
+function LoadRow({ name, indent = false, onLoad, onDelete }: { name: string; indent?: boolean; onLoad: () => void; onDelete: () => void }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 4, height: 32, padding: '0 2px 0 8px', borderRadius: radius.md, background: hover ? tk.bg.field : 'transparent' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, height: 32, padding: `0 2px 0 ${indent ? 30 : 8}px`, borderRadius: radius.md, background: hover ? tk.bg.field : 'transparent' }}
     >
       <button
         type="button"

@@ -638,7 +638,7 @@ export const VolumeCloudsNode: NodeDefinition = {
     time:     { type: 'float', label: 'Time'          },
     cam_speed:{ type: 'float', label: 'Cam Speed'     },
     coverage: { type: 'float', label: 'Coverage'      },
-    density:  { type: 'float', label: 'Density Scale' },
+    density_scale: { type: 'float', label: 'Density Scale' },
     sun_angle:{ type: 'float', label: 'Sun Angle'     },
   },
   outputs: {
@@ -648,6 +648,12 @@ export const VolumeCloudsNode: NodeDefinition = {
     sky:        { type: 'vec3',  label: 'Sky Only'      },
   },
   glslFunction: VOLUME_CLOUDS_GLSL,
+  // The socket used to be keyed `density` while its slider is `density_scale`. Every
+  // socket/slider pair is matched by key (the card swaps the slider for a wired chip,
+  // addNode drops the socket default, keyframes bind to the socket), so the mismatch
+  // left the Density slider live-looking but dead while the socket was wired.
+  // Saved graphs still carry the old key; rename it on load so connections survive.
+  migrateInputKeys: { density: 'density_scale' },
   defaultParams: {
     steps:          40,
     cloud_min_y:    1.5,
@@ -700,7 +706,7 @@ export const VolumeCloudsNode: NodeDefinition = {
     const timeVar    = inputVars.time      ?? '0.0';
     const camSpeed   = inputVars.cam_speed ?? p(node.params.cam_speed, 0.1);
     const coverage   = inputVars.coverage  ?? p(node.params.coverage, 0.3);
-    const densityIn  = inputVars.density   ?? p(node.params.density_scale, 0.8);
+    const densityIn  = inputVars.density_scale ?? p(node.params.density_scale, 0.8);
     const sunAngle   = inputVars.sun_angle ?? p(node.params.sun_angle, 0.5);
 
     const steps      = Math.max(8, Math.round(typeof node.params.steps      === 'number' ? node.params.steps      : 40));

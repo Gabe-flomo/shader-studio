@@ -12,22 +12,17 @@ export const PaletteNode: NodeDefinition = {
   type: 'palette',
   label: 'Palette',
   category: 'Color',
-  description: 'Cosine-based color palette. Wire a float to Value to pick a position on the palette, and optionally wire Time to animate it.',
+  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it.',
+  // Offset/Amplitude/Frequency/Phase are one vec3 socket each (they used to be twelve
+  // per-channel floats); unwired, each falls back to its colour param below. Older graphs keep any
+  // per-channel wire they had, and it still drives its channel (see legacyLabels.ts).
   inputs: {
-    value:       { type: 'float', label: 'Value', defaultValue: 0 },
-    anim:        { type: 'float', label: 'Time',  defaultValue: 0 },
-    offset_r:    { type: 'float', label: 'offset.r' },
-    offset_g:    { type: 'float', label: 'offset.g' },
-    offset_b:    { type: 'float', label: 'offset.b' },
-    amplitude_r: { type: 'float', label: 'amplitude.r' },
-    amplitude_g: { type: 'float', label: 'amplitude.g' },
-    amplitude_b: { type: 'float', label: 'amplitude.b' },
-    freq_r:      { type: 'float', label: 'freq.r' },
-    freq_g:      { type: 'float', label: 'freq.g' },
-    freq_b:      { type: 'float', label: 'freq.b' },
-    phase_r:     { type: 'float', label: 'phase.r' },
-    phase_g:     { type: 'float', label: 'phase.g' },
-    phase_b:     { type: 'float', label: 'phase.b' },
+    value:     { type: 'float', label: 'Angle', defaultValue: 0 },
+    anim:      { type: 'float', label: 'Angle offset', defaultValue: 0 },
+    offset:    { type: 'vec3', label: 'Offset' },
+    amplitude: { type: 'vec3', label: 'Amplitude' },
+    freq:      { type: 'vec3', label: 'Frequency' },
+    phase:     { type: 'vec3', label: 'Phase' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -45,12 +40,12 @@ export const PaletteNode: NodeDefinition = {
     // cycle for Value; Time is a plain bounded stand-in for u_time, since
     // wiring the real Time node is how you'd animate this for real) instead
     // of always compiling to a hardcoded 0.0 with nothing to tune.
-    value:     { label: 'Value',     type: 'float', min: 0.0,      max: 1.0,     step: 0.01 },
-    anim:      { label: 'Time',      type: 'float', min: 0.0,      max: 10.0,    step: 0.1  },
-    offset:    { label: 'Offset',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    amplitude: { label: 'Amplitude', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    freq:      { label: 'Freq',      type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
-    phase:     { label: 'Phase',     type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
+    value:     { label: 'Angle',        type: 'float', min: 0.0,      max: 1.0,     step: 0.01, hint: 'Where on the palette to sample. 0 → 1 goes once around; wire a gradient or distance here to paint with it.' },
+    anim:      { label: 'Angle offset', type: 'float', min: 0.0,      max: 10.0,    step: 0.1,  hint: 'Only added to Angle. Wire Time here to animate.' },
+    offset:    { label: 'Offset',       type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The colour at the middle of the wave (per channel).' },
+    amplitude: { label: 'Amplitude',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How far each channel swings either side of Offset.' },
+    freq:      { label: 'Frequency',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How many times each channel cycles as Angle goes 0 → 1.' },
+    phase:     { label: 'Phase',        type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'Shifts each channel along the cycle; spreading r/g/b gives the rainbow.' },
   },
   migrateInputKeys: { t: 'value' },
   glslFunction: PALETTE_GLSL_FN,
@@ -59,16 +54,15 @@ export const PaletteNode: NodeDefinition = {
     const valVar  = inputVars.value || p(node.params.value, 0);
     const timeVar = inputVars.anim  || p(node.params.anim, 0);
     const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
-    const oV = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
-    const aV = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
-    const fV = Array.isArray(node.params.freq)      ? node.params.freq      as number[] : [1.0, 1.0, 1.0];
-    const phV = Array.isArray(node.params.phase)    ? node.params.phase     as number[] : [0.0, 0.33, 0.67];
-    const oR = inputVars.offset_r    || f(oV[0]);  const oG = inputVars.offset_g    || f(oV[1]);  const oB = inputVars.offset_b    || f(oV[2]);
-    const aR = inputVars.amplitude_r || f(aV[0]);  const aG = inputVars.amplitude_g || f(aV[1]);  const aB = inputVars.amplitude_b || f(aV[2]);
-    const fR = inputVars.freq_r      || f(fV[0]);  const fG = inputVars.freq_g      || f(fV[1]);  const fB = inputVars.freq_b      || f(fV[2]);
-    const pR = inputVars.phase_r     || f(phV[0]); const pG = inputVars.phase_g     || f(phV[1]); const pB = inputVars.phase_b     || f(phV[2]);
+    // A wired vec3 socket wins; otherwise the colour param, with any legacy per-channel wire
+    // (`offset_r` …, kept on older graphs) overriding its channel.
+    const vec = (key: 'offset' | 'amplitude' | 'freq' | 'phase', fallback: number[]) => {
+      if (inputVars[key]) return inputVars[key];
+      const v = Array.isArray(node.params[key]) ? node.params[key] as number[] : fallback;
+      return `vec3(${['r', 'g', 'b'].map((c, i) => inputVars[`${key}_${c}`] || f(v[i] ?? fallback[i])).join(',')})`;
+    };
     return {
-      code: `    vec3 ${outVar} = palette(${tVar}, vec3(${oR},${oG},${oB}), vec3(${aR},${aG},${aB}), vec3(${fR},${fG},${fB}), vec3(${pR},${pG},${pB}));\n`,
+      code: `    vec3 ${outVar} = palette(${tVar}, ${vec('offset', [0.5, 0.5, 0.5])}, ${vec('amplitude', [0.5, 0.5, 0.5])}, ${vec('freq', [1.0, 1.0, 1.0])}, ${vec('phase', [0.0, 0.33, 0.67])});\n`,
       outputVars: { color: outVar },
     };
   },

@@ -18,3 +18,16 @@ export function emitTimeTick(time: number): void {
 export function hasTimeTickListeners(): boolean {
   return listeners.size > 0;
 }
+
+/**
+ * Ref callback for a text node that shows the clock ("12.34s"). Writes the text directly on each
+ * tick, so a readout following every frame doesn't re-render React.
+ */
+export function timeReadoutRef(el: HTMLElement | null): (() => void) | void {
+  if (!el) return;
+  let last = '';
+  return subscribeTimeTick(t => {
+    const text = `${t.toFixed(2)}s`;
+    if (text !== last) { el.textContent = text; last = text; }
+  });
+}

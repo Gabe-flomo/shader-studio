@@ -177,7 +177,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   const handleSavePreset = (name: string) => {
     const presetLabel = name.trim() || label;
-    saveExprPreset({ label: presetLabel, inputs: customInputs, outputType, lines, result });
+    saveExprPreset({ label: presetLabel, inputs: customInputs, outputType, lines, result, comment: typeof node.params.__comment === 'string' && node.params.__comment.trim() ? node.params.__comment.trim() : undefined });
     setShowSaveInput(false);
     setSavePresetName('');
     toast.success(`Saved “${presetLabel}” to Expression Blocks`);

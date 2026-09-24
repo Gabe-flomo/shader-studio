@@ -16,6 +16,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   `;
   document.head.appendChild(s);
 }
+import { toast } from '../ui/toastStore';
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
@@ -61,6 +62,11 @@ import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import { DocText } from '../ui/DocText';
+import { canRandomize, randomizableParams, randomizeAmount, randomizeExcluded } from '../../nodes/randomizeParams';
+import { useFoldState } from './foldState';
+import { RandomizeMenu } from './RandomizeMenu';
+import { timeReadoutRef } from '../../lib/timeTick';
+import type { NodeError } from '../../compiler/nodeErrors';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -107,6 +113,10 @@ interface Props {
   onEnterGroup?: (groupId: string) => void;
   /** Node has a compilation error — show red ring */
   hasError?: boolean;
+  /** Click (not drag) on an open socket → Smart connect suggestions at the pointer */
+  onSuggestSocket?: (nodeId: string, key: string, dir: 'in' | 'out', x: number, y: number) => void;
+  /** Compile problems traced to this node (see compiler/nodeErrors.ts) */
+  errors?: NodeError[];
   /**
    * When inside a group view, the set of this node's input keys that are
    * driven by an external (group-level) connection. These sockets are
@@ -373,21 +383,19 @@ function extractNodeCodeFromShader(lines: string[], node: GraphNode): string {
 }
 
 // Extract the RHS expression for a specific output variable from compiled GLSL
-// e.g. for nodeId="make_3", outputKey="glow" finds "float make_3_glow = ..." and returns the RHS
-function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string): string {
+function getSourceExpr(lines: string[], varMap: ReadonlyMap<string, Record<string, string>>, sourceNodeId: string, outputKey: string): string {
   if (!lines.length) return '';
-  const varName = `${sourceNodeId}_${outputKey}`;
+  // Compiled variables are named from the node's slug (`circ_3_dist`), not its id or output key:
+  // the compiler's map says which one this output became.
+  const varName = varMap.get(sourceNodeId)?.[outputKey] ?? `${sourceNodeId}_${outputKey}`;
+  const assign = new RegExp(`(?:^|\\s)${varName.replace(/[^A-Za-z0-9_]/g, '')}\\s*=(?!=)`);
   for (const line of lines) {
     const trimmed = line.trim();
-    // Match: "float varName = ..." or "vec2 varName = ..." etc.
-    if (trimmed.includes(varName)) {
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx !== -1) {
-        const rhs = trimmed.slice(eqIdx + 1).trim().replace(/;$/, '');
-        // Truncate long expressions
-        return rhs.length > 60 ? rhs.slice(0, 57) + '...' : rhs;
-      }
-    }
+    if (!assign.test(trimmed)) continue;
+    const eqIdx = trimmed.search(/=(?!=)/);
+    const rhs = trimmed.slice(eqIdx + 1).trim().replace(/;$/, '');
+    // Truncate long expressions
+    return rhs.length > 60 ? rhs.slice(0, 57) + '...' : rhs;
   }
   return varName; // fallback: just show the variable name
 }
@@ -399,11 +407,12 @@ const getZoom = () => getView().zoom;
 // Memoised: NodeGraph re-renders on every pan commit, selection change and
 // store write, and a plain function component would re-render every card each
 // time. All props are stable references or primitives.
-export const NodeComponent = React.memo(function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, activeGroupNode = null, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover }: Props) {
+export const NodeComponent = React.memo(function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, activeGroupNode = null, dimmed = false, onEnterGroup, hasError = false, errors, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover, onSuggestSocket }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const inputStyle_ = inputStyleFor(tc);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
+  const nodeOutputVarMap = useNodeGraphStore(s => s.nodeOutputVarMap);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
   const activeGroupId   = useNodeGraphStore(s => s.activeGroupId);
   // Check if the active group has iterations > 1 (assignOp / carryMode only meaningful in loops)
@@ -413,6 +422,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams       = useNodeGraphStore(s => s.updateNodeParams);
+  const randomizeNodeParams    = useNodeGraphStore(s => s.randomizeNodeParams);
+  const foldedSections = useFoldState(s => s.folded);
+  const toggleFold     = useFoldState(s => s.toggle);
+  const [randomizeMenu, setRandomizeMenu] = useState<{ x: number; y: number } | null>(null);
   const changeNodeVectorType   = useNodeGraphStore(s => s.changeNodeVectorType);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
@@ -424,6 +437,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const setHoveredParamHint  = useNodeGraphStore(s => s.setHoveredParamHint);
   const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
+  const revealNode         = useNodeGraphStore(s => s.revealNode);
+  const revealTimer        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedNodeId     = useNodeGraphStore(s => s.selectedNodeId);
   const isSelected         = selectedNodeId === node.id;
 
@@ -447,8 +462,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const setSwapTargetNodeId = useNodeGraphStore(s => s.setSwapTargetNodeId);
   const openUserNodeSource  = useNodeGraphStore(s => s.openUserNodeSource);
   const isSwapTarget       = swapTargetNodeId === node.id;
-  // currentTime is only needed for the Time node live badge — subscribed below conditionally
-  const currentTime = useNodeGraphStore(s => node.type === 'time' ? s.currentTime : null);
   // Texture input
   const setNodeTexture     = useNodeGraphStore(s => s.setNodeTexture);
   const nodeTexture        = useNodeGraphStore(s => node.type === 'textureInput' ? s.nodeTextures[node.id] : null);
@@ -559,6 +572,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Comment text lives in node.params.__comment — same "__-prefixed metadata,
   // not a real shader param" convention already used by __codeOverride.
   const nodeComment = typeof node.params.__comment === 'string' ? (node.params.__comment as string) : '';
+  // Close the comment editor; a comment that's only whitespace is removed rather than kept
+  const finishComment = () => {
+    if (typeof node.params.__comment === 'string' && !node.params.__comment.trim()) updateNodeParams(node.id, { __comment: undefined });
+    setShowCommentEditor(false);
+  };
 
   // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
   const scopeCanvasRef        = useRef<HTMLCanvasElement>(null);
@@ -723,7 +741,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           setNodeTexture(node.id, texture);
           updateNodeParams(node.id, { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect }, { immediate: true });
         })
-        .catch(err => console.error('Failed to load texture image:', err));
+        .catch(err => toast.error('Couldn’t load that image', { message: 'The file may be damaged or in a format the browser can’t read. Your graph wasn’t changed.', details: errorMessage(err) }));
     };
 
     return (
@@ -1800,10 +1818,30 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
     const groupIcon = isSceneGroup ? 'presets' : isSpaceWarpGroup ? 'loop' : isMarchLoopGroup ? 'wave' : 'nodes';
 
+    /**
+     * Section header on a group card: click opens that inner node in the group, double-click renames
+     * the section. The click waits out the double-click window so a rename doesn't also navigate.
+     */
+    const sectionClick = (innerId: string, startRename: () => void) => ({
+      onClick: (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (editingSectionId === innerId || e.detail > 1) return;
+        if (revealTimer.current) clearTimeout(revealTimer.current);
+        revealTimer.current = setTimeout(() => { revealTimer.current = null; revealNode([node.id], innerId); }, 220);
+      },
+      onDoubleClick: (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (revealTimer.current) { clearTimeout(revealTimer.current); revealTimer.current = null; }
+        startRename();
+      },
+    });
+
     /** One exposed inner param: typed socket on the card edge, label, and a ruler (or the wire). */
     const groupParamRow = (o: {
       rowKey: string; psKey: string; label: string; value: number; min: number; max: number; step: number;
       overrideKey: string; defaultValue?: number;
+      /** Clicking the label opens the node this param belongs to */
+      reveal?: { path: string[]; nodeId: string };
     }) => {
       const wired = !!node.inputs[o.psKey]?.connection;
       const wire = node.inputs[o.psKey]?.connection;
@@ -1813,10 +1851,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <ParamSocket color={TYPE_COLORS.float} wired={wired} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', o.psKey, el); }}
             onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, o.psKey); }} />
-          <ParamLabel muted={wired}>{o.label}</ParamLabel>
+          {o.reveal ? (
+            <ParamLabel muted={wired} title="Open this node in the group" onClick={() => revealNode(o.reveal!.path, o.reveal!.nodeId)}>{o.label}</ParamLabel>
+          ) : (
+            <ParamLabel muted={wired}>{o.label}</ParamLabel>
+          )}
           {wired && wire ? (
             <>
-              <WiredChip expr={getSourceExpr(shaderLines, wire.nodeId, wire.outputKey) || 'wired from outside'} />
+              <WiredChip source={wire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
               <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, o.psKey)} />
             </>
           ) : (
@@ -1873,6 +1915,18 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             borderBottom: `1px solid ${tk.border.subtle}`,
           }}
         >
+          <button
+            type="button"
+            aria-label={collapsed ? 'Expand group' : 'Collapse group (keeps its ports and wired params)'}
+            aria-expanded={!collapsed}
+            onMouseDown={e => e.stopPropagation()}
+            onDoubleClick={e => e.stopPropagation()}
+            onClick={() => setCollapsed(v => !v)}
+            style={{
+              width: 18, height: 26, marginLeft: -6, padding: 0, border: 0, background: 'none', cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: tk.text.faint,
+            }}
+          ><Icon name={collapsed ? 'chevR' : 'chevD'} size={14} /></button>
           <span style={{ display: 'flex', color: groupAccentColor, flexShrink: 0 }}><Icon name={groupIcon} size={16} /></span>
           {isEditingTitle ? (
             <input
@@ -1916,6 +1970,25 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             {nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
+            {canRandomize(node, def) && (
+              <CardButton icon="dice" on={randomizeExcluded(node).length > 0}
+                label="Randomize the values on this card (right-click to choose which)"
+                onClick={() => randomizeNodeParams(node.id)}
+                onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
+            )}
+            {randomizeMenu && (
+              <RandomizeMenu
+                x={randomizeMenu.x}
+                y={randomizeMenu.y}
+                params={randomizableParams(node, def)}
+                excluded={randomizeExcluded(node)}
+                onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
+                amount={randomizeAmount(node)}
+                onAmountChange={a => updateNodeParams(node.id, { __randAmount: a >= 1 ? undefined : a })}
+                onRandomize={() => randomizeNodeParams(node.id)}
+                onClose={() => setRandomizeMenu(null)}
+              />
+            )}
             <CardButton icon="copy" label="Duplicate group (an independent copy)" onClick={() => duplicateGroup(node.id)} />
             <CardButton icon="save" tint="success" on={savedFlash} label="Save as a preset" onClick={() => {
               setSaveLabel(typeof node.params.label === 'string' ? node.params.label : 'Group');
@@ -1969,7 +2042,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })()}
 
         {/* Iterations — regular groups only */}
-        {node.type === 'group' && (
+        {node.type === 'group' && !collapsed && (
           <div
             onMouseDown={e => e.stopPropagation()}
             onDoubleClick={e => e.stopPropagation()}
@@ -2228,7 +2301,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
             }) ?? false;
             if (!hasInnerParams) return null;
-            if (surfacedParams.length === 0) return null;
+            // Collapsed: only wired rows stay (their wires need somewhere to land)
+            const shownSurfaced = collapsed
+              ? surfacedParams.filter(sp => node.inputs[`ps_${innerNode.id}_${sp.nodeId}_${sp.paramKey}`]?.connection)
+              : surfacedParams;
+            if (shownSurfaced.length === 0) return null;
 
             const innerGroupLabel = typeof innerNode.params.label === 'string' ? innerNode.params.label : 'Inner Group';
             const sectionLabelKey = `__sectionLabel_${innerNode.id}`;
@@ -2239,13 +2316,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             return (
               <div key={innerNode.id} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingBottom: 4 }}>
                 <div
-                  title="Double-click to rename this section"
-                  style={sectionHeadStyle}
-                  onDoubleClick={e => {
-                    e.stopPropagation();
-                    setEditingSectionId(innerNode.id);
-                    setEditingSectionLabel(sectionLabel);
-                  }}
+                  title="Click to open it in the group · double-click to rename"
+                  style={{ ...sectionHeadStyle, cursor: 'pointer' }}
+                  {...sectionClick(innerNode.id, () => { setEditingSectionId(innerNode.id); setEditingSectionLabel(sectionLabel); })}
                 >
                   {editingSectionId === innerNode.id ? (
                     <input
@@ -2270,11 +2343,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       style={sectionInputStyle}
                     />
                   ) : (
-                    <span style={{ flex: 1, cursor: 'text' }}>{sectionLabel}</span>
+                    <span style={{ flex: 1 }}>{sectionLabel}</span>
                   )}
                   <Icon name="nodes" size={12} />
                 </div>
-                {surfacedParams.map(sp => {
+                {shownSurfaced.map(sp => {
                   const innNode = innerGroupSub?.nodes.find(n => n.id === sp.nodeId);
                   if (!innNode) return null;
                   const innDef = getNodeDefinition(innNode.type);
@@ -2288,6 +2361,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     rowKey: `${sp.nodeId}::${sp.paramKey}`, psKey, label: sp.label ?? paramDef.label, value: currentVal,
                     min: paramDef.min ?? 0, max: paramDef.max ?? 1, step: paramDef.step ?? 0.01, overrideKey,
                     defaultValue: typeof innDef?.defaultParams?.[sp.paramKey] === 'number' ? innDef.defaultParams[sp.paramKey] as number : undefined,
+                    reveal: { path: [node.id, innerNode.id], nodeId: sp.nodeId },
                   });
                 })}
               </div>
@@ -2319,7 +2393,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             if (hiddenParams.includes(`${innerNode.id}::${paramKey}`)) return false;
             return true;
           });
-          if (visibleParams.length === 0) return null;
+          const shownParams = collapsed
+            ? visibleParams.filter(([k]) => node.inputs[`ps_${innerNode.id}_${k}`]?.connection)
+            : visibleParams;
+          if (shownParams.length === 0) return null;
 
           const innerLabel = typeof innerNode.params.label === 'string'
             ? innerNode.params.label
@@ -2332,13 +2409,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           return (
             <div key={innerNode.id} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingBottom: 4 }}>
               <div
-                title="Double-click to rename this section"
-                style={{ ...sectionHeadStyle, cursor: 'text' }}
-                onDoubleClick={e => {
-                  e.stopPropagation();
-                  setEditingSectionId(innerNode.id);
-                  setEditingSectionLabel(displayLabel);
-                }}
+                title="Click to open this node in the group · double-click to rename"
+                style={{ ...sectionHeadStyle, cursor: 'pointer' }}
+                {...sectionClick(innerNode.id, () => { setEditingSectionId(innerNode.id); setEditingSectionLabel(displayLabel); })}
               >
                 {editingSectionId === innerNode.id ? (
                   <input
@@ -2366,7 +2439,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   displayLabel
                 )}
               </div>
-              {visibleParams.map(([paramKey, paramDef]) => {
+              {shownParams.map(([paramKey, paramDef]) => {
                 if (paramDef.type !== 'float') return null;
                 const psKey = `ps_${innerNode.id}_${paramKey}`;
                 const overrideKey = `${innerNode.id}::${paramKey}`;
@@ -2387,7 +2460,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })}
 
         {/* MarchLoopGroup outer params — maxSteps, maxDist, stepScale, bg, albedo */}
-        {isMarchLoopGroup && (() => {
+        {isMarchLoopGroup && !collapsed && (() => {
           const outerDef = getNodeDefinition(node.type);
           const outerParamDefs = outerDef?.paramDefs ?? {};
           const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float' || pd.type === 'bool');
@@ -2441,7 +2514,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })()}
 
         {/* "Customize params" button — shown for any group with float params */}
-        {subgraph && (() => {
+        {subgraph && !collapsed && (() => {
           const SKIP_PARAM_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant', 'loopIndex', 'loopCarry', 'group']);
           const hasInnerGroupNodes = subgraph.nodes.some(n => n.type === 'group');
           // For outer groups: check inner-group subgraph nodes
@@ -2563,6 +2636,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         <span style={{ color: typeColor }}>▶</span> {input.label} <span style={{ color: tc.surface2 }}>({input.type})</span>
       </span>
     );
+    const inputError = errors?.find(e => e.socket === inputKey);
+    if (inputError) lines.push(<span style={{ color: tk.status.danger, fontWeight: 600, whiteSpace: 'normal' }}>{inputError.message}</span>);
     if (input.connection) {
       // Show what's connected
       const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
@@ -3010,6 +3085,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             input.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, vectorAxes ?? [])
           );
           const kfBypassed = isKeyframed && isKeyframeBypassed(node, key);
+          const socketError = errors?.find(e => e.socket === key);
 
           return (
             <div
@@ -3027,8 +3103,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   borderRadius: isKeyframed ? '3px' : '50%',
                   transform: isKeyframed ? 'rotate(45deg)' : undefined,
                   boxSizing: 'border-box',
-                  background: isKeyframed ? (kfBypassed ? tk.bg.panel : tk.status.warning) : isConnected ? (TYPE_COLORS[input.type] || '#888') : tk.bg.panel,
-                  border: `2px solid ${isKeyframed ? tk.status.warning : (TYPE_COLORS[input.type] || '#888')}`,
+                  background: socketError ? tk.status.danger : isKeyframed ? (kfBypassed ? tk.bg.panel : tk.status.warning) : isConnected ? (TYPE_COLORS[input.type] || '#888') : tk.bg.panel,
+                  border: `2px solid ${socketError ? tk.status.danger : isKeyframed ? tk.status.warning : (TYPE_COLORS[input.type] || '#888')}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
                   marginLeft: socketMarginLeft,
@@ -3062,6 +3138,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 onMouseUp={(e) => {
                   e.stopPropagation();
                   if (e.altKey && !isConnected) return; // handled by onMouseDown
+                  // Right-click is the keyframe menu only (onContextMenu); only a left click connects or disconnects
+                  if (e.button !== 0) return;
                   if (isConnectionDragging) {
                     if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
                     onEndConnection(node.id, key);
@@ -3070,6 +3148,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   if (isConnected) {
                     if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
                     disconnectInput(node.id, key);
+                  } else if (!isExternal && onSuggestSocket) {
+                    // Click on an open input: the nearest outputs that could feed it
+                    onSuggestSocket(node.id, key, 'in', e.clientX, e.clientY);
                   } else {
                     onEndConnection(node.id, key);
                   }
@@ -3534,11 +3615,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const isParamInternallyWired = paramInputConn != null;
             const lockIcon = <span style={{ marginLeft: 4, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={11} /></span>;
             if (isSocketConnected) {
-              const srcExpr = getSourceExpr(shaderLines, socketConn!.nodeId, socketConn!.outputKey);
+              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, socketConn!.nodeId, socketConn!.outputKey);
               return (
                 <div key={key} style={rowStyle}>
                   <ParamLabel muted>{paramDef.label}{isParamExternal && lockIcon}</ParamLabel>
-                  <WiredChip expr={srcExpr} locked={isParamExternal} />
+                  <WiredChip source={socketConn!} expr={srcExpr} locked={isParamExternal} />
                 </div>
               );
             }
@@ -3555,7 +3636,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             }
             // Wired inside the group through the param's own socket
             if (isParamInternallyWired) {
-              const srcExpr = getSourceExpr(shaderLines, paramInputConn!.nodeId, paramInputConn!.outputKey);
+              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, paramInputConn!.nodeId, paramInputConn!.outputKey);
               return (
                 <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                   {activeGroupId && (
@@ -3564,7 +3645,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
                   )}
                   <ParamLabel muted>{paramDef.label}</ParamLabel>
-                  <WiredChip expr={srcExpr} />
+                  <WiredChip source={paramInputConn!} expr={srcExpr} />
                   <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, paramInputKey)} />
                 </div>
               );
@@ -3638,24 +3719,43 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const compLabels = ['r', 'g', 'b'];
             const compColors = [tc.red, tc.green, tc.blue];
             const defVal = def?.defaultParams?.[key];
+            // Each vec3 section folds on its own to a one-line summary (see foldState.ts)
+            const foldId = `${node.id}:${key}`;
+            const isFolded = !!foldedSections[foldId];
             return (
               <div
                 key={key}
                 style={{ padding: '6px 12px 6px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}
                 onMouseDown={e => e.stopPropagation()}
               >
-                <span
-                  style={{ color: tk.text.secondary, fontWeight: 600, marginBottom: 2, cursor: 'default' }}
-                  title="Double-click to reset to default"
-                  onDoubleClick={() => { if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true }); }}
-                >{paramDef.label}</span>
-                {[0, 1, 2].map(idx => {
+                <button
+                  type="button"
+                  aria-expanded={!isFolded}
+                  onClick={() => toggleFold(foldId)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4, width: '100%', padding: 0, margin: '0 0 2px -4px', border: 0, background: 'none',
+                    cursor: 'pointer', textAlign: 'left', color: tk.text.secondary, font: `600 12.5px ${fontFamily.ui}`,
+                  }}
+                  title={`${paramDef.hint ? `${paramDef.hint}\n` : ''}Click to ${isFolded ? 'expand' : 'fold'} · double-click the name to reset`}
+                >
+                  <Icon name={isFolded ? 'chevR' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
+                  <span onDoubleClick={e => { e.stopPropagation(); if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true }); }}>{paramDef.label}</span>
+                  {isFolded && (
+                    <span style={{ marginLeft: 'auto', font: `500 11.5px ${fontFamily.mono}`, color: tk.text.muted }}>
+                      {node.inputs[key]?.connection ? 'wired' : vals.slice(0, 3).map(v => (+(v ?? 0)).toFixed(2)).join('  ')}
+                    </span>
+                  )}
+                </button>
+                {/* The whole vec3 wired (Palette's Offset, …): one chip instead of three rulers */}
+                {isFolded ? null : node.inputs[key]?.connection ? (
+                  <WiredChip source={node.inputs[key].connection!} expr={getSourceExpr(shaderLines, nodeOutputVarMap, node.inputs[key].connection!.nodeId, node.inputs[key].connection!.outputKey)} />
+                ) : [0, 1, 2].map(idx => {
                   const conn = node.inputs[compKeys[idx]]?.connection;
                   return (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
                       <span style={{ width: 10, flexShrink: 0, textAlign: 'center', font: `600 11px ${fontFamily.mono}`, color: compColors[idx] }}>{compLabels[idx]}</span>
                       {conn
-                        ? <WiredChip expr={getSourceExpr(shaderLines, conn.nodeId, conn.outputKey)} />
+                        ? <WiredChip source={conn} expr={getSourceExpr(shaderLines, nodeOutputVarMap, conn.nodeId, conn.outputKey)} />
                         : (
                           <RulerSlider
                             value={vals[idx] ?? 0}
@@ -3757,7 +3857,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               >
                 <ParamLabel muted={isWired}>{inp.name}</ParamLabel>
                 {isWired && wire
-                  ? <WiredChip expr={getSourceExpr(shaderLines, wire.nodeId, wire.outputKey)} />
+                  ? <WiredChip source={wire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
                   : (
                     <RulerSlider
                       value={val}
@@ -3780,10 +3880,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {Object.keys(node.outputs).length > 0 && (Object.keys(node.inputs).length > 0 || (!collapsed && Object.keys(paramDefs).length > 0)) && sectionRule}
         {Object.entries(node.outputs).map(([key, output]) => {
           const isHovered = hoveredOutput === key;
-          // Live value badge: show time for Time node
-          const liveValueBadge = node.type === 'time' && key === 'time'
-            ? (currentTime as number).toFixed(2) + 's'
-            : null;
+          // Live clock on the Time node's output (follows every frame, see timeReadoutRef)
+          const liveValueBadge = node.type === 'time' && key === 'time';
           return (
             <div
               key={key}
@@ -3798,8 +3896,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             >
               {liveValueBadge && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 2, marginRight: 8 }}>
-                  <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.field, borderRadius: 6, padding: '2px 7px', fontVariantNumeric: 'tabular-nums' }}>
-                    {liveValueBadge}
+                  <span ref={timeReadoutRef} style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.field, borderRadius: 6, padding: '2px 7px', fontVariantNumeric: 'tabular-nums' }}>
+                    {(useNodeGraphStore.getState().currentTime ?? 0).toFixed(2)}s
                   </span>
                   <CardButton icon="reset" label="Reset time to 0" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
                 </span>
@@ -3929,7 +4027,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onChange={e => updateNodeParams(node.id, { __comment: e.target.value })}
             onKeyDown={e => {
               e.stopPropagation();
-              if (e.key === 'Escape') setShowCommentEditor(false);
+              if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); finishComment(); }
             }}
             style={{
               width: '100%', minHeight: 58, boxSizing: 'border-box', resize: 'vertical', border: 0, outline: 'none',
@@ -3937,6 +4035,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               font: `12.5px/1.45 ${fontFamily.ui}`,
             }}
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+            {nodeComment && (
+              <Button size="sm" variant="ghost" icon="trash" style={{ color: tk.status.danger }}
+                onClick={() => { updateNodeParams(node.id, { __comment: undefined }); setShowCommentEditor(false); }}>Delete</Button>
+            )}
+            <span style={{ flex: 1 }} />
+            <Button size="sm" variant="primary" onClick={finishComment} title="Done (⌘↵)">Done</Button>
+          </div>
         </div>
       )}
 
@@ -3960,6 +4066,20 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             }}>
               {codeSnippet || '// (no code generated)'}
             </pre>
+        </div>
+      )}
+
+      {/* ── Compile problems traced to this node ── */}
+      {errors && errors.length > 0 && !collapsed && (
+        <div role="alert" style={{
+          display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 12px', borderTop: `1px solid ${alpha(tk.status.danger, 0.25)}`,
+          background: alpha(tk.status.danger, 0.07), color: tk.status.danger, font: `500 12px/1.45 ${fontFamily.ui}`, userSelect: 'text',
+        }}>
+          <Icon name="alert" size={14} style={{ flexShrink: 0, marginTop: 1.5 }} />
+          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+            {errors[0].message}
+            {errors.length > 1 && <span style={{ opacity: 0.75 }}>{` · ${errors.length - 1} more in the error panel`}</span>}
+          </span>
         </div>
       )}
 
@@ -3989,7 +4109,26 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <CardButton icon="resetParams" label="Reset parameters to defaults"
             onClick={() => { if (def.defaultParams) updateNodeParams(node.id, def.defaultParams as Record<string, unknown>, { immediate: true }); }} />
         )}
+        {canRandomize(node, def) && (
+          <CardButton icon="dice" on={randomizeExcluded(node).length > 0}
+            label={randomizeExcluded(node).length > 0 ? 'Randomize the ticked sliders (right-click to choose)' : 'Randomize values (right-click to choose which)'}
+            onClick={() => randomizeNodeParams(node.id)}
+            onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
+        )}
       </div>
+      {randomizeMenu && (
+        <RandomizeMenu
+          x={randomizeMenu.x}
+          y={randomizeMenu.y}
+          params={randomizableParams(node, def)}
+          excluded={randomizeExcluded(node)}
+          onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
+                amount={randomizeAmount(node)}
+                onAmountChange={a => updateNodeParams(node.id, { __randAmount: a >= 1 ? undefined : a })}
+          onRandomize={() => randomizeNodeParams(node.id)}
+          onClose={() => setRandomizeMenu(null)}
+        />
+      )}
     </div>
   );
 });

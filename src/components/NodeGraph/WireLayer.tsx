@@ -27,6 +27,8 @@ interface Props {
   /** Mobile two-tap connection: a short stub from the source socket. */
   pendingMobileConnection: { fromPos: Pt } | null;
   pendingMobileType: string | null;
+  /** Smart connect: the wire the hovered suggestion would make */
+  ghostWire?: { from: Pt; to: Pt; type: string } | null;
   onEdgeEnter: (edge: EdgeInfo, midWorld: Pt) => void;
   onEdgeLeave: () => void;
 }
@@ -49,7 +51,7 @@ const edgeKeyOf = (fromNodeId: string, fromOutputKey: string, toNodeId: string, 
  */
 export const WireLayer = React.memo(function WireLayer({
   displayNodes, activeSubgraph, groupOutputTerminalPos, groupInputTerminalPos, spotlightEdges,
-  dragConnection, draggingType, pendingMobileConnection, pendingMobileType, onEdgeEnter, onEdgeLeave,
+  dragConnection, draggingType, pendingMobileConnection, pendingMobileType, onEdgeEnter, onEdgeLeave, ghostWire = null,
 }: Props) {
   const [, bump] = useState(0);
   useEffect(() => subscribeLayout(() => bump(t => t + 1)), []);
@@ -164,6 +166,11 @@ export const WireLayer = React.memo(function WireLayer({
       {wires}
       {dragConnection && (
         <ConnectionLine from={dragConnection.fromPos} to={dragConnection.mousePos} dataType={draggingType ?? undefined} />
+      )}
+      {ghostWire && (
+        <g style={{ opacity: 0.55 }}>
+          <ConnectionLine from={ghostWire.from} to={ghostWire.to} dataType={ghostWire.type} />
+        </g>
       )}
       {/* Pending mobile connection — static stub to a ghost endpoint near the source */}
       {pendingMobileConnection && !dragConnection && (
