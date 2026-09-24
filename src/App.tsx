@@ -3,10 +3,11 @@ import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './co
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { MobileGraphBrowser, MobileNodeGraphOverlay } from './components/NodeGraph/MobileGraphBrowser';
-import { CodePanel, tokenizeLine } from './components/CodePanel';
+import { CodeBarRow, CodePanel, tokenizeLine } from './components/CodePanel';
 import { DesktopTopNav } from './components/shell/DesktopTopNav';
 import { IconButton } from './components/ui/Button';
-import { useTokens } from './theme/themeStore';
+import { ThemeOverrideContext, useTokens } from './theme/themeStore';
+import { PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -1157,7 +1158,8 @@ function App() {
             </button>
 
             <NodeGraph />
-            {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
+            {/* Tablet keeps the dark look until the tablet/mobile phase. */}
+            {showCode && <ThemeOverrideContext.Provider value="dark"><CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} /></ThemeOverrideContext.Provider>}
             {/* Time controls: floating dock on the node-graph side of the
                 divider, vertically centered — never overlapping the render
                 canvas on the other side of it. */}
@@ -1258,28 +1260,21 @@ function App() {
         {/* Center content */}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'studio' && (
-            <>
-              {/* Code toggle */}
-              <button
-                onClick={() => setShowCode(v => !v)}
-                style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode), fontFamily: 'monospace' }}
-                onMouseEnter={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = ctp.surface1; }}
-                onMouseLeave={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = ctp.surface0; }}
-              >
-                {'{ } Code'}
-              </button>
-
-              <NodeGraph redesignToolbar />
-              {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
-              {/* Time controls: floating dock on the node-graph side of the
-                  divider, vertically centered — never overlapping the
-                  render canvas on the other side of it. */}
-              {!previewFloated && (
-                <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
-                  <TimeControlsStrip direction="column" />
-                </div>
-              )}
-            </>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                <NodeGraph redesignToolbar />
+              </div>
+              {/* Generated code docks under the canvas: a bar when closed, a resizable panel when open. */}
+              {showCode
+                ? <CodePanel docked code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />
+                : (
+                  <div style={{ borderTop: `1px solid ${tk.border.default}` }}>
+                    <CodeBarRow slug={selectedNodeId ? (nodeSlugMap.get(selectedNodeId) ?? null) : null} onClick={() => setShowCode(true)}>
+                      <IconButton icon="chevU" label="Show generated code" size="sm" onClick={e => { e.stopPropagation(); setShowCode(true); }} />
+                    </CodeBarRow>
+                  </div>
+                )}
+            </div>
           )}
           {page === 'glsl' && <GLSLPage />}
         </div>
@@ -1289,151 +1284,58 @@ function App() {
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
-            style={{ width: '5px', flexShrink: 0, background: isDragging ? ctp.surface1 : ctp.surface0, cursor: 'col-resize', transition: 'background 0.15s' }}
-            onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = ctp.surface1; }}
-            onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = ctp.surface0; }}
-          />
+            style={{ width: 5, flexShrink: 0, marginLeft: -2, marginRight: -2, zIndex: 5, position: 'relative', cursor: 'col-resize', display: 'flex', justifyContent: 'center' }}
+          >
+            <span style={{ width: 1, height: '100%', background: isDragging ? tk.accent.base : tk.border.default }} />
+          </div>
         )}
 
-        {/* Right: Shader Preview — hidden when floated */}
+        {/* Right: Shader Preview — hidden when floated. A render surface, so it's dark in both themes. */}
         {!previewFloated && (
-          <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
-              {showHistogram && histData && <HistogramOverlay data={histData} />}
-              {/* Overlay controls: histogram toggle + float */}
-              <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: '4px' }}>
-                <button
-                  onClick={() => setShowHistogram(v => !v)}
-                  title="Toggle brightness histogram"
-                  style={{ background: showHistogram ? `${ctp.mauve}22` : `${ctp.base}99`, border: `1px solid ${showHistogram ? ctp.mauve : ctp.surface1}`, color: showHistogram ? ctp.mauve : ctp.surface2, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.mauve; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? ctp.mauve : ctp.surface2; }}
-                >∿</button>
-                <button
-                  onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }}
-                  title="Float preview"
-                  style={{ background: `${ctp.base}99`, border: `1px solid ${ctp.surface1}`, color: ctp.surface2, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
-                >⊞</button>
+          <ThemeOverrideContext.Provider value="dark">
+            <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
+              <PreviewHeader>
+                <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
+                <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
+              </PreviewHeader>
+              <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+                <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
+                {showHistogram && histData && <HistogramOverlay data={histData} />}
               </div>
+              <PreviewFooter pixelSample={pixelSample} probe={probeDisplay} idleHint={selectedNodeId ? 'computing…' : 'Hover for colour · select a node to probe'} />
             </div>
-            {/* Status bar */}
-            <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '28px', flexShrink: 0 }}>
-              {pixelSample ? (
-                <div title="Pixel color under cursor (0.0–1.0)" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
-                  <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                  <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                  <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
-                </div>
-              ) : probeDisplay ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                  {probeDisplay.map(({ label, col, formatted }) => (
-                    <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-                      <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                      <span style={{ color: ctp.text }}>{formatted}</span>
-                    </span>
-                  ))}
-                </div>
-              ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover for color · click node to probe'}</span>}
-              <div style={{ flex: 1 }} />
-              {errorBadge}
-            </div>
-            {errorPopup}
-          </div>
+          </ThemeOverrideContext.Provider>
         )}
       </div>
 
       {/* Floating preview window */}
       {previewFloated && (
-        <div
-          ref={floatContainerRef}
-          style={{
-            position: 'fixed',
-            left: floatPos.x,
-            top: floatPos.y,
-            width: floatSize.w,
-            height: floatSize.h,
-            zIndex: 500,
-            display: 'flex',
-            flexDirection: 'column',
-            background: ctp.mantle,
-            border: `1px solid ${ctp.surface1}`,
-            borderRadius: '8px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-            overflow: 'hidden',
-            resize: 'both',
-            minWidth: 240,
-            minHeight: 180,
-          }}
-        >
-          {/* Drag handle / title bar */}
+        <ThemeOverrideContext.Provider value="dark">
           <div
-            onMouseDown={handleFloatHeaderMouseDown}
+            ref={floatContainerRef}
             style={{
-              background: ctp.base,
-              borderBottom: `1px solid ${ctp.surface0}`,
-              padding: '4px 8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              cursor: 'grab',
-              flexShrink: 0,
-              userSelect: 'none',
+              position: 'fixed', left: floatPos.x, top: floatPos.y, width: floatSize.w, height: floatSize.h, zIndex: 500,
+              display: 'flex', flexDirection: 'column', background: '#0d0d12', borderRadius: 12, overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)',
+              resize: 'both', minWidth: 240, minHeight: 180,
             }}
           >
-            <span style={{ fontSize: '10px', color: ctp.surface2, letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
-            <span onMouseDown={e => e.stopPropagation()}><TimeControlsStrip /></span>
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => setShowHistogram(v => !v)}
-              title="Toggle brightness histogram"
-              style={{ background: 'none', border: 'none', color: showHistogram ? ctp.mauve : ctp.surface2, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.mauve; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? ctp.mauve : ctp.surface2; }}
-            >∿</button>
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => setPreviewFloated(false)}
-              title="Dock preview"
-              style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
-            >⊟</button>
+            {/* Drag handle / title bar */}
+            <div onMouseDown={handleFloatHeaderMouseDown} style={{ cursor: 'grab', userSelect: 'none' }}>
+              <PreviewHeader>
+                <span onMouseDown={e => e.stopPropagation()} style={{ display: 'flex', gap: 2 }}>
+                  <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
+                  <IconButton icon="popout" label="Dock the preview" size="sm" active onClick={() => setPreviewFloated(false)} />
+                </span>
+              </PreviewHeader>
+            </div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
+              {showHistogram && histData && <HistogramOverlay data={histData} />}
+            </div>
+            <PreviewFooter pixelSample={pixelSample} probe={probeDisplay} idleHint="Hover to probe" />
           </div>
-
-          {/* Canvas */}
-          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-            <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
-            {showHistogram && histData && <HistogramOverlay data={histData} />}
-          </div>
-
-          {/* Status bar */}
-          <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '24px', flexShrink: 0 }}>
-            {pixelSample ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
-                <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
-              </div>
-            ) : probeDisplay ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                {probeDisplay.map(({ label, col, formatted }) => (
-                  <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-                    <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                    <span style={{ color: ctp.text }}>{formatted}</span>
-                  </span>
-                ))}
-              </div>
-            ) : <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : 'hover to probe'}</span>}
-            <div style={{ flex: 1 }} />
-            {errorBadge}
-          </div>
-          {errorPopup}
-        </div>
+        </ThemeOverrideContext.Provider>
       )}
 
       {showExport && (
