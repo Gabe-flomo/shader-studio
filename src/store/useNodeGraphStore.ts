@@ -281,6 +281,8 @@ interface NodeGraphState {
    */
   selectedNodeIds: string[];
   selectNode: (id: string, addToSelection?: boolean) => void;
+  /** Replace the selection with exactly these nodes (e.g. "select all Circle SDFs" from graph stats). */
+  selectNodes: (ids: string[]) => void;
   deselectAll: () => void;
 
   /** Maps nodeId → { outputKey → glslVarName }, updated on every compile */
@@ -3968,6 +3970,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const isSoleSelection = state.selectedNodeIds.length === 1 && state.selectedNodeIds[0] === id;
     return { selectedNodeIds: isSoleSelection ? [] : [id] };
   }),
+  selectNodes: (ids) => set({ selectedNodeIds: [...ids] }),
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────

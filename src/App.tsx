@@ -4,6 +4,7 @@ import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { MobileGraphBrowser, MobileNodeGraphOverlay } from './components/NodeGraph/MobileGraphBrowser';
 import { CodePanel, tokenizeLine } from './components/CodePanel';
+import { DesktopTopNav } from './components/shell/DesktopTopNav';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -1212,7 +1213,7 @@ function App() {
 
   return (
     <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
-      <TopNav page={page} onPageChange={setPage} />
+      <DesktopTopNav page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
       {page === 'shortcuts' && <ShortcutsPage />}
       {page === 'fn' && (
@@ -1265,9 +1266,6 @@ function App() {
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'studio' && (
             <>
-              {/* Toolbar — collapses to icon-only on small screens */}
-              {graphToolbarEl}
-
               {/* Code toggle */}
               <button
                 onClick={() => setShowCode(v => !v)}
@@ -1278,7 +1276,7 @@ function App() {
                 {'{ } Code'}
               </button>
 
-              <NodeGraph />
+              <NodeGraph redesignToolbar />
               {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
               {/* Time controls: floating dock on the node-graph side of the
                   divider, vertically centered — never overlapping the

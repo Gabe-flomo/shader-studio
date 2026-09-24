@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { Toaster } from './components/ui/Toaster'
 
 const root = createRoot(document.getElementById('root')!)
 
@@ -9,5 +10,5 @@ const root = createRoot(document.getElementById('root')!)
 if (import.meta.env.DEV && location.hash === '#ui') {
   import('./components/ui/UiGallery').then(({ UiGallery }) => root.render(<UiGallery />))
 } else {
-  root.render(<App />)
+  root.render(<><App /><Toaster /></>)
 }

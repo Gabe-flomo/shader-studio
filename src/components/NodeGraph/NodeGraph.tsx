@@ -5,6 +5,7 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { ConnectionLine } from './ConnectionLine';
 import { NodeSearchPalette } from './NodeSearchPalette';
+import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
 import { ctp } from '../../theme/palette';
@@ -40,13 +41,24 @@ function getSocketPos(
 const ZOOM_MIN = 0.15;
 const ZOOM_MAX = 2.5;
 
-export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
+function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
+  if (typeof gn.params?.label === 'string') return gn.params.label;
+  return gn.type === 'sceneGroup' ? 'Scene Group' : gn.type === 'spaceWarpGroup' ? 'Space Warp Group'
+    : gn.type === 'marchLoopGroup' ? 'March Loop Group' : gn.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
+}
+
+export function NodeGraph({ transparent = false, redesignToolbar = false }: {
+  transparent?: boolean;
+  /** Desktop redesign: the top-centre CanvasToolbar (node count, zoom, fit, layout, minimap, clear) replaces the legacy corner toolbar. */
+  redesignToolbar?: boolean;
+}) {
   const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
   const compactToolbar = canvasWidth < 700;
   const nodes                 = useNodeGraphStore(s => s.nodes);
   const compilationErrors     = useNodeGraphStore(s => s.compilationErrors);
   const connectNodes          = useNodeGraphStore(s => s.connectNodes);
   const autoLayout            = useNodeGraphStore(s => s.autoLayout);
+  const loadExampleGraph      = useNodeGraphStore(s => s.loadExampleGraph);
   const setPreviewNodeId      = useNodeGraphStore(s => s.setPreviewNodeId);
   const previewNodeId         = useNodeGraphStore(s => s.previewNodeId);
   const nodeHighlightFilter   = useNodeGraphStore(s => s.nodeHighlightFilter);
@@ -279,6 +291,7 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
     });
   }, []);
 
+
   // ── Pan / zoom state ────────────────────────────────────────────────────────
   const [zoom, setZoom] = useState(1);
   const [pan,  setPan]  = useState({ x: 0, y: 0 });
@@ -287,6 +300,17 @@ export function NodeGraph({ transparent = false }: { transparent?: boolean }) {
   const panRef  = useRef(pan);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { panRef.current  = pan;  }, [pan]);
+
+  // Toolbar zoom buttons zoom around the middle of the visible canvas (the wheel zooms around the cursor).
+  const zoomAroundCentre = useCallback((target: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const oldZoom = zoomRef.current;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, target));
+    if (!rect) { setZoom(newZoom); return; }
+    const cx = rect.width / 2, cy = rect.height / 2, p = panRef.current;
+    setZoom(newZoom);
+    setPan({ x: cx - (cx - p.x) * (newZoom / oldZoom), y: cy - (cy - p.y) * (newZoom / oldZoom) });
+  }, []);
 
   // ── Pan mode tracking ───────────────────────────────────────────────────────
   // Pan is triggered by: middle-mouse drag, Space+drag, or Option+drag (Ableton-style)
@@ -909,8 +933,24 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
+      {redesignToolbar && (
+        <CanvasToolbar
+          nodes={displayNodes}
+          topLevel={activeGroupPath.length === 0}
+          groupName={activeGroupNode ? groupLabel(activeGroupNode) : undefined}
+          zoom={zoom}
+          onZoom={zoomAroundCentre}
+          onResetZoom={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+          onFit={handleFitView}
+          onAutoLayout={autoLayout}
+          showMinimap={showMinimap}
+          onToggleMinimap={toggleMinimap}
+          onClear={() => loadExampleGraph('blank')}
+        />
+      )}
+
       {/* Toolbar — top-right, always in screen space */}
-      <div
+      {!redesignToolbar && <div
         style={{
           position: 'absolute',
           top: '10px',
@@ -980,7 +1020,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             [M]
           </button>
         )}
-      </div>
+      </div>}
 
       {/* Breadcrumb when inside a group */}
       {activeGroupPath.length > 0 && (
