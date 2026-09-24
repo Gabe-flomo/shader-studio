@@ -751,6 +751,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       if (timePlayingRef.current) virtualTime += dt;
       const elapsed = virtualTime;
       material.uniforms.u_time.value = elapsed;
+      // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
+      // cheap, and throttling it made the readout visibly choppy once frames were throttled.
+      if (hasTimeTickListeners()) emitTimeTick(elapsed);
 
       // ── GPU particle tick: just keep u_time in sync ────────────────────────
       for (const [, points] of gpuParticlesRef.current) {
@@ -852,7 +855,6 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
           if (hasTimeNodeRef.current) {
             setCurrentTime(material.uniforms.u_time.value);
           }
-          if (hasTimeTickListeners()) emitTimeTick(material.uniforms.u_time.value);
           const mp = mousePosRef.current;
           if (mp === null) {
             // Mouse not over canvas — hide the overlay
@@ -1259,7 +1261,6 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         // anything following it) current without drawing.
         if (playing && ++frameCount % SAMPLE_EVERY === 0) {
           if (hasTimeNodeRef.current) setCurrentTime(material.uniforms.u_time.value);
-          if (hasTimeTickListeners()) emitTimeTick(material.uniforms.u_time.value);
         }
       }
 
