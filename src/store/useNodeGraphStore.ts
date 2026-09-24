@@ -147,7 +147,7 @@ const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStorageP
  * 'customfn-changed' CustomEvent so NodePalette refreshes.
  */
 export function saveCustomFnPreset(
-  data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string },
+  data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string; comment?: string },
 ): Promise<FileResult> {
   const preset: CustomFnPreset = {
     id: `cfp_${Date.now()}`,
@@ -156,6 +156,7 @@ export function saveCustomFnPreset(
     outputType: data.outputType ?? 'float',
     body: data.body ?? '0.0',
     glslFunctions: data.glslFunctions ?? '',
+    comment: data.comment?.trim() || undefined,
     savedAt: Date.now(),
   };
   return customFnPresetManager.save(preset);
@@ -2428,7 +2429,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const preset: GroupPreset = {
       id: `gp_${Date.now()}`,
       label: label ?? (typeof groupNode.params.label === 'string' ? groupNode.params.label : 'Group'),
-      description: description || undefined,
+      // The group's comment stands in when the save form's description is left empty
+      description: description || (typeof groupNode.params.__comment === 'string' && groupNode.params.__comment.trim()) || undefined,
       subgraph,
       savedAt: Date.now(),
     };
@@ -2512,7 +2514,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       position: pos,
       inputs: groupInputSockets,
       outputs: groupOutputSockets,
-      params: { label: preset.label, subgraph: newSubgraph },
+      params: { label: preset.label, subgraph: newSubgraph, ...(preset.description ? { __comment: preset.description } : {}) },
       ...(sealed ? { sealed: true } : {}),
     };
 
@@ -4221,6 +4223,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       outputType: (node.params.outputType as CustomFnPreset['outputType']) ?? 'float',
       body: (node.params.body as string) ?? '0.0',
       glslFunctions: (node.params.glslFunctions as string) ?? '',
+      comment: typeof node.params.__comment === 'string' && node.params.__comment.trim() ? node.params.__comment.trim() : undefined,
       savedAt: Date.now(),
     };
     // Always save to localStorage (belt-and-suspenders), and to disk if configured
