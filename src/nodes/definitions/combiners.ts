@@ -71,24 +71,6 @@ export const MaxNode2: NodeDefinition = {
   },
 };
 
-export const SubtractNode2: NodeDefinition = {
-  type: 'sdfSubtract',
-  label: 'Subtract (Cut)',
-  category: 'Combiners',
-  description: 'SDF subtraction — cuts shape B out of shape A. Result is max(A, -B).',
-  inputs: {
-    a: { type: 'float', label: 'Shape' },
-    b: { type: 'float', label: 'Cutter' },
-  },
-  outputs: { result: { type: 'float', label: 'Result' } },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const outVar = `${node.id}_result`;
-    return {
-      code: `    float ${outVar} = max(${inputVars.a || '0.0'}, -(${inputVars.b || '0.0'}));\n`,
-      outputVars: { result: outVar },
-    };
-  },
-};
 
 export const SmoothMaxNode: NodeDefinition = {
   type: 'smoothMax',

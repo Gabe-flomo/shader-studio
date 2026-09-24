@@ -2,17 +2,29 @@ import { useEffect, useRef, useCallback } from 'react';
 
 // Use setInterval as fallback when rAF is throttled (e.g., headless/hidden tab)
 function scheduleLoop(cb: () => void): () => void {
+  // Plain rAF. A hidden tab simply doesn't get frames, which is the point —
+  // the old setInterval fallback kept this loop running at 60 Hz in the
+  // background forever once it had kicked in.
   let rafId = requestAnimationFrame(function tick() { cb(); rafId = requestAnimationFrame(tick); });
-  // If first rAF doesn't fire within 100ms, fall back to setInterval
-  let intervalId: ReturnType<typeof setInterval> | null = null;
-  const fallbackTimer = setTimeout(() => {
-    cancelAnimationFrame(rafId);
-    intervalId = setInterval(cb, 16);
-  }, 100);
-  return () => {
-    clearTimeout(fallbackTimer);
-    cancelAnimationFrame(rafId);
-    if (intervalId) clearInterval(intervalId);
+  return () => cancelAnimationFrame(rafId);
+}
+
+/** Uniform / attribute locations, looked up once per program instead of six times per frame. */
+interface ProgramLocations {
+  uTime: WebGLUniformLocation | null; uRes: WebGLUniformLocation | null;
+  uXMin: WebGLUniformLocation | null; uXMax: WebGLUniformLocation | null;
+  uYMin: WebGLUniformLocation | null; uYMax: WebGLUniformLocation | null;
+  pos: number;
+}
+function lookupLocations(gl: WebGLRenderingContext, prog: WebGLProgram): ProgramLocations {
+  return {
+    uTime: gl.getUniformLocation(prog, 'u_time'),
+    uRes:  gl.getUniformLocation(prog, 'u_resolution'),
+    uXMin: gl.getUniformLocation(prog, 'u_xMin'),
+    uXMax: gl.getUniformLocation(prog, 'u_xMax'),
+    uYMin: gl.getUniformLocation(prog, 'u_yMin'),
+    uYMax: gl.getUniformLocation(prog, 'u_yMax'),
+    pos:   gl.getAttribLocation(prog, 'a_position'),
   };
 }
 
@@ -67,6 +79,7 @@ export function PreviewCanvas({ shaderSource, xRange, yRange, onError }: Props) 
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const glRef      = useRef<WebGLRenderingContext | null>(null);
   const progRef    = useRef<WebGLProgram | null>(null);
+  const locRef     = useRef<ProgramLocations | null>(null);
   const startRef   = useRef<number>(Date.now());
   const rangeRef   = useRef({ xRange, yRange });
   // Store onError in a ref so it never causes effect re-runs
@@ -110,7 +123,10 @@ export function PreviewCanvas({ shaderSource, xRange, yRange, onError }: Props) 
     const loop = () => {
       const gl = glRef.current;
       const prog = progRef.current;
-      if (!gl || !prog || !canvas) return;
+      const loc = locRef.current;
+      if (!gl || !prog || !loc || !canvas) return;
+      // Nothing to show while the tab is hidden; the clock keeps running.
+      if (document.hidden) return;
 
       const w = canvas.clientWidth * devicePixelRatio;
       const h = canvas.clientHeight * devicePixelRatio;
@@ -122,23 +138,16 @@ export function PreviewCanvas({ shaderSource, xRange, yRange, onError }: Props) 
       gl.useProgram(prog);
 
       const t = (Date.now() - startRef.current) / 1000;
-      const uTime = gl.getUniformLocation(prog, 'u_time');
-      const uRes  = gl.getUniformLocation(prog, 'u_resolution');
-      const uXMin = gl.getUniformLocation(prog, 'u_xMin');
-      const uXMax = gl.getUniformLocation(prog, 'u_xMax');
-      const uYMin = gl.getUniformLocation(prog, 'u_yMin');
-      const uYMax = gl.getUniformLocation(prog, 'u_yMax');
-      gl.uniform1f(uTime, t);
-      gl.uniform2f(uRes, w, h);
+      gl.uniform1f(loc.uTime, t);
+      gl.uniform2f(loc.uRes, w, h);
       const { xRange, yRange } = rangeRef.current;
-      gl.uniform1f(uXMin, xRange[0]);
-      gl.uniform1f(uXMax, xRange[1]);
-      gl.uniform1f(uYMin, yRange[0]);
-      gl.uniform1f(uYMax, yRange[1]);
+      gl.uniform1f(loc.uXMin, xRange[0]);
+      gl.uniform1f(loc.uXMax, xRange[1]);
+      gl.uniform1f(loc.uYMin, yRange[0]);
+      gl.uniform1f(loc.uYMax, yRange[1]);
 
-      const pos = gl.getAttribLocation(prog, 'a_position');
-      gl.enableVertexAttribArray(pos);
-      gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(loc.pos);
+      gl.vertexAttribPointer(loc.pos, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
 
@@ -157,6 +166,7 @@ export function PreviewCanvas({ shaderSource, xRange, yRange, onError }: Props) 
     const mainProg = buildProgram(gl, src);
     const prog = mainProg ?? buildProgram(gl, FALLBACK_FRAG, false) ?? null;
     progRef.current = prog;
+    locRef.current = prog ? lookupLocations(gl, prog) : null;
     // If the main shader failed, clear immediately so we don't show a stale frame.
     if (!mainProg && prog) {
       gl.useProgram(prog);

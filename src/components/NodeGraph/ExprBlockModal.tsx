@@ -80,7 +80,8 @@ interface InsertTarget {
 }
 
 export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
-  const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
+  const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const tk = useTokens();
 
   // Read current params

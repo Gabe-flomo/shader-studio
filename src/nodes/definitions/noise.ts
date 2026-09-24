@@ -477,9 +477,8 @@ export const CirclePackNode: NodeDefinition = {
       `        float ${id}_hr  = noiseHash1(vec2(${id}_cf * 0.57721, ${id}_cf * 0.41421));\n`,
       `        float ${id}_r   = ${minR} + ${id}_hr * ${id}_radRange;\n`,
       // Animate: pulse radius with time (when animate > 0)
-      ...(parseFloat(animate) > 0.0 ? [
+      // `animate` is a live uniform; the pulse term is a no-op at 0.
         `        ${id}_r += sin(${timeVar} * ${animate} + ${id}_cf * 0.91) * ${id}_r * 0.15;\n`,
-      ] : []),
       // Collision check: skip this circle if it overlaps any earlier circle
       // (approximate Hobbs brute-force — checks first min(ci, MAX_CHECK) circles)
       `        bool  ${id}_ok  = true;\n`,

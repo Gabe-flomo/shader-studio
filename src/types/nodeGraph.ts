@@ -87,6 +87,12 @@ export interface ParamDef {
   options?: { value: string; label: string }[];
   // Conditionally show this param only when another param matches a value
   showWhen?: { param: string; value: string | string[] };
+  /**
+   * The value is baked into the GLSL as a constant (loop bounds, array sizes)
+   * rather than becoming a live uniform; changing it recompiles. Prefer this
+   * over relying on `step === 1` as the signal.
+   */
+  compileTime?: boolean;
 }
 
 // Node definition (blueprint)

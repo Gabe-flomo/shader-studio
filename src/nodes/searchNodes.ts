@@ -3,7 +3,7 @@ import type { NodeDefinition } from '../types/nodeGraph';
 /**
  * Search score for a node definition (0 = no match). Substring/prefix only, no fuzzy scatter.
  * Old names (`aliases`) rank just under the current label, so "Make Light" still finds
- * Glow from Distance after a rename.
+ * SDF Glow after a rename.
  */
 export function scoreNodeDef(def: NodeDefinition, query: string): number {
   const q = query.trim().toLowerCase();

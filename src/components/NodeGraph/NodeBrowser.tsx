@@ -460,7 +460,7 @@ export function NodeBrowser({
   if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
     const results = Object.values(NODE_REGISTRY)
-      .filter(def => !HIDDEN_NODES.has(def.type))
+      .filter(def => !HIDDEN_NODES.has(def.type) && !def.deprecated)
       .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
