@@ -1084,7 +1084,7 @@ function App() {
     return (
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
         <TopNav page={page} onPageChange={setPage} />
-        <ShortcutsPage />
+        <ThemeOverrideContext.Provider value="dark"><ShortcutsPage /></ThemeOverrideContext.Provider>
       </div>
     );
   }
@@ -1107,7 +1107,7 @@ function App() {
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
         <TopNav page={page} onPageChange={setPage} />
 
-        {page === 'shortcuts' && <ShortcutsPage />}
+        {page === 'shortcuts' && <ThemeOverrideContext.Provider value="dark"><ShortcutsPage /></ThemeOverrideContext.Provider>}
         {page === 'glsl' && <GLSLPage />}
 
         <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
