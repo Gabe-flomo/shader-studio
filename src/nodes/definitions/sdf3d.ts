@@ -1686,7 +1686,7 @@ export const MirrorFold3DNode: NodeDefinition = {
     foldZ:   { label: 'Fold Z',   type: 'bool' },
     offsetX: { label: 'Offset X', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
     offsetY: { label: 'Offset Y', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
-    offsetZ: { label: 'Offset Z', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+    offsetZ: { label: 'Offset Z', type: 'float', min: -2.0, max: 2.0, step: 0.01, showWhen: { param: 'foldZ', value: 'true' } },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id  = node.id;

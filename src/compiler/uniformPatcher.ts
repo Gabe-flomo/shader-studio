@@ -1,4 +1,4 @@
-import type { GraphNode, NodeDefinition, DataType } from '../types/nodeGraph';
+import type { GraphNode, NodeDefinition, DataType, ParamDef } from '../types/nodeGraph';
 import { getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed } from './keyframes';
 
 /** Node types whose params must remain as baked compile-time constants.
@@ -22,7 +22,22 @@ export const SKIP_UNIFORM_TYPES = new Set([
   // between field-flow mode (backward trace) and spawn-point mode (different GLSL branches).
   // Slider changes trigger a full recompile; use input sockets for real-time animation.
   'particleEmitter',
+  // scope: min/max are read by ShaderCanvas (JS) to scale the waveform probe; the
+  // node emits no GLSL of its own, so a uniform would be declared and never read.
+  'scope',
 ]);
+
+/**
+ * Is a param currently visible, per its `showWhen` gate? A hidden param's
+ * value isn't used by the emitted GLSL either (the gate mirrors the code
+ * branch), so it shouldn't become a uniform.
+ */
+export function isParamVisible(paramDef: ParamDef, params: Record<string, unknown>): boolean {
+  const sw = paramDef.showWhen;
+  if (!sw) return true;
+  const v = String(params[sw.param]);
+  return Array.isArray(sw.value) ? sw.value.includes(v) : sw.value === v;
+}
 
 /** Default GLSL zero literal for a given type. */
 export function defaultGlslVal(type: DataType | string): string {
@@ -56,18 +71,27 @@ export function defaultGlslVal(type: DataType | string): string {
  * @param registerFn - sink for keyframe curve-evaluator GLSL functions
  *   (`this.functions.add`, same convention resolveInputVars uses). Omit to
  *   uniform-patch only, e.g. call sites that don't need keyframe support.
+ * @param bindingId - the node's ORIGINAL graph id (before slugging / group
+ *   prefixing). `node.id` at this point is usually the slug the uniform name
+ *   is derived from, which the store never sees; the binding map is keyed by
+ *   the id the store does know so the slider fast path can find its uniform
+ *   without re-deriving the compiler's naming. Defaults to `node.id`.
  *
- * Returns `{ patchedNode, uniforms }` where `uniforms` maps name → current value.
+ * Returns `{ patchedNode, uniforms, bindings }` where `uniforms` maps uniform
+ * name → current value and `bindings` maps `${bindingId}::${paramKey}` →
+ * uniform name for every param that became a uniform.
  */
 export function patchNodeParamsForUniforms(
   node: GraphNode,
   def: NodeDefinition,
   registerFn?: (glsl: string) => void,
-): { patchedNode: GraphNode; uniforms: Record<string, number> } {
+  bindingId: string = node.id,
+): { patchedNode: GraphNode; uniforms: Record<string, number>; bindings: Record<string, string> } {
   const uniforms: Record<string, number> = {};
+  const bindings: Record<string, string> = {};
 
   if (SKIP_UNIFORM_TYPES.has(node.type) || !def.paramDefs) {
-    return { patchedNode: node, uniforms };
+    return { patchedNode: node, uniforms, bindings };
   }
 
   // Sanitize node IDs: underscores in IDs create double-underscore sequences
@@ -76,7 +100,9 @@ export function patchNodeParamsForUniforms(
   const patchedParams = { ...node.params };
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
     if (paramDef.type !== 'float') continue;  // only scalar floats
+    if (paramDef.compileTime) continue;        // baked by declaration (loop bounds…)
     if (paramDef.step === 1) continue;         // integer param — keep baked
+    if (!isParamVisible(paramDef, node.params)) continue; // hidden by showWhen → not read by the GLSL
     if (!(key in node.inputs) && registerFn && !isKeyframeBypassed(node, key)) {
       const kfCfg = getKeyframeConfig(node, key);
       if (kfCfg) {
@@ -93,7 +119,18 @@ export function patchNodeParamsForUniforms(
     const uniformName = `u_p_${safeId}_${key}`;
     patchedParams[key] = uniformName;
     uniforms[uniformName] = val;
+    bindings[paramBindingKey(bindingId, key)] = uniformName;
   }
 
-  return { patchedNode: { ...node, params: patchedParams }, uniforms };
+  return { patchedNode: { ...node, params: patchedParams }, uniforms, bindings };
+}
+
+/**
+ * Key of the param → uniform binding map: `${nodeId}::${paramKey}`. For a
+ * node inside a group, `nodeId` is the inner node's own id, which is also how
+ * the group node stores its overrides (`params["innerId::paramKey"]`), so the
+ * same key works for both editing inside the group and editing the override.
+ */
+export function paramBindingKey(nodeId: string, paramKey: string): string {
+  return `${nodeId}::${paramKey}`;
 }
