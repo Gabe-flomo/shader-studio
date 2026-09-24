@@ -44,6 +44,7 @@ import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
 const PublishNodeModal    = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
+import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
@@ -145,7 +146,7 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'midiInput']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
@@ -840,6 +841,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         </div>
       </div>
     );
+  }
+
+  // ── MIDI Input node special card (own component: engine sync + activity readout) ──
+  if (node.type === 'midiInput') {
+    return <MidiInputCard node={node} isSelected={isSelected} isMultiSelected={isMultiSelected} dimmed={dimmed} onStartConnection={onStartConnection} />;
   }
 
   // ── Audio Input node special card ────────────────────────────────────────────

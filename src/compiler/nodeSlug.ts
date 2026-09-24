@@ -4,7 +4,7 @@ import type { GraphNode } from '../types/nodeGraph';
 const TYPE_ABBREV: Record<string, string> = {
   // Sources
   uv: 'uv', pixelUv: 'puv', time: 'time', mousePos: 'mouse',
-  constant: 'cst', textureInput: 'tex', audioInput: 'audio', videoInput: 'vid',
+  constant: 'cst', textureInput: 'tex', audioInput: 'audio', videoInput: 'vid', midiInput: 'midi',
   previousFrame: 'prev', loopIndex: 'idx',
   // Output
   output: 'out', vec4Output: 'out4',

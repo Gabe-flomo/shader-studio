@@ -47,6 +47,12 @@ export interface CompilationResult {
    */
   audioUniforms: Record<string, string>;
   /**
+   * Maps float uniform name (e.g. "u_midi_<slug>_note") → `${nodeId}::${channel}`.
+   * The input bus (lib/inputBus.ts) writes these every frame from JS-side
+   * sources (MIDI now; audio, mouse, keyboard mappings later).
+   */
+  liveUniforms: Record<string, string>;
+  /**
    * Maps sampler2D uniform name (e.g. "u_vid_nodeId") → nodeId.
    * ShaderCanvas uses this to bind THREE.VideoTexture objects for VideoInput nodes.
    */
