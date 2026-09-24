@@ -341,6 +341,9 @@ interface NodeGraphState {
   nodeOutputVarMap: Map<string, Record<string, string>>;
   /** Live-sampled values for the selected node: outputKey → number[] (1–4 components) */
   nodeProbeValues: Record<string, number[]> | null;
+  /** Frame stats of the isolated preview (clipped / black / flat), for the explaining caption */
+  previewStats: import('../lib/previewExplain').PreviewStats | null;
+  setPreviewStats: (stats: import('../lib/previewExplain').PreviewStats | null) => void;
   setSelectedNodeId: (id: string | null) => void;
   /** Open `groupPath` (group ids from the current level inward), select `nodeId` there and ask the canvas to centre on it. */
   revealNode: (groupPath: string[], nodeId: string) => void;
@@ -1176,6 +1179,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   selectedNodeIds: [],
   nodeOutputVarMap: new Map(),
   nodeProbeValues: null,
+  previewStats: null,
+  setPreviewStats: (stats) => set(state => {
+    const cur = state.previewStats;
+    if (cur === stats) return state;
+    if (cur && stats && cur.flat === stats.flat && Math.abs(cur.clipped - stats.clipped) < 0.02 && Math.abs(cur.black - stats.black) < 0.02 && Math.abs(cur.mean - stats.mean) < 0.03) return state;
+    return { previewStats: stats };
+  }),
   scopeProbeValues: {},
   previewNodeId: null,
   mobileKeyframeEditor: null,

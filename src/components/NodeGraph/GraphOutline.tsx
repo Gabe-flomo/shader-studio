@@ -19,6 +19,7 @@ import { categoryColor } from '../../theme/categories';
 import { IconButton, Button } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
+import { explainPreview, previewLegend } from '../../lib/previewExplain';
 
 const GROUP_TYPES = new Set(['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup']);
 const OUTPUT_TYPES = new Set(['output', 'vec4Output']);
@@ -62,6 +63,9 @@ export function GraphOutline({ nodes, top, onClose }: { nodes: readonly GraphNod
   const stepIdx = step && step.scope === scopeKey ? step.idx : null;
   const setStepIdx = (idx: number | null) => setStep(idx === null ? null : { scope: scopeKey, idx });
   const stepping = stepIdx !== null;
+  const previewStats = useNodeGraphStore(s => s.previewStats);
+  const stepNode = stepping && stepIdx !== null && stepIdx < steps.length ? steps[stepIdx] : null;
+  const stepCaption = stepNode ? (explainPreview(stepNode, getNodeDefinition(stepNode.type), previewStats) ?? previewLegend(stepNode, getNodeDefinition(stepNode.type))) : null;
   const goTo = (idx: number) => {
     const clamped = Math.max(0, Math.min(steps.length, idx));
     setStepIdx(clamped);
@@ -141,7 +145,7 @@ export function GraphOutline({ nodes, top, onClose }: { nodes: readonly GraphNod
       </div>
       {stepping && (
         <div style={{ padding: '6px 12px', fontSize: 11.5, color: tk.text.muted, borderBottom: `1px solid ${tk.border.subtle}`, lineHeight: 1.4 }}>
-          The preview shows this node on its own. Open <b>Generated code</b> to see its GLSL lines highlighted.
+          {stepCaption ?? <>The preview shows this node on its own. Open <b>Generated code</b> to see its GLSL lines highlighted.</>}
         </div>
       )}
 
