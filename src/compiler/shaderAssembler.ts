@@ -375,6 +375,11 @@ export function dedupeGlslFunctions(blocks: string[]): string[] {
 // ── Main assembler ────────────────────────────────────────────────────────────
 
 
+export interface ShaderAssemblerOptions {
+  /** Output variables for node ids that exist outside the compiled node list. */
+  seedOutputs?: Map<string, Record<string, string>>;
+}
+
 export class ShaderAssembler {
   private nodeMap: Map<string, GraphNode>;
   private functions = new Set<string>();
@@ -395,16 +400,55 @@ export class ShaderAssembler {
   private sortedNodes: GraphNode[];
   private allNodes: GraphNode[];
 
-  constructor(sortedNodes: GraphNode[], allNodes: GraphNode[]) {
+  constructor(sortedNodes: GraphNode[], allNodes: GraphNode[], opts?: ShaderAssemblerOptions) {
     this.sortedNodes = sortedNodes;
     this.allNodes = allNodes;
     this.nodeMap = new Map(sortedNodes.map(n => [n.id, n]));
+    // Pre-resolved outputs for nodes that aren't in the graph (see
+    // flattenSubgraph.ts: a phantom node whose "outputs" are the parameters
+    // of the function being built). resolveInputVars finds them like any
+    // other source; topologicalSort ignores connections to unknown ids.
+    if (opts?.seedOutputs) {
+      for (const [id, vars] of opts.seedOutputs) this.nodeOutputs.set(id, { ...vars });
+    }
     this.functions.add(GLSL_SMIN);
     this.functions.add(GLSL_SD_BOX);
     this.functions.add(GLSL_SD_SEGMENT);
     this.functions.add(GLSL_SD_ELLIPSE);
     this.functions.add(GLSL_OP_REPEAT);
     this.functions.add(GLSL_OP_REPEAT_POLAR);
+  }
+
+  /**
+   * Compile the nodes and return the pieces of the shader separately, without
+   * wrapping them in a fragment shader: the `main()`-scope body the nodes
+   * emitted, the de-duplicated helper blocks, and the uniform tables. Used to
+   * flatten a subgraph into a standalone GLSL function.
+   */
+  assembleParts(): {
+    body: string;
+    helperBlocks: string[];
+    nodeOutputVars: Map<string, Record<string, string>>;
+    paramUniforms: Record<string, number>;
+    textureUniforms: Record<string, string>;
+    audioUniforms: Record<string, string>;
+    videoUniforms: Record<string, string>;
+    isStateful: boolean;
+  } {
+    this.detectStateful();
+    for (const node of this.sortedNodes) {
+      this.compileNode(node);
+    }
+    return {
+      body: this.mainCode.join(''),
+      helperBlocks: dedupeGlslFunctions(Array.from(this.functions)),
+      nodeOutputVars: this.nodeOutputs,
+      paramUniforms: this.paramUniforms,
+      textureUniforms: this.textureUniforms,
+      audioUniforms: this.audioUniforms,
+      videoUniforms: this.videoUniforms,
+      isStateful: this.isStateful,
+    };
   }
 
   assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
@@ -437,6 +481,7 @@ export class ShaderAssembler {
         // Collect GLSL helper this.functions (deduplicated)
         if (def.glslFunction) this.functions.add(def.glslFunction);
         def.glslFunctions?.forEach(f => this.functions.add(f));
+        def?.glslFunctionsFor?.(node).forEach(f => this.functions.add(f));
         if ((node.type === 'customFn' || node.type === 'exprNode') && typeof node.params.glslFunctions === 'string') {
           const h = (node.params.glslFunctions as string).trim();
           if (h) this.functions.add(h);
@@ -452,6 +497,11 @@ export class ShaderAssembler {
         if (node.type === 'textureInput') {
           this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         }
+        // Nodes with their own image slots (published user nodes): one
+        // sampler per slot, bound from nodeTextures["<id>::<slot>"].
+        def.textureSlots?.forEach(slot => {
+          this.textureUniforms[`u_tex_${nodeSlug}_${slot}`] = `${node.id}::${slot}`;
+        });
         if (node.type === 'audioInput') {
           const rawBands = node.params._bands;
           const bands: unknown[] = Array.isArray(rawBands) ? rawBands : [200];
@@ -588,6 +638,7 @@ export class ShaderAssembler {
                   const innDef = getNodeDefinition(inn.type);
                   if (innDef?.glslFunction) this.functions.add(innDef.glslFunction);
                   innDef?.glslFunctions?.forEach(f => this.functions.add(f));
+                  innDef?.glslFunctionsFor?.(inn).forEach(f => this.functions.add(f));
                   if (inn.type === 'customFn' && typeof inn.params.glslFunctions === 'string') {
                     const h = (inn.params.glslFunctions as string).trim();
                     if (h) this.functions.add(h);
@@ -701,6 +752,7 @@ export class ShaderAssembler {
 
               if (subDef.glslFunction) this.functions.add(subDef.glslFunction);
               subDef.glslFunctions?.forEach(f => this.functions.add(f));
+              subDef.glslFunctionsFor?.(subNode).forEach(f => this.functions.add(f));
               // slugId = the slug portion of subNode.id (after iterPrefix has been stripped)
               const slugId = subNode.id.slice(iterPrefix.length);
               // originalId = the original node id (pre-slug) — needed for carryModeNaturalVars lookup
@@ -1302,6 +1354,7 @@ export class ShaderAssembler {
                 if (!gDef) continue;
                 if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                 gDef.glslFunctions?.forEach(h => this.functions.add(h));
+                gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
                 const gnOrigId = gn.id.slice(grpPrefix.length);
                 const gnInputVars: Record<string, string> = {};
                 for (const [k, inp] of Object.entries(gn.inputs)) {
@@ -1341,6 +1394,7 @@ export class ShaderAssembler {
             // Collect GLSL helper this.functions
             if (snDef.glslFunction) this.functions.add(snDef.glslFunction);
             if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => this.functions.add(h));
+            snDef.glslFunctionsFor?.(sn).forEach(f => this.functions.add(f));
 
             // Resolve input vars
             const origId = sn.id.slice(sgPrefix.length);
@@ -1771,6 +1825,7 @@ export class ShaderAssembler {
                         const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
                         if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                         gDef.glslFunctions?.forEach(h => this.functions.add(h));
+                        gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
                         const gnOrigId2 = gn.id.slice(igrpPrefix.length);
                         const gnInputVars2: Record<string, string> = {};
                         for (const [k, inp] of Object.entries(gn.inputs)) {
@@ -1799,6 +1854,7 @@ export class ShaderAssembler {
 
                     if (sgnDef.glslFunction) this.functions.add(sgnDef.glslFunction);
                     sgnDef.glslFunctions?.forEach(h => this.functions.add(h));
+                    sgnDef?.glslFunctionsFor?.(sgn).forEach(f => this.functions.add(f));
 
                     const sgnOrigId = sgn.id.slice(sgInnerPrefix.length);
                     const sgnInputVars: Record<string, string> = {};
@@ -1886,6 +1942,7 @@ export class ShaderAssembler {
                   const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
                   if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                   gDef.glslFunctions?.forEach(h => this.functions.add(h));
+                  gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
                   const gnOrigId = gn.id.slice(mlGrpPrefix.length);
                   const gnInputVars: Record<string, string> = {};
                   for (const [k, inp] of Object.entries(gn.inputs)) {
@@ -1955,6 +2012,7 @@ export class ShaderAssembler {
 
               if (snDef.glslFunction) this.functions.add(snDef.glslFunction);
               if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => this.functions.add(h));
+              snDef.glslFunctionsFor?.(sn).forEach(f => this.functions.add(f));
 
               const origId = sn.id.slice(mlPrefix.length);
               // Apply param overrides stored on the outer MLG node using "innerNodeId::paramName" keys
@@ -2515,6 +2573,7 @@ export class ShaderAssembler {
                         const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
                         if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                         gDef.glslFunctions?.forEach(h => this.functions.add(h));
+                        gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
                         const gnOrigId2 = gn.id.slice(igrpPrefix.length);
                         const gnInputVars2: Record<string, string> = {};
                         for (const [k, inp] of Object.entries(gn.inputs)) {
@@ -2543,6 +2602,7 @@ export class ShaderAssembler {
 
                     if (sgnDef.glslFunction) this.functions.add(sgnDef.glslFunction);
                     sgnDef.glslFunctions?.forEach(h => this.functions.add(h));
+                    sgnDef?.glslFunctionsFor?.(sgn).forEach(f => this.functions.add(f));
 
                     const sgnOrigId = sgn.id.slice(sgInnerPrefix.length);
                     const sgnInputVars: Record<string, string> = {};
@@ -2624,6 +2684,7 @@ export class ShaderAssembler {
                   const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
                   if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                   gDef.glslFunctions?.forEach(h => this.functions.add(h));
+                  gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
                   const gnOrigId = gn.id.slice(mlGrpPrefix.length);
                   const gnInputVars: Record<string, string> = {};
                   for (const [k, inp] of Object.entries(gn.inputs)) {
@@ -2691,6 +2752,7 @@ export class ShaderAssembler {
 
               if (snDef.glslFunction) this.functions.add(snDef.glslFunction);
               if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => this.functions.add(h));
+              snDef.glslFunctionsFor?.(sn).forEach(f => this.functions.add(f));
 
               const origId = sn.id.slice(mlPrefix.length);
               const bodyParamOverrides: Record<string, unknown> = {};
@@ -3091,6 +3153,7 @@ export class ShaderAssembler {
 
             if (snDef.glslFunction) this.functions.add(snDef.glslFunction);
             if (snDef.glslFunctions) snDef.glslFunctions.forEach(h => this.functions.add(h));
+            snDef.glslFunctionsFor?.(sn).forEach(f => this.functions.add(f));
 
             const origId = sn.id.slice(swPrefix.length);
             const snInputVars: Record<string, string> = {};

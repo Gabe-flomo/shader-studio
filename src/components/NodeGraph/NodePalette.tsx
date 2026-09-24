@@ -5,8 +5,16 @@ import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
 import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
+import type { GraphNode } from '../../types/nodeGraph';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
+import { useUserNodes } from '../../nodes/userNodes/useUserNodes';
+import { graphToSubgraph } from '../../nodes/userNodes/graphToSubgraph';
+import type { PublishSource } from '../../nodes/userNodes/publishUserNode';
+import { Toggle } from '../ui/Choice';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
+const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import type { TransformPreset } from '../../types/transformPreset';
 import type { KeyframePreset } from '../../types/keyframePreset';
 import { useTokens } from '../../theme/themeStore';
@@ -17,9 +25,10 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult } from '../shell/reportFileResult';
+import { toast } from '../ui/toastStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions' | 'keyframes';
+type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
 
 interface ContentPaneState {
   id: string;
@@ -33,13 +42,14 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
   { id: 'favorites',   label: 'Favorites',       icon: 'star',    color: tk => tk.status.warning },
   { id: 'graphs',      label: 'Saved Graphs',    icon: 'graphs',  color: tk => tk.status.success },
   { id: 'presets',     label: 'Presets',         icon: 'presets', color: tk => tk.accent.base },
+  { id: 'builder',     label: 'Node Builder',    icon: 'spark',   color: tk => tk.kind.fn },
   { id: 'functions',   label: 'Functions',       icon: 'fn',      color: tk => tk.kind.fn },
   { id: 'expressions', label: 'Expression Blocks', icon: 'expr',    color: tk => tk.kind.expr },
   { id: 'keyframes',   label: 'Saved Keyframes', icon: 'kf',      color: tk => tk.status.warning },
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport }: {
   label: string; icon: IconName; color: string;
   onClick: () => void;
   /** Saved items: click selects (showing `preview`), double-click places */
@@ -48,6 +58,11 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
   preview?: React.ReactNode;
   onDelete?: () => void;
   onRename?: () => void;
+  /** Open the item for editing (distinct from renaming). */
+  onEdit?: () => void;
+  editLabel?: string;
+  /** Save the item as a shareable file. */
+  onExport?: () => void;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
@@ -73,6 +88,8 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}
       >{label}</button>
+      {(hovered || selected) && onExport && <IconButton icon="export" label="Export as a file" size="sm" onClick={e => { e.stopPropagation(); onExport(); }} />}
+      {(hovered || selected) && onEdit && <IconButton icon="layoutGraph" label={editLabel} size="sm" onClick={e => { e.stopPropagation(); onEdit(); }} />}
       {(hovered || selected) && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
       {(hovered || selected) && onDelete && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
     </div>
@@ -190,6 +207,31 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const groupPresets      = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
+  const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
+  const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
+  const exportUserNodes    = useNodeGraphStore(s => s.exportUserNodes);
+  const readSavedGraphNodes = useNodeGraphStore(s => s.readSavedGraphNodes);
+  const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
+  const [publishExisting, setPublishExisting] = useState<string | undefined>(undefined);
+  const [exposeUv, setExposeUv] = useState(true);
+  const [exposeTime, setExposeTime] = useState(false);
+  const openPublishFor = (nodes: GraphNode[] | null, label: string) => {
+    if (!nodes) { toast.error(`Couldn’t read “${label}”`); return; }
+    const r = graphToSubgraph(nodes, { exposeUv, exposeTime });
+    if (!r.ok) { toast.error(`Can’t publish “${label}”`, { message: r.error }); return; }
+    setPublishSource({ kind: 'subgraph', subgraph: r.subgraph, label });
+  };
+  const importUserNodesFromFile = useNodeGraphStore(s => s.importUserNodesFromFile);
+  const importUserNodes = async () => {
+    const r = await importUserNodesFromFile();
+    if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import node types' }); return; }
+    const parts = [
+      r.imported?.length ? `${r.imported.length} new: ${r.imported.join(', ')}` : '',
+      r.replaced?.length ? `${r.replaced.length} updated: ${r.replaced.join(', ')}` : '',
+    ].filter(Boolean);
+    toast.success('Node types imported', { message: parts.join(' · ') });
+  };
+  const userNodes          = useUserNodes();
   const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
   const loadExampleGraph  = useNodeGraphStore(s => s.loadExampleGraph);
 
@@ -379,6 +421,80 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               )}
               emptyHint={!showGraphSaveInput && <EmptyHint>Save the current graph to keep it here.</EmptyHint>}
             />
+          </>
+        );
+
+      case 'builder':
+        return (
+          <>
+            <div style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.5, padding: '2px 2px 6px' }}>
+              Turn a whole graph into a single node. Whatever is wired into the graph’s Output becomes the node’s output. Every slider in the graph can stay adjustable on the new node or be frozen at its current value.
+            </div>
+            <TabSectionHeader label="Inputs on the new node" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '2px 2px 8px' }}>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <Toggle checked={exposeUv} onChange={setExposeUv} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
+                  <b style={{ color: tk.text.primary }}>UV socket.</b> The graph’s UV nodes are replaced by one input. Wire anything into it (a warp, a tiling, another node) or leave it empty to use the screen, like the graph did.
+                </span>
+              </label>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <Toggle checked={exposeTime} onChange={setExposeTime} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
+                  <b style={{ color: tk.text.primary }}>Time socket.</b> The graph’s Time nodes are replaced by one input, so the node can run on its own clock. Off: it follows the global time.
+                </span>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+              <Button size="sm" variant="primary" icon="spark"
+                disabled={graphNodes.length === 0}
+                onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
+              <Button size="sm" icon="code" title="Write a GLSL function and publish it as a node"
+                onClick={() => setPublishSource({ kind: 'code', code: '', label: 'My Node' })}>Write GLSL…</Button>
+            </div>
+            <TabSectionHeader label="From a saved graph" />
+            <FolderableList
+              scopeKey="builder:saved"
+              color={tabColor('graphs')}
+              items={savedNames.map(name => ({ id: name, label: name }))}
+              renderItem={(item) => (
+                <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')}
+                  onClick={() => openPublishFor(readSavedGraphNodes(item.id), item.label)} />
+              )}
+              emptyHint={<EmptyHint>Save a graph (Saved Graphs tab) and it can be published from here without opening it.</EmptyHint>}
+            />
+            <TabSectionHeader label="My nodes" action={
+              <span style={{ display: 'flex', gap: 2 }}>
+                <IconButton icon="import" label="Import node types from a .json file" size="sm" onClick={importUserNodes} />
+                {userNodes.length > 0 && (
+                  <IconButton icon="export" label="Export all node types as one .json file" size="sm"
+                    onClick={async () => reportFileResult(await exportUserNodes(), { failTitle: 'Couldn’t export node types' })} />
+                )}
+              </span>
+            } />
+            <FolderableList
+              scopeKey="presets:usernodes"
+              color={tabColor('presets')}
+              items={userNodes.map(d => ({ id: d.id, label: d.label }))}
+              renderItem={(item) => {
+                const d = userNodes.find(u => u.id === item.id);
+                if (!d) return null;
+                return (
+                  <ItemRow label={d.label} icon="spark" color={tk.kind.fn}
+                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode(d.id, {x,y}); onNodeAdded?.(); }}
+                    onEdit={d.source ? () => {
+                      if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
+                      const x = 200+Math.random()*120, y = 120+Math.random()*200;
+                      if (openUserNodeSource(d.id, {x,y})) onNodeAdded?.();
+                    } : undefined}
+                    editLabel={d.source?.kind === 'code' ? 'Edit the GLSL (publish again to update)' : 'Open source graph (publish again to update)'}
+                    onExport={async () => reportFileResult(await exportUserNodes([d.id]), { failTitle: `Couldn’t export “${d.label}”` })}
+                    onDelete={() => { if (window.confirm(`Delete node type “${d.label}”? Placed instances will stop compiling.`)) deleteUserNode(d.id); }} />
+                );
+              }}
+              emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes. Or import a .json someone shared.</EmptyHint>}
+            />
+            {publishSource && <PublishNodeModal source={publishSource} existingId={publishExisting} onClose={() => { setPublishSource(null); setPublishExisting(undefined); }} />}
           </>
         );
 

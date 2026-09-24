@@ -8,7 +8,8 @@
 
 import { scoreNodeDef } from '../../nodes/searchNodes';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
+import { getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
+import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
@@ -21,14 +22,19 @@ interface SearchEntry {
   searchKey: string; // label + type + category + description, lowercased
 }
 
-const ALL_ENTRIES: SearchEntry[] = Object.entries(NODE_REGISTRY)
-  // Deprecated nodes stay loadable from saved graphs but aren't offered for new ones.
-  .filter(([type, def]) => !HIDDEN_TYPES.has(type) && !def.deprecated)
-  .map(([type, def]) => ({
-    type,
-    def,
-    searchKey: [def.label, ...(def.aliases ?? []), type, def.category, def.description ?? ''].join(' ').toLowerCase(),
-  }));
+// Built-ins never change; user-published nodes do, so the full list is
+// rebuilt whenever the user-node registry version bumps (see useMemo below).
+function buildEntries(userNodesVersion: number): SearchEntry[] {
+  void userNodesVersion; // the argument is what invalidates the memo below
+  return getOfferedDefinitions()
+    // Deprecated nodes stay loadable from saved graphs but aren't offered for new ones.
+    .filter(def => !HIDDEN_TYPES.has(def.type))
+    .map(def => ({
+      type: def.type,
+      def,
+      searchKey: [def.label, ...(def.aliases ?? []), def.type, def.category, def.description ?? ''].join(' ').toLowerCase(),
+    }));
+}
 
 // ── Scorer — substring/prefix only, no fuzzy char-scatter ────────────────────
 function scoreEntry(entry: SearchEntry, query: string): number {
@@ -94,6 +100,9 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
   const inputRef  = useRef<HTMLInputElement>(null);
   const listRef   = useRef<HTMLUListElement>(null);
 
+  const userNodesVersion = useUserNodesVersion();
+  const ALL_ENTRIES = useMemo(() => buildEntries(userNodesVersion), [userNodesVersion]);
+
   // Filtered + ranked results
   const results = useMemo<SearchEntry[]>(() => {
     const base = (filterOutputType || filterInputType)
@@ -109,7 +118,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.entry.def.label.localeCompare(b.entry.def.label))
       .map(({ entry }) => entry);
-  }, [query, filterOutputType, filterInputType]);
+  }, [ALL_ENTRIES, query, filterOutputType, filterInputType]);
 
   // Group results by category
   const grouped = useMemo(() => {

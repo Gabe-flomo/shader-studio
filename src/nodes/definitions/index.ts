@@ -3,6 +3,7 @@
 // builds the unified NODE_REGISTRY consumed by the rest of the app.
 
 import type { NodeDefinition } from '../../types/nodeGraph';
+import { getUserNodeDefinition, getAllUserNodeDefinitions } from '../userNodes/userNodeRegistry';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
 
@@ -651,15 +652,21 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   bpmSync: BPMSyncNode,
 };
 
+/** Built-ins first, then user-published node types (see nodes/userNodes/userNodeRegistry.ts). */
 export function getNodeDefinition(type: string): NodeDefinition | undefined {
-  return NODE_REGISTRY[type];
+  return NODE_REGISTRY[type] ?? getUserNodeDefinition(type);
 }
 
-/** Nodes offered for adding: deprecated ones stay in the registry (saved graphs still load) but aren't listed. */
+/** Every definition that can be offered for adding: built-ins plus user nodes.
+ *  Deprecated ones stay in the registry (saved graphs still load) but aren't listed. */
+export function getOfferedDefinitions(): NodeDefinition[] {
+  return [...Object.values(NODE_REGISTRY), ...getAllUserNodeDefinitions()].filter(n => !n.deprecated);
+}
+
 export function getNodesByCategory(category: string): NodeDefinition[] {
-  return Object.values(NODE_REGISTRY).filter(n => n.category === category && !n.deprecated);
+  return getOfferedDefinitions().filter(n => n.category === category);
 }
 
 export function getAllCategories(): string[] {
-  return [...new Set(Object.values(NODE_REGISTRY).filter(n => !n.deprecated).map(n => n.category))];
+  return [...new Set(getOfferedDefinitions().map(n => n.category))];
 }
