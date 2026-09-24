@@ -89,6 +89,12 @@ export interface OfflineRenderHandle {
    * buffers, so callers should compare it against what they asked for.
    */
   setRenderScale: (scale: number) => { width: number; height: number };
+  /**
+   * Render the live canvas at an exact pixel size (export presets such as
+   * 1920×1080) regardless of its CSS size; null returns to the CSS size.
+   * Same contract as setRenderScale: returns what the GPU allocated.
+   */
+  setRenderSize: (size: { width: number; height: number } | null) => { width: number; height: number };
 }
 
 // Font texture: 16×16 grid of ASCII chars (codes 0-255), 64×64 px per cell.
@@ -348,6 +354,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
     // exporting at 2×/4× (see OfflineRenderHandle.setRenderScale).
     let renderScale = 1;
+    // Exact drawing-buffer size for export presets; null = CSS size × renderScale.
+    let exportSize: { width: number; height: number } | null = null;
     let cssW = 1;
     let cssH = 1;
     container.appendChild(renderer.domElement);
@@ -540,6 +548,16 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           exportReadbackRT?.dispose(); exportReadbackRT = null;
           exportW = 0; exportH = 0;
           renderScale = scale;
+          exportSize = null;
+          applySize();
+          return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+        },
+        setRenderSize: (size) => {
+          exportRT?.dispose(); exportRT = null;
+          exportReadbackRT?.dispose(); exportReadbackRT = null;
+          exportW = 0; exportH = 0;
+          exportSize = size ? { width: Math.max(1, Math.round(size.width)), height: Math.max(1, Math.round(size.height)) } : null;
+          renderScale = 1;
           applySize();
           return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
         },
@@ -697,8 +715,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // CSS size is floored so the drawing buffer at render scale N is exactly
     // N× the 1× buffer — the export modal predicts output size that way.
     const applySize = () => {
-      renderer.setPixelRatio(renderScale);
-      renderer.setSize(cssW, cssH);
+      if (exportSize) {
+        renderer.setPixelRatio(1);
+        renderer.setSize(exportSize.width, exportSize.height, false); // keep the CSS size
+      } else {
+        renderer.setPixelRatio(renderScale);
+        renderer.setSize(cssW, cssH);
+      }
       const w = renderer.domElement.width;
       const h = renderer.domElement.height;
       material.uniforms.u_resolution.value.set(w, h);

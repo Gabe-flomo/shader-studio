@@ -16,7 +16,7 @@ import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, onClear, compact = false,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, compact = false,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -28,6 +28,9 @@ export function CanvasToolbar({
   onAutoLayout: () => void;
   showMinimap: boolean;
   onToggleMinimap: () => void;
+  /** The outline panel: a list of the nodes in evaluation order, with step-through. */
+  showOutline?: boolean;
+  onToggleOutline?: () => void;
   onClear: () => void;
   /** Narrow canvas (tablet): Fit and Auto layout become icon buttons. */
   compact?: boolean;
@@ -91,6 +94,9 @@ export function CanvasToolbar({
       )}
       <Sep />
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
+      {onToggleOutline && (
+        <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
+      )}
       <IconButton icon="trash" label="Clear all nodes" size="sm" tone="danger" onClick={onClear} />
     </div>
   );

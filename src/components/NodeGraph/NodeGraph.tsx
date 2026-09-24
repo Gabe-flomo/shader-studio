@@ -21,6 +21,7 @@ import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
 import { SelectionBar } from '../shell/SelectionBar';
+import { GraphOutline } from './GraphOutline';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -297,6 +298,13 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   }, [disconnectedNotice, clearDisconnectedNotice]);
 
   // ── Minimap toggle (persisted) ──────────────────────────────────────────────
+  const [showOutline, setShowOutline] = useState(() => {
+    try { return localStorage.getItem('shader-studio:settings:outline') === '1'; } catch { return false; }
+  });
+  const toggleOutline = () => setShowOutline(v => {
+    try { localStorage.setItem('shader-studio:settings:outline', v ? '0' : '1'); } catch { /* preference only */ }
+    return !v;
+  });
   const [showMinimap, setShowMinimap] = useState(() => {
     try { return localStorage.getItem('shader-studio:minimap') !== 'false'; }
     catch { return true; }
@@ -1156,11 +1164,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onAutoLayout={autoLayout}
           showMinimap={showMinimap}
           onToggleMinimap={toggleMinimap}
+          showOutline={showOutline}
+          onToggleOutline={toggleOutline}
           onClear={() => loadExampleGraph('blank')}
           compact={compactToolbar}
         />
       )}
       {redesignToolbar && <SelectionBar top={previewNodeId ? 108 : 66} />}
+      {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 108 : 66} onClose={() => setShowOutline(false)} />}
 
       {/* Toolbar — top-right, always in screen space */}
       {!redesignToolbar && <div

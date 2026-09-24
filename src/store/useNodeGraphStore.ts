@@ -3,6 +3,9 @@ import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
+import { toast } from '../components/ui/toastStore';
+import { planSmart3DAdd } from '../nodes/smart3d';
+import type { NodeDefinition } from '../types/nodeGraph';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
@@ -248,6 +251,15 @@ function loadGroupPresets(): GroupPreset[] {
   return groupPresetManager.load()
     .filter(p => !!p.subgraph)
     .sort((a, b) => b.savedAt - a.savedAt);
+}
+
+/** A fresh node from its definition, the way addNode/spawnGraph build one. */
+function instantiateNode(id: string, type: string, def: NodeDefinition, position: { x: number; y: number }, params?: Record<string, unknown>): GraphNode {
+  const inputs: Record<string, InputSocket> = {};
+  for (const [key, socket] of Object.entries(def.inputs)) {
+    inputs[key] = { ...socket, defaultValue: def.paramDefs?.[key] ? undefined : def.defaultParams?.[key] as number | number[] | undefined };
+  }
+  return { id, type, position, inputs, outputs: { ...def.outputs }, params: { ...(def.defaultParams ?? {}), ...(params ?? {}) } };
 }
 
 // Debounce timer for recompilation triggered by param edits.
@@ -2822,6 +2834,76 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Only at the top level — not inside a group drill-down.
     // overrideParams guard prevents triggering from programmatic calls.
     if (!get().activeGroupId && !overrideParams) {
+      // ── Smart 3D placement ───────────────────────────────────────────────
+      // A shape or 3D transform dropped on the top level goes into a new Scene
+      // Group wired to a march loop; a lighting node is wired to the nearest
+      // loop's outputs. See nodes/smart3d.ts for the rules.
+      const smartDef = getNodeDefinition(type);
+      const plan = smartDef ? planSmart3DAdd(type, smartDef, get().nodes, position) : { kind: 'none' as const };
+      if (smartDef && plan.kind === 'wrap-scene') {
+        undoManager.push(get().nodes);
+        const groupDef = getNodeDefinition('sceneGroup')!;
+        const scenePosDef = getNodeDefinition('scenePos')!;
+        const sceneOutDef = getNodeDefinition('sceneOutput')!;
+        const inner = instantiateNode(idGenerator.next(), type, smartDef, { x: 300, y: 200 });
+        const scenePos = instantiateNode(idGenerator.next(), 'scenePos', scenePosDef, { x: 60, y: 200 }, { _groupOriginal: true });
+        const sceneOut = instantiateNode(idGenerator.next(), 'sceneOutput', sceneOutDef, { x: 720, y: 200 }, { _groupOriginal: true });
+        if (plan.posInput && inner.inputs[plan.posInput]) inner.inputs[plan.posInput] = { ...inner.inputs[plan.posInput], connection: { nodeId: scenePos.id, outputKey: 'pos' } };
+        if (plan.distOutput && sceneOut.inputs.dist) sceneOut.inputs.dist = { ...sceneOut.inputs.dist, connection: { nodeId: inner.id, outputKey: plan.distOutput } };
+        const group = instantiateNode(idGenerator.next(), 'sceneGroup', groupDef, position, {
+          label: smartDef.label,
+          subgraph: { nodes: [scenePos, inner, sceneOut], outputNodeId: '', outputKey: '' },
+        });
+        let nodes = [...get().nodes, group];
+        let note = `${smartDef.label} was placed inside a new Scene Group`;
+        if (plan.attachToMarchId) {
+          nodes = nodes.map(n => n.id === plan.attachToMarchId && n.inputs.scene
+            ? { ...n, inputs: { ...n.inputs, scene: { ...n.inputs.scene, connection: { nodeId: group.id, outputKey: 'scene' } } } }
+            : n);
+          note += ' and wired into the march loop.';
+        } else if (plan.spawnMarch) {
+          const camDef = getNodeDefinition('marchCamera')!;
+          const mlgDef = getNodeDefinition('marchLoopGroup')!;
+          const cam = instantiateNode(idGenerator.next(), 'marchCamera', camDef, { x: position.x - 440, y: position.y + 120 });
+          const mlg = instantiateNode(idGenerator.next(), 'marchLoopGroup', mlgDef, { x: position.x + 440, y: position.y });
+          mlg.inputs.ro = { ...mlg.inputs.ro, connection: { nodeId: cam.id, outputKey: 'ro' } };
+          mlg.inputs.rd = { ...mlg.inputs.rd, connection: { nodeId: cam.id, outputKey: 'rd' } };
+          mlg.inputs.scene = { ...mlg.inputs.scene, connection: { nodeId: group.id, outputKey: 'scene' } };
+          nodes = [...nodes, cam, mlg];
+          if (plan.outputNodeId) {
+            nodes = nodes.map(n => n.id === plan.outputNodeId && n.inputs.color
+              ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { nodeId: mlg.id, outputKey: 'color' } } } }
+              : n);
+            note += ', with a camera and march loop wired to the Output.';
+          } else {
+            note += ', with a camera and march loop. Wire the loop\'s Color to your Output.';
+          }
+        } else {
+          note += '. Double-click it to edit the shape.';
+        }
+        set({ nodes });
+        get().compile();
+        toast.info(`3D node placed`, { message: note });
+        return group.id;
+      }
+      if (smartDef && plan.kind === 'wire-lighting') {
+        undoManager.push(get().nodes);
+        const node = instantiateNode(idGenerator.next(), type, smartDef, position);
+        for (const w of plan.wires) {
+          if (node.inputs[w.input]) node.inputs[w.input] = { ...node.inputs[w.input], connection: { nodeId: plan.marchId, outputKey: w.fromKey } };
+        }
+        if (plan.sceneSourceId && node.inputs.scene) node.inputs.scene = { ...node.inputs.scene, connection: { nodeId: plan.sceneSourceId, outputKey: 'scene' } };
+        if (plan.cameraId) {
+          for (const k of ['viewDir', 'rd'] as const) {
+            if (node.inputs[k]) node.inputs[k] = { ...node.inputs[k], connection: { nodeId: plan.cameraId, outputKey: 'rd' } };
+          }
+        }
+        set(state => ({ nodes: [...state.nodes, node] }));
+        get().compile();
+        const wired = plan.wires.map(w => w.input).concat(plan.sceneSourceId && node.inputs.scene ? ['scene'] : []);
+        if (wired.length) toast.info(`${smartDef.label} wired to the march loop`, { message: `Connected: ${wired.join(', ')}.` });
+        return node.id;
+      }
       if (type === 'rayMarch') {
         get().spawnGraph(
           position,
