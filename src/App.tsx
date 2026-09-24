@@ -1069,7 +1069,7 @@ function App() {
 
         {/* Export modal */}
         {showExport && (
-          <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
+          <ThemeOverrideContext.Provider value="dark"><ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} /></ThemeOverrideContext.Provider>
         )}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} />
@@ -1203,7 +1203,7 @@ function App() {
             {errorPopup}
           </div>
         </div>
-        {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
+        {showExport && <ThemeOverrideContext.Provider value="dark"><ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} /></ThemeOverrideContext.Provider>}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} />
       </div>

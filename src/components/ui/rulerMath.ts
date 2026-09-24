@@ -78,7 +78,7 @@ export function countAfterDrag(start: number, dx: number, fine: boolean): number
 }
 
 export function formatValue(v: number, step: number, integer = false): string {
-  if (integer) return String(Math.round(v));
+  if (integer || step >= 1) return String(Math.round(v));
   const decimals = Math.abs(v) >= 10 ? 2 : step >= 0.1 ? 2 : 3;
   return v.toFixed(decimals);
 }

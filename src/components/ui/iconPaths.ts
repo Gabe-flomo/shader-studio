@@ -52,6 +52,7 @@ export const ICONS = {
   camera: { sw: 1.4, body: "<rect x='2' y='4.5' width='12' height='9' rx='2'/><circle cx='8' cy='9' r='2.3'/><path d='M5.5 4.5l1-2h3l1 2'/>" },
   grip: { sw: 2.2, body: "<path d='M6 4.5h.01M10 4.5h.01M6 8h.01M10 8h.01M6 11.5h.01M10 11.5h.01'/>" },
   alert: { sw: 1.4, body: "<circle cx='8' cy='8' r='6'/><path d='M8 4.8v3.6'/><circle cx='8' cy='11' r='0.4' fill='currentColor'/>" },
+  record: { sw: 1.5, body: "<circle cx='8' cy='8' r='5.8'/><circle cx='8' cy='8' r='2.7' fill='currentColor' stroke='none'/>" },
   bidir: { sw: 1.4, body: "<path d='M2.5 5.5h11M11 3l2.5 2.5L11 8'/><path d='M13.5 10.5h-11M5 8l-2.5 2.5L5 13'/>" },
   loop: { sw: 1.4, body: "<path d='M12.8 6.5A5 5 0 0 0 3.6 5.2M3.2 9.5a5 5 0 0 0 9.2 1.3'/><path d='M3.4 2.6v2.8h2.8M12.6 13.4v-2.8H9.8'/>" },
   curve: { sw: 1.4, body: "<path d='M2.5 13.5C5 13.5 5 2.5 8 2.5s3 11 5.5 11'/><circle cx='2.5' cy='13.5' r='1'/><circle cx='13.5' cy='13.5' r='1'/>" },
