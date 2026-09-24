@@ -104,6 +104,15 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
   const groupPresets = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
+  const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
+
+  // Opened from Shift+Space or A there's no anchor, so place the node in the middle of what's
+  // on screen — offset by half a 240px-wide node so it lands centred, not hanging off to the right.
+  const resolveSpawn = useCallback(() => {
+    if (spawnPosition) return spawnPosition;
+    const c = getViewportCenter?.();
+    return c ? { x: c.x - 120, y: c.y - 60 } : { x: 300, y: 200 };
+  }, [spawnPosition, getViewportCenter]);
 
   const [query, setQuery]       = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
@@ -162,11 +171,10 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
   }, [activeIdx]);
 
   const place = useCallback((type: string) => {
-    const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
-    const newId = addNode(type, pos);
+    const newId = addNode(type, resolveSpawn());
     if (newId && onNodePlaced) onNodePlaced(newId);
     onClose();
-  }, [addNode, spawnPosition, onClose, onNodePlaced]);
+  }, [addNode, resolveSpawn, onClose, onNodePlaced]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { onClose(); return; }
@@ -293,8 +301,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                       onMouseEnter={e => (e.currentTarget.style.background = ctp.surface0)}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       onClick={() => {
-                        const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
-                        instantiateGroupPreset(preset.id, pos);
+                        instantiateGroupPreset(preset.id, resolveSpawn());
                         onClose();
                       }}
                     >
