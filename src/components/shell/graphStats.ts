@@ -117,3 +117,21 @@ export function computeGraphStats(nodes: readonly GraphNode[], topLevel: boolean
     bypassed,
   };
 }
+
+/**
+ * Lines inside `void main() { … }` — where the per-pixel work happens, as opposed to the helper
+ * functions and uniforms around it. null if there's no main().
+ */
+export function mainBodyLines(glsl: string): number | null {
+  const m = /\bvoid\s+main\s*\(\s*(?:void)?\s*\)\s*\{/.exec(glsl);
+  if (!m) return null;
+  let depth = 1;
+  let i = m.index + m[0].length;
+  const start = i;
+  for (; i < glsl.length && depth > 0; i++) {
+    if (glsl[i] === '{') depth++;
+    else if (glsl[i] === '}') depth--;
+  }
+  const body = glsl.slice(start, i - 1);
+  return body.split('\n').filter(l => l.trim() !== '').length;
+}

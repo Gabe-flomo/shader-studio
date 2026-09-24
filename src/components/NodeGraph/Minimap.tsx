@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { ctp } from '../../theme/palette';
 
@@ -77,13 +77,13 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
     ctx.fillRect(vx, vy, vw, vh);
   }, [nodes, pan, zoom, viewportWidth, viewportHeight]);
 
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const panToPointer = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas || nodes.length === 0) return;
 
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const mx = clientX - rect.left;
+    const my = clientY - rect.top;
 
     // Recompute the same mapping as in the draw effect
     const minX = Math.min(...nodes.map(n => n.position.x)) - PAD;
@@ -119,8 +119,20 @@ export function Minimap({ nodes, pan, zoom, viewportWidth, viewportHeight, onPan
         ref={canvasRef}
         width={MAP_W}
         height={MAP_H}
-        onClick={handleClick}
-        style={{ display: 'block', cursor: 'crosshair' }}
+        // Press and drag to scrub the view. The press must not reach the graph canvas underneath,
+        // which would start a box-selection instead.
+        onMouseDown={e => e.stopPropagation()}
+        onPointerDown={e => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          panToPointer(e.clientX, e.clientY);
+        }}
+        onPointerMove={e => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) panToPointer(e.clientX, e.clientY);
+        }}
+        style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
       />
     </div>
   );

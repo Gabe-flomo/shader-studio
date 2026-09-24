@@ -8,7 +8,7 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
-import { computeGraphStats, countNodes } from './graphStats';
+import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 
 /**
  * Floating toolbar at the top centre of the canvas (desktop redesign): node count for the
@@ -128,6 +128,8 @@ function GraphStatsPanel({ nodes, topLevel, groupName, onClose }: {
   const accents = CATEGORY_ACCENTS[mode];
   const maxCat = Math.max(1, ...stats.byCategory.map(c => c.count));
   const glslLines = fragmentShader ? fragmentShader.split('\n').length : 0;
+  const mainLines = useMemo(() => (fragmentShader ? mainBodyLines(fragmentShader) : null), [fragmentShader]);
+  const [wholeFile, setWholeFile] = useState(false);
   const uniforms = fragmentShader ? (fragmentShader.match(/^\s*uniform\s/gm) ?? []).length : 0;
   const select = (ids: string[]) => { selectNodes(ids); onClose(); };
 
@@ -205,7 +207,16 @@ function GraphStatsPanel({ nodes, topLevel, groupName, onClose }: {
       </div>
 
       <div style={{ display: 'flex', gap: 14, padding: '10px 16px', background: tk.bg.subtle, borderRadius: `0 0 ${radius.lg}px ${radius.lg}px`, font: `500 11.5px ${fontFamily.mono}`, color: tk.text.muted }}>
-        <span>{glslLines} lines GLSL</span><span>{uniforms} uniforms</span>
+        <Tooltip label={wholeFile ? 'Show lines in main() only' : 'Show lines in the whole shader file'}>
+          <button
+            type="button"
+            onClick={() => setWholeFile(w => !w)}
+            style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: tk.text.secondary, textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
+          >
+            {wholeFile || mainLines === null ? `${glslLines} lines in the whole file` : `${mainLines} lines in main()`}
+          </button>
+        </Tooltip>
+        <span>{uniforms} uniforms</span>
       </div>
     </div>
   );
