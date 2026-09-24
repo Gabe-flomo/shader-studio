@@ -1,5 +1,6 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
+import { typesCompatible } from '../lib/typesCompatible';
 
 export interface ValidationResult {
   valid: boolean;
@@ -63,14 +64,8 @@ export function validateGraph(nodes: GraphNode[]): ValidationResult {
       const targetType = liveInput?.type ?? def.inputs[inputKey]?.type;
       if (!targetType) continue; // dynamic socket not in def — skip
 
-      // Match assembler coercions: float broadcasts to any vector; vec2↔vec3 pad/truncate
-      const compatible =
-        sourceOutputType === targetType ||
-        (sourceOutputType === 'float' && (targetType === 'vec2' || targetType === 'vec3' || targetType === 'vec4')) ||
-        (sourceOutputType === 'vec2'  && targetType === 'vec3') ||
-        (sourceOutputType === 'vec3'  && targetType === 'vec2');
-
-      if (!compatible) {
+      // Same promotion table the assembler emits from (D12).
+      if (!typesCompatible(sourceOutputType, targetType)) {
         errors.push(
           `Node ${node.id} [source:${sourceNode.id}]: type mismatch on input "${inputKey}". ` +
           `Expected ${targetType}, got ${sourceOutputType}`,

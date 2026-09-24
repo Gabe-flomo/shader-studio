@@ -170,16 +170,13 @@ export function compileNodePreviewShader(
   } else if (outType === 'vec2') {
     // Show vec2 as (R=x, G=y, B=0)
     extraNodes.push(
-      { id: '__preview_extX__', type: 'extractX', position: { x:0,y:0 }, params: {},
+      { id: '__preview_split__', type: 'splitVec2', position: { x:0,y:0 }, params: {},
         inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId, outputKey: chosenKey } } },
-        outputs: { x: { type: 'float', label: 'X' } } },
-      { id: '__preview_extY__', type: 'extractY', position: { x:0,y:0 }, params: {},
-        inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId, outputKey: chosenKey } } },
-        outputs: { y: { type: 'float', label: 'Y' } } },
+        outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } } },
       { id: '__preview_mkV3__', type: 'makeVec3', position: { x:0,y:0 }, params: {},
         inputs: {
-          r: { type: 'float', label: 'R', connection: { nodeId: '__preview_extX__', outputKey: 'x' } },
-          g: { type: 'float', label: 'G', connection: { nodeId: '__preview_extY__', outputKey: 'y' } },
+          r: { type: 'float', label: 'R', connection: { nodeId: '__preview_split__', outputKey: 'x' } },
+          g: { type: 'float', label: 'G', connection: { nodeId: '__preview_split__', outputKey: 'y' } },
           b: { type: 'float', label: 'B' },
         },
         outputs: { rgb: { type: 'vec3', label: 'RGB' } } },

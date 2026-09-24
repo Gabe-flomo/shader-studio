@@ -19,7 +19,7 @@ const HIDDEN_NODES = new Set([
   'groupOutput', 'groupInput', 'marchLoopInputs', 'marchLoopOutput', 'scope',
   'forLoop', 'loopRippleStep', 'loopRotateStep', 'loopDomainFold',
   'loopFloatAccumulate', 'loopColorRingStep', 'loopRingStep',
-  'lumaGrain', 'temporalGrain', 'forwardCamera',
+  'forwardCamera',
   'marchPos', 'marchDist', 'marchOutput',
   'scenePos', 'sceneOutput', 'spaceWarpGroup',
   'rotatingLinesLoop', 'accumulateLoop', 'flowField', 'circlePack',
@@ -28,7 +28,7 @@ const HIDDEN_NODES = new Set([
 ]);
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
-  { label: 'Shapes',       categories: ['2D Primitives', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
+  { label: 'Shapes',       categories: ['2D Primitives', '3D Primitives', 'SDF', '3D Transforms', 'Combiners'] },
   { label: '3D',           categories: ['3D Scene', '3D Lighting', '3D Fractals', 'Loops'] },
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
   { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces', 'Grid', 'Field'] },
@@ -42,7 +42,7 @@ const CATEGORY_ORDER = CATEGORY_SECTIONS.flatMap(s => s.categories);
 // ── Sub-group definitions for categories that need them ───────────────────────
 const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>> = {
   '2D Primitives': [
-    { label: 'SDF',      types: ['circleSDF', 'boxSDF', 'ringSDF', 'simpleSDF', 'shapeSDF', 'sdBox', 'sdSegment', 'sdEllipse'] },
+    { label: 'SDF',      types: ['circleSDF', 'boxSDF', 'ringSDF', 'simpleSDF', 'shapeSDF', 'sdSegment', 'sdEllipse'] },
     { label: 'Patterns', types: ['truchet', 'metaballs', 'lissajous'] },
   ],
   '3D Primitives': [
@@ -64,8 +64,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Volume',  types: ['volumetricFog', 'phaseHG'] },
   ],
   Color: [
-    { label: 'Palette', types: ['palette', 'gradient', 'palettePreset', 'colorRamp', 'blackbody'] },
-    { label: 'Adjust',  types: ['invert', 'desaturate', 'posterize', 'hueRange', 'brightnessContrast'] },
+    { label: 'Palette', types: ['palette', 'gradient', 'colorRamp', 'blackbody'] },
+    { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast'] },
     { label: 'Convert', types: ['hsv'] },
     { label: 'Blend',   types: ['blendModes'] },
   ],
@@ -74,11 +74,11 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Trig',       types: ['sin', 'cos', 'tan', 'atan2'] },
     { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract', 'fractRaw'] },
     { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
-    { label: 'Interp',     types: ['clamp', 'mix', 'mixVec3', 'smoothstep', 'mod', 'modSelect'] },
+    { label: 'Interp',     types: ['clamp', 'mix', 'smoothstep', 'mod', 'modSelect'] },
     { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
     { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'refractDir', 'luminance'] },
-    { label: 'Vec2',       types: ['vec2Const', 'makeVec2', 'splitVec2', 'transformVec', 'extractX', 'extractY', 'addVec2', 'multiplyVec2', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
-    { label: 'Vec3',       types: ['vec3Const', 'makeVec3', 'splitVec3', 'floatToVec3', 'multiplyVec3', 'addVec3'] },
+    { label: 'Vec2',       types: ['vec2Const', 'makeVec2', 'splitVec2', 'transformVec', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
+    { label: 'Vec3',       types: ['makeVec3', 'splitVec3', 'floatToVec3'] },
     { label: 'Vec4',       types: ['splitVec4'] },
     { label: 'Complex',    types: ['complexMul', 'complexPow'] },
     { label: 'Remap',      types: ['remap'] },
@@ -92,7 +92,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Effects: [
     { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
     { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
-    { label: 'Lighting', types: ['makeLight', 'light', 'light2d', 'radianceCascadesApprox'] },
+    { label: 'Lighting', types: ['light', 'light2d', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
     { label: 'Other',    types: ['particleEmitter'] },
   ],
@@ -102,8 +102,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Film',  types: ['grain'] },
   ],
   Combiners: [
-    { label: 'SDF Ops', types: ['smoothMin', 'min', 'sdfMax', 'sdfSubtract', 'smoothMax', 'smoothSubtract', 'sdfOutline', 'sdfColorize'] },
-    { label: 'Blend',   types: ['blend', 'mask', 'addColor', 'screenBlend', 'alphaBlend'] },
+    { label: 'SDF Ops', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract', 'sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfOutline', 'sdfColorize'] },
+    { label: 'Blend',   types: ['mix', 'blendModes', 'mask', 'addColor', 'alphaBlend'] },
     { label: 'Layer',   types: ['glowLayer', 'deepGlow'] },
   ],
   Spaces: [

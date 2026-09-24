@@ -20,7 +20,12 @@ describe('Palette', () => {
     };
     const r = compileGraph({ nodes: [uv, pal, out("n2")] } as never);
     expect(r.success).toBe(true);
-    expect(paletteLine(r.fragmentShader!)).toContain('vec3(0.1,0.2,0.3)');
+    // Colour params are live vec3 uniforms (audit D8): the line reads the uniform, which carries the value.
+    const phaseUniform = r.paramBindings['n2::phase'];
+    expect(phaseUniform).toMatch(/^u_p_\w+_phase$/);
+    expect(paletteLine(r.fragmentShader!)).toContain(phaseUniform);
+    expect(r.paramUniforms[phaseUniform]).toEqual([0.1, 0.2, 0.3]);
+    expect(r.fragmentShader).toContain(`uniform vec3 ${phaseUniform};`);
   });
 
   it('migrates a legacy node: unwired per-channel sockets go, a wired one still drives its channel', () => {
@@ -40,6 +45,9 @@ describe('Palette', () => {
     expect(up.inputs.value.label).toBe('Angle');
     const r = compileGraph({ nodes: [uv, time, up, out("n2")] } as never);
     expect(r.success).toBe(true);
-    expect(paletteLine(r.fragmentShader!)).toMatch(/vec3\(0\.0,\w+_time,0\.67\)/);
+    // The wired channel drives .y; the other two come from the (live uniform) phase param.
+    const phaseUniform = r.paramBindings['n2::phase'];
+    expect(phaseUniform).toMatch(/^u_p_\w+_phase$/);
+    expect(paletteLine(r.fragmentShader!)).toMatch(new RegExp(`vec3\\(${phaseUniform}\\.x,\\w+_time,${phaseUniform}\\.z\\)`));
   });
 });

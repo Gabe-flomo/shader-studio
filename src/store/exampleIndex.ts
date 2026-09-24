@@ -33,13 +33,13 @@ export const BLANK_GRAPH: ExampleGraph = {
         params: { radius: 0.3, posX: 0.0, posY: 0.0 },
       },
       {
-        id: 'n4', type: 'makeLight', position: { x: 580, y: 240 },
+        id: 'n4', type: 'light', position: { x: 580, y: 240 },
         inputs: {
           distance:   { type: 'float', label: 'Distance', connection: { nodeId: 'n3', outputKey: 'distance' } },
-          brightness: { type: 'float', label: 'Brightness' },
+          brightness: { type: 'float', label: 'Falloff' },
         },
         outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { brightness: 10.0 },
+        params: { mode: 'glow', brightness: 10.0, ringFreq: 8.0 },
       },
       {
         id: 'n2', type: 'output', position: { x: 820, y: 240 },

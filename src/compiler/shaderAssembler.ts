@@ -5,6 +5,8 @@ import { f as formatFloat } from '../nodes/definitions/helpers';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
+import { coerce, coerceLossy } from '../lib/typesCompatible';
+import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -92,11 +94,14 @@ mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }`;
  * For Expr and CustomFn nodes the output type is stored in `params.outputType`
  * at runtime; their definition hardcodes `float` as a placeholder.
  */
-function getNodeOutputType(node: GraphNode, defType: DataType): DataType {
-  if (node.type === 'expr' || node.type === 'exprNode' || node.type === 'customFn') {
-    const pt = node.params.outputType as string | undefined;
-    if (pt === 'float' || pt === 'vec2' || pt === 'vec3' || pt === 'vec4') return pt as DataType;
-  }
+function getNodeOutputType(node: GraphNode, outKey: string, defType: DataType): DataType {
+  const pt = node.params.outputType as string | undefined;
+  const live = pt === 'float' || pt === 'vec2' || pt === 'vec3' || pt === 'vec4' ? (pt as DataType) : null;
+  if (!live) return defType;
+  if (node.type === 'expr' || node.type === 'exprNode' || node.type === 'customFn') return live;
+  // Vectorizable math (add, sin, mix…): the type pill retypes the primary output;
+  // the definition still says float. Group / loop paths pre-declare from here.
+  if (VECTORIZABLE_NODES[node.type]?.primaryOutput === outKey) return live;
   return defType;
 }
 
@@ -152,21 +157,10 @@ export function resolveInputVars(
       const sourceOutputs = nodeOutputs.get(input.connection.nodeId);
       if (sourceOutputs) {
         const rawVar = sourceOutputs[input.connection.outputKey];
-        const src = sourceOutputType as string;
-        const tgt = input.type as string;
-        if (src === tgt) {
-          inputVars[inputKey] = rawVar;
-        } else if (src === 'float' && tgt === 'vec2') {
-          inputVars[inputKey] = `vec2(${rawVar})`;
-        } else if (src === 'float' && tgt === 'vec3') {
-          inputVars[inputKey] = `vec3(${rawVar})`;
-        } else if (src === 'vec2' && tgt === 'vec3') {
-          inputVars[inputKey] = `vec3(${rawVar}, 0.0)`;
-        } else if (src === 'vec3' && tgt === 'vec2') {
-          inputVars[inputKey] = `(${rawVar}).xy`;
-        } else {
-          inputVars[inputKey] = rawVar;
-        }
+        // One promotion table for every site (D12): validate() rejects what
+        // coerce() can't express, so a null here only happens for a wire
+        // validation already flagged — pass the raw var through and let GLSL report it.
+        inputVars[inputKey] = coerce(rawVar, sourceOutputType as string, input.type as string) ?? rawVar;
       }
     } else if (kfCfg && registerFn) {
       const fnName = `kf_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}_${inputKey}`;
@@ -372,6 +366,58 @@ export function dedupeGlslFunctions(blocks: string[]): string[] {
   return out;
 }
 
+// ── Dead helper elimination (D10) ────────────────────────────────────────────
+// Definitions attach whole libraries (`SHAPE_SDF_GLSL` is 35 shapes / 13 KB
+// even when the chosen shape is `circle`). After dedupe, keep only the
+// functions the main body reaches, transitively through the functions it
+// calls. Non-function text (#defines, consts, structs, prototypes) is always
+// kept and counts as a root, so a macro that calls a helper keeps the helper.
+
+const CALL_SITE = /\b([A-Za-z_]\w*)\s*\(/g;
+
+/** Names that appear as `name(` in `text`. */
+function calledNames(text: string): Set<string> {
+  const out = new Set<string>();
+  CALL_SITE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = CALL_SITE.exec(text)) !== null) out.add(m[1]);
+  return out;
+}
+
+/**
+ * Drop top-level function definitions that nothing in `rootText` (the main
+ * body) reaches. Order is preserved, so define-before-use still holds.
+ */
+export function pruneUnusedGlslFunctions(blocks: string[], rootText: string): string[] {
+  const split = blocks.map(splitGlslBlock);
+  const byName = new Map<string, string[]>();
+  for (const chunks of split) for (const c of chunks) {
+    if (c.name) byName.set(c.name, [...(byName.get(c.name) ?? []), c.text]);
+  }
+  if (byName.size === 0) return blocks;
+
+  const live = new Set<string>();
+  const queue: string[] = [];
+  const visit = (text: string) => {
+    for (const n of calledNames(text)) {
+      if (byName.has(n) && !live.has(n)) { live.add(n); queue.push(n); }
+    }
+  };
+  visit(rootText);
+  for (const chunks of split) for (const c of chunks) if (!c.name) visit(c.text);
+  while (queue.length) {
+    const n = queue.pop()!;
+    for (const body of byName.get(n) ?? []) visit(body);
+  }
+
+  const out: string[] = [];
+  for (const chunks of split) {
+    const kept = chunks.filter(c => !c.name || live.has(c.name)).map(c => c.text);
+    if (kept.some(t => t.trim())) out.push(kept.join('\n'));
+  }
+  return out;
+}
+
 // ── Main assembler ────────────────────────────────────────────────────────────
 
 
@@ -384,7 +430,7 @@ export class ShaderAssembler {
   private nodeMap: Map<string, GraphNode>;
   private functions = new Set<string>();
   private mainCode: string[] = [];
-  private paramUniforms: Record<string, number> = {};
+  private paramUniforms: Record<string, number | number[]> = {};
   // `${originalNodeId}::${paramKey}` → uniform name, for every param that
   // became a uniform. The store's slider fast path looks its param up here.
   private paramBindings: Record<string, string> = {};
@@ -429,7 +475,7 @@ export class ShaderAssembler {
     body: string;
     helperBlocks: string[];
     nodeOutputVars: Map<string, Record<string, string>>;
-    paramUniforms: Record<string, number>;
+    paramUniforms: Record<string, number | number[]>;
     textureUniforms: Record<string, string>;
     audioUniforms: Record<string, string>;
     videoUniforms: Record<string, string>;
@@ -441,7 +487,7 @@ export class ShaderAssembler {
     }
     return {
       body: this.mainCode.join(''),
-      helperBlocks: dedupeGlslFunctions(Array.from(this.functions)),
+      helperBlocks: pruneUnusedGlslFunctions(dedupeGlslFunctions(Array.from(this.functions)), this.mainCode.join('')),
       nodeOutputVars: this.nodeOutputs,
       paramUniforms: this.paramUniforms,
       textureUniforms: this.textureUniforms,
@@ -451,7 +497,7 @@ export class ShaderAssembler {
     };
   }
 
-  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
     this.detectStateful();
     for (const node of this.sortedNodes) {
       this.compileNode(node);
@@ -782,15 +828,7 @@ export class ShaderAssembler {
                   const outputDefs = Object.entries(subDef.outputs);
                   for (const [outKey, outSocket] of outputDefs) {
                     const varName = `${subNode.id}_${outKey}`;
-                    let coerced = passthroughVar;
-                    if (srcType !== outSocket.type) {
-                      if (outSocket.type === 'float' && (srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4')) coerced = `${passthroughVar}.x`;
-                      else if (outSocket.type === 'vec2' && srcType === 'float') coerced = `vec2(${passthroughVar})`;
-                      else if (outSocket.type === 'vec3' && srcType === 'float') coerced = `vec3(${passthroughVar})`;
-                      else if (outSocket.type === 'vec3' && srcType === 'vec2') coerced = `vec3(${passthroughVar}, 0.0)`;
-                      else if (outSocket.type === 'vec4' && srcType === 'float') coerced = `vec4(${passthroughVar})`;
-                      else if (outSocket.type === 'vec4' && srcType === 'vec3') coerced = `vec4(${passthroughVar}, 1.0)`;
-                    }
+                    const coerced = coerceLossy(passthroughVar, srcType, outSocket.type);
                     bypassCode += `    ${outSocket.type} ${varName} = ${coerced};\n`;
                     bypassOutVars[outKey] = varName;
                   }
@@ -945,7 +983,7 @@ export class ShaderAssembler {
               if (!firstOutEntry) continue;
               const [firstOutKey, firstOutSock] = firstOutEntry;
               // Use the actual runtime output type (Expr/CustomFn store it in params.outputType)
-              const actualOutType = getNodeOutputType(sn, firstOutSock.type);
+              const actualOutType = getNodeOutputType(sn, firstOutKey, firstOutSock.type);
               // Find first input with the same type as the primary output (the carry input).
               // Fall back to the first input for nodes like Expr where definition types
               // don't reflect the actual wired types (all Expr inputs are 'float' in the def).
@@ -1009,7 +1047,7 @@ export class ShaderAssembler {
               const outVars: Record<string, string> = {};
               for (const [outKey, outSock] of Object.entries(def.outputs)) {
                 // Use the actual runtime type (Expr/CustomFn store it in params.outputType)
-                const actualType = getNodeOutputType(sn, outSock.type);
+                const actualType = getNodeOutputType(sn, outKey, outSock.type);
                 const varName = `${nodeSlug}_ao_${snSlugAcc}_${outKey}`;
                 outVars[outKey] = varName;
                 const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType);
@@ -1428,7 +1466,7 @@ export class ShaderAssembler {
 
             // Track last float output as candidate return value
             for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-              const outType = snDef.outputs[outKey]?.type;
+              const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
               if (outType === 'float') sgLastFloatVar = varName;
             }
           }
@@ -2091,7 +2129,7 @@ export class ShaderAssembler {
 
               // Track last vec3 output as the warp return value
               for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-                const outType = snDef.outputs[outKey]?.type;
+                const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
                 if (outType === 'vec3') mlLastVec3Var = varName;
               }
             }
@@ -2825,7 +2863,7 @@ export class ShaderAssembler {
               this.nodeOutputs.set(sn.id, snResult.outputVars);
 
               for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-                const outType = snDef.outputs[outKey]?.type;
+                const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
                 if (outType === 'vec3') mlLastVec3Var = varName;
               }
             }
@@ -3184,7 +3222,7 @@ export class ShaderAssembler {
 
             // Track last vec3 output as the warp return value
             for (const [outKey, varName] of Object.entries(snResult.outputVars)) {
-              const outType = snDef.outputs[outKey]?.type;
+              const outType = snDef.outputs[outKey] ? getNodeOutputType(sn, outKey, snDef.outputs[outKey].type) : undefined;
               if (outType === 'vec3') swLastVec3Var = varName;
             }
           }
@@ -3219,16 +3257,8 @@ export class ShaderAssembler {
             for (const [outKey, outSocket] of outputEntries) {
               const varName = `${nodeSlug}_${outKey}`;
               const srcType = (Object.values(def.inputs)[0]?.type ?? 'float');
-              let coerced = passthroughVar;
+              let coerced = coerceLossy(passthroughVar, srcType, outSocket.type);
               if (srcType !== outSocket.type) {
-                if (outSocket.type === 'float' && srcType === 'vec2') coerced = `${passthroughVar}.x`;
-                else if (outSocket.type === 'float' && srcType === 'vec3') coerced = `${passthroughVar}.x`;
-                else if (outSocket.type === 'float' && srcType === 'vec4') coerced = `${passthroughVar}.x`;
-                else if (outSocket.type === 'vec2' && srcType === 'float') coerced = `vec2(${passthroughVar})`;
-                else if (outSocket.type === 'vec3' && srcType === 'float') coerced = `vec3(${passthroughVar})`;
-                else if (outSocket.type === 'vec3' && srcType === 'vec2') coerced = `vec3(${passthroughVar}, 0.0)`;
-                else if (outSocket.type === 'vec4' && srcType === 'float') coerced = `vec4(${passthroughVar})`;
-                else if (outSocket.type === 'vec4' && srcType === 'vec3') coerced = `vec4(${passthroughVar}, 1.0)`;
                 const matchingInput = inputEntries.find(([, v]) => v !== passthroughVar);
                 if (matchingInput) coerced = matchingInput[1];
               }
@@ -3295,8 +3325,8 @@ export class ShaderAssembler {
             const compOrder = ['x', 'y', 'z', 'w'];
             for (const outKey of Object.keys(result.outputVars)) {
               const outSock = def.outputs[outKey];
-              const actualType = outSock?.type ?? 'float';
-              const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType as DataType);
+              const actualType = getNodeOutputType(node, outKey, outSock?.type ?? 'float');
+              const neutral = isMultiply ? `${actualType}(1.0)` : defaultGlslVal(actualType);
               let initExpr: string;
               if (node.assignInit?.trim()) {
                 const raw = node.assignInit.trim();
@@ -3330,9 +3360,10 @@ export class ShaderAssembler {
   }
 
   private buildResult() {
-    const functionCode = dedupeGlslFunctions(Array.from(this.functions)).join('\n');
-    const paramUniformDecls = Object.keys(this.paramUniforms)
-      .map(name => `uniform float ${name};`)
+    const mainBody = this.mainCode.join('');
+    const functionCode = pruneUnusedGlslFunctions(dedupeGlslFunctions(Array.from(this.functions)), mainBody).join('\n');
+    const paramUniformDecls = Object.entries(this.paramUniforms)
+      .map(([name, value]) => `uniform ${Array.isArray(value) ? 'vec3' : 'float'} ${name};`)
       .join('\n');
     const textureUniformDecls = [
       ...Object.keys(this.textureUniforms).map(name => `uniform sampler2D ${name};`),
@@ -3365,7 +3396,7 @@ ${functionCode}
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
-${this.mainCode.join('')}}`.trim();
+${mainBody}}`.trim();
 
     return {
       fragmentShader,
@@ -3385,6 +3416,6 @@ ${this.mainCode.join('')}}`.trim();
 export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
   return new ShaderAssembler(sortedNodes, allNodes).assemble();
 }

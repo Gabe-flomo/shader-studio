@@ -32,10 +32,15 @@ export const SKIP_UNIFORM_TYPES = new Set([
  * value isn't used by the emitted GLSL either (the gate mirrors the code
  * branch), so it shouldn't become a uniform.
  */
-export function isParamVisible(paramDef: ParamDef, params: Record<string, unknown>): boolean {
+export function isParamVisible(
+  paramDef: ParamDef,
+  params: Record<string, unknown>,
+  defaults?: Record<string, unknown>,
+): boolean {
   const sw = paramDef.showWhen;
   if (!sw) return true;
-  const v = String(params[sw.param]);
+  // A gate param an older save never had (e.g. palette's `preset`) reads as its default.
+  const v = String(params[sw.param] ?? defaults?.[sw.param]);
   return Array.isArray(sw.value) ? sw.value.includes(v) : sw.value === v;
 }
 
@@ -81,13 +86,15 @@ export function defaultGlslVal(type: DataType | string): string {
  * name → current value and `bindings` maps `${bindingId}::${paramKey}` →
  * uniform name for every param that became a uniform.
  */
+export type ParamUniformValue = number | number[];
+
 export function patchNodeParamsForUniforms(
   node: GraphNode,
   def: NodeDefinition,
   registerFn?: (glsl: string) => void,
   bindingId: string = node.id,
-): { patchedNode: GraphNode; uniforms: Record<string, number>; bindings: Record<string, string> } {
-  const uniforms: Record<string, number> = {};
+): { patchedNode: GraphNode; uniforms: Record<string, ParamUniformValue>; bindings: Record<string, string> } {
+  const uniforms: Record<string, ParamUniformValue> = {};
   const bindings: Record<string, string> = {};
 
   if (SKIP_UNIFORM_TYPES.has(node.type) || !def.paramDefs) {
@@ -99,10 +106,21 @@ export function patchNodeParamsForUniforms(
   const safeId = node.id.replace(/_/g, 'x');
   const patchedParams = { ...node.params };
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
-    if (paramDef.type !== 'float') continue;  // only scalar floats
     if (paramDef.compileTime) continue;        // baked by declaration (loop bounds…)
+    if (!isParamVisible(paramDef, node.params, def.defaultParams)) continue; // hidden by showWhen → not read by the GLSL
+    // vec3 / vec3color → a vec3 uniform, so a colour-picker drag is a uniform
+    // write, not a recompile. The definition reads it through pv3().
+    if (paramDef.type === 'vec3' || paramDef.type === 'vec3color') {
+      const v = node.params[key];
+      if (!Array.isArray(v) || v.length < 3 || !v.every(n => typeof n === 'number')) continue;
+      const uniformName = `u_p_${safeId}_${key}`;
+      patchedParams[key] = uniformName;
+      uniforms[uniformName] = [v[0], v[1], v[2]];
+      bindings[paramBindingKey(bindingId, key)] = uniformName;
+      continue;
+    }
+    if (paramDef.type !== 'float') continue;  // otherwise only scalar floats
     if (paramDef.step === 1) continue;         // integer param — keep baked
-    if (!isParamVisible(paramDef, node.params)) continue; // hidden by showWhen → not read by the GLSL
     if (!(key in node.inputs) && registerFn && !isKeyframeBypassed(node, key)) {
       const kfCfg = getKeyframeConfig(node, key);
       if (kfCfg) {

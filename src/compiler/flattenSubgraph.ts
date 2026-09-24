@@ -30,7 +30,7 @@ import type { UserNodeParam, UserNodePort } from '../types/userNode';
 import { ShaderAssembler } from './shaderAssembler';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import { getNodeDefinition } from '../nodes/definitions';
-import { f } from '../nodes/definitions/helpers';
+import { f, vec3Str } from '../nodes/definitions/helpers';
 
 /** Phantom source node id whose "outputs" are the function's input parameters. */
 const FN_ARG_SENTINEL = '__fnarg__';
@@ -228,7 +228,8 @@ export function flattenSubgraphToFunction(spec: FlattenSpec): FlattenResult {
 
   // ── Bake every non-surfaced float param back to its literal ──────────────────
   for (const [uniform, value] of Object.entries(parts.paramUniforms)) {
-    body = body.replace(new RegExp(`\\b${escapeRe(uniform)}\\b`, 'g'), f(value));
+    // Float sliders bake to a float literal, colour / vec3 pickers to a vec3 literal.
+    body = body.replace(new RegExp(`\\b${escapeRe(uniform)}\\b`, 'g'), Array.isArray(value) ? vec3Str(value) : f(value));
   }
 
   // ── Output variables ─────────────────────────────────────────────────────────

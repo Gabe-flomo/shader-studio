@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, pv3 } from './helpers';
 import { PALETTE_GLSL_FN, PALETTE_PRESET_OPTIONS } from './color';
 
 // ─── Truchet Tiles ────────────────────────────────────────────────────────────
@@ -64,10 +64,8 @@ export const TruchetNode: NodeDefinition = {
     const aa      = p(node.params.aa, 0.02);
     const animate = p(node.params.animate, 0.0);
 
-    const colAArr  = Array.isArray(node.params.color_a) ? node.params.color_a as number[] : [0.1, 0.1, 0.15];
-    const colBArr  = Array.isArray(node.params.color_b) ? node.params.color_b as number[] : [0.8, 0.8, 0.9];
-    const colAExpr = colAVar ?? `vec3(${colAArr.map(v => (v as number).toFixed(3)).join(',')})`;
-    const colBExpr = colBVar ?? `vec3(${colBArr.map(v => (v as number).toFixed(3)).join(',')})`;
+    const colAExpr = colAVar ?? pv3(node.params.color_a, [0.1, 0.1, 0.15]);
+    const colBExpr = colBVar ?? pv3(node.params.color_b, [0.8, 0.8, 0.9]);
 
     const code = [
       `    // Truchet Tiles\n`,
@@ -261,10 +259,8 @@ export const LissajousNode: NodeDefinition = {
     // If delta is wired, use that; otherwise animate from time
     const deltaExpr  = inputVars.delta ?? `${deltaParam} + ${timeVar} * ${deltaSpeed}`;
 
-    const colInArr = Array.isArray(node.params.color_inner) ? node.params.color_inner as number[] : [0.9, 0.8, 0.3];
-    const colOutArr = Array.isArray(node.params.color_outer) ? node.params.color_outer as number[] : [0.0, 0.0, 0.0];
-    const colIn  = `vec3(${colInArr.map(v => (v as number).toFixed(3)).join(',')})`;
-    const colOut = `vec3(${colOutArr.map(v => (v as number).toFixed(3)).join(',')})`;
+    const colIn  = pv3(node.params.color_inner, [0.9, 0.8, 0.3]);
+    const colOut = pv3(node.params.color_outer, [0.0, 0.0, 0.0]);
 
     const code = [
       `    // Lissajous Curve\n`,

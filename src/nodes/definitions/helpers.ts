@@ -26,6 +26,20 @@ export function p(val: unknown, fallback: number, decimals?: number): string {
   return f(n);
 }
 
+/**
+ * Resolve a vec3 / vec3color param to a GLSL vec3 expression or a uniform name.
+ *
+ * Like p(): in uniform mode the compiler has replaced the [r, g, b] array with
+ * its `u_p_*` uniform name, which passes through unchanged. Otherwise the
+ * array (or the fallback) is formatted as a vec3 literal. The result is an
+ * expression, so components are `${v}.x` etc. — never `v[0]`.
+ */
+export function pv3(val: unknown, fallback: number[]): string {
+  if (typeof val === 'string') return val;            // uniform name — pass through
+  const arr = Array.isArray(val) && val.length >= 3 && val.every(n => typeof n === 'number') ? val as number[] : fallback;
+  return vec3Str(arr);
+}
+
 // Helper: emit a vec3 literal (exact components, integers get a ".0" suffix)
 export function vec3Str(v: number[]): string {
   return `vec3(${v.map(f).join(', ')})`;

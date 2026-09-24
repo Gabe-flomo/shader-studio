@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
+import type { GraphNode, InputSocket, OutputSocket, DataType } from '../types/nodeGraph';
+import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
@@ -13,7 +14,7 @@ import type { SubgraphData } from '../types/nodeGraph';
 import { buildUserNodeDefinition, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
 import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { paramBindingKey } from '../compiler/uniformPatcher';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
@@ -245,6 +246,8 @@ export function renameTransformPreset(id: string, newLabel: string): void {
 function loadGroupPresets(): GroupPreset[] {
   return groupPresetManager.load()
     .filter(p => !!p.subgraph)
+    // Presets saved before a node merge still reference the old type keys.
+    .map(p => ({ ...p, subgraph: resolveSubgraphAliases(p.subgraph, getNodeDefinition) }))
     .sort((a, b) => b.savedAt - a.savedAt);
 }
 
@@ -288,11 +291,11 @@ interface NodeGraphState {
    * Uniform name → current value for all float params extracted by the compiler.
    * Updated in-place (without recompile) when sliders change eligible float params.
    */
-  paramUniforms: Record<string, number>;
+  paramUniforms: Record<string, number | number[]>;
   /** `${nodeId}::${paramKey}` → uniform name, from the last compile. See CompilationResult.paramBindings. */
   paramBindings: Record<string, string>;
   /** Push param uniform value changes to ShaderCanvas without triggering a recompile. */
-  updateParamUniforms: (updates: Record<string, number>) => void;
+  updateParamUniforms: (updates: Record<string, number | number[]>) => void;
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
@@ -727,21 +730,13 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
 
   // vec2: promote (x, y, 0) → vec3 via extractX/Y + makeVec3
   if (outType === 'vec2') {
-    const extX: GraphNode = {
-      id: '__preview_extX__',
-      type: 'extractX',
+    const split: GraphNode = {
+      id: '__preview_split__',
+      type: 'splitVec2',
       position: { x: 0, y: 0 },
       params: {},
       inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: targetId, outputKey: chosenKey } } },
-      outputs: { x: { type: 'float', label: 'X' } },
-    };
-    const extY: GraphNode = {
-      id: '__preview_extY__',
-      type: 'extractY',
-      position: { x: 0, y: 0 },
-      params: {},
-      inputs: { v: { type: 'vec2', label: 'Vec2', connection: { nodeId: targetId, outputKey: chosenKey } } },
-      outputs: { y: { type: 'float', label: 'Y' } },
+      outputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
     };
     const mkVec3: GraphNode = {
       id: '__preview_mkVec3__',
@@ -749,8 +744,8 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
       position: { x: 0, y: 0 },
       params: {},
       inputs: {
-        r: { type: 'float', label: 'R', connection: { nodeId: '__preview_extX__', outputKey: 'x' } },
-        g: { type: 'float', label: 'G', connection: { nodeId: '__preview_extY__', outputKey: 'y' } },
+        r: { type: 'float', label: 'R', connection: { nodeId: '__preview_split__', outputKey: 'x' } },
+        g: { type: 'float', label: 'G', connection: { nodeId: '__preview_split__', outputKey: 'y' } },
         b: { type: 'float', label: 'B' },
       },
       outputs: { rgb: { type: 'vec3', label: 'RGB' } },
@@ -763,7 +758,7 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
       inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: '__preview_mkVec3__', outputKey: 'rgb' } } },
       outputs: {},
     };
-    return [...subgraph, extX, extY, mkVec3, syntheticOutput];
+    return [...subgraph, split, mkVec3, syntheticOutput];
   }
 
   // float: promote to grayscale vec3
@@ -2922,6 +2917,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
 
     undoManager.push(get().nodes);
+    // A merged (aliased) type is created as its canonical node, with the alias's defaults.
+    const alias = NODE_ALIASES[type];
+    if (alias) {
+      type = alias.to;
+      overrideParams = { ...aliasParams(alias, {}), ...(overrideParams ?? {}) };
+    }
     const def = getNodeDefinition(type);
     if (!def) {
       console.error(`Unknown node type: ${type}`);
@@ -2973,9 +2974,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
 
     const outputType = (mergedParams.outputType as DataType | undefined) ?? 'float';
-    const outputs = (type === 'customFn' || type === 'exprNode') && overrideParams?.outputType
+    const outputs: Record<string, OutputSocket> = (type === 'customFn' || type === 'exprNode') && overrideParams?.outputType
       ? { result: { type: outputType, label: 'Result' } }
       : { ...def.outputs };
+
+    if (alias?.socketTypes) {
+      for (const [k, t] of Object.entries(alias.socketTypes.inputs ?? {}))  if (inputs[k])  inputs[k]  = { ...inputs[k],  type: t };
+      for (const [k, t] of Object.entries(alias.socketTypes.outputs ?? {})) if (outputs[k]) outputs[k] = { ...outputs[k], type: t };
+    }
 
     const newNode: GraphNode = {
       id: nodeId,
@@ -3269,10 +3275,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // every slider tick used to take the full-recompile path below.
     if (options?.immediate) {
       const { paramUniforms: currentUniforms, paramBindings } = get();
-      const uniformUpdates: Record<string, number> = {};
+      const uniformUpdates: Record<string, number | number[]> = {};
       let allAreUniforms = true;
       for (const [key, val] of Object.entries(params)) {
-        if (typeof val !== 'number') { allAreUniforms = false; break; }
+        // A float slider, or a vec3 / colour picker's [r, g, b].
+        const isVec3 = Array.isArray(val) && val.length === 3 && val.every(n => typeof n === 'number');
+        if (typeof val !== 'number' && !isVec3) { allAreUniforms = false; break; }
         // Editing inside a group passes the inner node's own id with a plain key.
         // Editing a group node's override passes the group id with an
         // `innerNodeId::paramKey` key — which is already the binding key. A param
@@ -3281,7 +3289,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const bindingKey = key.includes('::') ? key.split('::').slice(-2).join('::') : paramBindingKey(nodeId, key);
         const uniformName = paramBindings[bindingKey];
         if (!uniformName || !(uniformName in currentUniforms)) { allAreUniforms = false; break; }
-        uniformUpdates[uniformName] = val;
+        uniformUpdates[uniformName] = val as number | number[];
       }
       if (allAreUniforms && Object.keys(uniformUpdates).length > 0) {
         // Fast path: update uniforms only, skip shader recompile entirely
@@ -3912,11 +3920,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     const updater = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
       const newInputs = { ...n.inputs };
-      const existingIn = newInputs[primaryInputKey];
-      if (existingIn) {
+      // Both operands of an arithmetic node follow the chosen type (VECTORIZABLE_NODES.alsoInputs).
+      const also = VECTORIZABLE_NODES[n.type]?.alsoInputs ?? [];
+      for (const key of [primaryInputKey, ...also]) {
+        const existingIn = newInputs[key];
+        if (!existingIn) continue;
         // Drop the connection if the type changed (avoids type-mismatch wires)
         const keepConn = existingIn.connection != null && existingIn.type === outputType;
-        newInputs[primaryInputKey] = { ...existingIn, type: outputType, connection: keepConn ? existingIn.connection : undefined };
+        newInputs[key] = { ...existingIn, type: outputType, connection: keepConn ? existingIn.connection : undefined };
       }
       const newOutputs = { ...n.outputs };
       if (newOutputs[primaryOutputKey]) {
@@ -4132,7 +4143,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     undoManager.clear();
     const { nodes: rawNodes } = graph;
 
-    const nodes = spreadLegacyLayout(upgradeExprNodes(rawNodes).map(n => migrateNodeParams(
+    const nodes = spreadLegacyLayout(upgradeExprNodes(resolveNodeAliases(rawNodes, getNodeDefinition)).map(n => migrateNodeParams(
       n.params ? n : { ...n, params: {} },
       getNodeDefinition,
     )));
@@ -4259,7 +4270,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }
         return n;
       });
-      nodes = upgradeExprNodes(sanitized).map(n => migrateNodeParams(n, getNodeDefinition));
+      nodes = upgradeExprNodes(resolveNodeAliases(sanitized, getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[loadSavedGraph] saved graph is corrupt', name, e);
@@ -4304,7 +4315,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
       if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Shader Studio graph file?');
       looseGroups = parsed.looseGroups;
-      nodes = upgradeExprNodes(parsed.nodes as GraphNode[]).map(n => migrateNodeParams(n, getNodeDefinition));
+      nodes = upgradeExprNodes(resolveNodeAliases(parsed.nodes as GraphNode[], getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[importGraph] invalid graph file', e);

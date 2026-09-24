@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, vec3Str } from './helpers';
+import { f, p, pv3 } from './helpers';
 import { PALETTE_GLSL_FN, PALETTE_PRESET_OPTIONS } from './color';
 
 // ─── Shared 3D GLSL helpers ───────────────────────────────────────────────────
@@ -293,7 +293,7 @@ export const RaymarchNode: NodeDefinition = {
     const twistK       = p(node.params.twist_k, 1.5);
     const roundR       = p(node.params.round_r, 0.15);
 
-    const fogColorArr  = Array.isArray(node.params.fog_color) ? node.params.fog_color as number[] : [0.7, 0.75, 0.85];
+    const fogColor     = pv3(node.params.fog_color, [0.7, 0.75, 0.85]);
 
     // Palettes
     const presIdx    = parseInt((node.params.palette_preset as string) ?? '4', 10);
@@ -422,7 +422,7 @@ export const RaymarchNode: NodeDefinition = {
 
       // Exponential fog
       `    float ${id}_fog = exp(-${id}_t / ${fogDist});\n`,
-      `    vec3  ${id}_fogc = ${vec3Str(fogColorArr)};\n`,
+      `    vec3  ${id}_fogc = ${fogColor};\n`,
       `    vec3  ${id}_color = mix(${id}_fogc, ${id}_hitcol, ${id}_fog);\n`,
 
       // Depth (normalize 0..1 by maxDist)
@@ -542,7 +542,7 @@ export const MandelbulbNode: NodeDefinition = {
     const lightX   = p(node.params.light_x, 2.0);
     const lightY   = p(node.params.light_y, 4.0);
     const lightZ   = p(node.params.light_z, 2.0);
-    const bgColorArr = Array.isArray(node.params.bg_color) ? node.params.bg_color as number[] : [0.05, 0.05, 0.1];
+    const bgColor    = pv3(node.params.bg_color, [0.05, 0.05, 0.1]);
 
     const presIdx   = parseInt((node.params.palette_preset as string) ?? '1', 10);
     const pres      = RM_PALETTE_PRESETS[Math.min(presIdx, RM_PALETTE_PRESETS.length - 1)];
@@ -604,7 +604,7 @@ export const MandelbulbNode: NodeDefinition = {
       `    float ${id}_colt   = ${id}_orbitMin.x;\n`,
       `    vec3  ${id}_objcol = palette(${id}_colt, ${pA}, ${pB}, ${pC}, ${pD});\n`,
       `    vec3  ${id}_litcol = ${id}_objcol * (${ambient} + (1.0 - ${ambient}) * ${id}_diff) + vec3(${id}_spec * 0.2);\n`,
-      `    vec3  ${id}_bgcol  = ${vec3Str(bgColorArr)};\n`,
+      `    vec3  ${id}_bgcol  = ${bgColor};\n`,
       `    vec3  ${id}_color  = ${id}_hit ? ${id}_litcol : ${id}_bgcol;\n`,
       `    float ${id}_depth  = clamp(${id}_t / ${maxDist}, 0.0, 1.0);\n`,
     ];
@@ -717,11 +717,11 @@ export const VolumeCloudsNode: NodeDefinition = {
     const scatter    = p(node.params.scatter, 0.3);
     const sunSize    = p(node.params.sun_size, 0.03);
 
-    const skyTop    = Array.isArray(node.params.sky_top)     ? node.params.sky_top     as number[] : [0.1, 0.2, 0.5];
-    const skyHoriz  = Array.isArray(node.params.sky_horizon) ? node.params.sky_horizon as number[] : [0.8, 0.5, 0.3];
-    const skyGround = Array.isArray(node.params.sky_ground)  ? node.params.sky_ground  as number[] : [0.3, 0.15, 0.05];
-    const cloudCol  = Array.isArray(node.params.cloud_col)   ? node.params.cloud_col   as number[] : [1.0, 0.95, 0.85];
-    const sunCol    = Array.isArray(node.params.sun_col)     ? node.params.sun_col     as number[] : [1.0, 0.85, 0.4];
+    const skyTop    = pv3(node.params.sky_top,     [0.1, 0.2, 0.5]);
+    const skyHoriz  = pv3(node.params.sky_horizon, [0.8, 0.5, 0.3]);
+    const skyGround = pv3(node.params.sky_ground,  [0.3, 0.15, 0.05]);
+    const cloudCol  = pv3(node.params.cloud_col,   [1.0, 0.95, 0.85]);
+    const sunCol    = pv3(node.params.sun_col,     [1.0, 0.85, 0.4]);
     const absR      = p(node.params.absorptionR, 0.0);
     const absG      = p(node.params.absorptionG, 0.0);
     const absB      = p(node.params.absorptionB, 0.0);
@@ -739,13 +739,13 @@ export const VolumeCloudsNode: NodeDefinition = {
 
       // Sky gradient (based on ray y)
       `    float ${id}_skyT = clamp(${id}_rd.y * 0.5 + 0.5, 0.0, 1.0);\n`,
-      `    vec3  ${id}_sky  = mix(${vec3Str(skyGround)}, ${vec3Str(skyHoriz)}, smoothstep(0.0, 0.4, ${id}_skyT));\n`,
-      `    ${id}_sky = mix(${id}_sky, ${vec3Str(skyTop)}, smoothstep(0.3, 1.0, ${id}_skyT));\n`,
+      `    vec3  ${id}_sky  = mix(${skyGround}, ${skyHoriz}, smoothstep(0.0, 0.4, ${id}_skyT));\n`,
+      `    ${id}_sky = mix(${id}_sky, ${skyTop}, smoothstep(0.3, 1.0, ${id}_skyT));\n`,
 
       // Sun disk
       `    float ${id}_sunDot  = dot(${id}_rd, ${id}_sunDir);\n`,
       `    float ${id}_sun     = smoothstep(${sunSize} + 0.005, ${sunSize}, acos(clamp(${id}_sunDot, -1.0, 1.0)));\n`,
-      `    ${id}_sky += ${vec3Str(sunCol)} * ${id}_sun * 3.0;\n`,
+      `    ${id}_sky += ${sunCol} * ${id}_sun * 3.0;\n`,
       // HG phase (normalized: g=0 → 1.0 for any angle, preserving original behavior)
       `    float ${id}_pg  = ${phaseG};\n`,
       `    float ${id}_pg2 = ${id}_pg * ${id}_pg;\n`,
@@ -766,7 +766,7 @@ export const VolumeCloudsNode: NodeDefinition = {
       `            if (${id}_dens > 0.001) {\n`,
       `                float ${id}_lightDens = cloudDensity(${id}_cp + ${id}_sunDir * 0.5, ${coverage}, ${puffiness}, ${cloudScale});\n`,
       `                float ${id}_shadow = exp(-${id}_lightDens * 2.0);\n`,
-      `                vec3  ${id}_lit = (${vec3Str(cloudCol)} * (${id}_shadow + ${scatter}) + ${vec3Str(sunCol)} * pow(max(${id}_sunDot, 0.0), 4.0) * ${id}_shadow) * ${id}_phase;\n`,
+      `                vec3  ${id}_lit = (${cloudCol} * (${id}_shadow + ${scatter}) + ${sunCol} * pow(max(${id}_sunDot, 0.0), 4.0) * ${id}_shadow) * ${id}_phase;\n`,
       `                float ${id}_alpha = min(${id}_dens * ${id}_dt * 8.0, 1.0 - ${id}_cloudAccum);\n`,
       `                ${id}_cloudCol   += ${id}_lit * ${id}_alpha;\n`,
       `                ${id}_cloudAccum += ${id}_alpha;\n`,
@@ -1158,8 +1158,8 @@ export const OrbitalVolume3DNode: NodeDefinition = {
     const camPitch     = node.params.cam_pitch !== undefined
                          ? p(node.params.cam_pitch, 0.35)
                          : f(typeof node.params.cam_height === 'number' ? Math.atan2(node.params.cam_height as number, parseFloat(camDist)) : 0.35);
-    const pA = Array.isArray(node.params.color_a) ? node.params.color_a as number[] : [0.3, 0.6, 1.0];
-    const pB = Array.isArray(node.params.color_b) ? node.params.color_b as number[] : [1.0, 0.4, 0.2];
+    const pA = pv3(node.params.color_a, [0.3, 0.6, 1.0]);
+    const pB = pv3(node.params.color_b, [1.0, 0.4, 0.2]);
 
     // If orbit_angle is wired in, use it directly (+ cam_angle offset); otherwise animate with time
     const angleExpr = orbitAngleIn
@@ -1203,7 +1203,7 @@ export const OrbitalVolume3DNode: NodeDefinition = {
         float ${id}_sa = clamp(${id}_ds * ${stepSize}, 0.0, 1.0);
         if (${id}_sa > 0.001) {
             float ${id}_ax = dot(normalize(${id}_ps + vec3(0.0001)), vec3(0.0, 0.0, 1.0));
-            vec3  ${id}_sc = mix(${vec3Str(pB)}, ${vec3Str(pA)}, clamp(${id}_ax * 0.5 + 0.5, 0.0, 1.0));
+            vec3  ${id}_sc = mix(${pB}, ${pA}, clamp(${id}_ax * 0.5 + 0.5, 0.0, 1.0));
             // Fresnel-like rim brightening at silhouette edges
             float ${id}_fr = 1.0 - abs(dot(normalize(${id}_p - ${id}_ro), ${id}_rd));
             ${id}_sc *= 1.0 + ${id}_fr * 0.5;

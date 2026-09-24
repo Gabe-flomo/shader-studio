@@ -64,9 +64,9 @@ vec2 swirlWarpOffset(vec2 uv, float cx, float cy, float twist, float falloff, fl
 
 export const FractNode: NodeDefinition = {
   type: 'fract',
-  label: 'Fract / Tile',
+  label: 'Tile', aliases: ['fract', 'repeat'],
+  description: 'Repeats the space: fract(uv * count) - 0.5, so each tile is centred on 0. For a plain scalar fract use Fract (scalar).',
   category: 'Transforms',
-  description: 'Tile space using fract with an optional scale multiplier. Wire a float to Scale to animate tile count.',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
     scale: { type: 'float', label: 'Tile count' },

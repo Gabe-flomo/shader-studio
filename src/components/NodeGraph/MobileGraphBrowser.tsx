@@ -95,7 +95,8 @@ const ASSIGN_OP_EXCLUDED = new Set(['output', 'vec4Output', 'loopIndex', 'loopCa
 // custom-max power-user controls.
 function paramVisible(node: GraphNode, paramDef: { showWhen?: { param: string; value: string | string[] } }): boolean {
   if (!paramDef.showWhen) return true;
-  const val = node.params[paramDef.showWhen.param];
+  // A gate param an older save never had reads as its default (same rule as isParamVisible)
+  const val = node.params[paramDef.showWhen.param] ?? getNodeDefinition(node.type)?.defaultParams?.[paramDef.showWhen.param];
   const want = paramDef.showWhen.value;
   return Array.isArray(want) ? want.includes(val as string) : val === want;
 }
