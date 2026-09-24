@@ -38,7 +38,7 @@ interface CategoryGroup { name: string; subgroups: SubGroup[] }
 const CATEGORIES: CategoryGroup[] = (() => {
   const catMap = new Map<string, Map<string | null, string[]>>();
   for (const [type, def] of Object.entries(NODE_REGISTRY)) {
-    if (HIDDEN_TYPES.has(type)) continue;
+    if (HIDDEN_TYPES.has(type) || def.deprecated) continue; // deprecated: loadable, not offered
     if (!catMap.has(def.category)) catMap.set(def.category, new Map());
     const subMap = catMap.get(def.category)!;
     const sub = def.subcategory ?? null;

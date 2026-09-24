@@ -145,7 +145,8 @@ const SECTION_LABEL: React.CSSProperties = {
 };
 
 export function ExprModal({ node, onClose }: Props) {
-  const { updateNodeParams, disconnectInput } = useNodeGraphStore();
+  const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  const disconnectInput  = useNodeGraphStore(s => s.disconnectInput);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [autoWrap, setAutoWrap] = useState(false);
 
