@@ -42,9 +42,9 @@ import { errorMessage } from '../../utils/fileIO';
 import type { FileResult } from '../../utils/fileIO';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
-import { AssetContextMenu } from './AssetContextMenu';
+import { Menu } from '../ui/Menu';
 import { KeyframeEditorModal } from './KeyframeEditorModal';
-import { socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
+import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
 import { ctp } from '../../theme/palette';
@@ -56,7 +56,7 @@ import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
-import { CardBadge, CardButton, CardDivider, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
+import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -486,6 +486,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
   const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
+  const [kfChipHover, setKfChipHover] = useState(false);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
   const [showCommentEditor, setShowCommentEditor] = useState(false);
@@ -3041,6 +3042,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const isKeyframed = kfEligible && (
             input.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, vectorAxes ?? [])
           );
+          const kfBypassed = isKeyframed && isKeyframeBypassed(node, key);
 
           return (
             <div
@@ -3051,14 +3053,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               <div
                 data-socket="in"
                 ref={el => registerSocket(node.id, 'in', key, el)}
-                title={isKeyframed ? 'Keyframed — right-click to edit' : undefined}
+                title={isKeyframed ? (kfBypassed ? 'Keyframes bypassed — right-click to use them again' : 'Keyframed — right-click for options, double-click to edit') : undefined}
                 style={{
                   width: socketSize,
                   height: socketSize,
                   borderRadius: isKeyframed ? '3px' : '50%',
                   transform: isKeyframed ? 'rotate(45deg)' : undefined,
                   boxSizing: 'border-box',
-                  background: isKeyframed ? tk.status.warning : isConnected ? (TYPE_COLORS[input.type] || '#888') : tk.bg.panel,
+                  background: isKeyframed ? (kfBypassed ? tk.bg.panel : tk.status.warning) : isConnected ? (TYPE_COLORS[input.type] || '#888') : tk.bg.panel,
                   border: `2px solid ${isKeyframed ? tk.status.warning : (TYPE_COLORS[input.type] || '#888')}`,
                   marginRight: socketMarginRight,
                   flexShrink: 0,
@@ -3117,7 +3119,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                 }}
               />
               {/* Hover tooltip */}
-              {isHovered && !draggingType && (
+              {isHovered && !draggingType && !kfChipHover && (
                 <SocketTooltip
                   lines={isExternal ? [`🔒 Wired from outside group`, `(${input.type})`] : buildInputTooltip(key)}
                   side="left"
@@ -3127,18 +3129,26 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   surface that on hover instead of requiring right-click to find it.
                   Only float, unconnected, non-external sockets are kfEligible, so a
                   wired input never shows this (you'd delete the connection first). */}
-              {isHovered && !draggingType && kfEligible && !isKeyframed && (
-                <button
-                  onMouseDown={e => e.stopPropagation()}
-                  onClick={e => { e.stopPropagation(); setKfModalKey(key); }}
-                  title="Add keyframes to this input"
-                  style={{
-                    position: 'absolute', left: 8, top: -12, zIndex: 200, height: 20, padding: '0 7px', borderRadius: 6,
-                    display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap',
-                    border: 0, background: tk.bg.panel, color: tk.status.warningText, font: `600 10.5px ${fontFamily.ui}`,
-                    boxShadow: `inset 0 0 0 1px ${alpha(tk.status.warning, 0.6)}, ${tk.shadow.float}`,
-                  }}
-                ><Icon name="kf" size={10} />Keyframe</button>
+              {isHovered && !draggingType && kfEligible && !isKeyframed && !isTouchDevice && (
+                // Sits out in the canvas gutter left of the socket, so it never collides with the
+                // socket tooltip (which opens to the right). The padding bridges the gap from the dot.
+                <div
+                  onMouseEnter={() => { setHoveredInput(key); setKfChipHover(true); }}
+                  onMouseLeave={() => { setHoveredInput(null); setKfChipHover(false); }}
+                  style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', zIndex: 200, marginRight: -4, paddingRight: 12 }}
+                >
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={e => { e.stopPropagation(); setKfChipHover(false); setKfModalKey(key); }}
+                    title="Add keyframes to this input"
+                    style={{
+                      height: 20, padding: '0 7px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap',
+                      border: 0, background: tk.bg.panel, color: tk.status.warningText, font: `600 10.5px ${fontFamily.ui}`,
+                      boxShadow: `inset 0 0 0 1px ${alpha(tk.status.warning, 0.6)}, ${tk.shadow.float}`,
+                    }}
+                  ><Icon name="kf" size={10} />Keyframe</button>
+                </div>
               )}
               {/* When dragging: show a drop-here indicator on compatible sockets (not external) */}
               {!isExternal && draggingType && typesCompatible(draggingType, input.type as DataType) && (
@@ -3563,7 +3573,8 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             const effMin = bidir ? -effMax : (customMax != null ? 0 : (paramDef.min ?? 0));
             const defVal = def?.defaultParams?.[key];
             const hovered = hoveredSliderKey === key;
-            const isKeyframed = node.inputs[key]?.type === 'float' && socketHasKeyframes(node, key);
+            const isKeyframed = node.inputs[key]?.type === 'float' && !node.inputs[key]?.connection
+              && socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
 
             // A typed value becomes the new max (by magnitude), so the ruler can reach it
             const handleTyped = (n: number) => {
@@ -3585,18 +3596,21 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
                 )}
                 <ParamLabel title={paramDef.hint}>{paramDef.label}</ParamLabel>
-                <RulerSlider
-                  value={val}
-                  min={effMin}
-                  max={effMax}
-                  step={adaptiveStep(val, step)}
-                  defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
-                  onChange={v => setFloat(key, String(v))}
-                  onType={handleTyped}
-                  keyframed={isKeyframed ? {} : undefined}
-                  ariaLabel={paramDef.label}
-                  touch={isTouchDevice}
-                />
+                {isKeyframed ? (
+                  <KeyframedRuler node={node} socketKey={key} label={paramDef.label} min={effMin} max={effMax} step={step} touch={isTouchDevice} />
+                ) : (
+                  <RulerSlider
+                    value={val}
+                    min={effMin}
+                    max={effMax}
+                    step={adaptiveStep(val, step)}
+                    defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
+                    onChange={v => setFloat(key, String(v))}
+                    onType={handleTyped}
+                    ariaLabel={paramDef.label}
+                    touch={isTouchDevice}
+                  />
+                )}
                 {/* Range tools: bidirectional (±max) and, after typing past the range, reset it */}
                 <div style={{ display: 'flex', gap: 1, marginRight: -6, visibility: hovered || bidir || customMax != null ? 'visible' : 'hidden' }}>
                   <CardButton icon="bidir" on={bidir}
@@ -3856,6 +3870,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         const isVec = kfInput && (kfInput.type === 'vec2' || kfInput.type === 'vec3');
         const axes = isVec ? VECTOR_AXES[kfInput.type as 'vec2' | 'vec3'] : null;
         const hasKf = isVec ? socketHasVectorKeyframes(node, kfMenu.key, axes ?? []) : socketHasKeyframes(node, kfMenu.key);
+        const bypassed = isKeyframeBypassed(node, kfMenu.key);
         const clearParams: Record<string, unknown> = {
           [`__kfMode_${kfMenu.key}`]: undefined,
           [`__kfLoopBack_${kfMenu.key}`]: undefined,
@@ -3864,22 +3879,19 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         if (isVec && axes) axes.forEach(axis => { clearParams[`__keyframes_${kfMenu.key}_${axis}`] = undefined; });
         else clearParams[`__keyframes_${kfMenu.key}`] = undefined;
         return (
-          <AssetContextMenu
+          <Menu
             x={kfMenu.x}
             y={kfMenu.y}
-            onDismiss={() => setKfMenu(null)}
-            items={[
-              {
-                label: hasKf ? 'Edit Keyframes…' : 'Add Keyframes…',
-                action: () => setKfModalKey(kfMenu.key),
-              },
-              ...(hasKf
-                ? [{
-                    label: 'Remove Keyframes',
-                    destructive: true,
-                    action: () => updateNodeParams(node.id, clearParams),
-                  }]
-                : []),
+            onClose={() => setKfMenu(null)}
+            items={hasKf ? [
+              { label: 'Edit keyframes…', icon: 'kf', hint: 'dbl-click', onSelect: () => setKfModalKey(kfMenu.key) },
+              bypassed
+                ? { label: 'Use keyframes again', icon: 'bypass', onSelect: () => updateNodeParams(node.id, { [`__kfBypass_${kfMenu.key}`]: undefined }) }
+                : { label: 'Bypass keyframes', icon: 'bypass', onSelect: () => updateNodeParams(node.id, { [`__kfBypass_${kfMenu.key}`]: true }) },
+              'separator',
+              { label: 'Remove keyframes', icon: 'trash', danger: true, onSelect: () => updateNodeParams(node.id, clearParams) },
+            ] : [
+              { label: 'Add keyframes…', icon: 'kf', onSelect: () => setKfModalKey(kfMenu.key) },
             ]}
           />
         );

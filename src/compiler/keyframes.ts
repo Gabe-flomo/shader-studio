@@ -118,6 +118,50 @@ export function socketHasVectorKeyframes(node: GraphNode, socketKey: string, axe
   });
 }
 
+// ─── JS evaluation ───────────────────────────────────────────────────────────
+
+/** Mirrors kfCubicBezier (CSS cubic-bezier, Newton solve, output unclamped for overshoot). */
+function cubicBezier(x: number, a: number, b: number, c: number, d: number): number {
+  const A = 1 - 3 * c + 3 * a, B = 3 * c - 6 * a, C = 3 * a;
+  let t = Math.min(1, Math.max(0, x));
+  for (let i = 0; i < 5; i++) {
+    const cx = A * t * t * t + B * t * t + C * t;
+    t -= (cx - x) / (3 * A * t * t + 2 * B * t + C || 1e-6);
+    t = Math.min(1, Math.max(0, t));
+  }
+  const E = 1 - 3 * d + 3 * b, F = 3 * d - 6 * b, G = 3 * b;
+  return E * t * t * t + F * t * t + G * t;
+}
+
+/** The value a keyframe track has at global time `t` — the same maths as generateKeyframeGLSL. */
+export function evaluateKeyframes(cfg: KeyframeConfig, t: number): number {
+  const { keyframes, mode, loopBack, offset, loopCount } = cfg;
+  const t0 = keyframes[0].t + offset;
+  const duration = Math.max(keyframes[keyframes.length - 1].t - keyframes[0].t, 0.0001);
+  const loopSpan = mode === 'interpolate' ? duration + loopBack : duration;
+  const glslMod = (x: number, y: number) => x - y * Math.floor(x / y);
+  const lt = mode === 'once' ? Math.min(duration, Math.max(0, t - t0))
+    : loopCount != null && t - t0 >= loopCount * loopSpan ? loopSpan
+      : glslMod(t - t0, loopSpan);
+  const segs: { start: number; end: number; v0: number; v1: number; ease: KeyframeEasing }[] = [];
+  for (let i = 0; i < keyframes.length - 1; i++) {
+    const a = keyframes[i], b = keyframes[i + 1];
+    segs.push({ start: a.t - keyframes[0].t, end: b.t - keyframes[0].t, v0: a.v, v1: b.v, ease: a.ease });
+  }
+  if (mode === 'interpolate') {
+    const last = keyframes[keyframes.length - 1];
+    segs.push({ start: duration, end: duration + loopBack, v0: last.v, v1: keyframes[0].v, ease: last.ease });
+  }
+  if (segs.length === 0) return keyframes[0].v;
+  for (const seg of segs) {
+    if (lt < seg.end) {
+      const st = Math.min(1, Math.max(0, (lt - seg.start) / Math.max(seg.end - seg.start, 0.0001)));
+      return seg.v0 + (seg.v1 - seg.v0) * cubicBezier(st, seg.ease.a, seg.ease.b, seg.ease.c, seg.ease.d);
+    }
+  }
+  return segs[segs.length - 1].v1;
+}
+
 // ─── GLSL codegen ────────────────────────────────────────────────────────────
 //
 // Reuses the exact cubic-bezier-with-Newton's-method solve already proven out

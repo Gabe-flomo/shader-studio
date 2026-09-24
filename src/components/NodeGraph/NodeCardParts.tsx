@@ -1,4 +1,7 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import type { GraphNode } from '../../types/nodeGraph';
+import { evaluateKeyframes, getKeyframeConfig } from '../../compiler/keyframes';
+import { RulerSlider } from '../ui/RulerSlider';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
@@ -107,3 +110,41 @@ export function ParamSocket({ color, wired, register, onMouseUp, touch = false }
   );
 }
 
+
+/**
+ * Greyed ruler for a keyframed param: the chip follows the animated value live (it listens to
+ * the preview's time tick), and hovering explains why it won't drag.
+ */
+export function KeyframedRuler({ node, socketKey, label, min, max, step, touch = false }: {
+  node: GraphNode;
+  socketKey: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  touch?: boolean;
+}) {
+  const cfg = getKeyframeConfig(node, socketKey);
+  const [time, setTime] = useState(0);
+  useEffect(() => {
+    const onTick = (e: Event) => setTime((e as CustomEvent<{ time: number }>).detail.time);
+    window.addEventListener('time-tick', onTick);
+    return () => window.removeEventListener('time-tick', onTick);
+  }, []);
+  const value = cfg ? evaluateKeyframes(cfg, time) : 0;
+  const summary = cfg
+    ? `${cfg.keyframes.length} ${cfg.keyframes.length === 1 ? 'key' : 'keys'} · ${cfg.mode === 'once' ? 'plays once' : cfg.mode === 'loop' ? 'loops' : 'smooth loop'}. Edit them from the ◆ socket.`
+    : undefined;
+  return (
+    <RulerSlider
+      value={value}
+      min={Math.min(min, value)}
+      max={Math.max(max, value)}
+      step={step}
+      onChange={() => {}}
+      keyframed={{ summary }}
+      ariaLabel={label}
+      touch={touch}
+    />
+  );
+}
