@@ -2,15 +2,13 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
 import { paletteNodePreset } from '../../nodes/definitions/color';
 import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
-import { ctp } from '../../theme/palette';
 import { useCtp } from '../../theme/nodePalette';
+import { useThemeMode } from '../../theme/themeStore';
+import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, type Viz } from './vizKit';
+import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
-const VIZ_CONTAINER: React.CSSProperties = {
-  borderBottom: `1px solid ${ctp.surface0}`,
-  overflow: 'hidden',
-};
 
 // ─── Viz 1 — Tone Curve (toneMap) ────────────────────────────────────────────
 
@@ -61,15 +59,15 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -77,7 +75,7 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
     }
 
     // Identity diagonal
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W * 0.5, 0); ctx.stroke();
@@ -85,7 +83,7 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
 
     // Tone curve — sample input 0→2
     const fn = TONE_FNS[mode] ?? TONE_FNS.aces;
-    ctx.strokeStyle = ctp.green;
+    ctx.strokeStyle = pal.green;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -97,13 +95,13 @@ export function ToneCurveViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Mode label
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(mode, 4, H - 4);
   }, [mode]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -136,9 +134,9 @@ export function GradientStripViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
     if (node.type === 'gradient') {
       const aV = Array.isArray(node.params.color_a) ? node.params.color_a as number[] : [1,0.2,0.2];
@@ -162,7 +160,7 @@ export function GradientStripViz({ node }: { node: GraphNode }) {
   }, [node.type, node.params]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -184,13 +182,13 @@ export function HueRingViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     const cx = W / 2, cy = H / 2;
     const R = Math.min(cx, cy) - 4;
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Draw hue ring (64 segments), dim outside selection
@@ -235,12 +233,12 @@ export function HueRingViz({ node }: { node: GraphNode }) {
     ctx.fill();
   }, [hueCtr, hueW]);
 
-  const boostColor = boost > 1.05 ? ctp.green : boost < 0.95 ? ctp.red : ctp.overlay0;
+  const boostColor = boost > 1.05 ? pal.green : boost < 0.95 ? pal.red : pal.overlay0;
   const centerDeg  = Math.round(hueCtr * 360);
   const widthDeg   = Math.round(hueW   * 360);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px 6px 8px' }}>
+    <div style={{ ...vizContainer(), display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px 6px 8px' }}>
       <canvas
         ref={canvasRef}
         width={64}
@@ -248,12 +246,12 @@ export function HueRingViz({ node }: { node: GraphNode }) {
         style={{ flexShrink: 0, width: '64px', height: '64px' }}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-        <div style={{ fontSize: '9px', color: ctp.overlay0, fontFamily: 'monospace' }}>
+        <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO }}>
           {centerDeg}° ± {widthDeg}°
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ fontSize: '9px', color: ctp.overlay0, width: '28px' }}>boost</span>
-          <div style={{ flex: 1, height: '5px', background: ctp.base, borderRadius: '3px', position: 'relative' }}>
+          <span style={{ fontSize: '9px', color: pal.overlay0, width: '28px' }}>boost</span>
+          <div style={{ flex: 1, height: '5px', background: pal.base, borderRadius: '3px', position: 'relative' }}>
             {/* Bar from center: right = boost >1, left = boost <1 */}
             <div style={{
               position: 'absolute',
@@ -263,9 +261,9 @@ export function HueRingViz({ node }: { node: GraphNode }) {
               background: boostColor,
               borderRadius: '3px',
             }} />
-            <div style={{ position: 'absolute', left: '50%', top: 0, width: 1, height: '100%', background: ctp.surface1 }} />
+            <div style={{ position: 'absolute', left: '50%', top: 0, width: 1, height: '100%', background: pal.surface1 }} />
           </div>
-          <span style={{ fontSize: '9px', color: boostColor, width: '32px', textAlign: 'right', fontFamily: 'monospace' }}>
+          <span style={{ fontSize: '9px', color: boostColor, width: '32px', textAlign: 'right', fontFamily: MONO }}>
             ×{boost.toFixed(2)}
           </span>
         </div>
@@ -283,28 +281,28 @@ export function StepCurveViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = ctp.crust;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     }
 
     // Identity diagonal reference
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 2]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Staircase
-    ctx.strokeStyle = ctp.yellow;
+    ctx.strokeStyle = pal.yellow;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -315,13 +313,13 @@ export function StepCurveViz({ node }: { node: GraphNode }) {
     }
     ctx.stroke();
 
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`${levels} levels`, 4, H - 4);
   }, [levels]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -343,15 +341,16 @@ export function NoisePatchViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    const img = ctx.createImageData(W, H);
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz);
+    const img = ctx.createImageData(IW, IH);
 
-    for (let i = 0; i < W * H; i++) {
+    for (let i = 0; i < IW * IH; i++) {
       // Apply scale: scale > 1 = finer grain, scale < 1 = coarser blobs
-      const px = (i % W) * scale;
-      const py = Math.floor(i / W) * scale;
+      const px = (i % IW) * scale;
+      const py = Math.floor(i / IW) * scale;
       const h = Math.sin(px * 12.9898 + py * 4.1414) * 43758.5453;
       const n = (h - Math.floor(h)) - 0.5;
       // Luma mode: weight noise toward zero (simulates shadow-only grain)
@@ -363,22 +362,22 @@ export function NoisePatchViz({ node }: { node: GraphNode }) {
       img.data[i * 4 + 2] = pv;
       img.data[i * 4 + 3] = 255;
     }
-    ctx.putImageData(img, 0, 0);
+    blitImage(ctx, img, W, H);
 
     // Bottom bar — left: amount, right: scale readout
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, H - 12, W, 12);
-    ctx.fillStyle = ctp.green;
+    ctx.fillStyle = pal.green;
     ctx.fillRect(0, H - 12, Math.round(Math.min(1, amount / 0.5) * (W * 0.6)), 12);
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText(`amt ${amount.toFixed(3)}`, 3, H - 2);
-    ctx.fillStyle = ctp.blue;
+    ctx.fillStyle = pal.blue;
     ctx.fillText(`×${scale.toFixed(2)}`, W - 36, H - 2);
   }, [amount, scale, mode]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -395,6 +394,7 @@ export function NoisePatchViz({ node }: { node: GraphNode }) {
 // ─── Viz N — Audio Freq Range (audioInput) ────────────────────────────────────
 
 export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
+  setVizPalette(useCtp());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rawBands  = node.params._bands;
   const bands: number[] = Array.isArray(rawBands) ? rawBands as number[] : [200];
@@ -404,11 +404,9 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const W = canvas.width;
-    const H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
     const logMin = Math.log10(20);
     const logMax = Math.log10(20000);
@@ -416,7 +414,7 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
       Math.round(((Math.log10(Math.max(20, Math.min(20000, hz))) - logMin) / (logMax - logMin)) * W);
 
     // Background gradient
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
     const grad = ctx.createLinearGradient(0, 0, W, 0);
     grad.addColorStop(0.0,  '#1a2a3a');
@@ -435,7 +433,7 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
       ctx.strokeRect(0, 0, W, H);
     } else {
       // Draw each band
-      const BAND_COLORS = [ctp.sky, ctp.green, ctp.peach, ctp.red, ctp.mauve, ctp.yellow];
+      const BAND_COLORS = [pal.sky, pal.green, pal.peach, pal.red, pal.mauve, pal.yellow];
       for (let i = 0; i < bands.length; i++) {
         const center = bands[i];
         const lo = Math.max(20, center - freqRange);
@@ -461,15 +459,15 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
 
         // Label
         ctx.fillStyle = col;
-        ctx.font = '8px monospace';
+        ctx.font = `8px ${MONO}`;
         const label = center >= 1000 ? `${(center/1000).toFixed(1)}k` : `${Math.round(center)}`;
         ctx.fillText(label, Math.min(cx + 2, W - 28), 9 + i * 9);
       }
     }
 
     // Axis labels
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface2;
+    ctx.font = `8px ${MONO}`;
     const ticks: [number, string][] = [[100, '100'], [1000, '1k'], [5000, '5k'], [10000, '10k']];
     for (const [hz, lbl] of ticks) {
       const x = toX(hz);
@@ -478,7 +476,7 @@ export function AudioFreqRangeViz({ node }: { node: GraphNode }) {
   }, [bands, freqRange, mode]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -829,21 +827,21 @@ export function SdfPreviewViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const img = ctx.createImageData(canvas.width, canvas.height);
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { IW, IH } = imageSize(viz, 200);
+    const img = viz.ctx.createImageData(IW, IH);
     renderSDF(img, node.type, node.params);
-    ctx.putImageData(img, 0, 0);
+    blitImage(viz.ctx, img, viz.W, viz.H);
   });
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+    <div style={{ ...vizContainer(), background: pal.crust }}>
       <canvas
         ref={canvasRef}
         width={160}
         height={160}
-        // cover, not stretch: the field is square, and stretching it to a wide box turns circles into ellipses.
-        style={{ display: 'block', width: '100%', height: '120px', objectFit: 'cover', imageRendering: 'pixelated' }}
+        style={{ display: 'block', width: '100%', height: '120px' }}
       />
     </div>
   );
@@ -860,12 +858,12 @@ export function ColorRampViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
     if (stops.length === 0) {
-      ctx.fillStyle = ctp.crust;
+      ctx.fillStyle = pal.crust;
       ctx.fillRect(0, 0, W, H);
       return;
     }
@@ -903,7 +901,7 @@ export function ColorRampViz({ node }: { node: GraphNode }) {
   }, [stops]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={160}
@@ -925,15 +923,16 @@ function blackbodyJS(k: number): [number, number, number] {
   return [Math.max(0, Math.min(1, r)), Math.max(0, Math.min(1, g)), Math.max(0, Math.min(1, b))];
 }
 
-export function BlackbodyViz(_props: { node: GraphNode }) {
+export function BlackbodyViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const kelvin = typeof node.params.kelvin === 'number' ? node.params.kelvin : 6500;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
     const K_MIN = 1000, K_MAX = 12000;
     for (let i = 0; i < W; i++) {
@@ -942,10 +941,18 @@ export function BlackbodyViz(_props: { node: GraphNode }) {
       ctx.fillStyle = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
       ctx.fillRect(i, 0, 1, H);
     }
-  }, []);
+    // Marker at this node's temperature
+    const mx = ((Math.max(K_MIN, Math.min(K_MAX, kelvin)) - K_MIN) / (K_MAX - K_MIN)) * (W - 1);
+    ctx.strokeStyle = pal.crust; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, H); ctx.stroke();
+    ctx.strokeStyle = pal.text; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, H); ctx.stroke();
+    ctx.fillStyle = pal.crust; ctx.fillRect(mx + 5, 3, 48, 13);
+    ctx.fillStyle = pal.text; ctx.font = `9px ${MONO}`; ctx.fillText(`${Math.round(kelvin)} K`, mx + 8, 13);
+  }, [kelvin]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={160}
@@ -966,15 +973,15 @@ export function BrightnessContrastViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -982,14 +989,14 @@ export function BrightnessContrastViz({ node }: { node: GraphNode }) {
     }
 
     // Identity diagonal (dashed, dim)
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Actual curve: y = (x - 0.5) * contrast + 0.5 + brightness, clamped [0,1]
-    ctx.strokeStyle = ctp.peach;
+    ctx.strokeStyle = pal.peach;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -1002,7 +1009,7 @@ export function BrightnessContrastViz({ node }: { node: GraphNode }) {
   }, [brightness, contrast]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={80}
@@ -1023,11 +1030,11 @@ export function GridViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     const cells = Math.max(1, Math.min(Math.round(scale), 12));
@@ -1048,7 +1055,7 @@ export function GridViz({ node }: { node: GraphNode }) {
     }
 
     // Grid lines
-    ctx.strokeStyle = ctp.surface2;
+    ctx.strokeStyle = pal.surface2;
     ctx.lineWidth = lw;
     for (let i = 0; i <= cells; i++) {
       const x = i * cellW;
@@ -1059,7 +1066,7 @@ export function GridViz({ node }: { node: GraphNode }) {
   }, [scale, lineWidth]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={80}
@@ -1080,14 +1087,14 @@ export function WaveTextureViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = ctp.blue;
+    ctx.strokeStyle = pal.blue;
     ctx.lineWidth = 1.5;
 
     if (mode === 'rings') {
@@ -1126,7 +1133,7 @@ export function WaveTextureViz({ node }: { node: GraphNode }) {
   }, [mode, scale]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={160}
@@ -1141,9 +1148,9 @@ export function WaveTextureViz({ node }: { node: GraphNode }) {
 
 // Shared helper: draw a minimal curve plot
 function drawCurveGrid(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  ctx.fillStyle = ctp.crust;
+  ctx.fillStyle = pal.crust;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = ctp.base;
+  ctx.strokeStyle = pal.base;
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -1160,13 +1167,13 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawCurveGrid(ctx, W, H);
 
     // Identity line
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.setLineDash([2, 3]);
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
@@ -1174,7 +1181,7 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
 
     // Smoothstep curve (X range: -0.1 to 1.1)
     const xLo = -0.1, xHi = 1.1;
-    ctx.strokeStyle = ctp.blue;
+    ctx.strokeStyle = pal.blue;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1188,7 +1195,7 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
 
     // Edge markers
     const toScreenX = (v: number) => ((v - xLo) / (xHi - xLo)) * W;
-    ctx.strokeStyle = ctp.surface2;
+    ctx.strokeStyle = pal.surface2;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 2]);
     [edge0, edge1].forEach(e => {
@@ -1200,14 +1207,14 @@ export function SmoothstepViz({ node }: { node: GraphNode }) {
     ctx.setLineDash([]);
 
     // Labels
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface2;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText(`e0=${edge0.toFixed(2)}`, 3, H - 3);
     ctx.fillText(`e1=${edge1.toFixed(2)}`, W - 60, 9);
   }, [edge0, edge1]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={52} style={{ display: 'block', width: '100%', height: '52px' }} />
     </div>
   );
@@ -1222,9 +1229,9 @@ export function ClampViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawCurveGrid(ctx, W, H);
 
     // Display range: lo-0.2 to hi+0.2, clamped sensibly
@@ -1236,14 +1243,14 @@ export function ClampViz({ node }: { node: GraphNode }) {
     const toY = (v: number) => H - ((v - yLo) / range) * H;
 
     // Identity diagonal (behind)
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.setLineDash([2, 3]);
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(toX(xLo), toY(xLo)); ctx.lineTo(toX(xHi), toY(xHi)); ctx.stroke();
     ctx.setLineDash([]);
 
     // Clamp curve: flat at lo, ramp, flat at hi
-    ctx.strokeStyle = ctp.green;
+    ctx.strokeStyle = pal.green;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1255,7 +1262,7 @@ export function ClampViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Min/max tick lines
-    ctx.strokeStyle = ctp.surface2;
+    ctx.strokeStyle = pal.surface2;
     ctx.setLineDash([2, 2]);
     ctx.lineWidth = 1;
     const loX = toX(lo), hiX = toX(hi);
@@ -1263,14 +1270,14 @@ export function ClampViz({ node }: { node: GraphNode }) {
     if (hiX >= 0 && hiX <= W) { ctx.beginPath(); ctx.moveTo(hiX, 0); ctx.lineTo(hiX, H); ctx.stroke(); }
     ctx.setLineDash([]);
 
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface2;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText(`min=${lo.toFixed(2)}`, 3, H - 3);
     ctx.fillText(`max=${hi.toFixed(2)}`, W - 56, 9);
   }, [lo, hi]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={52} style={{ display: 'block', width: '100%', height: '52px' }} />
     </div>
   );
@@ -1284,23 +1291,23 @@ export function MixViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Gradient bar: dark (A) to bright (B)
     const grad = ctx.createLinearGradient(0, 0, W, 0);
-    grad.addColorStop(0, ctp.surface0);
-    grad.addColorStop(1, ctp.text);
+    grad.addColorStop(0, pal.surface0);
+    grad.addColorStop(1, pal.text);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 4, W, H - 12);
 
     // Tick line at t
     const tx = t * W;
-    ctx.strokeStyle = ctp.yellow;
+    ctx.strokeStyle = pal.yellow;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, H); ctx.stroke();
 
@@ -1308,21 +1315,21 @@ export function MixViz({ node }: { node: GraphNode }) {
     const outV = Math.round(t * 255);
     ctx.fillStyle = `rgb(${outV},${outV},${outV})`;
     ctx.beginPath(); ctx.arc(tx, H / 2, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = ctp.yellow;
+    ctx.strokeStyle = pal.yellow;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
     // Labels
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface2;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText('A', 4, H - 2);
     ctx.fillText('B', W - 11, H - 2);
-    ctx.fillStyle = ctp.yellow;
+    ctx.fillStyle = pal.yellow;
     ctx.fillText(`t=${t.toFixed(2)}`, tx > W * 0.7 ? tx - 38 : tx + 4, 9);
   }, [t]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={36} style={{ display: 'block', width: '100%', height: '36px' }} />
     </div>
   );
@@ -1342,9 +1349,9 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawCurveGrid(ctx, W, H);
 
     const inRange  = Math.max(inMax  - inMin,  0.0001);
@@ -1360,7 +1367,7 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
     const toY = (v: number) => H - ((v - yLo) / ySpan) * H;
 
     // Curve
-    ctx.strokeStyle = smooth ? ctp.mauve : ctp.yellow;
+    ctx.strokeStyle = smooth ? pal.mauve : pal.yellow;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1374,7 +1381,7 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // In range markers
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.setLineDash([2, 2]);
     ctx.lineWidth = 1;
     const toX = (v: number) => ((v - xLo) / (xHi - xLo)) * W;
@@ -1384,13 +1391,13 @@ export function MapRangeViz({ node }: { node: GraphNode }) {
     });
     ctx.setLineDash([]);
 
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface2;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText(`[${inMin.toFixed(1)},${inMax.toFixed(1)}]→[${outMin.toFixed(1)},${outMax.toFixed(1)}]`, 3, H - 3);
   }, [inMin, inMax, outMin, outMax, smooth]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={52} style={{ display: 'block', width: '100%', height: '52px' }} />
     </div>
   );
@@ -1434,19 +1441,19 @@ export function AddColorsViz({ node }: { node: GraphNode }) {
   }, []);
 
   const scale = typeof node.params.scale === 'number' ? node.params.scale : null;
-  const sw: React.CSSProperties = { width: 22, height: 22, borderRadius: 3, border: `1px solid ${ctp.surface1}`, flexShrink: 0, background: '#111' };
+  const sw: React.CSSProperties = { width: 22, height: 22, borderRadius: 3, border: `1px solid ${pal.surface1}`, flexShrink: 0, background: '#111' };
 
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'monospace' }}>
+    <div style={{ ...vizContainer(), padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px', fontFamily: MONO }}>
       <div ref={aRef} style={sw} />
-      <span style={{ fontSize: '9px', color: ctp.surface2 }}>A</span>
-      <span style={{ fontSize: '12px', color: ctp.overlay0 }}>+</span>
+      <span style={{ fontSize: '9px', color: pal.surface2 }}>A</span>
+      <span style={{ fontSize: '12px', color: pal.overlay0 }}>+</span>
       <div ref={bRef} style={sw} />
-      <span style={{ fontSize: '9px', color: ctp.surface2 }}>B</span>
-      {scale !== null && <span style={{ fontSize: '9px', color: ctp.yellow }}>×{scale.toFixed(2)}</span>}
-      <span style={{ fontSize: '12px', color: ctp.overlay0 }}>=</span>
+      <span style={{ fontSize: '9px', color: pal.surface2 }}>B</span>
+      {scale !== null && <span style={{ fontSize: '9px', color: pal.yellow }}>×{scale.toFixed(2)}</span>}
+      <span style={{ fontSize: '12px', color: pal.overlay0 }}>=</span>
       <div ref={rRef} style={sw} />
-      <span ref={rLabelRef} style={{ fontSize: '9px', color: ctp.overlay0, marginLeft: 2 }} />
+      <span ref={rLabelRef} style={{ fontSize: '9px', color: pal.overlay0, marginLeft: 2 }} />
     </div>
   );
 }
@@ -1506,25 +1513,25 @@ export function ParticleEmitterViz({ node }: { node: GraphNode }) {
   const modeLabel = flowMode === 'noise' ? 'noise flow' : flowMode === 'gravity' ? 'gravity field' : `${count} pts • ${lifetime.toFixed(1)}s`;
 
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div style={{ ...vizContainer(), padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
       <svg width={48} height={48} style={{ flexShrink: 0, overflow: 'visible' }}>
         {flowMode === 'linear' && (
-          <circle cx={cx} cy={cy} r={3} fill={ctp.mauve} opacity={0.9} />
+          <circle cx={cx} cy={cy} r={3} fill={pal.mauve} opacity={0.9} />
         )}
         {dots.map((d, i) => (
           <circle
             key={i}
             cx={d.x} cy={d.y} r={d.size / 2}
-            fill={ctp.mauve}
+            fill={pal.mauve}
             opacity={d.alpha}
           />
         ))}
       </svg>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <span style={{ fontSize: '12px', color: ctp.mauve, fontFamily: 'monospace', fontWeight: 600 }}>
+        <span style={{ fontSize: '12px', color: pal.mauve, fontFamily: MONO, fontWeight: 600 }}>
           ~{rate} / sec
         </span>
-        <span style={{ fontSize: '9px', color: ctp.overlay0, lineHeight: 1.3 }}>
+        <span style={{ fontSize: '9px', color: pal.overlay0, lineHeight: 1.3 }}>
           {modeLabel}
         </span>
       </div>
@@ -1635,10 +1642,10 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
   const drawFrame = useCallback((liveY?: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const viz = setupViz(canvas);
+    if (!viz) return;
     const n = nodeRef.current;
-    const W = canvas.width, H = canvas.height;
+    const { ctx, W, H } = viz;
 
     drawCurveGrid(ctx, W, H);
 
@@ -1653,10 +1660,10 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     if (n.type === 'quadBezierShaper') {
       const ax = typeof n.params.a === 'number' ? n.params.a : 0.5;
       const ay = typeof n.params.b === 'number' ? n.params.b : 0.5;
-      ctx.strokeStyle = `${ctp.red}40`;
+      ctx.strokeStyle = `${pal.red}40`;
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.lineTo(W, 0); ctx.stroke();
-      ctx.fillStyle = ctp.red;
+      ctx.fillStyle = pal.red;
       ctx.beginPath(); ctx.arc(ax*W, H - ay*H, 3, 0, Math.PI*2); ctx.fill();
     }
     if (n.type === 'cubicBezierShaper') {
@@ -1664,11 +1671,11 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
       const ay = typeof n.params.b === 'number' ? n.params.b : 0.1;
       const bx = typeof n.params.c === 'number' ? n.params.c : 0.25;
       const by = typeof n.params.d === 'number' ? n.params.d : 1.0;
-      ctx.strokeStyle = `${ctp.red}40`;
+      ctx.strokeStyle = `${pal.red}40`;
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(ax*W, H - ay*H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(W, 0); ctx.lineTo(bx*W, H - by*H); ctx.stroke();
-      ctx.fillStyle = ctp.red;
+      ctx.fillStyle = pal.red;
       [[ax, ay], [bx, by]].forEach(([px, py]) => {
         ctx.beginPath(); ctx.arc(px*W, H - py*H, 3, 0, Math.PI*2); ctx.fill();
       });
@@ -1680,7 +1687,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     // Map pixel x → domain value and domain y → canvas y
     const xFromPx = (px: number) => isBipolar ? (px / W) * 2 - 1 : px / W;
     const yToPy   = (y: number)  => isBipolar ? H / 2 - y * (H / 2) : H - y * H;
-    ctx.strokeStyle = ctp.blue;
+    ctx.strokeStyle = pal.blue;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -1711,7 +1718,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
       }
       // Dot
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = ctp.crust;
+      ctx.strokeStyle = pal.crust;
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(dotPx, dotPy, 4, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
@@ -1740,7 +1747,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
   }, [node.id, drawFrame]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -1764,7 +1771,7 @@ const TYPE_COLORS: Record<DataType, string> = {
   mat3:        '#e8a020',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
-  particle:    ctp.yellow,
+  particle:    pal.yellow,
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {
@@ -1948,7 +1955,7 @@ export function SDF3DParamViz({ node }: { node: GraphNode }) {
 
   return (
     <div style={{
-      ...VIZ_CONTAINER,
+      ...vizContainer(),
       padding: '5px 8px 6px',
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -1956,8 +1963,8 @@ export function SDF3DParamViz({ node }: { node: GraphNode }) {
     }}>
       {entries.map(([k, v]) => (
         <div key={k} style={{ display: 'flex', gap: '4px', alignItems: 'baseline', minWidth: 0 }}>
-          <span style={{ fontSize: '8px', color: ctp.overlay0, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{k}</span>
-          <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtVal(v)}</span>
+          <span style={{ fontSize: '8px', color: pal.overlay0, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{k}</span>
+          <span style={{ fontSize: '9px', color: pal.text, fontFamily: MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtVal(v)}</span>
         </div>
       ))}
     </div>
@@ -1981,42 +1988,42 @@ const SCALAR_FNS: Record<string, ScalarFn> = {
   mod:      (x, p) => { const period = typeof p.period === 'number' ? p.period : 1; return ((x % period) + period) % period; },
   tanh:     (x)    => Math.tanh(x),
   round:    (x)    => Math.round(x * 4) / 4,
-  step:     (x, p) => x >= (typeof p.edge === 'number' ? p.edge : 0) ? 1 : -1,
-  atan2:    (x)    => Math.atan2(x, 0.5) / Math.PI,
+  step:     (x, p) => x >= (typeof p.edge === 'number' ? p.edge : 0) ? 1 : 0,
+  atan2:    (x)    => Math.atan2(x, 1) / (Math.PI / 2), // y over x = 1, scaled to ±1 at ±90°
 };
 
 const SCALAR_COLORS: Record<string, string> = {
-  exp: ctp.peach, pow: ctp.yellow, sqrt: ctp.green,
-  ceil: ctp.sky, floor: ctp.blue, negate: ctp.red,
-  sign: ctp.mauve, fractRaw: ctp.yellow, mod: ctp.yellow,
-  abs: ctp.green,
-  tanh: ctp.mauve, round: ctp.sky, step: ctp.yellow, atan2: ctp.green,
+  exp: pal.peach, pow: pal.yellow, sqrt: pal.green,
+  ceil: pal.sky, floor: pal.blue, negate: pal.red,
+  sign: pal.mauve, fractRaw: pal.yellow, mod: pal.yellow,
+  abs: pal.green,
+  tanh: pal.mauve, round: pal.sky, step: pal.yellow, atan2: pal.green,
 };
 
 export function ScalarFnViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fn = SCALAR_FNS[node.type];
-  const color = SCALAR_COLORS[node.type] ?? ctp.text;
+  const color = SCALAR_COLORS[node.type] ?? pal.text;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !fn) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
     }
     // Axes
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
@@ -2046,13 +2053,13 @@ export function ScalarFnViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Label
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(node.type, 4, H - 4);
   }, [fn, color, node.type, node.params]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={56}
         style={{ display: 'block', width: '100%', height: '56px' }} />
     </div>
@@ -2065,7 +2072,7 @@ const OP_SYMBOLS: Record<string, string> = {
   add: '+', subtract: '−', multiply: '×', divide: '÷',
 };
 const OP_COLORS: Record<string, string> = {
-  add: ctp.green, subtract: ctp.red, multiply: ctp.blue, divide: ctp.yellow,
+  add: pal.green, subtract: pal.red, multiply: pal.blue, divide: pal.yellow,
 };
 
 export function ArithmeticOpViz({ node }: { node: GraphNode }) {
@@ -2077,16 +2084,16 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     const n = nodeRef.current;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     const op    = OP_SYMBOLS[n.type] ?? '?';
-    const color = OP_COLORS[n.type]  ?? ctp.text;
+    const color = OP_COLORS[n.type]  ?? pal.text;
 
     const fmt = (v: number) => {
       const s = (Math.round(v * 1000) / 1000).toString();
@@ -2107,28 +2114,28 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
 
     // A
     if (aVal !== null) {
-      ctx.font = '12px monospace'; ctx.fillStyle = ctp.text; ctx.textAlign = 'left';
+      ctx.font = `12px ${MONO}`; ctx.fillStyle = pal.text; ctx.textAlign = 'left';
       const s = fmt(aVal); ctx.fillText(s, x, cy); x += ctx.measureText(s).width + 8;
     } else {
-      ctx.font = '11px monospace'; ctx.fillStyle = ctp.surface2; ctx.textAlign = 'left';
+      ctx.font = `11px ${MONO}`; ctx.fillStyle = pal.surface2; ctx.textAlign = 'left';
       ctx.fillText('a', x, cy); x += 16;
     }
 
     // Op symbol
-    ctx.font = '15px monospace'; ctx.fillStyle = color; ctx.textAlign = 'left';
+    ctx.font = `15px ${MONO}`; ctx.fillStyle = color; ctx.textAlign = 'left';
     ctx.fillText(op, x, cy); x += ctx.measureText(op).width + 8;
 
     // B
     if (bVal !== null) {
-      ctx.font = '12px monospace'; ctx.fillStyle = ctp.text; ctx.textAlign = 'left';
+      ctx.font = `12px ${MONO}`; ctx.fillStyle = pal.text; ctx.textAlign = 'left';
       ctx.fillText(fmt(bVal), x, cy);
     } else {
-      ctx.font = '11px monospace'; ctx.fillStyle = ctp.surface2; ctx.textAlign = 'left';
+      ctx.font = `11px ${MONO}`; ctx.fillStyle = pal.surface2; ctx.textAlign = 'left';
       ctx.fillText('b', x, cy);
     }
 
     // Result label
-    ctx.font = '9px monospace'; ctx.fillStyle = ctp.surface1; ctx.textAlign = 'right';
+    ctx.font = `9px ${MONO}`; ctx.fillStyle = pal.surface1; ctx.textAlign = 'right';
     ctx.fillText('→ result', W - 8, cy);
   }, []);
 
@@ -2139,7 +2146,7 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
   }, [draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={36}
         style={{ display: 'block', width: '100%', height: '36px' }} />
     </div>
@@ -2149,15 +2156,15 @@ export function ArithmeticOpViz({ node }: { node: GraphNode }) {
 // ─── Viz — Vec2 arrow on grid (length, angleToVec2, vec2Angle) ────────────────
 
 function drawGrid2D(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  ctx.fillStyle = ctp.crust;
+  ctx.fillStyle = pal.crust;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = ctp.base;
+  ctx.strokeStyle = pal.base;
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
   }
-  ctx.strokeStyle = ctp.surface0;
+  ctx.strokeStyle = pal.surface0;
   ctx.setLineDash([2, 2]);
   ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
@@ -2191,17 +2198,17 @@ export function LengthViz({ node }: { node: GraphNode }) {
   const draw = useCallback((val?: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    ctx.fillStyle = pal.crust; ctx.fillRect(0, 0, W, H);
 
     const cx = W / 2, cy = H / 2;
     const mg = 20;
     const axisW = W - mg * 2;
 
     // Axis line
-    ctx.strokeStyle = ctp.surface0; ctx.lineWidth = 1;
+    ctx.strokeStyle = pal.surface0; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(mg, cy); ctx.lineTo(W - mg, cy); ctx.stroke();
     // Centre tick
     ctx.beginPath(); ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4); ctx.stroke();
@@ -2217,12 +2224,12 @@ export function LengthViz({ node }: { node: GraphNode }) {
     const barX = Math.min(cx, toX(v));
     const barW = Math.abs(toX(v) - cx);
     const isNeg = v < 0;
-    ctx.fillStyle = isNeg ? `${ctp.red}44` : '#00ffaa44';
+    ctx.fillStyle = isNeg ? `${pal.red}44` : '#00ffaa44';
     ctx.fillRect(barX, cy - 6, barW, 12);
 
     // Arrow pointing right (+) or left (-)
     const tipX = toX(v);
-    ctx.strokeStyle = isNeg ? ctp.red : '#00ffaa'; ctx.lineWidth = 2;
+    ctx.strokeStyle = isNeg ? pal.red : '#00ffaa'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tipX, cy); ctx.stroke();
     // arrowhead
     const dir = isNeg ? -1 : 1;
@@ -2230,17 +2237,17 @@ export function LengthViz({ node }: { node: GraphNode }) {
     ctx.moveTo(tipX, cy);
     ctx.lineTo(tipX - dir * 6, cy - 4);
     ctx.lineTo(tipX - dir * 6, cy + 4);
-    ctx.closePath(); ctx.fillStyle = isNeg ? ctp.red : '#00ffaa'; ctx.fill();
+    ctx.closePath(); ctx.fillStyle = isNeg ? pal.red : '#00ffaa'; ctx.fill();
 
     // Scale labels
-    ctx.fillStyle = ctp.surface1; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = pal.surface1; ctx.font = `8px ${MONO}`; ctx.textAlign = 'center';
     ctx.fillText(`-${range}`, mg, cy - 7);
     ctx.fillText(`${range}`, W - mg, cy - 7);
     ctx.fillText('0', cx, cy - 7);
 
     // Value
-    ctx.font = '10px monospace';
-    ctx.fillStyle = val !== undefined ? (isNeg ? ctp.red : '#00ffaa') : ctp.overlay0;
+    ctx.font = `10px ${MONO}`;
+    ctx.fillStyle = val !== undefined ? (isNeg ? pal.red : '#00ffaa') : pal.overlay0;
     ctx.textAlign = 'left';
     ctx.fillText(val !== undefined ? `|v| = ${val.toFixed(3)}` : '|v|', 4, H - 4);
     ctx.textAlign = 'left';
@@ -2258,7 +2265,7 @@ export function LengthViz({ node }: { node: GraphNode }) {
   }, [node.id, draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={48}
         style={{ display: 'block', width: '100%', height: '48px' }} />
     </div>
@@ -2282,9 +2289,9 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
   const draw = useCallback((x: number, y: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawGrid2D(ctx, W, H);
     const cx = W / 2, cy = H / 2;
     const margin = 10;
@@ -2295,7 +2302,7 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
     const toSX = (v: number) => cx + (v / scale) * axisR;
     const toSY = (v: number) => cy - (v / scale) * axisR;
 
-    ctx.fillStyle = ctp.surface1; ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface1; ctx.font = `8px ${MONO}`;
     ctx.textAlign = 'center';
     ctx.fillText(`${scale}`, toSX(scale), cy - 3);
     ctx.fillText(`-${scale}`, toSX(-scale), cy - 3);
@@ -2304,7 +2311,7 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
     ctx.fillText(`-${scale}`, cx + 2, toSY(-scale));
 
     const px = toSX(x), py = toSY(y);
-    ctx.strokeStyle = ctp.surface0; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+    ctx.strokeStyle = pal.surface0; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px, cy); ctx.lineTo(px, py); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx, py); ctx.lineTo(px, py); ctx.stroke();
     ctx.setLineDash([]);
@@ -2313,7 +2320,7 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
     ctx.fillStyle = '#00aaff';
     ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
 
-    ctx.fillStyle = ctp.overlay0; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+    ctx.fillStyle = pal.overlay0; ctx.font = `9px ${MONO}`; ctx.textAlign = 'left';
     ctx.fillText(`(${x.toFixed(2)}, ${y.toFixed(2)})`, 4, H - 4);
   }, []);
 
@@ -2340,7 +2347,7 @@ export function MakeVec2Viz({ node }: { node: GraphNode }) {
   }, [node.id, draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={80}
         style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
@@ -2354,15 +2361,15 @@ export function AngleToVec2Viz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawGrid2D(ctx, W, H);
     const cx = W / 2, cy = H / 2;
     const r = Math.min(cx, cy) * 0.75;
 
     // Draw the angle arc
-    ctx.strokeStyle = `${ctp.yellow}44`;
+    ctx.strokeStyle = `${pal.yellow}44`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.35, 0, -angle, angle < 0); ctx.stroke();
 
@@ -2372,17 +2379,17 @@ export function AngleToVec2Viz({ node }: { node: GraphNode }) {
 
     // Angle label
     const deg = ((angle * 180 / Math.PI) % 360 + 360) % 360;
-    ctx.fillStyle = ctp.yellow;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.yellow;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`${deg.toFixed(0)}°`, 4, H - 4);
-    ctx.fillStyle = ctp.overlay0;
+    ctx.fillStyle = pal.overlay0;
     ctx.textAlign = 'right';
     ctx.fillText(`(${vx.toFixed(2)}, ${vy.toFixed(2)})`, W - 4, H - 4);
     ctx.textAlign = 'left';
   }, [angle]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={64}
         style={{ display: 'block', width: '100%', height: '64px' }} />
     </div>
@@ -2395,9 +2402,9 @@ export function Vec2AngleViz({ node: _node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawGrid2D(ctx, W, H);
     const cx = W / 2, cy = H / 2;
     const r = Math.min(cx, cy) * 0.75;
@@ -2408,22 +2415,22 @@ export function Vec2AngleViz({ node: _node }: { node: GraphNode }) {
     drawArrow(ctx, cx, cy, vx, vy, '#00aaff', r);
 
     // Angle arc
-    ctx.strokeStyle = `${ctp.yellow}88`;
+    ctx.strokeStyle = `${pal.yellow}88`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.35, 0, -angle, false); ctx.stroke();
 
     // Labels
     ctx.fillStyle = '#00aaff';
-    ctx.font = '9px monospace';
+    ctx.font = `9px ${MONO}`;
     ctx.fillText('v →', 4, H - 4);
-    ctx.fillStyle = ctp.yellow;
+    ctx.fillStyle = pal.yellow;
     ctx.textAlign = 'right';
     ctx.fillText('atan2(y,x)', W - 4, H - 4);
     ctx.textAlign = 'left';
   }, []);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={64}
         style={{ display: 'block', width: '100%', height: '64px' }} />
     </div>
@@ -2437,7 +2444,7 @@ export function SplitVecViz({ node }: { node: GraphNode }) {
   const is3 = node.type === 'splitVec3';
   const is4 = node.type === 'splitVec4';
   const comps = is4 ? ['x','y','z','w'] : is3 ? ['x','y','z'] : ['x','y'];
-  const colors: Record<string, string> = { x: ctp.red, y: ctp.green, z: ctp.blue, w: ctp.mauve };
+  const colors: Record<string, string> = { x: pal.red, y: pal.green, z: pal.blue, w: pal.mauve };
   const nodeRef = useRef(node);
   nodeRef.current = node;
   const rafRef  = useRef(0);
@@ -2460,11 +2467,11 @@ export function SplitVecViz({ node }: { node: GraphNode }) {
   }, []);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '4px 12px', fontFamily: 'monospace' }}>
+    <div style={{ ...vizContainer(), padding: '4px 12px', fontFamily: MONO }}>
       {comps.map((c, i) => (
         <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '1px 0' }}>
           <span style={{ fontSize: '10px', color: colors[c], width: '10px' }}>{c}</span>
-          <span ref={el => { rowRefs.current[i] = el; }} style={{ fontSize: '11px', color: ctp.text }}>—</span>
+          <span ref={el => { rowRefs.current[i] = el; }} style={{ fontSize: '11px', color: pal.text }}>—</span>
         </div>
       ))}
     </div>
@@ -2503,8 +2510,8 @@ const COMBINER_FNS: Record<string, CombinerFn> = {
 };
 
 const COMBINER_COLORS: Record<string, string> = {
-  sdfUnion: ctp.green, sdfIntersect: ctp.red, sdfSubtract: ctp.blue,
-  minMath: ctp.green, max: ctp.red,
+  sdfUnion: pal.green, sdfIntersect: pal.red, sdfSubtract: pal.blue,
+  minMath: pal.green, max: pal.red,
 };
 
 export function CombinerCurveViz({ node }: { node: GraphNode }) {
@@ -2514,13 +2521,13 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     const fn = COMBINER_FNS[node.type];
     if (!fn) return;
 
-    const color = COMBINER_COLORS[node.type] ?? ctp.text;
+    const color = COMBINER_COLORS[node.type] ?? pal.text;
     const isSmooth = k > 0 && node.type in COMBINER_COLORS && node.type !== 'minMath' && node.type !== 'max';
 
     // Fixed B value — for subtract, offset so the cutoff is visible
@@ -2548,11 +2555,11 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
     const cb = parseInt(hex.slice(4, 6), 16);
 
     // Background
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Subtle axis grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, toY(0)); ctx.lineTo(W, toY(0)); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(toX(0), 0); ctx.lineTo(toX(0), H); ctx.stroke();
@@ -2624,8 +2631,8 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Corner labels
-    ctx.font = '9px monospace';
-    ctx.fillStyle = ctp.surface1;
+    ctx.font = `9px ${MONO}`;
+    ctx.fillStyle = pal.surface1;
     ctx.textAlign = 'left';
     ctx.fillText('A', 3, toY(RANGE * 0.78) - 2);
     ctx.fillText('B', 3, toY(fixedB) - 3);
@@ -2637,7 +2644,7 @@ export function CombinerCurveViz({ node }: { node: GraphNode }) {
   }, [node.type, k]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={80}
         style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
@@ -2655,9 +2662,9 @@ export function NormalizeVec2Viz({ node }: { node: GraphNode }) {
   const draw = useCallback((vx: number, vy: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawGrid2D(ctx, W, H);
     const cx = W / 2, cy = H / 2;
     const r = Math.min(cx, cy) * 0.72;
@@ -2670,7 +2677,7 @@ export function NormalizeVec2Viz({ node }: { node: GraphNode }) {
     const pixPerUnit = r / scale;
 
     // Input arrow (dim)
-    ctx.strokeStyle = ctp.surface1; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = pal.surface1; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + vx * pixPerUnit, cy - vy * pixPerUnit); ctx.stroke();
 
     // Normalized arrow (bright)
@@ -2678,7 +2685,7 @@ export function NormalizeVec2Viz({ node }: { node: GraphNode }) {
       drawArrow(ctx, cx, cy, vx / len, vy / len, '#00aaff', r);
     }
 
-    ctx.fillStyle = ctp.overlay0; ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0; ctx.font = `9px ${MONO}`;
     ctx.textAlign = 'left';
     ctx.fillText(`|v|=${len.toFixed(2)} → unit`, 4, H - 4);
   }, []);
@@ -2698,7 +2705,7 @@ export function NormalizeVec2Viz({ node }: { node: GraphNode }) {
   }, [node.id, draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={68}
         style={{ display: 'block', width: '100%', height: '68px' }} />
     </div>
@@ -2714,9 +2721,9 @@ export function DotProductViz({ node }: { node: GraphNode }) {
   const draw = useCallback((aVec: number[], bVec: number[], dotVal?: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     drawGrid2D(ctx, W, H);
     const cx = W / 2, cy = H / 2;
 
@@ -2728,12 +2735,12 @@ export function DotProductViz({ node }: { node: GraphNode }) {
     drawArrow(ctx, cx, cy, aVec[0], aVec[1], '#00aaff', r);
     drawArrow(ctx, cx, cy, bVec[0], bVec[1], '#00ffaa', r);
 
-    ctx.font = '11px monospace'; ctx.textBaseline = 'middle';
+    ctx.font = `11px ${MONO}`; ctx.textBaseline = 'middle';
     if (dotVal !== undefined) {
-      ctx.fillStyle = ctp.yellow; ctx.textAlign = 'right';
+      ctx.fillStyle = pal.yellow; ctx.textAlign = 'right';
       ctx.fillText(`A·B = ${dotVal.toFixed(3)}`, W - 6, 12);
     } else {
-      ctx.fillStyle = ctp.overlay0; ctx.textAlign = 'left';
+      ctx.fillStyle = pal.overlay0; ctx.textAlign = 'left';
       ctx.fillText('A · B', 6, 12);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -2754,7 +2761,7 @@ export function DotProductViz({ node }: { node: GraphNode }) {
   }, [node.id, draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={68}
         style={{ display: 'block', width: '100%', height: '68px' }} />
     </div>
@@ -2777,13 +2784,13 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
       const n = nodeRef.current;
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const W = canvas.width, H = canvas.height;
+      const viz = setupViz(canvas);
+      if (!viz) return;
+      const { ctx, W, H } = viz;
 
       if (!isMat3) {
         // mat2MulVec: same bar layout as mat3 but with x/y only
-        ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = pal.crust; ctx.fillRect(0, 0, W, H);
         const vecConn = n.inputs.vec?.connection;
         const inVec = vecConn
           ? (vectorValueRegistry.get(`__preview__${vecConn.nodeId}:${vecConn.outputKey}`) ?? [0, 0])
@@ -2791,7 +2798,7 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
         const outVec = vectorValueRegistry.get(`__preview__${n.id}:output`) ?? null;
 
         const comps2 = ['x', 'y'];
-        const colors2 = [ctp.red, ctp.green];
+        const colors2 = [pal.red, pal.green];
         const barW2 = W - 70;
 
         for (let i = 0; i < 2; i++) {
@@ -2800,38 +2807,38 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
           const outV = outVec?.[i] ?? null;
 
           ctx.fillStyle = colors2[i] + '88';
-          ctx.font = '9px monospace'; ctx.textAlign = 'left';
+          ctx.font = `9px ${MONO}`; ctx.textAlign = 'left';
           ctx.fillText(comps2[i], 6, rowY + 10);
 
           const inNorm = Math.max(-1, Math.min(1, inV));
           const bx = 18, bh = 8;
-          ctx.fillStyle = ctp.base; ctx.fillRect(bx, rowY + 2, barW2 / 2 - 2, bh);
+          ctx.fillStyle = pal.base; ctx.fillRect(bx, rowY + 2, barW2 / 2 - 2, bh);
           ctx.fillStyle = colors2[i] + '66';
           const fw = Math.abs(inNorm) * (barW2 / 2 - 2) / 2;
           const fx = inNorm >= 0 ? bx + (barW2 / 4 - 1) : bx + (barW2 / 4 - 1) - fw;
           ctx.fillRect(fx, rowY + 2, fw, bh);
-          ctx.fillStyle = ctp.surface1; ctx.textAlign = 'right';
+          ctx.fillStyle = pal.surface1; ctx.textAlign = 'right';
           ctx.fillText(inV.toFixed(2), bx + barW2 / 2 - 4, rowY + 10);
 
           if (outV !== null) {
             const bx2 = bx + barW2 / 2 + 4;
             const outNorm = Math.max(-1, Math.min(1, outV));
-            ctx.fillStyle = ctp.base; ctx.fillRect(bx2, rowY + 2, barW2 / 2 - 2, bh);
+            ctx.fillStyle = pal.base; ctx.fillRect(bx2, rowY + 2, barW2 / 2 - 2, bh);
             ctx.fillStyle = colors2[i];
             const fw2 = Math.abs(outNorm) * (barW2 / 2 - 2) / 2;
             const fx2 = outNorm >= 0 ? bx2 + (barW2 / 4 - 1) : bx2 + (barW2 / 4 - 1) - fw2;
             ctx.fillRect(fx2, rowY + 2, fw2, bh);
-            ctx.fillStyle = ctp.text; ctx.textAlign = 'right';
+            ctx.fillStyle = pal.text; ctx.textAlign = 'right';
             ctx.fillText(outV.toFixed(2), bx2 + barW2 / 2 - 4, rowY + 10);
           }
         }
 
-        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = pal.surface1; ctx.font = `9px ${MONO}`; ctx.textAlign = 'left';
         ctx.fillText('in', 18, H - 4);
-        if (outVec) { ctx.fillStyle = ctp.overlay0; ctx.fillText('out', 18 + barW2 / 2 + 4, H - 4); }
+        if (outVec) { ctx.fillStyle = pal.overlay0; ctx.fillText('out', 18 + barW2 / 2 + 4, H - 4); }
       } else {
         // mat3MulVec: show input and output as component bars
-        ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = pal.crust; ctx.fillRect(0, 0, W, H);
         const vecConn = n.inputs.vec?.connection;
         const inVec  = vecConn
           ? (vectorValueRegistry.get(`__preview__${vecConn.nodeId}:${vecConn.outputKey}`) ?? [0, 0, 0])
@@ -2839,7 +2846,7 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
         const outVec = vectorValueRegistry.get(`__preview__${n.id}:output`) ?? null;
 
         const comps = ['x', 'y', 'z'];
-        const colors = [ctp.red, ctp.green, ctp.blue];
+        const colors = [pal.red, pal.green, pal.blue];
         const barW = W - 70;
 
         for (let i = 0; i < 3; i++) {
@@ -2848,37 +2855,37 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
           const outV = outVec?.[i] ?? null;
 
           ctx.fillStyle = colors[i] + '88';
-          ctx.font = '9px monospace'; ctx.textAlign = 'left';
+          ctx.font = `9px ${MONO}`; ctx.textAlign = 'left';
           ctx.fillText(comps[i], 6, rowY + 10);
 
           // Input bar
           const inNorm = Math.max(-1, Math.min(1, inV));
           const bx = 18, bh = 8;
-          ctx.fillStyle = ctp.base; ctx.fillRect(bx, rowY + 2, barW / 2 - 2, bh);
+          ctx.fillStyle = pal.base; ctx.fillRect(bx, rowY + 2, barW / 2 - 2, bh);
           ctx.fillStyle = colors[i] + '66';
           const fw = Math.abs(inNorm) * (barW / 2 - 2) / 2;
           const fx = inNorm >= 0 ? bx + (barW / 4 - 1) : bx + (barW / 4 - 1) - fw;
           ctx.fillRect(fx, rowY + 2, fw, bh);
-          ctx.fillStyle = ctp.surface1; ctx.textAlign = 'right';
+          ctx.fillStyle = pal.surface1; ctx.textAlign = 'right';
           ctx.fillText(inV.toFixed(2), bx + barW / 2 - 4, rowY + 10);
 
           // Output bar
           if (outV !== null) {
             const bx2 = bx + barW / 2 + 4;
             const outNorm = Math.max(-1, Math.min(1, outV));
-            ctx.fillStyle = ctp.base; ctx.fillRect(bx2, rowY + 2, barW / 2 - 2, bh);
+            ctx.fillStyle = pal.base; ctx.fillRect(bx2, rowY + 2, barW / 2 - 2, bh);
             ctx.fillStyle = colors[i];
             const fw2 = Math.abs(outNorm) * (barW / 2 - 2) / 2;
             const fx2 = outNorm >= 0 ? bx2 + (barW / 4 - 1) : bx2 + (barW / 4 - 1) - fw2;
             ctx.fillRect(fx2, rowY + 2, fw2, bh);
-            ctx.fillStyle = ctp.text; ctx.textAlign = 'right';
+            ctx.fillStyle = pal.text; ctx.textAlign = 'right';
             ctx.fillText(outV.toFixed(2), bx2 + barW / 2 - 4, rowY + 10);
           }
         }
 
-        ctx.fillStyle = ctp.surface1; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = pal.surface1; ctx.font = `9px ${MONO}`; ctx.textAlign = 'left';
         ctx.fillText('in', 18, H - 4);
-        if (outVec) { ctx.fillStyle = ctp.overlay0; ctx.fillText('out', 18 + barW / 2 + 4, H - 4); }
+        if (outVec) { ctx.fillStyle = pal.overlay0; ctx.fillText('out', 18 + barW / 2 + 4, H - 4); }
         ctx.textAlign = 'left';
       }
     };
@@ -2887,7 +2894,7 @@ export function MatMulVecViz({ node }: { node: GraphNode }) {
   }, [node.id, isMat3]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={isMat3 ? 84 : 80}
         style={{ display: 'block', width: '100%', height: `${isMat3 ? 84 : 80}px` }} />
     </div>
@@ -2905,29 +2912,29 @@ export function SinCosWaveViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     }
 
     // Zero line
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
 
     // Waveform — fixed display range of 2; wave is proportionally shorter when amp < 2
     const DISP = 2;
-    const color = isCos ? ctp.blue : ctp.green;
+    const color = isCos ? pal.blue : pal.green;
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -2946,13 +2953,13 @@ export function SinCosWaveViz({ node }: { node: GraphNode }) {
     ctx.beginPath(); ctx.arc(2, py0, 3, 0, Math.PI * 2); ctx.fill();
 
     // Label
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`${isCos ? 'cos' : 'sin'}  freq:${freq.toFixed(2)}  amp:${amp.toFixed(2)}`, 4, H - 4);
   }, [isCos, freq, amp]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -2973,22 +2980,22 @@ export function TanWaveViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
     }
 
     // Zero / center line
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
@@ -2996,11 +3003,11 @@ export function TanWaveViz({ node }: { node: GraphNode }) {
     // Display: show range -π to π (one full cycle of period π each)
     const DISP = 3.0; // clip at ±3 so steep parts are visible
     const xRange = Math.PI * 2;
-    const color = ctp.yellow;
+    const color = pal.yellow;
 
     // Asymptote guides at x = ±π/2
     const numPeriods = freq;
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 4]);
     for (let k = -Math.ceil(numPeriods); k <= Math.ceil(numPeriods); k++) {
@@ -3033,13 +3040,13 @@ export function TanWaveViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Label
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`tan  freq:${freq.toFixed(2)}  amp:${amp.toFixed(2)}`, 4, H - 4);
   }, [freq, amp]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={56} style={{ display: 'block', width: '100%', height: '56px' }} />
     </div>
   );
@@ -3056,14 +3063,14 @@ export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -3071,14 +3078,14 @@ export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
     }
 
     // Identity diagonal
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Tone curve: remap [blacks,whites]→[0,1], apply S-curve blended with linear
     const range = Math.max(0.001, whites - blacks);
-    ctx.strokeStyle = ctp.mauve;
+    ctx.strokeStyle = pal.mauve;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3094,17 +3101,17 @@ export function ToneCurveNodeViz({ node }: { node: GraphNode }) {
     // Black/white point markers
     const bx = Math.round(blacks * W);
     const wx = Math.round(whites * W);
-    ctx.fillStyle = ctp.surface1;
+    ctx.fillStyle = pal.surface1;
     ctx.fillRect(bx - 1, 0, 2, H);
     ctx.fillRect(wx - 1, 0, 2, H);
 
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`str ${strength.toFixed(2)}`, 4, H - 4);
   }, [blacks, whites, strength]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -3126,14 +3133,14 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
@@ -3141,14 +3148,14 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     }
 
     // Identity
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
     // Transfer curve: luma + shadowMask*shadows + highlightMask*highlights
     const sm = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
-    ctx.strokeStyle = ctp.mauve;
+    ctx.strokeStyle = pal.mauve;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3162,7 +3169,7 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Shadow mask (blue tint)
-    ctx.strokeStyle = `${ctp.blue}88`;
+    ctx.strokeStyle = `${pal.blue}88`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3175,7 +3182,7 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Highlight mask (orange tint)
-    ctx.strokeStyle = `${ctp.peach}88`;
+    ctx.strokeStyle = `${pal.peach}88`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -3187,15 +3194,15 @@ export function ShadowsHighlightsViz({ node }: { node: GraphNode }) {
     ctx.stroke();
 
     // Labels
-    ctx.fillStyle = ctp.blue;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.blue;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`shd ${shadows > 0 ? '+' : ''}${shadows.toFixed(2)}`, 4, H - 4);
-    ctx.fillStyle = ctp.peach;
+    ctx.fillStyle = pal.peach;
     ctx.fillText(`hi ${highlights > 0 ? '+' : ''}${highlights.toFixed(2)}`, W - 70, H - 4);
   }, [shadows, highlights, pivot]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -3217,26 +3224,26 @@ export function LiftGammaGainViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
     }
 
-    ctx.strokeStyle = ctp.surface1;
+    ctx.strokeStyle = pal.surface1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(W, 0); ctx.stroke();
     ctx.setLineDash([]);
 
-    const COLORS = [ctp.red, ctp.green, ctp.blue];
+    const COLORS = [pal.red, pal.green, pal.blue];
     for (let ch = 0; ch < 3; ch++) {
       const l = lift[ch]  ?? 0;
       const g = Math.max(0.001, gamma[ch] ?? 1);
@@ -3254,13 +3261,13 @@ export function LiftGammaGainViz({ node }: { node: GraphNode }) {
       ctx.stroke();
     }
 
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText('R  G  B', 4, H - 4);
   }, [lift, gamma, gain]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -3280,11 +3287,11 @@ export function HueRotateViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     const cx = W / 2, cy = H / 2;
@@ -3307,7 +3314,7 @@ export function HueRotateViz({ node }: { node: GraphNode }) {
     // Inner circle (dark)
     ctx.beginPath();
     ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2);
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fill();
 
     // Arrow at angle (angle in radians, 0=red, clockwise)
@@ -3325,15 +3332,15 @@ export function HueRotateViz({ node }: { node: GraphNode }) {
 
     // Angle label
     const deg = ((angle * 180 / Math.PI) % 360 + 360) % 360;
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.textAlign = 'center';
     ctx.fillText(`${deg.toFixed(0)}°`, cx, cy + 4);
     ctx.textAlign = 'left';
   }, [angle]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -3353,11 +3360,11 @@ export function SaturationViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Gradient strip: sample a rainbow desaturated → saturated by `amount`
@@ -3371,7 +3378,7 @@ export function SaturationViz({ node }: { node: GraphNode }) {
     }
 
     // Border
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.lineWidth = 1;
     ctx.strokeRect(0, barY, W, barH);
 
@@ -3382,13 +3389,13 @@ export function SaturationViz({ node }: { node: GraphNode }) {
     ctx.beginPath(); ctx.moveTo(markerX, barY - 3); ctx.lineTo(markerX, barY + barH + 3); ctx.stroke();
 
     // Labels
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`sat ×${amount.toFixed(2)}`, 4, H - 4);
   }, [amount]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -3410,16 +3417,16 @@ export function MatrixGridViz({ node }: { node: GraphNode }) {
   const isInspect = node.type.endsWith('Inspect');
 
   useEffect(() => {
-    const COL_COLORS = [ctp.blue, ctp.green, ctp.peach];
+    const COL_COLORS = [pal.blue, pal.green, pal.peach];
     const cellW = 52, cellH = 22;
 
     const tick = () => {
       rafRef.current = requestAnimationFrame(tick);
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const W = canvas.width, H = canvas.height;
+      const viz = setupViz(canvas);
+      if (!viz) return;
+      const { ctx, W, H } = viz;
       const n = nodeRef.current;
       const mode = (n.params.mode as string) ?? 'cols';
 
@@ -3440,7 +3447,7 @@ export function MatrixGridViz({ node }: { node: GraphNode }) {
         }
       }
 
-      ctx.fillStyle = ctp.crust;
+      ctx.fillStyle = pal.crust;
       ctx.fillRect(0, 0, W, H);
 
       const totalW = size * cellW;
@@ -3471,15 +3478,15 @@ export function MatrixGridViz({ node }: { node: GraphNode }) {
           }
 
           ctx.fillStyle = val !== null ? `${baseColor}ee` : `${baseColor}44`;
-          ctx.font = '9px monospace';
+          ctx.font = `9px ${MONO}`;
           ctx.textAlign = 'center';
           ctx.fillText(val !== null ? val.toFixed(2) : `[${col}][${row}]`, x + cellW / 2, y + cellH / 2 + 3);
         }
       }
       ctx.textAlign = 'left';
 
-      ctx.fillStyle = ctp.surface1;
-      ctx.font = '9px monospace';
+      ctx.fillStyle = pal.surface1;
+      ctx.font = `9px ${MONO}`;
       ctx.fillText(`mat${size}  ${mode}`, 4, H - 4);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -3488,7 +3495,7 @@ export function MatrixGridViz({ node }: { node: GraphNode }) {
 
   const H = size === 2 ? 76 : 100;
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={H}
         style={{ display: 'block', width: '100%', height: `${H}px` }} />
     </div>
@@ -3509,10 +3516,10 @@ function ColorSwatchViz({ node }: { node: GraphNode }) {
       const canvas = canvasRef.current;
       const n = nodeRef.current;
       if (!canvas) { rafId = requestAnimationFrame(draw); return; }
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { rafId = requestAnimationFrame(draw); return; }
+      const viz = setupViz(canvas);
+      if (!viz) { rafId = requestAnimationFrame(draw); return; }
 
-      const W = canvas.width, H = canvas.height;
+      const { ctx, W, H } = viz;
       const isFloat = n.type === 'floatToVec3';
 
       let r = 0, g = 0, b = 0;
@@ -3543,7 +3550,7 @@ function ColorSwatchViz({ node }: { node: GraphNode }) {
       }
 
       ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = ctp.crust;
+      ctx.fillStyle = pal.crust;
       ctx.fillRect(0, 0, W, H);
 
       // Color swatch bar
@@ -3554,23 +3561,23 @@ function ColorSwatchViz({ node }: { node: GraphNode }) {
       const bHex = Math.round(b * 255).toString(16).padStart(2, '0');
       ctx.fillStyle = `#${rHex}${gHex}${bHex}`;
       ctx.fillRect(8, barY, W - 16, swatchH);
-      ctx.strokeStyle = ctp.surface0;
+      ctx.strokeStyle = pal.surface0;
       ctx.lineWidth = 1;
       ctx.strokeRect(8.5, barY + 0.5, W - 17, swatchH - 1);
 
       // Component labels below
       const labelY = barY + swatchH + 12;
-      ctx.font = '9px monospace';
+      ctx.font = `9px ${MONO}`;
       ctx.textAlign = 'center';
       if (isFloat) {
         const v = r;
-        ctx.fillStyle = ctp.blue;
+        ctx.fillStyle = pal.blue;
         ctx.fillText(`${v.toFixed(3)}  →  (${v.toFixed(2)}, ${v.toFixed(2)}, ${v.toFixed(2)})`, W / 2, labelY);
       } else {
         const labels = [
-          { text: `r:${r.toFixed(2)}`, color: ctp.red, x: W / 4 },
-          { text: `g:${g.toFixed(2)}`, color: ctp.green, x: W / 2 },
-          { text: `b:${b.toFixed(2)}`, color: ctp.blue, x: (3 * W) / 4 },
+          { text: `r:${r.toFixed(2)}`, color: pal.red, x: W / 4 },
+          { text: `g:${g.toFixed(2)}`, color: pal.green, x: W / 2 },
+          { text: `b:${b.toFixed(2)}`, color: pal.blue, x: (3 * W) / 4 },
         ];
         for (const { text, color, x } of labels) {
           ctx.fillStyle = color;
@@ -3586,7 +3593,7 @@ function ColorSwatchViz({ node }: { node: GraphNode }) {
   }, []);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas
         ref={canvasRef}
         width={240}
@@ -3609,30 +3616,30 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
     const mg = 4;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.base;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * H / 4); ctx.lineTo(W, i * H / 4); ctx.stroke();
     }
     // Zero line
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
 
-    const COLORS: Record<string, string> = { lfo: ctp.blue, bpmSync: ctp.peach,
+    const COLORS: Record<string, string> = { lfo: pal.blue, bpmSync: pal.peach,
     };
-    ctx.strokeStyle = COLORS[node.type] ?? ctp.text;
+    ctx.strokeStyle = COLORS[node.type] ?? pal.text;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
 
@@ -3663,13 +3670,13 @@ function LFOWaveViz({ node }: { node: GraphNode }) {
     }
     ctx.stroke();
 
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface2;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText(`f=${freq.toFixed(2)} a=${amplitude.toFixed(2)}`, 3, H - 3);
   }, [node.params.waveform, node.type, freq, phase, amplitude, offset]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={52}
         style={{ display: 'block', width: '100%', height: '52px' }} />
     </div>
@@ -3683,28 +3690,29 @@ function UVGradientViz(_props: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    const img = ctx.createImageData(W, H);
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const i = (y * W + x) * 4;
-        img.data[i]     = Math.round((x / W) * 255);
-        img.data[i + 1] = Math.round(((H - 1 - y) / H) * 255);
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz);
+    const img = ctx.createImageData(IW, IH);
+    for (let y = 0; y < IH; y++) {
+      for (let x = 0; x < IW; x++) {
+        const i = (y * IW + x) * 4;
+        img.data[i]     = Math.round((x / IW) * 255);
+        img.data[i + 1] = Math.round(((IH - 1 - y) / IH) * 255);
         img.data[i + 2] = 0;
         img.data[i + 3] = 255;
       }
     }
-    ctx.putImageData(img, 0, 0);
+    blitImage(ctx, img, W, H);
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, H - 13, W, 13);
-    ctx.font = '8px monospace';
-    ctx.fillStyle = ctp.red; ctx.fillText('U', 4, H - 3);
-    ctx.fillStyle = ctp.green; ctx.fillText('V', 14, H - 3);
+    ctx.font = `8px ${MONO}`;
+    ctx.fillStyle = pal.red; ctx.fillText('U', 4, H - 3);
+    ctx.fillStyle = pal.green; ctx.fillText('V', 14, H - 3);
   }, []);
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={48}
         style={{ display: 'block', width: '100%', height: '48px' }} />
     </div>
@@ -3718,12 +3726,12 @@ function TimeBadgeViz(_props: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = ctp.crust; ctx.fillRect(0, 0, W, H);
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    ctx.fillStyle = pal.crust; ctx.fillRect(0, 0, W, H);
     // sine preview
-    ctx.strokeStyle = ctp.mauve; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = pal.mauve; ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let x = 0; x < W; x++) {
       const t = x / W;
@@ -3731,12 +3739,12 @@ function TimeBadgeViz(_props: { node: GraphNode }) {
       x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
-    ctx.font = 'bold 10px monospace'; ctx.fillStyle = ctp.mauve;
+    ctx.font = `bold 10px ${MONO}`; ctx.fillStyle = pal.mauve;
     ctx.textAlign = 'center';
     ctx.fillText('u_time', W / 2, H - 4);
   }, []);
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={44}
         style={{ display: 'block', width: '100%', height: '44px' }} />
     </div>
@@ -3747,11 +3755,11 @@ function TimeBadgeViz(_props: { node: GraphNode }) {
 
 function MouseBadgeViz(_props: { node: GraphNode }) {
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div style={{ ...vizContainer(), padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
       <span style={{ fontSize: '18px', lineHeight: 1 }}>⊕</span>
       <div>
-        <div style={{ fontSize: '9px', color: ctp.overlay0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mouse position</div>
-        <div style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace' }}>u_mouse · vec2(0..1)</div>
+        <div style={{ fontSize: '9px', color: pal.overlay0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mouse position</div>
+        <div style={{ fontSize: '9px', color: pal.text, fontFamily: MONO }}>u_mouse · vec2(0..1)</div>
       </div>
     </div>
   );
@@ -3762,13 +3770,13 @@ function MouseBadgeViz(_props: { node: GraphNode }) {
 function TextureBadgeViz({ node }: { node: GraphNode }) {
   const isPrev = node.type === 'prevFrame';
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <span style={{ fontSize: '18px', lineHeight: 1, color: ctp.blue }}>{isPrev ? '⊡' : '⊞'}</span>
+    <div style={{ ...vizContainer(), padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontSize: '18px', lineHeight: 1, color: pal.blue }}>{isPrev ? '⊡' : '⊞'}</span>
       <div>
-        <div style={{ fontSize: '9px', color: ctp.overlay0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div style={{ fontSize: '9px', color: pal.overlay0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {isPrev ? 'Previous frame' : 'Texture input'}
         </div>
-        <div style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace' }}>sampler2D</div>
+        <div style={{ fontSize: '9px', color: pal.text, fontFamily: MONO }}>sampler2D</div>
       </div>
     </div>
   );
@@ -3781,14 +3789,14 @@ function Vec2ConstViz({ node }: { node: GraphNode }) {
   const y = typeof node.params.y === 'number' ? node.params.y : 0;
   const toBar = (v: number) => Math.max(0, Math.min(1, (v + 1) / 2));
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
-      {([['x', x, ctp.red], ['y', y, ctp.green]] as [string, number, string][]).map(([label, val, col]) => (
+    <div style={{ ...vizContainer(), padding: '5px 10px 6px' }}>
+      {([['x', x, pal.red], ['y', y, pal.green]] as [string, number, string][]).map(([label, val, col]) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-          <span style={{ fontSize: '9px', color: col, fontFamily: 'monospace', width: '8px' }}>{label}</span>
-          <div style={{ flex: 1, height: '6px', background: ctp.base, borderRadius: '3px', overflow: 'hidden' }}>
+          <span style={{ fontSize: '9px', color: col, fontFamily: MONO, width: '8px' }}>{label}</span>
+          <div style={{ flex: 1, height: '6px', background: pal.base, borderRadius: '3px', overflow: 'hidden' }}>
             <div style={{ width: `${toBar(val) * 100}%`, height: '100%', background: col, opacity: 0.7, borderRadius: '3px' }} />
           </div>
-          <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace', width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
+          <span style={{ fontSize: '9px', color: pal.text, fontFamily: MONO, width: '40px', textAlign: 'right' }}>{val.toFixed(3)}</span>
         </div>
       ))}
     </div>
@@ -3808,11 +3816,11 @@ function ExprBadgeViz({ node }: { node: GraphNode }) {
     : (typeof node.params.label === 'string' ? node.params.label : 'Expr');
   const snippet = body.split('\n')[0].slice(0, 48) || (isCustom ? 'no body yet' : 'no expression');
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '5px 10px 6px' }}>
-      <div style={{ fontSize: '9px', color: ctp.mauve, fontFamily: 'monospace', fontWeight: 700, marginBottom: '2px' }}>
+    <div style={{ ...vizContainer(), padding: '5px 10px 6px' }}>
+      <div style={{ fontSize: '9px', color: pal.mauve, fontFamily: MONO, fontWeight: 700, marginBottom: '2px' }}>
         {isCustom ? 'ƒ' : '∑'} {label}
       </div>
-      <div style={{ fontSize: '9px', color: ctp.overlay0, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {snippet}
       </div>
     </div>
@@ -3828,11 +3836,11 @@ export function GridUVViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     const cells = Math.max(2, Math.min(Math.round(scale * 0.5), 8));
@@ -3862,7 +3870,7 @@ export function GridUVViz({ node }: { node: GraphNode }) {
           }
         }
         // Cell border
-        ctx.strokeStyle = ctp.crust;
+        ctx.strokeStyle = pal.crust;
         ctx.lineWidth = 1;
         ctx.strokeRect(px + 0.5, py + 0.5, cellW - 1, cellH - 1);
       }
@@ -3870,7 +3878,7 @@ export function GridUVViz({ node }: { node: GraphNode }) {
   }, [scale]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={200} height={80}
         style={{ display: 'block', width: '100%', height: '80px', imageRendering: 'pixelated' }} />
     </div>
@@ -3887,9 +3895,9 @@ export function DotMaskViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
     ctx.fillStyle = '#0d0d14';
     ctx.fillRect(0, 0, W, H);
@@ -3905,8 +3913,8 @@ export function DotMaskViz({ node }: { node: GraphNode }) {
         const dotR = radius * Math.min(cellW, cellH);
         const blur = Math.max(1, softness * Math.min(cellW, cellH) * 20);
         ctx.shadowBlur = blur * 2;
-        ctx.shadowColor = ctp.mauve;
-        ctx.fillStyle = ctp.text;
+        ctx.shadowColor = pal.mauve;
+        ctx.fillStyle = pal.text;
         ctx.beginPath();
         ctx.arc(cx, cy, Math.max(1, dotR), 0, Math.PI * 2);
         ctx.fill();
@@ -3916,7 +3924,7 @@ export function DotMaskViz({ node }: { node: GraphNode }) {
   }, [radius, softness]);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+    <div style={{ ...vizContainer(), background: '#0d0d14' }}>
       <canvas ref={canvasRef} width={160} height={80}
         style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
@@ -3933,14 +3941,15 @@ export function SdfMaskViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.38;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz);
+    const img = ctx.createImageData(IW, IH);
+    const cx = IW / 2, cy = IH / 2, r = Math.min(IW, IH) * 0.38;
 
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
+    for (let y = 0; y < IH; y++) {
+      for (let x = 0; x < IW; x++) {
         const nx = (x - cx) / r;
         const ny = (y - cy) / r;
         // SDF of a circle: negative inside, positive outside
@@ -3950,18 +3959,18 @@ export function SdfMaskViz({ node }: { node: GraphNode }) {
         const t = Math.max(0, Math.min(1, (sdf - lo) / Math.max(hi - lo, 0.001)));
         const smooth = t * t * (3 - 2 * t);
         const mask = 1 - smooth;
-        const i = (y * W + x) * 4;
+        const i = (y * IW + x) * 4;
         img.data[i    ] = Math.round(mask * 200 + 20);
         img.data[i + 1] = Math.round(mask * 180 + 15);
         img.data[i + 2] = Math.round(mask * 220 + 30);
         img.data[i + 3] = 255;
       }
     }
-    ctx.putImageData(img, 0, 0);
+    blitImage(ctx, img, W, H);
   }, [threshold, softness]);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+    <div style={{ ...vizContainer(), background: '#0d0d14' }}>
       <canvas ref={canvasRef} width={160} height={80}
         style={{ display: 'block', width: '100%', height: '80px', imageRendering: 'pixelated' }} />
     </div>
@@ -3979,9 +3988,9 @@ export function LumaRadiusViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
     ctx.fillStyle = '#0d0d14';
     ctx.fillRect(0, 0, W, H);
@@ -3990,10 +3999,10 @@ export function LumaRadiusViz({ node }: { node: GraphNode }) {
     const stripH = 16;
     const grad = ctx.createLinearGradient(0, 0, W, 0);
     grad.addColorStop(0, '#111122');
-    grad.addColorStop(1, ctp.text);
+    grad.addColorStop(1, pal.text);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 4, W, stripH);
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 4, W, stripH);
 
@@ -4015,13 +4024,13 @@ export function LumaRadiusViz({ node }: { node: GraphNode }) {
     }
 
     // Label
-    ctx.fillStyle = ctp.surface2;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.surface2;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText('luma → radius', 4, H - 2);
   }, [baseRadius, minScale, maxScale]);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+    <div style={{ ...vizContainer(), background: '#0d0d14' }}>
       <canvas ref={canvasRef} width={200} height={70}
         style={{ display: 'block', width: '100%', height: '70px' }} />
     </div>
@@ -4059,9 +4068,9 @@ export function CmykHalftoneViz(_props: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
     ctx.fillStyle = '#f5f0e8';
     ctx.fillRect(0, 0, W, H);
@@ -4078,7 +4087,7 @@ export function CmykHalftoneViz(_props: { node: GraphNode }) {
   }, []);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#f5f0e8' }}>
+    <div style={{ ...vizContainer(), background: '#f5f0e8' }}>
       <canvas ref={canvasRef} width={160} height={80}
         style={{ display: 'block', width: '100%', height: '80px' }} />
     </div>
@@ -4098,22 +4107,23 @@ export function BlinnPhongViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, sr = Math.min(W, H) * 0.38;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz);
+    const img = ctx.createImageData(IW, IH);
+    const cx = IW / 2, cy = IH / 2, sr = Math.min(IW, IH) * 0.38;
 
     // Normalize light direction
     const lLen = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1;
     const lnx = lx / lLen, lny = -ly / lLen, lnz = lz / lLen;
 
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
+    for (let y = 0; y < IH; y++) {
+      for (let x = 0; x < IW; x++) {
         const nx = (x - cx) / sr;
         const ny = (y - cy) / sr;
         const r2 = nx * nx + ny * ny;
-        const i = (y * W + x) * 4;
+        const i = (y * IW + x) * 4;
         if (r2 > 1) {
           img.data[i] = 13; img.data[i+1] = 13; img.data[i+2] = 20; img.data[i+3] = 255;
           continue;
@@ -4135,11 +4145,11 @@ export function BlinnPhongViz({ node }: { node: GraphNode }) {
         img.data[i + 3] = 255;
       }
     }
-    ctx.putImageData(img, 0, 0);
+    blitImage(ctx, img, W, H);
   }, [shininess, diffuseness, lx, ly, lz]);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+    <div style={{ ...vizContainer(), background: '#0d0d14' }}>
       <canvas ref={canvasRef} width={160} height={100}
         style={{ display: 'block', width: '100%', height: '100px', imageRendering: 'pixelated' }} />
     </div>
@@ -4154,18 +4164,19 @@ export function GlassViz(_props: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, sr = Math.min(W, H) * 0.40;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz);
+    const img = ctx.createImageData(IW, IH);
+    const cx = IW / 2, cy = IH / 2, sr = Math.min(IW, IH) * 0.40;
 
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
+    for (let y = 0; y < IH; y++) {
+      for (let x = 0; x < IW; x++) {
         const nx = (x - cx) / sr;
         const ny = (y - cy) / sr;
         const r2 = nx * nx + ny * ny;
-        const i = (y * W + x) * 4;
+        const i = (y * IW + x) * 4;
         if (r2 > 1) {
           // Background: dark dot grid for visual interest
           const bx = Math.round((x + 5) / 10), by = Math.round((y + 5) / 10);
@@ -4196,11 +4207,11 @@ export function GlassViz(_props: { node: GraphNode }) {
         img.data[i + 3] = 255;
       }
     }
-    ctx.putImageData(img, 0, 0);
+    blitImage(ctx, img, W, H);
   }, []);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+    <div style={{ ...vizContainer(), background: '#0d0d14' }}>
       <canvas ref={canvasRef} width={160} height={100}
         style={{ display: 'block', width: '100%', height: '100px', imageRendering: 'pixelated' }} />
     </div>
@@ -4215,11 +4226,12 @@ export function SpectralDispersionViz(_props: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
-    const img = ctx.createImageData(W, H);
-    const cx = W / 2, cy = H / 2, sr = Math.min(W, H) * 0.40;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz);
+    const img = ctx.createImageData(IW, IH);
+    const cx = IW / 2, cy = IH / 2, sr = Math.min(IW, IH) * 0.40;
 
     // HSV to RGB helper
     function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
@@ -4232,12 +4244,12 @@ export function SpectralDispersionViz(_props: { node: GraphNode }) {
       return [r, g, b];
     }
 
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
+    for (let y = 0; y < IH; y++) {
+      for (let x = 0; x < IW; x++) {
         const nx = (x - cx) / sr;
         const ny = (y - cy) / sr;
         const r2 = nx * nx + ny * ny;
-        const i = (y * W + x) * 4;
+        const i = (y * IW + x) * 4;
         if (r2 > 1) {
           img.data[i] = 10; img.data[i+1] = 10; img.data[i+2] = 18; img.data[i+3] = 255;
           continue;
@@ -4255,11 +4267,11 @@ export function SpectralDispersionViz(_props: { node: GraphNode }) {
         img.data[i + 3] = 255;
       }
     }
-    ctx.putImageData(img, 0, 0);
+    blitImage(ctx, img, W, H);
   }, []);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, background: '#0d0d14' }}>
+    <div style={{ ...vizContainer(), background: '#0d0d14' }}>
       <canvas ref={canvasRef} width={160} height={100}
         style={{ display: 'block', width: '100%', height: '100px', imageRendering: 'pixelated' }} />
     </div>
@@ -4275,11 +4287,11 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Display up to 20 cols; derive rows to keep cells square-ish (aspect ~1.6)
@@ -4290,7 +4302,7 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
     const pad   = Math.max(1, Math.min(2, cellW * 0.08));
 
     // Cell interiors
-    ctx.fillStyle = ctp.base;
+    ctx.fillStyle = pal.base;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         ctx.fillRect(
@@ -4303,7 +4315,7 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
     }
 
     // Grid lines
-    ctx.strokeStyle = ctp.surface2;
+    ctx.strokeStyle = pal.surface2;
     ctx.lineWidth = 0.75;
     for (let i = 0; i <= cols; i++) {
       const x = i * cellW;
@@ -4315,13 +4327,13 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
     }
 
     // Column count label
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '9px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `9px ${MONO}`;
     ctx.fillText(`${cols} cols`, 3, H - 3);
   }, [columns]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={160} height={80}
         style={{ display: 'block', width: '100%', height: '80px', imageRendering: 'pixelated' }} />
     </div>
@@ -4336,11 +4348,11 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Draw a 3×3 neighborhood grid; center cell highlighted
@@ -4358,7 +4370,7 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
         const w = cellW - gap;
         const h = cellH - gap;
 
-        ctx.fillStyle = isCenter ? ctp.blue : ctp.surface0;
+        ctx.fillStyle = isCenter ? pal.blue : pal.surface0;
         ctx.fillRect(x, y, w, h);
 
         // Distance line from neighbor to center
@@ -4380,13 +4392,13 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
     }
 
     // Label
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText('3×3 neighborhood', 3, H - 3);
   }, []);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={120} height={100}
         style={{ display: 'block', width: '120px', height: '100px', margin: '0 auto', imageRendering: 'pixelated' }} />
     </div>
@@ -4402,27 +4414,27 @@ export function PrintFloatViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     const placeholder = decimals > 0 ? '0.' + '0'.repeat(Math.min(decimals, 4)) : '0';
-    ctx.font = 'bold 22px monospace';
+    ctx.font = `bold 22px ${MONO}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = ctp.text;
+    ctx.fillStyle = pal.text;
     ctx.fillText(placeholder, W / 2, H / 2);
 
-    ctx.font = '8px monospace';
-    ctx.fillStyle = ctp.surface2;
+    ctx.font = `8px ${MONO}`;
+    ctx.fillStyle = pal.surface2;
     ctx.fillText(`float · ${decimals} dec`, W / 2, H - 6);
   }, [decimals]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={160} height={60}
         style={{ display: 'block', width: '100%', height: '60px' }} />
     </div>
@@ -4439,11 +4451,11 @@ export function PrintTextViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
     // Build display: text + placeholder number
@@ -4466,19 +4478,19 @@ export function PrintTextViz({ node }: { node: GraphNode }) {
     const startX   = (W - totalPx) / 2;
 
     ctx.textAlign = 'left';
-    ctx.fillStyle = ctp.text;
+    ctx.fillStyle = pal.text;
     ctx.fillText(text, startX, H / 2 - 4);
-    ctx.fillStyle = ctp.green;
+    ctx.fillStyle = pal.green;
     ctx.fillText(numPlaceholder, startX + textPx, H / 2 - 4);
 
-    ctx.font = '8px monospace';
+    ctx.font = `8px ${MONO}`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = ctp.surface2;
+    ctx.fillStyle = pal.surface2;
     ctx.fillText(`"${text.slice(0, 12)}"  +  float`, W / 2, H - 6);
   }, [text, decimals]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={160} height={60}
         style={{ display: 'block', width: '100%', height: '60px' }} />
     </div>
@@ -4528,19 +4540,21 @@ function chladniFieldColor(v: number): [number, number, number] {
   return [Math.round((1 - a) * 30 + 10), Math.round((1 - a) * 40 + 15), Math.round(a * 220 + 25)];
 }
 
-function drawChladniField(ctx: CanvasRenderingContext2D, W: number, H: number, field: (px: number, py: number) => number | null) {
-  const img = ctx.createImageData(W, H);
+function drawChladniField(viz: Viz, field: (px: number, py: number) => number | null) {
+  const { IW: W, IH: H } = imageSize(viz, 200);
+  const img = viz.ctx.createImageData(W, H);
+  const aspect = W / H; // the box is wide: show more field sideways instead of stretching the square pattern
   for (let j = 0; j < H; j++) {
     const py = 1 - (j / (H - 1)) * 2; // top row = +1, so +y renders up like screen UV
     for (let i = 0; i < W; i++) {
-      const px = (i / (W - 1)) * 2 - 1;
+      const px = ((i / (W - 1)) * 2 - 1) * aspect;
       const v = field(px, py);
       const idx = (j * W + i) * 4;
       const [r, g, b] = v === null ? [17, 17, 27] : chladniFieldColor(v);
       img.data[idx] = r; img.data[idx + 1] = g; img.data[idx + 2] = b; img.data[idx + 3] = 255;
     }
   }
-  ctx.putImageData(img, 0, 0);
+  blitImage(viz.ctx, img, viz.W, viz.H, false);
 }
 
 export function WaveTermViz({ node }: { node: GraphNode }) {
@@ -4551,14 +4565,14 @@ export function WaveTermViz({ node }: { node: GraphNode }) {
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    const viz = canvas ? setupViz(canvas) : null;
+    if (!canvas || !viz) return;
     const n = nodeRef.current;
     const nVal = chladniLiveOrParam(n, 'n', 3.0);
     const mVal = chladniLiveOrParam(n, 'm', 4.0);
     const scale = chladniLiveOrParam(n, 'scale', 1.0);
     const bounded = n.params.bounded !== 'infinite';
-    drawChladniField(ctx, canvas.width, canvas.height, (px, py) => {
+    drawChladniField(viz, (px, py) => {
       const sx = px * scale, sy = py * scale;
       if (bounded && (Math.abs(sx) > 1 || Math.abs(sy) > 1)) return null;
       return waveTermValue(sx, sy, nVal, mVal);
@@ -4572,7 +4586,7 @@ export function WaveTermViz({ node }: { node: GraphNode }) {
   }, [draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={CHLADNI_FIELD_RES} height={CHLADNI_FIELD_RES}
         style={{ display: 'block', width: '100%', height: `${CHLADNI_FIELD_RES}px`, imageRendering: 'pixelated' }} />
     </div>
@@ -4587,8 +4601,8 @@ export function ChladniFieldViz({ node }: { node: GraphNode }) {
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    const viz = canvas ? setupViz(canvas) : null;
+    if (!canvas || !viz) return;
     const n = nodeRef.current;
     const nVal = chladniLiveOrParam(n, 'n', 6.0);
     const mVal = chladniLiveOrParam(n, 'm', 4.0);
@@ -4596,7 +4610,7 @@ export function ChladniFieldViz({ node }: { node: GraphNode }) {
     const scale = chladniLiveOrParam(n, 'scale', 1.0);
     const circular = n.params.geometry === 'circular';
     const bounded = n.params.bounded !== 'infinite';
-    drawChladniField(ctx, canvas.width, canvas.height, (px, py) => {
+    drawChladniField(viz, (px, py) => {
       const sx = px * scale, sy = py * scale;
       if (circular) {
         const r = Math.hypot(sx, sy);
@@ -4616,7 +4630,7 @@ export function ChladniFieldViz({ node }: { node: GraphNode }) {
   }, [draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={CHLADNI_FIELD_RES} height={CHLADNI_FIELD_RES}
         style={{ display: 'block', width: '100%', height: `${CHLADNI_FIELD_RES}px`, imageRendering: 'pixelated' }} />
     </div>
@@ -4636,8 +4650,8 @@ export function ChladniSuperpositionViz({ node }: { node: GraphNode }) {
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    const viz = canvas ? setupViz(canvas) : null;
+    if (!canvas || !viz) return;
     const n = nodeRef.current;
     const n1 = chladniLiveOrParam(n, 'n1', 6.0);
     const m1 = chladniLiveOrParam(n, 'm1', 4.0);
@@ -4653,7 +4667,7 @@ export function ChladniSuperpositionViz({ node }: { node: GraphNode }) {
       const wv = typeof n.params[`w${i}`] === 'number' ? n.params[`w${i}`] as number : fb.w;
       extraTerms.push({ n: nv, m: mv, w: wv });
     }
-    drawChladniField(ctx, canvas.width, canvas.height, (px, py) => {
+    drawChladniField(viz, (px, py) => {
       const sx = px * scale, sy = py * scale;
       if (circular) {
         const r = Math.hypot(sx, sy);
@@ -4677,7 +4691,7 @@ export function ChladniSuperpositionViz({ node }: { node: GraphNode }) {
   }, [draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={CHLADNI_FIELD_RES} height={CHLADNI_FIELD_RES}
         style={{ display: 'block', width: '100%', height: `${CHLADNI_FIELD_RES}px`, imageRendering: 'pixelated' }} />
     </div>
@@ -4695,10 +4709,10 @@ export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    const viz = canvas ? setupViz(canvas) : null;
+    if (!canvas || !viz) return;
     const n = nodeRef.current;
-    const W = canvas.width, H = canvas.height;
+    const { ctx, W, H } = viz;
     const freq = chladniLiveOrParam(n, 'frequency', 5.0);
     const seed = chladniLiveOrParam(n, 'seed', 0.0);
     const hash = (x: number) => { const s = Math.sin(x) * 43758.5453; return s - Math.floor(s); };
@@ -4707,16 +4721,16 @@ export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
     const nVal = freq;
     const mVal = freq * ratio + phase;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
     ctx.textBaseline = 'middle';
-    ctx.font = '11px monospace';
-    ctx.fillStyle = ctp.text;
+    ctx.font = `11px ${MONO}`;
+    ctx.fillStyle = pal.text;
     ctx.textAlign = 'left';
     ctx.fillText(`n ${nVal.toFixed(2)}`, 10, H / 2);
     ctx.fillText(`m ${mVal.toFixed(2)}`, 10 + ctx.measureText(`n ${nVal.toFixed(2)}`).width + 14, H / 2);
-    ctx.font = '9px monospace';
-    ctx.fillStyle = ctp.surface1;
+    ctx.font = `9px ${MONO}`;
+    ctx.fillStyle = pal.surface1;
     ctx.textAlign = 'right';
     ctx.fillText('→ n, m', W - 8, H / 2);
   }, []);
@@ -4728,7 +4742,7 @@ export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
   }, [draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={36}
         style={{ display: 'block', width: '100%', height: '36px' }} />
     </div>
@@ -4746,7 +4760,7 @@ export function ChladniModeFreqViz({ node }: { node: GraphNode }) {
 export function SwizzleViz({ node }: { node: GraphNode }) {
   const is3 = node.type === 'vec3Swizzle';
   const axes = is3 ? ['x', 'y', 'z'] : ['x', 'y'];
-  const colors: Record<string, string> = { x: ctp.red, y: ctp.green, z: ctp.blue, w: ctp.mauve };
+  const colors: Record<string, string> = { x: pal.red, y: pal.green, z: pal.blue, w: pal.mauve };
   const mode = String(node.params.mode || (is3 ? 'yzx' : 'yx'));
   const nodeRef = useRef(node);
   nodeRef.current = node;
@@ -4777,22 +4791,22 @@ export function SwizzleViz({ node }: { node: GraphNode }) {
   }, [axes, is3]);
 
   return (
-    <div style={{ ...VIZ_CONTAINER, padding: '6px 12px', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+    <div style={{ ...vizContainer(), padding: '6px 12px', fontFamily: MONO, display: 'flex', flexDirection: 'column', gap: '5px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '9px', color: ctp.surface2, width: '26px' }}>in</span>
+        <span style={{ fontSize: '9px', color: pal.surface2, width: '26px' }}>in</span>
         {axes.map((c, i) => (
           <span key={c} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
             <span style={{ fontSize: '9px', color: colors[c] }}>{c}</span>
-            <span ref={el => { inRefs.current[i] = el; }} style={{ fontSize: '10px', color: ctp.text }}>—</span>
+            <span ref={el => { inRefs.current[i] = el; }} style={{ fontSize: '10px', color: pal.text }}>—</span>
           </span>
         ))}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '9px', color: ctp.blue, width: '26px' }}>.{mode}</span>
+        <span style={{ fontSize: '9px', color: pal.blue, width: '26px' }}>.{mode}</span>
         {mode.split('').map((c, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-            <span style={{ fontSize: '9px', color: colors[c] ?? ctp.surface2 }}>{c}</span>
-            <span ref={el => { outRefs.current[i] = el; }} style={{ fontSize: '10px', color: ctp.yellow }}>—</span>
+            <span style={{ fontSize: '9px', color: colors[c] ?? pal.surface2 }}>{c}</span>
+            <span ref={el => { outRefs.current[i] = el; }} style={{ fontSize: '10px', color: pal.yellow }}>—</span>
           </span>
         ))}
       </div>
@@ -4814,23 +4828,23 @@ export function QuantizeViz({ node }: { node: GraphNode }) {
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    const viz = canvas ? setupViz(canvas) : null;
+    if (!canvas || !viz) return;
     const n = nodeRef.current;
-    const W = canvas.width, H = canvas.height;
+    const { ctx, W, H } = viz;
     const step = Math.max(0.0001, typeof n.params.step === 'number' ? n.params.step : 1.0);
     const domain = Math.max(step * 4, 1);
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = ctp.surface0;
+    ctx.strokeStyle = pal.surface0;
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 2]);
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
     ctx.setLineDash([]);
 
     const toY = (v: number) => H / 2 - (v / domain) * (H / 2) * 0.9;
-    ctx.strokeStyle = ctp.yellow;
+    ctx.strokeStyle = pal.yellow;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= W; i++) {
@@ -4846,12 +4860,12 @@ export function QuantizeViz({ node }: { node: GraphNode }) {
     if (liveVal != null && Number.isFinite(liveVal)) {
       const qx = ((liveVal + domain) / (domain * 2)) * W;
       const qy = toY(Math.floor(liveVal / step + 0.5) * step);
-      ctx.fillStyle = ctp.green;
+      ctx.fillStyle = pal.green;
       ctx.beginPath(); ctx.arc(Math.max(0, Math.min(W, qx)), qy, 2.5, 0, Math.PI * 2); ctx.fill();
     }
 
-    ctx.fillStyle = ctp.overlay0;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.overlay0;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText(`step ${step.toFixed(3)}`, 4, H - 4);
   }, []);
 
@@ -4862,7 +4876,7 @@ export function QuantizeViz({ node }: { node: GraphNode }) {
   }, [draw]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={56}
         style={{ display: 'block', width: '100%', height: '56px' }} />
     </div>
@@ -4883,9 +4897,9 @@ export function ModSelectViz({ node }: { node: GraphNode }) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    const W = canvas.width, H = canvas.height;
+    const viz = canvas ? setupViz(canvas) : null;
+    if (!canvas || !viz) return;
+    const { ctx, W, H } = viz;
     const per = Math.max(0.001, period);
     const win = per * Math.max(0, Math.min(1, threshold));
     const sft = Math.max(0.001, softness);
@@ -4902,13 +4916,13 @@ export function ModSelectViz({ node }: { node: GraphNode }) {
 
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, H - 12, W, 12);
-    ctx.fillStyle = ctp.subtext0;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = pal.subtext0;
+    ctx.font = `8px ${MONO}`;
     ctx.fillText(`period ${per.toFixed(2)}  thr ${threshold.toFixed(2)}`, 4, H - 3);
   }, [period, threshold, softness]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={240} height={48}
         style={{ display: 'block', width: '100%', height: '48px' }} />
     </div>
@@ -4926,10 +4940,10 @@ export function PixelateViz({ node }: { node: GraphNode }) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    const W = canvas.width, H = canvas.height;
-    ctx.fillStyle = ctp.crust;
+    const viz = canvas ? setupViz(canvas) : null;
+    if (!canvas || !viz) return;
+    const { ctx, W, H } = viz;
+    ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
     const cells = Math.max(2, Math.min(24, Math.round(2 / Math.max(0.005, pixelSize))));
     const cellW = W / cells, cellH = H / cells;
@@ -4939,7 +4953,7 @@ export function PixelateViz({ node }: { node: GraphNode }) {
         ctx.fillRect(col * cellW, row * cellH, cellW, cellH);
       }
     }
-    ctx.strokeStyle = ctp.surface2;
+    ctx.strokeStyle = pal.surface2;
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= cells; i++) {
       ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, H); ctx.stroke();
@@ -4948,7 +4962,7 @@ export function PixelateViz({ node }: { node: GraphNode }) {
   }, [pixelSize]);
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={vizContainer()}>
       <canvas ref={canvasRef} width={80} height={80}
         style={{ display: 'block', width: '100%', height: '100%', imageRendering: 'pixelated' }} />
     </div>
@@ -4958,6 +4972,15 @@ export function PixelateViz({ node }: { node: GraphNode }) {
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export function NodeInlineViz({ node }: { node: GraphNode }) {
+  setVizPalette(useCtp());
+  const mode = useThemeMode();
+  // Keyed on the theme: a flip remounts the drawing below so its effect runs again with the new palette
+  return <React.Fragment key={mode}><NodeInlineVizSwitch node={node} /></React.Fragment>;
+}
+
+function NodeInlineVizSwitch({ node }: { node: GraphNode }) {
+  // Table-driven families (2D spaces, falloff curves, echo…) live in vizGeneric.tsx
+  if (GENERIC_VIZ_TYPES.has(node.type)) return <GenericViz node={node} />;
   switch (node.type) {
     case 'toneMap':        return <ToneCurveViz          node={node} />;
     case 'palette':
@@ -5272,7 +5295,8 @@ export function NodeInlineViz({ node }: { node: GraphNode }) {
 }
 
 // Nodes whose inline viz fully replaces the shader thumbnail
-export const INLINE_VIZ_TYPES = new Set([
+export const INLINE_VIZ_TYPES = new Set<string>([
+  ...GENERIC_VIZ_TYPES,
   // Halftone nodes
   'gridUV', 'dotMask', 'sdfMask', 'lumaRadius', 'cmykHalftone', 'rgbToCMYK',
   // 3D Lighting
@@ -5281,8 +5305,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'toneMap', 'palette', 'gradient',
   'posterize', 'grain', 'hueRange', 'audioInput',
   'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'printFloat', 'printText', 'waveTexture',
-  'smoothstep', 'clamp', 'mix', 'mapRange',
-  'addColor',
+  'smoothstep', 'clamp', 'mix', 'addColor',
   'particleEmitter',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
@@ -5304,9 +5327,6 @@ export const INLINE_VIZ_TYPES = new Set([
   // 3D boolean ops
   'sdfOnion',
   // Effects / post-process
-  'vignette', 'scanlines', 'sobel', 'chromaticAberrationAuto',
-  'gaussianBlur', 'radialBlur', 'tiltShiftBlur', 'lensBlur',
-  'depthOfField', 'motionBlur', 'chromaShift', 'gravitationalLens', 'floatWarp',
   // Scalar math
   'exp', 'pow', 'sqrt', 'ceil', 'floor', 'negate', 'sign', 'fractRaw', 'abs', 'mod',
   'tanh', 'round', 'step', 'atan2',
@@ -5335,17 +5355,13 @@ export const INLINE_VIZ_TYPES = new Set([
   // 'fbm', 'voronoi', 'noiseFloat',
   // Space / UV warps
   'fract', 'rotate2d', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'displace',
-  'domainWarp', 'flowField',
   'polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace',
   'swirlSpace', 'kaleidoSpace', 'sphericalSpace', 'rippleSpace', 'infiniteRepeatSpace',
   'shear', 'perspective2d', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D',
   // Color ops
-  'hsv', 'invert', 'blendModes', 'lumaKey', 'sdfColorize', 'sdfFill',
-  'mask', 'glowLayer', 'alphaBlend', 'chromaticAberration',
   // Math
-  'luminance', 'compare', 'select', 'reflect', 'crossProduct', 'complexMul', 'complexPow',
   // 2D SDF missing
-  'sdSegment', 'simpleSDF',
+  'simpleSDF',
   // 3D SDF missing
   'sdCross3D', 'mengerSponge', 'mandelboxDE', 'kifsTetra', 'mandelbulb',
   // 3D transforms missing
@@ -5353,8 +5369,7 @@ export const INLINE_VIZ_TYPES = new Set([
   // Lighting
   'light', 'light2d', 'multiLight', 'fresnel3d', 'sdfAo', 'softShadow',
   // 2D Fractals / Patterns / Physics
-  'mandelbrot', 'ifs', 'newtonFractal', 'lyapunov', 'apollonian',
-  'truchet', 'metaballs', 'lissajous',
+  'lissajous',
   'chladni', 'chladni3d', 'chladni3dParticles',
   'waveTerm', 'chladniField', 'chladniSuperposition', 'chladniModeFreq',
   'vec2Swizzle', 'vec3Swizzle', 'quantize', 'modSelect', 'pixelate',
@@ -5362,8 +5377,7 @@ export const INLINE_VIZ_TYPES = new Set([
   'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
   'loopCarry', 'loopDomainFold',
   // Volumetrics / complex effects
-  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'glassDistortion',
-  'orbitalVolume3d', 'radianceCascadesApprox',
+  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'orbitalVolume3d', 'radianceCascadesApprox',
   // Particle fields
   'vectorField', 'gravityField', 'spiralField',
   // 3D Scene nodes

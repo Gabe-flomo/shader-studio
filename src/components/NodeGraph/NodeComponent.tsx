@@ -151,7 +151,7 @@ const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
 const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
-const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat']);
+const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat', 'sdSegment', 'mask', 'luminance', 'sobel', 'compare', 'select']);
 
 
 const inputStyleFor = (tc: CtpPalette): React.CSSProperties => ({
@@ -473,6 +473,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const previewDataUrl  = useNodeGraphStore(s => s.nodePreviews[node.id] ?? null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // The thumbnail follows the node's own sliders: params are baked into the preview shader, so a
+  // change is a new shader. Debounced so a slider drag doesn't compile on every tick.
+  const paramsKey = JSON.stringify(node.params);
+  const [previewParamsKey, setPreviewParamsKey] = useState(paramsKey);
+  useEffect(() => {
+    if (!isPreviewActive) return;
+    const t = setTimeout(() => setPreviewParamsKey(paramsKey), 300);
+    return () => clearTimeout(t);
+  }, [paramsKey, isPreviewActive]);
+
   // Render a 200×200 preview whenever preview mode is activated for this node
   useEffect(() => {
     if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
@@ -501,7 +511,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       .catch(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewActive, node.id, node.type]);
+  }, [isPreviewActive, node.id, node.type, previewParamsKey]);
 
   // Comment preview — brief hover delay (not the old 1200ms tooltip delay,
   // just enough to avoid flicker while panning/passing over the card).
