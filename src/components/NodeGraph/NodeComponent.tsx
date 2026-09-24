@@ -1878,6 +1878,18 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             borderBottom: `1px solid ${tk.border.subtle}`,
           }}
         >
+          <button
+            type="button"
+            aria-label={collapsed ? 'Expand group' : 'Collapse group (keeps its ports and wired params)'}
+            aria-expanded={!collapsed}
+            onMouseDown={e => e.stopPropagation()}
+            onDoubleClick={e => e.stopPropagation()}
+            onClick={() => setCollapsed(v => !v)}
+            style={{
+              width: 18, height: 26, marginLeft: -6, padding: 0, border: 0, background: 'none', cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: tk.text.faint,
+            }}
+          ><Icon name={collapsed ? 'chevR' : 'chevD'} size={14} /></button>
           <span style={{ display: 'flex', color: groupAccentColor, flexShrink: 0 }}><Icon name={groupIcon} size={16} /></span>
           {isEditingTitle ? (
             <input
@@ -1988,7 +2000,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })()}
 
         {/* Iterations — regular groups only */}
-        {node.type === 'group' && (
+        {node.type === 'group' && !collapsed && (
           <div
             onMouseDown={e => e.stopPropagation()}
             onDoubleClick={e => e.stopPropagation()}
@@ -2247,7 +2259,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
             }) ?? false;
             if (!hasInnerParams) return null;
-            if (surfacedParams.length === 0) return null;
+            // Collapsed: only wired rows stay (their wires need somewhere to land)
+            const shownSurfaced = collapsed
+              ? surfacedParams.filter(sp => node.inputs[`ps_${innerNode.id}_${sp.nodeId}_${sp.paramKey}`]?.connection)
+              : surfacedParams;
+            if (shownSurfaced.length === 0) return null;
 
             const innerGroupLabel = typeof innerNode.params.label === 'string' ? innerNode.params.label : 'Inner Group';
             const sectionLabelKey = `__sectionLabel_${innerNode.id}`;
@@ -2289,7 +2305,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   )}
                   <Icon name="nodes" size={12} />
                 </div>
-                {surfacedParams.map(sp => {
+                {shownSurfaced.map(sp => {
                   const innNode = innerGroupSub?.nodes.find(n => n.id === sp.nodeId);
                   if (!innNode) return null;
                   const innDef = getNodeDefinition(innNode.type);
@@ -2335,7 +2351,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             if (hiddenParams.includes(`${innerNode.id}::${paramKey}`)) return false;
             return true;
           });
-          if (visibleParams.length === 0) return null;
+          const shownParams = collapsed
+            ? visibleParams.filter(([k]) => node.inputs[`ps_${innerNode.id}_${k}`]?.connection)
+            : visibleParams;
+          if (shownParams.length === 0) return null;
 
           const innerLabel = typeof innerNode.params.label === 'string'
             ? innerNode.params.label
@@ -2378,7 +2397,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   displayLabel
                 )}
               </div>
-              {visibleParams.map(([paramKey, paramDef]) => {
+              {shownParams.map(([paramKey, paramDef]) => {
                 if (paramDef.type !== 'float') return null;
                 const psKey = `ps_${innerNode.id}_${paramKey}`;
                 const overrideKey = `${innerNode.id}::${paramKey}`;
@@ -2399,7 +2418,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })}
 
         {/* MarchLoopGroup outer params — maxSteps, maxDist, stepScale, bg, albedo */}
-        {isMarchLoopGroup && (() => {
+        {isMarchLoopGroup && !collapsed && (() => {
           const outerDef = getNodeDefinition(node.type);
           const outerParamDefs = outerDef?.paramDefs ?? {};
           const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float' || pd.type === 'bool');
@@ -2453,7 +2472,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })()}
 
         {/* "Customize params" button — shown for any group with float params */}
-        {subgraph && (() => {
+        {subgraph && !collapsed && (() => {
           const SKIP_PARAM_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant', 'loopIndex', 'loopCarry', 'group']);
           const hasInnerGroupNodes = subgraph.nodes.some(n => n.type === 'group');
           // For outer groups: check inner-group subgraph nodes
@@ -3061,6 +3080,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 onMouseUp={(e) => {
                   e.stopPropagation();
                   if (e.altKey && !isConnected) return; // handled by onMouseDown
+                  // Right-click is the keyframe menu only (onContextMenu); only a left click connects or disconnects
+                  if (e.button !== 0) return;
                   if (isConnectionDragging) {
                     if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
                     onEndConnection(node.id, key);

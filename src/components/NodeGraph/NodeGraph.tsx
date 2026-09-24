@@ -681,6 +681,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     event: React.MouseEvent
   ) => {
     event.stopPropagation();
+    if (event.button !== 0) return; // only the left button starts a wire (or a Smart connect click)
     let fromPos = socketWorld(nodeId, 'out', outputKey);
     if (!fromPos) {
       const node = displayNodesRef.current.find(n => n.id === nodeId);
