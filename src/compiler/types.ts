@@ -11,6 +11,8 @@ export interface ParticleSystemData {
   shape: number;
   /** Float param uniforms for this chain — merged into CompilationResult.paramUniforms */
   paramUniforms: Record<string, number>;
+  /** `${nodeId}::${paramKey}` → uniform name — merged into CompilationResult.paramBindings */
+  paramBindings: Record<string, string>;
 }
 
 export interface CompilationResult {
@@ -25,6 +27,14 @@ export interface CompilationResult {
    * Slider changes push new values here instead of triggering a recompile.
    */
   paramUniforms: Record<string, number>;
+  /**
+   * Maps `${nodeId}::${paramKey}` (the node's ORIGINAL id, the one the store
+   * edits — not its slug) → the uniform name in `paramUniforms`. Absent from
+   * this map means the param is baked into the GLSL and changing it needs a
+   * recompile. This is the only place uniform names should be looked up from;
+   * never rebuild them from the id.
+   */
+  paramBindings: Record<string, string>;
   /**
    * Maps sampler2D uniform name (e.g. "u_tex_nodeId") → nodeId.
    * ShaderCanvas uses this to bind THREE.Texture objects for TextureInput nodes.
