@@ -21,7 +21,7 @@ export function UiGallery() {
   return (
     // index.css locks body scrolling for the app, so the gallery scrolls its own box.
     <div style={{ height: '100vh', overflow: 'auto' }}>
-      <div style={{ display: 'flex', minHeight: '100%' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', minHeight: '100%' }}>
         {(['light', 'dark'] as ThemeMode[]).map(m => (
           <ThemeOverrideContext.Provider key={m} value={m}>
             <Column mode={m} />
@@ -60,7 +60,7 @@ function Column({ mode }: { mode: ThemeMode }) {
   const [modal, setModal] = useState(false);
 
   return (
-    <div style={{ flex: 1, minWidth: 0, padding: 32, background: tk.bg.app, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={{ flex: '1 1 480px', minWidth: 0, padding: 32, background: tk.bg.app, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, display: 'flex', flexDirection: 'column', gap: 28 }}>
       <div style={{ fontSize: 22, fontWeight: 700 }}>{mode === 'light' ? 'Light' : 'Dark'}</div>
 
       <Section title="Buttons">
