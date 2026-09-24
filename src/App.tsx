@@ -1158,8 +1158,8 @@ function App() {
               {'{ } Code'}
             </button>
 
-            <NodeGraph />
             {/* Tablet keeps the dark look until the tablet/mobile phase. */}
+            <ThemeOverrideContext.Provider value="dark"><NodeGraph /></ThemeOverrideContext.Provider>
             {showCode && <ThemeOverrideContext.Provider value="dark"><CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} /></ThemeOverrideContext.Provider>}
             {/* Time controls: floating dock on the node-graph side of the
                 divider, vertically centered — never overlapping the render
