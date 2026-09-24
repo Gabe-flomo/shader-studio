@@ -166,8 +166,13 @@ class AudioEngine {
    * Called every animation frame from ShaderCanvas.
    * Returns map of uniformName → amplitude (0–1) for all active audio nodes.
    */
+  // Reused across frames: tick() runs every animation frame, and its result
+  // is consumed synchronously by the caller, so one Map serves every call.
+  private tickResult = new Map<string, number>();
+
   tick(): Map<string, number> {
-    const result = new Map<string, number>();
+    const result = this.tickResult;
+    result.clear();
     for (const [nodeId, state] of this.nodes) {
       if (!state.isPlaying) continue;
       state.analyser.getFloatFrequencyData(state.freqData as Float32Array<ArrayBuffer>);

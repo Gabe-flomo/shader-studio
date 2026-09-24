@@ -6,6 +6,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import type { IconName } from '../ui/iconPaths';
+import { subscribeTimeTick } from '../../lib/timeTick';
 
 // Building blocks shared by the node cards (standard, group and special cards).
 
@@ -126,11 +127,7 @@ export function KeyframedRuler({ node, socketKey, label, min, max, step, touch =
 }) {
   const cfg = getKeyframeConfig(node, socketKey);
   const [time, setTime] = useState(0);
-  useEffect(() => {
-    const onTick = (e: Event) => setTime((e as CustomEvent<{ time: number }>).detail.time);
-    window.addEventListener('time-tick', onTick);
-    return () => window.removeEventListener('time-tick', onTick);
-  }, []);
+  useEffect(() => subscribeTimeTick(setTime), []);
   const value = cfg ? evaluateKeyframes(cfg, time) : 0;
   const summary = cfg
     ? `${cfg.keyframes.length} ${cfg.keyframes.length === 1 ? 'key' : 'keys'} · ${cfg.mode === 'once' ? 'plays once' : cfg.mode === 'loop' ? 'loops' : 'smooth loop'}. Edit them from the ◆ socket.`

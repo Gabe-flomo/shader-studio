@@ -791,10 +791,10 @@ export const WeightedAverageNode: NodeDefinition = {
   },
   defaultParams: { w1: 1.0, w2: 1.0, w3: 0.0, w4: 0.0, inputs_used: '2' },
   paramDefs: {
-    w1:          { label: 'Weight A',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
-    w2:          { label: 'Weight B',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
-    w3:          { label: 'Weight C',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
-    w4:          { label: 'Weight D',          type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w1:          { label: 'Weight A',    type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w2:          { label: 'Weight B',    type: 'float',  min: 0.0, max: 10.0, step: 0.1 },
+    w3:          { label: 'Weight C',    type: 'float',  min: 0.0, max: 10.0, step: 0.1, showWhen: { param: 'inputs_used', value: ['3', '4'] } },
+    w4:          { label: 'Weight D',    type: 'float',  min: 0.0, max: 10.0, step: 0.1, showWhen: { param: 'inputs_used', value: '4' } },
     inputs_used: { label: 'Inputs Used', type: 'select', options: [
       { value: '2', label: '2' },
       { value: '3', label: '3' },
@@ -864,36 +864,23 @@ export const CompareNode: NodeDefinition = {
     const aV   = inputs.a   ?? '0.0';
     const bV   = inputs.b   ?? '0.0';
     const op   = (node.params.operator as string) ?? '>';
-    const soft = (node.params.smoothing as number) ?? 0.0;
+    // Live uniform: a width of 0 degenerates smoothstep, so clamp to a hair above it (≈ hard step).
+    const h = `max(${p(node.params.smoothing, 0.0)}, 1e-5)`;
 
+    // One smoothstep form for every width: at the clamped minimum it behaves
+    // as the hard step() the old zero-smoothing branch emitted.
     let expr: string;
-    if (soft > 0) {
-      const h = p(soft, 0.0);
-      if (op === '>') {
-        expr = `smoothstep(${bV} - ${h}, ${bV} + ${h}, ${aV})`;
-      } else if (op === '<') {
-        expr = `1.0 - smoothstep(${bV} - ${h}, ${bV} + ${h}, ${aV})`;
-      } else if (op === '>=') {
-        expr = `smoothstep(${bV} - ${h}, ${bV}, ${aV})`;
-      } else if (op === '<=') {
-        expr = `1.0 - smoothstep(${bV}, ${bV} + ${h}, ${aV})`;
-      } else {
-        // ≈
-        expr = `1.0 - smoothstep(0.0, ${h}, abs(${aV} - ${bV}))`;
-      }
+    if (op === '>') {
+      expr = `smoothstep(${bV} - ${h}, ${bV} + ${h}, ${aV})`;
+    } else if (op === '<') {
+      expr = `1.0 - smoothstep(${bV} - ${h}, ${bV} + ${h}, ${aV})`;
+    } else if (op === '>=') {
+      expr = `smoothstep(${bV} - ${h}, ${bV}, ${aV})`;
+    } else if (op === '<=') {
+      expr = `1.0 - smoothstep(${bV}, ${bV} + ${h}, ${aV})`;
     } else {
-      if (op === '>') {
-        expr = `step(${bV}, ${aV}) * (1.0 - step(${aV}, ${bV}))`;
-      } else if (op === '<') {
-        expr = `step(${aV}, ${bV}) * (1.0 - step(${bV}, ${aV}))`;
-      } else if (op === '>=') {
-        expr = `step(${bV}, ${aV})`;
-      } else if (op === '<=') {
-        expr = `step(${aV}, ${bV})`;
-      } else {
-        // ≈ hard: exact equality
-        expr = `1.0 - step(0.001, abs(${aV} - ${bV}))`;
-      }
+      // ≈
+      expr = `1.0 - smoothstep(0.0, ${h}, abs(${aV} - ${bV}))`;
     }
 
     return {
@@ -1108,4 +1095,9 @@ export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryO
   smoothstep: { primaryInput: 'value', primaryOutput: 'result' },
   clamp:      { primaryInput: 'input', primaryOutput: 'result' },
   mod:        { primaryInput: 'input', primaryOutput: 'output' },
+  // Constant: the pills pick float / vec2 / vec3 / vec4 and the card shows 1–4 sliders.
+  constant:   { primaryInput: 'value', primaryOutput: 'value' },
 };
+
+/** Node types whose type pills also offer vec4. */
+export const VEC4_CAPABLE_NODES = new Set(['constant']);
