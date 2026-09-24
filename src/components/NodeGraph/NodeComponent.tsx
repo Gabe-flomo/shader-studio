@@ -52,6 +52,7 @@ import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
 import { errorMessage } from '../../utils/fileIO';
 import type { FileResult } from '../../utils/fileIO';
+import { isParamVisible } from '../../compiler/uniformPatcher';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { AssetContextMenu } from './AssetContextMenu';
@@ -2401,7 +2402,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           const hiddenParams: string[] = Array.isArray(node.params.hiddenParams)
             ? (node.params.hiddenParams as string[])
             : [];
-          const visibleParams = paramEntries.filter(([paramKey]) => {
+          const visibleParams = paramEntries.filter(([paramKey, pd]) => {
+            // Same showWhen gate as the node's own card (a vec3 Constant has no Value slider)
+            if (!isParamVisible(pd, innerNode.params)) return false;
             if (innerNode.inputs[`__param_${paramKey}`]?.connection) return false;
             const matchingInput = Object.entries(innerNode.inputs).find(
               ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
