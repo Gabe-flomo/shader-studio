@@ -1,4 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
+import { audioUniformName } from '../../compiler/audioUniformNames';
 import { p } from './helpers';
 
 /**
@@ -278,7 +279,7 @@ export const AudioInputNode: NodeDefinition = {
     for (let i = 0; i < bands.length; i++) {
       const outVar = `${id}_amplitude_${i}`;
       const muted = soloedBand >= 0 && soloedBand !== i;
-      lines.push(`    float ${outVar} = ${muted ? '0.0' : `u_audio_${id}_${i}`};\n`);
+      lines.push(`    float ${outVar} = ${muted ? '0.0' : audioUniformName(id, i)};\n`);
       outputVars[`amplitude_${i}`] = outVar;
     }
     return { code: lines.join(''), outputVars };

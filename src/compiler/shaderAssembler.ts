@@ -6,6 +6,7 @@ import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
 import { midiOutputKeys, midiUniformName, liveChannelKey } from '../lib/midiOutputs';
+import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
@@ -557,7 +558,7 @@ export class ShaderAssembler {
           const rawBands = node.params._bands;
           const bands: unknown[] = Array.isArray(rawBands) ? rawBands : [200];
           for (let i = 0; i < bands.length; i++) {
-            this.audioUniforms[`u_audio_${nodeSlug}_${i}`] = node.id;
+            this.audioUniforms[audioUniformName(nodeSlug, i)] = node.id;
           }
         }
         if (node.type === 'videoInput') {

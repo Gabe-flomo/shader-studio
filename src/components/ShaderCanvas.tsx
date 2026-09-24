@@ -429,6 +429,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
     for (const name of Object.keys(au))              initialUniforms[name] = { value: 0 };
     for (const name of Object.keys(lu))              initialUniforms[name] = { value: 0 };
+    audioEngine.setUniformNames(au);
     for (const name of Object.keys(vu))              initialUniforms[name] = { value: null };
     // `let`: the shader-change effect swaps in a freshly compiled material
     // (see swapShaderRef below); everything in this closure reads `material`
@@ -831,11 +832,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
 
       // ── Audio engine tick: push amplitude uniforms + draw live spectrum ──
+      // tick() keys are the compiled uniform names (setUniformNames above).
       const audioAmps = audioEngine.tick();
       for (const [uName, amp] of audioAmps) {
-        if (material.uniforms[uName]) {
-          material.uniforms[uName].value = amp;
-        }
+        const u = material.uniforms[uName];
+        if (u) u.value = amp;
       }
       // ── Input bus tick: MIDI (and later mouse/keyboard/envelope) float uniforms ──
       const liveValues = inputBus.tick(dt, elapsed);
@@ -1541,6 +1542,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         mat.uniforms[uniformName] = { value: 0 };
       }
     }
+    // Uniforms are named by GLSL slug, so the engine needs the map to
+    // address them (tick() emits these names).
+    audioEngine.setUniformNames(currentAudioUniforms);
     // Register sampler2D video uniforms (initial value null — filled by video effect)
     const currentVideoUniforms = useNodeGraphStore.getState().videoUniforms;
     for (const uniformName of Object.keys(currentVideoUniforms)) {
