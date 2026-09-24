@@ -5,6 +5,8 @@ import { f as formatFloat } from '../nodes/definitions/helpers';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
+import { midiOutputKeys, midiUniformName, liveChannelKey } from '../lib/midiOutputs';
+import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
@@ -442,6 +444,8 @@ export class ShaderAssembler {
   private paramBindings: Record<string, string> = {};
   private textureUniforms: Record<string, string> = {};
   private audioUniforms: Record<string, string> = {};
+  // Float uniforms the input bus writes each frame: name → `${nodeId}::${channel}`.
+  private liveUniforms: Record<string, string> = {};
   private videoUniforms: Record<string, string> = {};
   private nodeOutputs = new Map<string, Record<string, string>>();
   private mlgDynamicOutputs = new Map<string, Record<string, { type: string; label: string }>>();
@@ -486,6 +490,7 @@ export class ShaderAssembler {
     paramUniforms: Record<string, number | number[]>;
     textureUniforms: Record<string, string>;
     audioUniforms: Record<string, string>;
+    liveUniforms: Record<string, string>;
     videoUniforms: Record<string, string>;
     isStateful: boolean;
   } {
@@ -500,12 +505,13 @@ export class ShaderAssembler {
       paramUniforms: this.paramUniforms,
       textureUniforms: this.textureUniforms,
       audioUniforms: this.audioUniforms,
+      liveUniforms: this.liveUniforms,
       videoUniforms: this.videoUniforms,
       isStateful: this.isStateful,
     };
   }
 
-  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; echo: { copies: number; delay: number } | null; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; liveUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; echo: { copies: number; delay: number } | null; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
     this.detectStateful();
     for (const node of this.sortedNodes) {
       this.compileNode(node);
@@ -577,11 +583,16 @@ export class ShaderAssembler {
           const rawBands = node.params._bands;
           const bands: unknown[] = Array.isArray(rawBands) ? rawBands : [200];
           for (let i = 0; i < bands.length; i++) {
-            this.audioUniforms[`u_audio_${nodeSlug}_${i}`] = node.id;
+            this.audioUniforms[audioUniformName(nodeSlug, i)] = node.id;
           }
         }
         if (node.type === 'videoInput') {
           this.videoUniforms[`u_vid_${nodeSlug}`] = node.id;
+        }
+        if (node.type === 'midiInput') {
+          for (const key of midiOutputKeys(node.params)) {
+            this.liveUniforms[midiUniformName(nodeSlug, key)] = liveChannelKey(node.id, key);
+          }
         }
 
 
@@ -3407,6 +3418,9 @@ export class ShaderAssembler {
     const audioUniformDecls = Object.keys(this.audioUniforms)
       .map(name => `uniform float ${name};`)
       .join('\n');
+    const liveUniformDecls = Object.keys(this.liveUniforms)
+      .map(name => `uniform float ${name};`)
+      .join('\n');
     const videoUniformDecls = Object.keys(this.videoUniforms)
       .map(name => `uniform sampler2D ${name};`)
       .join('\n');
@@ -3419,7 +3433,7 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
 uniform sampler2D u_fontTexture;
-${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}${audioUniformDecls ? audioUniformDecls + '\n' : ''}${videoUniformDecls ? videoUniformDecls + '\n' : ''}
+${paramUniformDecls ? paramUniformDecls + '\n' : ''}${textureUniformDecls ? textureUniformDecls + '\n' : ''}${audioUniformDecls ? audioUniformDecls + '\n' : ''}${liveUniformDecls ? liveUniformDecls + '\n' : ''}${videoUniformDecls ? videoUniformDecls + '\n' : ''}
 varying vec2 vUv;
 
 // ── Always-available helpers (noise, rotation) ───────────────────────────────
@@ -3440,6 +3454,7 @@ ${mainBody}}`.trim();
       paramBindings: this.paramBindings,
       textureUniforms: this.textureUniforms,
       audioUniforms: this.audioUniforms,
+      liveUniforms: this.liveUniforms,
       videoUniforms: this.videoUniforms,
       isStateful: this.isStateful,
       echo: this.echo,
@@ -3452,6 +3467,6 @@ ${mainBody}}`.trim();
 export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; echo: { copies: number; delay: number } | null; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; liveUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; echo: { copies: number; delay: number } | null; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
   return new ShaderAssembler(sortedNodes, allNodes).assemble();
 }

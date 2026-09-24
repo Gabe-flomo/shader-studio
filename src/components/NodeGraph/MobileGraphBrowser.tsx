@@ -643,7 +643,7 @@ export function InlineVizFrame({ node }: { node: GraphNode }) {
 // scope probe, or a type that isn't really "a shader" on its own. Same
 // list desktop's own SKIP_PREVIEW (NodeComponent.tsx) excludes from its
 // 👁 in-card preview for the same reason.
-export const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
+export const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'midiInput']);
 // ── Generic live-render fallback ─────────────────────────────────────────
 // For the ~75% of node types with no custom NodeInlineViz entry, this is
 // the same fallback desktop uses (NodeComponent.tsx's own isPreviewActive

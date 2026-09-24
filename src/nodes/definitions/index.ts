@@ -9,6 +9,8 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 import { getUserNodeDefinition, getAllUserNodeDefinitions } from '../userNodes/userNodeRegistry';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
+import { MidiInputNode } from './midi';
+export { MidiInputNode };
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
@@ -264,6 +266,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   loopIndex: LoopIndexNode,
   audioInput: AudioInputNode,
   videoInput: VideoInputNode,
+  midiInput: MidiInputNode,
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,

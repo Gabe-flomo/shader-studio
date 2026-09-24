@@ -6,6 +6,8 @@
  *   AudioBufferSourceNode → AnalyserNode → masterGainNode → ctx.destination
  */
 
+import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
+
 interface AudioNodeState {
   buffer: AudioBuffer;
   source: AudioBufferSourceNode | null;
@@ -25,6 +27,10 @@ class AudioEngine {
   private masterPaused = false;
   private pausedNodeIds = new Set<string>(); // nodes that were playing when pauseAll was called
   private nodes = new Map<string, AudioNodeState>();
+  // nodeId → uniform name per band, from the last compile (see setUniformNames).
+  // The compiler names uniforms by GLSL slug, not node id, so tick() can only
+  // address the shader through this map.
+  private uniformNames = new Map<string, string[]>();
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -163,11 +169,25 @@ class AudioEngine {
   }
 
   /**
+   * Give the engine the compiled `audioUniforms` map (uniform name → node id)
+   * so tick() emits the names the shader actually declares. Called by
+   * ShaderCanvas whenever a compile changes the map; cheap enough to call on
+   * every recompile since it only walks the audio uniforms.
+   */
+  setUniformNames(audioUniforms: Record<string, string>): void {
+    this.uniformNames = audioUniformNamesByNode(audioUniforms);
+  }
+
+  /**
    * Called every animation frame from ShaderCanvas.
    * Returns map of uniformName → amplitude (0–1) for all active audio nodes.
+   * Nodes the last compile declared no uniforms for (unwired, or not yet
+   * compiled) are skipped.
    */
   // Reused across frames: tick() runs every animation frame, and its result
   // is consumed synchronously by the caller, so one Map serves every call.
+  // Uniform names come pre-built from setUniformNames, so no strings are
+  // allocated here.
   private tickResult = new Map<string, number>();
 
   tick(): Map<string, number> {
@@ -175,15 +195,21 @@ class AudioEngine {
     result.clear();
     for (const [nodeId, state] of this.nodes) {
       if (!state.isPlaying) continue;
+      const names = this.uniformNames.get(nodeId);
+      if (!names) continue;
       state.analyser.getFloatFrequencyData(state.freqData as Float32Array<ArrayBuffer>);
       if (state.mode === 'full') {
-        // Full spectrum — emit band_0 with range=0
+        // Full spectrum — emit band 0 with range=0
+        if (names[0] === undefined) continue;
         const amp = this.computeBandAmplitude(state.freqData, state.analyser, 0, 0);
-        result.set(`u_audio_${nodeId}_0`, amp);
+        result.set(names[0], amp);
       } else {
-        for (let i = 0; i < state.bands.length; i++) {
+        const n = Math.min(state.bands.length, names.length);
+        for (let i = 0; i < n; i++) {
+          const name = names[i];
+          if (name === undefined) continue;
           const amp = this.computeBandAmplitude(state.freqData, state.analyser, state.bands[i], state.freqRange);
-          result.set(`u_audio_${nodeId}_${i}`, amp);
+          result.set(name, amp);
         }
       }
     }
