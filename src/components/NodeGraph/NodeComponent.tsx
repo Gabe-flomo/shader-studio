@@ -57,7 +57,8 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
-import { canRandomize } from '../../nodes/randomizeParams';
+import { canRandomize, randomizableParams, randomizeExcluded } from '../../nodes/randomizeParams';
+import { RandomizeMenu } from './RandomizeMenu';
 import { timeReadoutRef } from '../../lib/timeTick';
 import type { NodeError } from '../../compiler/nodeErrors';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
@@ -390,6 +391,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams       = useNodeGraphStore(s => s.updateNodeParams);
   const randomizeNodeParams    = useNodeGraphStore(s => s.randomizeNodeParams);
+  const [randomizeMenu, setRandomizeMenu] = useState<{ x: number; y: number } | null>(null);
   const changeNodeVectorType   = useNodeGraphStore(s => s.changeNodeVectorType);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
@@ -3945,9 +3947,23 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onClick={() => { if (def.defaultParams) updateNodeParams(node.id, def.defaultParams as Record<string, unknown>, { immediate: true }); }} />
         )}
         {canRandomize(node, def) && (
-          <CardButton icon="dice" label="Randomize values (wired and keyframed ones stay)" onClick={() => randomizeNodeParams(node.id)} />
+          <CardButton icon="dice" on={randomizeExcluded(node).length > 0}
+            label={randomizeExcluded(node).length > 0 ? 'Randomize the ticked sliders (right-click to choose)' : 'Randomize values (right-click to choose which)'}
+            onClick={() => randomizeNodeParams(node.id)}
+            onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
         )}
       </div>
+      {randomizeMenu && (
+        <RandomizeMenu
+          x={randomizeMenu.x}
+          y={randomizeMenu.y}
+          params={randomizableParams(node, def)}
+          excluded={randomizeExcluded(node)}
+          onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
+          onRandomize={() => randomizeNodeParams(node.id)}
+          onClose={() => setRandomizeMenu(null)}
+        />
+      )}
     </div>
   );
 });

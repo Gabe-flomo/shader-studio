@@ -19,11 +19,12 @@ type Tint = 'accent' | 'success' | 'warning' | 'expr' | 'fn';
  * tints it (preview = success, bypass = warning, open editors = their kind colour).
  */
 export function CardButton({
-  icon, label, onClick, on = false, tint = 'accent', tone,
+  icon, label, onClick, onContextMenu, on = false, tint = 'accent', tone,
 }: {
   icon: IconName;
   label: string;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   on?: boolean;
   tint?: Tint;
   tone?: 'danger';
@@ -42,6 +43,7 @@ export function CardButton({
       aria-pressed={on || undefined}
       onMouseDown={e => e.stopPropagation()}
       onClick={e => { e.stopPropagation(); onClick(); }}
+      onContextMenu={onContextMenu ? e => { e.preventDefault(); e.stopPropagation(); onContextMenu(e); } : undefined}
       style={on ? { background: bg, color } : undefined}
     />
   );
@@ -84,7 +86,6 @@ export function ParamLabel({ children, title, muted = false, onClick }: { childr
   );
 }
 
-/** "= expr" chip shown in place of a control whose value comes from a wire. */
 /**
  * Stands in for a control whose value comes from a wire: shows where it comes from ("← Sin", or
  * "← Sin · Output" when that node has several outputs); the compiled expression is in the tooltip.
