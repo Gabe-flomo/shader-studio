@@ -26,6 +26,8 @@ import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
+import { openTextFile } from '../../utils/fileIO';
+import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
@@ -49,8 +51,10 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint }: {
   label: string; icon: IconName; color: string;
+  /** One line shown in the row's tooltip (an example's description) */
+  hint?: string;
   onClick: () => void;
   /** Saved items: click selects (showing `preview`), double-click places */
   onDoubleClick?: () => void;
@@ -82,7 +86,7 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
         onClick={e => { if (onDoubleClick && e.detail > 1) return; onClick(); }}
         onDoubleClick={onDoubleClick}
         aria-expanded={preview !== undefined ? selected : undefined}
-        title={onDoubleClick ? `${label} · double-click to add` : label}
+        title={hint ? `${label} — ${hint}` : onDoubleClick ? `${label} · double-click to add` : label}
         style={{
           flex: 1, minWidth: 0, height: '100%', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -256,6 +260,15 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const { activeTab } = state;
 
   const refreshSavedNames     = () => setSavedNames(getSavedGraphNames());
+  const importGraphsBulk      = useNodeGraphStore(s => s.importGraphsBulk);
+  const importGraphs = async (mode: 'files' | 'folder') => {
+    const r = await importGraphsBulk(mode);
+    refreshSavedNames();
+    if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import graphs' }); return; }
+    const n = r.imported?.length ?? 0;
+    const skipped = r.skipped?.length ?? 0;
+    toast.success(`Imported ${n} graph${n === 1 ? '' : 's'}`, { message: skipped ? `${skipped} file${skipped === 1 ? '' : 's'} skipped (${r.skipped![0].reason}).` : undefined });
+  };
   // Saves and deletes from anywhere (the top bar too) keep this list current
   useEffect(() => {
     const onChange = () => setSavedNames(useNodeGraphStore.getState().getSavedGraphNames());
@@ -370,7 +383,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                           {folder.keys.filter(k => EXAMPLE_INDEX[k])
                             .sort((a, b) => EXAMPLE_INDEX[a].label.localeCompare(EXAMPLE_INDEX[b].label))
                             .map(k => (
-                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success}
+                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} hint={EXAMPLE_INDEX[k].description}
                                 onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
                             ))}
                         </div>
@@ -407,8 +420,11 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 <Button size="sm" variant="primary" disabled={!graphSaveInput.trim()} onClick={saveCurrentGraph}>Save</Button>
               </div>
             ) : (
-              <Button size="sm" icon="save" style={{ alignSelf: 'flex-start', marginBottom: 6 }}
-                onClick={() => { setShowGraphSaveInput(true); setGraphSaveInput(''); }}>Save current graph</Button>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                <Button size="sm" icon="save" onClick={() => { setShowGraphSaveInput(true); setGraphSaveInput(''); }}>Save current graph</Button>
+                <Button size="sm" icon="import" title="Import several graph files at once" onClick={() => importGraphs('files')}>Import files…</Button>
+                <Button size="sm" icon="folder" title="Import a folder of graphs; its folders are recreated here" onClick={() => importGraphs('folder')}>Import folder…</Button>
+              </div>
             )}
             <FolderableList
               scopeKey="graphs"
@@ -451,6 +467,16 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
               <Button size="sm" icon="code" title="Write a GLSL function and publish it as a node"
                 onClick={() => setPublishSource({ kind: 'code', code: '', label: 'My Node' })}>Write GLSL…</Button>
+              <Button size="sm" icon="import" title="Open a fragment shader (Shadertoy or raw) and turn it into a node"
+                onClick={async () => {
+                  let code: string | null;
+                  try { code = await openTextFile('.glsl,.frag,.fs,.fsh,.shader,.txt'); } catch (e) { toast.error('Couldn’t read that file', { message: e instanceof Error ? e.message : String(e) }); return; }
+                  if (code === null) return;
+                  const r = convertFragmentShader(code, { label: 'Imported shader' });
+                  if (!r.ok) { toast.error('Couldn’t convert that shader', { message: r.error }); return; }
+                  if (r.notes.length) toast.info('Check the converted code', { message: r.notes.join(' ') });
+                  setPublishSource({ kind: 'code', code: r.code, entry: r.entry, label: 'Imported shader' });
+                }}>Import GLSL…</Button>
             </div>
             <TabSectionHeader label="From a saved graph" />
             <FolderableList

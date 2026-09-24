@@ -150,6 +150,23 @@ describe('user node registry + compile', () => {
     expect(getUserNodeDefinition('nope')).toBeUndefined();
   });
 
+  it('a live param is also a socket, so another node can drive it', async () => {
+    const def = await publish();
+    const nd = getNodeDefinition(def.id)!;
+    expect(nd.inputs.freq).toMatchObject({ type: 'float', label: 'Frequency' });
+    const graph: GraphNode[] = [
+      { id: 't', type: 'time', position: { x: 0, y: 0 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'a', type: def.id, position: { x: 0, y: 0 },
+        inputs: { uv: { type: 'vec2', label: 'UV' }, freq: { type: 'float', label: 'Frequency', connection: { nodeId: 't', outputKey: 'time' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' }, wave: { type: 'float', label: 'Wave' } }, params: { freq: 4 } },
+      { id: 'out', type: 'output', position: { x: 0, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'a', outputKey: 'color' } } }, outputs: {}, params: {} },
+    ];
+    const r = compileGraph({ nodes: graph });
+    expect(r.success, r.errors?.join()).toBe(true);
+    // the wire wins over the slider: the call takes the Time node's variable
+    expect(r.fragmentShader).toMatch(/= un_test_fn\(g_uv, \w*time\w*, /);
+  });
+
   it('compiles a graph using the node: one call, param as a live uniform, function emitted once', async () => {
     const def = await publish();
     const inst = (id: string, x: number): GraphNode => ({
@@ -325,6 +342,46 @@ vec3 glow(sampler2D img, vec2 uv, float radius, out float mask) {
     expect(boundTo).toBe('a::image');
     expect(r.fragmentShader).toContain(`uniform sampler2D ${texUniform};`);
     expect(r.fragmentShader).toMatch(new RegExp(`un_glow_code\\(${texUniform}, g_uv, u_p_\\w+_radius, \\w+\\)`));
+  });
+
+  it('binds image slots for a published node placed inside a group', async () => {
+    const built = buildUserNodeDefinition({ kind: 'code', code: CODE, entry: 'glow', label: 'Glow' }, {
+      label: 'Glow', category: 'My Nodes',
+      inputs: [{ portKey: 'uv', key: 'uv', label: 'UV', type: 'vec2' }, { portKey: 'radius', key: 'radius', label: 'Radius', type: 'float', slider: { min: 0, max: 1, default: 0.4 } }],
+      outputs: [{ portKey: '__return__', key: 'color', label: 'Color', type: 'vec3' }, { portKey: 'mask', key: 'mask', label: 'Mask', type: 'float' }],
+      params: [],
+      textures: [{ sourceKey: 'img', key: 'image', label: 'Image' }],
+      existingId: 'un_glow_grp',
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    await registerUserNode(built.def, { persist: false });
+
+    const inner: GraphNode = {
+      id: 'a', type: 'un_glow_grp', position: { x: 0, y: 0 },
+      inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in0' } }, radius: { type: 'float', label: 'Radius' } },
+      outputs: { color: { type: 'vec3', label: 'Color' }, mask: { type: 'float', label: 'Mask' } }, params: { radius: 0.4 },
+    };
+    const subgraph: SubgraphData = {
+      nodes: [inner],
+      inputPorts: [{ key: 'in0', type: 'vec2', label: 'UV', toNodeId: 'a', toInputKey: 'uv' }],
+      outputPorts: [{ key: 'out0', type: 'vec3', label: 'Color', fromNodeId: 'a', fromOutputKey: 'color' }],
+    };
+    const graph: GraphNode[] = [
+      { id: 'uv', type: 'uv', position: { x: 0, y: 0 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'g', type: 'group', position: { x: 0, y: 0 },
+        inputs: { in0: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } } },
+        outputs: { out0: { type: 'vec3', label: 'Color' } }, params: { subgraph } },
+      { id: 'out', type: 'output', position: { x: 0, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'g', outputKey: 'out0' } } }, outputs: {}, params: {} },
+    ];
+    const r = compileGraph({ nodes: graph });
+    expect(r.success, r.errors?.join()).toBe(true);
+    const entry = Object.entries(r.textureUniforms).find(([, bound]) => bound === 'a::image');
+    expect(entry, 'sampler for the inner node is registered').toBeDefined();
+    const [texUniform] = entry!;
+    expect(r.fragmentShader).toContain(`uniform sampler2D ${texUniform};`);
+    expect(r.fragmentShader).toContain(`un_glow_grp(${texUniform}, `);
+    unregisterUserNode('un_glow_grp');
   });
 
   it('refuses void entries and unsupported parameter types with a readable message', () => {

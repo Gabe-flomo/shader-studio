@@ -4,6 +4,9 @@ import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
+import { toast } from '../components/ui/toastStore';
+import { planSmart3DAdd } from '../nodes/smart3d';
+import type { NodeDefinition } from '../types/nodeGraph';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
@@ -12,13 +15,18 @@ import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
 import type { SubgraphData } from '../types/nodeGraph';
-import { buildUserNodeDefinition, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
+import { buildUserNodeDefinition, CODE_RETURN_PORT, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
+import { USER_NODE_DEFAULT_CATEGORY } from '../types/userNode';
 import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
+import { recordGraphCompile } from '../lib/perfStats';
+import { convertFragmentShader } from '../nodes/userNodes/glslImport';
 import { paramBindingKey } from '../compiler/uniformPatcher';
-import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
+import { saveTextFile, openTextFile, pickJsonFiles, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
+import { planGraphImport, type PreviewAspect } from '../utils/graphImportPlan';
+import { loadFolders, createFolder, moveItemsToFolder } from '../utils/assetFolders';
 import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
 import type { ExampleGraph } from './exampleIndex';
@@ -252,6 +260,15 @@ function loadGroupPresets(): GroupPreset[] {
     .sort((a, b) => b.savedAt - a.savedAt);
 }
 
+/** A fresh node from its definition, the way addNode/spawnGraph build one. */
+function instantiateNode(id: string, type: string, def: NodeDefinition, position: { x: number; y: number }, params?: Record<string, unknown>): GraphNode {
+  const inputs: Record<string, InputSocket> = {};
+  for (const [key, socket] of Object.entries(def.inputs)) {
+    inputs[key] = { ...socket, defaultValue: def.paramDefs?.[key] ? undefined : def.defaultParams?.[key] as number | number[] | undefined };
+  }
+  return { id, type, position, inputs, outputs: { ...def.outputs }, params: { ...(def.defaultParams ?? {}), ...(params ?? {}) } };
+}
+
 // Debounce timer for recompilation triggered by param edits.
 // Structure changes (connect/disconnect/add/remove) still compile immediately.
 const compilationService = new CompilationService();
@@ -333,6 +350,9 @@ interface NodeGraphState {
   nodeOutputVarMap: Map<string, Record<string, string>>;
   /** Live-sampled values for the selected node: outputKey → number[] (1–4 components) */
   nodeProbeValues: Record<string, number[]> | null;
+  /** Frame stats of the isolated preview (clipped / black / flat), for the explaining caption */
+  previewStats: import('../lib/previewExplain').PreviewStats | null;
+  setPreviewStats: (stats: import('../lib/previewExplain').PreviewStats | null) => void;
   setSelectedNodeId: (id: string | null) => void;
   /** Open `groupPath` (group ids from the current level inward), select `nodeId` there and ask the canvas to centre on it. */
   revealNode: (groupPath: string[], nodeId: string) => void;
@@ -427,12 +447,22 @@ interface NodeGraphState {
 
   // Stateful rendering — true when a PrevFrame node exists in the graph
   isStateful: boolean;
+  /** Echo nodes present: snapshot ring the preview must keep (see nodes/definitions/echo.ts). */
+  echoConfig: { copies: number; delay: number } | null;
 
   /** Maps nodeId → GLSL slug, e.g. "node_49" → "cos_49". Used for code-panel highlighting. */
   nodeSlugMap: Map<string, string>;
 
   // Raw GLSL editor override — when set, ShaderCanvas uses this shader instead of the compiled graph
   rawGlslShader: string | null;
+  /** Shape the preview (and therefore every export) is held to. Persisted. */
+  previewAspect: PreviewAspect;
+  setPreviewAspect: (a: PreviewAspect) => void;
+  /** A group just made from a selection that should open its Publish dialog once its card mounts. */
+  pendingPublishGroupId: string | null;
+  setPendingPublishGroupId: (id: string | null) => void;
+  /** Import many graphs (a multi-file pick or a folder); folders are recreated in Saved Graphs. */
+  importGraphsBulk: (mode: 'files' | 'folder') => Promise<FileResult & { imported?: string[]; skipped?: Array<{ path: string; reason: string }> }>;
   setRawGlslShader: (shader: string | null) => void;
 
   /** Brief notice shown when group output reassignment auto-disconnected incompatible outer connections */
@@ -564,6 +594,8 @@ interface NodeGraphState {
   redo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => Promise<void>;
+  /** Empty the canvas down to UV → Output (the trash button's right-click) */
+  clearToMinimal: () => void;
   autoLayout: () => void;
   /** `source` is the shader the errors were reported against (their line numbers point into it) */
   setGlslErrors: (errors: string[], source?: string | null) => void;
@@ -588,6 +620,8 @@ interface NodeGraphState {
   exportGraph: () => Promise<FileResult>;
   importGraph: (json: string) => FileResult;
   importGraphFromFile: () => Promise<FileResult>;
+  /** Pick a .glsl/.frag file, wrap it as a code-backed node type and build UV → node → Output. */
+  importGlslFromFile: () => Promise<FileResult & { notes?: string[]; label?: string }>;
 
   // Custom-fn presets
   saveCustomFn: (nodeId: string) => Promise<FileResult>;
@@ -933,7 +967,7 @@ function updateNodeInTree(
 /**
  * Return a new top-level nodes array with the subgraph at `path` replaced by `newSub`.
  */
-function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[]): GraphNode[] | null {
+export function setActiveNodes(nodes: GraphNode[], path: string[], newSub: GraphNode[]): GraphNode[] | null {
   if (path.length === 0) return newSub;
   if (path.length === 1) {
     return nodes.map(n => {
@@ -1159,6 +1193,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   selectedNodeIds: [],
   nodeOutputVarMap: new Map(),
   nodeProbeValues: null,
+  previewStats: null,
+  setPreviewStats: (stats) => set(state => {
+    const cur = state.previewStats;
+    if (cur === stats) return state;
+    if (cur && stats && cur.flat === stats.flat && Math.abs(cur.clipped - stats.clipped) < 0.02 && Math.abs(cur.black - stats.black) < 0.02 && Math.abs(cur.mean - stats.mean) < 0.03) return state;
+    return { previewStats: stats };
+  }),
   scopeProbeValues: {},
   previewNodeId: null,
   mobileKeyframeEditor: null,
@@ -1180,8 +1221,47 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   audioMasterVolume: 0.7,
   nodePreviews: {},
   isStateful: false,
+  echoConfig: null,
   nodeSlugMap: new Map(),
   rawGlslShader: null,
+  previewAspect: ((): PreviewAspect => {
+    try { const v = localStorage.getItem('shader-studio:settings:previewAspect'); return (v as PreviewAspect) || 'free'; } catch { return 'free'; }
+  })(),
+  setPreviewAspect: (a) => {
+    try { localStorage.setItem('shader-studio:settings:previewAspect', a); } catch { /* preference only */ }
+    set({ previewAspect: a });
+  },
+  pendingPublishGroupId: null,
+  setPendingPublishGroupId: (id) => set({ pendingPublishGroupId: id }),
+  importGraphsBulk: async (mode) => {
+    let files: Array<{ path: string; content: string }> | null;
+    try {
+      files = await pickJsonFiles(mode);
+    } catch (e) {
+      return { ok: false, error: errorMessage(e) };
+    }
+    if (files === null) return CANCELLED;
+    const plan = planGraphImport(files, get().getSavedGraphNames());
+    if (plan.graphs.length === 0) {
+      const why = plan.skipped.length ? ` (${plan.skipped.length} file${plan.skipped.length === 1 ? '' : 's'} skipped: ${plan.skipped[0].reason})` : '';
+      return { ok: false, error: `No graphs found in what you picked${why}.` };
+    }
+    const folderIds = new Map(loadFolders('graphs').map(f => [f.label, f.id]));
+    const imported: string[] = [];
+    for (const g of plan.graphs) {
+      const stored = safeSetItem(`shader-studio:${g.name}`, g.payload, `graph "${g.name}"`);
+      if (!stored.ok) return { ok: false, error: stored.error, imported, skipped: plan.skipped };
+      imported.push(g.name);
+      if (g.folder) {
+        let fid = folderIds.get(g.folder);
+        if (!fid) { fid = createFolder('graphs', g.folder).id; folderIds.set(g.folder, fid); }
+        moveItemsToFolder('graphs', [g.name], fid);
+      }
+    }
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
+    window.dispatchEvent(new Event('assetbrowser-folders-changed'));
+    return { ok: true, imported, skipped: plan.skipped };
+  },
   disconnectedNotice: null,
   groupPresets: loadGroupPresets(),
 
@@ -2782,6 +2862,76 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Only at the top level — not inside a group drill-down.
     // overrideParams guard prevents triggering from programmatic calls.
     if (!get().activeGroupId && !overrideParams) {
+      // ── Smart 3D placement ───────────────────────────────────────────────
+      // A shape or 3D transform dropped on the top level goes into a new Scene
+      // Group wired to a march loop; a lighting node is wired to the nearest
+      // loop's outputs. See nodes/smart3d.ts for the rules.
+      const smartDef = getNodeDefinition(type);
+      const plan = smartDef ? planSmart3DAdd(type, smartDef, get().nodes, position) : { kind: 'none' as const };
+      if (smartDef && plan.kind === 'wrap-scene') {
+        undoManager.push(get().nodes);
+        const groupDef = getNodeDefinition('sceneGroup')!;
+        const scenePosDef = getNodeDefinition('scenePos')!;
+        const sceneOutDef = getNodeDefinition('sceneOutput')!;
+        const inner = instantiateNode(idGenerator.next(), type, smartDef, { x: 300, y: 200 });
+        const scenePos = instantiateNode(idGenerator.next(), 'scenePos', scenePosDef, { x: 60, y: 200 }, { _groupOriginal: true });
+        const sceneOut = instantiateNode(idGenerator.next(), 'sceneOutput', sceneOutDef, { x: 720, y: 200 }, { _groupOriginal: true });
+        if (plan.posInput && inner.inputs[plan.posInput]) inner.inputs[plan.posInput] = { ...inner.inputs[plan.posInput], connection: { nodeId: scenePos.id, outputKey: 'pos' } };
+        if (plan.distOutput && sceneOut.inputs.dist) sceneOut.inputs.dist = { ...sceneOut.inputs.dist, connection: { nodeId: inner.id, outputKey: plan.distOutput } };
+        const group = instantiateNode(idGenerator.next(), 'sceneGroup', groupDef, position, {
+          label: smartDef.label,
+          subgraph: { nodes: [scenePos, inner, sceneOut], outputNodeId: '', outputKey: '' },
+        });
+        let nodes = [...get().nodes, group];
+        let note = `${smartDef.label} was placed inside a new Scene Group`;
+        if (plan.attachToMarchId) {
+          nodes = nodes.map(n => n.id === plan.attachToMarchId && n.inputs.scene
+            ? { ...n, inputs: { ...n.inputs, scene: { ...n.inputs.scene, connection: { nodeId: group.id, outputKey: 'scene' } } } }
+            : n);
+          note += ' and wired into the march loop.';
+        } else if (plan.spawnMarch) {
+          const camDef = getNodeDefinition('marchCamera')!;
+          const mlgDef = getNodeDefinition('marchLoopGroup')!;
+          const cam = instantiateNode(idGenerator.next(), 'marchCamera', camDef, { x: position.x - 440, y: position.y + 120 });
+          const mlg = instantiateNode(idGenerator.next(), 'marchLoopGroup', mlgDef, { x: position.x + 440, y: position.y });
+          mlg.inputs.ro = { ...mlg.inputs.ro, connection: { nodeId: cam.id, outputKey: 'ro' } };
+          mlg.inputs.rd = { ...mlg.inputs.rd, connection: { nodeId: cam.id, outputKey: 'rd' } };
+          mlg.inputs.scene = { ...mlg.inputs.scene, connection: { nodeId: group.id, outputKey: 'scene' } };
+          nodes = [...nodes, cam, mlg];
+          if (plan.outputNodeId) {
+            nodes = nodes.map(n => n.id === plan.outputNodeId && n.inputs.color
+              ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { nodeId: mlg.id, outputKey: 'color' } } } }
+              : n);
+            note += ', with a camera and march loop wired to the Output.';
+          } else {
+            note += ', with a camera and march loop. Wire the loop\'s Color to your Output.';
+          }
+        } else {
+          note += '. Double-click it to edit the shape.';
+        }
+        set({ nodes });
+        get().compile();
+        toast.info(`3D node placed`, { message: note });
+        return group.id;
+      }
+      if (smartDef && plan.kind === 'wire-lighting') {
+        undoManager.push(get().nodes);
+        const node = instantiateNode(idGenerator.next(), type, smartDef, position);
+        for (const w of plan.wires) {
+          if (node.inputs[w.input]) node.inputs[w.input] = { ...node.inputs[w.input], connection: { nodeId: plan.marchId, outputKey: w.fromKey } };
+        }
+        if (plan.sceneSourceId && node.inputs.scene) node.inputs.scene = { ...node.inputs.scene, connection: { nodeId: plan.sceneSourceId, outputKey: 'scene' } };
+        if (plan.cameraId) {
+          for (const k of ['viewDir', 'rd'] as const) {
+            if (node.inputs[k]) node.inputs[k] = { ...node.inputs[k], connection: { nodeId: plan.cameraId, outputKey: 'rd' } };
+          }
+        }
+        set(state => ({ nodes: [...state.nodes, node] }));
+        get().compile();
+        const wired = plan.wires.map(w => w.input).concat(plan.sceneSourceId && node.inputs.scene ? ['scene'] : []);
+        if (wired.length) toast.info(`${smartDef.label} wired to the march loop`, { message: `Connected: ${wired.join(', ')}.` });
+        return node.id;
+      }
       if (type === 'rayMarch') {
         get().spawnGraph(
           position,
@@ -3989,7 +4139,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     } else {
       graphNodes = nodes;
     }
+    const compileT0 = performance.now();
     const result = compileGraph({ nodes: graphNodes });
+    recordGraphCompile(performance.now() - compileT0);
 
     // Patch MLG node.outputs with dynamic acc* sockets discovered at compile time.
     // Preserves any existing acc* labels already stored in the graph (e.g. from saved examples).
@@ -4061,6 +4213,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       liveUniforms: result.liveUniforms,
       videoUniforms: result.videoUniforms,
       isStateful: result.isStateful,
+      echoConfig: result.echo ?? null,
       particleSystems: result.particleSystems ?? [],
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go
@@ -4142,6 +4295,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         })),
       }));
     }
+  },
+
+  clearToMinimal: () => {
+    undoManager.push(get().nodes);
+    const uv = instantiateNode(idGenerator.next(), 'uv', getNodeDefinition('uv')!, { x: 100, y: 240 });
+    const out = instantiateNode(idGenerator.next(), 'output', getNodeDefinition('output')!, { x: 820, y: 240 });
+    set({ nodes: [uv, out], looseGroups: [], previewNodeId: null, activeGroupId: null, activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [], nodeProbeValues: null });
+    get().compile();
   },
 
   loadExampleGraph: async (name?: string) => {
@@ -4351,6 +4512,43 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
     return { ok: true };
+  },
+
+  importGlslFromFile: async () => {
+    let code: string | null;
+    let fileName = 'Imported shader';
+    try {
+      code = await openTextFile('.glsl,.frag,.fs,.fsh,.shader,.txt');
+    } catch (e) {
+      return { ok: false, error: errorMessage(e) };
+    }
+    if (code === null) return CANCELLED;
+    const titled = /^\s*\/\/\s*(.+)$/m.exec(code);
+    if (titled && titled[1].length < 48) fileName = titled[1].trim();
+    const converted = convertFragmentShader(code, { label: fileName });
+    if (!converted.ok) return { ok: false, error: converted.error };
+    const spec: PublishUserNodeSpec = {
+      label: fileName, category: USER_NODE_DEFAULT_CATEGORY,
+      description: `Imported from a fragment shader. ${converted.notes.join(' ')}`.trim(),
+      inputs: [{ portKey: 'uv', key: 'uv', label: 'UV', type: 'vec2' }],
+      outputs: [{ portKey: CODE_RETURN_PORT, key: 'color', label: 'Color', type: 'vec3' }, { portKey: 'alpha', key: 'alpha', label: 'Alpha', type: 'float' }],
+      params: [], textures: [],
+    };
+    const built = buildUserNodeDefinition({ kind: 'code', code: converted.code, entry: converted.entry, label: fileName }, spec);
+    if (!built.ok) return { ok: false, error: built.error };
+    const reg = await registerUserNode(built.def);
+    if (!reg.ok) return reg;
+    // UV → shader → Output
+    undoManager.push(get().nodes);
+    const uvDef = getNodeDefinition('uv')!, outDef = getNodeDefinition('output')!, def = getNodeDefinition(built.def.id)!;
+    const uv = instantiateNode(idGenerator.next(), 'uv', uvDef, { x: 80, y: 220 });
+    const shader = instantiateNode(idGenerator.next(), built.def.id, def, { x: 520, y: 200 });
+    const out = instantiateNode(idGenerator.next(), 'output', outDef, { x: 980, y: 220 });
+    shader.inputs.uv = { ...shader.inputs.uv, connection: { nodeId: uv.id, outputKey: 'uv' } };
+    out.inputs.color = { ...out.inputs.color, connection: { nodeId: shader.id, outputKey: 'color' } };
+    set({ nodes: [uv, shader, out], activeGroupPath: [], activeGroupId: null, selectedNodeId: shader.id, selectedNodeIds: [shader.id] });
+    get().compile();
+    return { ok: true, notes: converted.notes, label: fileName };
   },
 
   importGraphFromFile: async () => {

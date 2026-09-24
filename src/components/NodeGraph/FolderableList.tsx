@@ -140,7 +140,10 @@ export function FolderableList<T extends FolderableItem>({
   const numSel        = selectedIds.size;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minHeight: 40, font: `12.5px ${fontFamily.ui}` }}
+    // flexShrink 0: when two lists share a scrolling column (Node Builder: saved
+    // graphs above My nodes) a long list must push the next section down, not
+    // get squashed to its minHeight and spill over it.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, flexShrink: 0, minHeight: 40, font: `12.5px ${fontFamily.ui}` }}
       onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()); }}
     >
 

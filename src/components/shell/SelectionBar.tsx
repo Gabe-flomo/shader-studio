@@ -17,6 +17,7 @@ export function SelectionBar({ top }: { top: number }) {
   const duplicateNodes = useNodeGraphStore(s => s.duplicateNodes);
   const removeNodes = useNodeGraphStore(s => s.removeNodes);
   const deselectAll = useNodeGraphStore(s => s.deselectAll);
+  const setPendingPublishGroupId = useNodeGraphStore(s => s.setPendingPublishGroupId);
   if (ids.length < 2) return null;
   const keys = loadShortcutMap();
 
@@ -33,9 +34,11 @@ export function SelectionBar({ top }: { top: number }) {
     >
       <Icon name={icon} size={15} />
       {label}
-      <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, background: tk.bg.field, borderRadius: 4, padding: '1px 5px' }}>
-        {displayCombo(combo)}
-      </span>
+      {combo && (
+        <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, background: tk.bg.field, borderRadius: 4, padding: '1px 5px' }}>
+          {displayCombo(combo)}
+        </span>
+      )}
     </button>
   );
 
@@ -53,6 +56,14 @@ export function SelectionBar({ top }: { top: number }) {
       <span style={{ fontWeight: 600, fontSize: 12.5, color: tk.text.primary, marginRight: 6 }}>{ids.length} selected</span>
       <span style={{ width: 1, height: 18, background: tk.border.default, margin: '0 4px' }} />
       {action('presets', 'Group', keys.groupSelected, () => { groupNodes(ids); deselectAll(); })}
+      {action('spark', 'Publish as node', '', () => {
+        // Group the selection, then open the publish dialog on the new group's
+        // card once it mounts — the selected nodes are the node's insides, the
+        // wires crossing the selection boundary become its inputs and outputs.
+        const gid = groupNodes(ids, 'New node');
+        deselectAll();
+        if (gid) setPendingPublishGroupId(gid);
+      })}
       {action('copy', 'Duplicate', keys.duplicateSelected, () => duplicateNodes(ids))}
       {action('trash', 'Delete', keys.deleteSelected, () => { removeNodes(ids); deselectAll(); }, true)}
       <IconButton icon="close" label="Clear the selection" size="sm" tooltip={false} onClick={deselectAll} />

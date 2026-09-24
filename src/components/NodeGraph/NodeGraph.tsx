@@ -9,6 +9,8 @@ import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, 
 import { WireLayer, type EdgeInfo } from './WireLayer';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
+import { suggestQuickAdds, type QuickAdd } from './quickAdds';
+import { explainPreview, previewLegend } from '../../lib/previewExplain';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
@@ -21,6 +23,7 @@ import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
 import { SelectionBar } from '../shell/SelectionBar';
+import { GraphOutline } from './GraphOutline';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -138,6 +141,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
   const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
   const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
+  const previewStats = useNodeGraphStore(s => s.previewStats);
+  const previewCaption = previewNode ? (explainPreview(previewNode, previewDef ?? undefined, previewStats) ?? previewLegend(previewNode, previewDef ?? undefined)) : null;
   const previewLabel = previewDef
     ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
         ? (previewNode.params.label as string) || previewDef.label
@@ -297,6 +302,13 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   }, [disconnectedNotice, clearDisconnectedNotice]);
 
   // ── Minimap toggle (persisted) ──────────────────────────────────────────────
+  const [showOutline, setShowOutline] = useState(() => {
+    try { return localStorage.getItem('shader-studio:settings:outline') === '1'; } catch { return false; }
+  });
+  const toggleOutline = () => setShowOutline(v => {
+    try { localStorage.setItem('shader-studio:settings:outline', v ? '0' : '1'); } catch { /* preference only */ }
+    return !v;
+  });
   const [showMinimap, setShowMinimap] = useState(() => {
     try { return localStorage.getItem('shader-studio:minimap') !== 'false'; }
     catch { return true; }
@@ -793,7 +805,33 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
     });
   }, [smartConnect, displayNodes, socketWorld]);
+  // New nodes worth adding and wiring straight to the clicked socket (see quickAdds.ts)
+  const smartQuickAdds = useMemo(() => {
+    if (!smartConnect) return [];
+    const origin = displayNodes.find(n => n.id === smartConnect.nodeId);
+    const sock = smartConnect.dir === 'out' ? origin?.outputs[smartConnect.key] : origin?.inputs[smartConnect.key];
+    if (!sock) return [];
+    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key });
+  }, [smartConnect, displayNodes]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
+  const pickQuickAdd = useCallback((q: QuickAdd) => {
+    if (!smartConnect) return;
+    const origin = displayNodesRef.current.find(n => n.id === smartConnect.nodeId);
+    if (!origin) return;
+    // Beside the origin on the side data comes from, level with the clicked socket
+    const sockY = socketWorld(origin.id, smartConnect.dir, smartConnect.key)?.y;
+    const pos = {
+      x: smartConnect.dir === 'in' ? origin.position.x - NODE_WIDTH - 90 : origin.position.x + NODE_WIDTH + 90,
+      y: sockY !== undefined ? sockY - 60 : origin.position.y,
+    };
+    const newId = addNode(q.type, pos);
+    if (newId) {
+      if (smartConnect.dir === 'in') connectNodes(newId, q.key, smartConnect.nodeId, smartConnect.key);
+      else connectNodes(smartConnect.nodeId, smartConnect.key, newId, q.key);
+      useNodeGraphStore.getState().setSelectedNodeId(newId);
+    }
+    closeSmartConnect();
+  }, [smartConnect, addNode, connectNodes, socketWorld, closeSmartConnect]);
   // Add-then-wire: a node just added from search gets Smart connect on its first output, once
   // its socket has been measured, and only when there is something to suggest.
   const smartConnectRequest = useNodeGraphStore(s => s.smartConnectRequest);
@@ -1087,14 +1125,17 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         <div
           style={{
             position: 'absolute', top: redesignToolbar ? 66 : 10, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
-            height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px 0 12px', borderRadius: 10,
+            minHeight: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: 560,
             background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.status.success, 0.35)}`,
-            color: tk.text.secondary, fontSize: 12.5, userSelect: 'none', whiteSpace: 'nowrap',
+            color: tk.text.secondary, fontSize: 12.5, userSelect: 'none',
           }}
         >
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.success }} />
-          <span>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
-          <Button size="sm" variant="ghost" style={{ height: 26 }} onClick={() => setPreviewNodeId(null)}>Exit</Button>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.success, flexShrink: 0 }} />
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+            <span style={{ whiteSpace: 'nowrap' }}>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
+            {previewCaption && <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.35 }}>{previewCaption}</span>}
+          </span>
+          <Button size="sm" variant="ghost" style={{ height: 26, flexShrink: 0 }} onClick={() => setPreviewNodeId(null)}>Exit</Button>
         </div>
       )}
 
@@ -1156,11 +1197,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onAutoLayout={autoLayout}
           showMinimap={showMinimap}
           onToggleMinimap={toggleMinimap}
+          showOutline={showOutline}
+          onToggleOutline={toggleOutline}
           onClear={() => loadExampleGraph('blank')}
+          onClearMinimal={() => useNodeGraphStore.getState().clearToMinimal()}
           compact={compactToolbar}
         />
       )}
       {redesignToolbar && <SelectionBar top={previewNodeId ? 108 : 66} />}
+      {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
       {/* Toolbar — top-right, always in screen space */}
       {!redesignToolbar && <div
@@ -1748,7 +1793,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             y={smartConnect.y}
             title={`${smartConnect.dir === 'out' ? 'CONNECT' : 'FEED'} ${sock.label.toUpperCase()} ${smartConnect.dir === 'out' ? 'TO' : 'FROM'}`}
             items={smartSuggestions}
+            quickAdds={smartQuickAdds}
             onPick={pickSuggestion}
+            onQuickAdd={pickQuickAdd}
             onHover={setGhostSuggestion}
             onAddNode={() => {
               setPendingSocket({ nodeId: smartConnect.nodeId, key: smartConnect.key, dir: smartConnect.dir, type: sock.type, screenX: smartConnect.x, screenY: smartConnect.y });

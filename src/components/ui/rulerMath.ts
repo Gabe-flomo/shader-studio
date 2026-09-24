@@ -31,8 +31,13 @@ export const TICK_WIDTH = [2, 1.5, 1] as const;
  */
 export function rulerTicks(value: number, min: number, max: number, unit: number, integer = false): Tick[] {
   const span = (HALF_WIDTH / PX_PER_UNIT) * unit;
-  const q0 = Math.ceil((Math.max(min, value - span) / unit) * 4 - 1e-6);
-  const q1 = Math.floor((Math.min(max, value + span) / unit) * 4 + 1e-6);
+  // A value outside its declared range (a default set past the max, an old
+  // graph with a wider range) still gets a readable ruler: the tick window
+  // stretches to include the value instead of drawing nothing around the needle.
+  const lo = value < min ? value - span : min;
+  const hi = value > max ? value + span : max;
+  const q0 = Math.ceil((Math.max(lo, value - span) / unit) * 4 - 1e-6);
+  const q1 = Math.floor((Math.min(hi, value + span) / unit) * 4 + 1e-6);
   const ticks: Tick[] = [];
   for (let q = q0; q <= q1; q++) {
     const tv = (q / 4) * unit;

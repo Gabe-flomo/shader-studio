@@ -106,8 +106,8 @@ export const MandelbrotNode: NodeDefinition = {
   ].join(''),
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'         },
-    c_pos: { type: 'vec2',  label: 'c (Julia)'  },  // Julia constant or Mandelbrot seed offset
-    time:  { type: 'float', label: 'Time'        },  // unused by default but available for animated c
+    c_pos: { type: 'vec2',  label: 'c (Julia)', hint: 'Overrides Julia c (or offsets the Mandelbrot seed). Try Mouse UV.' },  // Julia constant or Mandelbrot seed offset
+    time:  { type: 'float', label: 'Time', hint: 'Unused by default; wire it through a Math node into c for animated morphs.' },  // unused by default but available for animated c
   },
   outputs: {
     color: { type: 'vec3',  label: 'Color'           },
@@ -138,37 +138,37 @@ export const MandelbrotNode: NodeDefinition = {
     dist_shade:     0.0,   // 0 = off; darken near-set boundary using distance estimation
   },
   paramDefs: {
-    mode: { label: 'Mode', type: 'select', options: [
+    mode: { label: 'Mode', type: 'select', hint: 'Mandelbrot varies c per pixel; Julia fixes c and varies the start point.', options: [
       { value: 'mandelbrot', label: 'Mandelbrot' },
       { value: 'julia',      label: 'Julia'      },
     ]},
-    precision: { label: 'Precision', type: 'select', options: [
+    precision: { label: 'Precision', type: 'select', hint: 'Standard is fast; High uses double-single math for zooms past 10^6.', options: [
       { value: 'standard', label: 'Standard (fast, zoom ≤ 10⁶)' },
       { value: 'high',     label: 'High (DS, zoom ≤ 10¹²)'     },
     ]},
-    power:          { label: 'Power (k)',       type: 'float', min: 2,     max: 8,    step: 1    },
-    max_iter:       { label: 'Max Iterations',  type: 'float', min: 20,    max: 2000, step: 5    },
-    bailout:        { label: 'Bailout Radius',  type: 'float', min: 2,     max: 1000, step: 10   },
-    zoom:           { label: 'Zoom',            type: 'float', min: 0.01,  max: 50000, step: 0.05 },
-    zoom_exp:       { label: 'Zoom (log₂)',     type: 'float', min: 0,     max: 60,   step: 0.1  },
-    center_x:       { label: 'Center X',        type: 'float', min: -3,    max: 3,    step: 0.0001 },
-    center_y:       { label: 'Center Y',        type: 'float', min: -3,    max: 3,    step: 0.0001 },
-    cx:             { label: 'Julia c.x',       type: 'float', min: -2,    max: 2,    step: 0.001 },
-    cy:             { label: 'Julia c.y',       type: 'float', min: -2,    max: 2,    step: 0.001 },
-    orbit_trap:     { label: 'Orbit Trap',  type: 'select', options: [
+    power:          { label: 'Power (k)',       type: 'float', min: 2,     max: 8,    step: 1, hint: 'Exponent k in z^k + c. 2 is the classic set; higher adds symmetry lobes.' },
+    max_iter:       { label: 'Max Iterations',  type: 'float', min: 20,    max: 2000, step: 5, hint: 'Detail at the boundary. Higher resolves finer filaments but costs GPU time.' },
+    bailout:        { label: 'Bailout Radius',  type: 'float', min: 2,     max: 1000, step: 10, hint: 'Escape radius. 2 is the minimum; larger smooths the coloring bands.' },
+    zoom:           { label: 'Zoom',            type: 'float', min: 0.01,  max: 50000, step: 0.05, hint: 'Magnification. Fine control; use Zoom (log2) for deep dives.' },
+    zoom_exp:       { label: 'Zoom (log₂)',     type: 'float', min: 0,     max: 60,   step: 0.1, hint: 'Extra magnification as a power of two. 10 is x1024 on top of Zoom.' },
+    center_x:       { label: 'Center X',        type: 'float', min: -3,    max: 3,    step: 0.0001, hint: 'Real part of the view center.' },
+    center_y:       { label: 'Center Y',        type: 'float', min: -3,    max: 3,    step: 0.0001, hint: 'Imaginary part of the view center.' },
+    cx:             { label: 'Julia c.x',       type: 'float', min: -2,    max: 2,    step: 0.001, hint: 'Real part of c in Julia mode. Try -0.8.' },
+    cy:             { label: 'Julia c.y',       type: 'float', min: -2,    max: 2,    step: 0.001, hint: 'Imaginary part of c in Julia mode. Try 0.156.' },
+    orbit_trap:     { label: 'Orbit Trap',  type: 'select', hint: 'Shape the orbit is measured against; colors by how close the orbit passes.', options: [
       { value: 'none',  label: 'None'         },
       { value: 'point', label: 'Point'        },
       { value: 'line',  label: 'Line (y=0)'   },
       { value: 'ring',  label: 'Ring'         },
       { value: 'cross', label: 'Cross'        },
     ]},
-    trap_x:         { label: 'Trap X',          type: 'float', min: -2,    max: 2,    step: 0.01 },
-    trap_y:         { label: 'Trap Y',          type: 'float', min: -2,    max: 2,    step: 0.01 },
-    trap_r:         { label: 'Trap Radius',     type: 'float', min: 0.0,   max: 2,    step: 0.01 },
-    palette_preset: { label: 'Palette',         type: 'select', options: PALETTE_PRESET_OPTIONS },
-    color_scale:    { label: 'Color Cycles',    type: 'float', min: 0.1,   max: 20,   step: 0.1  },
-    color_offset:   { label: 'Color Offset',    type: 'float', min: 0.0,   max: 1.0,  step: 0.01 },
-    dist_shade:     { label: 'Edge Shading',    type: 'float', min: 0.0,   max: 20,   step: 0.1  },
+    trap_x:         { label: 'Trap X',          type: 'float', min: -2,    max: 2,    step: 0.01, hint: 'Horizontal position of the trap shape.' },
+    trap_y:         { label: 'Trap Y',          type: 'float', min: -2,    max: 2,    step: 0.01, hint: 'Vertical position of the trap shape.' },
+    trap_r:         { label: 'Trap Radius',     type: 'float', min: 0.0,   max: 2,    step: 0.01, hint: 'Size of the trap shape (ring and cross).' },
+    palette_preset: { label: 'Palette',         type: 'select', options: PALETTE_PRESET_OPTIONS, hint: 'Color ramp used for iteration coloring.' },
+    color_scale:    { label: 'Color Cycles',    type: 'float', min: 0.1,   max: 20,   step: 0.1, hint: 'How many times the palette repeats across the iteration range.' },
+    color_offset:   { label: 'Color Offset',    type: 'float', min: 0.0,   max: 1.0,  step: 0.01, hint: 'Shifts the palette along, 0 to 1.' },
+    dist_shade:     { label: 'Edge Shading',    type: 'float', min: 0.0,   max: 20,   step: 0.1, hint: 'Darkens pixels near the set boundary using the distance estimate. 0 is off.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -516,7 +516,7 @@ export const IFSNode: NodeDefinition = {
   ].join(''),
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Wire Time to morph the fractal (with Speed above 0); unwired it is static.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -536,21 +536,21 @@ export const IFSNode: NodeDefinition = {
     anim_speed:     0.0,
   },
   paramDefs: {
-    preset: { label: 'Preset', type: 'select', options: [
+    preset: { label: 'Preset', type: 'select', hint: 'Which attractor the chaos game draws.', options: [
       { value: 'fern',       label: 'Barnsley Fern'   },
       { value: 'sierpinski', label: 'Sierpinski'      },
       { value: 'dragon',     label: 'Dragon Curve'    },
       { value: 'koch',       label: 'Koch (snowflake)'},
     ]},
-    iterations:     { label: 'Iterations',  type: 'float', min: 10,   max: 150,  step: 1    },
-    glow:           { label: 'Glow',        type: 'float', min: 0.001, max: 0.1,  step: 0.001 },
-    scale:          { label: 'Scale',       type: 'float', min: 0.1,  max: 5.0,  step: 0.05 },
-    offset_x:       { label: 'Offset X',    type: 'float', min: -3,   max: 3,    step: 0.01 },
-    offset_y:       { label: 'Offset Y',    type: 'float', min: -3,   max: 3,    step: 0.01 },
-    anim_speed:     { label: 'Speed',  type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
-    palette_preset: { label: 'Palette',     type: 'select', options: PALETTE_PRESET_OPTIONS },
-    color_scale:    { label: 'Color Scale', type: 'float', min: 0.01, max: 5.0,  step: 0.01 },
-    color_offset:   { label: 'Color Offset',type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
+    iterations:     { label: 'Iterations',  type: 'float', min: 10,   max: 150,  step: 1, hint: 'Chaos game steps per pixel. More fills the attractor in; costs GPU time.' },
+    glow:           { label: 'Glow',        type: 'float', min: 0.001, max: 0.1,  step: 0.001, hint: 'How close a pixel must be to the attractor to light up. Smaller = sharper.' },
+    scale:          { label: 'Scale',       type: 'float', min: 0.1,  max: 5.0,  step: 0.05, hint: 'Zoom of the fractal.' },
+    offset_x:       { label: 'Offset X',    type: 'float', min: -3,   max: 3,    step: 0.01, hint: 'Slides the fractal horizontally.' },
+    offset_y:       { label: 'Offset Y',    type: 'float', min: -3,   max: 3,    step: 0.01, hint: 'Slides the fractal vertically.' },
+    anim_speed:     { label: 'Speed',  type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: 'Slowly morphs the transform over time. 0 is static. Needs Time wired.' },
+    palette_preset: { label: 'Palette',     type: 'select', options: PALETTE_PRESET_OPTIONS, hint: 'Color ramp used across the attractor.' },
+    color_scale:    { label: 'Color Scale', type: 'float', min: 0.01, max: 5.0,  step: 0.01, hint: 'How fast the palette cycles across the fractal.' },
+    color_offset:   { label: 'Color Offset',type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: 'Shifts the palette along, 0 to 1.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -669,19 +669,19 @@ export const NewtonFractalNode: NodeDefinition = {
     convergence:    0.001,
   },
   paramDefs: {
-    polynomial: { label: 'Polynomial', type: 'select', options: [
+    polynomial: { label: 'Polynomial', type: 'select', hint: 'Which polynomial to solve. Higher degree = more root basins.', options: [
       { value: 'z3-1', label: 'z³ - 1' },
       { value: 'z4-1', label: 'z⁴ - 1' },
       { value: 'z5-1', label: 'z⁵ - 1' },
       { value: 'z6-1', label: 'z⁶ - 1' },
     ]},
-    max_iter:       { label: 'Max Iterations', type: 'float', min: 8,    max: 128, step: 4,    compileTime: true },
-    zoom:           { label: 'Zoom',           type: 'float', min: 0.1,  max: 10,  step: 0.05  },
-    center_x:       { label: 'Center X',       type: 'float', min: -3,   max: 3,   step: 0.001 },
-    center_y:       { label: 'Center Y',       type: 'float', min: -3,   max: 3,   step: 0.001 },
-    palette_preset: { label: 'Palette',        type: 'select', options: PALETTE_PRESET_OPTIONS },
-    shade_power:    { label: 'Shade Power',    type: 'float', min: 0.5,  max: 4,   step: 0.1   },
-    convergence:    { label: 'Convergence ε',  type: 'float', min: 0.0001, max: 0.01, step: 0.0001 },
+    max_iter:       { label: 'Max Iterations', type: 'float', min: 8,    max: 128, step: 4,    compileTime: true, hint: 'Newton steps per pixel. Recompiles the shader when changed.' },
+    zoom:           { label: 'Zoom',           type: 'float', min: 0.1,  max: 10,  step: 0.05, hint: 'Magnification of the view.' },
+    center_x:       { label: 'Center X',       type: 'float', min: -3,   max: 3,   step: 0.001, hint: 'Real part of the view center.' },
+    center_y:       { label: 'Center Y',       type: 'float', min: -3,   max: 3,   step: 0.001, hint: 'Imaginary part of the view center.' },
+    palette_preset: { label: 'Palette',        type: 'select', options: PALETTE_PRESET_OPTIONS, hint: 'Color ramp; each root gets a different slot.' },
+    shade_power:    { label: 'Shade Power',    type: 'float', min: 0.5,  max: 4,   step: 0.1, hint: 'Contrast of the convergence shading. Higher darkens slow-converging areas.' },
+    convergence:    { label: 'Convergence ε',  type: 'float', min: 0.0001, max: 0.01, step: 0.0001, hint: 'How close to a root counts as converged. Smaller = crisper basin edges.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -811,18 +811,18 @@ export const LyapunovNode: NodeDefinition = {
     lyap_scale: 1.5,
   },
   paramDefs: {
-    sequence: { label: 'Sequence', type: 'select', options: [
+    sequence: { label: 'Sequence', type: 'select', hint: 'Order in which r alternates between the A and B values.', options: [
       { value: 'AB',   label: 'AB (standard)'    },
       { value: 'AABB', label: 'AABB'              },
       { value: 'ABAB', label: 'ABAB'              },
       { value: 'ABBA', label: 'ABBA (symmetric)'  },
       { value: 'AAAB', label: 'AAAB'              },
     ]},
-    r_min:      { label: 'r Min',      type: 'float', min: 1.0, max: 3.9, step: 0.01 },
-    r_max:      { label: 'r Max',      type: 'float', min: 2.0, max: 4.0, step: 0.01 },
-    warmup:     { label: 'Warmup',     type: 'float', min: 0,   max: 100, step: 4,   compileTime: true },
-    iterations: { label: 'Iterations', type: 'float', min: 16,  max: 256, step: 8,   compileTime: true },
-    lyap_scale: { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1  },
+    r_min:      { label: 'r Min',      type: 'float', min: 1.0, max: 3.9, step: 0.01, hint: 'Lowest r value mapped across the view.' },
+    r_max:      { label: 'r Max',      type: 'float', min: 2.0, max: 4.0, step: 0.01, hint: 'Highest r value mapped across the view. Chaos appears past about 3.57.' },
+    warmup:     { label: 'Warmup',     type: 'float', min: 0,   max: 100, step: 4,   compileTime: true, hint: 'Iterations discarded before measuring. Recompiles when changed.' },
+    iterations: { label: 'Iterations', type: 'float', min: 16,  max: 256, step: 8,   compileTime: true, hint: 'Iterations averaged for the exponent. More is smoother; recompiles.' },
+    lyap_scale: { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1, hint: 'Contrast of the stable/chaotic coloring.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -905,7 +905,7 @@ export const ApollonianNode: NodeDefinition = {
   description: 'Circle-inversion fractal (Apollonian gasket / Kleinian group limit set). Outputs SDF and color.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Wire Time to drift the folds (with Animate above 0); unwired it is static.' },
   },
   outputs: {
     color:    { type: 'vec3',  label: 'Color'    },
@@ -925,15 +925,15 @@ export const ApollonianNode: NodeDefinition = {
     animate:        0.0,
   },
   paramDefs: {
-    iterations:     { label: 'Iterations',   type: 'float', min: 1,   max: 24,  step: 1    },
-    scale:          { label: 'Scale',        type: 'float', min: 1.0, max: 3.0, step: 0.01 },
-    zoom:           { label: 'Zoom',         type: 'float', min: 0.1, max: 10,  step: 0.05 },
-    center_x:       { label: 'Center X',     type: 'float', min: -5,  max: 5,   step: 0.01 },
-    center_y:       { label: 'Center Y',     type: 'float', min: -5,  max: 5,   step: 0.01 },
-    animate:        { label: 'Animate',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    palette_preset: { label: 'Palette',      type: 'select', options: PALETTE_PRESET_OPTIONS },
-    color_scale:    { label: 'Color Scale',  type: 'float', min: 0.01, max: 5.0, step: 0.01 },
-    color_offset:   { label: 'Color Offset', type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
+    iterations:     { label: 'Iterations',   type: 'float', min: 1,   max: 24,  step: 1, hint: 'Number of circle inversions. More = finer, deeper gasket.' },
+    scale:          { label: 'Scale',        type: 'float', min: 1.0, max: 3.0, step: 0.01, hint: 'Inversion scale. Around 1.5 to 2 gives the classic packing.' },
+    zoom:           { label: 'Zoom',         type: 'float', min: 0.1, max: 10,  step: 0.05, hint: 'Magnification of the view.' },
+    center_x:       { label: 'Center X',     type: 'float', min: -5,  max: 5,   step: 0.01, hint: 'Slides the view horizontally.' },
+    center_y:       { label: 'Center Y',     type: 'float', min: -5,  max: 5,   step: 0.01, hint: 'Slides the view vertically.' },
+    animate:        { label: 'Animate',      type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Amount of slow drift in the folds over time. 0 is static. Needs Time wired.' },
+    palette_preset: { label: 'Palette',      type: 'select', options: PALETTE_PRESET_OPTIONS, hint: 'Color ramp driven by the orbit value.' },
+    color_scale:    { label: 'Color Scale',  type: 'float', min: 0.01, max: 5.0, step: 0.01, hint: 'How fast the palette cycles across the gasket.' },
+    color_offset:   { label: 'Color Offset', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Shifts the palette along, 0 to 1.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -1010,7 +1010,7 @@ export const SphericalFoldFractalNode: NodeDefinition = {
   description: 'Self-contained 3D raymarch. Each step runs an IFS that alternates spherical inversion with a box-fold; accumulated scale drives HSV brightness. Rotate the camera by animating time_speed.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Wire Time to orbit the camera (with Time Speed above 0); unwired it is static.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -1030,29 +1030,29 @@ export const SphericalFoldFractalNode: NodeDefinition = {
     color_scale:   4000.0,
   },
   paramDefs: {
-    zoom:        { label: 'Zoom',        type: 'float', min: 1.0,  max: 20.0, step: 0.1  },
-    time_speed:  { label: 'Time Speed',  type: 'float', min: 0.0,  max: 3.0,  step: 0.01 },
-    outer_steps: { label: 'Ray Steps',   type: 'select', options: [
+    zoom:        { label: 'Zoom',        type: 'float', min: 1.0,  max: 20.0, step: 0.1, hint: 'Magnification of the view.' },
+    time_speed:  { label: 'Time Speed',  type: 'float', min: 0.0,  max: 3.0,  step: 0.01, hint: 'How fast the camera orbits. 0 holds still. Needs Time wired.' },
+    outer_steps: { label: 'Ray Steps',   type: 'select', hint: 'Ray march steps. More reaches deeper but costs GPU time.', options: [
       { value: '12', label: '12 (fast)' },
       { value: '18', label: '18 (default)' },
       { value: '24', label: '24 (detailed)' },
     ]},
-    fold_iters: { label: 'Fold Iters',   type: 'select', options: [
+    fold_iters: { label: 'Fold Iters',   type: 'select', hint: 'Fold iterations per step. More adds fine detail, costs GPU time.', options: [
       { value: '6',  label: '6 (fast)' },
       { value: '9',  label: '9 (default)' },
       { value: '12', label: '12 (deep)' },
     ]},
-    fold_x:      { label: 'Fold X',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05 },
-    fold_y:      { label: 'Fold Y',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05 },
-    fold_z:      { label: 'Fold Z',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05 },
-    offset_x:    { label: 'Offset X',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
-    offset_y:    { label: 'Offset Y',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
-    offset_z:    { label: 'Offset Z',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
-    inv_scale:   { label: 'Inv Scale',   type: 'float', min: 1.0,  max: 20.0, step: 0.1  },
-    inv_min:     { label: 'Inv Min',     type: 'float', min: 0.5,  max: 1.5,  step: 0.01 },
-    hue:         { label: 'Hue',         type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
-    saturation:  { label: 'Saturation',  type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
-    color_scale: { label: 'Color Scale', type: 'float', min: 100.0, max: 20000.0, step: 100.0 },
+    fold_x:      { label: 'Fold X',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05, hint: 'Box-fold limit on X. Larger boxes fold less often.' },
+    fold_y:      { label: 'Fold Y',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05, hint: 'Box-fold limit on Y. Larger boxes fold less often.' },
+    fold_z:      { label: 'Fold Z',      type: 'float', min: 0.0,  max: 8.0,  step: 0.05, hint: 'Box-fold limit on Z. Larger boxes fold less often.' },
+    offset_x:    { label: 'Offset X',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05, hint: 'Shift applied on X after each fold.' },
+    offset_y:    { label: 'Offset Y',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05, hint: 'Shift applied on Y after each fold.' },
+    offset_z:    { label: 'Offset Z',    type: 'float', min: 0.0,  max: 5.0,  step: 0.05, hint: 'Shift applied on Z after each fold.' },
+    inv_scale:   { label: 'Inv Scale',   type: 'float', min: 1.0,  max: 20.0, step: 0.1, hint: 'Strength of the spherical inversion. Higher = more explosive detail.' },
+    inv_min:     { label: 'Inv Min',     type: 'float', min: 0.5,  max: 1.5,  step: 0.01, hint: 'Inner radius of the inversion. Smaller pulls in more structure.' },
+    hue:         { label: 'Hue',         type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: 'Base hue, 0 to 1 around the color wheel.' },
+    saturation:  { label: 'Saturation',  type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: 'Color intensity. 0 is grayscale.' },
+    color_scale: { label: 'Color Scale', type: 'float', min: 100.0, max: 20000.0, step: 100.0, hint: 'Divides the accumulated scale into brightness. Higher = darker.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;

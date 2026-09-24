@@ -18,6 +18,8 @@ import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
 import type { GraphNode, DataType, LooseGroup, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
+import { PublishNodeModal } from './PublishNodeModal';
+import type { PublishSource } from '../../nodes/userNodes/publishUserNode';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
@@ -41,6 +43,7 @@ import type { IconName } from '../ui/iconPaths';
 import { Button, IconButton } from '../ui/Button';
 import { Sheet } from '../ui/Sheet';
 import { suggestConnections } from './smartConnect';
+import { suggestQuickAdds } from './quickAdds';
 import { wirePath } from './wirePath';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
@@ -1445,6 +1448,8 @@ export function MobileGraphBrowser() {
   // it, same as a browser tab's forward history after you follow a new link.
   const [forwardStack, setForwardStack] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSocket | null>(null);
+  // Publish a group as a node type (the same dialog as the desktop card's ✦)
+  const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
   // Building a brand-new group port from the group's own settings page (its
   // Inputs/Outputs tabs, viewed from outside): 'choose' shows Connect
@@ -2227,6 +2232,15 @@ export function MobileGraphBrowser() {
             >Save</button>
           </div>
         )}
+        {isPlainGroup && (
+          <button
+            onClick={() => setPublishSource({ kind: 'group', node })}
+            style={{ background: tc.mauve, border: 0, color: tc.crust, borderRadius: '8px', padding: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            ✦ Publish as node…
+          </button>
+        )}
+        {publishSource && <PublishNodeModal source={publishSource} onClose={() => setPublishSource(null)} />}
         {isPlainGroup && !node.sealed && (
           <button
             onClick={() => { ungroupNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
@@ -3271,6 +3285,18 @@ export function MobileGraphBrowser() {
             else connectNodes(node.id, pending.key, otherId, otherKey);
             setPending(null);
           };
+          // New nodes to add and wire in one tap (see quickAdds.ts)
+          const quickAdds = socket ? suggestQuickAdds({ type: socket.type, dir: pending.dir === 'input' ? 'in' : 'out', label: socket.label, key: pending.key }) : [];
+          const quickAdd = (q: (typeof quickAdds)[number]) => {
+            const pos = { x: node.position.x + (pending.dir === 'input' ? -420 : 420), y: node.position.y };
+            const newId = useNodeGraphStore.getState().addNode(q.type, pos);
+            if (newId) {
+              if (pending.dir === 'input') connectNodes(newId, q.key, node.id, pending.key);
+              else connectNodes(node.id, pending.key, newId, q.key);
+              pushFocus(newId);
+            }
+            setPending(null);
+          };
           return (
             <Sheet onClose={() => setPending(null)} title={pending.dir === 'input' ? `Feed ${socket?.label ?? 'this input'}` : `Use ${socket?.label ?? 'this output'} in…`}>
               {suggestions.length > 0 && (
@@ -3282,7 +3308,15 @@ export function MobileGraphBrowser() {
                   ))}
                 </>
               )}
-              <SheetSection>{suggestions.length > 0 ? 'Or' : 'Connect'}</SheetSection>
+              {quickAdds.length > 0 && (
+                <>
+                  <SheetSection>Add and wire</SheetSection>
+                  {quickAdds.map(q => (
+                    <SheetRow key={`add:${q.type}`} icon="plus" label={q.label} detail={`New · ${q.socketLabel} · ${q.note}`} onClick={() => quickAdd(q)} />
+                  ))}
+                </>
+              )}
+              <SheetSection>{suggestions.length > 0 || quickAdds.length > 0 ? 'Or' : 'Connect'}</SheetSection>
               <SheetRow icon="nodes" label="Connect another node…" detail="Pick one on the graph"
                 onClick={() => { setConnectPicker(pending); setPending(null); }} />
               <SheetRow icon="plus" label="Add a new node…" detail="Search the library"

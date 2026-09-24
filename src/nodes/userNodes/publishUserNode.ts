@@ -128,8 +128,19 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
 
   const id = spec.existingId ?? makeUserNodeId(label);
   const fnName = fnNameFor(id);
+  // A slider whose default sits outside its range draws no ticks around the
+  // needle and clamps on first touch; fix the range up front instead.
+  const tidyRange = <T extends { min: number; max: number; default: number }>(r: T): T => {
+    const min = Math.min(r.min, r.max);
+    const max = Math.max(r.min, r.max) === min ? min + 1 : Math.max(r.min, r.max);
+    return { ...r, min, max, default: Math.min(max, Math.max(min, r.default)) };
+  };
   const textures: UserNodeTexture[] = (spec.textures ?? []).map(t => ({ key: t.key, label: t.label, hint: t.hint?.trim() || undefined }));
-  const inputs: UserNodePort[] = spec.inputs.map(i => ({ key: i.key, type: i.type, label: i.label, slider: i.type === 'float' ? (i.slider ?? null) : null, hint: i.hint?.trim() || undefined }));
+  const inputs: UserNodePort[] = spec.inputs.map(i => ({
+    key: i.key, type: i.type, label: i.label,
+    slider: i.type === 'float' && i.slider ? tidyRange(i.slider) : null,
+    hint: i.hint?.trim() || undefined,
+  }));
   const outputs: UserNodePort[] = spec.outputs.map(o => ({ key: o.key, type: o.type, label: o.label, hint: o.hint?.trim() || undefined }));
   const common = {
     id, label,
@@ -203,7 +214,7 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
   }
 
   const params: UserNodeParam[] = spec.params.map(p => ({
-    key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.default, hint: p.hint?.trim() || undefined, sourcePath: p.sourcePath,
+    key: p.key, label: p.label, ...tidyRange({ min: p.min, max: p.max, default: p.default }), step: p.step, hint: p.hint?.trim() || undefined, sourcePath: p.sourcePath,
   }));
 
   return {

@@ -49,7 +49,7 @@ const IMPLICIT_GLOBALS: Array<{ name: string; type: string }> = [
  * sampler uniforms (media inputs). A clear refusal beats a broken shader.
  */
 const STATEFUL_TYPES = new Set([
-  'prevFrame', 'radianceCascadesApprox',
+  'prevFrame', 'echo', 'radianceCascadesApprox',
   'gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'motionBlur', 'depthOfField',
 ]);
 // textureInput is allowed: each one becomes a sampler2D argument (see spec.textures).
@@ -219,7 +219,10 @@ export function flattenSubgraphToFunction(spec: FlattenSpec): FlattenResult {
     return { ok: false, error: e instanceof Error ? e.message : 'The group failed to compile.' };
   }
 
-  if (parts.isStateful || Object.keys(parts.textureUniforms).length || Object.keys(parts.audioUniforms).length || Object.keys(parts.videoUniforms).length || Object.keys(parts.liveUniforms).length) {
+  // Texture Inputs the caller marked as slots register `u_tex_…texslot<i>…` samplers, which
+  // become the function's sampler arguments below; any other sampler is a per-instance binding.
+  const foreignSamplers = Object.keys(parts.textureUniforms).filter(k => !k.includes(TEX_MARK));
+  if (parts.isStateful || foreignSamplers.length || Object.keys(parts.audioUniforms).length || Object.keys(parts.videoUniforms).length || Object.keys(parts.liveUniforms).length) {
     return { ok: false, error: 'The group depends on per-instance uniforms (media or previous frame) and can\'t be flattened.' };
   }
 

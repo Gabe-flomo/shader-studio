@@ -91,6 +91,13 @@ vec3 my_node(vec2 uv, float radius) {
 
 export function PublishNodeModal({ source: initialSource, onClose, onPublished, existingId }: Props) {
   const tk = useTokens();
+  // Phones: one column, preview under the fields, full-height dialog
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const publishUserNode = useNodeGraphStore(s => s.publishUserNode);
   const groupNode: GraphNode | null = initialSource.kind === 'group' ? initialSource.node : null;
   const isCode = initialSource.kind === 'code';
@@ -340,7 +347,7 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
       icon={isCode ? 'code' : 'spark'}
       iconColor={tk.kind.fn}
       width={800}
-      height={Math.min(760, typeof window !== 'undefined' ? window.innerHeight - 48 : 760)}
+      height={narrow ? (typeof window !== 'undefined' ? window.innerHeight - 32 : 760) : Math.min(760, typeof window !== 'undefined' ? window.innerHeight - 48 : 760)}
       onClose={onClose}
       footer={
         <>
@@ -365,9 +372,9 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
         {error && <Callout title="Couldn't publish" details={error} onDismiss={() => setError(null)}>The node failed to build. The details show what the compiler said.</Callout>}
 
         {/* Identity + live preview */}
-        <div style={{ display: 'grid', gridTemplateColumns: `1fr ${PREVIEW_SIZE}px`, gap: 12, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : `1fr ${PREVIEW_SIZE}px`, gap: 12, alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 180px', gap: 8 }}>
               <Field autoFocus={!isCode} aria-label="Node name" placeholder="Node name" value={label} onChange={e => setLabel(e.target.value)} />
               <Select ariaLabel="Category" height={34} value={category} onChange={setCategory} options={categories.map(c => ({ value: c, label: c }))} />
             </div>

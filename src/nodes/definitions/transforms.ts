@@ -66,7 +66,7 @@ export const FractNode: NodeDefinition = {
   type: 'fract',
   label: 'Tile', aliases: ['fract', 'repeat'],
   description: 'Repeats the space: fract(uv * count) - 0.5, so each tile is centred on 0. For a plain scalar fract use Fract (scalar).',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
     scale: { type: 'float', label: 'Tile count' },
@@ -92,20 +92,20 @@ export const FractNode: NodeDefinition = {
 export const UVWarpNode: NodeDefinition = {
   type: 'uvWarp',
   label: 'UV Warp (Jitter)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Hash-grid jitter warp — intentionally blocky/pixelated displacement. Great for glitch and mosaic effects. For smooth flowing warps use UV Warp (Smooth).',
   inputs: {
     input: { type: 'vec2', label: 'UV' },
-    time:  { type: 'float', label: 'Time' },
+    time:  { type: 'float', label: 'Time', hint: 'Wire Time to animate the jitter; unwired it is a fixed displacement.' },
   },
   outputs: {
     output: { type: 'vec2', label: 'UV out' },
   },
   defaultParams: { strength: 0.05, scale: 8.0, speed: 1.0 },
   paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 0.5,  step: 0.001 },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1   },
-    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01  },
+    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 0.5,  step: 0.001, hint: 'How far each block shifts. 0.05 is a subtle glitch, 0.3 shreds the image.' },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1, hint: 'Size of the jitter blocks. Higher = smaller, more numerous blocks.' },
+    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the blocks reshuffle. Needs Time wired.' },
   },
   glslFunction: UV_WARP_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -125,11 +125,11 @@ export const UVWarpNode: NodeDefinition = {
 export const SmoothWarpNode: NodeDefinition = {
   type: 'smoothWarp',
   label: 'UV Warp (Smooth)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Smooth bilinear value-noise warp — flowing, organic displacement with no visible grid edges. Use Strength to control how much it moves, Scale for frequency.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
-    time:     { type: 'float', label: 'Time' },
+    time:     { type: 'float', label: 'Time', hint: 'Wire Time to animate the warp; unwired it is a fixed displacement.' },
     strength: { type: 'float', label: 'Strength' },
   },
   outputs: {
@@ -137,9 +137,9 @@ export const SmoothWarpNode: NodeDefinition = {
   },
   defaultParams: { strength: 0.1, scale: 4.0, speed: 0.5 },
   paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 1.0,  step: 0.005 },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1   },
-    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01  },
+    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 1.0,  step: 0.005, hint: 'How far the warp pushes pixels. 0.1 ripples, 0.5 melts.' },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1, hint: 'Frequency of the warp field. Higher = smaller, tighter swirls.' },
+    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the warp field drifts. Needs Time wired.' },
   },
   glslFunction: SMOOTH_WARP_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -159,11 +159,11 @@ export const SmoothWarpNode: NodeDefinition = {
 export const CurlWarpNode: NodeDefinition = {
   type: 'curlWarp',
   label: 'UV Warp (Curl)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Divergence-free curl noise warp — simulates fluid flow, smoke, and turbulent streams. Particles never converge or diverge, giving a very natural swirling motion.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
-    time:     { type: 'float', label: 'Time' },
+    time:     { type: 'float', label: 'Time', hint: 'Wire Time to animate the flow; unwired it is a fixed displacement.' },
     strength: { type: 'float', label: 'Strength' },
   },
   outputs: {
@@ -171,9 +171,9 @@ export const CurlWarpNode: NodeDefinition = {
   },
   defaultParams: { strength: 0.15, scale: 3.0, speed: 0.4 },
   paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 1.0,  step: 0.005 },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 20.0, step: 0.1   },
-    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01  },
+    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 1.0,  step: 0.005, hint: 'How far the flow carries pixels. 0.15 is gentle smoke.' },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 20.0, step: 0.1, hint: 'Size of the eddies. Higher = smaller, busier swirls.' },
+    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the flow evolves. Needs Time wired.' },
   },
   glslFunction: CURL_WARP_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -193,11 +193,11 @@ export const CurlWarpNode: NodeDefinition = {
 export const SwirlWarpNode: NodeDefinition = {
   type: 'swirlWarp',
   label: 'UV Warp (Swirl)',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Rotational twist warp — strongest at center, decays with distance. Twist sets max rotation angle, Falloff controls how quickly it fades outward. Animates with time.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
-    time:     { type: 'float', label: 'Time' },
+    time:     { type: 'float', label: 'Time', hint: 'Wire Time to keep the swirl spinning; unwired it holds still.' },
     strength: { type: 'float', label: 'Twist' },
   },
   outputs: {
@@ -205,11 +205,11 @@ export const SwirlWarpNode: NodeDefinition = {
   },
   defaultParams: { strength: 2.0, falloff: 4.0, cx: 0.0, cy: 0.0, speed: 0.3 },
   paramDefs: {
-    strength: { label: 'Twist',   type: 'float', min: -12.0, max: 12.0, step: 0.05 },
-    falloff:  { label: 'Falloff', type: 'float', min: 0.1,   max: 20.0, step: 0.1  },
-    cx:       { label: 'Center X',type: 'float', min: -1.0,  max: 1.0,  step: 0.01 },
-    cy:       { label: 'Center Y',type: 'float', min: -1.0,  max: 1.0,  step: 0.01 },
-    speed:    { label: 'Speed',   type: 'float', min: -5.0,  max: 5.0,  step: 0.01 },
+    strength: { label: 'Twist',   type: 'float', min: -12.0, max: 12.0, step: 0.05, hint: 'Max rotation at the center, in radians. Negative twists the other way.' },
+    falloff:  { label: 'Falloff', type: 'float', min: 0.1,   max: 20.0, step: 0.1, hint: 'How quickly the twist fades outward. Higher keeps it tight to the center.' },
+    cx:       { label: 'Center X',type: 'float', min: -1.0,  max: 1.0,  step: 0.01, hint: 'Horizontal position of the swirl center.' },
+    cy:       { label: 'Center Y',type: 'float', min: -1.0,  max: 1.0,  step: 0.01, hint: 'Vertical position of the swirl center.' },
+    speed:    { label: 'Speed',   type: 'float', min: -5.0,  max: 5.0,  step: 0.01, hint: 'Adds continuous spin over time. Needs Time wired.' },
   },
   glslFunction: SWIRL_WARP_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -232,7 +232,7 @@ export const SwirlWarpNode: NodeDefinition = {
 export const DisplaceNode: NodeDefinition = {
   type: 'displace',
   label: 'Displace',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Displace UV by any vec2 input — plug in noise, math expressions, or any vec2 to use as the warp field. This is the "bring your own function" warp node.',
   inputs: {
     input:  { type: 'vec2',  label: 'UV' },
@@ -244,7 +244,7 @@ export const DisplaceNode: NodeDefinition = {
   },
   defaultParams: { amount: 0.1 },
   paramDefs: {
-    amount: { label: 'Amount', type: 'float', min: -2.0, max: 2.0, step: 0.005 },
+    amount: { label: 'Amount', type: 'float', min: -2.0, max: 2.0, step: 0.005, hint: 'Scales the Offset vector. Negative pushes the opposite way.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
@@ -261,7 +261,7 @@ export const DisplaceNode: NodeDefinition = {
 export const Rotate2DNode: NodeDefinition = {
   type: 'rotate2d',
   label: 'Rotate 2D',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Rotate a 2D vector by an angle (radians)',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
@@ -291,7 +291,7 @@ export const Rotate2DNode: NodeDefinition = {
 export const UvTransform2dNode: NodeDefinition = {
   type: 'uvTransform2d',
   label: 'UV Transform 2D',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Basic',
   description: 'Full 2D affine transform: translate + rotate + scale composed as a single mat2 multiply. More efficient than chaining three separate nodes. Rotation and scale apply relative to pivot.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
@@ -302,13 +302,13 @@ export const UvTransform2dNode: NodeDefinition = {
   outputs: { result: { type: 'vec2', label: 'Result' } },
   defaultParams: { tx: 0.0, ty: 0.0, angle: 0.0, sx: 1.0, sy: 1.0, pivotX: 0.0, pivotY: 0.0 },
   paramDefs: {
-    tx:     { label: 'Translate X', type: 'float', min: -2.0,    max: 2.0,    step: 0.01 },
-    ty:     { label: 'Translate Y', type: 'float', min: -2.0,    max: 2.0,    step: 0.01 },
-    angle:  { label: 'Angle',       type: 'float', min: -3.14159, max: 3.14159, step: 0.01 },
-    sx:     { label: 'Scale X',     type: 'float', min: 0.01,    max: 8.0,    step: 0.01 },
-    sy:     { label: 'Scale Y',     type: 'float', min: 0.01,    max: 8.0,    step: 0.01 },
-    pivotX: { label: 'Pivot X',     type: 'float', min: -1.0,    max: 1.0,    step: 0.01 },
-    pivotY: { label: 'Pivot Y',     type: 'float', min: -1.0,    max: 1.0,    step: 0.01 },
+    tx:     { label: 'Translate X', type: 'float', min: -2.0,    max: 2.0,    step: 0.01, hint: 'Shifts the space horizontally.' },
+    ty:     { label: 'Translate Y', type: 'float', min: -2.0,    max: 2.0,    step: 0.01, hint: 'Shifts the space vertically.' },
+    angle:  { label: 'Angle',       type: 'float', min: -3.14159, max: 3.14159, step: 0.01, hint: 'Rotation in radians around the pivot. 3.14 is half a turn.' },
+    sx:     { label: 'Scale X',     type: 'float', min: 0.01,    max: 8.0,    step: 0.01, hint: 'Horizontal stretch. Below 1 zooms in, above 1 zooms out.' },
+    sy:     { label: 'Scale Y',     type: 'float', min: 0.01,    max: 8.0,    step: 0.01, hint: 'Vertical stretch. Below 1 zooms in, above 1 zooms out.' },
+    pivotX: { label: 'Pivot X',     type: 'float', min: -1.0,    max: 1.0,    step: 0.01, hint: 'Horizontal center that rotation and scale happen around.' },
+    pivotY: { label: 'Pivot Y',     type: 'float', min: -1.0,    max: 1.0,    step: 0.01, hint: 'Vertical center that rotation and scale happen around.' },
   },
   glslFunction: `vec2 uvTransform2dFn(vec2 uv, vec2 translate, float angle, vec2 scale, vec2 pivot) {
     uv -= pivot;
@@ -336,13 +336,13 @@ export const UvTransform2dNode: NodeDefinition = {
 export const UvReciprocalNode: NodeDefinition = {
   type: 'uvReciprocal',
   label: 'UV Reciprocal',
-  category: 'Transforms',
+  category: '2D Space', subcategory: 'Warp',
   description: 'Applies N/x family transforms to UV. Bounded = smooth lens distortion. Raw = hyperbolic (interesting with fract). Circle inversion = Möbius-like, foundation for inversion fractal patterns.',
   inputs: { uv: { type: 'vec2', label: 'UV' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },
   defaultParams: { mode: '0.0', k: 1.0 },
   paramDefs: {
-    mode: { label: 'Mode', type: 'select', options: [
+    mode: { label: 'Mode', type: 'select', hint: 'Bounded is a soft lens, Raw is hyperbolic, Circle Inversion swaps inside and outside.', options: [
       { value: '0.0', label: 'Bounded'          },
       { value: '1.0', label: 'Raw'               },
       { value: '2.0', label: 'Circle Inversion'  },

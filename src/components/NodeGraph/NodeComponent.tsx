@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 
 // Inject save-flash keyframe once
 if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
@@ -152,7 +152,7 @@ const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
 const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
-const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat']);
+const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat', 'sdSegment', 'mask', 'luminance', 'sobel', 'compare', 'select']);
 
 
 const inputStyleFor = (tc: CtpPalette): React.CSSProperties => ({
@@ -474,6 +474,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const previewDataUrl  = useNodeGraphStore(s => s.nodePreviews[node.id] ?? null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // The thumbnail follows the node's own sliders: params are baked into the preview shader, so a
+  // change is a new shader. Debounced so a slider drag doesn't compile on every tick.
+  const paramsKey = JSON.stringify(node.params);
+  const [previewParamsKey, setPreviewParamsKey] = useState(paramsKey);
+  useEffect(() => {
+    if (!isPreviewActive) return;
+    const t = setTimeout(() => setPreviewParamsKey(paramsKey), 300);
+    return () => clearTimeout(t);
+  }, [paramsKey, isPreviewActive]);
+
   // Render a 200×200 preview whenever preview mode is activated for this node
   useEffect(() => {
     if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
@@ -502,7 +512,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       .catch(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewActive, node.id, node.type]);
+  }, [isPreviewActive, node.id, node.type, previewParamsKey]);
 
   // Comment preview — brief hover delay (not the old 1200ms tooltip delay,
   // just enough to avoid flicker while panning/passing over the card).
@@ -530,6 +540,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [showPublish, setShowPublish] = useState(false); // group card → Publish as node
+  // "Publish as node" on the selection bar groups the selection and asks the
+  // new group's card to open the dialog as soon as it exists.
+  const pendingPublishGroupId = useNodeGraphStore(s => s.pendingPublishGroupId);
+  const setPendingPublishGroupId = useNodeGraphStore(s => s.setPendingPublishGroupId);
+  useEffect(() => {
+    if (pendingPublishGroupId && pendingPublishGroupId === node.id && node.type === 'group') {
+      setPendingPublishGroupId(null);
+      setShowPublish(true);
+    }
+  }, [pendingPublishGroupId, node.id, node.type, setPendingPublishGroupId]);
   // Custom Fn card → Publish as node (code source), or a user node's "open source" for code-backed types
   const [publishCode, setPublishCode] = useState<{ code: string; entry?: string; label: string; existingId?: string } | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -660,6 +680,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const specialHeadStyle: React.CSSProperties = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '8px 8px 8px 14px',
     borderBottom: `1px solid ${tk.border.subtle}`, cursor: 'grab',
+    background: tk.bg.head, borderRadius: `${radius.card}px ${radius.card}px 0 0`,
   };
 
   // ── Loop Index node special card ─────────────────────────────────────────────
@@ -1919,6 +1940,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           style={{
             display: 'flex', alignItems: 'center', gap: 3, padding: '7px 7px 7px 11px', cursor: 'grab',
             borderBottom: `1px solid ${tk.border.subtle}`,
+            background: tk.bg.head, borderRadius: collapsed ? radius.card - 2 : `${radius.card - 2}px ${radius.card - 2}px 0 0`,
           }}
         >
           <button
@@ -2630,6 +2652,17 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const generatedCode = showCode ? (extractNodeCodeFromShader(shaderLines, node) || def.generateGLSL(node, {}).code) : '';
   const hasOverride = typeof node.params?.__codeOverride === 'string' && (node.params.__codeOverride as string).trim().length > 0;
   const codeSnippet = hasOverride ? (node.params.__codeOverride as string) : generatedCode;
+  // The helper functions this node's line calls (circleSDF, palette, …), so the panel can show
+  // what the node actually computes above how this instance calls it.
+  const helperFunctions = useMemo(() => {
+    if (!showCode) return [] as string[];
+    const all = [...(def.glslFunction ? [def.glslFunction] : []), ...(def.glslFunctions ?? []), ...(def.glslFunctionsFor?.(node) ?? [])];
+    if (all.length === 0) return [] as string[];
+    const called = new Set([...codeSnippet.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]));
+    const nameOf = (fn: string) => /^\s*(?:[a-z0-9]+\s+)?([A-Za-z_]\w*)\s*\(/m.exec(fn)?.[1];
+    const used = all.filter(fn => { const n = nameOf(fn); return n && called.has(n); });
+    return (used.length ? used : all).map(fn => fn.trim());
+  }, [showCode, def, node, codeSnippet]);
 
   // ─── Build tooltip for an input socket ─────────────────────────────────────
   const buildInputTooltip = (inputKey: string): React.ReactNode[] => {
@@ -2757,6 +2790,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         style={{
           display: 'flex', alignItems: 'center', gap: 3, padding: isTouchDevice ? '10px 8px' : 8, position: 'relative',
           minHeight: isTouchDevice ? 44 : undefined, cursor: 'grab', borderBottom: `1px solid ${tk.border.subtle}`,
+          background: tk.bg.head, borderRadius: collapsed ? radius.card : `${radius.card}px ${radius.card}px 0 0`,
         }}
       >
         <button
@@ -4067,6 +4101,18 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               </Button>
             )}
           </div>
+            {helperFunctions.length > 0 && (
+              <>
+                <div style={{ padding: '6px 12px 0', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>WHAT IT COMPUTES</div>
+                <pre style={{
+                  margin: 0, padding: '4px 12px 8px', maxHeight: 260, overflow: 'auto', whiteSpace: 'pre',
+                  color: tk.text.muted, font: `11px/1.55 ${fontFamily.mono}`, borderBottom: `1px solid ${tk.border.subtle}`,
+                }}>
+                  {helperFunctions.join('\n\n')}
+                </pre>
+                <div style={{ padding: '6px 12px 0', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>HOW THIS NODE USES IT</div>
+              </>
+            )}
             <pre style={{
               margin: 0, padding: '8px 12px', maxHeight: 400, overflow: 'auto', whiteSpace: 'pre',
               color: hasOverride ? tk.status.warningText : tk.text.secondary, font: `11.5px/1.55 ${fontFamily.mono}`,

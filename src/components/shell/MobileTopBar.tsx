@@ -7,7 +7,7 @@ import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { Menu } from '../ui/Menu';
 import { LoadGraphButton, SaveGraphButton } from './DesktopTopNav';
-import { reportFileResult } from './reportFileResult';
+import { reportFileResult, reportGlslImport } from './reportFileResult';
 
 /**
  * Phone top bar (Mobile board): logo (back to Studio), undo/redo, save/load, and a ⋯ menu with
@@ -27,6 +27,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   const redo = useNodeGraphStore(s => s.redo);
   const exportGraph = useNodeGraphStore(s => s.exportGraph);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
+  const importGlslFromFile = useNodeGraphStore(s => s.importGlslFromFile);
   const moreRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -84,6 +85,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
               : { label: 'Play this graph', icon: 'play', onSelect: () => onPageChange('play') },
             'separator',
             { label: 'Import a graph', icon: 'import', onSelect: async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); } },
+            { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
             'separator',
             page === 'shortcuts'

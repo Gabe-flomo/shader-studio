@@ -10,13 +10,14 @@ import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
+import { PerfBadge, PerfPanel } from './PerfPanel';
 
 /**
  * Floating toolbar at the top centre of the canvas (desktop redesign): node count for the
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, onClear, compact = false,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -28,7 +29,12 @@ export function CanvasToolbar({
   onAutoLayout: () => void;
   showMinimap: boolean;
   onToggleMinimap: () => void;
+  /** The outline panel: a list of the nodes in evaluation order, with step-through. */
+  showOutline?: boolean;
+  onToggleOutline?: () => void;
   onClear: () => void;
+  /** Right-click on the trash: empty the canvas down to UV → Output */
+  onClearMinimal?: () => void;
   /** Narrow canvas (tablet): Fit and Auto layout become icon buttons. */
   compact?: boolean;
 }) {
@@ -37,6 +43,8 @@ export function CanvasToolbar({
   const { total, insideGroups } = useMemo(() => countNodes(nodes), [nodes]);
   const countRef = useRef<HTMLSpanElement>(null);
   const [statsOpen, setStatsOpen] = useState(false);
+  const perfRef = useRef<HTMLSpanElement>(null);
+  const [perfOpen, setPerfOpen] = useState(false);
 
   const countLabel = selected > 1 ? `${selected} of ${total} selected` : `${total} ${total === 1 ? 'node' : 'nodes'}`;
   const countTip = topLevel
@@ -67,6 +75,16 @@ export function CanvasToolbar({
           <GraphStatsPanel nodes={nodes} topLevel={topLevel} groupName={groupName} onClose={() => setStatsOpen(false)} />
         </Popover>
       )}
+      <span ref={perfRef} style={{ display: 'inline-flex' }}>
+        <Tooltip label="Performance: frame time, compiles, cost by node" disabled={perfOpen}>
+          <ToolButton icon="wave" active={perfOpen} onClick={() => setPerfOpen(o => !o)}><PerfBadge /></ToolButton>
+        </Tooltip>
+      </span>
+      {perfOpen && (
+        <Popover anchorRef={perfRef} onClose={() => setPerfOpen(false)} align="start" width={420} padding={0}>
+          <PerfPanel onClose={() => setPerfOpen(false)} />
+        </Popover>
+      )}
       <Sep />
       <IconButton icon="minus" label="Zoom out" size="sm" onClick={() => onZoom(zoom / 1.2)} />
       <Tooltip label="Reset zoom to 100%">
@@ -91,7 +109,12 @@ export function CanvasToolbar({
       )}
       <Sep />
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
-      <IconButton icon="trash" label="Clear all nodes" size="sm" tone="danger" onClick={onClear} />
+      {onToggleOutline && (
+        <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
+      )}
+      <span onContextMenu={e => { if (onClearMinimal) { e.preventDefault(); onClearMinimal(); } }} style={{ display: 'inline-flex' }}>
+        <IconButton icon="trash" label={onClearMinimal ? 'Reset to the starter graph · right-click: clear to just UV and Output' : 'Clear all nodes'} size="sm" tone="danger" onClick={onClear} />
+      </span>
     </div>
   );
 }

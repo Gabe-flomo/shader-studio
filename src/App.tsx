@@ -873,12 +873,17 @@ function App() {
                           type="button"
                           onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
                           style={{
-                            width: '100%', height: 42, display: 'flex', alignItems: 'center', padding: '0 12px 0 43px', border: 0,
+                            width: '100%', minHeight: 42, display: 'flex', alignItems: 'center', padding: '6px 12px 6px 43px', border: 0,
                             borderRadius: 10, cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
                             background: 'none', color: tk.text.secondary, font: `500 13.5px ${fontFamily.ui}`,
                           }}
                         >
-                          <span style={{ flex: 1 }}>{EXAMPLE_INDEX[k].label}</span>
+                          <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                            <span>{EXAMPLE_INDEX[k].label}</span>
+                            {EXAMPLE_INDEX[k].description && (
+                              <span style={{ fontSize: 11.5, fontWeight: 400, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{EXAMPLE_INDEX[k].description}</span>
+                            )}
+                          </span>
                           <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
                         </button>
                       ))}

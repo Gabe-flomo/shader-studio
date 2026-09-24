@@ -144,6 +144,77 @@ export async function readJsonFilesFromDir(
 }
 
 /**
+ * Pick several .json files, or a whole folder (recursively), and read them.
+ * Paths are relative to what was picked, with `/` separators, so a folder
+ * structure can be recreated (see utils/graphImportPlan.ts). Returns null on
+ * cancel. Rejects with a readable message when the dialog or a read fails.
+ */
+export async function pickJsonFiles(mode: 'files' | 'folder'): Promise<Array<{ path: string; content: string }> | null> {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const { readDir, readTextFile } = await import('@tauri-apps/plugin-fs');
+    let picked: string | string[] | null;
+    try {
+      picked = mode === 'folder'
+        ? await open({ directory: true, multiple: false })
+        : await open({ multiple: true, filters: [{ name: 'Shader Graph', extensions: ['json'] }] });
+    } catch (e) {
+      throw new Error(`Could not open the file dialog: ${errorMessage(e)}`);
+    }
+    if (!picked) return null;
+    const out: Array<{ path: string; content: string }> = [];
+    if (mode === 'folder') {
+      const root = picked as string;
+      const rootName = root.split(/[\\/]/).filter(Boolean).pop() ?? 'folder';
+      const walk = async (dir: string, rel: string) => {
+        for (const entry of await readDir(dir)) {
+          if (!entry.name) continue;
+          const full = `${dir}/${entry.name}`;
+          if (entry.isDirectory) { await walk(full, `${rel}/${entry.name}`); continue; }
+          if (!entry.name.toLowerCase().endsWith('.json')) continue;
+          try { out.push({ path: `${rel}/${entry.name}`, content: await readTextFile(full) }); }
+          catch (e) { throw new Error(`Could not read "${full}": ${errorMessage(e)}`); }
+        }
+      };
+      await walk(root, rootName);
+    } else {
+      for (const path of Array.isArray(picked) ? picked : [picked]) {
+        const name = path.split(/[\\/]/).pop() ?? path;
+        try { out.push({ path: name, content: await readTextFile(path) }); }
+        catch (e) { throw new Error(`Could not read "${path}": ${errorMessage(e)}`); }
+      }
+    }
+    return out;
+  }
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.style.display = 'none';
+    if (mode === 'folder') input.setAttribute('webkitdirectory', '');
+    else { input.multiple = true; input.accept = '.json,application/json'; }
+    const cleanup = () => input.remove();
+    input.onchange = async () => {
+      const files = Array.from(input.files ?? []);
+      cleanup();
+      if (files.length === 0) return resolve(null);
+      try {
+        const out: Array<{ path: string; content: string }> = [];
+        for (const f of files) {
+          if (!f.name.toLowerCase().endsWith('.json')) continue;
+          out.push({ path: (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name, content: await f.text() });
+        }
+        resolve(out);
+      } catch (e) {
+        reject(new Error(`Could not read the picked files: ${errorMessage(e)}`));
+      }
+    };
+    input.oncancel = () => { cleanup(); resolve(null); };
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+/**
  * Write text content to an absolute file path.
  * No-op on web. Rejects (with the plugin-fs error) when the write fails —
  * callers await it and report.
@@ -183,9 +254,10 @@ export async function openTextFile(
     let path: string | string[] | null;
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
+      const extensions = accept.split(',').map(a => a.trim().replace(/^\./, '')).filter(a => a && !a.includes('/'));
       path = await open({
         multiple: false,
-        filters: [{ name: 'Shader Graph', extensions: ['json'] }],
+        filters: [{ name: extensions.includes('json') && extensions.length === 1 ? 'Shader Graph' : 'Files', extensions: extensions.length ? extensions : ['json'] }],
       });
     } catch (e) {
       console.error('[fileIO] open dialog failed', e);
