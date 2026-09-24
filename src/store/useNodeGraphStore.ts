@@ -583,6 +583,8 @@ interface NodeGraphState {
   redo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => Promise<void>;
+  /** Empty the canvas down to UV → Output (the trash button's right-click) */
+  clearToMinimal: () => void;
   autoLayout: () => void;
   /** `source` is the shader the errors were reported against (their line numbers point into it) */
   setGlslErrors: (errors: string[], source?: string | null) => void;
@@ -4274,6 +4276,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         })),
       }));
     }
+  },
+
+  clearToMinimal: () => {
+    undoManager.push(get().nodes);
+    const uv = instantiateNode(idGenerator.next(), 'uv', getNodeDefinition('uv')!, { x: 100, y: 240 });
+    const out = instantiateNode(idGenerator.next(), 'output', getNodeDefinition('output')!, { x: 820, y: 240 });
+    set({ nodes: [uv, out], looseGroups: [], previewNodeId: null, activeGroupId: null, activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [], nodeProbeValues: null });
+    get().compile();
   },
 
   loadExampleGraph: async (name?: string) => {

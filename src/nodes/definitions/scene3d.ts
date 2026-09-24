@@ -617,6 +617,7 @@ const COMMON_MARCH_PARAM_DEFS = {
 
 export const RayMarchNode: NodeDefinition = {
   type: 'rayMarch', label: 'Ray March', category: '3D Scene',
+  deprecated: true, // superseded by March Camera + Scene Group + March Loop Group (smart 3D placement builds that trio)
   description: 'Camera + sphere-march. Outputs raw hit data (dist, depth, normal, iter, hit) — no color. Connect to palette/math nodes for custom coloring. Wire a SpaceWarpGroup to spacewarp to bend the entire scene coordinate field inside the march loop.',
   inputs: {
     scene:     { type: 'scene3d',     label: 'Scene' },

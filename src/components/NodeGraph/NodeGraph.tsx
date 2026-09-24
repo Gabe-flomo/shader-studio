@@ -1200,11 +1200,12 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           showOutline={showOutline}
           onToggleOutline={toggleOutline}
           onClear={() => loadExampleGraph('blank')}
+          onClearMinimal={() => useNodeGraphStore.getState().clearToMinimal()}
           compact={compactToolbar}
         />
       )}
       {redesignToolbar && <SelectionBar top={previewNodeId ? 108 : 66} />}
-      {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 108 : 66} onClose={() => setShowOutline(false)} />}
+      {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
       {/* Toolbar — top-right, always in screen space */}
       {!redesignToolbar && <div

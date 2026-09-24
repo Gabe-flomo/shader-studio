@@ -8,7 +8,7 @@
  * it, centres it, and — with the Generated code panel open — highlights its
  * GLSL lines, so you can watch the picture build up node by node.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { topologicalSort } from '../../compiler/topoSort';
@@ -35,6 +35,25 @@ function evaluationOrder(nodes: readonly GraphNode[]): GraphNode[] {
 }
 
 export function GraphOutline({ nodes, top, onClose }: { nodes: readonly GraphNode[]; top: number; onClose: () => void }) {
+  // Drag the panel by its header; the offset from the default corner is remembered
+  const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(() => {
+    try { const raw = localStorage.getItem('shader-studio:settings:outlinePos'); return raw ? JSON.parse(raw) as { dx: number; dy: number } : null; } catch { return null; }
+  });
+  const dragStart = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
+  const onHeaderPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    dragStart.current = { x: e.clientX, y: e.clientY, dx: drag?.dx ?? 0, dy: drag?.dy ?? 0 };
+    const move = (ev: PointerEvent) => {
+      const s0 = dragStart.current; if (!s0) return;
+      setDrag({ dx: s0.dx + (ev.clientX - s0.x), dy: Math.max(-top + 8, s0.dy + (ev.clientY - s0.y)) });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      setDrag(d => { try { if (d) localStorage.setItem('shader-studio:settings:outlinePos', JSON.stringify(d)); } catch { /* private mode */ } return d; });
+      dragStart.current = null;
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
   const tk = useTokens();
   const mode = useThemeMode();
   const activeGroupPath = useNodeGraphStore(s => s.activeGroupPath);
@@ -110,12 +129,12 @@ export function GraphOutline({ nodes, top, onClose }: { nodes: readonly GraphNod
       onMouseDown={e => e.stopPropagation()}
       onWheel={e => e.stopPropagation()}
       style={{
-        position: 'absolute', top, right: 16, width: 280, maxHeight: `calc(100% - ${top + 16}px)`, zIndex: 20,
+        position: 'absolute', top: top + (drag?.dy ?? 0), right: 16 - (drag?.dx ?? 0), width: 280, maxHeight: `calc(100% - ${top + (drag?.dy ?? 0) + 16}px)`, zIndex: 20,
         display: 'flex', flexDirection: 'column', borderRadius: 12, overflow: 'hidden',
         background: tk.bg.panel, boxShadow: tk.shadow.float, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 8px 8px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+      <div onPointerDown={onHeaderPointerDown} title="Drag to move the panel" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 8px 8px 12px', borderBottom: `1px solid ${tk.border.subtle}`, cursor: 'grab', touchAction: 'none' }}>
         <Icon name="layoutGraph" size={15} style={{ color: tk.text.muted }} />
         <b style={{ fontSize: 13, flex: 1 }}>Outline</b>
         <span style={{ fontSize: 11.5, color: tk.text.faint }}>{ordered.length} nodes</span>
