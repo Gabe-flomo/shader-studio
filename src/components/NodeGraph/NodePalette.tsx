@@ -5,9 +5,16 @@ import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
 import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
+import type { GraphNode } from '../../types/nodeGraph';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
 import { useUserNodes } from '../../nodes/userNodes/useUserNodes';
+import { graphToSubgraph } from '../../nodes/userNodes/graphToSubgraph';
+import type { PublishSource } from '../../nodes/userNodes/publishUserNode';
+import { Toggle } from '../ui/Choice';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
+const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import type { TransformPreset } from '../../types/transformPreset';
 import type { KeyframePreset } from '../../types/keyframePreset';
 import { useTokens } from '../../theme/themeStore';
@@ -21,7 +28,7 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions' | 'keyframes';
+type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
 
 interface ContentPaneState {
   id: string;
@@ -35,6 +42,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
   { id: 'favorites',   label: 'Favorites',       icon: 'star',    color: tk => tk.status.warning },
   { id: 'graphs',      label: 'Saved Graphs',    icon: 'graphs',  color: tk => tk.status.success },
   { id: 'presets',     label: 'Presets',         icon: 'presets', color: tk => tk.accent.base },
+  { id: 'builder',     label: 'Node Builder',    icon: 'spark',   color: tk => tk.kind.fn },
   { id: 'functions',   label: 'Functions',       icon: 'fn',      color: tk => tk.kind.fn },
   { id: 'expressions', label: 'Expression Blocks', icon: 'expr',    color: tk => tk.kind.expr },
   { id: 'keyframes',   label: 'Saved Keyframes', icon: 'kf',      color: tk => tk.status.warning },
@@ -149,6 +157,16 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
   const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
   const exportUserNodes    = useNodeGraphStore(s => s.exportUserNodes);
+  const readSavedGraphNodes = useNodeGraphStore(s => s.readSavedGraphNodes);
+  const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
+  const [exposeUv, setExposeUv] = useState(true);
+  const [exposeTime, setExposeTime] = useState(false);
+  const openPublishFor = (nodes: GraphNode[] | null, label: string) => {
+    if (!nodes) { toast.error(`Couldn’t read “${label}”`); return; }
+    const r = graphToSubgraph(nodes, { exposeUv, exposeTime });
+    if (!r.ok) { toast.error(`Can’t publish “${label}”`, { message: r.error }); return; }
+    setPublishSource({ kind: 'subgraph', subgraph: r.subgraph, label });
+  };
   const importUserNodesFromFile = useNodeGraphStore(s => s.importUserNodesFromFile);
   const importUserNodes = async () => {
     const r = await importUserNodesFromFile();
@@ -346,9 +364,33 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
           </>
         );
 
-      case 'presets':
+      case 'builder':
         return (
           <>
+            <div style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.5, padding: '2px 2px 6px' }}>
+              Turn a whole graph into a node. Its Output becomes the node’s output, every slider can stay live or bake into the code, and the result is one GLSL function you can place, share and reuse.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 2px 8px' }}>
+              <Toggle checked={exposeUv} onChange={setExposeUv} label="UV nodes → a UV input" />
+              <Toggle checked={exposeTime} onChange={setExposeTime} label="Time nodes → a Time input" />
+              <div style={{ fontSize: 11.5, color: tk.text.faint, lineHeight: 1.45 }}>
+                Exposed sources become sockets on the node, so it can be fed warped coordinates or its own clock. Unexposed ones keep reading the screen and the global time.
+              </div>
+            </div>
+            <Button size="sm" variant="primary" icon="spark" style={{ alignSelf: 'flex-start', marginBottom: 6 }}
+              disabled={graphNodes.length === 0}
+              onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
+            <TabSectionHeader label="From a saved graph" />
+            <FolderableList
+              scopeKey="builder:saved"
+              color={tabColor('graphs')}
+              items={savedNames.map(name => ({ id: name, label: name }))}
+              renderItem={(item) => (
+                <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')}
+                  onClick={() => openPublishFor(readSavedGraphNodes(item.id), item.label)} />
+              )}
+              emptyHint={<EmptyHint>Save a graph (Saved Graphs tab) and it can be published from here without opening it.</EmptyHint>}
+            />
             <TabSectionHeader label="My nodes" action={
               <span style={{ display: 'flex', gap: 2 }}>
                 <IconButton icon="import" label="Import node types from a .json file" size="sm" onClick={importUserNodes} />
@@ -379,6 +421,13 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               }}
               emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes. Or import a .json someone shared.</EmptyHint>}
             />
+            {publishSource && <PublishNodeModal source={publishSource} onClose={() => setPublishSource(null)} />}
+          </>
+        );
+
+      case 'presets':
+        return (
+          <>
             <TabSectionHeader label="Group presets" />
             <FolderableList
               scopeKey="presets:group"

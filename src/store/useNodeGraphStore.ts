@@ -8,7 +8,7 @@ import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
 import type { SubgraphData } from '../types/nodeGraph';
-import { buildUserNodeDefinition, type PublishUserNodeSpec } from '../nodes/userNodes/publishUserNode';
+import { buildUserNodeDefinition, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
 import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition } from '../nodes/definitions';
@@ -569,8 +569,10 @@ interface NodeGraphState {
   placeSubgraphAsGroup: (label: string, subgraph: SubgraphData, position?: { x: number; y: number }) => string | null;
 
   // User-published node types (see nodes/userNodes)
-  /** Flatten the group node into a GLSL function and register it as a node type. */
-  publishUserNode: (groupNodeId: string, spec: PublishUserNodeSpec) => Promise<FileResult>;
+  /** Flatten a group node (by id in the active scope) or a prepared subgraph into a GLSL function and register it as a node type. */
+  publishUserNode: (source: string | PublishSource, spec: PublishUserNodeSpec) => Promise<FileResult>;
+  /** Parse a saved graph's nodes (migrated) without loading it into the editor. */
+  readSavedGraphNodes: (name: string) => GraphNode[] | null;
   deleteUserNode: (id: string) => void;
   /** Re-open a published node's source subgraph as an editable group. */
   openUserNodeSource: (id: string, position?: { x: number; y: number }) => string | null;
@@ -2543,17 +2545,35 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return groupId;
   },
 
-  publishUserNode: async (groupNodeId, spec) => {
-    const { nodes, activeGroupPath } = get();
-    const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
-    const groupNode = scope.find(n => n.id === groupNodeId && n.type === 'group');
-    if (!groupNode) return { ok: false, error: 'Group node not found' };
-    const built = buildUserNodeDefinition(groupNode, spec);
+  publishUserNode: async (source, spec) => {
+    let resolved: PublishSource;
+    if (typeof source === 'string') {
+      const { nodes, activeGroupPath } = get();
+      const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+      const groupNode = scope.find(n => n.id === source && n.type === 'group');
+      if (!groupNode) return { ok: false, error: 'Group node not found' };
+      resolved = { kind: 'group', node: groupNode };
+    } else {
+      resolved = source;
+    }
+    const built = buildUserNodeDefinition(resolved, spec);
     if (!built.ok) return { ok: false, error: built.error };
     const result = await registerUserNode(built.def);
     // Instances of a re-published node pick up the new function on the next compile.
     get().compile();
     return result;
+  },
+
+  readSavedGraphNodes: (name) => {
+    const raw = localStorage.getItem(`shader-studio:${name}`);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as { nodes?: unknown };
+      if (!Array.isArray(parsed?.nodes)) return null;
+      return upgradeExprNodes(parsed.nodes as GraphNode[]).map(n => migrateNodeParams(n, getNodeDefinition));
+    } catch {
+      return null;
+    }
   },
 
   deleteUserNode: (id) => {

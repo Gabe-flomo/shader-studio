@@ -2456,7 +2456,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 />
               )}
               {showPublish && (
-                <PublishNodeModal groupNode={node} onClose={() => setShowPublish(false)} />
+                <PublishNodeModal source={{ kind: 'group', node }} onClose={() => setShowPublish(false)} />
               )}
             </div>
           );

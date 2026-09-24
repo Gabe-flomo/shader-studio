@@ -73,7 +73,7 @@ export type FlattenResult =
   | { ok: false; error: string };
 
 /** Walk the subgraph (and nested groups) and return the first unsupported type, if any. */
-export function findUnsupportedNode(subgraph: SubgraphData): { node: GraphNode; reason: string } | null {
+export function findUnsupportedNode(subgraph: SubgraphData, depth = 0): { node: GraphNode; reason: string } | null {
   for (const n of subgraph.nodes) {
     if (PARTICLE_PIPELINE_TYPES.has(n.type)) return { node: n, reason: 'particle pipeline nodes compile outside the main shader' };
     if (STATEFUL_TYPES.has(n.type)) return { node: n, reason: 'it reads the previous frame' };
@@ -81,9 +81,12 @@ export function findUnsupportedNode(subgraph: SubgraphData): { node: GraphNode; 
     if (OUTPUT_TYPES.has(n.type)) return { node: n, reason: 'output nodes belong to the graph, not a node' };
     if (!getNodeDefinition(n.type)) return { node: n, reason: `unknown node type "${n.type}"` };
     if (n.type === 'group') {
+      // The published node is itself the outer group, so a group here is
+      // already level 2 — the compiler inlines at most two levels deep.
+      if (depth >= 1) return { node: n, reason: 'groups inside groups nest too deep for one node — ungroup the inner one first' };
       const inner = n.params.subgraph as SubgraphData | undefined;
       if (inner) {
-        const hit = findUnsupportedNode(inner);
+        const hit = findUnsupportedNode(inner, depth + 1);
         if (hit) return hit;
       }
     }

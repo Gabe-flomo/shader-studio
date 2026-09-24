@@ -6,13 +6,13 @@
  * a live param. Everything else is baked into the flattened GLSL function.
  */
 import { useMemo, useState } from 'react';
-import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
+import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { USER_NODE_DEFAULT_CATEGORY } from '../../types/userNode';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getAllCategories } from '../../nodes/definitions';
 import { collectParamCandidates, keyFromLabel, type ParamCandidate } from '../../nodes/userNodes/paramCandidates';
 import { findUnsupportedNode } from '../../compiler/flattenSubgraph';
-import type { PublishPortSpec, PublishParamSpec } from '../../nodes/userNodes/publishUserNode';
+import { sourceSubgraph, type PublishPortSpec, type PublishParamSpec, type PublishSource } from '../../nodes/userNodes/publishUserNode';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -27,7 +27,8 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { toast } from '../ui/toastStore';
 
 interface Props {
-  groupNode: GraphNode;
+  /** A group node on the canvas, or a subgraph prepared from a whole graph. */
+  source: PublishSource;
   onClose: () => void;
   /** Called with the new definition id after a successful publish. */
   onPublished?: (id: string) => void;
@@ -56,17 +57,18 @@ function TypeDot({ type }: { type: string }) {
   return <span style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: TYPE_COLORS[type] ?? tk.text.faint }} />;
 }
 
-export function PublishNodeModal({ groupNode, onClose, onPublished }: Props) {
+export function PublishNodeModal({ source, onClose, onPublished }: Props) {
   const tk = useTokens();
   const publishUserNode = useNodeGraphStore(s => s.publishUserNode);
-  const subgraph = groupNode.params.subgraph as SubgraphData | undefined;
+  const { subgraph, label: sourceLabel } = sourceSubgraph(source);
+  const groupNode: GraphNode | null = source.kind === 'group' ? source.node : null;
 
   // A group placed from "Edit source" remembers which definition it came from,
   // so publishing again updates that node type instead of creating a new one.
-  const sourceId = typeof groupNode.params.__userNodeId === 'string' ? groupNode.params.__userNodeId : undefined;
+  const sourceId = typeof groupNode?.params.__userNodeId === 'string' ? groupNode.params.__userNodeId : undefined;
   const existing = sourceId ? getUserNode(sourceId) : undefined;
 
-  const [label, setLabel] = useState(existing?.label ?? (typeof groupNode.params.label === 'string' ? groupNode.params.label : 'My Node'));
+  const [label, setLabel] = useState(existing?.label ?? sourceLabel ?? 'My Node');
   const [category, setCategory] = useState(existing?.category ?? USER_NODE_DEFAULT_CATEGORY);
   const [description, setDescription] = useState(existing?.description ?? '');
   const [replace, setReplace] = useState(!!existing);
@@ -136,7 +138,7 @@ export function PublishNodeModal({ groupNode, onClose, onPublished }: Props) {
       key: keyFromLabel(o.label, taken, 'output'),
     }));
     setBusy(true);
-    const result = await publishUserNode(groupNode.id, {
+    const result = await publishUserNode(groupNode ? groupNode.id : source, {
       label, category, description,
       inputs: inputSpecs, outputs: outputSpecs, params: paramSpecs,
       existingId: replace && existing ? existing.id : undefined,
@@ -169,7 +171,7 @@ export function PublishNodeModal({ groupNode, onClose, onPublished }: Props) {
   return (
     <Modal
       title={existing ? 'Update node type' : 'Publish as node'}
-      subtitle={`From group "${typeof groupNode.params.label === 'string' ? groupNode.params.label : 'Group'}" · ${subgraph?.nodes.length ?? 0} nodes flatten into one GLSL function`}
+      subtitle={`From ${source.kind === 'group' ? 'group' : 'graph'} "${sourceLabel}" · ${subgraph?.nodes.length ?? 0} nodes flatten into one GLSL function`}
       icon="spark"
       iconColor={tk.kind.fn}
       width={720}

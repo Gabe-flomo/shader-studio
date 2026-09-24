@@ -42,8 +42,24 @@ function fnNameFor(id: string): string {
   return id.replace(/[^A-Za-z0-9_]/g, '_');
 }
 
-export function buildUserNodeDefinition(groupNode: GraphNode, spec: PublishUserNodeSpec): PublishResult {
-  const subgraph = groupNode.params.subgraph as SubgraphData | undefined;
+/** What gets flattened: a group node on the canvas, or a subgraph built from a whole graph. */
+export type PublishSource =
+  | { kind: 'group'; node: GraphNode }
+  | { kind: 'subgraph'; subgraph: SubgraphData; label: string; iterations?: number };
+
+export function sourceSubgraph(source: PublishSource): { subgraph: SubgraphData | undefined; iterations: number; label: string } {
+  if (source.kind === 'group') {
+    return {
+      subgraph: source.node.params.subgraph as SubgraphData | undefined,
+      iterations: typeof source.node.params.iterations === 'number' ? source.node.params.iterations : 1,
+      label: typeof source.node.params.label === 'string' ? source.node.params.label : 'Group',
+    };
+  }
+  return { subgraph: source.subgraph, iterations: source.iterations ?? 1, label: source.label };
+}
+
+export function buildUserNodeDefinition(source: PublishSource, spec: PublishUserNodeSpec): PublishResult {
+  const { subgraph, iterations } = sourceSubgraph(source);
   if (!subgraph) return { ok: false, error: 'This group has no contents to publish.' };
   const label = spec.label.trim();
   if (!label) return { ok: false, error: 'Give the node a name.' };
@@ -57,7 +73,6 @@ export function buildUserNodeDefinition(groupNode: GraphNode, spec: PublishUserN
 
   const id = spec.existingId ?? makeUserNodeId(label);
   const fnName = fnNameFor(id);
-  const iterations = typeof groupNode.params.iterations === 'number' ? groupNode.params.iterations : 1;
 
   const flat = flattenSubgraphToFunction({
     subgraph,
