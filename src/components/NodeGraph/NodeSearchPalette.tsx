@@ -6,6 +6,7 @@
  * Escape closes without placing.
  */
 
+import { scoreNodeDef } from '../../nodes/searchNodes';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import type { NodeDefinition } from '../../types/nodeGraph';
@@ -26,30 +27,12 @@ const ALL_ENTRIES: SearchEntry[] = Object.entries(NODE_REGISTRY)
   .map(([type, def]) => ({
     type,
     def,
-    searchKey: [def.label, type, def.category, def.description ?? ''].join(' ').toLowerCase(),
+    searchKey: [def.label, ...(def.aliases ?? []), type, def.category, def.description ?? ''].join(' ').toLowerCase(),
   }));
 
 // ── Scorer — substring/prefix only, no fuzzy char-scatter ────────────────────
 function scoreEntry(entry: SearchEntry, query: string): number {
-  if (!query) return 1;
-  const q = query.toLowerCase();
-  const { def } = entry;
-  const label = def.label.toLowerCase();
-  const type  = entry.type.toLowerCase();
-  const cat   = def.category.toLowerCase();
-  // Exact label prefix → highest score
-  if (label.startsWith(q)) return 100;
-  // Label contains query
-  if (label.includes(q)) return 80;
-  // Type contains query
-  if (type.includes(q)) return 60;
-  // Category word starts with query (word-boundary so "sign" won't match "design")
-  if (cat.split(/[\s\/,]+/).some(w => w.startsWith(q))) return 40;
-  // Description contains query as an exact word (e.g. "noise" in "fbm noise")
-  const rawDesc = def.description;
-  const desc = (Array.isArray(rawDesc) ? rawDesc.join(' ') : (rawDesc ?? '')).toLowerCase();
-  if (desc.split(/\W+/).some(w => w === q)) return 20;
-  return 0;
+  return scoreNodeDef(entry.def, query);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────

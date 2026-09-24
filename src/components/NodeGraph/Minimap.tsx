@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
-import { ctp } from '../../theme/palette';
+import { useTokens } from '../../theme/themeStore';
+import { alpha, radius } from '../../theme/tokens';
 import { getView, subscribeView, type Pt } from './socketRegistry';
 
-const NODE_W = 240;
-const NODE_H = 120;
+const NODE_W = 360;
+const NODE_H = 160;
 const PAD    = 200;
 const MAP_W  = 180;
 const MAP_H  = 120;
@@ -38,6 +39,7 @@ function mapping(nodes: GraphNode[]) {
  */
 export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewportHeight, onPanTo }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const tk = useTokens();
 
   const draw = useCallback((view: { pan: Pt; zoom: number }) => {
     const canvas = canvasRef.current;
@@ -52,7 +54,7 @@ export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewp
     const toMapY = (wy: number) => (wy - minY) * scale + offsetY;
 
     // Draw node rects
-    ctx.fillStyle = ctp.surface2;
+    ctx.fillStyle = tk.border.strong;
     for (const node of nodes) {
       ctx.fillRect(toMapX(node.position.x), toMapY(node.position.y), Math.max(2, NODE_W * scale), Math.max(2, NODE_H * scale));
     }
@@ -64,13 +66,13 @@ export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewp
     const vw = (viewportWidth  / zoom) * scale;
     const vh = (viewportHeight / zoom) * scale;
 
-    ctx.strokeStyle = ctp.mauve;
+    ctx.strokeStyle = tk.accent.base;
     ctx.lineWidth = 1;
     ctx.strokeRect(vx, vy, vw, vh);
     // Subtle tint inside viewport
-    ctx.fillStyle = 'rgba(203, 166, 247, 0.08)';
+    ctx.fillStyle = alpha(tk.accent.base, 0.08);
     ctx.fillRect(vx, vy, vw, vh);
-  }, [nodes, viewportWidth, viewportHeight]);
+  }, [nodes, viewportWidth, viewportHeight, tk]);
 
   // Redraw when nodes / viewport size change, and follow the live view.
   useEffect(() => { draw(getView()); }, [draw]);
@@ -83,14 +85,14 @@ export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewp
     return () => { unsub(); if (raf !== null) cancelAnimationFrame(raf); };
   }, [draw]);
 
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const panToPointer = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas || nodes.length === 0) return;
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const mx = clientX - rect.left;
+    const my = clientY - rect.top;
     const { minX, minY, scale, offsetX, offsetY } = mapping(nodes);
-    // Invert the mapping to get the clicked world position
+    // Invert the mapping to get the world position under the pointer
     onPanTo((mx - offsetX) / scale + minX, (my - offsetY) / scale + minY);
   };
 
@@ -101,19 +103,30 @@ export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewp
         bottom: 16,
         right: 16,
         zIndex: 10,
-        background: 'rgba(17,17,27,0.85)',
-        border: `1px solid ${ctp.surface1}`,
-        borderRadius: '6px',
+        background: tk.bg.panel,
+        borderRadius: radius.lg - 2,
         overflow: 'hidden',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+        boxShadow: tk.shadow.float,
       }}
     >
       <canvas
         ref={canvasRef}
         width={MAP_W}
         height={MAP_H}
-        onClick={handleClick}
-        style={{ display: 'block', cursor: 'crosshair' }}
+        // Press and drag to scrub the view. The press must not reach the graph canvas underneath,
+        // which would start a box-selection instead.
+        onMouseDown={e => e.stopPropagation()}
+        onPointerDown={e => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          panToPointer(e.clientX, e.clientY);
+        }}
+        onPointerMove={e => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) panToPointer(e.clientX, e.clientY);
+        }}
+        style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
       />
     </div>
   );

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
+import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
+import { relabelLegacySockets } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -52,14 +54,16 @@ function _upgradeExprNode(node: GraphNode): GraphNode {
   }
 
   const exprStr = (node.params.expr as string) || '0.0';
+  // The output socket has to match outputType, or wiring it compiles a float into a vec3 slot
+  const outputType = (node.params.outputType as string) || 'float';
   return {
     ...node,
     type: 'exprNode',
     inputs: newInputs,
-    outputs: { result: { type: 'vec3' as DataType, label: 'Result (vec3)' } },
+    outputs: { result: { type: outputType as DataType, label: `Result (${outputType})` } },
     params: {
       inputs: dynamicInputs,
-      outputType: (node.params.outputType as string) || 'float',
+      outputType,
       lines: [],
       result: exprStr,
       expr: exprStr,
@@ -67,11 +71,11 @@ function _upgradeExprNode(node: GraphNode): GraphNode {
   };
 }
 
-/** Recursively upgrades all 'expr' nodes in a flat node list, including those
+/** Recursively upgrades all 'expr' nodes (and renamed socket labels) in a flat node list, including those
  *  nested in subgraph params (groups, SceneGroups, MarchLoopGroups, etc.). */
 function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
   return nodes.map(node => {
-    let n = _upgradeExprNode(node);
+    let n = relabelLegacySockets(_upgradeExprNode(node));
     // Recurse into subgraph if present
     if (n.params?.subgraph) {
       const sg = n.params.subgraph as { nodes?: GraphNode[] };
@@ -147,7 +151,7 @@ export function saveCustomFnPreset(
 ): Promise<FileResult> {
   const preset: CustomFnPreset = {
     id: `cfp_${Date.now()}`,
-    label: data.label || 'Custom Fn',
+    label: data.label || 'Custom Function',
     inputs: data.inputs ?? [],
     outputType: data.outputType ?? 'float',
     body: data.body ?? '0.0',
@@ -299,6 +303,8 @@ interface NodeGraphState {
    */
   selectedNodeIds: string[];
   selectNode: (id: string, addToSelection?: boolean) => void;
+  /** Replace the selection with exactly these nodes (e.g. "select all Circle SDFs" from graph stats). */
+  selectNodes: (ids: string[]) => void;
   deselectAll: () => void;
 
   /** Maps nodeId → { outputKey → glslVarName }, updated on every compile */
@@ -470,6 +476,8 @@ interface NodeGraphState {
     edges: Array<{ from: number; fromKey: string; to: number; toKey: string }>,
   ) => void;
   removeNode: (nodeId: string) => void;
+  /** Remove several nodes as one undo step. */
+  removeNodes: (nodeIds: string[]) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
   updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
@@ -752,8 +760,8 @@ function estimateNodeHeight(node: GraphNode): number {
   const paramCount = def ? Object.values(def.paramDefs ?? {}).filter(
     pd => pd.type === 'float' || pd.type === 'select' || pd.type === 'vec3'
   ).length : 0;
-  // Header ~36px, each socket row ~22px, each param ~34px, padding 16px
-  return 36 + (inputCount + outputCount) * 22 + paramCount * 34 + 16;
+  // Header 43px, socket rows 26px, param rows 36px, body padding 12px, footer 37px
+  return 43 + (inputCount + outputCount) * 26 + paramCount * 36 + 12 + 37;
 }
 
 // ── Nested-group path helpers ──────────────────────────────────────────────
@@ -2940,6 +2948,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  removeNodes: (nodeIds) => {
+    undoManager.batch(get().nodes, () => { for (const id of nodeIds) get().removeNode(id); });
+  },
+
   removeNode: (nodeId) => {
     const { nodes, activeGroupPath } = get();
 
@@ -3920,8 +3932,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       for (const { rank, nodes: rankNodes } of ranked) {
         let y = START_Y;
         for (const node of rankNodes) {
-          newPositions.set(node.id, { x: START_X + rank * 340, y });
-          y += estimateNodeHeight(node) + 24; // 24px gap between nodes
+          newPositions.set(node.id, { x: START_X + rank * 440, y }); // 360px cards + 80px for wires
+          y += estimateNodeHeight(node) + 32;
         }
       }
       return newPositions;
@@ -3985,10 +3997,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     undoManager.clear();
     const { nodes: rawNodes } = graph;
 
-    const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(
+    const nodes = spreadLegacyLayout(upgradeExprNodes(rawNodes).map(n => migrateNodeParams(
       n.params ? n : { ...n, params: {} },
       getNodeDefinition,
-    ));
+    )));
 
     idGenerator.syncFromGraph(nodes);
     // Example graphs don't carry their own loose groups yet — reset rather
@@ -4041,12 +4053,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const isSoleSelection = state.selectedNodeIds.length === 1 && state.selectedNodeIds[0] === id;
     return { selectedNodeIds: isSoleSelection ? [] : [id] };
   }),
+  selectNodes: (ids) => set({ selectedNodeIds: [...ids] }),
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: async (name) => {
     const { nodes, looseGroups } = get();
-    const payload = JSON.stringify({ nodes, looseGroups, savedAt: Date.now() });
+    const payload = JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION, savedAt: Date.now() });
     // localStorage is the primary store; a quota failure here means nothing
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
@@ -4055,7 +4068,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (dir) {
       const path = `${dir}/${labelToSlug(name || 'graph')}.json`;
       try {
-        await writeTextFileAtPath(path, JSON.stringify({ nodes, looseGroups }, null, 2));
+        await writeTextFileAtPath(path, JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION }, null, 2));
       } catch (e) {
         console.error('[saveGraph] disk write failed', path, e);
         return { ok: false, error: `Graph "${name}" was saved in the browser, but writing ${path} failed: ${errorMessage(e)}` };
@@ -4086,7 +4099,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     let nodes: GraphNode[];
     let looseGroups: unknown;
     try {
-      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown };
+      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown; layout?: unknown };
       if (!Array.isArray(parsed?.nodes)) throw new Error('missing "nodes" array');
       looseGroups = parsed.looseGroups;
       // Strip in-memory audio state — audio buffers are not persisted, so
@@ -4098,6 +4111,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return n;
       });
       nodes = upgradeExprNodes(sanitized).map(n => migrateNodeParams(n, getNodeDefinition));
+      if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[loadSavedGraph] saved graph is corrupt', name, e);
       return { ok: false, error: `Saved graph "${name}" is corrupt and could not be loaded: ${errorMessage(e)}` };
@@ -4117,7 +4131,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   exportGraph: async () => {
     const { nodes, looseGroups } = get();
-    const json = JSON.stringify({ nodes, looseGroups }, null, 2);
+    const json = JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'shader-graph';
     if (!isTauri) {
@@ -4137,11 +4151,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     let nodes: GraphNode[];
     let looseGroups: unknown;
     try {
-      const parsed = JSON.parse(json) as { nodes?: unknown; looseGroups?: unknown } | null;
+      const parsed = JSON.parse(json) as { nodes?: unknown; looseGroups?: unknown; layout?: unknown } | null;
       if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
       if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Shader Studio graph file?');
       looseGroups = parsed.looseGroups;
       nodes = upgradeExprNodes(parsed.nodes as GraphNode[]).map(n => migrateNodeParams(n, getNodeDefinition));
+      if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[importGraph] invalid graph file', e);
       return { ok: false, error: `Could not import graph: ${errorMessage(e)}` };
@@ -4181,10 +4196,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }
       }
     }
-    if (!node || node.type !== 'customFn') return { ok: false, error: 'Node is not a Custom Fn node' };
+    if (!node || node.type !== 'customFn') return { ok: false, error: 'Node is not a Custom Function node' };
     const preset: CustomFnPreset = {
       id: `cfp_${Date.now()}`,
-      label: (node.params.label as string) || 'Custom Fn',
+      label: (node.params.label as string) || 'Custom Function',
       inputs: (node.params.inputs as CustomFnPreset['inputs']) ?? [],
       outputType: (node.params.outputType as CustomFnPreset['outputType']) ?? 'float',
       body: (node.params.body as string) ?? '0.0',

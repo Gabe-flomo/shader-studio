@@ -2,9 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { safeSetItem } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
-import { tokenizeLine, C } from './CodePanel';
+import { tokenizeLine, C, C_LIGHT } from './glslSyntax';
 import { NodePalette } from './NodeGraph/NodePalette';
-import { ctp } from '../theme/palette';
+import { useThemeMode, useTokens } from '../theme/themeStore';
+import { fontFamily, radius } from '../theme/tokens';
+import { Button, IconButton } from './ui/Button';
+import { Callout } from './ui/Callout';
+import { Segmented } from './ui/Choice';
+import { Field } from './ui/Field';
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -147,6 +152,8 @@ const EDITOR_PADDING = '10px 12px';
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GLSLPage() {
+  const tk = useTokens();
+  const mode = useThemeMode();
   const setRawGlslShader = useNodeGraphStore(s => s.setRawGlslShader);
   const nodeGraphShader  = useNodeGraphStore(s => s.fragmentShader);
   const glslErrors       = useNodeGraphStore(s => s.glslErrors);
@@ -352,7 +359,7 @@ export function GLSLPage() {
   const lineCount  = code.split('\n').length;
   const lines      = code.split('\n');
 
-  const [paletteWidth, setPaletteWidth] = useState(210);
+  const [paletteWidth, setPaletteWidth] = useState(320);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const paletteResizeRef = useRef<{ startX: number; startW: number } | null>(null);
 
@@ -373,110 +380,74 @@ export function GLSLPage() {
     window.addEventListener('mouseup', onUp);
   }, [paletteWidth]);
 
-  const btnBase: React.CSSProperties = {
-    borderRadius: '4px', padding: '2px 10px',
-    fontSize: '10px', cursor: 'pointer', border: `1px solid ${ctp.surface1}`,
-  };
+  const sideOpen = showPanel || showFnPanel;
+  const pal = mode === 'dark' ? C : C_LIGHT;
+  const panelHead = { height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 0 12px', borderBottom: `1px solid ${tk.border.subtle}` } as const;
+  const caps = { fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: tk.text.faint, margin: '10px 0 6px' };
 
-  // ── Fn chip style helpers ─────────────────────────────────────────────────
-  const chipStyle = (accent: string): React.CSSProperties => ({
-    background: ctp.crust,
-    border: `1px solid ${accent}44`,
-    color: accent,
-    borderRadius: '3px',
-    padding: '2px 6px',
-    fontSize: '10px',
-    cursor: 'pointer',
-    fontFamily: EDITOR_FONT,
-    lineHeight: 1.4,
-  });
+  const chipRow = (entries: { label: string; insert: string }[]) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+      {entries.map(e => (
+        <button
+          key={e.label}
+          onMouseDown={ev => ev.preventDefault()}
+          onClick={() => insertAtCursor(e.insert)}
+          title={`Insert: ${e.insert}`}
+          style={{
+            height: 26, padding: '0 8px', border: 0, borderRadius: radius.md - 1, cursor: 'pointer', whiteSpace: 'nowrap',
+            background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`,
+          }}
+        >{e.label}</button>
+      ))}
+    </div>
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '100%', background: ctp.crust, fontFamily: 'monospace', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
 
       {/* ── Node palette sidebar ──────────────────────────────────────── */}
       {paletteCollapsed ? (
-        <div style={{ width: '28px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ctp.base, borderRight: `1px solid ${ctp.surface0}`, cursor: 'pointer' }}
-          onClick={() => setPaletteCollapsed(false)} title="Expand palette">
-          <span style={{ fontSize: '10px', color: ctp.surface1 }}>▶</span>
+        <div style={{ width: 44, flexShrink: 0, display: 'flex', justifyContent: 'center', paddingTop: 10, background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
+          <IconButton icon="chevR" label="Expand sidebar" size="sm" onClick={() => setPaletteCollapsed(false)} />
         </div>
       ) : (
         <>
-          <div style={{ width: paletteWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: `1px solid ${ctp.surface0}` }}>
+          <div style={{ width: paletteWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: `1px solid ${tk.border.default}` }}>
             <NodePalette
               context="glsl"
               onGlslInsert={insertAtCursor}
               onCollapse={() => setPaletteCollapsed(true)}
             />
           </div>
-          <div
-            onMouseDown={handlePaletteResizeStart}
-            style={{ width: '4px', flexShrink: 0, background: 'transparent', cursor: 'col-resize', borderRight: `1px solid ${ctp.surface0}` }}
-            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a5a'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-          />
+          <div onMouseDown={handlePaletteResizeStart} style={{ width: 4, marginLeft: -4, flexShrink: 0, cursor: 'col-resize', zIndex: 5 }} />
         </>
       )}
 
       {/* ── Editor pane ───────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${ctp.surface0}`, minWidth: 0 }}>
-
-        {/* Header */}
-        <div style={{
-          height: '36px', flexShrink: 0,
-          background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`,
-          display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px',
-        }}>
-          <span style={{ fontSize: '11px', color: ctp.surface2, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700 }}>
-            Fragment Shader
-          </span>
-          <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0 }}>
+        <div style={{ ...panelHead, padding: '0 12px 0 16px' }}>
+          <span style={{ fontWeight: 650, fontSize: 13.5, marginRight: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>Fragment shader</span>
           {showSaveInput ? (
             <>
-              <input
+              <Field
                 autoFocus
                 value={saveNameVal}
                 onChange={e => setSaveNameVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') commitSave(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveNameVal(''); } }}
-                placeholder="Shader name…"
-                style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', border: `1px solid ${ctp.surface1}`, background: ctp.mantle, color: ctp.text, outline: 'none', width: '130px' }}
+                placeholder="Shader name"
+                height={30}
+                style={{ width: 170 }}
               />
-              <button onClick={commitSave} disabled={!saveNameVal.trim()} style={{ ...btnBase, background: saveNameVal.trim() ? ctp.green : ctp.surface0, color: ctp.base, fontWeight: 700 }}>Save</button>
-              <button onClick={() => { setShowSaveInput(false); setSaveNameVal(''); }} style={{ ...btnBase, background: 'none', color: ctp.surface2 }}>✕</button>
+              <Button size="sm" variant="primary" disabled={!saveNameVal.trim()} onClick={commitSave}>Save</Button>
+              <IconButton icon="close" label="Cancel" size="sm" onClick={() => { setShowSaveInput(false); setSaveNameVal(''); }} />
             </>
           ) : (
-            <button onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }} title="Save current shader" style={{ ...btnBase, background: ctp.base, color: ctp.green }}>
-              + Save
-            </button>
+            <Button size="sm" variant="primary" icon="plus" onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }}>Save</Button>
           )}
-          <button
-            onClick={() => setCode(nodeGraphShader || BOILERPLATE)}
-            title="Copy compiled node graph into editor"
-            style={{ ...btnBase, background: ctp.surface0, color: ctp.blue }}
-          >
-            ← From Graph
-          </button>
-          <button
-            onClick={() => setCode(BOILERPLATE)}
-            style={{ ...btnBase, background: 'none', color: ctp.surface2 }}
-          >
-            Reset
-          </button>
-          <button
-            onClick={() => { setShowFnPanel(v => !v); setShowPanel(false); }}
-            title="Toggle GLSL functions reference"
-            style={{ ...btnBase, background: showFnPanel ? ctp.surface0 : 'none', color: showFnPanel ? ctp.yellow : ctp.surface2, padding: '2px 8px' }}
-          >
-            ƒ Functions
-          </button>
-          <button
-            onClick={() => { setShowPanel(v => !v); setShowFnPanel(false); }}
-            title={showPanel ? 'Hide shaders panel' : 'Show shaders panel'}
-            style={{ ...btnBase, background: showPanel ? ctp.surface0 : 'none', color: showPanel ? ctp.text : ctp.surface2, padding: '2px 8px' }}
-          >
-            {showPanel ? '▶' : '◀'} Shaders
-          </button>
+          <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => setCode(nodeGraphShader || BOILERPLATE)} />
+          <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => setCode(BOILERPLATE)} />
+          {!sideOpen && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => setShowPanel(true)} />}
         </div>
 
         {/* Code area */}
@@ -485,44 +456,34 @@ export function GLSLPage() {
           <div
             ref={lineNumRef}
             style={{
-              width: '40px', flexShrink: 0,
-              background: '#13131f', borderRight: `1px solid ${ctp.base}`,
-              overflowY: 'hidden', paddingTop: EDITOR_PADDING.split(' ')[0],
-              color: '#3d4059', fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
-              textAlign: 'right', paddingRight: '6px',
+              width: 44, flexShrink: 0, background: tk.bg.subtle, borderRight: `1px solid ${tk.border.subtle}`,
+              overflowY: 'hidden', paddingTop: EDITOR_PADDING.split(' ')[0], paddingRight: 10, textAlign: 'right',
+              color: tk.text.disabled, fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
               userSelect: 'none', pointerEvents: 'none',
             }}
           >
             {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i + 1}</div>)}
           </div>
-
           {/* Overlay container */}
           <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-
             {/* Syntax-highlighted background */}
             <div
               ref={highlightRef}
               aria-hidden="true"
               style={{
-                position: 'absolute', inset: 0,
-                padding: EDITOR_PADDING,
-                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
-                fontFamily: EDITOR_FONT,
-                whiteSpace: 'pre',
-                overflowY: 'hidden', overflowX: 'hidden',
-                pointerEvents: 'none',
-                tabSize: 4,
+                position: 'absolute', inset: 0, padding: EDITOR_PADDING,
+                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
+                whiteSpace: 'pre', overflowY: 'hidden', overflowX: 'hidden', pointerEvents: 'none', tabSize: 4,
               }}
             >
               {lines.map((line, i) => (
                 <div key={i} style={{ minHeight: `calc(${EDITOR_LINE_HEIGHT} * ${EDITOR_FONT_SIZE})` }}>
-                  {tokenizeLine(line || ' ').map((tok, j) => (
+                  {tokenizeLine(line || ' ', pal).map((tok, j) => (
                     <span key={j} style={{ color: tok.color }}>{tok.text}</span>
                   ))}
                 </div>
               ))}
             </div>
-
             {/* Transparent textarea on top */}
             <textarea
               ref={textareaRef}
@@ -534,155 +495,124 @@ export function GLSLPage() {
               autoCapitalize="none"
               autoCorrect="off"
               style={{
-                position: 'absolute', inset: 0,
-                background: 'transparent',
-                color: 'transparent',
-                caretColor: ctp.text,
-                border: 'none', outline: 'none', resize: 'none',
-                padding: EDITOR_PADDING,
-                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT,
-                fontFamily: EDITOR_FONT,
-                tabSize: 4,
-                overflowY: 'auto', overflowX: 'auto',
-                zIndex: 1,
+                position: 'absolute', inset: 0, background: 'transparent', color: 'transparent', caretColor: tk.text.primary,
+                border: 'none', outline: 'none', resize: 'none', padding: EDITOR_PADDING,
+                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
+                tabSize: 4, overflowY: 'auto', overflowX: 'auto', zIndex: 1,
               }}
             />
           </div>
         </div>
 
-        {/* Error bar */}
+        {/* Compile errors */}
         {glslErrors.length > 0 && (
-          <div style={{ background: '#2d1b1b', borderTop: `1px solid ${ctp.red}33`, padding: '6px 12px', maxHeight: '120px', overflowY: 'auto' }}>
-            {glslErrors.map((err, i) => (
-              <div key={i} style={{ fontSize: '11px', color: ctp.red, fontFamily: 'monospace', lineHeight: 1.5 }}>{err}</div>
-            ))}
+          <div style={{ padding: '10px 12px', borderTop: `1px solid ${tk.border.subtle}`, maxHeight: 180, overflowY: 'auto', flexShrink: 0 }}>
+            <Callout title={glslErrors.length === 1 ? 'Shader didn’t compile' : `Shader didn’t compile — ${glslErrors.length} errors`} details={glslErrors.join('\n')}>
+              {glslErrors[0]}
+            </Callout>
           </div>
         )}
       </div>
 
-      {/* ── Functions reference panel ─────────────────────────────────── */}
-      {showFnPanel && (
-        <div style={{ width: '240px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#13131f' }}>
-          <div style={{ height: '36px', flexShrink: 0, background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`, display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-            <span style={{ fontSize: '11px', color: ctp.yellow, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
-              Functions
-            </span>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-            <div style={{ fontSize: '9px', color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px', paddingBottom: '4px', borderBottom: `1px solid ${ctp.base}` }}>
-              GLSL Built-ins
+      {/* ── Side panel: saved shaders / functions reference ─────────── */}
+      {sideOpen && (
+        <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
+          <div style={panelHead}>
+            <div style={{ flex: 1 }}>
+              <Segmented
+                fill
+                ariaLabel="Side panel"
+                value={showFnPanel ? 'fns' : 'shaders'}
+                onChange={v => { setShowPanel(v === 'shaders'); setShowFnPanel(v === 'fns'); }}
+                options={[{ value: 'shaders', label: `Shaders${shaders.length ? ` · ${shaders.length}` : ''}` }, { value: 'fns', label: 'Functions' }]}
+              />
             </div>
-            {BUILTIN_GROUPS.map(group => (
-              <div key={group.name} style={{ marginBottom: '8px' }}>
-                <div style={{ fontSize: '9px', color: ctp.surface1, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
-                  {group.name}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                  {group.entries.map(e => (
-                    <button
-                      key={e.label}
-                      onMouseDown={ev => ev.preventDefault()}
-                      onClick={() => insertAtCursor(e.insert)}
-                      style={chipStyle(C.builtin)}
-                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${ctp.yellow}18`; }}
-                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = ctp.crust; }}
-                      title={`Insert: ${e.insert}`}
-                    >
-                      {e.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+            <IconButton icon="close" label="Hide panel" size="sm" onClick={() => { setShowPanel(false); setShowFnPanel(false); }} />
+          </div>
 
-            <div style={{ fontSize: '9px', color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '10px 0 6px', paddingBottom: '4px', borderBottom: `1px solid ${ctp.base}` }}>
-              Studio Helpers
+          {showFnPanel ? (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 12px' }}>
+              <div style={caps}>GLSL built-ins</div>
+              {BUILTIN_GROUPS.map(group => (
+                <div key={group.name} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: tk.text.muted, marginBottom: 5 }}>{group.name}</div>
+                  {chipRow(group.entries)}
+                </div>
+              ))}
+              <div style={caps}>Studio helpers</div>
+              {STUDIO_GROUPS.map(group => (
+                <div key={group.name} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: tk.text.muted, marginBottom: 5 }}>{group.name}</div>
+                  {chipRow(group.entries)}
+                </div>
+              ))}
             </div>
-            {STUDIO_GROUPS.map(group => (
-              <div key={group.name} style={{ marginBottom: '8px' }}>
-                <div style={{ fontSize: '9px', color: ctp.surface1, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '3px' }}>
-                  {group.name}
+          ) : (
+            <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {shaders.length === 0 ? (
+                <div style={{ padding: '6px 4px', fontSize: 12, color: tk.text.faint, lineHeight: 1.5 }}>
+                  No saved shaders yet. Click <b style={{ color: tk.text.muted }}>Save</b> to keep the current file here.
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                  {group.entries.map(e => (
-                    <button
-                      key={e.label}
-                      onMouseDown={ev => ev.preventDefault()}
-                      onClick={() => insertAtCursor(e.insert)}
-                      style={chipStyle(C.keyword)}
-                      onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${ctp.mauve}18`; }}
-                      onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = ctp.crust; }}
-                      title={`Insert: ${e.insert}`}
-                    >
-                      {e.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+              ) : shaders.map(s => (
+                <SavedShaderCard
+                  key={s.id}
+                  name={s.name}
+                  code={s.code}
+                  renaming={renamingId === s.id}
+                  renameVal={renameVal}
+                  onRenameChange={setRenameVal}
+                  onStartRename={() => { setRenamingId(s.id); setRenameVal(s.name); }}
+                  onCommitRename={() => commitRename(s.id)}
+                  onCancelRename={() => setRenamingId(null)}
+                  onLoad={() => loadShader(s)}
+                  onDelete={() => deleteShader(s.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* ── Saved shaders panel ───────────────────────────────────────── */}
-      {showPanel && (
-        <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#13131f' }}>
-          <div style={{ height: '36px', flexShrink: 0, background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`, display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-            <span style={{ fontSize: '11px', color: ctp.surface2, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, flex: 1 }}>
-              Shaders
-            </span>
-            <span style={{ fontSize: '10px', color: ctp.surface1 }}>{shaders.length}</span>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
-            {shaders.length === 0 ? (
-              <div style={{ padding: '12px 8px', fontSize: '11px', color: ctp.surface1, lineHeight: 1.6 }}>
-                No saved shaders.<br />Click <strong style={{ color: ctp.surface2 }}>+ Save</strong> to save the current file.
-              </div>
-            ) : shaders.map(s => (
-              <div
-                key={s.id}
-                onDoubleClick={() => loadShader(s)}
-                title="Double-click to load"
-                style={{ marginBottom: '4px', borderRadius: '5px', background: ctp.base, border: `1px solid ${ctp.surface0}`, cursor: 'pointer', overflow: 'hidden' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', gap: '4px' }}>
-                  {renamingId === s.id ? (
-                    <input
-                      autoFocus
-                      value={renameVal}
-                      onChange={e => setRenameVal(e.target.value)}
-                      onBlur={() => commitRename(s.id)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') commitRename(s.id);
-                        if (e.key === 'Escape') setRenamingId(null);
-                      }}
-                      onClick={e => e.stopPropagation()}
-                      style={{ flex: 1, fontSize: '11px', background: ctp.crust, border: `1px solid ${ctp.blue}`, color: ctp.text, borderRadius: '3px', padding: '1px 4px', outline: 'none' }}
-                    />
-                  ) : (
-                    <span
-                      onDoubleClick={e => { e.stopPropagation(); setRenamingId(s.id); setRenameVal(s.name); }}
-                      title="Double-click to rename"
-                      style={{ flex: 1, fontSize: '11px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    >
-                      {s.name}
-                    </span>
-                  )}
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteShader(s.id); }}
-                    title="Delete"
-                    style={{ fontSize: '10px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
-                  >×</button>
-                </div>
-                <div style={{ padding: '3px 8px 6px', borderTop: `1px solid ${ctp.surface0}`, fontSize: '10px', color: ctp.surface1, fontFamily: EDITOR_FONT, whiteSpace: 'pre', overflow: 'hidden', maxHeight: '46px', lineHeight: 1.5 }}>
-                  {s.code.split('\n').slice(0, 3).join('\n')}
-                  {s.code.split('\n').length > 3 ? '\n…' : ''}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+function SavedShaderCard({ name, code, renaming, renameVal, onRenameChange, onStartRename, onCommitRename, onCancelRename, onLoad, onDelete }: {
+  name: string; code: string; renaming: boolean; renameVal: string;
+  onRenameChange: (v: string) => void; onStartRename: () => void; onCommitRename: () => void; onCancelRename: () => void;
+  onLoad: () => void; onDelete: () => void;
+}) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  const preview = code.split('\n').slice(0, 3).join('\n') + (code.split('\n').length > 3 ? '\n…' : '');
+  return (
+    <div
+      onDoubleClick={onLoad}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Double-click to load"
+      style={{ borderRadius: radius.lg - 2, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${hover ? tk.border.strong : tk.border.default}`, cursor: 'pointer', overflow: 'hidden' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 34, padding: '0 4px 0 10px' }}>
+        {renaming ? (
+          <Field
+            autoFocus
+            value={renameVal}
+            height={26}
+            onChange={e => onRenameChange(e.target.value)}
+            onBlur={onCommitRename}
+            onKeyDown={e => { if (e.key === 'Enter') onCommitRename(); if (e.key === 'Escape') onCancelRename(); }}
+            onClick={e => e.stopPropagation()}
+            style={{ flex: 1 }}
+          />
+        ) : (
+          <span style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        )}
+        {hover && !renaming && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onStartRename(); }} />}
+        {hover && !renaming && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
+      </div>
+      <div style={{ padding: '6px 10px 8px', borderTop: `1px solid ${tk.border.subtle}`, font: `11px/1.5 ${fontFamily.mono}`, color: tk.text.muted, whiteSpace: 'pre', overflow: 'hidden', maxHeight: 52 }}>
+        {preview}
+      </div>
     </div>
   );
 }

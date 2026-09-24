@@ -1,17 +1,18 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { saveTransformPreset } from '../../store/useNodeGraphStore';
 import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
-import { ctp } from '../../theme/palette';
+import { useCtp, type CtpPalette } from '../../theme/nodePalette';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const INPUT_STYLE: React.CSSProperties = {
-  background: ctp.crust,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.green,
+const INPUT_STYLEFor = (tc: CtpPalette): React.CSSProperties => ({
+  background: tc.crust,
+  border: `1px solid ${tc.surface1}`,
+  color: tc.green,
   borderRadius: '4px',
   padding: '4px 8px',
   fontSize: '12px',
@@ -19,42 +20,42 @@ const INPUT_STYLE: React.CSSProperties = {
   outline: 'none',
   width: '100%',
   boxSizing: 'border-box',
-};
+});
 
-const INPUT_FOCUSED_STYLE: React.CSSProperties = {
-  ...INPUT_STYLE,
-  border: `1px solid ${ctp.blue}88`,
-  boxShadow: `0 0 0 1px ${ctp.blue}22`,
-};
+const INPUT_FOCUSED_STYLEFor = (tc: CtpPalette): React.CSSProperties => ({
+  ...INPUT_STYLEFor(tc),
+  border: `1px solid ${tc.blue}88`,
+  boxShadow: `0 0 0 1px ${tc.blue}22`,
+});
 
-const SECTION_LABEL: React.CSSProperties = {
+const SECTION_LABELFor = (tc: CtpPalette): React.CSSProperties => ({
   fontSize: '9px',
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
-  color: ctp.surface1,
+  color: tc.surface1,
   margin: '0 0 6px',
-};
+});
 
-const SECTION: React.CSSProperties = {
+const SECTIONFor = (tc: CtpPalette): React.CSSProperties => ({
   fontSize: '10px',
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase' as const,
-  color: ctp.surface2,
+  color: tc.surface2,
   margin: '10px 0 4px',
-};
+});
 
-const BTN: React.CSSProperties = {
-  background: ctp.surface0,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
+const BTNFor = (tc: CtpPalette): React.CSSProperties => ({
+  background: tc.surface0,
+  border: `1px solid ${tc.surface1}`,
+  color: tc.text,
   borderRadius: '4px',
   padding: '3px 8px',
   fontSize: '11px',
   fontFamily: 'monospace',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
-};
+});
 
 // ── GLSL helper palette (same as AssignInitModal) ─────────────────────────────
 
@@ -96,13 +97,19 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 const COMPS = ['x', 'y', 'z', 'w'] as const;
-const COMP_COLORS: Record<string, string> = { x: ctp.red, y: ctp.green, z: ctp.blue, w: ctp.peach };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props { node: GraphNode; onClose: () => void }
 
 export function TransformVecModal({ node, onClose }: Props) {
+  const tc = useCtp();
+  const COMP_COLORS: Record<string, string> = { x: tc.red, y: tc.green, z: tc.blue, w: tc.peach };
+  const INPUT_STYLE = INPUT_STYLEFor(tc);
+  const INPUT_FOCUSED_STYLE = INPUT_FOCUSED_STYLEFor(tc);
+  const SECTION_LABEL = SECTION_LABELFor(tc);
+  const SECTION = SECTIONFor(tc);
+  const BTN = BTNFor(tc);
   const updateNodeParams     = useNodeGraphStore(s => s.updateNodeParams);
   const changeNodeVectorType = useNodeGraphStore(s => s.changeNodeVectorType);
   const nodeOutputVarMap     = useNodeGraphStore(s => s.nodeOutputVarMap);
@@ -224,34 +231,9 @@ export function TransformVecModal({ node, onClose }: Props) {
     });
   }, [node, updateNodeParams]);
 
-  return createPortal(
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        style={{
-          background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '10px',
-          width: 'min(520px, calc(100vw - 32px))',
-          maxHeight: '82vh', overflowY: 'auto',
-          padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.65)', color: ctp.text, fontSize: '12px',
-        }}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.blue }}>⊞ Transform Vec</span>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            {savedFlash && <span style={{ fontSize: '10px', color: ctp.green }}>✓ Saved</span>}
-            <button
-              onClick={() => { setSavingPreset(v => !v); setPresetLabel(''); }}
-              style={{ background: savingPreset ? `${ctp.green}22` : 'none', border: `1px solid ${savingPreset ? `${ctp.green}55` : `${ctp.surface1}55`}`, color: savingPreset ? ctp.green : ctp.overlay0, cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}
-            >↑ Save Preset</button>
-            <button onClick={onClose} style={{ background: 'none', border: `1px solid ${ctp.red}55`, color: ctp.red, cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
-          </div>
-        </div>
-
+  return (
+    <Modal title="Transform Vec" icon="grid" width={560} onClose={onClose} headerActions={<Button size="sm" variant={savingPreset ? 'secondary' : 'ghost'} icon="export" onClick={() => { setSavingPreset(v => !v); setPresetLabel(''); }}>{savedFlash ? 'Saved' : 'Save preset'}</Button>}>
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14, fontSize: 12.5 }}>
         {/* Inline save preset input */}
         {savingPreset && (
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -265,11 +247,11 @@ export function TransformVecModal({ node, onClose }: Props) {
                 if (e.key === 'Escape') { setSavingPreset(false); setPresetLabel(''); }
                 e.stopPropagation();
               }}
-              style={{ flex: 1, background: ctp.crust, border: `1px solid ${ctp.green}55`, color: ctp.green, borderRadius: '4px', padding: '4px 8px', fontSize: '12px', outline: 'none', fontFamily: 'monospace' }}
+              style={{ flex: 1, background: tc.crust, border: `1px solid ${tc.green}55`, color: tc.green, borderRadius: '4px', padding: '4px 8px', fontSize: '12px', outline: 'none', fontFamily: 'monospace' }}
             />
             <button
               onClick={handleSavePreset}
-              style={{ background: `${ctp.green}22`, border: `1px solid ${ctp.green}55`, color: ctp.green, cursor: 'pointer', fontSize: '11px', padding: '3px 10px', borderRadius: '4px' }}
+              style={{ background: `${tc.green}22`, border: `1px solid ${tc.green}55`, color: tc.green, cursor: 'pointer', fontSize: '11px', padding: '3px 10px', borderRadius: '4px' }}
             >Save</button>
           </div>
         )}
@@ -284,9 +266,9 @@ export function TransformVecModal({ node, onClose }: Props) {
                 <button key={t}
                   onClick={() => changeNodeVectorType(node.id, 'uv', 'result', t)}
                   style={{ fontSize: '11px', padding: '3px 12px', borderRadius: '4px', cursor: 'pointer',
-                    background: active ? `${ctp.blue}22` : 'none',
-                    border: `1px solid ${active ? ctp.blue : `${ctp.surface1}55`}`,
-                    color: active ? ctp.blue : ctp.overlay0,
+                    background: active ? `${tc.blue}22` : 'none',
+                    border: `1px solid ${active ? tc.blue : `${tc.surface1}55`}`,
+                    color: active ? tc.blue : tc.overlay0,
                   }}
                 >{t}</button>
               );
@@ -297,7 +279,7 @@ export function TransformVecModal({ node, onClose }: Props) {
         {/* Per-component expression editors */}
         <div>
           <p style={SECTION_LABEL}>Component Expressions</p>
-          <p style={{ fontSize: '10px', color: ctp.surface1, marginBottom: '10px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: '10px', color: tc.surface1, marginBottom: '10px', lineHeight: 1.5 }}>
             Built-in components: {activeComps.map(c => (
               <code key={c} style={{ color: COMP_COLORS[c], marginRight: '6px' }}>{c}</code>
             ))}
@@ -311,7 +293,7 @@ export function TransformVecModal({ node, onClose }: Props) {
               return (
                 <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '13px', fontFamily: 'monospace', color: COMP_COLORS[c], width: '12px', flexShrink: 0 }}>{c}</span>
-                  <span style={{ fontSize: '11px', color: ctp.surface1, fontFamily: 'monospace', flexShrink: 0 }}>=</span>
+                  <span style={{ fontSize: '11px', color: tc.surface1, fontFamily: 'monospace', flexShrink: 0 }}>=</span>
                   <input
                     ref={el => { inputRefs.current[c] = el; }}
                     type="text"
@@ -326,24 +308,24 @@ export function TransformVecModal({ node, onClose }: Props) {
               );
             })}
           </div>
-          <p style={{ fontSize: '9px', color: ctp.surface1, marginTop: '6px' }}>
+          <p style={{ fontSize: '9px', color: tc.surface1, marginTop: '6px' }}>
             Click a variable or function below to insert at cursor
           </p>
         </div>
 
         {/* Outputs hint */}
-        <div style={{ background: ctp.mantle, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${ctp.surface0}` }}>
+        <div style={{ background: tc.mantle, borderRadius: '6px', padding: '10px 12px', border: `1px solid ${tc.surface0}` }}>
           <p style={{ ...SECTION_LABEL, marginBottom: '4px' }}>Outputs</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '10px', fontFamily: 'monospace' }}>
             {activeComps.map(c => (
-              <span key={c} style={{ color: COMP_COLORS[c] }}>{c} <span style={{ color: ctp.surface1 }}>(float)</span></span>
+              <span key={c} style={{ color: COMP_COLORS[c] }}>{c} <span style={{ color: tc.surface1 }}>(float)</span></span>
             ))}
-            <span style={{ color: ctp.blue }}>result <span style={{ color: ctp.surface1 }}>({type})</span></span>
+            <span style={{ color: tc.blue }}>result <span style={{ color: tc.surface1 }}>({type})</span></span>
           </div>
         </div>
 
         {/* ── Insert panel ── */}
-        <div style={{ borderTop: `1px solid ${ctp.surface0}66`, paddingTop: '12px' }}>
+        <div style={{ borderTop: `1px solid ${tc.surface0}66`, paddingTop: '12px' }}>
           {/* Operators */}
           <div style={SECTION}>Operators</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -359,7 +341,7 @@ export function TransformVecModal({ node, onClose }: Props) {
               {TYPE_ORDER.map(t => {
                 const vars = typeGroups.get(t) ?? [];
                 if (vars.length === 0) return null;
-                const color = TYPE_COLOR[t] ?? ctp.text;
+                const color = TYPE_COLOR[t] ?? tc.text;
                 return (
                   <div key={t} style={{ marginBottom: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
@@ -372,7 +354,7 @@ export function TransformVecModal({ node, onClose }: Props) {
                           key={v.varName}
                           title={v.varName}
                           onMouseDown={e => { e.preventDefault(); insertAtCursor(v.varName); }}
-                          style={{ ...BTN, background: ctp.base, border: `1px solid ${color}44`, color }}
+                          style={{ ...BTN, background: tc.base, border: `1px solid ${color}44`, color }}
                         >
                           {buttonLabel(v)}
                         </button>
@@ -397,7 +379,6 @@ export function TransformVecModal({ node, onClose }: Props) {
           ))}
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

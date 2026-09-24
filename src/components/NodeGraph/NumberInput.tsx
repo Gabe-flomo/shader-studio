@@ -21,10 +21,12 @@ import { useEffect, useRef, useState } from 'react';
  * blur, the same as the browser's own type="number" does today.
  */
 export function NumberInput({
-  value, onCommit, style, ...rest
+  value, onCommit, format = String, style, ...rest
 }: {
   value: number;
   onCommit: (n: number) => void;
+  /** How the value is shown while not being edited (e.g. fixed decimals). Defaults to String. */
+  format?: (n: number) => string;
   step?: number;
   min?: number;
   max?: number;
@@ -32,12 +34,12 @@ export function NumberInput({
   title?: string;
   disabled?: boolean;
 }) {
-  const [text, setText] = useState(() => String(value));
+  const [text, setText] = useState(() => format(value));
   const focused = useRef(false);
 
   useEffect(() => {
-    if (!focused.current) setText(String(value));
-  }, [value]);
+    if (!focused.current) setText(format(value));
+  }, [value, format]);
 
   return (
     <input
@@ -59,7 +61,7 @@ export function NumberInput({
       onBlur={() => {
         focused.current = false;
         const n = parseFloat(text);
-        setText(String(isNaN(n) ? value : n));
+        setText(format(isNaN(n) ? value : n));
       }}
       style={style}
       {...rest}

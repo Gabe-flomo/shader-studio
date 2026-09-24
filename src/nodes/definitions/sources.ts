@@ -110,7 +110,7 @@ export const MouseNode: NodeDefinition = {
 
 export const FragCoordNode: NodeDefinition = {
   type: 'fragCoord',
-  label: 'Frag Coord',
+  label: 'Pixel Coordinates', aliases: ['Frag Coord'],
   category: 'Sources',
   description: 'Raw fragment pixel coordinates (gl_FragCoord.xy). Origin at bottom-left corner, in pixels.',
   inputs: {},
@@ -152,7 +152,7 @@ export const ResolutionNode: NodeDefinition = {
 
 export const PrevFrameNode: NodeDefinition = {
   type: 'prevFrame',
-  label: 'Prev Frame',
+  label: 'Previous Frame (Feedback)', aliases: ['Prev Frame'],
   category: 'Post Processing',
   description: 'Samples the previous frame\'s rendered output. Enables stateful effects like trails, reaction-diffusion, and fluid simulation.',
   inputs: {

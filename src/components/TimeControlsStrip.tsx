@@ -1,11 +1,11 @@
-import type { CSSProperties } from 'react';
+import type React from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
-import { ctp } from '../theme/palette';
+import { useCtp, type CtpPalette } from '../theme/nodePalette';
 
-const btnStyle: CSSProperties = {
-  background: `${ctp.base}99`,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.surface2,
+const btnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
+  background: `${tc.base}99`,
+  border: `1px solid ${tc.surface1}`,
+  color: tc.surface2,
   borderRadius: '4px',
   width: '26px',
   height: '26px',
@@ -16,7 +16,7 @@ const btnStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   padding: 0,
-};
+});
 
 /**
  * Global play/pause/reset for u_time animation. Rendered as a horizontal
@@ -26,6 +26,7 @@ const btnStyle: CSSProperties = {
  * rendered canvas itself either way.
  */
 export function TimeControlsStrip({ direction = 'row' }: { direction?: 'row' | 'column' }) {
+  const tc = useCtp();
   const timePlaying = useNodeGraphStore(s => s.timePlaying);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
 
@@ -34,16 +35,16 @@ export function TimeControlsStrip({ direction = 'row' }: { direction?: 'row' | '
       <button
         onClick={() => setTimePlaying(!timePlaying)}
         title={timePlaying ? 'Pause' : 'Play'}
-        style={btnStyle}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.green; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
+        style={btnStyleFor(tc)}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.green; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}
       >{timePlaying ? '⏸' : '▶'}</button>
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))}
         title="Reset time to 0"
-        style={btnStyle}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.yellow; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
+        style={btnStyleFor(tc)}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.yellow; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}
       >↺</button>
     </div>
   );

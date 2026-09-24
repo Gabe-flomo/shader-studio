@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { scoreNodeDef } from '../../nodes/searchNodes';
 import { createPortal } from 'react-dom';
 import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
-import { getAssetTags, saveAssetTags } from '../../utils/assetTags';
 import type { GraphNode } from '../../types/nodeGraph';
-import { ctp } from '../../theme/palette';
+import { useTokens } from '../../theme/themeStore';
+import { fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Icon } from '../ui/Icon';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
@@ -19,41 +22,6 @@ const HIDDEN_NODES = new Set([
   'raymarch3d', 'volumeClouds', 'rayMarch', 'loopCarry', 'loop',
   'grid',
 ]);
-
-// ── Category colors ───────────────────────────────────────────────────────────
-const CATEGORY_COLORS: Record<string, string> = {
-  Sources:          ctp.blue,
-  Transforms:       ctp.green,
-  Math:             ctp.lavender,
-  Color:            ctp.peach,
-  'Color Grading':  '#f9a86b',
-  Noise:            ctp.sapphire,
-  Effects:          ctp.red,
-  'Post Processing': ctp.red,
-  Loops:            ctp.sky,
-  '2D Primitives':  ctp.yellow,
-  Combiners:        ctp.mauve,
-  Spaces:           ctp.flamingo,
-  Grid:             ctp.sky,
-  Field:            ctp.sapphire,
-  Shapers:          ctp.yellow,
-  Science:          ctp.teal,
-  Fractals:         ctp.mauve,
-  Output:           ctp.overlay0,
-  '3D Primitives':  ctp.pink,
-  '3D Transforms':  ctp.pink,
-  '3D Scene':       '#cc88aa',
-  '3D Boolean Ops': ctp.sky,
-  '3D Fractals':    ctp.pink,
-  '3D Lighting':    '#f9c468',
-  Animation:        ctp.lavender,
-  Conditionals:     ctp.flamingo,
-  Utility:          ctp.overlay0,
-  Matrix:           '#f5c842',
-  Halftone:         '#a6e3d5',
-  Particles:        ctp.yellow,
-  'Particles & Fields': ctp.yellow,
-};
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Shapes',       categories: ['2D Primitives', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
@@ -196,13 +164,14 @@ function makeSyntheticNode(type: string): GraphNode {
   };
 }
 
-// ── GLSL source popup ─────────────────────────────────────────────────────────
+// ── GLSL source popup (GLSL page) ─────────────────────────────────────────────
 function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
   type: string;
   anchorRef: React.RefObject<HTMLElement | null>;
   onInsert?: (code: string) => void;
   onClose: () => void;
 }) {
+  const tk = useTokens();
   const def = getNodeDefinition(type);
   const source = getNodeGLSLSource(type);
   const [copied, setCopied] = useState(false);
@@ -217,10 +186,10 @@ function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
     navigator.clipboard.writeText(source).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }, () => { /* clipboard blocked; the source is still selectable */ });
   };
 
-  // Position: anchored to right edge of the anchor element (the palette)
+  // Anchored to the right edge of the palette.
   const anchor = anchorRef.current?.getBoundingClientRect();
   const left = anchor ? anchor.right + 8 : 220;
   const top = anchor ? Math.max(48, anchor.top) : 48;
@@ -228,314 +197,143 @@ function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
   return createPortal(
     <div
       style={{
-        position: 'fixed', left, top,
-        width: '380px', maxHeight: 'calc(100vh - 64px)',
-        background: ctp.base, border: `1px solid ${ctp.surface1}`,
-        borderRadius: '10px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-        display: 'flex', flexDirection: 'column',
-        zIndex: 500, overflow: 'hidden',
+        position: 'fixed', left, top, width: 380, maxHeight: 'calc(100vh - 64px)', zIndex: 500, overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', background: tk.bg.panel, borderRadius: radius.lg, boxShadow: tk.shadow.popover,
+        font: `12.5px ${fontFamily.ui}`, color: tk.text.primary,
       }}
       onMouseDown={e => e.stopPropagation()}
     >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 10px 14px', borderBottom: `1px solid ${tk.border.subtle}`, flexShrink: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {def?.label ?? type}
-          </div>
-          {def?.description && (
-            <div style={{ fontSize: '10px', color: ctp.overlay0, marginTop: '2px', lineHeight: 1.4 }}>{def.description}</div>
-          )}
+          <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def?.label ?? type}</div>
+          {def?.description && <div style={{ fontSize: 12, color: tk.text.muted, marginTop: 2, lineHeight: 1.45 }}>{def.description}</div>}
         </div>
-        <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '10px', background: ctp.surface0, color: ctp.overlay0, fontFamily: 'monospace', flexShrink: 0 }}>
-          {def?.category}
-        </span>
-        <button
-          onClick={onClose}
-          style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
-        >✕</button>
+        <CategoryChip>{def?.category}</CategoryChip>
+        <IconButton icon="close" label="Close" size="sm" onClick={onClose} />
       </div>
-
-      {/* GLSL source */}
       <pre style={{
-        flex: 1, margin: 0, padding: '12px 14px',
-        background: ctp.crust, overflowY: 'auto', overflowX: 'auto',
-        fontSize: '11px', lineHeight: 1.6,
-        color: ctp.subtext0, fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
-        whiteSpace: 'pre', minHeight: 0,
-      }}>
-        {source}
-      </pre>
-
-      {/* Footer actions */}
-      <div style={{ display: 'flex', gap: '6px', padding: '10px 14px', borderTop: `1px solid ${ctp.surface0}`, flexShrink: 0 }}>
-        <button
-          onClick={() => { onInsert?.(source); onClose(); }}
-          title="Insert GLSL at cursor position"
-          style={{
-            flex: 1, padding: '5px 10px',
-            background: `${ctp.blue}18`, border: `1px solid ${ctp.blue}44`,
-            borderRadius: '6px', color: ctp.blue, fontSize: '11px',
-            cursor: 'pointer', fontFamily: 'monospace', fontWeight: 500,
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}28`; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}18`; }}
-        >
-          ⌥ Insert at cursor
-        </button>
-        <button
-          onClick={copyToClipboard}
-          style={{
-            padding: '5px 12px',
-            background: copied ? `${ctp.green}18` : ctp.surface0,
-            border: `1px solid ${copied ? `${ctp.green}44` : ctp.surface1}`,
-            borderRadius: '6px',
-            color: copied ? ctp.green : ctp.text,
-            fontSize: '11px', cursor: 'pointer',
-            transition: 'background 0.15s, color 0.15s, border-color 0.15s',
-          }}
-        >
-          {copied ? '✓ Copied' : 'Copy'}
-        </button>
+        flex: 1, minHeight: 0, margin: 0, padding: '12px 14px', overflow: 'auto', whiteSpace: 'pre',
+        background: tk.bg.subtle, color: tk.text.secondary, font: `11.5px/1.6 ${fontFamily.mono}`,
+      }}>{source}</pre>
+      <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderTop: `1px solid ${tk.border.subtle}`, flexShrink: 0 }}>
+        <Button size="sm" variant="primary" icon="code" style={{ flex: 1 }} onClick={() => { onInsert?.(source); onClose(); }}>Insert at cursor</Button>
+        <Button size="sm" icon={copied ? 'check' : 'copy'} onClick={copyToClipboard}>{copied ? 'Copied' : 'Copy'}</Button>
       </div>
     </div>,
     document.body
   );
 }
 
+function CategoryChip({ children }: { children: ReactNode }) {
+  const tk = useTokens();
+  return (
+    <span style={{ font: `500 10.5px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.hover, borderRadius: radius.sm, padding: '2px 6px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
+  );
+}
+
 // ── Preview card ──────────────────────────────────────────────────────────────
-function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert }: {
+function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert, swapMode }: {
   type: string; onAdd: () => void;
   isFavorite: boolean; onToggleFavorite: () => void;
   context?: 'studio' | 'glsl';
   onGlslInsert?: (code: string) => void;
+  swapMode: boolean;
 }) {
+  const tk = useTokens();
   const def = getNodeDefinition(type);
   const node = makeSyntheticNode(type);
   const hasViz = INLINE_VIZ_TYPES.has(type);
-  const [editingTags, setEditingTags] = useState(false);
-  const [tagInput, setTagInput] = useState('');
-  const [copied, setCopied] = useState(false);
-  const currentTags = getAssetTags('nodes', type);
   const isGlsl = context === 'glsl';
   const glslSource = isGlsl ? getNodeGLSLSource(type) : null;
 
-  const handleSaveTags = () => {
-    const tags = tagInput.split(',').map(t => t.trim()).filter(Boolean);
-    saveAssetTags('nodes', type, tags);
-    setEditingTags(false);
-  };
-
   return (
-    <div style={{
-      background: ctp.mantle,
-      border: `1px solid ${ctp.surface0}`,
-      borderRadius: '8px',
-      padding: '8px',
-      marginTop: '6px',
-      marginBottom: '2px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: hasViz ? '6px' : '4px' }}>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: ctp.text, flex: 1 }}>{def?.label ?? type}</span>
-        <button
+    <div style={{ marginTop: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, border: `1px solid ${tk.border.default}`, borderRadius: radius.lg, background: tk.bg.panel }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def?.label ?? type}</span>
+        <IconButton
+          icon={isFavorite ? 'starF' : 'star'}
+          label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          size="sm"
+          style={isFavorite ? { color: tk.status.warning } : undefined}
           onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(); }}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            padding: '1px 4px', lineHeight: 1, fontSize: '13px',
-            color: isFavorite ? ctp.yellow : ctp.surface1,
-            transition: 'color 0.1s',
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = isFavorite ? ctp.peach : ctp.text)}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = isFavorite ? ctp.yellow : ctp.surface1)}
-        >★</button>
-        <span style={{
-          fontSize: '9px', padding: '1px 5px', borderRadius: '10px',
-          background: ctp.surface0, color: ctp.overlay0, fontFamily: 'monospace',
-        }}>{def?.category}</span>
+        />
+        <CategoryChip>{def?.category}</CategoryChip>
       </div>
 
       {isGlsl ? (
-        <pre
-          onDoubleClick={() => {
-            if (glslSource) {
-              navigator.clipboard.writeText(glslSource).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
-            }
-          }}
-          title="Double-click to copy"
-          style={{
-            margin: '0 0 6px', padding: '6px 8px',
-            background: ctp.crust, border: '1px solid #252535',
-            borderRadius: '5px', fontSize: '9px', lineHeight: 1.6,
-            color: ctp.subtext0, fontFamily: "'Fira Code', monospace",
-            overflowX: 'auto', overflowY: 'auto', maxHeight: '90px',
-            whiteSpace: 'pre', cursor: 'text',
-          }}
-        >{glslSource}</pre>
+        <pre style={{
+          margin: 0, padding: '6px 8px', maxHeight: 110, overflow: 'auto', whiteSpace: 'pre-wrap', borderRadius: radius.md - 1,
+          background: tk.bg.field, color: tk.text.secondary, font: `11.5px/1.55 ${fontFamily.mono}`,
+        }}>{glslSource}</pre>
       ) : hasViz ? (
-        <NodeInlineViz node={node} />
-      ) : def?.description ? (
-        <p style={{ fontSize: '10px', color: ctp.overlay0, margin: '0 0 6px', lineHeight: 1.5 }}>
-          {def.description}
-        </p>
+        // The thumbnail is a render surface, so it keeps its own dark look in both themes.
+        <div style={{ borderRadius: radius.md, overflow: 'hidden' }}><NodeInlineViz node={node} /></div>
       ) : null}
-
-      {/* Existing tags */}
-      {currentTags.length > 0 && !editingTags && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '5px', marginBottom: '2px' }}>
-          {currentTags.map(t => (
-            <span key={t} style={{ fontSize: '9px', padding: '1px 6px', background: `${ctp.blue}22`, color: ctp.blue, borderRadius: '10px' }}>#{t}</span>
-          ))}
-        </div>
+      {!isGlsl && def?.description && (
+        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{def.description}</p>
       )}
 
-      {/* Inline tag editor */}
-      {editingTags && (
-        <div style={{ marginTop: '5px', marginBottom: '2px' }}>
-          <input
-            autoFocus
-            value={tagInput}
-            onChange={e => setTagInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') { e.preventDefault(); handleSaveTags(); }
-              if (e.key === 'Escape') { e.preventDefault(); setEditingTags(false); }
-              e.stopPropagation();
-            }}
-            onBlur={handleSaveTags}
-            placeholder="tag1, tag2, tag3…"
-            style={{ width: '100%', background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', outline: 'none', boxSizing: 'border-box' }}
-          />
-        </div>
+      {isGlsl ? (
+        <Button size="sm" variant="primary" icon="code" onClick={() => { if (glslSource) onGlslInsert?.(glslSource); }}>Insert at cursor</Button>
+      ) : (
+        <Button size="sm" variant="primary" icon="plus" onClick={onAdd}>{swapMode ? 'Replace with this' : 'Add to graph'}</Button>
       )}
-
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
-        {isGlsl ? (
-          <button
-            onClick={() => { if (glslSource) onGlslInsert?.(glslSource); }}
-            title="Insert GLSL at cursor"
-            style={{
-              flex: 1, padding: '3px 6px',
-              background: copied ? `${ctp.green}18` : `${ctp.blue}18`,
-              border: `1px solid ${copied ? `${ctp.green}44` : `${ctp.blue}44`}`,
-              borderRadius: '5px',
-              color: copied ? ctp.green : ctp.blue,
-              fontSize: '10px', cursor: 'pointer',
-              transition: 'background 0.1s, border-color 0.1s, color 0.1s',
-              lineHeight: 1, fontFamily: 'monospace',
-            }}
-          >
-            {copied ? '✓ copied' : '⌥ insert'}
-          </button>
-        ) : (
-          <button
-            onClick={onAdd}
-            title="Add to Graph"
-            style={{
-              flex: 1, padding: '3px 6px',
-              background: `${ctp.blue}18`, border: `1px solid ${ctp.blue}44`,
-              borderRadius: '5px', color: ctp.blue, fontSize: '13px',
-              cursor: 'pointer', transition: 'background 0.1s, border-color 0.1s',
-              lineHeight: 1,
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}28`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.blue}77`; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.blue}18`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.blue}44`; }}
-          >
-            +
-          </button>
-        )}
-        <button
-          onClick={() => { setTagInput(currentTags.join(', ')); setEditingTags(v => !v); }}
-          title="Add or edit tags"
-          style={{
-            padding: '3px 8px',
-            background: editingTags ? `${ctp.green}28` : `${ctp.green}10`,
-            border: `1px solid ${editingTags ? `${ctp.green}66` : `${ctp.green}33`}`,
-            borderRadius: '5px',
-            color: ctp.green,
-            fontSize: '11px', fontFamily: 'monospace', fontWeight: 600,
-            cursor: 'pointer', transition: 'background 0.1s, border-color 0.1s',
-            lineHeight: 1,
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.green}28`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}66`; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = editingTags ? `${ctp.green}28` : `${ctp.green}10`; (e.currentTarget as HTMLButtonElement).style.borderColor = editingTags ? `${ctp.green}66` : `${ctp.green}33`; }}
-        >
-          #
-        </button>
-      </div>
     </div>
   );
 }
 
 // ── Node pill ─────────────────────────────────────────────────────────────────
 function NodePill({
-  type, label, description, color,
+  type, label, description,
   isSelected, isHighlighted,
   onSingleClick, onDoubleClick,
   swapMode, btnRef,
 }: {
-  type: string; label: string; description?: string; color: string;
+  type: string; label: string; description?: string;
   isSelected: boolean; isHighlighted: boolean;
   onSingleClick: () => void; onDoubleClick: () => void;
   swapMode: boolean;
   btnRef?: (el: HTMLButtonElement | null) => void;
 }) {
+  const tk = useTokens();
   const [hovered, setHovered] = useState(false);
-
-  const activeColor = isHighlighted ? ctp.blue : (isSelected || hovered) ? color : undefined;
-  const borderColor = isHighlighted ? ctp.blue : isSelected ? color + '88' : hovered ? color + '55' : '#3a3a4e';
-  const bg = isHighlighted ? '#1a2a3a' : isSelected ? '#252545' : hovered ? '#2a2a3e' : '#252535';
-
+  const on = isSelected || isHighlighted;
   return (
-    <div
-      style={{ position: 'relative', display: 'inline-flex' }}
+    <button
+      ref={btnRef}
+      title={description ?? `Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}`}
+      draggable={!swapMode}
+      onDragStart={e => {
+        e.dataTransfer.setData('application/shader-studio-node', type);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+      onClick={onSingleClick}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      style={{
+        height: 28, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 10px', border: 0, borderRadius: radius.md,
+        background: on ? tk.bg.selected : hovered ? tk.bg.hover : tk.bg.field,
+        boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none',
+        color: on ? tk.accent.text : tk.text.secondary, font: `${on ? 600 : 500} 12.5px ${fontFamily.ui}`,
+        cursor: swapMode ? 'pointer' : 'grab', userSelect: 'none', whiteSpace: 'nowrap',
+        transition: 'background 0.12s, box-shadow 0.12s',
+      }}
     >
-      <button
-        ref={btnRef}
-        title={description ?? `Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}`}
-        draggable={!swapMode}
-        onDragStart={e => {
-          e.dataTransfer.setData('application/shader-studio-node', type);
-          e.dataTransfer.effectAllowed = 'copy';
-        }}
-        onClick={onSingleClick}
-        onDoubleClick={onDoubleClick}
-        style={{
-          display: 'inline-flex', alignItems: 'center',
-          padding: '4px 10px 4px 8px',
-          background: bg,
-          border: `1px solid ${borderColor}`,
-          borderRadius: '20px',
-          color: activeColor ?? ctp.subtext0,
-          fontSize: '11px', fontWeight: 500,
-          cursor: swapMode ? 'pointer' : 'grab',
-          userSelect: 'none',
-          transition: 'background 0.12s, border-color 0.12s, color 0.12s',
-          boxShadow: isHighlighted ? `0 0 0 2px ${ctp.blue}33` : 'none',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {label}
-      </button>
-    </div>
+      {label}
+    </button>
   );
 }
 
-// ── Sub-group label ───────────────────────────────────────────────────────────
-function GroupHeader({ label }: { label: string }) {
+// ── Caps labels ───────────────────────────────────────────────────────────────
+function CapsLabel({ children, rule = false }: { children: ReactNode; rule?: boolean }) {
+  const tk = useTokens();
   return (
-    <div style={{
-      width: '100%',
-      fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em',
-      textTransform: 'uppercase', color: ctp.surface1,
-      padding: '6px 2px 3px',
-      marginTop: '2px',
-    }}>
-      {label}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 4px' }}>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint }}>{children}</span>
+      {rule && <span style={{ flex: 1, height: 1, background: tk.border.subtle }} />}
     </div>
   );
 }
@@ -557,6 +355,7 @@ export function NodeBrowser({
   onAdd, swapTargetNodeId, favorites, onToggleFavorite, nodeButtonRefs, searchQuery,
   context, onGlslInsert,
 }: NodeBrowserProps) {
+  const tk = useTokens();
   const [path, setPath] = useState<string[]>([]);
   const [previewType, setPreviewType] = useState<string | null>(null);
   const [highlightType, setHighlightType] = useState<string | null>(null);
@@ -615,15 +414,15 @@ export function NodeBrowser({
     setPreviewType(null);
   }, [isGlsl, onAdd, onGlslInsert]);
 
-  // Helper to render a flat list of node pills + preview below
-  const renderPills = (nodes: Array<{ type: string; label: string; description?: string }>, color: string) => (
+  // A wrap of node pills, with the preview card for the selected one underneath.
+  const renderPills = (nodes: Array<{ type: string; label: string; description?: string }>) => (
     <>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {nodes.map(def => (
           <NodePill
             key={def.type}
             type={def.type} label={def.label} description={def.description}
-            color={color} isSelected={previewType === def.type}
+            isSelected={previewType === def.type}
             isHighlighted={highlightType === def.type}
             onSingleClick={() => handleNodeClick(def.type)}
             onDoubleClick={() => handleNodeDblClick(def.type)}
@@ -640,9 +439,19 @@ export function NodeBrowser({
           onToggleFavorite={() => onToggleFavorite(previewType)}
           context={context}
           onGlslInsert={onGlslInsert}
+          swapMode={!!swapTargetNodeId}
         />
       )}
     </>
+  );
+
+  const crumb = (label: ReactNode, count: number) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+      <IconButton icon="chevL" label="Back to categories" size="sm" onClick={() => { setPath([]); setPreviewType(null); }}
+        style={{ background: tk.bg.hover, color: tk.text.secondary }} />
+      <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 12.5, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      <Count n={count} />
+    </div>
   );
 
   // ── Compute content ────────────────────────────────────────────────────────
@@ -650,84 +459,55 @@ export function NodeBrowser({
 
   if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
-    const scoreNodeDef = (def: import('../../types/nodeGraph').NodeDefinition): number => {
-      const label = def.label.toLowerCase();
-      if (label === trimmed) return 120;
-      if (label.startsWith(trimmed)) return 100;
-      if (label.includes(trimmed)) return 80;
-      if (def.type.toLowerCase().includes(trimmed)) return 60;
-      const cat = (def.category ?? '').toLowerCase();
-      if (cat.split(/[\s\/,]+/).some((w: string) => w.startsWith(trimmed))) return 40;
-      const rawDesc = def.description;
-      const desc = (Array.isArray(rawDesc) ? rawDesc.join(' ') : (rawDesc ?? '')).toLowerCase();
-      if (desc.split(/\W+/).some((w: string) => w === trimmed)) return 20;
-      return 0;
-    };
     const results = Object.values(NODE_REGISTRY)
       .filter(def => !HIDDEN_NODES.has(def.type) && !def.deprecated)
-      .map(def => ({ def, score: scoreNodeDef(def) }))
+      .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
       .map(({ def }) => def);
     innerContent = results.length === 0
-      ? <div style={{ color: ctp.surface2, fontSize: '11px', paddingLeft: '4px' }}>No matches</div>
-      : <div>{renderPills(results, ctp.blue)}</div>;
+      ? <div style={{ color: tk.text.faint, fontSize: 12, padding: '4px 2px' }}>No matches</div>
+      : <div>{renderPills(results)}</div>;
 
   } else if (path.length === 0) {
     const favCount = favorites.filter(t => NODE_REGISTRY[t] && !HIDDEN_NODES.has(t)).length;
     innerContent = (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {favCount > 0 && (
           <CategoryRow
             key="__favorites__"
-            cat="★ Favorites"
-            color={ctp.yellow}
+            cat="Favorites"
+            icon={<Icon name="starF" size={14} style={{ color: tk.status.warning }} />}
             count={favCount}
             onClick={() => { setPath(['__favorites__']); setPreviewType(null); }}
           />
         )}
         {CATEGORY_SECTIONS.map(section => {
-          const sectionCats = section.categories.filter(cat => {
-            const nodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
-            return nodes.length > 0;
-          });
+          const sectionCats = section.categories.filter(cat => getNodesByCategory(cat).some(d => !HIDDEN_NODES.has(d.type)));
           if (sectionCats.length === 0) return null;
           return (
             <div key={section.label}>
-              <div style={{
-                fontSize: '8px', fontWeight: 700, letterSpacing: '0.12em',
-                textTransform: 'uppercase', color: ctp.surface1,
-                padding: '8px 4px 4px',
-              }}>
-                {section.label}
-              </div>
-              {sectionCats.map(cat => {
-                const color = CATEGORY_COLORS[cat] ?? '#888';
-                const nodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
-                return (
-                  <CategoryRow
-                    key={cat}
-                    cat={cat}
-                    color={color}
-                    count={nodes.length}
-                    onClick={() => { setPath([cat]); setPreviewType(null); }}
-                  />
-                );
-              })}
+              <CapsLabel rule>{section.label}</CapsLabel>
+              {sectionCats.map(cat => (
+                <CategoryRow
+                  key={cat}
+                  cat={cat}
+                  count={getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length}
+                  onClick={() => { setPath([cat]); setPreviewType(null); }}
+                />
+              ))}
             </div>
           );
         })}
         {/* Any categories not covered by sections */}
         {categories.filter(cat => !CATEGORY_ORDER.includes(cat)).map(cat => {
-          const color = CATEGORY_COLORS[cat] ?? '#888';
-          const nodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
-          if (nodes.length === 0) return null;
+          const n = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
+          if (n === 0) return null;
           return (
             <CategoryRow
               key={cat}
               cat={cat}
-              color={color}
-              count={nodes.length}
+              count={n}
               onClick={() => { setPath([cat]); setPreviewType(null); }}
             />
           );
@@ -740,54 +520,34 @@ export function NodeBrowser({
       .map(t => NODE_REGISTRY[t])
       .filter((d): d is NonNullable<typeof d> => !!d && !HIDDEN_NODES.has(d.type));
     innerContent = (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <button
-          onClick={() => { setPath([]); setPreviewType(null); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: '4px', color: ctp.overlay0, fontSize: '11px', textAlign: 'left' }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
-        >
-          <span style={{ fontSize: '13px' }}>‹</span>
-          <span style={{ color: ctp.yellow, fontWeight: 600, fontSize: '11px', letterSpacing: '0.04em' }}>★ FAVORITES</span>
-          <span style={{ color: ctp.surface1, marginLeft: 'auto', fontSize: '10px' }}>{favDefs.length}</span>
-        </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {crumb('Favorites', favDefs.length)}
         {favDefs.length === 0
-          ? <div style={{ color: ctp.surface1, fontSize: '11px', paddingLeft: '4px' }}>No favorites yet</div>
-          : renderPills(favDefs, ctp.yellow)
-        }
+          ? <div style={{ color: tk.text.faint, fontSize: 12 }}>No favorites yet</div>
+          : renderPills(favDefs)}
       </div>
     );
 
   } else {
     const cat = path[0];
-    const color = CATEGORY_COLORS[cat] ?? '#888';
     const rawNodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
     const groups = CATEGORY_GROUPS[cat];
     innerContent = (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <button
-          onClick={() => { setPath([]); setPreviewType(null); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginBottom: '4px', color: ctp.overlay0, fontSize: '11px', textAlign: 'left' }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
-        >
-          <span style={{ fontSize: '13px' }}>‹</span>
-          <span style={{ color, fontWeight: 600, fontSize: '11px', letterSpacing: '0.04em' }}>{cat.toUpperCase()}</span>
-          <span style={{ color: ctp.surface1, marginLeft: 'auto', fontSize: '10px' }}>{rawNodes.length}</span>
-        </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {crumb(cat, rawNodes.length)}
         {groups ? (
           groups.map(group => {
             const groupNodes = rawNodes.filter(d => group.types.includes(d.type));
             if (groupNodes.length === 0) return null;
             return (
               <div key={group.label}>
-                <GroupHeader label={group.label} />
-                {renderPills(groupNodes, color)}
+                <CapsLabel>{group.label}</CapsLabel>
+                {renderPills(groupNodes)}
               </div>
             );
           })
         ) : (
-          renderPills([...rawNodes].sort((a, b) => a.label.localeCompare(b.label)), color)
+          <div style={{ marginTop: 4 }}>{renderPills([...rawNodes].sort((a, b) => a.label.localeCompare(b.label)))}</div>
         )}
       </div>
     );
@@ -808,10 +568,16 @@ export function NodeBrowser({
   );
 }
 
-// ── Category row button (extracted to avoid re-renders on hover state) ────────
-function CategoryRow({ cat, color, count, onClick }: {
-  cat: string; color: string; count: number; onClick: () => void;
+function Count({ n }: { n: number }) {
+  const tk = useTokens();
+  return <span style={{ fontSize: 11, color: tk.text.faint, background: tk.bg.hover, borderRadius: radius.sm, padding: '1px 6px', fontVariantNumeric: 'tabular-nums' }}>{n}</span>;
+}
+
+// ── Category row ──────────────────────────────────────────────────────────────
+function CategoryRow({ cat, icon, count, onClick }: {
+  cat: string; icon?: ReactNode; count: number; onClick: () => void;
 }) {
+  const tk = useTokens();
   const [hovered, setHovered] = useState(false);
   return (
     <button
@@ -819,23 +585,15 @@ function CategoryRow({ cat, color, count, onClick }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
-        width: '100%', padding: '7px 10px',
-        background: hovered ? '#252535' : ctp.base,
-        border: `1px solid ${ctp.surface0}`,
-        borderLeft: `3px solid ${hovered ? color : 'transparent'}`,
-        borderRadius: '6px',
-        color: hovered ? color : ctp.text,
-        fontSize: '12px', fontWeight: 500,
-        cursor: 'pointer', textAlign: 'left',
-        transition: 'background 0.1s, border-color 0.1s, color 0.1s',
+        width: '100%', height: 30, display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 0 8px', border: 0,
+        borderRadius: radius.md, background: hovered ? tk.bg.hover : 'transparent', cursor: 'pointer', textAlign: 'left',
+        color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`,
       }}
     >
-      <span style={{ flex: 1 }}>{cat}</span>
-      <span style={{ fontSize: '10px', color: hovered ? color + '88' : ctp.surface1, fontVariantNumeric: 'tabular-nums' }}>
-        {count}
-      </span>
-      <span style={{ fontSize: '9px', color: hovered ? color + '88' : ctp.surface1, flexShrink: 0 }}>›</span>
+      {icon && <span style={{ width: 14, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
+      <Count n={count} />
+      <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
     </button>
   );
 }

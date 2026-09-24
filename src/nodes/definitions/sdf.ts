@@ -5,10 +5,10 @@ import { f, p } from './helpers';
 // built-ins emitted by shaderAssembler.ts — no per-node glslFunction needed.
 
 export const SdBoxNode: NodeDefinition = {
-  type: 'sdBox', label: 'sdBox', category: '2D Primitives',
+  type: 'sdBox', label: 'Box SDF (half size)', aliases: ['sdBox'], category: '2D Primitives',
   description: 'Signed distance to a 2D box (IQ)',
   inputs: {
-    p: { type: 'vec2', label: 'P' },
+    p: { type: 'vec2', label: 'UV' },
     b: { type: 'vec2', label: 'Half-size' },
   },
   outputs: { distance: { type: 'float', label: 'Distance' } },
@@ -26,10 +26,10 @@ export const SdBoxNode: NodeDefinition = {
 };
 
 export const SdSegmentNode: NodeDefinition = {
-  type: 'sdSegment', label: 'sdSegment', category: '2D Primitives',
+  type: 'sdSegment', label: 'Line Segment SDF', aliases: ['sdSegment'], category: '2D Primitives',
   description: 'Signed distance to a 2D line segment (IQ)',
   inputs: {
-    p: { type: 'vec2', label: 'P' },
+    p: { type: 'vec2', label: 'UV' },
     a: { type: 'vec2', label: 'A' },
     b: { type: 'vec2', label: 'B' },
   },
@@ -48,10 +48,10 @@ export const SdSegmentNode: NodeDefinition = {
 };
 
 export const SdEllipseNode: NodeDefinition = {
-  type: 'sdEllipse', label: 'sdEllipse', category: '2D Primitives',
+  type: 'sdEllipse', label: 'Ellipse SDF', aliases: ['sdEllipse'], category: '2D Primitives',
   description: 'Signed distance to a 2D ellipse (IQ)',
   inputs: {
-    p:  { type: 'vec2', label: 'P' },
+    p:  { type: 'vec2', label: 'UV' },
     ab: { type: 'vec2', label: 'Radii (a,b)' },
   },
   outputs: { distance: { type: 'float', label: 'Distance' } },
@@ -68,13 +68,13 @@ export const SdEllipseNode: NodeDefinition = {
 };
 
 export const OpRepeatNode: NodeDefinition = {
-  type: 'opRepeat', label: 'opRepeat', category: 'Spaces',
+  type: 'opRepeat', label: 'Repeat Space (Grid)', aliases: ['opRepeat'], category: 'Spaces',
   description: 'Infinite domain repetition — tiles p every s units',
   inputs: {
-    p: { type: 'vec2', label: 'P' },
+    p: { type: 'vec2', label: 'UV' },
     s: { type: 'float', label: 'Spacing' },
   },
-  outputs: { result: { type: 'vec2', label: 'Tiled P' } },
+  outputs: { result: { type: 'vec2', label: 'Tiled UV' } },
   // opRepeat is now a built-in — no glslFunction needed
   generateGLSL: (node: GraphNode, inputVars) => {
     const p = inputVars['p'] ?? 'vec2(0.0)';
@@ -89,13 +89,13 @@ export const OpRepeatNode: NodeDefinition = {
 };
 
 export const OpRepeatPolarNode: NodeDefinition = {
-  type: 'opRepeatPolar', label: 'opRepeatPolar', category: 'Spaces',
+  type: 'opRepeatPolar', label: 'Repeat Space (Radial)', aliases: ['opRepeatPolar'], category: 'Spaces',
   description: 'Polar domain repetition — n-fold rotational symmetry',
   inputs: {
-    p: { type: 'vec2', label: 'P' },
+    p: { type: 'vec2', label: 'UV' },
     n: { type: 'float', label: 'Segments' },
   },
-  outputs: { result: { type: 'vec2', label: 'Tiled P' } },
+  outputs: { result: { type: 'vec2', label: 'Tiled UV' } },
   // opRepeatPolar is now a built-in — no glslFunction needed
   generateGLSL: (node: GraphNode, inputVars) => {
     const p = inputVars['p'] ?? 'vec2(0.0)';
@@ -173,11 +173,11 @@ export const Sdf2dSmoothUnionNode: NodeDefinition = {
   },
   outputs: {
     result: { type: 'float', label: 'Result' },
-    blend:  { type: 'float', label: 'Blend'  },
+    blend:  { type: 'float', label: 'Blend radius'  },
   },
   defaultParams: { k: 0.12 },
   paramDefs: {
-    k: { label: 'Blend k', type: 'float', min: 0.01, max: 0.5, step: 0.005 },
+    k: { label: 'Blend radius', type: 'float', min: 0.01, max: 0.5, step: 0.005, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
   },
   glslFunction: `vec2 sdf2dSmoothUnionFn(float a, float b, float k) {
     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);

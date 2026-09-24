@@ -41,6 +41,9 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'addColor',          label: 'Add Color node',        group: 'Add Nodes',  defaultCombo: 'c',           description: 'Instantly add a Color constant node' },
   // Node graph — group / multi-select
   { id: 'groupSelected',     label: 'Group selected nodes',  group: 'Graph',      defaultCombo: 'cmd+g',       description: 'Collapse selected nodes into a group' },
+  { id: 'duplicateSelected', label: 'Duplicate selection',   group: 'Graph',      defaultCombo: 'cmd+d',       description: 'Copy the selected nodes, with the wires between them' },
+  { id: 'deleteSelected',    label: 'Delete selection',      group: 'Graph',      defaultCombo: 'backspace',   description: 'Remove the selected nodes' },
+  { id: 'exitGroup',         label: 'Leave group',           group: 'Graph',      defaultCombo: 'escape',      description: 'Go up one level when inside a group' },
   // Node graph — select/filter/highlight
   { id: 'selectAll',         label: 'Show all nodes',        group: 'Filter',     defaultCombo: 'cmd+a',       description: 'Clear filter — show all nodes normally' },
   { id: 'filterFloat',       label: 'Highlight float nodes', group: 'Filter',     defaultCombo: '1',           description: 'Hold to highlight nodes that output float' },
@@ -109,6 +112,7 @@ export function comboFromEvent(e: KeyboardEvent): string {
   if (key === '\\')           key = '\\';
   if (key === '?')            key = '?';
   if (key.startsWith('arrow')) key = key.slice(5); // arrowup → up
+  if (key === 'delete')       key = 'backspace'; // forward-delete does the same as ⌫
   parts.push(key);
   return parts.join('+');
 }
@@ -125,6 +129,8 @@ export function displayCombo(combo: string): string {
         case 'shift': return '⇧';
         case 'alt':   return '⌥';
         case 'space': return '␣';
+        case 'backspace': return '⌫';
+        case 'escape': return 'Esc';
         default:      return p.toUpperCase();
       }
     })

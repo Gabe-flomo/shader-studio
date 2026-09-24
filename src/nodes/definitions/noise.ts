@@ -20,14 +20,14 @@ float fbm(vec2 p, int octaves, float lacunarity, float gain) {
 
 export const FBMNode: NodeDefinition = {
   type: 'fbm',
-  label: 'FBM',
+  label: 'Fractal Noise (FBM)', aliases: ['FBM'],
   category: 'Noise',
   description: 'Fractal Brownian Motion — layered value noise returning a float in [0,1]. Use as a texture, displacement, or color driver.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
     time:      { type: 'float', label: 'Time'      },
-    scale:     { type: 'float', label: 'Scale'     },
-    time_scale:{ type: 'float', label: 'Time Scale'},
+    scale:     { type: 'float', label: 'Frequency'     },
+    time_scale:{ type: 'float', label: 'Speed'},
   },
   outputs: {
     value: { type: 'float', label: 'Value' },
@@ -39,8 +39,8 @@ export const FBMNode: NodeDefinition = {
     octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 8,   step: 1    },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01 },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 10.0,step: 0.1  },
-    time_scale: { label: 'Anim Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+    scale:      { label: 'Frequency',      type: 'float', min: 0.1, max: 10.0,step: 0.1, hint: 'Bigger means smaller, busier features.'  },
+    time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id         = node.id;
@@ -92,9 +92,9 @@ export const VoronoiNode: NodeDefinition = {
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
     time:      { type: 'float', label: 'Time'      },
-    scale:     { type: 'float', label: 'Scale'     },
-    jitter:    { type: 'float', label: 'Jitter'    },
-    time_scale:{ type: 'float', label: 'Anim Speed'},
+    scale:     { type: 'float', label: 'Cell density'     },
+    jitter:    { type: 'float', label: 'Randomness'    },
+    time_scale:{ type: 'float', label: 'Speed'},
   },
   outputs: {
     dist: { type: 'float', label: 'Distance' },
@@ -103,9 +103,9 @@ export const VoronoiNode: NodeDefinition = {
   glslFunction: VORONOI_GLSL,
   defaultParams: { scale: 5.0, jitter: 1.0, time_scale: 0.0 },
   paramDefs: {
-    scale:      { label: 'Scale',      type: 'float', min: 0.5,  max: 20.0, step: 0.1  },
-    jitter:     { label: 'Jitter',     type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
-    time_scale: { label: 'Anim Speed', type: 'float', min: 0.0,  max: 2.0,  step: 0.01 },
+    scale:      { label: 'Cell density',      type: 'float', min: 0.5,  max: 20.0, step: 0.1, hint: 'Cells per unit.'  },
+    jitter:     { label: 'Randomness',     type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: '0 is a regular grid, 1 is fully random.' },
+    time_scale: { label: 'Speed', type: 'float', min: 0.0,  max: 2.0,  step: 0.01 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -157,7 +157,7 @@ export const DomainWarpNode: NodeDefinition = {
     time:      { type: 'float', label: 'Time'      },
     strength:  { type: 'float', label: 'Strength'  },
     scale:     { type: 'float', label: 'Scale'     },
-    time_scale:{ type: 'float', label: 'Anim Speed'},
+    time_scale:{ type: 'float', label: 'Speed'},
   },
   outputs: {
     uv:     { type: 'vec2', label: 'Warped UV'  },
@@ -171,7 +171,7 @@ export const DomainWarpNode: NodeDefinition = {
     octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 4,   step: 1    },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01 },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01 },
-    time_scale: { label: 'Anim Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
+    time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01 },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -284,7 +284,7 @@ export const FlowFieldNode: NodeDefinition = {
     steps:         { label: 'Steps/Curve',   type: 'float',  min: 2,    max: 64,   step: 1     },
     step_size:     { label: 'Step Size',     type: 'float',  min: 0.002,max: 0.15, step: 0.002 },
     noise_scale:   { label: 'Noise Scale',   type: 'float',  min: 0.1,  max: 8.0,  step: 0.05  },
-    speed:         { label: 'Anim Speed',    type: 'float',  min: 0.0,  max: 1.0,  step: 0.005 },
+    speed:         { label: 'Speed',    type: 'float',  min: 0.0,  max: 1.0,  step: 0.005 },
     line_width:    { label: 'Line Width',    type: 'float',  min: 0.001,max: 0.05, step: 0.001 },
     line_softness: { label: 'Line Softness', type: 'float',  min: 0.5,  max: 6.0,  step: 0.1   },
     field_mode:    {

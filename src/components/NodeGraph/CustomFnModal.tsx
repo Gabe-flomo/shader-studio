@@ -1,74 +1,22 @@
-import React, { useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useMemo, useRef, useState } from 'react';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveCustomFnPreset } from '../../store/useNodeGraphStore';
 import { NumberInput } from './NumberInput';
-import { ctp } from '../../theme/palette';
+import { TYPE_COLORS } from './typeColors';
+import { useTokens } from '../../theme/themeStore';
+import { fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Toggle } from '../ui/Choice';
+import { Field, TypeSelect } from '../ui/Field';
+import { Icon } from '../ui/Icon';
+import { Modal } from '../ui/Modal';
+import { toast } from '../ui/toastStore';
+import { CodeField } from '../code/CodeField';
+import { ReferencePanel } from '../code/ReferencePanel';
+import { buildCompletions } from '../code/glslReference';
+import { insertSnippet } from '../code/useCompletion';
 
-// ─── GLSL function palette (same entries as ExprModal) ───────────────────────
-
-interface GlslEntry { label: string; insert: string; group: string; }
-
-const GLSL_PALETTE: GlslEntry[] = [
-  { group: 'Trig',      label: 'sin(float)',        insert: 'sin()'               },
-  { group: 'Trig',      label: 'cos(float)',        insert: 'cos()'               },
-  { group: 'Trig',      label: 'tan(float)',        insert: 'tan()'               },
-  { group: 'Trig',      label: 'atan(float,float)', insert: 'atan(, )'            },
-  { group: 'Exp/Log',   label: 'exp(float)',        insert: 'exp()'               },
-  { group: 'Exp/Log',   label: 'sqrt(float)',       insert: 'sqrt()'              },
-  { group: 'Exp/Log',   label: 'pow(float,float)',  insert: 'pow(, )'             },
-  { group: 'Rounding',  label: 'floor(float)',      insert: 'floor()'             },
-  { group: 'Rounding',  label: 'ceil(float)',       insert: 'ceil()'              },
-  { group: 'Rounding',  label: 'fract(float)',      insert: 'fract()'             },
-  { group: 'Math',      label: 'abs(float)',        insert: 'abs()'               },
-  { group: 'Math',      label: 'mod(float,float)',  insert: 'mod(, )'             },
-  { group: 'Math',      label: 'min(float,float)',  insert: 'min(, )'             },
-  { group: 'Math',      label: 'max(float,float)',  insert: 'max(, )'             },
-  { group: 'Math',      label: 'clamp(f,f,f)',      insert: 'clamp(, , )'         },
-  { group: 'Math',      label: 'mix(f,f,f)',        insert: 'mix(, , )'           },
-  { group: 'Math',      label: 'smoothstep(f,f,f)', insert: 'smoothstep(, , )'    },
-  { group: 'Vector',    label: 'length(vec2)',      insert: 'length()'            },
-  { group: 'Vector',    label: 'normalize(vec2)',   insert: 'normalize()'         },
-  { group: 'Vector',    label: 'dot(vec2,vec2)',    insert: 'dot(, )'             },
-  { group: 'Vector',    label: 'vec2(f,f)',         insert: 'vec2(, )'            },
-  { group: 'Vector',    label: 'vec3(f,f,f)',       insert: 'vec3(, , )'          },
-  { group: 'Custom',    label: 'palette(f,v3×4)',   insert: 'palette(, vec3(0.5), vec3(0.5), vec3(1.0), vec3(0.0,0.33,0.67))' },
-  { group: 'Custom',    label: 'rotate(vec2,float)',insert: 'rotate(, )'          },
-  { group: 'SDF',       label: 'sdBox(vec2,vec2)',     insert: 'sdBox(, )'         },
-  { group: 'SDF',       label: 'sdSegment(v2,v2,v2)', insert: 'sdSegment(, , )'   },
-  { group: 'SDF',       label: 'sdEllipse(vec2,vec2)', insert: 'sdEllipse(, )'    },
-  { group: 'SDF',       label: 'opRepeat(vec2,f)',     insert: 'opRepeat(, )'     },
-  { group: 'SDF',       label: 'opRepeatPolar(vec2,f)', insert: 'opRepeatPolar(, )' },
-  { group: 'Constants', label: 'PI',               insert: 'PI'                  },
-  { group: 'Constants', label: 'TAU',              insert: 'TAU'                 },
-  { group: 'Constants', label: 'u_time',           insert: 'u_time'              },
-];
-
-const GROUPS = Array.from(new Set(GLSL_PALETTE.map(e => e.group)));
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const BTN: React.CSSProperties = {
-  background: ctp.surface0,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
-  borderRadius: '4px',
-  padding: '3px 8px',
-  fontSize: '11px',
-  fontFamily: 'monospace',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-};
-
-const SECTION_LABEL: React.CSSProperties = {
-  fontSize: '10px',
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: ctp.surface2,
-  margin: '10px 0 4px',
-};
 
 // ─── CustomFnModal ────────────────────────────────────────────────────────────
 
@@ -80,22 +28,32 @@ interface Props {
 export function CustomFnModal({ node, onClose }: Props) {
   const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
+  const tk = useTokens();
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fnRef   = useRef<HTMLTextAreaElement | null>(null);
-  const [savedFlash, setSavedFlash] = useState(false);
+  // Reference-panel clicks go to whichever code field was focused last
+  const lastField = useRef<'body' | 'fns'>('body');
   const [autoWrap, setAutoWrap] = useState(false);
+  const [showHelpers, setShowHelpers] = useState(() => typeof node.params.glslFunctions === 'string' && node.params.glslFunctions.trim() !== '');
 
   // Read current params
   const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
   const outputType   = (node.params.outputType as DataType) || 'float';
   const body         = typeof node.params.body === 'string' ? node.params.body : '0.0';
   const glslFns      = typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '';
-  const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Fn';
+  const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Function';
+
+  const rawInputs = node.params.inputs;
+  const completions = useMemo(
+    () => buildCompletions((rawInputs as Array<{ name: string; type: DataType }> | undefined) ?? []),
+    [rawInputs],
+  );
 
   // ── Undo / Redo for body ────────────────────────────────────────────────────
   const bodyHistory      = useRef<string[]>([body]);
   const bodyHistoryIndex = useRef<number>(0);
   const [bodyHistoryPos, setBodyHistoryPos] = useState(0);
+  const [bodyHistoryLen, setBodyHistoryLen] = useState(1);
 
   const pushBodyHistory = (newBody: string) => {
     const trimmed = bodyHistory.current.slice(0, bodyHistoryIndex.current + 1);
@@ -103,6 +61,7 @@ export function CustomFnModal({ node, onClose }: Props) {
     bodyHistory.current      = trimmed;
     bodyHistoryIndex.current = trimmed.length - 1;
     setBodyHistoryPos(bodyHistoryIndex.current);
+    setBodyHistoryLen(trimmed.length);
   };
 
   const commitBody = (newBody: string) => {
@@ -127,7 +86,7 @@ export function CustomFnModal({ node, onClose }: Props) {
   };
 
   const canUndoBody = bodyHistoryPos > 0;
-  const canRedoBody = bodyHistoryPos < bodyHistory.current.length - 1;
+  const canRedoBody = bodyHistoryPos < bodyHistoryLen - 1;
 
   const handleBodyKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const mod = e.metaKey || e.ctrlKey;
@@ -149,69 +108,29 @@ export function CustomFnModal({ node, onClose }: Props) {
     // Read params directly from the node prop (always up-to-date via controlled inputs)
     // This avoids any store node-lookup issues (e.g. nodes inside group subgraphs).
     saveCustomFnPreset({
-      label:         (node.params.label as string) || 'Custom Fn',
+      label:         (node.params.label as string) || 'Custom Function',
       inputs:        (node.params.inputs as Parameters<typeof saveCustomFnPreset>[0]['inputs']) ?? [],
       outputType:    ((node.params.outputType as string) || 'float') as Parameters<typeof saveCustomFnPreset>[0]['outputType'],
       body:          typeof node.params.body === 'string' ? node.params.body : '0.0',
       glslFunctions: typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '',
     });
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1500);
+    toast.success(`Saved “${labelParam}” to Functions`);
   };
 
-  // Insert text at cursor for the body textarea — supports auto-wrap and selection-wrap.
-  // For non-body textareas (glslFunctions), falls back to plain cursor insert.
-  const insertAtCursor = (ref: React.RefObject<HTMLTextAreaElement | null>, current: string, paramKey: string, text: string) => {
-    const ta = ref.current;
-    const isBody = paramKey === 'body';
-
-    if (!ta) {
-      if (isBody) commitBody(current + text);
-      else updateNodeParams(node.id, { [paramKey]: current + text });
-      return;
-    }
-
-    const start    = ta.selectionStart ?? current.length;
-    const end      = ta.selectionEnd   ?? current.length;
-    const selected = current.slice(start, end);
-    const hasParen = text.includes('(');
-
-    // Helper: insert `inner` as first argument of a function template like "sin()" or "pow(, )"
-    const wrapFirst = (fnInsert: string, inner: string): string => {
-      const parenIdx = fnInsert.indexOf('(');
-      return fnInsert.slice(0, parenIdx + 1) + inner + fnInsert.slice(parenIdx + 1);
-    };
-
-    let next: string;
-    let cursorOffset: number;
-
-    if (isBody && autoWrap && hasParen) {
-      // Auto-wrap ON: wrap the entire current body as the first argument
-      const wrapped = wrapFirst(text, current);
-      next         = wrapped;
-      cursorOffset = wrapped.length;
-    } else if (selected && hasParen) {
-      // Selection present: wrap selected text as first argument, replace selection
-      const wrapped = wrapFirst(text, selected);
-      next         = current.slice(0, start) + wrapped + current.slice(end);
-      cursorOffset = start + wrapped.length;
-    } else if (!selected && hasParen) {
-      // No selection: insert and place cursor inside the first "()"
-      const parenIdx = text.indexOf('()');
-      next         = current.slice(0, start) + text + current.slice(end);
-      cursorOffset = start + (parenIdx >= 0 ? parenIdx + 1 : text.length);
-    } else {
-      // Plain insert / replace selection
-      next         = current.slice(0, start) + text + current.slice(end);
-      cursorOffset = start + text.length;
-    }
-
+  // Insert a reference snippet into the last-focused field — wraps the selection, or the
+  // whole body when "Wrap all" is on.
+  const insertFromReference = (text: string) => {
+    const isBody = lastField.current === 'body';
+    const ta = isBody ? bodyRef.current : fnRef.current;
+    const current = isBody ? body : glslFns;
+    const start = ta?.selectionStart ?? current.length;
+    const end = ta?.selectionEnd ?? current.length;
+    const { next, caret } = insertSnippet(current, start, end, text, isBody && autoWrap);
     if (isBody) commitBody(next);
-    else updateNodeParams(node.id, { [paramKey]: next });
-
+    else updateNodeParams(node.id, { glslFunctions: next });
     requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(cursorOffset, cursorOffset);
+      ta?.focus();
+      ta?.setSelectionRange(caret, caret);
     });
   };
 
@@ -272,357 +191,173 @@ export function CustomFnModal({ node, onClose }: Props) {
     updateNodeSockets(node.id, customInputs, type);
   };
 
-  return createPortal(
-    // Backdrop — portalled to document.body so position:fixed escapes
-    // the CSS transform on the node graph's world-space container.
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+  const smallField: React.CSSProperties = {
+    width: 60, height: 26, boxSizing: 'border-box', padding: '0 6px', border: 0, outline: 'none', borderRadius: radius.md,
+    background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, textAlign: 'center',
+  };
+
+  return (
+    <Modal
+      title="Custom Function"
+      subtitle={`${labelParam} · Custom Function node`}
+      icon="fn"
+      iconColor={tk.kind.fn}
+      width={980}
+      height={800}
+      onClose={onClose}
+      footer={
+        <>
+          <Button icon="export" onClick={handleSavePreset}>Save as preset</Button>
+          <Note>Adds it to Functions in the sidebar</Note>
+          <span style={{ flex: 1 }} />
+          <Note>Changes apply live</Note>
+          <Button variant="primary" onClick={onClose}>Done</Button>
+        </>
+      }
     >
-      {/* Panel */}
-      <div
-        style={{
-          background: ctp.base,
-          border: `1px solid ${ctp.surface1}`,
-          borderRadius: '10px',
-          width: 'min(700px, calc(100vw - 32px))',
-          maxHeight: '88vh',
-          overflowY: 'auto',
-          padding: '16px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          color: ctp.text,
-          fontSize: '12px',
-        }}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.mauve }}>ƒ Custom Function</span>
-            <input
-              type="text"
-              value={labelParam}
-              onChange={e => updateNodeParams(node.id, { label: e.target.value })}
-              placeholder="Node name"
-              spellCheck={false}
-              style={{
-                background: ctp.mantle,
-                border: `1px solid ${ctp.surface1}`,
-                color: ctp.text,
-                borderRadius: '4px',
-                fontSize: '12px',
-                padding: '3px 8px',
-                outline: 'none',
-                width: '160px',
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              onClick={handleSavePreset}
-              title="Save this function as a reusable preset in the palette"
-              style={{
-                ...BTN,
-                background: savedFlash ? `${ctp.green}22` : '#1a2e1a',
-                border: `1px solid ${savedFlash ? ctp.green : `${ctp.green}33`}`,
-                color: savedFlash ? ctp.green : `${ctp.green}aa`,
-                transition: 'all 0.2s',
-                fontSize: '11px',
-                padding: '3px 10px',
-              }}
-            >
-              {savedFlash ? '✓ Saved' : '↑ Save Preset'}
-            </button>
-            <button
-              onClick={onClose}
-              style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, fontSize: '16px', padding: '0 4px' }}
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <Section label="Name">
+            <Field value={labelParam} onChange={e => updateNodeParams(node.id, { label: e.target.value })} placeholder="Node name" aria-label="Node name" spellCheck={false} />
+          </Section>
 
-        {/* Inputs section */}
-        <div style={SECTION_LABEL as React.CSSProperties}>Inputs</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
-          {customInputs.map((inp, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: 'flex', flexDirection: 'column', gap: '4px',
-                background: ctp.mantle, border: `1px solid ${ctp.surface0}`,
-                borderRadius: '5px', padding: '5px 8px',
-              }}
-            >
-              {/* Main row: index · name · type · insert · slider toggle · remove */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: ctp.surface2, fontSize: '10px', minWidth: '16px' }}>{idx}</span>
-                <input
-                  type="text"
-                  value={inp.name}
-                  onChange={e => updateInputName(idx, e.target.value)}
-                  spellCheck={false}
-                  placeholder="name"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    borderBottom: `1px solid ${ctp.surface0}`,
-                    color: ctp.text,
-                    fontSize: '12px',
-                    fontFamily: 'monospace',
-                    outline: 'none',
-                    width: '90px',
-                    padding: '0 2px',
-                  }}
-                />
-                <select
-                  value={inp.type}
-                  onChange={e => updateInputType(idx, e.target.value as DataType)}
-                  style={{
-                    background: ctp.mantle,
-                    border: `1px solid ${ctp.surface1}`,
-                    color: ctp.text,
-                    borderRadius: '3px',
-                    fontSize: '11px',
-                    padding: '2px 4px',
-                    outline: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                {/* Insert into body */}
-                <button
-                  onClick={() => insertAtCursor(bodyRef, body, 'body', inp.name)}
-                  title={`Insert "${inp.name}" into body`}
-                  style={{ ...BTN, padding: '2px 6px', fontSize: '10px' }}
-                >
-                  ↵
-                </button>
-                {/* Slider toggle — only for float inputs */}
-                {inp.type === 'float' && (
-                  <button
-                    onClick={() => toggleSlider(idx)}
-                    title={inp.slider ? 'Remove slider — use socket connection instead' : 'Add slider — control value with a range slider'}
-                    style={{
-                      ...BTN,
-                      padding: '2px 7px',
-                      fontSize: '10px',
-                      color: inp.slider ? ctp.mauve : ctp.surface2,
-                      borderColor: inp.slider ? `${ctp.mauve}55` : ctp.surface1,
-                      background: inp.slider ? `${ctp.mauve}11` : ctp.surface0,
-                    }}
-                  >
-                    ⊟ slider
-                  </button>
-                )}
-                <button
-                  onClick={() => removeInput(idx)}
-                  style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, padding: '2px 4px', fontSize: '13px', marginLeft: 'auto' }}
-                  title="Remove input"
-                >
-                  ×
-                </button>
-              </div>
-              {/* Slider range row — visible only when slider is enabled */}
-              {inp.slider && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '22px' }}>
-                  <span style={{ fontSize: '10px', color: ctp.surface2 }}>range</span>
-                  <NumberInput
-                    value={inp.slider.min}
-                    onCommit={n => updateSliderRange(idx, 'min', n)}
-                    step={0.1}
-                    style={{
-                      background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text,
-                      borderRadius: '3px', fontSize: '11px', padding: '2px 5px',
-                      outline: 'none', width: '64px', fontFamily: 'monospace',
-                    }}
+          <Section label="Inputs">
+            {customInputs.map((inp, idx) => (
+              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 104px auto 32px', gap: 8, alignItems: 'center' }}>
+                  <Field
+                    mono
+                    leading={<span style={{ width: 9, height: 9, borderRadius: '50%', background: TYPE_COLORS[inp.type] ?? tk.text.faint, flexShrink: 0 }} />}
+                    value={inp.name}
+                    onChange={e => updateInputName(idx, e.target.value)}
+                    spellCheck={false}
+                    placeholder="name"
+                    aria-label={`Input ${idx + 1} name`}
                   />
-                  <span style={{ fontSize: '10px', color: ctp.surface2 }}>→</span>
-                  <NumberInput
-                    value={inp.slider.max}
-                    onCommit={n => updateSliderRange(idx, 'max', n)}
-                    step={0.1}
-                    style={{
-                      background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text,
-                      borderRadius: '3px', fontSize: '11px', padding: '2px 5px',
-                      outline: 'none', width: '64px', fontFamily: 'monospace',
-                    }}
-                  />
-                  <span style={{ fontSize: '10px', color: ctp.surface2 }}>
-                    (current: {typeof node.params[inp.name] === 'number' ? (node.params[inp.name] as number).toFixed(3) : '—'})
-                  </span>
+                  <TypeSelect value={inp.type} options={TYPE_OPTIONS} onChange={t => updateInputType(idx, t as DataType)} ariaLabel={`Input ${idx + 1} type`} />
+                  {inp.type === 'float'
+                    ? <Toggle checked={!!inp.slider} onChange={() => toggleSlider(idx)} label="Slider" />
+                    : <span />}
+                  <IconButton icon="close" label="Remove input" tone="danger" onClick={() => removeInput(idx)} />
                 </div>
-              )}
+                {inp.slider && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 2, fontSize: 12, color: tk.text.muted }}>
+                    Range
+                    <NumberInput value={inp.slider.min} onCommit={n => updateSliderRange(idx, 'min', n)} step={0.1} style={smallField} />
+                    to
+                    <NumberInput value={inp.slider.max} onCommit={n => updateSliderRange(idx, 'max', n)} step={0.1} style={smallField} />
+                    <span style={{ color: tk.text.faint }}>
+                      now {typeof node.params[inp.name] === 'number' ? (node.params[inp.name] as number).toFixed(3) : '—'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+            <AddRow onClick={addInput}>Add input</AddRow>
+          </Section>
+
+          <Section label="Returns">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <TypeSelect value={outputType} options={TYPE_OPTIONS} onChange={t => changeOutputType(t as DataType)} ariaLabel="Return type" />
+              <Note>The body’s result becomes the node’s output.</Note>
             </div>
-          ))}
-          <button
-            onClick={addInput}
-            style={{ ...BTN, alignSelf: 'flex-start', marginTop: '4px', color: ctp.green, borderColor: `${ctp.green}33` }}
-          >
-            + Add Input
-          </button>
-        </div>
+          </Section>
 
-        {/* Output type */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Output type</span>
-          <select
-            value={outputType}
-            onChange={e => changeOutputType(e.target.value as DataType)}
-            style={{
-              background: ctp.mantle,
-              border: `1px solid ${ctp.surface1}`,
-              color: ctp.text,
-              borderRadius: '3px',
-              fontSize: '11px',
-              padding: '2px 6px',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
+          <Section label="Body" grow>
+            <CodeField
+              grow
+              minHeight={180}
+              ariaLabel="Function body"
+              value={body}
+              onChange={v => updateNodeParams(node.id, { body: v })}
+              completions={completions}
+              textareaRef={el => { bodyRef.current = el; }}
+              onFocus={() => { lastField.current = 'body'; }}
+              onBlur={handleBodyBlur}
+              onKeyDown={handleBodyKeyDown}
+              actions={
+                <>
+                  <IconButton icon="undo" label="Undo" shortcut="cmd+z" size="sm" disabled={!canUndoBody} onClick={undoBody} />
+                  <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" size="sm" disabled={!canRedoBody} onClick={redoBody} />
+                </>
+              }
+            />
+            <Note>Use your input names directly. Write a single expression, or a block that ends with <code>return</code>.</Note>
+          </Section>
 
-        {/* Body textarea */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-          <span style={{ ...(SECTION_LABEL as React.CSSProperties), margin: 0 }}>GLSL Body</span>
-
-          {/* Undo */}
-          <button
-            onClick={undoBody}
-            disabled={!canUndoBody}
-            title="Undo (Cmd/Ctrl+Z)"
-            style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canUndoBody ? 1 : 0.35, cursor: canUndoBody ? 'pointer' : 'default' }}
-          >↩</button>
-
-          {/* Redo */}
-          <button
-            onClick={redoBody}
-            disabled={!canRedoBody}
-            title="Redo (Cmd/Ctrl+Shift+Z)"
-            style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canRedoBody ? 1 : 0.35, cursor: canRedoBody ? 'pointer' : 'default' }}
-          >↪</button>
-
-          {/* Auto-wrap toggle */}
-          <button
-            onClick={() => setAutoWrap(v => !v)}
-            title={autoWrap
-              ? 'Auto-wrap ON — clicking a function wraps the entire body as its first argument. Click to toggle off.'
-              : 'Auto-wrap OFF — clicking a function while text is selected wraps just the selection. Click to toggle on.'}
-            style={{
-              ...BTN, padding: '2px 8px', fontSize: '10px',
-              background: autoWrap ? ctp.surface1 : ctp.surface0,
-              color: autoWrap ? ctp.mauve : ctp.surface2,
-              border: `1px solid ${autoWrap ? ctp.mauve : ctp.surface1}`,
-              transition: 'all 0.15s',
-            }}
-          >⊂ auto-wrap {autoWrap ? 'ON' : 'OFF'}</button>
-        </div>
-        <div style={{ fontSize: '10px', color: ctp.surface2, marginBottom: '4px' }}>
-          Use your input names directly. Single expression or multi-line block. The result is assigned to the output.
-        </div>
-        <textarea
-          ref={bodyRef}
-          value={body}
-          onChange={e => updateNodeParams(node.id, { body: e.target.value })}
-          onBlur={handleBodyBlur}
-          onKeyDown={handleBodyKeyDown}
-          spellCheck={false}
-          rows={6}
-          style={{
-            background: ctp.crust,
-            border: `1px solid ${ctp.surface1}`,
-            color: ctp.green,
-            padding: '8px 10px',
-            borderRadius: '5px',
-            fontSize: '12px',
-            fontFamily: 'monospace',
-            width: '100%',
-            minHeight: '120px',
-            resize: 'vertical',
-            outline: 'none',
-            boxSizing: 'border-box',
-            lineHeight: 1.5,
-            display: 'block',
-          }}
-        />
-
-        {/* Operators */}
-        <div style={SECTION_LABEL as React.CSSProperties}>Operators</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
-          {['+', '-', '*', '/', '()', '.', ','].map(op => (
+          <div style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
-              key={op}
-              onClick={() => insertAtCursor(bodyRef, body, 'body', op === '()' ? '()' : ` ${op} `)}
-              style={{ ...BTN, padding: '3px 10px' }}
+              type="button"
+              aria-expanded={showHelpers}
+              onClick={() => setShowHelpers(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'none', cursor: 'pointer',
+                color: tk.text.muted, font: `600 12.5px ${fontFamily.ui}`, textAlign: 'left',
+              }}
             >
-              {op}
+              <Icon name={showHelpers ? 'chevD' : 'chevR'} size={14} />
+              Helper functions
+              <span style={{ fontWeight: 400, color: tk.text.faint }}>optional · added before main()</span>
             </button>
-          ))}
-        </div>
-
-        {/* Function palette */}
-        {GROUPS.map(group => (
-          <div key={group}>
-            <div style={SECTION_LABEL as React.CSSProperties}>{group}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
-              {GLSL_PALETTE.filter(e => e.group === group).map(entry => (
-                <button
-                  key={entry.label}
-                  onClick={() => insertAtCursor(bodyRef, body, 'body', entry.insert)}
-                  title={`Insert: ${entry.insert}`}
-                  style={BTN}
-                >
-                  {entry.label}
-                </button>
-              ))}
-            </div>
+            {showHelpers && (
+              <CodeField
+                title="Helper functions"
+                minHeight={140}
+                maxHeight={320}
+                ariaLabel="Helper functions"
+                value={glslFns}
+                onChange={v => updateNodeParams(node.id, { glslFunctions: v })}
+                completions={completions}
+                textareaRef={el => { fnRef.current = el; }}
+                onFocus={() => { lastField.current = 'fns'; }}
+                placeholder={'// e.g.\nfloat sdBox(vec2 p, vec2 b) {\n  vec2 d = abs(p) - b;\n  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n}'}
+              />
+            )}
           </div>
-        ))}
-
-        {/* Helper GLSL functions */}
-        <div style={SECTION_LABEL as React.CSSProperties}>Helper Functions (optional)</div>
-        <div style={{ fontSize: '10px', color: ctp.surface2, marginBottom: '4px' }}>
-          Paste external GLSL functions here. They are injected before main() and available in the body above.
         </div>
-        <textarea
-          ref={fnRef}
-          value={glslFns}
-          onChange={e => updateNodeParams(node.id, { glslFunctions: e.target.value })}
-          spellCheck={false}
-          rows={6}
-          placeholder={'// e.g.\nfloat sdBox(vec2 p, vec2 b) {\n  vec2 d = abs(p) - b;\n  return length(max(d,0.0)) + min(max(d.x,d.y),0.0);\n}'}
-          style={{
-            background: ctp.crust,
-            border: `1px solid ${ctp.surface1}`,
-            color: ctp.blue,
-            padding: '8px 10px',
-            borderRadius: '5px',
-            fontSize: '11px',
-            fontFamily: 'monospace',
-            width: '100%',
-            minHeight: '120px',
-            resize: 'vertical',
-            outline: 'none',
-            boxSizing: 'border-box',
-            lineHeight: 1.5,
-            display: 'block',
-            flexShrink: 0,
-          }}
+
+        <ReferencePanel
+          variables={customInputs}
+          onInsert={insertFromReference}
+          wrapAll={autoWrap}
+          onWrapAllChange={setAutoWrap}
         />
-        {/* Spacer so the resize handle has room to grab at the bottom of the scroll container */}
-        <div style={{ height: '24px', flexShrink: 0 }} />
       </div>
-    </div>,
-    document.body,
+    </Modal>
+  );
+}
+
+function Section({ label, grow = false, children }: { label: string; grow?: boolean; children: React.ReactNode }) {
+  const tk = useTokens();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: grow ? 1 : undefined, minHeight: grow ? 260 : undefined }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function Note({ children }: { children: React.ReactNode }) {
+  const tk = useTokens();
+  return <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{children}</span>;
+}
+
+function AddRow({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
+        border: `1.5px dashed ${hover ? tk.text.faint : tk.border.strong}`, borderRadius: radius.control,
+        background: hover ? tk.bg.hover : 'none', color: tk.text.muted, font: `500 12.5px ${fontFamily.ui}`,
+      }}
+    >
+      <Icon name="plus" size={15} />{children}
+    </button>
   );
 }

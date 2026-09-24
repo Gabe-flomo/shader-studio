@@ -10,9 +10,11 @@ import {
   moveItemsToFolder,
   removeItemsFromFolders,
 } from '../../utils/assetFolders';
-import { AssetContextMenu } from './AssetContextMenu';
-import type { ContextMenuItem } from './AssetContextMenu';
-import { ctp } from '../../theme/palette';
+import { useTokens } from '../../theme/themeStore';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
+import { Menu, type MenuItem } from '../ui/Menu';
 
 export interface FolderableItem { id: string; label: string; }
 
@@ -24,32 +26,11 @@ interface Props<T extends FolderableItem> {
   emptyHint?: React.ReactNode;
 }
 
-// ── Btn helper ────────────────────────────────────────────────────────────────
-function SmallBtn({ children, onClick, title, active }: {
-  children: React.ReactNode; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; title?: string; active?: boolean;
-}) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button
-      title={title}
-      onClick={e => { e.stopPropagation(); onClick(e); }}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        background: active || hov ? ctp.surface0 : 'none',
-        border: '1px solid ' + (active || hov ? ctp.surface1 : ctp.surface0),
-        color: hov ? ctp.text : ctp.overlay0,
-        borderRadius: '4px', fontSize: '10px', padding: '1px 6px',
-        cursor: 'pointer', lineHeight: 1.5, flexShrink: 0,
-      }}
-    >{children}</button>
-  );
-}
-
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function FolderableList<T extends FolderableItem>({
   scopeKey, color, items, renderItem, emptyHint,
 }: Props<T>) {
+  const tk = useTokens();
   const [folders,     setFolders]    = useState<FolderEntry[]>(() => loadFolders(scopeKey));
   const [membership,  setMembership] = useState<Record<string,string>>(() => getMembership(scopeKey));
   const [selectedIds, setSelected]   = useState<Set<string>>(new Set());
@@ -105,25 +86,23 @@ export function FolderableList<T extends FolderableItem>({
   }
 
   // ── Folder context menu ───────────────────────────────────────────────────
-  function buildFolderMenuItems(folderId: string): ContextMenuItem[] {
+  function buildFolderMenuItems(folderId: string): MenuItem[] {
     return [
-      { label: 'Rename', action: () => setRenamingId(folderId) },
-      { label: 'Delete Folder', destructive: true, separator: true,
-        action: () => { deleteFolder(scopeKey, folderId); refresh(); } },
+      { label: 'Rename', icon: 'edit', onSelect: () => setRenamingId(folderId) },
+      'separator',
+      { label: 'Delete folder', icon: 'trash', danger: true, onSelect: () => { deleteFolder(scopeKey, folderId); refresh(); } },
     ];
   }
 
   // ── Move-selected submenu ─────────────────────────────────────────────────
-  function buildMoveMenuItems(ids: string[]): ContextMenuItem[] {
-    const folderItems: ContextMenuItem[] = folders.map(f => ({
-      label: `📁  ${f.label}`,
-      action: () => { moveItemsToFolder(scopeKey, ids, f.id); setSelected(new Set()); refresh(); setMoveMenu(null); },
+  function buildMoveMenuItems(ids: string[]): MenuItem[] {
+    const folderItems: MenuItem[] = folders.map(f => ({
+      label: f.label,
+      icon: 'folder' as const,
+      onSelect: () => { moveItemsToFolder(scopeKey, ids, f.id); setSelected(new Set()); refresh(); setMoveMenu(null); },
     }));
-    folderItems.push({
-      label: '＋  New folder…',
-      separator: folderItems.length > 0,
-      action: () => { setMoveMenu(null); startCreating(); },
-    });
+    if (folderItems.length > 0) folderItems.push('separator');
+    folderItems.push({ label: 'New folder…', icon: 'plus', onSelect: () => { setMoveMenu(null); startCreating(); } });
     return folderItems;
   }
 
@@ -148,7 +127,7 @@ export function FolderableList<T extends FolderableItem>({
         draggable
         onDragStart={e => handleDragStart(e, item.id)}
         onMouseDown={e => handleMouseDown(e, item.id)}
-        style={{ outline: sel ? `2px solid ${color}66` : 'none', borderRadius: '20px', cursor: 'grab' }}
+        style={{ boxShadow: sel ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none', background: sel ? tk.bg.selected : undefined, borderRadius: radius.md, cursor: 'grab' }}
       >
         {renderItem(item, sel)}
       </div>
@@ -161,35 +140,34 @@ export function FolderableList<T extends FolderableItem>({
   const numSel        = selectedIds.size;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minHeight: '40px' }}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minHeight: 40, font: `12.5px ${fontFamily.ui}` }}
       onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()); }}
     >
 
       {/* Toolbar: + New Folder button + selection action */}
-      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <SmallBtn onClick={() => startCreating()} title="Create a new folder">
-          + Folder
-        </SmallBtn>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 }}>
+        <Button size="sm" variant="ghost" icon="plus" title="Create a new folder" onClick={e => { e.stopPropagation(); startCreating(); }}
+          style={{ height: 26, padding: '0 8px', color: tk.text.muted }}>Folder</Button>
         {numSel > 0 && (
-          <SmallBtn
-            active
+          <Button
+            size="sm"
+            title="Move selected items to a folder"
+            style={{ height: 26, padding: '0 8px' }}
             onClick={e => {
+              e.stopPropagation();
               const rect = e.currentTarget.getBoundingClientRect();
               setMoveMenu({ x: rect.left, y: rect.bottom + 4, ids: [...selectedIds] });
             }}
-            title="Move selected items to a folder"
-          >
-            Move {numSel} →
-          </SmallBtn>
+          >Move {numSel} to…</Button>
         )}
       </div>
 
       {/* Inline new-folder input */}
       {creatingFolder && (
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '0 8px' }}
           onClick={e => e.stopPropagation()}
         >
-          <span style={{ fontSize: '11px', color: `${color}99`, flexShrink: 0 }}>📁</span>
+          <Icon name="folder" size={15} style={{ color: tk.text.faint }} />
           <input
             autoFocus
             value={newFolderVal}
@@ -202,9 +180,9 @@ export function FolderableList<T extends FolderableItem>({
             }}
             onBlur={confirmNewFolder}
             style={{
-              flex: 1, background: ctp.crust, border: `1px solid ${color}`,
-              color, borderRadius: '4px', padding: '2px 7px',
-              fontSize: '11px', outline: 'none', minWidth: 0,
+              flex: 1, minWidth: 0, height: 28, background: tk.bg.panel, border: 0, borderRadius: radius.md - 1,
+              boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, padding: '0 8px',
+              font: `12.5px ${fontFamily.ui}`, outline: 'none',
             }}
           />
         </div>
@@ -232,19 +210,14 @@ export function FolderableList<T extends FolderableItem>({
               onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setFolderMenu({ x: e.clientX, y: e.clientY, id: folder.id }); }}
               onClick={e => { if (!isRenaming) { e.stopPropagation(); toggleFolderCollapsed(scopeKey, folder.id); refresh(); } }}
               style={{
-                display: 'flex', alignItems: 'center', gap: '5px',
-                padding: '3px 6px', borderRadius: '5px',
-                background: isTarget ? `${color}18` : 'transparent',
-                border: isTarget ? `1px dashed ${color}88` : '1px solid transparent',
-                cursor: 'pointer', userSelect: 'none',
-                transition: 'background 0.1s, border-color 0.1s',
+                height: 30, display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px', borderRadius: radius.md,
+                background: isTarget ? alpha(color, 0.12) : 'transparent',
+                boxShadow: isTarget ? `inset 0 0 0 1px ${alpha(color, 0.5)}` : 'none',
+                cursor: 'pointer', userSelect: 'none', color: tk.text.secondary, fontWeight: 600,
+                transition: 'background 0.1s',
               }}
             >
-              <span style={{
-                fontSize: '9px', color: `${color}aa`, display: 'inline-block',
-                transform: folder.collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-                transition: 'transform 0.15s', flexShrink: 0,
-              }}>▾</span>
+              <Icon name={folder.collapsed ? 'chevR' : 'chevD'} size={14} style={{ color: tk.text.faint }} />
 
               {isRenaming ? (
                 <input
@@ -257,21 +230,21 @@ export function FolderableList<T extends FolderableItem>({
                     e.stopPropagation();
                   }}
                   onClick={e => e.stopPropagation()}
-                  style={{ background: ctp.crust, border: `1px solid ${color}`, color, borderRadius: '4px', padding: '1px 6px', fontSize: '11px', outline: 'none', flex: 1, minWidth: 0 }}
+                  style={{ flex: 1, minWidth: 0, height: 24, background: tk.bg.panel, border: 0, borderRadius: radius.sm, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, padding: '0 6px', font: `12.5px ${fontFamily.ui}`, outline: 'none' }}
                 />
               ) : (
-                <span style={{ fontSize: '11px', color, fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  📁 {folder.label}
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {folder.label}
                 </span>
               )}
-              <span style={{ fontSize: '9px', color: `${color}55`, flexShrink: 0 }}>{children.length}</span>
+              <span style={{ fontSize: 11, fontWeight: 400, color: tk.text.faint, background: tk.bg.hover, borderRadius: radius.sm, padding: '1px 6px', flexShrink: 0 }}>{children.length}</span>
             </div>
 
             {/* Contents */}
             {!folder.collapsed && (
-              <div style={{ paddingLeft: '12px', paddingTop: '3px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              <div style={{ paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {children.length === 0
-                  ? <span style={{ fontSize: '10px', color: ctp.surface1, fontStyle: 'italic' }}>Empty — drag items here</span>
+                  ? <span style={{ fontSize: 12, color: tk.text.faint, padding: '4px 8px' }}>Empty — drag items here</span>
                   : children.map(item => renderWrapped(item))
                 }
               </div>
@@ -291,9 +264,9 @@ export function FolderableList<T extends FolderableItem>({
             if (ids) { removeItemsFromFolders(scopeKey, ids); setSelected(new Set()); refresh(); }
           }}
           style={{
-            display: 'flex', flexWrap: 'wrap', gap: '4px',
-            paddingTop: folders.length > 0 ? '4px' : '0',
-            borderTop: folders.length > 0 ? `1px solid ${dropTarget === 'ungrouped' ? `${color}44` : '#252535'}` : 'none',
+            display: 'flex', flexDirection: 'column', gap: 2,
+            paddingTop: folders.length > 0 ? 6 : 0,
+            borderTop: folders.length > 0 ? `1px solid ${dropTarget === 'ungrouped' ? alpha(color, 0.5) : tk.border.subtle}` : 'none',
             transition: 'border-color 0.1s',
           }}
         >
@@ -304,20 +277,12 @@ export function FolderableList<T extends FolderableItem>({
 
       {/* Folder right-click menu */}
       {folderMenu && (
-        <AssetContextMenu
-          x={folderMenu.x} y={folderMenu.y}
-          items={buildFolderMenuItems(folderMenu.id)}
-          onDismiss={() => setFolderMenu(null)}
-        />
+        <Menu x={folderMenu.x} y={folderMenu.y} items={buildFolderMenuItems(folderMenu.id)} onClose={() => setFolderMenu(null)} />
       )}
 
       {/* Move-selected submenu */}
       {moveMenu && (
-        <AssetContextMenu
-          x={moveMenu.x} y={moveMenu.y}
-          items={buildMoveMenuItems(moveMenu.ids)}
-          onDismiss={() => setMoveMenu(null)}
-        />
+        <Menu x={moveMenu.x} y={moveMenu.y} items={buildMoveMenuItems(moveMenu.ids)} onClose={() => setMoveMenu(null)} />
       )}
     </div>
   );

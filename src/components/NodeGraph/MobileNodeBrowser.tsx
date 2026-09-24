@@ -1,3 +1,4 @@
+import type React from 'react';
 /**
  * MobileNodeBrowser — the "Nodes" tab inside the mobile Examples sheet.
  *
@@ -20,10 +21,14 @@ import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { typesCompatible } from '../../lib/typesCompatible';
-import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
+import { HIDDEN_TYPES } from './nodeCategoryMeta';
+import { categoryColor } from '../../theme/categories';
+import { useThemeMode } from '../../theme/themeStore';
+import { fontFamily } from '../../theme/tokens';
+import { Icon } from '../ui/Icon';
 import { InlineVizFrame, GenericPreviewViz, SKIP_INLINE_PREVIEW } from './MobileGraphBrowser';
 import { INLINE_VIZ_TYPES } from './NodeInlineViz';
-import { ctp } from '../../theme/palette';
+import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 
 function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
@@ -61,15 +66,18 @@ const CATEGORIES: CategoryGroup[] = (() => {
     .sort((a, b) => a.name.localeCompare(b.name));
 })();
 
-const rowBtnStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-  background: 'none', border: 'none', padding: '8px 4px', textAlign: 'left',
-  fontSize: '13px', color: ctp.text, cursor: 'pointer', touchAction: 'manipulation',
-};
-const backBtnStyle: React.CSSProperties = {
-  alignSelf: 'flex-start', background: 'none', border: 'none', color: ctp.blue,
-  fontSize: '12px', cursor: 'pointer', padding: '2px 0', touchAction: 'manipulation',
-};
+// Full-width list row (node types, pairing targets)
+const rowBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
+  display: 'flex', alignItems: 'center', gap: '8px', width: '100%', height: 44, boxSizing: 'border-box',
+  background: 'none', border: 'none', padding: '0 12px', textAlign: 'left',
+  font: `500 13.5px ${fontFamily.ui}`, color: tc.subtext1, cursor: 'pointer', touchAction: 'manipulation',
+});
+// "‹ Back to …" pill at the top of a sub-page
+const backBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
+  alignSelf: 'flex-start', height: 32, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 12px 0 8px',
+  background: tc.surface0, border: 'none', borderRadius: 16, color: tc.subtext1,
+  font: `500 12.5px ${fontFamily.ui}`, cursor: 'pointer', touchAction: 'manipulation',
+});
 
 // One type-compatible way to wire `newType` (not yet placed) to `existing`
 // (a real node already in the graph) — either direction.
@@ -99,6 +107,10 @@ function pairingsFor(newDef: NodeDefinition, existing: GraphNode): Pairing[] {
 }
 
 export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
+  const tc = useCtp();
+  const mode = useThemeMode();
+  const pairHeadStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', margin: '4px 0 6px' };
+  const promotedStyle: React.CSSProperties = { font: `500 11px ${fontFamily.ui}`, color: '#a8720a', background: 'rgba(217,154,30,0.14)', borderRadius: 6, padding: '2px 7px' };
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   // "Add Connected" sub-flow: pick an existing node, then pick one of its
@@ -162,18 +174,18 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       const from = pairings.filter(p => p.direction === 'fromNew');
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button onClick={() => setConnectTargetId(null)} style={backBtnStyle}>‹ Back to node list</button>
-          <div style={{ fontSize: '13px', color: ctp.subtext0 }}>
-            Wire <span style={{ color: ctp.text, fontWeight: 700 }}>{def.label}</span> to <span style={{ color: ctp.text, fontWeight: 700 }}>{labelFor(target)}</span>
+          <button onClick={() => setConnectTargetId(null)} style={backBtnStyleFor(tc)}><Icon name="chevL" size={14} />Back to node list</button>
+          <div style={{ fontSize: '13px', color: tc.subtext0 }}>
+            Wire <span style={{ color: tc.text, fontWeight: 700 }}>{def.label}</span> to <span style={{ color: tc.text, fontWeight: 700 }}>{labelFor(target)}</span>
           </div>
           {into.length > 0 && (
             <div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '4px' }}>INTO THE NEW NODE</div>
-              <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={pairHeadStyle}>INTO THE NEW NODE</div>
+              <div style={{ background: tc.base, borderRadius: 14, boxShadow: `0 0 0 1px ${tc.surface1}`, overflow: 'hidden' }}>
                 {into.map((p, i) => (
-                  <button key={i} onClick={() => place(p)} style={{ ...rowBtnStyle, borderBottom: i === into.length - 1 ? 'none' : '1px solid #24243a' }}>
+                  <button key={i} onClick={() => place(p)} style={{ ...rowBtnStyleFor(tc), height: 'auto', minHeight: 50, font: `500 12.5px ${fontFamily.mono}`, borderBottom: i === into.length - 1 ? 'none' : `1px solid ${tc.surface0}` }}>
                     <span style={{ flex: 1 }}>{labelFor(target)}.{p.existingLabel} → {def.label}.{p.newLabel}</span>
-                    {!p.exact && <span style={{ fontSize: '9px', color: ctp.surface2 }}>promoted</span>}
+                    {!p.exact && <span style={promotedStyle}>promoted</span>}
                   </button>
                 ))}
               </div>
@@ -181,19 +193,19 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
           )}
           {from.length > 0 && (
             <div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '4px' }}>FROM THE NEW NODE</div>
-              <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={pairHeadStyle}>FROM THE NEW NODE</div>
+              <div style={{ background: tc.base, borderRadius: 14, boxShadow: `0 0 0 1px ${tc.surface1}`, overflow: 'hidden' }}>
                 {from.map((p, i) => (
-                  <button key={i} onClick={() => place(p)} style={{ ...rowBtnStyle, borderBottom: i === from.length - 1 ? 'none' : '1px solid #24243a' }}>
+                  <button key={i} onClick={() => place(p)} style={{ ...rowBtnStyleFor(tc), height: 'auto', minHeight: 50, font: `500 12.5px ${fontFamily.mono}`, borderBottom: i === from.length - 1 ? 'none' : `1px solid ${tc.surface0}` }}>
                     <span style={{ flex: 1 }}>{def.label}.{p.newLabel} → {labelFor(target)}.{p.existingLabel}</span>
-                    {!p.exact && <span style={{ fontSize: '9px', color: ctp.surface2 }}>promoted</span>}
+                    {!p.exact && <span style={promotedStyle}>promoted</span>}
                   </button>
                 ))}
               </div>
             </div>
           )}
           {pairings.length === 0 && (
-            <div style={{ fontSize: '11px', color: ctp.surface2 }}>No compatible sockets between these two after all.</div>
+            <div style={{ fontSize: '11px', color: tc.surface2 }}>No compatible sockets between these two after all.</div>
           )}
         </div>
       );
@@ -204,18 +216,18 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       const candidates = scopedNodes.filter(n => pairingsFor(def, n).length > 0);
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button onClick={() => setConnectTargetId(null)} style={backBtnStyle}>‹ Back</button>
-          <div style={{ fontSize: '13px', color: ctp.subtext0 }}>
-            Connect <span style={{ color: ctp.text, fontWeight: 700 }}>{def.label}</span> to which node?
+          <button onClick={() => setConnectTargetId(null)} style={backBtnStyleFor(tc)}><Icon name="chevL" size={14} />Back</button>
+          <div style={{ fontSize: '13px', color: tc.subtext0 }}>
+            Connect <span style={{ color: tc.text, fontWeight: 700 }}>{def.label}</span> to which node?
           </div>
           {candidates.length === 0 ? (
-            <div style={{ fontSize: '11px', color: ctp.surface2 }}>Nothing in the current graph has a compatible input or output.</div>
+            <div style={{ fontSize: '11px', color: tc.surface2 }}>Nothing in the current graph has a compatible input or output.</div>
           ) : (
-            <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
+            <div style={{ background: tc.base, borderRadius: 14, boxShadow: `0 0 0 1px ${tc.surface1}`, overflow: 'hidden' }}>
               {candidates.map((n, i) => (
-                <button key={n.id} onClick={() => setConnectTargetId(n.id)} style={{ ...rowBtnStyle, borderBottom: i === candidates.length - 1 ? 'none' : '1px solid #24243a' }}>
+                <button key={n.id} onClick={() => setConnectTargetId(n.id)} style={{ ...rowBtnStyleFor(tc), borderBottom: i === candidates.length - 1 ? 'none' : `1px solid ${tc.surface0}` }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
-                  <span style={{ fontSize: '11px', color: ctp.surface1, flexShrink: 0 }}>›</span>
+                  <span style={{ fontSize: '11px', color: tc.surface1, flexShrink: 0 }}>›</span>
                 </button>
               ))}
             </div>
@@ -227,15 +239,13 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
     // ── Detail page itself ────────────────────────────────────────────
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <button onClick={closeDetail} style={backBtnStyle}>‹ Back to categories</button>
+        <button onClick={closeDetail} style={backBtnStyleFor(tc)}><Icon name="chevL" size={14} />Back to categories</button>
 
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: CATEGORY_COLORS[def.category] ?? '#888', flexShrink: 0 }} />
-            <span style={{ fontSize: '16px', fontWeight: 700, color: ctp.text }}>{def.label}</span>
-          </div>
-          <div style={{ fontSize: '10px', color: ctp.overlay0, letterSpacing: '0.05em', marginTop: '2px', marginLeft: '18px' }}>
-            {def.category.toUpperCase()}{def.subcategory ? ` · ${def.subcategory}` : ''}
+          <div style={{ font: `650 22px ${fontFamily.ui}`, letterSpacing: '-0.01em', color: tc.text }}>{def.label}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: categoryColor(def.category, mode) }} />
+            {def.category.toUpperCase()}{def.subcategory ? ` · ${def.subcategory.toUpperCase()}` : ''}
           </div>
         </div>
 
@@ -246,24 +256,26 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
         )}
 
         {def.description && (
-          <div style={{ fontSize: '12px', color: ctp.subtext0, lineHeight: 1.5 }}>{def.description}</div>
+          <div style={{ fontSize: 13, color: tc.subtext0, lineHeight: 1.5 }}>{def.description}</div>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
           <button
             onClick={() => setConnectTargetId('')}
             style={{
-              padding: '10px', borderRadius: '8px', border: `1px solid ${ctp.blue}66`, background: `${ctp.blue}18`,
-              color: ctp.blue, fontSize: '13px', fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
+              height: 46, borderRadius: 12, border: 'none', background: tc.text, color: tc.base,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              font: `600 14px ${fontFamily.ui}`, cursor: 'pointer', touchAction: 'manipulation',
             }}
-          >+ Add Connected…</button>
+          ><Icon name="plus" size={15} />Add connected…</button>
           <button
             onClick={() => place()}
             style={{
-              padding: '10px', borderRadius: '8px', border: `1px solid ${ctp.surface1}`, background: 'none',
-              color: ctp.text, fontSize: '13px', fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
+              height: 46, borderRadius: 12, border: 'none', background: tc.base, boxShadow: `0 0 0 1px ${tc.surface1}`,
+              color: tc.text, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              font: `500 14px ${fontFamily.ui}`, cursor: 'pointer', touchAction: 'manipulation',
             }}
-          >+ Add Disconnected</button>
+          ><Icon name="plus" size={15} />Add disconnected</button>
         </div>
       </div>
     );
@@ -271,55 +283,45 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
 
   // ── Category accordion ─────────────────────────────────────────────────
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {CATEGORIES.map(cat => {
         const isOpen = openCategory === cat.name;
         const flat = cat.subgroups.length === 1 && cat.subgroups[0].name === null;
         const total = cat.subgroups.reduce((n, g) => n + g.types.length, 0);
         return (
-          <div key={cat.name} style={{ marginBottom: '10px' }}>
+          <div key={cat.name}>
             <button
+              aria-expanded={isOpen}
               onClick={() => setOpenCategory(o => (o === cat.name ? null : cat.name))}
               style={{
-                display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
-                background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
-                cursor: 'pointer', touchAction: 'manipulation',
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 46, padding: '0 12px', border: 'none',
+                borderRadius: 12, background: isOpen ? tc.mantle : 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+                color: tc.text, font: `600 13.5px ${fontFamily.ui}`,
               }}
             >
-              <span style={{ fontSize: '9px', color: CATEGORY_COLORS[cat.name] ?? '#888' }}>{isOpen ? '▾' : '▸'}</span>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: CATEGORY_COLORS[cat.name] ?? '#888', letterSpacing: '0.05em' }}>
-                {cat.name.toUpperCase()}
-              </span>
-              <span style={{ fontSize: '10px', color: ctp.surface2 }}>({total})</span>
+              <Icon name={isOpen ? 'chevD' : 'chevR'} size={14} style={{ color: tc.overlay0 }} />
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: categoryColor(cat.name, mode) }} />
+              <span style={{ flex: 1 }}>{cat.name}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: tc.overlay0, background: tc.surface0, borderRadius: 7, padding: '2px 7px' }}>{total}</span>
             </button>
-            {isOpen && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {cat.subgroups.map(group => (
-                  <div key={group.name ?? '__none__'}>
-                    {!flat && group.name && (
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#7d8296', letterSpacing: '0.04em', margin: '0 0 4px 2px' }}>
-                        {group.name.toUpperCase()}
-                      </div>
-                    )}
-                    <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
-                      {group.types.map((type, i) => {
-                        const d = getNodeDefinition(type)!;
-                        return (
-                          <button
-                            key={type}
-                            onClick={() => openDetail(type)}
-                            style={{ ...rowBtnStyle, borderBottom: i === group.types.length - 1 ? 'none' : '1px solid #24243a' }}
-                          >
-                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label}</span>
-                            <span style={{ fontSize: '11px', color: ctp.surface1, flexShrink: 0 }}>›</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+            {isOpen && cat.subgroups.map(group => (
+              <div key={group.name ?? '__none__'}>
+                {!flat && group.name && (
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', padding: '8px 12px 2px 43px' }}>
+                    {group.name.toUpperCase()}
                   </div>
-                ))}
+                )}
+                {group.types.map(type => {
+                  const d = getNodeDefinition(type)!;
+                  return (
+                    <button key={type} onClick={() => openDetail(type)} style={{ ...rowBtnStyleFor(tc), height: 40, padding: '0 12px 0 43px', borderRadius: 10 }}>
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label}</span>
+                      <Icon name="chevR" size={14} style={{ color: tc.surface2, flexShrink: 0 }} />
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            ))}
           </div>
         );
       })}

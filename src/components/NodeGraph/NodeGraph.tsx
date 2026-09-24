@@ -4,13 +4,21 @@ import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { NodeSearchPalette } from './NodeSearchPalette';
+import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
 import { Minimap } from './Minimap';
-import { ctp } from '../../theme/palette';
+import { useCtp, type CtpPalette } from '../../theme/nodePalette';
+import { useTokens } from '../../theme/themeStore';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Segmented } from '../ui/Choice';
+import { Icon } from '../ui/Icon';
+import { TYPE_COLORS } from './typeColors';
+import { SelectionBar } from '../shell/SelectionBar';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
-const NODE_WIDTH = 240;
+const NODE_WIDTH = 360;
 
 // ─── Pan/zoom constants ───────────────────────────────────────────────────────
 const ZOOM_MIN = 0.15;
@@ -22,9 +30,41 @@ const CULL_MIN_NODES = 30;
 const CULL_MARGIN_PX = 300;
 const ZOOM_MAX = 2.5;
 
+function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
+  if (typeof gn.params?.label === 'string') return gn.params.label;
+  return gn.type === 'sceneGroup' ? 'Scene Group' : gn.type === 'spaceWarpGroup' ? 'Space Warp Group'
+    : gn.type === 'marchLoopGroup' ? 'March Loop Group' : gn.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
+}
+
 // Memoised so a parent re-render (App) doesn't re-render the whole graph;
 // NodeGraph reads everything it needs from the store with selectors.
-export const NodeGraph = React.memo(function NodeGraph({ transparent = false }: { transparent?: boolean }) {
+export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false }: {
+  transparent?: boolean;
+  /** Desktop redesign: the top-centre CanvasToolbar (node count, zoom, fit, layout, minimap, clear) replaces the legacy corner toolbar. */
+  redesignToolbar?: boolean;
+}) {
+  const tc = useCtp();
+  const tk = useTokens();
+  const ctxBtnStyle = ctxBtnStyleFor(tc);
+  const toolbarBtnStyle = toolbarBtnStyleFor(tc);
+  const touchToolbarBtnStyle = touchToolbarBtnStyleFor(tc);
+  // Group terminals (the group's inputs and output, shown inside a group)
+  const terminalCard: React.CSSProperties = {
+    position: 'absolute', width: 260, borderRadius: radius.card, overflow: 'visible', userSelect: 'none',
+    background: tk.bg.panel, color: tk.text.primary, fontSize: 12.5, fontFamily: fontFamily.ui,
+  };
+  const terminalHead: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 7, padding: '10px 12px', fontWeight: 600, fontSize: 13,
+    borderBottom: `1px solid ${tk.border.subtle}`,
+  };
+  const terminalRow: React.CSSProperties = { position: 'relative', display: 'flex', alignItems: 'center', gap: 8, height: 32 };
+  const terminalDot: React.CSSProperties = {
+    position: 'absolute', top: '50%', width: 12, height: 12, marginTop: -6, boxSizing: 'border-box', borderRadius: '50%', cursor: 'crosshair',
+  };
+  const terminalInput: React.CSSProperties = {
+    width: 100, height: 24, padding: '0 6px', border: 0, outline: 'none', borderRadius: 6,
+    background: tk.bg.panel, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`,
+  };
   const [canvasWidth, setCanvasWidth]   = useState(window.innerWidth);
   const [canvasHeight, setCanvasHeight] = useState(window.innerHeight);
   const compactToolbar = canvasWidth < 700;
@@ -32,6 +72,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false }: 
   const compilationErrors     = useNodeGraphStore(s => s.compilationErrors);
   const connectNodes          = useNodeGraphStore(s => s.connectNodes);
   const autoLayout            = useNodeGraphStore(s => s.autoLayout);
+  const loadExampleGraph      = useNodeGraphStore(s => s.loadExampleGraph);
   const setPreviewNodeId      = useNodeGraphStore(s => s.setPreviewNodeId);
   const previewNodeId         = useNodeGraphStore(s => s.previewNodeId);
   const nodeHighlightFilter   = useNodeGraphStore(s => s.nodeHighlightFilter);
@@ -251,6 +292,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false }: 
     });
   }, []);
 
+
   // ── Pan / zoom state ────────────────────────────────────────────────────────
   // `pan` / `zoom` state is what React renders with (grid, zoom readout,
   // culling). During a gesture the transform is applied to the DOM directly
@@ -287,6 +329,17 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false }: 
     setLayoutZoomGetter(() => zoomRef.current);
     publishView(panRef.current, zoomRef.current);
   }, []);
+
+  // Toolbar zoom buttons zoom around the middle of the visible canvas (the wheel zooms around the cursor).
+  const zoomAroundCentre = useCallback((target: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const oldZoom = zoomRef.current;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, target));
+    const p = panRef.current;
+    if (!rect) { applyView(p, newZoom, 'now'); return; }
+    const cx = rect.width / 2, cy = rect.height / 2;
+    applyView({ x: cx - (cx - p.x) * (newZoom / oldZoom), y: cy - (cy - p.y) * (newZoom / oldZoom) }, newZoom, 'now');
+  }, [applyView]);
 
   // ── Pan mode tracking ───────────────────────────────────────────────────────
   // Pan is triggered by: middle-mouse drag, Space+drag, or Option+drag (Ableton-style)
@@ -868,7 +921,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   }, [nodes]);
 
   // Dot grid background size scales with zoom
-  const gridSize = 24 * zoom;
+  // Dot grid: 24 world units apart, doubling when zoomed out so it never turns into a haze
+  let gridSize = 24 * zoom;
+  while (gridSize < 14) gridSize *= 2;
   const gridOffX = pan.x % gridSize;
   const gridOffY = pan.y % gridSize;
 
@@ -897,54 +952,30 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         position: 'relative',
         width: '100%',
         height: '100%',
-        background: transparent ? 'transparent' : ctp.crust,
+        backgroundColor: transparent ? 'transparent' : tc.crust,
         overflow: 'hidden',
         cursor: 'default',
         userSelect: 'none',
         backgroundImage: transparent
           ? 'none'
-          : `radial-gradient(circle, ${ctp.surface0} 1px, transparent 1px)`,
+          : `radial-gradient(circle at 1.5px 1.5px, ${tk.text.disabled} 1.1px, transparent 1.6px)`,
         backgroundSize: `${gridSize}px ${gridSize}px`,
         backgroundPosition: `${gridOffX}px ${gridOffY}px`,
       }}
     >
-      {/* Preview mode banner */}
+      {/* Preview mode banner — below the canvas toolbar */}
       {previewNodeId && previewLabel && (
         <div
           style={{
-            position: 'absolute',
-            top: 10,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: ctp.base,
-            border: `1px solid ${ctp.green}55`,
-            color: ctp.green,
-            padding: '5px 14px',
-            borderRadius: '8px',
-            fontSize: '11px',
-            zIndex: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            userSelect: 'none',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            position: 'absolute', top: redesignToolbar ? 66 : 10, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+            height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px 0 12px', borderRadius: 10,
+            background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.status.success, 0.35)}`,
+            color: tk.text.secondary, fontSize: 12.5, userSelect: 'none', whiteSpace: 'nowrap',
           }}
         >
-          <span>👁 Previewing: <strong>{previewLabel}</strong></span>
-          <button
-            onClick={() => setPreviewNodeId(null)}
-            style={{
-              background: 'none',
-              border: `1px solid ${ctp.green}55`,
-              color: ctp.green,
-              cursor: 'pointer',
-              fontSize: '10px',
-              padding: '1px 6px',
-              borderRadius: '4px',
-            }}
-          >
-            exit
-          </button>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.success }} />
+          <span>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
+          <Button size="sm" variant="ghost" style={{ height: 26 }} onClick={() => setPreviewNodeId(null)}>Exit</Button>
         </div>
       )}
 
@@ -957,8 +988,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             left: '50%',
             transform: 'translateX(-50%)',
             background: 'rgba(30,30,46,0.92)',
-            border: `1px solid ${pendingMobileType ? ('#' + (pendingMobileType === 'float' ? 'f0a0aa' : pendingMobileType === 'vec2' ? '0af0f0' : pendingMobileType === 'vec3' ? '00fa80' : 'fa8000')) : ctp.blue}55`,
-            color: ctp.text,
+            border: `1px solid ${pendingMobileType ? ('#' + (pendingMobileType === 'float' ? 'f0a0aa' : pendingMobileType === 'vec2' ? '0af0f0' : pendingMobileType === 'vec3' ? '00fa80' : 'fa8000')) : tc.blue}55`,
+            color: tc.text,
             padding: '8px 16px',
             borderRadius: '10px',
             fontSize: '12px',
@@ -980,8 +1011,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={() => setPendingMobileConnection(null)}
             style={{
               background: 'none',
-              border: `1px solid ${ctp.surface1}`,
-              color: ctp.surface2,
+              border: `1px solid ${tc.surface1}`,
+              color: tc.surface2,
               cursor: 'pointer',
               fontSize: '11px',
               padding: '2px 7px',
@@ -994,8 +1025,26 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
+      {redesignToolbar && (
+        <CanvasToolbar
+          nodes={displayNodes}
+          topLevel={activeGroupPath.length === 0}
+          groupName={activeGroupNode ? groupLabel(activeGroupNode) : undefined}
+          zoom={zoom}
+          onZoom={zoomAroundCentre}
+          onResetZoom={() => applyView({ x: 0, y: 0 }, 1, 'now')}
+          onFit={handleFitView}
+          onAutoLayout={autoLayout}
+          showMinimap={showMinimap}
+          onToggleMinimap={toggleMinimap}
+          onClear={() => loadExampleGraph('blank')}
+          compact={compactToolbar}
+        />
+      )}
+      {redesignToolbar && <SelectionBar top={previewNodeId ? 108 : 66} />}
+
       {/* Toolbar — top-right, always in screen space */}
-      <div
+      {!redesignToolbar && <div
         style={{
           position: 'absolute',
           top: '10px',
@@ -1012,8 +1061,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={() => applyView({ x: 0, y: 0 }, 1, 'now')}
             title="Reset zoom to 100%"
             style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface0)}
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -1027,7 +1076,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               onMouseDown={e => e.stopPropagation()}
               onChange={e => applyView(panRef.current, Number(e.target.value) / 100, 'now')}
               title="Zoom level"
-              style={{ width: '60px', accentColor: ctp.blue, cursor: 'pointer' }}
+              style={{ width: '60px', accentColor: tc.blue, cursor: 'pointer' }}
             />
           )}
         </div>
@@ -1036,8 +1085,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onClick={handleFitView}
           title="Fit all nodes in view"
           style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface0)}
         >
           {compactToolbar ? '⊡' : '⊡ Fit'}
         </button>
@@ -1047,8 +1096,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={autoLayout}
             title="Automatically arrange nodes left-to-right by data flow"
             style={toolbarBtnStyle}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface0)}
           >
             ⊞ Auto Layout
           </button>
@@ -1059,30 +1108,25 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onClick={toggleMinimap}
             title={showMinimap ? 'Hide minimap' : 'Show minimap'}
             style={{ ...toolbarBtnStyle, opacity: showMinimap ? 1 : 0.45 }}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface1)}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface0)}
           >
             [M]
           </button>
         )}
-      </div>
+      </div>}
 
       {/* Breadcrumb when inside a group */}
       {activeGroupPath.length > 0 && (
         <div style={{
-          position: 'absolute',
-          bottom: 16,
-          left: '50%', transform: 'translateX(-50%)',
-          background: ctp.base, border: `1px solid ${ctp.mauve}55`,
-          color: ctp.mauve, padding: '5px 14px', borderRadius: '8px',
-          fontSize: '11px', zIndex: 20,
-          display: 'flex', alignItems: 'center', gap: '6px',
-          userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          whiteSpace: 'nowrap',
+          position: 'absolute', top: redesignToolbar ? 64 : 12, left: 12, zIndex: 20,
+          height: 34, display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', borderRadius: 10,
+          background: tk.bg.panel, boxShadow: tk.shadow.float, color: tk.accent.text, fontSize: 12.5,
+          userSelect: 'none', whiteSpace: 'nowrap',
         }}>
           <button
             onClick={() => exitToRoot()}
-            style={{ background: 'none', border: 'none', color: ctp.overlay1, cursor: 'pointer', padding: 0, fontSize: '11px' }}
+            style={{ background: 'none', border: 'none', color: tk.text.muted, cursor: 'pointer', padding: 0, font: `500 12.5px ${fontFamily.ui}` }}
           >Root</button>
           {activeGroupPath.map((gid, depth) => {
             // Find the group node label
@@ -1099,18 +1143,19 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             const isLast = depth === activeGroupPath.length - 1;
             return (
               <React.Fragment key={gid}>
-                <span style={{ color: ctp.surface1 }}>›</span>
+                <span style={{ color: tk.text.faint }}>›</span>
                 {isLast ? (
                   <strong>{lbl}</strong>
                 ) : (
                   <button
                     onClick={() => exitToDepth(depth + 1)}
-                    style={{ background: 'none', border: 'none', color: ctp.overlay1, cursor: 'pointer', padding: 0, fontSize: '11px' }}
+                    style={{ background: 'none', border: 'none', color: tk.text.muted, cursor: 'pointer', padding: 0, font: `500 12.5px ${fontFamily.ui}` }}
                   >{lbl}</button>
                 )}
               </React.Fragment>
             );
           })}
+          <span style={{ marginLeft: 6, font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}>esc to exit</span>
         </div>
       )}
 
@@ -1120,8 +1165,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           position: 'absolute',
           top: compactToolbar ? 80 : 50,
           left: '50%', transform: 'translateX(-50%)',
-          background: '#2d1b1b', border: `1px solid ${ctp.red}55`,
-          color: ctp.red, padding: '5px 14px', borderRadius: '8px',
+          background: '#2d1b1b', border: `1px solid ${tc.red}55`,
+          color: tc.red, padding: '5px 14px', borderRadius: '8px',
           fontSize: '11px', zIndex: 25, display: 'flex', alignItems: 'center',
           gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
           whiteSpace: 'nowrap',
@@ -1129,7 +1174,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           <span>⚠ {disconnectedNotice}</span>
           <button
             onClick={clearDisconnectedNotice}
-            style={{ background: 'none', border: `1px solid ${ctp.red}55`, color: ctp.red, cursor: 'pointer', fontSize: '10px', padding: '1px 6px', borderRadius: '4px' }}
+            style={{ background: 'none', border: `1px solid ${tc.red}55`, color: tc.red, cursor: 'pointer', fontSize: '10px', padding: '1px 6px', borderRadius: '4px' }}
           >×</button>
         </div>
       )}
@@ -1141,7 +1186,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onClick={e => e.stopPropagation()}
           style={{
             position: 'fixed', left: contextMenu.x, top: contextMenu.y,
-            background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
+            background: tc.base, border: `1px solid ${tc.surface1}`, borderRadius: '6px',
             padding: '4px 0', zIndex: 10000, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
             minWidth: '160px', fontSize: '12px',
           }}
@@ -1162,7 +1207,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       groupNodes(ids, 'Group');
                       setContextMenu(null);
                     }}>
-                      Group Selection <span style={{ color: ctp.surface2, fontSize: '10px' }}>⌘G</span>
+                      Group Selection <span style={{ color: tc.surface2, fontSize: '10px' }}>⌘G</span>
                     </button>
                     <button style={ctxBtnStyle} onClick={() => {
                       duplicateNodes(ids);
@@ -1170,7 +1215,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Duplicate Selection
                     </button>
-                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
                 {isSceneGroup && clickedNode && (
@@ -1179,10 +1224,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Enter Scene Group <span style={{ color: ctp.surface2, fontSize: '10px' }}>↵</span>
+                      Enter Scene Group <span style={{ color: tc.surface2, fontSize: '10px' }}>↵</span>
                     </button>
-                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1196,10 +1241,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Enter Space Warp Group <span style={{ color: ctp.surface2, fontSize: '10px' }}>↵</span>
+                      Enter Space Warp Group <span style={{ color: tc.surface2, fontSize: '10px' }}>↵</span>
                     </button>
-                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1213,10 +1258,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       enterGroup(clickedNode.id);
                       setContextMenu(null);
                     }}>
-                      Enter {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'} <span style={{ color: ctp.surface2, fontSize: '10px' }}>↵</span>
+                      Enter {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'} <span style={{ color: tc.surface2, fontSize: '10px' }}>↵</span>
                     </button>
-                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1239,14 +1284,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Rename Group
                     </button>
-                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       ungroupNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
                       Ungroup
                     </button>
-                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
+                    <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       if (window.confirm(`Delete group "${typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group'}" and all its nodes?`)) {
                         removeNode(clickedNode.id);
                         setContextMenu(null);
@@ -1264,8 +1309,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Duplicate
                     </button>
-                    <div style={{ borderTop: `1px solid ${ctp.surface0}`, margin: '4px 0' }} />
-                    <button style={{ ...ctxBtnStyle, color: ctp.red }} onClick={() => {
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                    <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       removeNode(clickedNode.id);
                       setContextMenu(null);
                     }}>
@@ -1347,65 +1392,46 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         {activeGroupId && activeSubgraph && groupOutputTerminalPos && !isInsideSceneGroup && (
           <div
             data-node-id="__group_output__"
-            style={{
-              position: 'absolute',
-              left: groupOutputTerminalPos.x,
-              top: groupOutputTerminalPos.y,
-              width: 180,
-              background: ctp.base,
-              border: `1px solid ${ctp.mauve}55`,
-              borderRadius: '8px',
-              overflow: 'hidden',
-              userSelect: 'none',
-            }}
+            style={{ ...terminalCard, left: groupOutputTerminalPos.x, top: groupOutputTerminalPos.y, boxShadow: `inset 0 0 0 1.5px ${alpha(tk.kind.expr, 0.5)}, ${tk.shadow.card}` }}
             onMouseDown={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div style={{
-              background: '#2a1f3d', padding: '6px 10px',
-              fontSize: '11px', color: ctp.mauve, fontWeight: 700,
-              letterSpacing: '0.04em',
-            }}>
-              ⊳ Group Output
+            <div style={{ ...terminalHead, color: tk.kind.expr }}>
+              <Icon name="export" size={15} />Group output
             </div>
 
             {/* One row per output port */}
             {(activeSubgraph.outputPorts ?? []).map(port => {
-              const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
               const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
               const srcDef   = srcNode ? getNodeDefinition(srcNode.type) : null;
               const srcLabel = port.fromNodeId
                 ? (typeof srcNode?.params?.label === 'string' ? srcNode.params.label : (srcDef?.label ?? srcNode?.type ?? '?'))
-                : '— not connected —';
+                : 'not connected';
               const isDraggingCompatible = dragConnection
                 ? (() => { const src = displayNodes.find(n => n.id === dragConnection.sourceNodeId); return !!(src?.outputs[dragConnection.sourceOutputKey]); })()
                 : false;
+              const color = TYPE_COLORS[port.type] ?? tk.text.faint;
               return (
                 <div
                   key={port.key}
                   style={{
-                    padding: '5px 8px 5px 16px',
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    position: 'relative',
-                    background: isDraggingCompatible ? `${ctp.mauve}11` : 'transparent',
+                    ...terminalRow, padding: '0 6px 0 16px',
+                    background: isDraggingCompatible ? alpha(tk.kind.expr, 0.08) : 'transparent',
                   }}
                 >
-                  {/* Input socket dot */}
+                  {/* Input socket */}
                   <div
                     ref={el => { registerSocket('__group_output__', 'in', port.key, el); }}
                     onMouseUp={e => { e.stopPropagation(); handleEndConnection('__group_output__', port.key); }}
                     style={{
-                      position: 'absolute', left: -5,
-                      width: 10, height: 10, borderRadius: '50%',
-                      background: port.fromNodeId ? (TYPE_COLORS[port.type] ?? '#888') : ctp.surface1,
-                      cursor: 'crosshair',
-                      border: isDraggingCompatible ? '2px solid white' : 'none',
+                      ...terminalDot, left: -6, border: `2px solid ${color}`,
+                      background: port.fromNodeId ? color : tk.bg.panel,
+                      boxShadow: isDraggingCompatible ? `0 0 0 3px ${alpha(color, 0.35)}` : port.fromNodeId ? `0 0 0 2px ${tk.bg.panel}` : undefined,
                     }}
                   />
-                  {/* Editable label */}
                   {editingOutputPortKey === port.key ? (
                     <input
                       autoFocus
+                      aria-label="Output name"
                       value={editingOutputPortLabel}
                       onMouseDown={e => e.stopPropagation()}
                       onChange={e => setEditingOutputPortLabel(e.target.value)}
@@ -1419,44 +1445,32 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingOutputPortKey(null);
                       }}
-                      style={{ width: '55px', fontSize: '10px', background: ctp.base, border: `1px solid ${ctp.mauve}`, color: ctp.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                      style={terminalInput}
                     />
                   ) : (
                     <span
-                      style={{ fontSize: '10px', color: ctp.subtext0, minWidth: '30px', cursor: 'text', flexShrink: 0 }}
+                      style={{ color: tk.text.secondary, cursor: 'text', flexShrink: 0 }}
                       title="Double-click to rename"
                       onDoubleClick={() => { setEditingOutputPortKey(port.key); setEditingOutputPortLabel(port.label); }}
                     >{port.label}</span>
                   )}
-                  <span style={{ fontSize: '9px', color: port.fromNodeId ? ctp.surface2 : ctp.surface1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontStyle: port.fromNodeId ? 'normal' : 'italic' }}>
-                    {srcLabel}
+                  <span style={{
+                    flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5,
+                    color: port.fromNodeId ? tk.text.muted : tk.text.faint, fontStyle: port.fromNodeId ? 'normal' : 'italic',
+                  }}>
+                    {port.fromNodeId ? `← ${srcLabel}` : srcLabel}
                   </span>
-                  {/* Delete button */}
-                  <button
+                  <IconButton icon="close" label="Remove this output" size="sm" tone="danger" tooltip={false}
                     onMouseDown={e => e.stopPropagation()}
-                    onClick={() => activeGroupId && removeGroupOutput(activeGroupId, port.key)}
-                    title="Remove output port"
-                    style={{ fontSize: '10px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
-                    onMouseEnter={e => (e.currentTarget.style.color = ctp.red)}
-                    onMouseLeave={e => (e.currentTarget.style.color = ctp.surface2)}
-                  >×</button>
+                    onClick={() => activeGroupId && removeGroupOutput(activeGroupId, port.key)} />
                 </div>
               );
             })}
 
-            {/* Add Output button */}
-            <div style={{ padding: '4px 8px 6px' }}>
-              <button
+            <div style={{ padding: '4px 8px 8px' }}>
+              <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
                 onMouseDown={e => e.stopPropagation()}
-                onClick={() => activeGroupId && addGroupOutput(activeGroupId)}
-                style={{
-                  width: '100%', fontSize: '10px', padding: '3px',
-                  background: 'none', border: `1px solid ${ctp.mauve}55`,
-                  color: ctp.mauve, borderRadius: '3px', cursor: 'pointer',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#2a1f3d')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-              >+ Add Output</button>
+                onClick={() => activeGroupId && addGroupOutput(activeGroupId)}>Add output</Button>
             </div>
           </div>
         )}
@@ -1465,53 +1479,28 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         {activeGroupId && activeSubgraph && groupInputTerminalPos && !isInsideSceneGroup && (
           <div
             data-node-id="__group_input__"
-            style={{
-              position: 'absolute',
-              left: groupInputTerminalPos.x,
-              top: groupInputTerminalPos.y,
-              width: 180,
-              background: ctp.base,
-              border: `1px solid ${ctp.blue}55`,
-              borderRadius: '8px',
-              overflow: 'hidden',
-              userSelect: 'none',
-            }}
+            style={{ ...terminalCard, left: groupInputTerminalPos.x, top: groupInputTerminalPos.y, boxShadow: `inset 0 0 0 1.5px ${alpha(tk.accent.base, 0.45)}, ${tk.shadow.card}` }}
             onMouseDown={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div style={{
-              background: '#1a2035', padding: '6px 10px',
-              fontSize: '11px', color: ctp.blue, fontWeight: 700,
-              letterSpacing: '0.04em',
-            }}>
-              ⊲ Group Inputs
+            <div style={{ ...terminalHead, color: tk.accent.text }}>
+              <Icon name="import" size={15} />Group inputs
             </div>
 
             {/* One row per input port */}
             {(activeSubgraph.inputPorts ?? []).map(port => {
-              const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
               const isDragging = !!dragConnection;
+              const color = TYPE_COLORS[port.type] ?? tk.text.faint;
               return (
-                <div
-                  key={port.key}
-                  style={{
-                    padding: '5px 14px 5px 10px',
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    position: 'relative',
-                  }}
-                >
-                  <span style={{ fontSize: '10px', color: ctp.subtext0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
-                  <span style={{ fontSize: '9px', color: TYPE_COLORS[port.type] ?? '#888', flexShrink: 0 }}>{port.type}</span>
-                  {/* Output socket dot — drag FROM this to an inner node input */}
+                <div key={port.key} style={{ ...terminalRow, padding: '0 16px 0 14px' }}>
+                  <span style={{ flex: 1, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
+                  <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint, flexShrink: 0 }}>{port.type}</span>
+                  {/* Output socket — drag FROM this to an inner node input */}
                   <div
                     ref={el => { registerSocket('__group_input__', 'out', port.key, el); }}
                     onMouseDown={e => { e.stopPropagation(); handleStartConnection('__group_input__', port.key, e); }}
                     style={{
-                      position: 'absolute', right: -5,
-                      width: 10, height: 10, borderRadius: '50%',
-                      background: TYPE_COLORS[port.type] ?? '#888',
-                      cursor: 'crosshair',
-                      border: isDragging ? '2px solid white' : 'none',
+                      ...terminalDot, right: -6, background: color, border: `2px solid ${color}`,
+                      boxShadow: isDragging ? `0 0 0 3px ${alpha(color, 0.35)}` : `0 0 0 2px ${tk.bg.panel}`,
                     }}
                   />
                 </div>
@@ -1519,61 +1508,40 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             })}
 
             {/* Add input form / button */}
-            <div style={{ borderTop: `1px solid ${ctp.surface0}`, padding: '4px 8px' }}>
+            <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: 8 }}>
               {addingGroupInput ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} onMouseDown={e => e.stopPropagation()}>
                   <input
                     autoFocus
+                    aria-label="Input name"
                     placeholder="Input name"
                     value={addingGroupInput.name}
                     onChange={e => setAddingGroupInput(prev => prev ? { ...prev, name: e.target.value } : null)}
                     onKeyDown={e => e.stopPropagation()}
-                    style={{
-                      fontSize: '10px', background: ctp.crust, border: `1px solid ${ctp.surface1}`,
-                      color: ctp.text, borderRadius: '3px', padding: '2px 6px', outline: 'none',
-                    }}
+                    style={{ ...terminalInput, width: '100%', height: 30, boxShadow: 'none', background: tk.bg.field }}
                   />
-                  <div style={{ display: 'flex', gap: '3px' }}>
-                    {(['float', 'vec2', 'vec3', 'vec4'] as const).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
-                        style={{
-                          fontSize: '9px', padding: '1px 5px', borderRadius: '3px', cursor: 'pointer',
-                          border: `1px solid ${ctp.surface1}`,
-                          background: addingGroupInput.type === t ? ctp.surface0 : 'none',
-                          color: addingGroupInput.type === t ? ctp.text : ctp.surface2,
-                        }}
-                      >{t}</button>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button
+                  <Segmented
+                    fill
+                    size="sm"
+                    ariaLabel="Input type"
+                    value={addingGroupInput.type}
+                    options={(['float', 'vec2', 'vec3', 'vec4'] as const).map(t => ({ value: t, label: t }))}
+                    onChange={t => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
+                  />
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <Button size="sm" variant="ghost" style={{ height: 28 }} onClick={() => setAddingGroupInput(null)}>Cancel</Button>
+                    <Button size="sm" variant="primary" style={{ height: 28 }} disabled={!addingGroupInput.name.trim()}
                       onClick={() => {
                         if (addingGroupInput.name.trim() && activeGroupId) {
                           addGroupInput(activeGroupId, addingGroupInput.type, addingGroupInput.name.trim());
                         }
                         setAddingGroupInput(null);
-                      }}
-                      style={{ flex: 1, fontSize: '10px', padding: '2px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.green, borderRadius: '3px', cursor: 'pointer' }}
-                    >Add</button>
-                    <button
-                      onClick={() => setAddingGroupInput(null)}
-                      style={{ fontSize: '10px', padding: '2px 6px', background: 'none', border: `1px solid ${ctp.surface1}`, color: ctp.surface2, borderRadius: '3px', cursor: 'pointer' }}
-                    >✕</button>
+                      }}>Add</Button>
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={() => setAddingGroupInput({ name: '', type: 'float' })}
-                  style={{
-                    width: '100%', fontSize: '10px', padding: '3px',
-                    background: 'none', border: `1px solid ${ctp.surface1}`,
-                    color: ctp.blue, borderRadius: '3px', cursor: 'pointer',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = ctp.surface0)}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                >+ Add Input</button>
+                <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
+                  onClick={() => setAddingGroupInput({ name: '', type: 'float' })}>Add input</Button>
               )}
             </div>
           </div>
@@ -1591,8 +1559,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             style={{
               position: 'fixed',
               left, top, width, height,
-              border: `1px dashed ${ctp.blue}`,
-              background: 'rgba(137,180,250,0.05)',
+              border: `1px solid ${alpha(tk.accent.base, 0.6)}`,
+              borderRadius: 4,
+              background: alpha(tk.accent.base, 0.06),
               pointerEvents: 'none',
               zIndex: 50,
             }}
@@ -1608,8 +1577,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             left: hoveredWire.midX - 14,
             top:  hoveredWire.midY - 14,
             width: 28, height: 28, borderRadius: '50%',
-            background: ctp.blue,
-            color: ctp.base,
+            background: tc.blue,
+            color: tc.base,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '16px', fontWeight: 700,
             cursor: 'pointer',
@@ -1683,34 +1652,34 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   );
 });
 
-const ctxBtnStyle: React.CSSProperties = {
+const ctxBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
   display: 'block',
   width: '100%',
   background: 'none',
   border: 'none',
-  color: ctp.text,
+  color: tc.text,
   padding: '6px 12px',
   textAlign: 'left',
   cursor: 'pointer',
   fontSize: '12px',
-};
+});
 
-const toolbarBtnStyle: React.CSSProperties = {
-  background: ctp.surface0,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
+const toolbarBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
+  background: tc.surface0,
+  border: `1px solid ${tc.surface1}`,
+  color: tc.text,
   borderRadius: '6px',
   padding: '5px 10px',
   fontSize: '11px',
   cursor: 'pointer',
   letterSpacing: '0.02em',
-};
+});
 
 // Larger touch target for toolbar buttons on touch devices
-const touchToolbarBtnStyle: React.CSSProperties = {
+const touchToolbarBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
   background: 'rgba(49,50,68,0.85)',
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
+  border: `1px solid ${tc.surface1}`,
+  color: tc.text,
   borderRadius: '8px',
   padding: '10px 14px',
   fontSize: '13px',
@@ -1719,4 +1688,4 @@ const touchToolbarBtnStyle: React.CSSProperties = {
   touchAction: 'manipulation',
   backdropFilter: 'blur(6px)',
   WebkitBackdropFilter: 'blur(6px)',
-};
+});

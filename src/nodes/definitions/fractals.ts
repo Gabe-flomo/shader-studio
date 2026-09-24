@@ -547,7 +547,7 @@ export const IFSNode: NodeDefinition = {
     scale:          { label: 'Scale',       type: 'float', min: 0.1,  max: 5.0,  step: 0.05 },
     offset_x:       { label: 'Offset X',    type: 'float', min: -3,   max: 3,    step: 0.01 },
     offset_y:       { label: 'Offset Y',    type: 'float', min: -3,   max: 3,    step: 0.01 },
-    anim_speed:     { label: 'Anim Speed',  type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
+    anim_speed:     { label: 'Speed',  type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
     palette_preset: { label: 'Palette',     type: 'select', options: PALETTE_PRESET_OPTIONS },
     color_scale:    { label: 'Color Scale', type: 'float', min: 0.01, max: 5.0,  step: 0.01 },
     color_offset:   { label: 'Color Offset',type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },

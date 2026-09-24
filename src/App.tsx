@@ -3,11 +3,22 @@ import { lazyWithSuspense, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
-import { CodePanel, tokenizeLine } from './components/CodePanel';
-import { TopNav } from './components/TopNav';
+import { CodeBarRow, CodePanel } from './components/CodePanel';
+import { tokenizeLine } from './components/glslSyntax';
+import { DesktopTopNav } from './components/shell/DesktopTopNav';
+import { MobileTopBar } from './components/shell/MobileTopBar';
+import { fontFamily } from './theme/tokens';
+import { Icon } from './components/ui/Icon';
+import { Sheet } from './components/ui/Sheet';
+import { Segmented } from './components/ui/Choice';
+import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
+import { MobileIconSegment } from './components/shell/MobileIconSegment';
+import { Button, IconButton } from './components/ui/Button';
+import { ThemeOverrideContext, useTokens } from './theme/themeStore';
+import { PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
-import type { Page } from './components/TopNav';
+import type { Page } from './components/page';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useShallow } from 'zustand/react/shallow';
 import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
@@ -15,6 +26,7 @@ import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useTimeHotkeys } from './hooks/useTimeHotkeys';
+import { useCtp, type CtpPalette } from './theme/nodePalette';
 import { ctp } from './theme/palette';
 // Type-only: erased at build time, so these don't pull the lazy chunks into the main bundle.
 import type { ExportModal as ExportModalT } from './components/ExportModal';
@@ -49,8 +61,8 @@ function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
 }
 
 function getPaletteWidth(bp: ReturnType<typeof useBreakpoint>) {
-  if (bp === 'desktop-lg') return 210;
-  if (bp === 'desktop-sm') return 180;
+  if (bp === 'desktop-lg') return 320;
+  if (bp === 'desktop-sm') return 280;
   return 0; // tablet/mobile: no fixed palette sidebar
 }
 
@@ -61,10 +73,10 @@ const MIN_GRAPH   = 280;
 const MOBILE_CANVAS_VH_DEFAULT = 42;
 
 // ── Button style helper ───────────────────────────────────────────────────────
-const btnStyle = (active = false): React.CSSProperties => ({
-  background: active ? `${ctp.blue}22` : ctp.surface0,
-  border: `1px solid ${active ? `${ctp.blue}55` : ctp.surface1}`,
-  color: active ? ctp.blue : ctp.text,
+const btnStyle = (tc: CtpPalette, active = false): React.CSSProperties => ({
+  background: active ? `${tc.blue}22` : tc.surface0,
+  border: `1px solid ${active ? `${tc.blue}55` : tc.surface1}`,
+  color: active ? tc.blue : tc.text,
   borderRadius: '6px',
   padding: '4px 10px',
   fontSize: '11px',
@@ -75,6 +87,7 @@ const btnStyle = (active = false): React.CSSProperties => ({
 
 // ── Audio master volume widget — shown when any audioInput node is in the graph ─
 function AudioMasterVolumeWidget() {
+  const tc = useCtp();
   const nodes        = useNodeGraphStore(s => s.nodes);
   const masterVolume = useNodeGraphStore(s => s.audioMasterVolume);
   const setVolume    = useNodeGraphStore(s => s.setAudioMasterVolume);
@@ -95,26 +108,26 @@ function AudioMasterVolumeWidget() {
   return (
     <div style={{
       position: 'absolute', bottom: 12, right: 12, zIndex: 20,
-      background: 'rgba(17,17,27,0.92)', border: `1px solid ${ctp.surface1}`,
+      background: 'rgba(17,17,27,0.92)', border: `1px solid ${tc.surface1}`,
       borderRadius: '8px', padding: '6px 10px',
       display: 'flex', alignItems: 'center', gap: '8px',
       backdropFilter: 'blur(8px)',
       boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
     }}>
-      <span style={{ fontSize: '11px', color: ctp.sky }}>♫</span>
+      <span style={{ fontSize: '11px', color: tc.sky }}>♫</span>
       <button
         onClick={togglePause}
         title={paused ? 'Resume all audio' : 'Pause all audio'}
-        style={{ background: 'none', border: 'none', color: paused ? ctp.red : ctp.green, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+        style={{ background: 'none', border: 'none', color: paused ? tc.red : tc.green, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
       >{paused ? '▶' : '⏸'}</button>
       <input
         type="range"
         min={0} max={1} step={0.01}
         value={masterVolume}
         onChange={e => setVolume(parseFloat(e.target.value))}
-        style={{ width: 72, accentColor: ctp.sky, cursor: 'pointer', opacity: paused ? 0.4 : 1 }}
+        style={{ width: 72, accentColor: tc.sky, cursor: 'pointer', opacity: paused ? 0.4 : 1 }}
       />
-      <span style={{ fontSize: '10px', color: ctp.overlay0, fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
+      <span style={{ fontSize: '10px', color: tc.overlay0, fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
         {Math.round(masterVolume * 100)}%
       </span>
     </div>
@@ -126,6 +139,7 @@ function AudioMasterVolumeWidget() {
 // fullscreen mobile pane, so this reuses just its tokenizer/palette for the
 // same syntax highlighting rather than the whole component.
 function MobileCodeView({ code }: { code: string }) {
+  const tc = useCtp();
   const [copied, setCopied] = useState(false);
   const lines = code ? code.split('\n') : ['// No shader compiled yet'];
   const handleCopy = async () => {
@@ -136,21 +150,21 @@ function MobileCodeView({ code }: { code: string }) {
     } catch { /* silent */ }
   };
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, background: ctp.mantle }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, background: tc.mantle }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 12px', background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0,
+        padding: '8px 12px', background: tc.base, borderBottom: `1px solid ${tc.surface0}`, flexShrink: 0,
       }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: ctp.blue, letterSpacing: '0.04em' }}>FRAGMENT SHADER</span>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: tc.blue, letterSpacing: '0.04em' }}>FRAGMENT SHADER</span>
         <button
           onClick={handleCopy}
-          style={{ background: 'none', border: `1px solid ${ctp.surface1}`, color: copied ? ctp.green : ctp.subtext0, borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+          style={{ background: 'none', border: `1px solid ${tc.surface1}`, color: copied ? tc.green : tc.subtext0, borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
         >{copied ? 'Copied' : 'Copy'}</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.6 }}>
         {lines.map((line, i) => (
           <div key={i} style={{ whiteSpace: 'pre' }}>
-            <span style={{ color: ctp.surface1, userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
+            <span style={{ color: tc.surface1, userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
             {tokenizeLine(line).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}
           </div>
         ))}
@@ -353,6 +367,8 @@ function StatusReadout({ swatchSize, probeGap, emptyText, swatchTitle }: { swatc
 }
 
 function App() {
+  const tc = useCtp();
+  const tk = useTokens();
   // Pick only what App itself renders with. A bare `useNodeGraphStore()`
   // subscribes to the whole store, so every per-frame write (pixel sample,
   // probe values, current time) re-rendered App and everything under it.
@@ -360,7 +376,7 @@ function App() {
   // readouts live in StatusReadout / CanvasHintOverlay above.
   const {
     loadExampleGraph, compilationErrors, glslErrors, fragmentShader,
-    saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
+    exportGraph, importGraphFromFile,
     addNode, setNodeHighlightFilter, _fitViewCallback, undo,
     selectedNodeId,
     groupNodes, deselectAll,
@@ -370,7 +386,7 @@ function App() {
     mobileNodeOverlayOpen, setMobileNodeOverlayOpen,
   } = useNodeGraphStore(useShallow(s => ({
     loadExampleGraph: s.loadExampleGraph, compilationErrors: s.compilationErrors, glslErrors: s.glslErrors, fragmentShader: s.fragmentShader,
-    saveGraph: s.saveGraph, getSavedGraphNames: s.getSavedGraphNames, loadSavedGraph: s.loadSavedGraph, deleteSavedGraph: s.deleteSavedGraph, exportGraph: s.exportGraph, importGraphFromFile: s.importGraphFromFile,
+    exportGraph: s.exportGraph, importGraphFromFile: s.importGraphFromFile,
     addNode: s.addNode, setNodeHighlightFilter: s.setNodeHighlightFilter, _fitViewCallback: s._fitViewCallback, undo: s.undo,
     selectedNodeId: s.selectedNodeId,
     groupNodes: s.groupNodes, deselectAll: s.deselectAll,
@@ -405,7 +421,6 @@ function App() {
   const [floatSize, setFloatSize] = useState({ w: 480, h: 360 });
   const floatDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const floatContainerRef = useRef<HTMLDivElement>(null);
-  const [showToolbarMenu, setShowToolbarMenu] = useState(false);
 
   // Mobile: canvas-only / split / graph-only layout mode
   const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph' | 'code'>('split');
@@ -424,17 +439,11 @@ function App() {
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
-  // Save / Load panel state
-  const [showSavePanel, setShowSavePanel] = useState(false);
-  const [showLoadPanel, setShowLoadPanel] = useState(false);
-  const [saveNameInput, setSaveNameInput] = useState('');
-  const [savedNames, setSavedNames]       = useState<string[]>([]);
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
   // Mobile: the record button opens a menu (Record / Reset / Import / Export)
   // instead of jumping straight into the export modal, and a separate
   // Examples button opens a browsable gallery of starter graphs.
-  const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
   const [showMobileExamples, setShowMobileExamples]     = useState(false);
   // Examples sheet has two tabs: starter graphs (existing folder accordion)
   // and an exploratory Nodes browser (MobileNodeBrowser) — category
@@ -488,6 +497,25 @@ function App() {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
       if (ids.length >= 2) { groupNodes(ids); deselectAll(); }
     },
+    duplicateSelected: () => {
+      const st = useNodeGraphStore.getState();
+      const ids = st.selectedNodeIds.length > 0 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : [];
+      if (ids.length > 0) st.duplicateNodes(ids);
+    },
+    deleteSelected: () => {
+      const st = useNodeGraphStore.getState();
+      const ids = st.selectedNodeIds.length > 0 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : [];
+      if (ids.length === 0) return;
+      st.removeNodes(ids);
+      st.deselectAll();
+      st.setSelectedNodeId(null);
+    },
+    exitGroup: () => {
+      const st = useNodeGraphStore.getState();
+      // Esc belongs to whatever dialog, menu or popover is open first
+      if (st.activeGroupPath.length === 0 || document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return;
+      st.exitGroup();
+    },
     addUV:          () => addRandomNode('uv'),
     addTime:        () => addRandomNode('time'),
     addFloat:       () => addRandomNode('float'),
@@ -512,13 +540,7 @@ function App() {
   useShortcuts(shortcutHandlers, holdHandlers);
   useTimeHotkeys();
 
-  const handleSave = () => {
-    const name = saveNameInput.trim();
-    if (!name) return;
-    saveGraph(name);
-    setShowSavePanel(false);
-    setSaveNameInput('');
-  };
+
 
   useEffect(() => {
     loadExampleGraph('blank');
@@ -620,122 +642,37 @@ function App() {
     <button
       onClick={() => setShowErrors(v => !v)}
       style={{
-        background: showErrors ? `${ctp.red}22` : 'none',
-        border: `1px solid ${showErrors ? `${ctp.red}55` : `${ctp.red}44`}`,
-        color: ctp.red, borderRadius: '4px',
-        padding: '3px 8px', fontSize: '10px', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', gap: '5px',
-        fontFamily: 'monospace', touchAction: 'manipulation',
+        height: 32, padding: '0 10px', border: 0, borderRadius: 9, cursor: 'pointer', flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 6, touchAction: 'manipulation',
+        background: `${tk.status.danger}${showErrors ? '42' : '29'}`, color: tk.status.danger, font: `600 12px ${fontFamily.ui}`,
       }}
     >
-      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: ctp.red }} />
-      {errorCount} err
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.danger }} />
+      {errorCount} {errorCount === 1 ? 'error' : 'errors'}
     </button>
   ) : null;
 
   // ── Error popup ───────────────────────────────────────────────────────────
   const errorPopup = showErrors && errorCount > 0 ? (
     <div style={{
-      background: ctp.base, border: `1px solid ${ctp.red}`, borderBottom: 'none',
-      padding: '8px 12px', fontSize: '11px', color: ctp.red,
+      background: tc.base, border: `1px solid ${tc.red}`, borderBottom: 'none',
+      padding: '8px 12px', fontSize: '11px', color: tc.red,
       maxHeight: '160px', overflowY: 'auto', fontFamily: 'monospace', flexShrink: 0,
     }}>
       {compilationErrors.length > 0 && (
         <div style={{ marginBottom: glslErrors.length > 0 ? '6px' : 0 }}>
-          <span style={{ color: `${ctp.red}88`, fontSize: '10px', letterSpacing: '0.05em' }}>GRAPH</span>
+          <span style={{ color: `${tc.red}88`, fontSize: '10px', letterSpacing: '0.05em' }}>GRAPH</span>
           {compilationErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
         </div>
       )}
       {glslErrors.length > 0 && (
         <div>
-          <span style={{ color: `${ctp.red}88`, fontSize: '10px', letterSpacing: '0.05em' }}>GLSL</span>
+          <span style={{ color: `${tc.red}88`, fontSize: '10px', letterSpacing: '0.05em' }}>GLSL</span>
           {glslErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
         </div>
       )}
     </div>
   ) : null;
-
-  // ── Save / Load panels (shared) ───────────────────────────────────────────
-  const savePanelEl = showSavePanel ? (
-    <div style={{
-      position: 'absolute', top: 36, left: 8, zIndex: 20,
-      background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
-      padding: '8px', display: 'flex', gap: '6px', alignItems: 'center',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-    }}>
-      <input autoFocus value={saveNameInput} onChange={e => setSaveNameInput(e.target.value)}
-        placeholder="Graph name..."
-        onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setShowSavePanel(false); }}
-        style={{ background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '4px', padding: '3px 8px', fontSize: '11px', outline: 'none', width: '150px' }}
-      />
-      <button onClick={handleSave} disabled={!saveNameInput.trim()} style={btnStyle(!!saveNameInput.trim())}>Save</button>
-      <button onClick={() => setShowSavePanel(false)} style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}>✕</button>
-    </div>
-  ) : null;
-
-  const loadPanelEl = showLoadPanel ? (
-    <div style={{
-      position: 'absolute', top: 36, left: 8, zIndex: 20,
-      background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
-      padding: '4px', minWidth: '200px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-    }}>
-      {savedNames.length === 0 ? (
-        <div style={{ padding: '8px 10px', fontSize: '11px', color: ctp.surface2 }}>No saved graphs yet</div>
-      ) : savedNames.map(name => (
-        <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 6px', borderRadius: '4px' }}
-          onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = ctp.surface0}
-          onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
-        >
-          <span style={{ flex: 1, fontSize: '11px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-          <button onClick={() => { loadSavedGraph(name); setShowLoadPanel(false); }} style={{ background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.blue, borderRadius: '4px', padding: '1px 7px', fontSize: '10px', cursor: 'pointer' }}>Load</button>
-          <button onClick={() => { deleteSavedGraph(name); setSavedNames(getSavedGraphNames()); }} style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '11px', padding: '1px 3px' }} title="Delete">✕</button>
-        </div>
-      ))}
-    </div>
-  ) : null;
-
-  // ── Graph toolbar — shared by tablet + desktop layouts ────────────────────
-  const compact = bp === 'desktop-sm';
-  const graphToolbarEl = (
-    <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 15, display: 'flex', alignItems: 'center', gap: '4px' }}>
-
-      {/* Export / Import / Record always collapsed into a ··· menu */}
-      <div style={{ position: 'relative' }}>
-        <button
-          onClick={() => setShowToolbarMenu(v => !v)}
-          style={{ ...btnStyle(showToolbarMenu), minWidth: 32 }}
-          title="Export, Import, Record"
-        >···</button>
-        {showToolbarMenu && (
-          <div
-            style={{
-              position: 'absolute', top: 'calc(100% + 4px)', left: 0,
-              background: ctp.base, border: `1px solid ${ctp.surface1}`,
-              borderRadius: '8px', padding: '4px',
-              display: 'flex', flexDirection: 'column', gap: '3px',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
-              minWidth: '130px',
-            }}
-            onMouseLeave={() => setShowToolbarMenu(false)}
-          >
-            <button onClick={() => { exportGraph(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
-            <button onClick={() => { importGraphFromFile(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
-            <div style={{ height: '1px', background: ctp.surface0, margin: '2px 0' }} />
-            <button onClick={() => { setShowExport(true); setShowToolbarMenu(false); }} style={{ ...btnStyle(), color: ctp.mauve, borderColor: `${ctp.mauve}44`, textAlign: 'left', width: '100%' }}>🎬 Record</button>
-          </div>
-        )}
-      </div>
-
-      <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: ctp.blue, borderColor: `${ctp.blue}44` }} title="Keyboard shortcuts">
-        {compact ? '⌨' : '⌨ Keys'}
-      </button>
-      <button
-        onClick={() => loadExampleGraph('blank')}
-        style={{ ...btnStyle(), color: ctp.red }}
-        title="Clear all nodes"
-      >✕</button>
-    </div>
-  );
 
   // ══════════════════════════════════════════════════════════════════════════
   // MOBILE LAYOUT (< 768px)
@@ -746,38 +683,19 @@ function App() {
     const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
     const showCodePane   = mobileLayout === 'code';
     return (
-      <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: ctp.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: tc.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
-        {/* Floating TopNav */}
-        <TopNav
-          page={page} onPageChange={setPage} floating
-          saveActive={showSavePanel}
-          loadActive={showLoadPanel}
-          onSaveClick={() => { setShowSavePanel(v => !v); setShowLoadPanel(false); }}
-          onLoadClick={() => { setSavedNames(getSavedGraphNames()); setShowLoadPanel(v => !v); setShowSavePanel(false); }}
-        />
-        {/* Save/load-by-name panels (savePanelEl/loadPanelEl) — same shared
-            elements desktop's node-graph toolbar uses. Both already carry
-            their own `position: absolute; top: 36px; left: 8px`, so this
-            wrapper just needs to BE their offset parent, anchored right
-            below the floating nav, rather than trying to reposition them
-            itself. */}
-        {(showSavePanel || showLoadPanel) && (
-          <div style={{ position: 'absolute', top: 'calc(44px + env(safe-area-inset-top, 0px))', left: 0, right: 0, zIndex: 31 }}>
-            {savePanelEl}
-            {loadPanelEl}
-          </div>
-        )}
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} onClear={() => setShowMobileResetConfirm(true)} />
 
         {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {showCanvasPane && (
             <div style={{
               position: 'relative',
               flex: mobileLayout === 'canvas' ? 1 : '0 0 auto',
               height: mobileLayout === 'canvas' ? undefined : `${mobileCanvasVh}vh`,
               minHeight: 0,
-              background: '#000',
+              background: tk.bg.render,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               overflow: 'hidden',
             }}>
@@ -793,26 +711,8 @@ function App() {
               {/* Pixel color info / param hint, pinned to the canvas pane */}
               <CanvasHintOverlay />
 
-              {/* Play/pause + reset, bottom-center of the canvas pane —
-                  mobile has no side dock to float this beside (unlike
-                  desktop's TimeControlsStrip next to the divider), so it
-                  overlays the canvas here instead. Node-graph toggle rides
-                  alongside it — same "floats on the canvas" idea, a
-                  read-only mirror of the real node layout while you watch
-                  the render, not another editor. */}
-              <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 22, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <TimeControlsStrip />
-                <button
-                  onClick={() => setMobileNodeOverlayOpen(!mobileNodeOverlayOpen)}
-                  title="Show the node graph over the canvas (read-only)"
-                  style={{
-                    background: mobileNodeOverlayOpen ? `${ctp.blue}22` : 'rgba(24,24,37,0.7)',
-                    border: `1px solid ${mobileNodeOverlayOpen ? ctp.blue : ctp.surface1}`,
-                    color: mobileNodeOverlayOpen ? ctp.blue : ctp.subtext0,
-                    borderRadius: '6px', width: '30px', height: '30px', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
-                  }}
-                >⊞</button>
-              </div>
+              {/* Time controls and the graph-overlay toggle float on the preview */}
+              <MobilePreviewPill overlayOpen={mobileNodeOverlayOpen} onToggleOverlay={() => setMobileNodeOverlayOpen(!mobileNodeOverlayOpen)} />
 
               <MobileNodeGraphOverlay />
             </div>
@@ -855,12 +755,12 @@ function App() {
                 cursor: 'ns-resize', touchAction: 'none',
               }}
             >
-              <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: ctp.surface1 }} />
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: tk.border.strong }} />
             </div>
           )}
 
           {showGraphPane && (
-            <div style={{ flex: 1, minHeight: 0, borderTop: showCanvasPane ? `1px solid ${ctp.surface0}` : undefined }}>
+            <div style={{ flex: 1, minHeight: 0, borderTop: showCanvasPane ? `1px solid ${tc.surface0}` : undefined }}>
               <MobileGraphBrowser />
             </div>
           )}
@@ -880,256 +780,127 @@ function App() {
           </div>
         )}
 
-        {/* Bottom action bar — bottom/side padding grows with the home-
-            indicator/notch-side insets (0 in a plain browser tab, real on
-            an installed/full-screen mobile app) so it isn't flush against
-            the edge the OS itself draws over. */}
+        {/* Bottom bar — layout switch, errors, keyframe tools, Browse. Padding grows with the
+            home-indicator/notch insets (0 in a browser tab, real in an installed app). */}
         <div style={{
-          flexShrink: 0, zIndex: 25,
-          background: 'rgba(24,24,37,0.90)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          borderTop: `1px solid ${ctp.surface0}`,
-          padding: '8px calc(12px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px))',
-          display: 'flex', alignItems: 'center', gap: '8px',
-          minHeight: '56px',
-          boxSizing: 'border-box',
+          flexShrink: 0, zIndex: 25, boxSizing: 'border-box', minHeight: 64,
+          background: tk.bg.panel, borderTop: `1px solid ${tk.border.default}`,
+          padding: '10px calc(14px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px))',
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          {/* Layout mode: canvas-only / split / graph-only */}
-          <div style={{ display: 'flex', border: `1px solid ${ctp.surface1}`, borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
-            <button
-              onClick={() => setMobileLayout('canvas')}
-              style={{ ...btnStyle(mobileLayout === 'canvas'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
-              title="Canvas fullscreen"
-            >▣</button>
-            <button
-              onClick={() => setMobileLayout('split')}
-              style={{ ...btnStyle(mobileLayout === 'split'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderLeft: `1px solid ${ctp.surface1}`, borderRight: `1px solid ${ctp.surface1}` }}
-              title="Split view"
-            >▥</button>
-            <button
-              onClick={() => setMobileLayout('graph')}
-              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderRight: `1px solid ${ctp.surface1}` }}
-              title="Graph fullscreen"
-            >☰</button>
-            <button
-              onClick={() => setMobileLayout('code')}
-              style={{ ...btnStyle(mobileLayout === 'code'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
-              title="Generated code"
-            >{'{}'}</button>
-          </div>
-
-          {/* Error badge */}
+          <MobileIconSegment
+            ariaLabel="Layout"
+            value={mobileLayout}
+            onChange={setMobileLayout}
+            options={[
+              { value: 'canvas', icon: 'layoutCanvas', label: 'Preview only' },
+              { value: 'split', icon: 'layoutSplit', label: 'Preview and graph' },
+              { value: 'graph', icon: 'layoutGraph', label: 'Graph only' },
+              { value: 'code', icon: 'code', label: 'Generated code' },
+            ]}
+          />
           {errorBadge}
-
-          {/* Keyframe editor tool modes — only shown while
-              MobileGraphBrowser's keyframe editor is open for some node's
-              socket. No keyboard here for desktop's V/C/X/D shortcuts, so
-              these live as buttons instead — mirrors desktop's own
-              Select/Add/Delete/Draw toolbar (KeyframeEditorModal.tsx) one
-              for one, just relocated to the bottom bar. */}
+          {/* Keyframe tools while the keyframe editor is open — no keyboard for V/C/X/D here */}
           {mobileKeyframeEditor && (
-            <div style={{ display: 'flex', border: `1px solid ${ctp.surface1}`, borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
-              {([
-                { id: 'select', icon: '↖' },
-                // Plain "+" rather than a pencil glyph (✏) — the pencil
-                // renders as a full-color emoji in Chromium even with the
-                // U+FE0E text-presentation selector appended, looking like a
-                // stray colored blob next to its monochrome siblings.
-                { id: 'add', icon: '+' },
-                { id: 'delete', icon: '✕' },
-                { id: 'draw', icon: '∿' },
-              ] as const).map((m, i) => (
-                <button
-                  key={m.id}
-                  onClick={() => setMobileKeyframeTool(m.id)}
-                  style={{
-                    ...btnStyle(mobileKeyframeTool === m.id), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px',
-                    borderLeft: i > 0 ? `1px solid ${ctp.surface1}` : undefined,
-                  }}
-                  title={m.id}
-                >{m.icon}</button>
-              ))}
-            </div>
+            <MobileIconSegment
+              ariaLabel="Keyframe tool"
+              value={mobileKeyframeTool}
+              onChange={setMobileKeyframeTool}
+              options={[
+                { value: 'select', icon: 'nodes', label: 'Select' },
+                { value: 'add', icon: 'plus', label: 'Add' },
+                { value: 'delete', icon: 'close', label: 'Delete' },
+                { value: 'draw', icon: 'wave', label: 'Draw' },
+              ]}
+            />
           )}
-
-          {/* Examples button — browse starter graphs; picking one loads it
-              in place (loadExampleGraph replaces the current graph), tapping
-              the button again just closes the browser and keeps whatever's
-              currently on screen. */}
+          <span style={{ flex: 1 }} />
           <button
-            onClick={() => { setMobileExamplesTab('examples'); setShowMobileExamples(true); }}
-            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: ctp.green, borderColor: `${ctp.green}44`, marginLeft: 'auto' }}
-            title="Browse examples"
+            type="button"
+            onClick={() => { setMobileExamplesTab('nodes'); setShowMobileExamples(true); }}
+            style={{
+              height: 40, padding: '0 14px', border: 0, borderRadius: 12, cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation',
+              display: 'flex', alignItems: 'center', gap: 7, background: tk.ink.base, color: tk.ink.text, font: `600 13px ${fontFamily.ui}`,
+            }}
           >
-            ✦
+            <Icon name="spark" size={15} />Browse
           </button>
-
-          {/* Action menu — was a direct-to-record button; now Record sits
-              alongside Reset/Import/Export since they're all "whole graph"
-              actions and none of them need to be one tap away. */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowMobileActionMenu(v => !v)}
-              style={{ ...btnStyle(showMobileActionMenu), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: ctp.mauve, borderColor: `${ctp.mauve}44` }}
-              title="Record, reset, import, export"
-            >
-              🎬
-            </button>
-            {showMobileActionMenu && (
-              <div
-                onMouseLeave={() => setShowMobileActionMenu(false)}
-                style={{
-                  position: 'absolute', bottom: 'calc(100% + 4px)', right: 0,
-                  background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '8px', padding: '4px',
-                  display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '140px',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
-                }}
-              >
-                <button
-                  onClick={() => { setShowMobileActionMenu(false); setShowExport(true); }}
-                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: ctp.mauve, borderColor: `${ctp.mauve}44` }}
-                >🎬 Record</button>
-                <button
-                  onClick={() => { setShowMobileActionMenu(false); setShowMobileResetConfirm(true); }}
-                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: ctp.red, borderColor: `${ctp.red}44` }}
-                >✕ Reset</button>
-                <div style={{ height: '1px', background: ctp.surface0, margin: '2px 0' }} />
-                <button onClick={() => { setShowMobileActionMenu(false); importGraphFromFile(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
-                <button onClick={() => { setShowMobileActionMenu(false); exportGraph(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Examples browser */}
+        {/* Browse sheet — starter graphs, or every node by category */}
         {showMobileExamples && (
-          <div
-            onClick={() => setShowMobileExamples(false)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 60, display: 'flex', alignItems: 'flex-end' }}
-          >
-            <div
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: '100%', maxHeight: '75vh', overflowY: 'auto', background: ctp.mantle,
-                borderRadius: '16px 16px 0 0', border: `1px solid ${ctp.surface0}`,
-                padding: '12px 12px calc(12px + env(safe-area-inset-bottom, 0px)) 12px',
-                boxSizing: 'border-box',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', border: `1px solid ${ctp.surface1}`, borderRadius: '8px', overflow: 'hidden' }}>
-                  <button
-                    onClick={() => setMobileExamplesTab('examples')}
-                    style={{
-                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', touchAction: 'manipulation',
-                      background: mobileExamplesTab === 'examples' ? ctp.surface0 : 'none',
-                      color: mobileExamplesTab === 'examples' ? ctp.text : ctp.overlay0,
-                    }}
-                  >Examples</button>
-                  <button
-                    onClick={() => setMobileExamplesTab('nodes')}
-                    style={{
-                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', borderLeft: `1px solid ${ctp.surface1}`, cursor: 'pointer', touchAction: 'manipulation',
-                      background: mobileExamplesTab === 'nodes' ? ctp.surface0 : 'none',
-                      color: mobileExamplesTab === 'nodes' ? ctp.text : ctp.overlay0,
-                    }}
-                  >Nodes</button>
-                </div>
-                <div style={{ flex: 1 }} />
-                <button
-                  onClick={() => setShowMobileExamples(false)}
-                  style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
-                  title="Close"
-                >✕</button>
-              </div>
-              {mobileExamplesTab === 'examples' ? (
-                EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_INDEX[k])).map(folder => {
+          <Sheet title="Browse" onClose={() => setShowMobileExamples(false)}>
+            <div style={{ marginBottom: 12 }}>
+              <Segmented
+                fill
+                ariaLabel="Browse"
+                value={mobileExamplesTab}
+                onChange={setMobileExamplesTab}
+                options={[{ value: 'examples', label: 'Examples' }, { value: 'nodes', label: 'Nodes' }]}
+              />
+            </div>
+            {mobileExamplesTab === 'examples' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_INDEX[k])).map(folder => {
                   const isOpen = expandedExampleFolders.has(folder.label);
+                  const keys = folder.keys.filter(k => EXAMPLE_INDEX[k]);
                   return (
-                    <div key={folder.label} style={{ marginBottom: '12px' }}>
+                    <div key={folder.label}>
                       <button
-                        onClick={() => setExpandedExampleFolders(s => {
-                          const next = new Set(s);
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() => setExpandedExampleFolders(prev => {
+                          const next = new Set(prev);
                           if (next.has(folder.label)) next.delete(folder.label); else next.add(folder.label);
                           return next;
                         })}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
-                          background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
-                          cursor: 'pointer', touchAction: 'manipulation',
+                          width: '100%', height: 46, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', border: 0,
+                          borderRadius: 12, cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+                          background: isOpen ? tk.bg.subtle : 'none', color: tk.text.primary, font: `600 13.5px ${fontFamily.ui}`,
                         }}
                       >
-                        <span style={{ fontSize: '9px', color: folder.color }}>{isOpen ? '▾' : '▸'}</span>
-                        <span style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em' }}>
-                          {folder.label.toUpperCase()}
-                        </span>
+                        <Icon name={isOpen ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint }} />
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: folder.color }} />
+                        <span style={{ flex: 1 }}>{folder.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: tk.text.faint, background: tk.bg.hover, borderRadius: 7, padding: '2px 7px' }}>{keys.length}</span>
                       </button>
-                      {isOpen && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {folder.keys.filter(k => EXAMPLE_INDEX[k]).map(k => (
-                            <button
-                              key={k}
-                              onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
-                              style={{
-                                background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px',
-                                padding: '8px 10px', fontSize: '12px', color: ctp.text,
-                                cursor: 'pointer', touchAction: 'manipulation',
-                              }}
-                            >
-                              {EXAMPLE_INDEX[k].label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      {isOpen && keys.map(k => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
+                          style={{
+                            width: '100%', height: 42, display: 'flex', alignItems: 'center', padding: '0 12px 0 43px', border: 0,
+                            borderRadius: 10, cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+                            background: 'none', color: tk.text.secondary, font: `500 13.5px ${fontFamily.ui}`,
+                          }}
+                        >
+                          <span style={{ flex: 1 }}>{EXAMPLE_INDEX[k].label}</span>
+                          <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
+                        </button>
+                      ))}
                     </div>
                   );
-                })
-              ) : (
-                <MobileNodeBrowser onClose={() => setShowMobileExamples(false)} />
-              )}
-            </div>
-          </div>
+                })}
+              </div>
+            ) : (
+              <MobileNodeBrowser onClose={() => setShowMobileExamples(false)} />
+            )}
+          </Sheet>
         )}
 
-        {/* Reset confirm — a custom modal instead of window.confirm(), which
-            is unreliable inside a Tauri webview. */}
+        {/* Clear confirm — our own sheet instead of window.confirm(), which is unreliable in a Tauri webview */}
         {showMobileResetConfirm && (
-          <div
-            onClick={() => setShowMobileResetConfirm(false)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'flex-end' }}
-          >
-            <div
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: '100%', background: ctp.base, borderRadius: '16px 16px 0 0',
-                border: `1px solid ${ctp.surface1}`, padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px',
-                boxSizing: 'border-box',
-              }}
-            >
-              <div style={{ fontSize: '14px', fontWeight: 700, color: ctp.text, marginBottom: '6px' }}>Clear all nodes?</div>
-              <div style={{ fontSize: '12px', color: ctp.subtext0, marginBottom: '16px' }}>This starts over from a blank graph. This can't be undone.</div>
-              <button
-                onClick={() => { setShowMobileResetConfirm(false); loadExampleGraph('blank'); }}
-                style={{
-                  width: '100%', padding: '12px', marginBottom: '8px', background: `${ctp.red}22`,
-                  border: `1px solid ${ctp.red}66`, borderRadius: '8px', color: ctp.red, fontSize: '13px',
-                  fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
-                }}
-              >
-                ✕ Reset
-              </button>
-              <button
-                onClick={() => setShowMobileResetConfirm(false)}
-                style={{
-                  width: '100%', padding: '12px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`,
-                  borderRadius: '8px', color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
-                }}
-              >
-                Cancel
-              </button>
+          <Sheet title="Clear the graph?" onClose={() => setShowMobileResetConfirm(false)}>
+            <p style={{ margin: '0 0 16px', fontSize: 13.5, lineHeight: 1.5, color: tk.text.muted }}>
+              This starts over from a blank graph, and can’t be undone.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Button variant="danger" style={{ height: 44 }} onClick={() => { setShowMobileResetConfirm(false); loadExampleGraph('blank'); }}>Clear graph</Button>
+              <Button style={{ height: 44 }} onClick={() => setShowMobileResetConfirm(false)}>Cancel</Button>
             </div>
-          </div>
+          </Sheet>
         )}
 
         {/* Export modal */}
@@ -1148,8 +919,8 @@ function App() {
 
   if (mobile && page === 'shortcuts') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
-        <TopNav page={page} onPageChange={setPage} />
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <ShortcutsPage />
       </div>
     );
@@ -1157,8 +928,8 @@ function App() {
 
   if (mobile && page === 'glsl') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
-        <TopNav page={page} onPageChange={setPage} />
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <GLSLPage />
       </div>
     );
@@ -1170,8 +941,8 @@ function App() {
   // ══════════════════════════════════════════════════════════════════════════
   if (tablet) {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
-        <TopNav page={page} onPageChange={setPage} />
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <DesktopTopNav compact page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
         {page === 'shortcuts' && <ShortcutsPage />}
         {page === 'glsl' && <GLSLPage />}
@@ -1182,8 +953,8 @@ function App() {
           <div style={{
             width: paletteExpanded ? '200px' : '36px',
             flexShrink: 0,
-            background: ctp.base,
-            borderRight: `1px solid ${ctp.surface0}`,
+            background: tc.base,
+            borderRight: `1px solid ${tc.surface0}`,
             transition: 'width 0.2s ease',
             overflow: 'hidden',
             display: 'flex',
@@ -1195,7 +966,7 @@ function App() {
               title={paletteExpanded ? 'Collapse palette' : 'Expand palette'}
               style={{
                 background: 'none', border: 'none',
-                color: ctp.blue, cursor: 'pointer',
+                color: tc.blue, cursor: 'pointer',
                 padding: '10px 0', fontSize: '16px',
                 width: '100%', flexShrink: 0,
                 touchAction: 'manipulation',
@@ -1213,17 +984,13 @@ function App() {
 
           {/* Center: Node Graph */}
           <div style={{ flex: 1, position: 'relative', minWidth: 0, userSelect: isDragging ? 'none' : undefined }}>
-            {/* Toolbar — collapses to icon-only on small screens */}
-            {graphToolbarEl}
-            {savePanelEl}
-            {loadPanelEl}
 
             {/* Code toggle */}
-            <button onClick={() => setShowCode(v => !v)} style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode) }}>
+            <button onClick={() => setShowCode(v => !v)} style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(tc, showCode) }}>
               {'{ } Code'}
             </button>
 
-            <NodeGraph />
+            <NodeGraph redesignToolbar />
             {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
             {/* Time controls: floating dock on the node-graph side of the
                 divider, vertically centered — never overlapping the render
@@ -1237,13 +1004,13 @@ function App() {
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
-            style={{ width: '8px', flexShrink: 0, background: isDragging ? ctp.surface1 : ctp.surface0, cursor: 'col-resize', transition: 'background 0.15s' }}
+            style={{ width: '8px', flexShrink: 0, background: isDragging ? tc.surface1 : tc.surface0, cursor: 'col-resize', transition: 'background 0.15s' }}
           />
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
-            <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '28px', flexShrink: 0 }}>
+            <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
               <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" />
               <div style={{ flex: 1 }} />
               {errorBadge}
@@ -1266,8 +1033,8 @@ function App() {
   const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
 
   return (
-    <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
-      <TopNav page={page} onPageChange={setPage} />
+    <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <DesktopTopNav page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
       {page === 'shortcuts' && <ShortcutsPage />}
       {page === 'fn' && (
@@ -1280,22 +1047,12 @@ function App() {
 
         {/* Left: Node Palette — hidden on GLSL page */}
         {page === 'studio' && paletteBaseW > 0 && (
-          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: ctp.mantle, borderRight: `1px solid ${ctp.surface0}` }}>
+          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
             {/* Collapsed state: show only an expand button */}
             {paletteCollapsed ? (
-              <button
-                onClick={() => setPaletteCollapsed(false)}
-                title="Expand palette"
-                style={{
-                  position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)',
-                  zIndex: 10, background: 'none', border: `1px solid ${ctp.surface0}`,
-                  color: ctp.surface1, cursor: 'pointer', borderRadius: '3px',
-                  fontSize: '10px', padding: '2px 4px', lineHeight: 1,
-                  transition: 'color 0.1s',
-                }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
-              >▶</button>
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
+                <IconButton icon="chevR" label="Expand sidebar" size="sm" onClick={() => setPaletteCollapsed(false)} />
+              </div>
             ) : (
               <>
                 <NodePalette onCollapse={() => setPaletteCollapsed(true)} />
@@ -1308,7 +1065,7 @@ function App() {
                     cursor: 'col-resize', zIndex: 20, background: 'transparent',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = ctp.surface1)}
+                  onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = tk.border.strong)}
                   onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.background = 'transparent')}
                 />
               </>
@@ -1319,31 +1076,21 @@ function App() {
         {/* Center content */}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'studio' && (
-            <>
-              {/* Toolbar — collapses to icon-only on small screens */}
-              {graphToolbarEl}
-
-              {/* Code toggle */}
-              <button
-                onClick={() => setShowCode(v => !v)}
-                style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode), fontFamily: 'monospace' }}
-                onMouseEnter={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = ctp.surface1; }}
-                onMouseLeave={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = ctp.surface0; }}
-              >
-                {'{ } Code'}
-              </button>
-
-              <NodeGraph />
-              {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
-              {/* Time controls: floating dock on the node-graph side of the
-                  divider, vertically centered — never overlapping the
-                  render canvas on the other side of it. */}
-              {!previewFloated && (
-                <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
-                  <TimeControlsStrip direction="column" />
-                </div>
-              )}
-            </>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                <NodeGraph redesignToolbar />
+              </div>
+              {/* Generated code docks under the canvas: a bar when closed, a resizable panel when open. */}
+              {showCode
+                ? <CodePanel docked code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />
+                : (
+                  <div style={{ borderTop: `1px solid ${tk.border.default}` }}>
+                    <CodeBarRow slug={selectedNodeId ? (nodeSlugMap.get(selectedNodeId) ?? null) : null} onClick={() => setShowCode(true)}>
+                      <IconButton icon="chevU" label="Show generated code" size="sm" onClick={e => { e.stopPropagation(); setShowCode(true); }} />
+                    </CodeBarRow>
+                  </div>
+                )}
+            </div>
           )}
           {page === 'glsl' && <GLSLPage />}
         </div>
@@ -1353,119 +1100,58 @@ function App() {
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
-            style={{ width: '5px', flexShrink: 0, background: isDragging ? ctp.surface1 : ctp.surface0, cursor: 'col-resize', transition: 'background 0.15s' }}
-            onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = ctp.surface1; }}
-            onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = ctp.surface0; }}
-          />
+            style={{ width: 5, flexShrink: 0, marginLeft: -2, marginRight: -2, zIndex: 5, position: 'relative', cursor: 'col-resize', display: 'flex', justifyContent: 'center' }}
+          >
+            <span style={{ width: 1, height: '100%', background: isDragging ? tk.accent.base : tk.border.default }} />
+          </div>
         )}
 
-        {/* Right: Shader Preview — hidden when floated */}
+        {/* Right: Shader Preview — hidden when floated. A render surface, so it's dark in both themes. */}
         {!previewFloated && (
-          <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
-              {showHistogram && histData && <HistogramOverlay data={histData} />}
-              {/* Overlay controls: histogram toggle + float */}
-              <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: '4px' }}>
-                <button
-                  onClick={() => setShowHistogram(v => !v)}
-                  title="Toggle brightness histogram"
-                  style={{ background: showHistogram ? `${ctp.mauve}22` : `${ctp.base}99`, border: `1px solid ${showHistogram ? ctp.mauve : ctp.surface1}`, color: showHistogram ? ctp.mauve : ctp.surface2, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.mauve; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? ctp.mauve : ctp.surface2; }}
-                >∿</button>
-                <button
-                  onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }}
-                  title="Float preview"
-                  style={{ background: `${ctp.base}99`, border: `1px solid ${ctp.surface1}`, color: ctp.surface2, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
-                >⊞</button>
+          <ThemeOverrideContext.Provider value="dark">
+            <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
+              <PreviewHeader>
+                <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
+                <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
+              </PreviewHeader>
+              <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+                <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
+                {showHistogram && histData && <HistogramOverlay data={histData} />}
               </div>
+              <PreviewFooter idleHint="Hover for colour · select a node to probe" />
             </div>
-            {/* Status bar */}
-            <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '28px', flexShrink: 0 }}>
-              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" swatchTitle="Pixel color under cursor (0.0–1.0)" />
-              <div style={{ flex: 1 }} />
-              {errorBadge}
-            </div>
-            {errorPopup}
-          </div>
+          </ThemeOverrideContext.Provider>
         )}
       </div>
 
       {/* Floating preview window */}
       {previewFloated && (
-        <div
-          ref={floatContainerRef}
-          style={{
-            position: 'fixed',
-            left: floatPos.x,
-            top: floatPos.y,
-            width: floatSize.w,
-            height: floatSize.h,
-            zIndex: 500,
-            display: 'flex',
-            flexDirection: 'column',
-            background: ctp.mantle,
-            border: `1px solid ${ctp.surface1}`,
-            borderRadius: '8px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-            overflow: 'hidden',
-            resize: 'both',
-            minWidth: 240,
-            minHeight: 180,
-          }}
-        >
-          {/* Drag handle / title bar */}
+        <ThemeOverrideContext.Provider value="dark">
           <div
-            onMouseDown={handleFloatHeaderMouseDown}
+            ref={floatContainerRef}
             style={{
-              background: ctp.base,
-              borderBottom: `1px solid ${ctp.surface0}`,
-              padding: '4px 8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              cursor: 'grab',
-              flexShrink: 0,
-              userSelect: 'none',
+              position: 'fixed', left: floatPos.x, top: floatPos.y, width: floatSize.w, height: floatSize.h, zIndex: 500,
+              display: 'flex', flexDirection: 'column', background: '#0d0d12', borderRadius: 12, overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)',
+              resize: 'both', minWidth: 240, minHeight: 180,
             }}
           >
-            <span style={{ fontSize: '10px', color: ctp.surface2, letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
-            <span onMouseDown={e => e.stopPropagation()}><TimeControlsStrip /></span>
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => setShowHistogram(v => !v)}
-              title="Toggle brightness histogram"
-              style={{ background: 'none', border: 'none', color: showHistogram ? ctp.mauve : ctp.surface2, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.mauve; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? ctp.mauve : ctp.surface2; }}
-            >∿</button>
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => setPreviewFloated(false)}
-              title="Dock preview"
-              style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
-            >⊟</button>
+            {/* Drag handle / title bar */}
+            <div onMouseDown={handleFloatHeaderMouseDown} style={{ cursor: 'grab', userSelect: 'none' }}>
+              <PreviewHeader>
+                <span onMouseDown={e => e.stopPropagation()} style={{ display: 'flex', gap: 2 }}>
+                  <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
+                  <IconButton icon="popout" label="Dock the preview" size="sm" active onClick={() => setPreviewFloated(false)} />
+                </span>
+              </PreviewHeader>
+            </div>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
+              {showHistogram && histData && <HistogramOverlay data={histData} />}
+            </div>
+            <PreviewFooter idleHint="Hover to probe" />
           </div>
-
-          {/* Canvas */}
-          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-            <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
-            {showHistogram && histData && <HistogramOverlay data={histData} />}
-          </div>
-
-          {/* Status bar */}
-          <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '24px', flexShrink: 0 }}>
-            <StatusReadout swatchSize={10} probeGap={8} emptyText="hover to probe" />
-            <div style={{ flex: 1 }} />
-            {errorBadge}
-          </div>
-          {errorPopup}
-        </div>
+        </ThemeOverrideContext.Provider>
       )}
 
       {showExport && (

@@ -175,7 +175,7 @@ export const RaymarchNode: NodeDefinition = {
     cam_height:{ type: 'float', label: 'Cam Height'   },
     cam_speed: { type: 'float', label: 'Orbit Speed'  },
     shape_r:   { type: 'float', label: 'Shape Radius' },
-    blend_k:   { type: 'float', label: 'Blend K'      },
+    blend_k:   { type: 'float', label: 'Blend radius'      },
     light_pos: { type: 'vec2',  label: 'Light XZ'     },
     fog_dist:  { type: 'float', label: 'Fog Distance' },
     noise_scale:{ type: 'float',label: 'Noise Scale'  },
@@ -240,7 +240,7 @@ export const RaymarchNode: NodeDefinition = {
     cam_speed:      { label: 'Orbit Speed',   type: 'float', min: 0,     max: 2,    step: 0.01   },
     cam_fov:        { label: 'FOV',           type: 'float', min: 0.5,   max: 3,    step: 0.05   },
     shape_r:        { label: 'Shape Radius',  type: 'float', min: 0.1,   max: 3,    step: 0.05   },
-    blend_k:        { label: 'Blend K',       type: 'float', min: 0.01,  max: 2,    step: 0.01, showWhen: { param: 'shape', value: 'blend' }   },
+    blend_k:        { label: 'Blend radius',  type: 'float', min: 0.01,  max: 2,    step: 0.01, showWhen: { param: 'shape', value: 'blend' }, hint: 'How far apart shapes start to merge. 0 is a hard edge.' },
     repeat_x:       { label: 'Repeat X',      type: 'float', min: 1,     max: 10,   step: 0.5, showWhen: { param: 'shape', value: 'repeat' }    },
     repeat_z:       { label: 'Repeat Z',      type: 'float', min: 1,     max: 10,   step: 0.5, showWhen: { param: 'shape', value: 'repeat' }    },
     light_x:        { label: 'Light X',       type: 'float', min: -10,   max: 10,   step: 0.1    },
@@ -838,7 +838,7 @@ export const ChromaticAberrationNode: NodeDefinition = {
       { value: 'false', label: 'Off' },
       { value: 'true',  label: 'On'  },
     ]},
-    anim_speed: { label: 'Anim Speed', type: 'float',  min: 0.0, max: 3.0,   step: 0.01, showWhen: { param: 'animate', value: 'true' } },
+    anim_speed: { label: 'Speed', type: 'float',  min: 0.0, max: 3.0,   step: 0.01, showWhen: { param: 'animate', value: 'true' } },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {

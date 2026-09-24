@@ -3,6 +3,7 @@ import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
 import { PALETTE_PRESETS } from '../../nodes/definitions/color';
 import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
 import { ctp } from '../../theme/palette';
+import { useCtp } from '../../theme/nodePalette';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -865,7 +866,8 @@ export function SdfPreviewViz({ node }: { node: GraphNode }) {
         ref={canvasRef}
         width={160}
         height={160}
-        style={{ display: 'block', width: '100%', height: '120px', imageRendering: 'pixelated' }}
+        // cover, not stretch: the field is square, and stretching it to a wide box turns circles into ellipses.
+        style={{ display: 'block', width: '100%', height: '120px', objectFit: 'cover', imageRendering: 'pixelated' }}
       />
     </div>
   );
@@ -1867,15 +1869,19 @@ const TYPE_COLORS: Record<DataType, string> = {
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const subgraph = node.params.subgraph as SubgraphData | undefined;
+  // A diagram of the group's insides, not a render — it follows the app theme.
+  const tc = useCtp();
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !subgraph) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const W = canvas.width, H = canvas.height;
+    // Drawn at 2× for a crisp result on the 360px card
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+    const W = canvas.width / 2, H = canvas.height / 2;
 
-    ctx.fillStyle = ctp.crust;
+    ctx.fillStyle = tc.surface0;
     ctx.fillRect(0, 0, W, H);
 
     const nodes       = subgraph.nodes       ?? [];
@@ -1886,7 +1892,7 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 
     const getNodeColor = (n: GraphNode): string => {
       const firstOutput = Object.values(n.outputs)[0];
-      return firstOutput ? (TYPE_COLORS[firstOutput.type as DataType] ?? ctp.overlay0) : ctp.overlay0;
+      return firstOutput ? (TYPE_COLORS[firstOutput.type as DataType] ?? tc.overlay0) : tc.overlay0;
     };
 
     // Build edges from input connections
@@ -1942,19 +1948,19 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
     for (const e of edges) {
       const from = positions.get(e.fromId);
       const to   = positions.get(e.toId);
-      if (from && to) drawEdge(from.x, from.y, to.x, to.y, '#2a2a3e');
+      if (from && to) drawEdge(from.x, from.y, to.x, to.y, tc.surface2);
     }
 
     // Group input → internal node edges
     for (const ip of inputPosArr) {
       const target = positions.get(ip.p.toNodeId);
-      if (target) drawEdge(ip.x, ip.y, target.x, target.y, (TYPE_COLORS[ip.p.type] ?? ctp.surface1) + '66');
+      if (target) drawEdge(ip.x, ip.y, target.x, target.y, (TYPE_COLORS[ip.p.type] ?? tc.surface1) + '66');
     }
 
     // Internal node → group output edges
     for (const op of outputPosArr) {
       const source = positions.get(op.p.fromNodeId);
-      if (source) drawEdge(source.x, source.y, op.x, op.y, (TYPE_COLORS[op.p.type] ?? ctp.surface1) + '66');
+      if (source) drawEdge(source.x, source.y, op.x, op.y, (TYPE_COLORS[op.p.type] ?? tc.surface1) + '66');
     }
 
     // Internal node dots — circles for regular nodes, diamonds for nested groups
@@ -1987,7 +1993,7 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 
     // Group input triangles (pointing right)
     for (const ip of inputPosArr) {
-      const color = TYPE_COLORS[ip.p.type as DataType] ?? ctp.overlay0;
+      const color = TYPE_COLORS[ip.p.type as DataType] ?? tc.overlay0;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.moveTo(ip.x - 4, ip.y - 3); ctx.lineTo(ip.x + 3, ip.y); ctx.lineTo(ip.x - 4, ip.y + 3);
@@ -1996,28 +2002,28 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 
     // Group output squares
     for (const op of outputPosArr) {
-      const color = TYPE_COLORS[op.p.type as DataType] ?? ctp.overlay0;
+      const color = TYPE_COLORS[op.p.type as DataType] ?? tc.overlay0;
       ctx.fillStyle = color;
       ctx.fillRect(op.x - 3, op.y - 3, 6, 6);
     }
 
     // Node count label
-    ctx.fillStyle = ctp.surface1;
-    ctx.font = '8px monospace';
+    ctx.fillStyle = tc.overlay0;
+    ctx.font = '600 9px ui-monospace, Menlo, monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`${nodes.length}n`, W - 3, H - 3);
     ctx.textAlign = 'left';
-  }, [subgraph]);
+  }, [subgraph, tc]);
 
   if (!subgraph) return null;
 
   return (
-    <div style={VIZ_CONTAINER}>
+    <div style={{ margin: '4px 10px 10px', borderRadius: 10, overflow: 'hidden' }}>
       <canvas
         ref={canvasRef}
-        width={240}
-        height={72}
-        style={{ display: 'block', width: '100%', height: '72px' }}
+        width={680}
+        height={192}
+        style={{ display: 'block', width: '100%', height: 96 }}
       />
     </div>
   );
@@ -4040,7 +4046,7 @@ function ExprBadgeViz({ node }: { node: GraphNode }) {
   const isCustom = node.type === 'customFn';
   const body = typeof node.params.body === 'string' ? node.params.body.trim() : '';
   const label = isCustom
-    ? (typeof node.params.label === 'string' ? node.params.label : 'Custom Fn')
+    ? (typeof node.params.label === 'string' ? node.params.label : 'Custom Function')
     : (typeof node.params.label === 'string' ? node.params.label : 'Expr');
   const snippet = body.split('\n')[0].slice(0, 48) || (isCustom ? 'no body yet' : 'no expression');
   return (

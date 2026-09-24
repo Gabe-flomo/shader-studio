@@ -9,9 +9,12 @@ import {
   normaliseCombo,
   comboFromEvent,
 } from '../hooks/useShortcuts';
-import { ctp } from '../theme/palette';
+import { useTokens } from '../theme/themeStore';
+import { alpha, fontFamily, radius } from '../theme/tokens';
+import { Button } from './ui/Button';
 
 export function ShortcutsPage() {
+  const tk = useTokens();
   const [map, setMap]         = useState<ShortcutMap>(loadShortcutMap);
   const [binding, setBinding] = useState<string | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
@@ -60,202 +63,101 @@ export function ShortcutsPage() {
     return acc;
   }, {});
 
-  const groupColors: Record<string, string> = {
-    'Graph':      ctp.blue,
-    'View':       ctp.green,
-    'Add Nodes':  ctp.mauve,
-    'Filter':     ctp.yellow,
-    'Help':       ctp.sapphire,
-  };
+  // Split the groups into two columns of roughly equal height.
+  const columns: [string, typeof DEFAULT_ACTIONS][][] = [[], []];
+  const heights = [0, 0];
+  for (const entry of Object.entries(groups)) {
+    const col = heights[0] <= heights[1] ? 0 : 1;
+    columns[col].push(entry);
+    heights[col] += entry[1].length + 1.5;
+  }
+
+  const groupColor = (g: string) =>
+    ({ Graph: tk.accent.base, View: tk.status.success, 'Add Nodes': tk.kind.expr, Filter: tk.status.warning }[g] ?? tk.text.faint);
 
   return (
-    <div
-      style={{
-        flex: 1,
-        overflowY: 'auto',
-        background: ctp.crust,
-        color: ctp.text,
-        fontFamily: 'system-ui, sans-serif',
-        padding: '32px',
-      }}
-    >
-      {/* Page header */}
-      <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '28px' }}>
-          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: ctp.text }}>
-            ⌨ Keyboard Shortcuts
-          </h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: ctp.surface2 }}>
-            Click any binding to rebind it — then press the new key combo. Changes save automatically.
-          </p>
+    <div style={{ flex: 1, overflowY: 'auto', background: tk.bg.app, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '44px 24px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>Keyboard shortcuts</div>
+            <div style={{ color: tk.text.muted, marginTop: 6 }}>Click any binding to rebind it, then press the new key combo. Changes save automatically.</div>
+          </div>
+          <Button size="sm" icon="reset" onClick={handleReset}>Reset all to defaults</Button>
         </div>
 
-        {/* Groups in a 2-column grid on wide screens */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: '24px',
-            alignItems: 'start',
-          }}
-        >
-          {Object.entries(groups).map(([group, actions]) => {
-            const accent = groupColors[group] ?? ctp.surface2;
-            return (
-              <div
-                key={group}
-                style={{
-                  background: ctp.base,
-                  border: `1px solid ${ctp.surface0}`,
-                  borderRadius: '10px',
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Group header */}
-                <div
-                  style={{
-                    padding: '10px 14px',
-                    background: ctp.mantle,
-                    borderBottom: `1px solid ${ctp.surface0}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '8px', height: '8px', borderRadius: '50%',
-                      background: accent, flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: '11px', fontWeight: 700,
-                      textTransform: 'uppercase', letterSpacing: '0.08em',
-                      color: accent,
-                    }}
-                  >
-                    {group}
-                  </span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16, alignItems: 'start' }}>
+          {columns.map((col, ci) => (
+            <div key={ci} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {col.map(([group, actions]) => (
+                <div key={group} style={{ background: tk.bg.panel, borderRadius: radius.card, boxShadow: tk.shadow.card, padding: '6px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px 8px', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: groupColor(group) }} />{group}
+                  </div>
+                  {actions.map(action => (
+                    <ShortcutRow
+                      key={action.id}
+                      label={action.label}
+                      description={action.description}
+                      combo={map[action.id] ?? action.defaultCombo}
+                      binding={binding === action.id}
+                      conflict={conflict === action.id}
+                      saved={saved === action.id}
+                      onClick={() => setBinding(binding === action.id ? null : action.id)}
+                    />
+                  ))}
                 </div>
-
-                {/* Actions */}
-                <div style={{ padding: '6px 8px' }}>
-                  {actions.map(action => {
-                    const isBinding  = binding === action.id;
-                    const isConflict = conflict === action.id;
-                    const isSaved    = saved === action.id;
-                    const combo      = map[action.id] ?? action.defaultCombo;
-
-                    return (
-                      <div
-                        key={action.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '7px 6px',
-                          borderRadius: '6px',
-                          background: isConflict ? `${ctp.red}22` : isSaved ? `${ctp.green}11` : 'transparent',
-                          transition: 'background 0.2s',
-                          gap: '12px',
-                        }}
-                      >
-                        {/* Label + description */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '13px', color: ctp.text, fontWeight: 500 }}>
-                            {action.label}
-                            {isSaved && (
-                              <span style={{ color: ctp.green, fontSize: '11px', marginLeft: '8px' }}>
-                                ✓ saved
-                              </span>
-                            )}
-                            {isConflict && (
-                              <span style={{ color: ctp.red, fontSize: '11px', marginLeft: '8px' }}>
-                                ⚠ conflict!
-                              </span>
-                            )}
-                          </div>
-                          {action.description && (
-                            <div style={{ fontSize: '11px', color: ctp.surface1, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {action.description}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Binding chip */}
-                        <button
-                          onClick={() => setBinding(isBinding ? null : action.id)}
-                          style={{
-                            flexShrink: 0,
-                            background: isBinding ? `${ctp.blue}22` : ctp.surface0,
-                            border: isBinding ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
-                            color: isBinding ? ctp.blue : ctp.text,
-                            borderRadius: '6px',
-                            padding: '4px 12px',
-                            fontSize: '13px',
-                            fontFamily: 'monospace',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            minWidth: '80px',
-                            textAlign: 'center',
-                            letterSpacing: '0.02em',
-                            transition: 'border-color 0.15s, color 0.15s, background 0.15s',
-                          }}
-                          title={isBinding ? 'Press new key combo (Esc to cancel)' : 'Click to rebind'}
-                        >
-                          {isBinding ? '● press key…' : displayCombo(combo)}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          ))}
         </div>
 
-        {/* Footer */}
-        <div
-          style={{
-            marginTop: '32px',
-            paddingTop: '20px',
-            borderTop: `1px solid ${ctp.surface0}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          <p style={{ margin: 0, fontSize: '12px', color: ctp.surface1 }}>
-            Shortcuts are stored locally in your browser. They survive page refreshes.
-          </p>
-          <button
-            onClick={handleReset}
-            style={{
-              background: 'none',
-              border: `1px solid ${ctp.surface1}`,
-              color: ctp.subtext0,
-              borderRadius: '6px',
-              padding: '6px 16px',
-              fontSize: '12px',
-              cursor: 'pointer',
-              transition: 'border-color 0.15s, color 0.15s',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.red;
-              (e.currentTarget as HTMLButtonElement).style.color = ctp.red;
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
-              (e.currentTarget as HTMLButtonElement).style.color = ctp.subtext0;
-            }}
-          >
-            Reset all to defaults
-          </button>
-        </div>
+        <div style={{ color: tk.text.faint, fontSize: 12 }}>Shortcuts are stored locally in your browser. They survive page refreshes.</div>
       </div>
     </div>
+  );
+}
+
+function ShortcutRow({ label, description, combo, binding, conflict, saved, onClick }: {
+  label: string; description?: string; combo: string;
+  binding: boolean; conflict: boolean; saved: boolean; onClick: () => void;
+}) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 18px', border: 0, cursor: 'pointer', textAlign: 'left',
+        background: binding ? tk.bg.selected : conflict ? alpha(tk.status.danger, 0.1) : hover ? tk.bg.hover : 'transparent',
+        font: `12.5px ${fontFamily.ui}`, color: tk.text.primary,
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {label}
+          {saved && <span style={{ fontSize: 11, fontWeight: 600, color: tk.status.success }}>Saved</span>}
+          {conflict && <span style={{ fontSize: 11, fontWeight: 600, color: tk.status.danger }}>Already uses that key</span>}
+        </span>
+        {description && <span style={{ fontSize: 12, color: tk.text.muted }}>{description}</span>}
+      </span>
+      {binding ? (
+        <span style={{ height: 28, display: 'flex', alignItems: 'center', padding: '0 10px', borderRadius: 7, background: tk.bg.panel, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.accent.text, fontSize: 12, fontWeight: 600 }}>
+          Press new keys…
+        </span>
+      ) : (
+        <span style={{ display: 'flex', gap: 4 }}>
+          {combo.split('+').map((part, i) => (
+            <span key={i} style={{
+              minWidth: 26, height: 28, boxSizing: 'border-box', padding: '0 7px', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: tk.bg.field, boxShadow: `inset 0 -1.5px 0 ${tk.border.strong}`, font: `600 12px ${fontFamily.mono}`, color: tk.text.primary,
+            }}>{displayCombo(part)}</span>
+          ))}
+        </span>
+      )}
+    </button>
   );
 }

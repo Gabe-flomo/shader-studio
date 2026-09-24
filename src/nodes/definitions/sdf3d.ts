@@ -935,10 +935,10 @@ export const SDFIntersectNode: NodeDefinition = {
 export const SDFSmoothUnionNode: NodeDefinition = {
   type: 'sdfSmoothUnion', label: 'Smooth Union', category: '3D Boolean Ops',
   description: 'Blend two shapes together with a smooth transition of width k. k=0.1 tight, k=0.5 blobby.',
-  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend' } },
+  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { k: 0.15 },
-  paramDefs: { k: { label: 'Blend k', type: 'float', min: 0.001, max: 1.0, step: 0.005 } },
+  paramDefs: { k: { label: 'Blend radius', type: 'float', min: 0.001, max: 1.0, step: 0.005, hint: 'How far apart shapes start to merge. 0 is a hard edge.' } },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
     const a = inputVars.a || '0.0';
@@ -954,10 +954,10 @@ export const SDFSmoothUnionNode: NodeDefinition = {
 export const SDFSmoothSubtractNode: NodeDefinition = {
   type: 'sdfSmoothSubtract', label: 'Smooth Subtract', category: '3D Boolean Ops',
   description: 'Smooth subtraction — rounds the carved edge. cut=shape removed, base=main.',
-  inputs: { cut: { type: 'float', label: 'Cut' }, base: { type: 'float', label: 'Base' }, k: { type: 'float', label: 'Blend' } },
+  inputs: { cut: { type: 'float', label: 'Cut' }, base: { type: 'float', label: 'Base' }, k: { type: 'float', label: 'Blend radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { k: 0.1 },
-  paramDefs: { k: { label: 'Blend k', type: 'float', min: 0.001, max: 1.0, step: 0.005 } },
+  paramDefs: { k: { label: 'Blend radius', type: 'float', min: 0.001, max: 1.0, step: 0.005, hint: 'How far apart shapes start to merge. 0 is a hard edge.' } },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
     const cut  = inputVars.cut  || '0.0';
@@ -973,10 +973,10 @@ export const SDFSmoothSubtractNode: NodeDefinition = {
 export const SDFSmoothIntersectNode: NodeDefinition = {
   type: 'sdfSmoothIntersect', label: 'Smooth Intersect', category: '3D Boolean Ops',
   description: 'Smooth intersection — rounds the overlap edge.',
-  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend' } },
+  inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { k: 0.1 },
-  paramDefs: { k: { label: 'Blend k', type: 'float', min: 0.001, max: 1.0, step: 0.005 } },
+  paramDefs: { k: { label: 'Blend radius', type: 'float', min: 0.001, max: 1.0, step: 0.005, hint: 'How far apart shapes start to merge. 0 is a hard edge.' } },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
     const a = inputVars.a || '0.0';

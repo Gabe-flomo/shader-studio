@@ -300,7 +300,7 @@ export const GlowFalloffNode: NodeDefinition = {
   defaultParams: { brightness: 0.5, k: 20.0, power: 2.0 },
   paramDefs: {
     brightness: { label: 'Brightness', type: 'float', min: 0.001, max: 2.0,  step: 0.01 },
-    k:          { label: 'k',          type: 'float', min: 0.5,   max: 50.0, step: 0.5  },
+    k:          { label: 'Falloff rate',          type: 'float', min: 0.5,   max: 50.0, step: 0.5, hint: 'Higher fades faster.'  },
     power:      { label: 'Power',      type: 'float', min: 1.0,   max: 4.0,  step: 0.1  },
   },
   glslFunction: `float glowFalloffFn(float dist, float brightness, float k, float power) {
@@ -377,7 +377,7 @@ export const NoisyGridSDFNode: NodeDefinition = {
     radius:         { label: 'Radius',    type: 'float', min: 0.05, max: 0.49, step: 0.01  },
     noiseAmt:       { label: 'Noise Amt', type: 'float', min: 0.0,  max: 0.5,  step: 0.01  },
     speed:          { label: 'Speed',     type: 'float', min: 0.0,  max: 2.0,  step: 0.05  },
-    smoothK:        { label: 'Merge K',   type: 'float', min: 0.01, max: 0.5,  step: 0.01  },
+    smoothK:        { label: 'Blend radius',   type: 'float', min: 0.01, max: 0.5,  step: 0.01, hint: 'How far apart shapes start to merge. 0 is a hard edge.'  },
     neighborRadius: { label: 'Neighbors', type: 'select', options: [
       { value: '1', label: '1 (3×3)' },
       { value: '2', label: '2 (5×5)' },

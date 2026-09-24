@@ -1,12 +1,19 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { useNodeGraphStore, saveKeyframePreset, loadKeyframePresets } from '../../store/useNodeGraphStore';
 import type { KeyframePreset } from '../../types/keyframePreset';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
-import { TimeControlsStrip } from '../TimeControlsStrip';
+import { getNodeDefinition } from '../../nodes/definitions';
 import { NumberInput } from './NumberInput';
-import { ctp } from '../../theme/palette';
+import { useCtp } from '../../theme/nodePalette';
+import { useTokens } from '../../theme/themeStore';
+import { fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Segmented, Toggle } from '../ui/Choice';
+import { Icon } from '../ui/Icon';
+import type { IconName } from '../ui/iconPaths';
+import { Modal } from '../ui/Modal';
+import { RulerSlider } from '../ui/RulerSlider';
 import { subscribeTimeTick } from '../../lib/timeTick';
 
 const MAX_KEYFRAMES = 8;
@@ -15,16 +22,13 @@ const KF_R = 6;
 const HIT_R = 9;
 
 type ToolMode = 'select' | 'add' | 'delete' | 'draw';
-const TOOL_MODES: { id: ToolMode; label: string; key: string; icon: string }[] = [
-  { id: 'select', label: 'Select', key: 'V', icon: '↖' },
-  { id: 'add', label: 'Add', key: 'C', icon: '✏' },
-  { id: 'delete', label: 'Delete', key: 'X', icon: '✕' },
-  { id: 'draw', label: 'Draw', key: 'D', icon: '∿' },
+const TOOL_MODES: { id: ToolMode; label: string; key: string }[] = [
+  { id: 'select', label: 'Select', key: 'V' },
+  { id: 'add', label: 'Add', key: 'C' },
+  { id: 'delete', label: 'Delete', key: 'X' },
+  { id: 'draw', label: 'Draw', key: 'D' },
 ];
 
-// Per-axis color, matching the classic X/Y/Z = red/green/blue convention.
-const AXIS_COLORS: Record<string, string> = { x: ctp.red, y: ctp.green, z: ctp.blue };
-const DEFAULT_AXIS_COLOR = ctp.blue; // plain float sockets (single axis, no letter)
 const FLOAT_AXIS: readonly string[] = ['']; // stable reference — a fresh [''] literal every render would churn useMemo deps below
 
 // ── Data read/write helpers ──────────────────────────────────────────────────
@@ -167,12 +171,18 @@ interface ViewState {
 
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; startViewT0: number; startValueCenter: number; moved: boolean }
-  | { kind: 'keyframe'; index: number; moved: boolean }
+  | { kind: 'keyframe'; index: number; moved: boolean; startX: number; startY: number }
   | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' }
   | { kind: 'draw'; moved: boolean }
   | { kind: 'scrub' };
 
 interface OtherAxisTrack { label: string; color: string; keyframes: Keyframe[] }
+
+/** Colours for the graph canvas, from the app theme. */
+interface KfPalette {
+  bg: string; grid: string; axis: string; label: string; ghost: string; playhead: string;
+  handleIn: string; handleOut: string; ring: string; readoutBg: string; readoutBorder: string; empty: string;
+}
 
 // ── Drawing ──────────────────────────────────────────────────────────────────
 
@@ -190,6 +200,7 @@ function draw(
   hoverInfo: { t: number; v: number } | null,
   drawPreview: { t: number; v: number }[] | null,
   playheadT: number | null,
+  pal: KfPalette,
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -200,21 +211,21 @@ function draw(
   const toY = (v: number) => H / 2 - (v - valueCenter) * pxPerUnit;
   const fromY = (py: number) => valueCenter - (py - H / 2) / pxPerUnit;
 
-  ctx.fillStyle = '#0d0d14';
+  ctx.fillStyle = pal.bg;
   ctx.fillRect(0, 0, W, H);
 
   // grid, with small tick labels so you can read off where you are in the
   // timeline/value range without needing a live hover.
-  ctx.strokeStyle = ctp.base;
+  ctx.strokeStyle = pal.grid;
   ctx.lineWidth = 1;
-  ctx.font = '9px monospace';
+  ctx.font = '10px ui-monospace, Menlo, monospace';
   const tStart = Math.floor(viewT0 / gridT) * gridT;
   const tEnd = viewT0 + W / pxPerSec;
   for (let t = tStart; t <= tEnd; t += gridT) {
     const x = toX(t);
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.grid;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    ctx.fillStyle = ctp.surface2;
+    ctx.fillStyle = pal.label;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(fmt(t), x + 3, H - 4);
@@ -224,16 +235,16 @@ function draw(
   const vEnd = Math.max(vTop, vBot);
   for (let v = vStart; v <= vEnd; v += gridV) {
     const y = toY(v);
-    ctx.strokeStyle = ctp.base;
+    ctx.strokeStyle = pal.grid;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    ctx.fillStyle = ctp.surface2;
+    ctx.fillStyle = pal.label;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(fmt(v), 3, y - 3);
   }
 
   // axes (t=0, v=0) — brighter
-  ctx.strokeStyle = ctp.surface1;
+  ctx.strokeStyle = pal.axis;
   ctx.lineWidth = 1.5;
   if (viewT0 <= 0.0001) {
     const x0 = toX(0);
@@ -267,7 +278,7 @@ function draw(
   // Live freehand-draw preview — the raw recorded path, before it gets
   // downsampled to keyframes on mouseup.
   if (drawPreview && drawPreview.length > 1) {
-    ctx.strokeStyle = ctp.yellow;
+    ctx.strokeStyle = pal.ghost;
     ctx.lineWidth = 2;
     ctx.setLineDash([]);
     ctx.beginPath();
@@ -279,9 +290,9 @@ function draw(
   }
 
   if (keyframes.length === 0 && !drawPreview) {
-    ctx.fillStyle = ctp.surface1;
-    ctx.font = '11px monospace';
-    ctx.fillText('click to place a keyframe', 12, 20);
+    ctx.fillStyle = pal.empty;
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText('Add mode (C) or Draw (D), then click the graph to place keys', 14, 24);
     return;
   }
   if (keyframes.length === 0) return;
@@ -295,7 +306,7 @@ function draw(
   if (segs.length > 0) {
     ctx.lineWidth = 2;
     const drawRange = (fromT: number, toT: number, dashed: boolean) => {
-      ctx.strokeStyle = dashed ? ctp.yellow : activeColor;
+      ctx.strokeStyle = dashed ? pal.ghost : activeColor;
       if (dashed) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
       ctx.beginPath();
       for (let i = 0; i <= steps; i++) {
@@ -324,13 +335,13 @@ function draw(
     const p0x = segToX(0), p0y = segToY(0), p3x = segToX(1), p3y = segToY(1);
     const p1x = segToX(seg.ease.a), p1y = segToY(seg.ease.b);
     const p2x = segToX(seg.ease.c), p2y = segToY(seg.ease.d);
-    ctx.strokeStyle = `${ctp.red}88`; ctx.lineWidth = 1;
+    ctx.strokeStyle = `${pal.handleIn}88`; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke();
-    ctx.strokeStyle = `${ctp.blue}88`;
+    ctx.strokeStyle = `${pal.handleOut}88`;
     ctx.beginPath(); ctx.moveTo(p3x, p3y); ctx.lineTo(p2x, p2y); ctx.stroke();
-    [[p1x, p1y, ctp.red], [p2x, p2y, ctp.blue]].forEach(([hx, hy, color]) => {
+    [[p1x, p1y, pal.handleIn], [p2x, p2y, pal.handleOut]].forEach(([hx, hy, color]) => {
       ctx.fillStyle = color as string;
-      ctx.strokeStyle = ctp.crust; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = pal.bg; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(hx as number, hy as number, HANDLE_R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     });
   }
@@ -340,12 +351,12 @@ function draw(
     const cx = toX(k.t), cy = toY(k.v);
     const isHover = hoverKf === i;
     const isSelected = selectedKf === i;
-    ctx.fillStyle = isHover ? '#ffffff' : activeColor;
-    ctx.strokeStyle = ctp.crust;
+    ctx.fillStyle = activeColor;
+    ctx.strokeStyle = pal.bg;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(cx, cy, isHover ? KF_R + 1.5 : KF_R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     if (isSelected) {
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = pal.ring;
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(cx, cy, KF_R + 4, 0, Math.PI * 2); ctx.stroke();
     }
@@ -357,11 +368,11 @@ function draw(
   if (playheadT !== null) {
     const px = toX(playheadT);
     if (px >= -2 && px <= W + 2) {
-      ctx.strokeStyle = ctp.yellow;
+      ctx.strokeStyle = pal.playhead;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
-      ctx.fillStyle = ctp.yellow;
+      ctx.fillStyle = pal.playhead;
       ctx.beginPath();
       ctx.moveTo(px - 5, 0); ctx.lineTo(px + 5, 0); ctx.lineTo(px, 8); ctx.closePath();
       ctx.fill();
@@ -374,14 +385,14 @@ function draw(
   if (hoverInfo) {
     const hx = toX(hoverInfo.t), hy = toY(hoverInfo.v);
     const label = `t=${fmt(hoverInfo.t)}  v=${fmt(hoverInfo.v)}`;
-    ctx.font = '10px monospace';
+    ctx.font = '11px ui-monospace, Menlo, monospace';
     const textW = ctx.measureText(label).width;
-    const padX = 6, boxH = 16;
+    const padX = 7, boxH = 20;
     const boxW = textW + padX * 2;
     const boxX = Math.max(2, Math.min(W - boxW - 2, hx - boxW / 2));
     const boxY = Math.max(2, hy - KF_R - boxH - 8);
-    ctx.fillStyle = `${ctp.base}dd`;
-    ctx.strokeStyle = ctp.surface1;
+    ctx.fillStyle = pal.readoutBg;
+    ctx.strokeStyle = pal.readoutBorder;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.rect(boxX, boxY, boxW, boxH); ctx.fill(); ctx.stroke();
     ctx.fillStyle = activeColor;
@@ -394,9 +405,18 @@ function draw(
 // ── KeyframeEditorModal ─────────────────────────────────────────────────────
 
 interface Props { node: GraphNode; socketKey: string; onClose: () => void }
-interface AnchorRect { left: number; top: number; width: number; height: number }
 
 export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
+  const tk = useTokens();
+  const tc = useCtp();
+  // Per-axis colour, matching the classic X/Y/Z = red/green/blue convention; a float track uses the accent.
+  const axisColors = useMemo<Record<string, string>>(() => ({ x: tc.red, y: tc.green, z: tc.blue }), [tc]);
+  const defaultAxisColor = tk.accent.base;
+  const pal = useMemo<KfPalette>(() => ({
+    bg: tk.bg.panel, grid: tk.border.subtle, axis: tk.border.strong, label: tk.text.faint, ghost: tk.status.warning,
+    playhead: tk.status.danger, handleIn: tc.red, handleOut: tc.blue, ring: tk.text.primary,
+    readoutBg: tk.bg.panel, readoutBorder: tk.border.default, empty: tk.text.muted,
+  }), [tk, tc]);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
 
@@ -431,16 +451,19 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Position/dim over the node-graph canvas only, not the whole viewport, so
-  // the render preview (and the rest of the app chrome) stays visible while
-  // editing — computed once on open.
-  const [anchor, setAnchor] = useState<AnchorRect | null>(null);
+  // The graph fills the space left in the modal; its drawing buffer follows that size.
+  const graphWrapRef = useRef<HTMLDivElement>(null);
+  const [graphSize, setGraphSize] = useState({ w: 680, h: 440, measured: false });
   useEffect(() => {
-    const el = document.querySelector('[data-node-canvas="true"]');
-    if (el) {
-      const r = el.getBoundingClientRect();
-      setAnchor({ left: r.left, top: r.top, width: r.width, height: r.height });
-    }
+    const el = graphWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setGraphSize(prev => (prev.measured && Math.round(width) === prev.w && Math.round(height) === prev.h
+        ? prev : { w: Math.round(width), h: Math.round(height), measured: true }));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // ── Vector (vec2/vec3) axis support ──
@@ -452,7 +475,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const [activeAxis, setActiveAxis] = useState<string>(axisLetters[0]);
   useEffect(() => { setActiveAxis(axisLetters[0]); }, [socketKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const storageKey = activeAxis ? `${socketKey}_${activeAxis}` : socketKey;
-  const activeColor = isVector ? (AXIS_COLORS[activeAxis] ?? DEFAULT_AXIS_COLOR) : DEFAULT_AXIS_COLOR;
+  const activeColor = isVector ? (axisColors[activeAxis] ?? defaultAxisColor) : defaultAxisColor;
 
   const keyframes = useMemo(() => readKeyframes(node, storageKey), [node, storageKey]);
   const mode = readMode(node, socketKey);
@@ -466,8 +489,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     if (!isVector) return [];
     return axisLetters
       .filter(a => a !== activeAxis)
-      .map(a => ({ label: a.toUpperCase(), color: AXIS_COLORS[a] ?? DEFAULT_AXIS_COLOR, keyframes: readKeyframes(node, `${socketKey}_${a}`) }));
-  }, [isVector, axisLetters, activeAxis, node, socketKey]);
+      .map(a => ({ label: a.toUpperCase(), color: axisColors[a] ?? defaultAxisColor, keyframes: readKeyframes(node, `${socketKey}_${a}`) }));
+  }, [isVector, axisLetters, activeAxis, node, socketKey, axisColors, defaultAxisColor]);
 
   // Invariant: the earliest keyframe always sits at t=0 — any "start later"
   // intent goes through Offset instead, so there's exactly one way to shift
@@ -607,19 +630,24 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     setView(v => ({ ...v, viewT0: Math.max(0, tMin - tPad), valueCenter: (vMin + vMax) / 2, pxPerSec: newPxPerSec, pxPerUnit: newPxPerUnit }));
   }, []);
 
+  // Open framed on the keys: fit once, after the graph has been measured.
+  const fittedRef = useRef(false);
+  useEffect(() => {
+    if (fittedRef.current || !graphSize.measured || keyframesRef.current.length === 0) return;
+    canvasSizeRef.current = { w: graphSize.w, h: graphSize.h };
+    fittedRef.current = true;
+    centerOnKeyframes();
+  }, [graphSize, centerOnKeyframes]);
+
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview, playheadT);
-  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview, playheadT]);
+    if (canvas) draw(canvas, keyframesRef.current, mode, loopBack, viewRef.current, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview, playheadT, pal);
+  }, [mode, loopBack, easeEditSeg, hoverKf, selectedKf, activeColor, otherAxes, hoverInfo, drawPreview, playheadT, pal]);
 
-  // `anchor` is in the deps because it drives canvasW/canvasH below: a canvas
-  // element clears its drawn content the instant its width/height attributes
-  // change (a plain browser behavior, nothing React-specific), and anchor
-  // resolves one render after mount (its own effect fires after first paint)
-  // — without this, that resize silently wipes the canvas and nothing
-  // schedules a repaint, so the editor opens blank until some other state
-  // change (e.g. a hover) happens to trigger one.
-  useEffect(() => { redraw(); }, [keyframes, view, redraw, anchor]);
+  // `graphSize` is in the deps because it drives the canvas width/height attributes: a canvas
+  // clears its drawn content the instant those change, and nothing else would schedule a
+  // repaint after a resize.
+  useEffect(() => { redraw(); }, [keyframes, view, redraw, graphSize]);
 
   const getLocalXY = useCallback((e: React.MouseEvent | MouseEvent) => {
     const canvas = canvasRef.current;
@@ -761,7 +789,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       return; // delete mode: no drag/pan, deletion happens immediately on the hit
     }
     if (kfHit !== null) {
-      dragRef.current = { kind: 'keyframe', index: kfHit, moved: false };
+      dragRef.current = { kind: 'keyframe', index: kfHit, moved: false, startX: xy.px, startY: xy.py };
       return;
     }
     dragRef.current = { kind: 'pan', startX: xy.px, startY: xy.py, startViewT0: viewRef.current.viewT0, startValueCenter: viewRef.current.valueCenter, moved: false };
@@ -785,6 +813,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
       setView(v => ({ ...v, viewT0: Math.max(0, drag.startViewT0 - dx / v.pxPerSec), valueCenter: drag.startValueCenter + dy / v.pxPerUnit }));
     } else if (drag.kind === 'keyframe') {
+      // A few pixels of jitter during a click shouldn't turn it into a move
+      if (!drag.moved && Math.hypot(xy.px - drag.startX, xy.py - drag.startY) < 3) return;
       drag.moved = true;
       const snap = effectiveSnap(e.shiftKey);
       const newT = Math.max(0, snapVal(fromX(xy.px), viewRef.current.gridT, snap));
@@ -938,304 +968,363 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     return () => window.removeEventListener('keydown', handler);
   }, [setToolMode]);
 
-  const modalW = anchor ? Math.min(anchor.width * 0.88, 920) : 760;
-  const modalH = anchor ? Math.min(anchor.height * 0.88, 640) : 560;
-  const canvasW = Math.round(modalW - 40);
-  const canvasH = Math.round(modalH - 220);
+  const canvasW = graphSize.w;
+  const canvasH = graphSize.h;
   canvasSizeRef.current = { w: canvasW, h: canvasH };
-
-  const inputStyle: React.CSSProperties = {
-    background: ctp.crust, border: `1px solid ${ctp.surface0}`, color: ctp.text,
-    borderRadius: '4px', padding: '3px 6px', fontSize: '11px', width: '52px', fontFamily: 'monospace',
-  };
-
-  const overlayStyle: React.CSSProperties = anchor
-    ? { position: 'fixed', left: anchor.left, top: anchor.top, width: anchor.width, height: anchor.height, zIndex: 1000, background: 'rgba(0,0,0,0.6)' }
-    : { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
   const cursorForMode = toolMode === 'add' || toolMode === 'draw' ? 'crosshair' : toolMode === 'delete' ? 'not-allowed' : 'default';
 
-  return createPortal(
-    <div style={overlayStyle} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+  // ── Inspector edits on the selected key ──
+  const selKey = selectedKf !== null ? keyframes[selectedKf] : null;
+  const updateSelected = (patch: Partial<Keyframe>) => {
+    if (selectedKf === null) return;
+    const target = { ...keyframes[selectedKf], ...patch };
+    const next = keyframes.map((k, i) => (i === selectedKf ? target : k)).sort((a, b) => a.t - b.t);
+    writeKeyframes(next);
+    setSelectedKf(next.indexOf(target));
+    if (patch.t !== undefined) seekToTime(target.t);
+  };
+  const easingEntries: { id: keyof typeof EASING_PRESETS; label: string }[] = [
+    { id: 'linear', label: 'Linear' }, { id: 'ease', label: 'Ease' }, { id: 'easeIn', label: 'In' }, { id: 'easeOut', label: 'Out' }, { id: 'easeInOut', label: 'In-out' },
+  ];
+  const sameEase = (a: Keyframe['ease'], b: Keyframe['ease']) =>
+    Math.abs(a.a - b.a) < 1e-3 && Math.abs(a.b - b.b) < 1e-3 && Math.abs(a.c - b.c) < 1e-3 && Math.abs(a.d - b.d) < 1e-3;
+  const hasNextSegment = selectedKf !== null && (selectedKf < keyframes.length - 1 || mode === 'interpolate');
+
+  const nodeLabel = typeof node.params.label === 'string' && node.params.label ? node.params.label : (getNodeDefinition(node.type)?.label ?? node.type);
+  const socketLabel = node.inputs[socketKey]?.label ?? socketKey;
+  const hint =
+    toolMode === 'add' ? 'Click empty space to add a key · drag a key to move it'
+    : toolMode === 'delete' ? 'Click a key to delete it'
+    : toolMode === 'draw' ? `Drag to draw a curve (sampled down to ${MAX_KEYFRAMES} keys) · click to drop one key`
+    : 'Click a key to edit its easing · drag to move · double-click to delete · scroll to pan · ⌃-scroll to zoom';
+
+  const fieldStyle: React.CSSProperties = {
+    width: '100%', height: 34, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', borderRadius: radius.control,
+    background: tk.bg.field, color: tk.text.primary, font: `500 12.5px ${fontFamily.mono}`,
+  };
+
+  return (
+    <Modal
+      title="Keyframes"
+      subtitle={`${nodeLabel} · ${socketLabel} (${inputType ?? 'float'})`}
+      icon="kf"
+      iconColor={tk.status.warning}
+      width={1040}
+      height={700}
+      onClose={onClose}
+      headerActions={<TimeCluster />}
+      footer={
+        <>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hint}</span>
+          <Button icon={kfPlaying ? 'pause' : 'play'} disabled={keyframes.length === 0}
+            title={kfPlaying ? 'Stop' : 'Play this track, following its end behaviour'}
+            onClick={() => (kfPlaying ? stopKfPlayback() : startKfPlayback())}>
+            {kfPlaying ? 'Stop' : 'Play track'}
+          </Button>
+          <Button variant="primary" onClick={onClose}>Done</Button>
+        </>
+      }
+    >
       <div
-        style={{
-          position: anchor ? 'absolute' : 'static',
-          left: anchor ? (anchor.width - modalW) / 2 : undefined,
-          top: anchor ? (anchor.height - modalH) / 2 : undefined,
-          background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '10px',
-          width: `${modalW}px`, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.65)', color: ctp.text, fontSize: '12px',
-          // Belt-and-suspenders alongside preventDefault() on the drag
-          // handlers: a fast drag shouldn't be able to select nearby text
-          // (header, button labels, hint row) and trigger a native
-          // text-drag instead of our own canvas/scrubber drag.
-          userSelect: 'none', WebkitUserSelect: 'none',
-        }}
+        style={{ display: 'flex', height: '100%', minHeight: 0, userSelect: 'none', WebkitUserSelect: 'none' }}
         onMouseDown={e => {
-          e.stopPropagation();
-          if (showLoadDropdown && loadDropdownRef.current && !loadDropdownRef.current.contains(e.target as Node)) {
-            setShowLoadDropdown(false);
-          }
+          if (showLoadDropdown && loadDropdownRef.current && !loadDropdownRef.current.contains(e.target as Node)) setShowLoadDropdown(false);
         }}
       >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: activeColor }}>
-            ◆ Keyframes — {socketKey}{isVector && <span style={{ opacity: 0.7 }}>.{activeAxis}</span>}
-          </span>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '10px', color: ctp.overlay0 }}>
-            <TimeControlsStrip />
-            <span>{keyframes.length}/{MAX_KEYFRAMES}</span>
-            <button onClick={onClose} style={{ background: 'none', border: `1px solid ${ctp.red}55`, color: ctp.red, cursor: 'pointer', fontSize: '11px', padding: '2px 8px', borderRadius: '4px' }}>✕ Close</button>
-          </div>
-        </div>
-
-        {/* Axis selector — vec2/vec3 sockets only */}
-        {isVector && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Axis</span>
-            <div style={{ display: 'flex', gap: '4px' }}>
-              {axisLetters.map(a => (
-                <button
-                  key={a}
-                  onClick={() => changeAxis(a)}
-                  title={`Edit the ${a.toUpperCase()} axis`}
-                  style={{
-                    background: activeAxis === a ? `${AXIS_COLORS[a]}22` : 'none',
-                    border: `1px solid ${activeAxis === a ? AXIS_COLORS[a] : ctp.surface1}`,
-                    color: activeAxis === a ? AXIS_COLORS[a] : ctp.subtext0,
-                    cursor: 'pointer', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px',
-                  }}
-                >{a.toUpperCase()}</button>
-              ))}
-            </div>
-            {keyframes.length > 0 && axisLetters.length > 1 && (
-              <>
-                <span style={{ color: ctp.surface1, fontSize: '10px' }}>copy to</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {axisLetters.filter(a => a !== activeAxis).map(a => (
-                    <button
-                      key={a}
-                      onClick={() => copyActiveAxisTo(a)}
-                      title={`Copy the ${activeAxis.toUpperCase()} axis's keyframes onto ${a.toUpperCase()} (overwrites it)`}
-                      style={{ background: 'none', border: `1px solid ${AXIS_COLORS[a]}55`, color: AXIS_COLORS[a], cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '4px' }}
-                    >→ {a.toUpperCase()}</button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Tool modes + bypass */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            {TOOL_MODES.map(tm => (
-              <button
-                key={tm.id}
-                onClick={() => setToolMode(tm.id)}
-                title={`${tm.label} (${tm.key})`}
-                style={{
-                  background: toolMode === tm.id ? `${ctp.blue}22` : 'none',
-                  border: `1px solid ${toolMode === tm.id ? ctp.blue : ctp.surface1}`,
-                  color: toolMode === tm.id ? ctp.blue : ctp.subtext0,
-                  cursor: 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
-                  display: 'flex', alignItems: 'center', gap: '5px',
-                }}
-              >
-                <span>{tm.icon}</span>{tm.label}
-                <span style={{ opacity: 0.6, fontSize: '9px' }}>{tm.key}</span>
-              </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button
-              onClick={centerOnKeyframes}
-              disabled={keyframes.length === 0}
-              title="Fit view to all keyframes"
-              style={{
-                background: 'none', border: `1px solid ${ctp.surface1}`, color: keyframes.length === 0 ? ctp.surface1 : ctp.subtext0,
-                cursor: keyframes.length === 0 ? 'default' : 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
-              }}
-            >⊡ Fit</button>
-            <button
-              onClick={() => setBypassed(!bypassed)}
-              title={bypassed ? 'Bypassed — using the static value instead of these keyframes' : 'Bypass these keyframes (keeps the data, ignores it when rendering)'}
-              style={{
-                background: bypassed ? `${ctp.red}22` : 'none',
-                border: `1px solid ${bypassed ? ctp.red : ctp.surface1}`,
-                color: bypassed ? ctp.red : ctp.subtext0,
-                cursor: 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
-              }}
-            >⏭ {bypassed ? 'Bypassed' : 'Bypass'}</button>
-            {showSaveInput ? (
-              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder={`${socketKey}${isVector ? `.${activeAxis}` : ''}`}
-                  value={savePresetName}
-                  onChange={e => setSavePresetName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleSavePreset(savePresetName);
-                    if (e.key === 'Escape') { setShowSaveInput(false); setSavePresetName(''); }
-                  }}
-                  style={{ width: '110px', padding: '3px 6px', fontSize: '11px', background: ctp.crust, color: ctp.text, border: `1px solid ${ctp.green}`, borderRadius: '4px', outline: 'none' }}
-                />
-                <button onClick={() => handleSavePreset(savePresetName)} style={{ background: `${ctp.green}11`, border: `1px solid ${ctp.green}55`, color: ctp.green, cursor: 'pointer', fontSize: '11px', padding: '3px 8px', borderRadius: '4px' }}>↑</button>
-                <button onClick={() => { setShowSaveInput(false); setSavePresetName(''); }} style={{ background: 'none', border: `1px solid ${ctp.overlay0}55`, color: ctp.overlay0, cursor: 'pointer', fontSize: '11px', padding: '3px 6px', borderRadius: '4px' }}>✕</button>
-              </div>
-            ) : (
-              <button
-                onClick={() => { setSavePresetName(''); setShowSaveInput(true); }}
-                disabled={keyframes.length === 0}
-                title="Save this curve as a reusable preset in the Saved Keyframes palette tab"
-                style={{
-                  background: 'none', border: `1px solid ${keyframes.length === 0 ? ctp.surface1 : `${ctp.green}55`}`, color: keyframes.length === 0 ? ctp.surface1 : ctp.green,
-                  cursor: keyframes.length === 0 ? 'default' : 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
-                }}
-              >↑ Save Preset</button>
-            )}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          {/* Tool bar */}
+          <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 0 16px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+            <Segmented
+              ariaLabel="Tool"
+              value={toolMode}
+              onChange={setToolMode}
+              options={TOOL_MODES.map(tm => ({ value: tm.id, label: tm.label, shortcut: tm.key.toLowerCase() }))}
+            />
+            <span style={{ font: `500 11.5px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.field, borderRadius: 6, padding: '3px 8px', whiteSpace: 'nowrap' }}>
+              {keyframes.length} / {MAX_KEYFRAMES} keys
+            </span>
+            <span style={{ flex: 1 }} />
+            <Button size="sm" variant="ghost" icon="fit" disabled={keyframes.length === 0} onClick={centerOnKeyframes} title="Fit the view to the keys">Fit</Button>
+            <span title={bypassed ? 'Bypassed: the static value is used instead of these keys' : 'Bypass these keys (keeps them, ignores them when rendering)'}>
+              <Toggle checked={bypassed} onChange={setBypassed} label="Bypass" />
+            </span>
+            <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 4px' }} />
             <div ref={loadDropdownRef} style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowLoadDropdown(v => !v)}
-                title="Load a saved preset onto this axis"
-                style={{
-                  background: showLoadDropdown ? `${ctp.blue}22` : 'none',
-                  border: `1px solid ${showLoadDropdown ? ctp.blue : ctp.surface1}`,
-                  color: showLoadDropdown ? ctp.blue : ctp.subtext0,
-                  cursor: 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px',
-                }}
-              >↓ Load Preset</button>
+              <Button size="sm" variant="ghost" icon="kf" onClick={() => setShowLoadDropdown(v => !v)}>
+                Presets <Icon name="chevD" size={13} />
+              </Button>
               {showLoadDropdown && (
-                <div
-                  style={{
-                    position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 20,
-                    background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.5)', minWidth: '160px', maxHeight: '220px', overflowY: 'auto',
-                    padding: '4px',
-                  }}
-                >
-                  {keyframePresets.length === 0 ? (
-                    <div style={{ fontSize: '10px', color: ctp.surface1, padding: '6px 8px', fontStyle: 'italic' }}>No saved presets yet</div>
-                  ) : (
-                    keyframePresets.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => handleLoadPreset(p)}
-                        style={{
-                          display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none',
-                          color: ctp.text, fontSize: '11px', padding: '5px 8px', cursor: 'pointer', borderRadius: '4px',
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 20, width: 240, padding: 4,
+                  background: tk.bg.panel, borderRadius: radius.lg, boxShadow: tk.shadow.popover,
+                }}>
+                  {showSaveInput ? (
+                    <div style={{ display: 'flex', gap: 6, padding: 4 }}>
+                      <input
+                        autoFocus
+                        aria-label="Preset name"
+                        placeholder={`${socketKey}${isVector ? `.${activeAxis}` : ''}`}
+                        value={savePresetName}
+                        onChange={e => setSavePresetName(e.target.value)}
+                        onKeyDown={e => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') { handleSavePreset(savePresetName); setShowLoadDropdown(false); }
+                          if (e.key === 'Escape') { setShowSaveInput(false); setSavePresetName(''); }
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = ctp.surface0; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-                      >◆ {p.label} <span style={{ opacity: 0.5 }}>({p.keyframes.length})</span></button>
-                    ))
+                        style={{ ...fieldStyle, height: 30, font: `500 12.5px ${fontFamily.ui}` }}
+                      />
+                      <Button size="sm" onClick={() => { handleSavePreset(savePresetName); setShowLoadDropdown(false); }}>Save</Button>
+                    </div>
+                  ) : (
+                    <MenuRow icon="save" disabled={keyframes.length === 0} onClick={() => { setSavePresetName(''); setShowSaveInput(true); }}>
+                      Save this curve as a preset…
+                    </MenuRow>
                   )}
+                  <div style={{ height: 1, background: tk.border.subtle, margin: '4px 0' }} />
+                  {keyframePresets.length === 0
+                    ? <div style={{ fontSize: 12, color: tk.text.muted, padding: '6px 10px' }}>No saved presets yet</div>
+                    : keyframePresets.map(p => (
+                      <MenuRow key={p.id} icon="kf" onClick={() => handleLoadPreset(p)}>
+                        {p.label} <span style={{ color: tk.text.faint }}>· {p.keyframes.length} keys</span>
+                      </MenuRow>
+                    ))}
                 </div>
               )}
             </div>
           </div>
-        </div>
 
-        {/* Scrubber — drag to seek global time live, After-Effects style */}
-        <div
-          onMouseDown={handleScrubberMouseDown}
-          title="Drag to scrub global time"
-          style={{
-            height: '16px', background: ctp.crust, borderRadius: '6px 6px 0 0',
-            border: `1px solid ${ctp.surface0}88`, borderBottom: 'none', position: 'relative', cursor: 'ew-resize',
-          }}
-        >
-          {playheadT !== null && toX(playheadT) >= 0 && toX(playheadT) <= canvasW && (
-            <div style={{ position: 'absolute', left: `${toX(playheadT) - 5}px`, top: '2px', width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `8px solid ${ctp.yellow}` }} />
+          {/* Axis picker — vec2/vec3 sockets */}
+          {isVector && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+              <span style={{ fontSize: 12, color: tk.text.muted }}>Axis</span>
+              <Segmented
+                size="sm"
+                ariaLabel="Axis"
+                value={activeAxis}
+                onChange={changeAxis}
+                options={axisLetters.map(a => ({ value: a, label: <span style={{ color: axisColors[a] }}>{a.toUpperCase()}</span> }))}
+              />
+              {keyframes.length > 0 && axisLetters.length > 1 && (
+                <>
+                  <span style={{ fontSize: 12, color: tk.text.faint, marginLeft: 6 }}>Copy to</span>
+                  {axisLetters.filter(a => a !== activeAxis).map(a => (
+                    <Button key={a} size="sm" variant="ghost" style={{ height: 26, color: axisColors[a] }}
+                      title={`Copy ${activeAxis.toUpperCase()}'s keys onto ${a.toUpperCase()} (replaces them)`}
+                      onClick={() => copyActiveAxisTo(a)}>{a.toUpperCase()}</Button>
+                  ))}
+                </>
+              )}
+            </div>
           )}
+
+          {/* Scrubber — drag to seek global time live */}
+          <div
+            onMouseDown={handleScrubberMouseDown}
+            title="Drag to scrub time"
+            style={{ height: 22, flexShrink: 0, position: 'relative', cursor: 'ew-resize', background: tk.bg.subtle, borderBottom: `1px solid ${tk.border.subtle}` }}
+          >
+            {playheadT !== null && toX(playheadT) >= 0 && toX(playheadT) <= canvasW && (
+              <div style={{
+                position: 'absolute', left: toX(playheadT) - 5, bottom: 2, width: 0, height: 0,
+                borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `8px solid ${tk.status.danger}`,
+              }} />
+            )}
+          </div>
+
+          {/* Graph */}
+          <div ref={graphWrapRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+            <canvas
+              ref={canvasRef}
+              width={canvasW}
+              height={canvasH}
+              onMouseDown={handleMouseDown}
+              onDoubleClick={handleDoubleClick}
+              onContextMenu={handleContextMenu}
+              onWheel={handleWheel}
+              onMouseLeave={() => { setHoverKf(null); setHoverInfo(null); }}
+              style={{ position: 'absolute', inset: 0, display: 'block', width: '100%', height: '100%', cursor: cursorForMode, opacity: bypassed ? 0.5 : 1 }}
+            />
+          </div>
         </div>
 
-        {/* Timeline canvas */}
-        <canvas
-          ref={canvasRef}
-          width={canvasW}
-          height={canvasH}
-          onMouseDown={handleMouseDown}
-          onDoubleClick={handleDoubleClick}
-          onContextMenu={handleContextMenu}
-          onWheel={handleWheel}
-          onMouseLeave={() => { setHoverKf(null); setHoverInfo(null); }}
-          style={{ display: 'block', width: '100%', height: `${canvasH}px`, borderRadius: '0 0 6px 6px', border: `1px solid ${ctp.surface0}88`, borderTop: 'none', cursor: cursorForMode, opacity: bypassed ? 0.5 : 1 }}
-        />
-        <div style={{ fontSize: '10px', color: ctp.surface1 }}>
-          {toolMode === 'add' && 'click empty space: add keyframe · drag point: move'}
-          {toolMode === 'delete' && 'click a point: delete it'}
-          {toolMode === 'draw' && `drag to freehand-draw a curve (replaces this axis's keyframes, sampled down to ${MAX_KEYFRAMES} points) · click: drop one point`}
-          {toolMode === 'select' && 'click point: select (shows ease handles) · drag: move · dbl-click: delete · scroll: pan · pinch/ctrl+scroll: zoom value · hold shift while dragging to invert snap'}
-        </div>
+        {/* Inspector */}
+        <div style={{
+          width: 280, flexShrink: 0, boxSizing: 'border-box', overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 18,
+          background: tk.bg.subtle, borderLeft: `1px solid ${tk.border.subtle}`,
+        }}>
+          <InspectorSection label="Selected key" meta={selKey ? `${selectedKf! + 1} of ${keyframes.length}` : undefined}>
+            {selKey ? (
+              <>
+                <InspectorRow label="Time">
+                  <RulerSlider value={selKey.t} min={0} max={Math.max(10, selKey.t + 2)} step={0.01} onChange={t => updateSelected({ t })} ariaLabel="Key time" />
+                </InspectorRow>
+                <InspectorRow label="Value">
+                  <RulerSlider value={selKey.v} min={Math.min(-5, selKey.v - 1)} max={Math.max(5, selKey.v + 1)} step={0.01} onChange={v => updateSelected({ v })} ariaLabel="Key value" />
+                </InspectorRow>
+              </>
+            ) : (
+              <InspectorNote>{toolMode === 'select' ? 'Click a key on the graph to edit it.' : 'Switch to Select (V) and click a key to edit it.'}</InspectorNote>
+            )}
+          </InspectorSection>
 
-        {/* Grid + snap controls */}
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', borderTop: `1px solid ${ctp.surface0}`, paddingTop: '10px', flexWrap: 'wrap' }}>
-          <span style={{ color: ctp.overlay0 }}>Grid</span>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ color: ctp.overlay0, fontSize: '10px' }}>Time</span>
-            <NumberInput step={0.05} min={0.05} value={view.gridT} style={inputStyle}
-              onCommit={n => setView(v => ({ ...v, gridT: Math.max(0.01, n) }))} />
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ color: ctp.overlay0, fontSize: '10px' }}>Value</span>
-            <NumberInput step={0.1} min={0.01} value={view.gridV} style={inputStyle}
-              onCommit={n => setView(v => ({ ...v, gridV: Math.max(0.01, n) }))} />
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-            <input type="checkbox" checked={view.snap} onChange={e => setView(v => ({ ...v, snap: e.target.checked }))} />
-            <span style={{ color: ctp.overlay0, fontSize: '10px' }}>Always snap (hold ⇧ to invert)</span>
-          </label>
-        </div>
+          <InspectorSection label="Easing to next key">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4, opacity: hasNextSegment ? 1 : 0.45 }}>
+              {easingEntries.map(e => {
+                const preset = EASING_PRESETS[e.id];
+                const on = !!selKey && sameEase(selKey.ease, preset);
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    disabled={!hasNextSegment}
+                    aria-pressed={on}
+                    title={hasNextSegment ? `${e.label} easing` : 'Select a key that has a key after it'}
+                    onClick={() => updateSelected({ ease: { ...preset } })}
+                    style={{
+                      height: 46, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, border: 0,
+                      borderRadius: radius.md, cursor: hasNextSegment ? 'pointer' : 'default',
+                      background: on ? tk.bg.selected : tk.bg.panel, boxShadow: `inset 0 0 0 ${on ? 1.5 : 1}px ${on ? tk.accent.base : tk.border.default}`,
+                      color: on ? tk.accent.text : tk.text.muted, font: `${on ? 600 : 500} 10px ${fontFamily.ui}`,
+                    }}
+                  >
+                    <EaseGlyph e={preset} color={on ? tk.accent.base : tk.text.faint} />
+                    {e.label}
+                  </button>
+                );
+              })}
+            </div>
+            {selKey && hasNextSegment && !easingEntries.some(e => sameEase(selKey.ease, EASING_PRESETS[e.id])) && (
+              <InspectorNote>Custom curve: drag the handles on the graph.</InspectorNote>
+            )}
+          </InspectorSection>
 
-        {/* Loop mode */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ color: ctp.overlay0, fontSize: '11px' }}>End behavior</span>
-          <select value={mode} style={{ ...inputStyle, width: 'auto' }} onChange={e => setMode(e.target.value as KeyframeLoopMode)}>
-            <option value="once">Play Once</option>
-            <option value="loop">Loop</option>
-            <option value="interpolate">Interpolate (smooth loop back)</option>
-          </select>
-          {mode === 'interpolate' && (
-            <>
-              <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Loop-back (s)</span>
-              <NumberInput step={0.1} min={0.01} value={loopBack} style={inputStyle}
-                onCommit={n => setLoopBack(Math.max(0.01, n))} />
-            </>
-          )}
-          {(mode === 'loop' || mode === 'interpolate') && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={loopCount === null} onChange={e => setLoopCount(e.target.checked ? null : 3)} />
-              <span style={{ color: ctp.overlay0, fontSize: '10px' }}>Loop forever</span>
+          <InspectorSection label="Snap grid">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11.5, color: tk.text.muted }}>
+                Time (s)
+                <NumberInput step={0.05} min={0.05} value={view.gridT} style={fieldStyle} onCommit={n => setView(v => ({ ...v, gridT: Math.max(0.01, n) }))} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11.5, color: tk.text.muted }}>
+                Value
+                <NumberInput step={0.1} min={0.01} value={view.gridV} style={fieldStyle} onCommit={n => setView(v => ({ ...v, gridV: Math.max(0.01, n) }))} />
+              </label>
+            </div>
+            <Toggle checked={view.snap} onChange={on => setView(v => ({ ...v, snap: on }))} label="Always snap" />
+            <InspectorNote>Hold ⇧ while dragging to invert.</InspectorNote>
+          </InspectorSection>
+
+          <InspectorSection label="When the last key ends">
+            <Segmented
+              fill
+              ariaLabel="End behaviour"
+              value={mode}
+              onChange={setMode}
+              options={[{ value: 'once', label: 'Play once' }, { value: 'loop', label: 'Loop' }, { value: 'interpolate', label: 'Smooth loop' }]}
+            />
+            {mode === 'interpolate' && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11.5, color: tk.text.muted }}>
+                Loop-back time (s)
+                <NumberInput step={0.1} min={0.01} value={loopBack} style={fieldStyle} onCommit={n => setLoopBack(Math.max(0.01, n))} />
+              </label>
+            )}
+            {(mode === 'loop' || mode === 'interpolate') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Toggle checked={loopCount === null} onChange={on => setLoopCount(on ? null : 3)} label="Forever" />
+                {loopCount !== null && (
+                  <>
+                    <NumberInput step={1} min={1} value={loopCount} style={{ ...fieldStyle, width: 64 }} onCommit={n => setLoopCount(Math.max(1, Math.round(n)))} />
+                    <span style={{ fontSize: 12, color: tk.text.muted }}>times</span>
+                  </>
+                )}
+              </div>
+            )}
+            <label title="Delay before this track starts, in global time; shifts the whole track without moving any key"
+              style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11.5, color: tk.text.muted }}>
+              Start offset (s)
+              <NumberInput step={0.1} value={offset} style={fieldStyle} onCommit={n => setOffset(n)} />
             </label>
-          )}
-          {(mode === 'loop' || mode === 'interpolate') && loopCount !== null && (
-            <>
-              <span style={{ color: ctp.overlay0, fontSize: '11px' }}>× times</span>
-              <NumberInput step={1} min={1} value={loopCount} style={inputStyle}
-                onCommit={n => setLoopCount(Math.max(1, Math.round(n)))} />
-            </>
-          )}
-          <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Offset (s)</span>
-          <NumberInput step={0.1} value={offset} style={inputStyle}
-            title="Delay before this track starts playing, in global time — shifts the whole track without moving any keyframe"
-            onCommit={n => setOffset(n)} />
-          <button
-            onClick={() => (kfPlaying ? stopKfPlayback() : startKfPlayback())}
-            disabled={keyframes.length === 0}
-            title={kfPlaying ? 'Stop' : "Play this track's curve, respecting its End behavior"}
-            style={{
-              background: kfPlaying ? `${ctp.red}22` : 'none',
-              border: `1px solid ${keyframes.length === 0 ? ctp.surface1 : kfPlaying ? ctp.red : `${ctp.green}55`}`,
-              color: keyframes.length === 0 ? ctp.surface1 : kfPlaying ? ctp.red : ctp.green,
-              cursor: keyframes.length === 0 ? 'default' : 'pointer', fontSize: '11px', padding: '3px 9px', borderRadius: '4px', marginLeft: 'auto',
-            }}
-          >{kfPlaying ? '⏸ Stop' : '▶ Play'}</button>
+          </InspectorSection>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
+  );
+}
+
+/** Play/pause, reset and the live time — the global clock, from inside the editor. */
+function TimeCluster() {
+  const tk = useTokens();
+  const timePlaying = useNodeGraphStore(s => s.timePlaying);
+  const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
+  const [time, setTime] = useState(0);
+  useEffect(() => subscribeTimeTick(setTime), []);
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 2, background: tk.bg.field, borderRadius: 10, padding: '3px 10px 3px 3px', marginRight: 6 }}>
+      <IconButton icon={timePlaying ? 'pause' : 'play'} label={timePlaying ? 'Pause' : 'Play'} size="sm" onClick={() => setTimePlaying(!timePlaying)} />
+      <IconButton icon="reset" label="Reset time to 0" size="sm" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
+      <span style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.primary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>{time.toFixed(2)}s</span>
+    </span>
+  );
+}
+
+function InspectorSection({ label, meta, children }: { label: string; meta?: string; children: React.ReactNode }) {
+  const tk = useTokens();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>
+        <span style={{ flex: 1 }}>{label}</span>
+        {meta && <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 12 }}>{meta}</span>}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function InspectorRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const tk = useTokens();
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ width: 42, flexShrink: 0, fontSize: 12.5, color: tk.text.secondary }}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function InspectorNote({ children }: { children: React.ReactNode }) {
+  const tk = useTokens();
+  return <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{children}</span>;
+}
+
+function MenuRow({ icon, onClick, disabled = false, children }: { icon: IconName; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: '100%', height: 32, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', border: 0, borderRadius: radius.md,
+        background: hover && !disabled ? tk.bg.hover : 'none', color: disabled ? tk.text.disabled : tk.text.primary,
+        font: `500 12.5px ${fontFamily.ui}`, textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
+      }}
+    >
+      <Icon name={icon} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
+      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</span>
+    </button>
+  );
+}
+
+/** Small cubic-bezier drawing for an easing preset tile. */
+function EaseGlyph({ e, color }: { e: Keyframe['ease']; color: string }) {
+  const W = 26, H = 16;
+  const x = (u: number) => 1 + u * (W - 2);
+  const y = (u: number) => H - 1 - u * (H - 2);
+  return (
+    <svg width={W} height={H} aria-hidden>
+      <path d={`M${x(0)} ${y(0)} C${x(e.a)} ${y(e.b)} ${x(e.c)} ${y(e.d)} ${x(1)} ${y(1)}`} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </svg>
   );
 }

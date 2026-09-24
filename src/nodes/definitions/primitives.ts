@@ -9,16 +9,16 @@ export const CircleSDFNode: NodeDefinition = {
   category: '2D Primitives',
   description: 'Signed distance function for a circle.',
   inputs: {
-    position: { type: 'vec2', label: 'Position' },
+    position: { type: 'vec2', label: 'UV' },
     radius:   { type: 'float', label: 'Radius' },
-    offset:   { type: 'vec2', label: 'Offset' },
+    offset:   { type: 'vec2', label: 'Center' },
   },
   outputs: { distance: { type: 'float', label: 'Distance' } },
   defaultParams: { radius: 0.3, posX: 0.0, posY: 0.0 },
   paramDefs: {
     radius: { label: 'Radius', type: 'float', min: 0.01, max: 2, step: 0.01 },
-    posX:   { label: 'X',      type: 'float', min: -1,   max: 1, step: 0.01 },
-    posY:   { label: 'Y',      type: 'float', min: -1,   max: 1, step: 0.01 },
+    posX:   { label: 'Center X',      type: 'float', min: -1,   max: 1, step: 0.01, hint: 'Where the shape\'s centre sits.' },
+    posY:   { label: 'Center Y',      type: 'float', min: -1,   max: 1, step: 0.01, hint: 'Where the shape\'s centre sits.' },
   },
   glslFunction: `float circleSDF(vec2 point, float size) { return length(point) - size; }`,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -41,17 +41,17 @@ export const BoxSDFNode: NodeDefinition = {
   category: '2D Primitives',
   description: 'Signed distance function for a box.',
   inputs: {
-    position:   { type: 'vec2', label: 'Position' },
+    position:   { type: 'vec2', label: 'UV' },
     dimensions: { type: 'vec2', label: 'Dimensions' },
-    offset:     { type: 'vec2', label: 'Offset' },
+    offset:     { type: 'vec2', label: 'Center' },
   },
   outputs: { distance: { type: 'float', label: 'Distance' } },
   defaultParams: { width: 0.5, height: 0.5, posX: 0.0, posY: 0.0 },
   paramDefs: {
-    width:  { label: 'Width',  type: 'float', min: 0.01, max: 2, step: 0.01 },
-    height: { label: 'Height', type: 'float', min: 0.01, max: 2, step: 0.01 },
-    posX:   { label: 'X',      type: 'float', min: -1,   max: 1, step: 0.01 },
-    posY:   { label: 'Y',      type: 'float', min: -1,   max: 1, step: 0.01 },
+    width:  { label: 'Half width',  type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'The drawn box is twice this wide.' },
+    height: { label: 'Half height', type: 'float', min: 0.01, max: 2, step: 0.01, hint: 'The drawn box is twice this tall.' },
+    posX:   { label: 'Center X',      type: 'float', min: -1,   max: 1, step: 0.01, hint: 'Where the shape\'s centre sits.' },
+    posY:   { label: 'Center Y',      type: 'float', min: -1,   max: 1, step: 0.01, hint: 'Where the shape\'s centre sits.' },
   },
   glslFunction: `float boxSDF(in vec2 position, in vec2 dimensions) {
   vec2 d = abs(position) - dimensions;
@@ -79,16 +79,16 @@ export const RingSDFNode: NodeDefinition = {
   category: '2D Primitives',
   description: 'Signed distance function for a ring (absolute circle SDF).',
   inputs: {
-    position: { type: 'vec2',  label: 'Position' },
+    position: { type: 'vec2',  label: 'UV' },
     radius:   { type: 'float', label: 'Radius' },
-    offset:   { type: 'vec2',  label: 'Offset' },
+    offset:   { type: 'vec2',  label: 'Center' },
   },
   outputs: { distance: { type: 'float', label: 'Distance' } },
   defaultParams: { radius: 0.3, posX: 0.0, posY: 0.0 },
   paramDefs: {
     radius: { label: 'Radius', type: 'float', min: 0.01, max: 2, step: 0.01 },
-    posX:   { label: 'X',      type: 'float', min: -1,   max: 1, step: 0.01 },
-    posY:   { label: 'Y',      type: 'float', min: -1,   max: 1, step: 0.01 },
+    posX:   { label: 'Center X',      type: 'float', min: -1,   max: 1, step: 0.01, hint: 'Where the shape\'s centre sits.' },
+    posY:   { label: 'Center Y',      type: 'float', min: -1,   max: 1, step: 0.01, hint: 'Where the shape\'s centre sits.' },
   },
   glslFunction: `float ringSDF(vec2 point, float size) { return abs(length(point) - size); }`,
   generateGLSL: (node: GraphNode, inputVars) => {

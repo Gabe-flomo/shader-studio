@@ -4,16 +4,27 @@ import {
   GLSL_SMIN, GLSL_SD_BOX, GLSL_SD_SEGMENT,
   GLSL_OP_REPEAT, GLSL_OP_REPEAT_POLAR,
 } from '../../compiler/shaderAssembler';
-// Curve colors for multi-plot (f1..f6)
-export const CURVE_COLORS: Array<[number, number, number]> = [
-  [0.13, 0.67, 1.0],   // cyan-blue
-  [1.0,  0.60, 0.20],  // orange
-  [0.30, 0.90, 0.40],  // green
-  [1.0,  0.40, 0.70],  // pink
-  [0.70, 0.40, 1.0],   // purple
-  [1.0,  0.90, 0.20],  // yellow
-];
+import type { ThemeMode } from '../../theme/tokens';
 
+// Plot colours per app theme. Curves f1..f6 cycle through `curves`; the editor cards use the
+// same list for their colour dots.
+export interface PlotTheme { bg: string; grid: string; axis: string; curves: readonly string[] }
+
+export const PLOT_THEMES: Readonly<Record<ThemeMode, PlotTheme>> = {
+  light: { bg: '#ffffff', grid: '#eef0f3', axis: '#c3c5cf', curves: ['#3a6ff7', '#fe640b', '#40a02b', '#ea76cb', '#8839ef', '#df8e1d'] },
+  dark:  { bg: '#181825', grid: '#28293b', axis: '#585b70', curves: ['#89b4fa', '#fab387', '#a6e3a1', '#f5c2e7', '#cba6f7', '#f9e2af'] },
+};
+
+export function curveColor(index: number, mode: ThemeMode): string {
+  const { curves } = PLOT_THEMES[mode];
+  return curves[index % curves.length];
+}
+
+/** `#rrggbb` → `vec3(r, g, b)` literal. */
+function vec3Of(hex: string): string {
+  const c = [1, 3, 5].map(i => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3));
+  return `vec3(${c.join(', ')})`;
+}
 
 /** Strip 'return' prefix and trailing ';' to get bare expression. */
 export function normalizeBodyExpr(body: string): string {
@@ -41,33 +52,36 @@ export function emitFunction(fn: FnDef): string {
 }`;
 }
 
-function floatVizMain(floatFns: FnDef[]): string {
-  const curves = floatFns.map((fn, i) => {
-    const [r, g, b] = CURVE_COLORS[i % CURVE_COLORS.length];
-    return `  {
-    float fy = ${fn.name}(xVal);
-    float d = abs(yVal - fy) / (abs(dFdy(yVal)) + 0.0001);
-    float line = 1.0 - smoothstep(0.8, 2.0, d);
-    col = mix(col, vec3(${r.toFixed(3)}, ${g.toFixed(3)}, ${b.toFixed(3)}), line);
-  }`;
-  }).join('\n');
+/** Plots every float function; curve colours follow each function's position in the list, like the cards. */
+function floatVizMain(functions: FnDef[], theme: PlotTheme, pixelRatio: number): string {
+  // Half the curve's stroke, in device pixels (2.5 CSS px wide).
+  const halfWidth = (1.25 * pixelRatio).toFixed(2);
+  const curves = functions.map((fn, i) => fn.returnType !== 'float' ? '' : `  {
+    // Distance to the curve in pixels, measured along its normal so steep parts keep their width.
+    float e = yVal - ${fn.name}(xVal);
+    float d = abs(e) / (length(vec2(dFdx(e), dFdy(e))) + 0.0001);
+    float line = 1.0 - smoothstep(${halfWidth} - 0.75, ${halfWidth} + 0.75, d);
+    col = mix(col, ${vec3Of(theme.curves[i % theme.curves.length])}, line);
+  }`).filter(Boolean).join('\n');
 
   return `void main() {
   float xVal = mix(u_xMin, u_xMax, vUv.x);
   float yVal = mix(u_yMin, u_yMax, vUv.y);
 
-  vec3 col = vec3(0.07, 0.07, 0.11);
+  vec3 col = ${vec3Of(theme.bg)};
 
-  // Grid lines (every 1 unit)
-  float gx = abs(fract(xVal - 0.5) - 0.5) / (abs(dFdx(xVal)) + 0.0001);
-  float gy = abs(fract(yVal - 0.5) - 0.5) / (abs(dFdy(yVal)) + 0.0001);
-  col = mix(col, vec3(0.16), 1.0 - smoothstep(0.5, 1.5, min(gx, gy)));
+  // Grid lines at the axis-label step: a power of two giving ~6 lines per axis (see AxisLabels)
+  float sx = exp2(floor(log2((u_xMax - u_xMin) / 6.0) + 0.5));
+  float sy = exp2(floor(log2((u_yMax - u_yMin) / 6.0) + 0.5));
+  float gx = abs(fract(xVal / sx - 0.5) - 0.5) * sx / (abs(dFdx(xVal)) + 0.0001);
+  float gy = abs(fract(yVal / sy - 0.5) - 0.5) * sy / (abs(dFdy(yVal)) + 0.0001);
+  col = mix(col, ${vec3Of(theme.grid)}, 1.0 - smoothstep(0.5, 1.5, min(gx, gy)));
 
   // Axes
   float ax = abs(xVal) / (abs(dFdx(xVal)) + 0.0001);
   float ay = abs(yVal) / (abs(dFdy(yVal)) + 0.0001);
-  col = mix(col, vec3(0.32), 1.0 - smoothstep(0.8, 2.0, ay));
-  col = mix(col, vec3(0.32), 1.0 - smoothstep(0.8, 2.0, ax));
+  col = mix(col, ${vec3Of(theme.axis)}, 1.0 - smoothstep(0.8, 2.0, ay));
+  col = mix(col, ${vec3Of(theme.axis)}, 1.0 - smoothstep(0.8, 2.0, ax));
 
 ${curves}
 
@@ -94,6 +108,17 @@ function vec2VizMain(activeName: string): string {
 export interface CompileResult {
   source: string;
   errors: string[];
+  /** 1-based, inclusive source lines of each session function, by id — maps compiler errors to cards. */
+  fnLines: Record<string, [number, number]>;
+}
+
+/** The function a WebGL log line ("ERROR: 0:42: …") points into, if any. */
+export function errorOwner(error: string, fnLines: CompileResult['fnLines']): string | null {
+  const m = /^ERROR:\s*\d+:(\d+):/i.exec(error);
+  if (!m) return null;
+  const line = Number(m[1]);
+  for (const [id, [start, end]] of Object.entries(fnLines)) if (line >= start && line <= end) return id;
+  return null;
 }
 
 export function buildShader(
@@ -102,8 +127,10 @@ export function buildShader(
   _xRange: [number, number],
   _yRange: [number, number],
   libraryFns: FnDef[] = [],
+  theme: PlotTheme = PLOT_THEMES.dark,
+  pixelRatio = 1,
 ): CompileResult {
-  if (functions.length === 0) return { source: '', errors: ['No functions defined'] };
+  if (functions.length === 0) return { source: '', errors: ['No functions defined'], fnLines: {} };
 
   const activeFn = functions.find(f => f.id === activeId) ?? functions[functions.length - 1];
   const errors: string[] = [];
@@ -115,8 +142,7 @@ export function buildShader(
 
   let mainGlsl: string;
   if (activeFn.returnType === 'float') {
-    const floatFns = functions.filter(f => f.returnType === 'float');
-    mainGlsl = floatVizMain(floatFns);
+    mainGlsl = floatVizMain(functions, theme, pixelRatio);
   } else if (activeFn.returnType === 'vec3') {
     mainGlsl = vec3VizMain(activeFn.name);
   } else {
@@ -152,5 +178,13 @@ ${userFns}
 
 ${mainGlsl}`.trim();
 
-  return { source, errors };
+  const lines = source.split('\n');
+  const fnLines: CompileResult['fnLines'] = {};
+  for (const fn of functions) {
+    const emitted = emitFunction(fn).split('\n');
+    const at = lines.lastIndexOf(emitted[0]);
+    if (at >= 0) fnLines[fn.id] = [at + 1, at + emitted.length];
+  }
+
+  return { source, errors, fnLines };
 }

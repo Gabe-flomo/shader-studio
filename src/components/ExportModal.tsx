@@ -3,67 +3,34 @@ import { CanvasRecorder } from '../utils/CanvasRecorder';
 import { runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
 import type { OfflineRenderHandle } from './ShaderCanvas';
 import { getGpuLimits, pickRecorderFormat, preferredRecorderFormat, type RecorderFormat } from '../utils/exportLimits';
-import { ctp } from '../theme/palette';
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const OVERLAY: React.CSSProperties = {
-  position: 'fixed', inset: 0, zIndex: 2000,
-  background: 'rgba(0,0,0,0.65)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-};
-
-const PANEL: React.CSSProperties = {
-  background: ctp.base,
-  border: `1px solid ${ctp.surface1}`,
-  borderRadius: '12px',
-  width: '420px',
-  maxWidth: '95vw',
-  padding: '20px 24px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '14px',
-  boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
-  color: ctp.text,
-  fontSize: '12px',
-};
-
-const BTN_BASE: React.CSSProperties = {
-  border: `1px solid ${ctp.surface1}`,
-  borderRadius: '6px',
-  fontSize: '12px',
-  fontFamily: 'system-ui, sans-serif',
-  cursor: 'pointer',
-  padding: '7px 16px',
-  transition: 'all 0.15s',
-};
-
-const LABEL: React.CSSProperties = {
-  fontSize: '10px',
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: ctp.surface2,
-  marginBottom: '4px',
-};
-
-const ROW: React.CSSProperties = {
-  display: 'flex',
-  gap: '8px',
-  alignItems: 'center',
-};
+import { useTokens } from '../theme/themeStore';
+import { alpha, fontFamily, radius } from '../theme/tokens';
+import { Button } from './ui/Button';
+import { Callout } from './ui/Callout';
+import { Segmented, Toggle } from './ui/Choice';
+import { Field } from './ui/Field';
+import { Icon } from './ui/Icon';
+import { Modal } from './ui/Modal';
+import { RulerSlider } from './ui/RulerSlider';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
+// Pulsing record dot, injected once
+if (typeof document !== 'undefined' && !document.getElementById('rec-pulse-anim')) {
+  const st = document.createElement('style');
+  st.id = 'rec-pulse-anim';
+  st.textContent = '@keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }';
+  document.head.appendChild(st);
+}
+
 function ProgressBar({ value }: { value: number }) {
+  const tk = useTokens();
   return (
-    <div style={{ background: ctp.surface0, borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+    <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)}
+      style={{ background: tk.bg.field, borderRadius: 4, height: 8, overflow: 'hidden' }}>
       <div style={{
-        height: '100%',
-        width: `${Math.min(Math.round(value * 100), 100)}%`,
-        background: `linear-gradient(90deg, ${ctp.blue}, ${ctp.mauve})`,
-        borderRadius: '4px',
-        transition: 'width 0.15s linear',
+        height: '100%', width: `${Math.min(Math.round(value * 100), 100)}%`, background: tk.accent.base,
+        borderRadius: 4, transition: 'width 0.15s linear',
       }} />
     </div>
   );
@@ -87,9 +54,9 @@ const CODEC_DESCRIPTIONS: Record<FfmpegCodec, string> = {
 
 // Resolution multipliers relative to the canvas's natural size
 const RESOLUTIONS = [
-  { label: '1×  (native)', scale: 1 },
-  { label: '2×  (2K/4K)',  scale: 2 },
-  { label: '4×  (ultra)', scale: 4 },
+  { scale: 1, sub: 'native' },
+  { scale: 2, sub: '2K / 4K' },
+  { scale: 4, sub: 'ultra' },
 ];
 
 /** What this device can do at a given scale — computed when the modal opens. */
@@ -120,6 +87,7 @@ type RecordMode  = 'mediarecorder' | 'ffmpeg';
 type RecordState = 'idle' | 'recording' | 'encoding' | 'done' | 'error';
 
 export function ExportModal({ canvas, offlineRender, onClose }: Props) {
+  const tk = useTokens();
   const [fps, setFps]               = useState(60);
   const [duration, setDuration]     = useState(5);
   const [manualStop, setManualStop] = useState(false);
@@ -471,326 +439,216 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     : !!canvas && !!current && !current.blocked && !!current.format;
   const blockedScales = support ? RESOLUTIONS.filter(r => support[r.scale]?.blocked) : [];
 
+  const ext = mode === 'ffmpeg' ? (codec === 'prores' ? 'mov' : codec === 'ffv1' ? 'mkv' : 'mp4') : (current?.format?.ext ?? preferred?.ext ?? 'webm');
+  const resetToIdle = () => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); };
+
+  const footer = state === 'idle' ? (
+    <>
+      <Button icon="camera" disabled={!canvas} onClick={handleScreenshot}>Snapshot PNG</Button>
+      <span style={{ flex: 1 }} />
+      <Button variant="ghost" onClick={onClose}>Cancel</Button>
+      <Button variant="primary" disabled={!canStart} onClick={handleStart}>
+        {mode === 'ffmpeg' ? 'Encode' : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start recording</>}
+      </Button>
+    </>
+  ) : isBusy ? (
+    <>
+      <span style={{ flex: 1 }} />
+      <Button variant="danger" onClick={handleStop}>{isEncoding ? 'Cancel encode' : 'Stop recording'}</Button>
+    </>
+  ) : (
+    <>
+      <Button onClick={resetToIdle}>Record again</Button>
+      <span style={{ flex: 1 }} />
+      <Button variant="primary" onClick={onClose}>Close</Button>
+    </>
+  );
+
+  const stats = (
+    <div style={{ display: 'flex', gap: 16, font: `500 12px ${fontFamily.mono}`, color: tk.text.muted, fontVariantNumeric: 'tabular-nums' }}>
+      <span>{elapsed.toFixed(1)}s</span>
+      <span>{frameCount} frames</span>
+      {(isEncoding || !manualStop) && <span>{Math.round(captureProgress * 100)}%</span>}
+    </div>
+  );
+
   return (
-    <div style={OVERLAY} onMouseDown={e => { if (e.target === e.currentTarget && !isBusy) onClose(); }}>
-      <div style={PANEL} onMouseDown={e => e.stopPropagation()}>
+    <Modal
+      title="Record"
+      subtitle="Export the preview as video or a still"
+      icon="record"
+      iconColor={tk.status.danger}
+      width={480}
+      closeOnScrim={!isBusy}
+      onClose={() => { if (!isBusy) onClose(); }}
+      footer={footer}
+    >
+      <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '15px', color: ctp.blue }}>⬡ Export Video</span>
-          <button
-            onClick={onClose}
-            disabled={isBusy}
-            style={{ ...BTN_BASE, background: 'none', border: 'none', color: ctp.red, fontSize: '16px', padding: '0 4px', opacity: isBusy ? 0.4 : 1 }}
-          >✕</button>
-        </div>
-
-        {/* Mode selector — Tauri only */}
+        {/* Mode — Tauri only */}
         {inTauri && state === 'idle' && (
-          <div>
-            <div style={LABEL}>Export Mode</div>
-            <div style={ROW}>
-              <button
-                onClick={() => setMode('ffmpeg')}
-                style={{
-                  ...BTN_BASE, flex: 1, padding: '5px 8px',
-                  background: mode === 'ffmpeg' ? ctp.surface0 : ctp.mantle,
-                  color: mode === 'ffmpeg' ? ctp.text : ctp.surface2,
-                  borderColor: mode === 'ffmpeg' ? ctp.mauve : ctp.surface0,
-                  fontSize: '11px',
-                }}
-              >✦ FFmpeg (HQ)</button>
-              <button
-                onClick={() => setMode('mediarecorder')}
-                style={{
-                  ...BTN_BASE, flex: 1, padding: '5px 8px',
-                  background: mode === 'mediarecorder' ? ctp.surface0 : ctp.mantle,
-                  color: mode === 'mediarecorder' ? ctp.text : ctp.surface2,
-                  borderColor: mode === 'mediarecorder' ? ctp.blue : ctp.surface0,
-                  fontSize: '11px',
-                }}
-              >◉ Real-time</button>
-            </div>
-            {mode === 'ffmpeg' && (
-              <div style={{ marginTop: '4px', fontSize: '10px', color: ctp.surface1, lineHeight: 1.4 }}>
-                Renders offline at exact timing — no dropped frames. Requires FFmpeg (auto-downloaded on first use).
-              </div>
-            )}
-          </div>
+          <Section label="Mode">
+            <Segmented
+              fill
+              ariaLabel="Export mode"
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: 'ffmpeg', label: 'FFmpeg (HQ)', sub: 'offline, exact timing' },
+                { value: 'mediarecorder', label: 'Real-time', sub: 'records as it plays' },
+              ]}
+            />
+            {mode === 'ffmpeg' && <Help>Renders offline at exact timing, with no dropped frames. FFmpeg downloads on first use.</Help>}
+          </Section>
         )}
 
-        {/* Setup UI */}
         {state === 'idle' && (
           <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-              {/* Codec picker — FFmpeg mode only */}
-              {mode === 'ffmpeg' && (
-                <div>
-                  <div style={LABEL}>Codec</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {(['h264', 'prores', 'ffv1'] as FfmpegCodec[]).map(c => (
-                      <button
-                        key={c}
-                        onClick={() => setCodec(c)}
-                        style={{
-                          ...BTN_BASE, padding: '5px 10px', textAlign: 'left',
-                          background: codec === c ? ctp.surface0 : ctp.mantle,
-                          color: codec === c ? ctp.text : ctp.surface2,
-                          borderColor: codec === c ? ctp.mauve : ctp.surface0,
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        }}
-                      >
-                        <span style={{ fontWeight: codec === c ? 600 : 400 }}>{CODEC_LABELS[c]}</span>
-                        <span style={{ fontSize: '10px', color: ctp.surface1, marginLeft: '8px' }}>
-                          {CODEC_DESCRIPTIONS[c]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* FPS */}
-              <div>
-                <div style={LABEL}>FPS</div>
-                <div style={ROW}>
-                  {[24, 30, 60].map(f => (
-                    <button
-                      key={f} onClick={() => setFps(f)}
-                      style={{
-                        ...BTN_BASE, padding: '4px 18px',
-                        background: fps === f ? ctp.surface0 : ctp.mantle,
-                        color: fps === f ? ctp.text : ctp.surface2,
-                        borderColor: fps === f ? ctp.blue : ctp.surface0,
-                      }}
-                    >{f}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Duration */}
-              <div>
-                <div style={LABEL}>Duration</div>
-                <div style={ROW}>
-                  {mode === 'mediarecorder' && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: ctp.overlay0 }}>
-                      <input
-                        type="checkbox"
-                        checked={manualStop}
-                        onChange={e => setManualStop(e.target.checked)}
-                        style={{ accentColor: ctp.blue }}
-                      />
-                      Manual stop
-                    </label>
-                  )}
-                  {(!manualStop || mode === 'ffmpeg') && (
-                    <>
-                      <input
-                        type="range" min={1} max={60} step={1}
-                        value={duration}
-                        onChange={e => setDuration(Number(e.target.value))}
-                        style={{ flex: 1, accentColor: ctp.blue }}
-                      />
-                      <span style={{ color: ctp.text, minWidth: '34px', textAlign: 'right' }}>{duration}s</span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Bitrate — MediaRecorder only */}
-              {mode === 'mediarecorder' && (
-                <div>
-                  <div style={LABEL}>Bitrate</div>
-                  <div style={ROW}>
-                    {[8, 25, 50, 100].map(b => (
-                      <button
-                        key={b} onClick={() => setBitrate(b)}
-                        style={{
-                          ...BTN_BASE, padding: '4px 10px',
-                          background: bitrate === b ? ctp.surface0 : ctp.mantle,
-                          color: bitrate === b ? ctp.text : ctp.surface2,
-                          borderColor: bitrate === b ? ctp.blue : ctp.surface0,
-                        }}
-                      >{b}</button>
-                    ))}
-                    <span style={{ color: ctp.surface1, fontSize: '10px' }}>Mbps</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Resolution */}
-              <div>
-                <div style={LABEL}>Resolution</div>
-                <div style={ROW}>
-                  {RESOLUTIONS.map(r => {
-                    const blocked = support?.[r.scale]?.blocked ?? null;
+            {mode === 'ffmpeg' && (
+              <Section label="Codec">
+                <div role="radiogroup" aria-label="Codec" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(['h264', 'prores', 'ffv1'] as FfmpegCodec[]).map(c => {
+                    const on = codec === c;
                     return (
                       <button
-                        key={r.scale} onClick={() => setResScale(r.scale)}
-                        disabled={!!blocked}
-                        title={blocked ?? undefined}
+                        key={c}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => setCodec(c)}
                         style={{
-                          ...BTN_BASE, padding: '4px 10px', flex: 1,
-                          background: resScale === r.scale ? ctp.surface0 : ctp.mantle,
-                          color: resScale === r.scale ? ctp.text : ctp.surface2,
-                          borderColor: resScale === r.scale ? ctp.blue : ctp.surface0,
-                          fontSize: '11px',
-                          opacity: blocked ? 0.4 : 1,
-                          cursor: blocked ? 'not-allowed' : 'pointer',
+                          height: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 12px',
+                          border: 0, borderRadius: radius.control, cursor: 'pointer', textAlign: 'left',
+                          background: on ? tk.bg.selected : tk.bg.panel,
+                          boxShadow: `inset 0 0 0 ${on ? 1.5 : 1}px ${on ? tk.accent.base : tk.border.default}`,
+                          color: tk.text.primary, font: `${on ? 600 : 500} 12.5px ${fontFamily.ui}`,
                         }}
-                      >{r.label}</button>
+                      >
+                        {CODEC_LABELS[c]}
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: tk.text.muted }}>{CODEC_DESCRIPTIONS[c]}</span>
+                      </button>
                     );
                   })}
                 </div>
-                {canvas && (
-                  <div style={{ marginTop: '4px', fontSize: '10px', color: ctp.surface1 }}>
-                    Output: {displayW} × {displayH}px
-                    {resScale > 1 && <span style={{ color: ctp.yellow, marginLeft: '6px' }}>⚠ higher bitrate recommended</span>}
-                  </div>
-                )}
-                {formatFallback && current && (
-                  <div style={{ marginTop: '4px', fontSize: '10px', color: ctp.yellow, lineHeight: 1.4 }}>
-                    ⚠ {preferred!.label} can’t encode {fmtPx(current.width, current.height)} on this device — recording as {formatFallback.label} (.{formatFallback.ext}) instead.
-                  </div>
-                )}
-                {blockedScales.map(r => (
-                  <div key={r.scale} style={{ marginTop: '4px', fontSize: '10px', color: ctp.surface2, lineHeight: 1.4 }}>
-                    {r.label.split(' ')[0]} unavailable: {support![r.scale].blocked}
-                  </div>
-                ))}
-              </div>
+              </Section>
+            )}
 
-              {/* Filename */}
-              <div>
-                <div style={LABEL}>File Name</div>
-                <input
-                  value={filename}
-                  onChange={e => setFilename(e.target.value)}
-                  placeholder="shader-export"
-                  style={{
-                    width: '100%', boxSizing: 'border-box',
-                    background: ctp.mantle, border: `1px solid ${ctp.surface1}`,
-                    color: ctp.text, borderRadius: '6px',
-                    padding: '5px 10px', fontSize: '12px', outline: 'none',
-                    fontFamily: 'system-ui, sans-serif',
-                  }}
-                />
-              </div>
-            </div>
+            <Section label="Frame rate">
+              <Segmented
+                fill
+                ariaLabel="Frame rate"
+                value={String(fps)}
+                onChange={v => setFps(Number(v))}
+                options={[24, 30, 60].map(f => ({ value: String(f), label: `${f}`, sub: 'fps' }))}
+              />
+            </Section>
+
+            <Section label="Duration">
+              {(!manualStop || mode === 'ffmpeg') && (
+                <div style={{ display: 'flex' }}>
+                  <RulerSlider value={duration} min={1} max={60} step={1} defaultValue={5} onChange={setDuration} ariaLabel="Duration in seconds" />
+                </div>
+              )}
+              {mode === 'mediarecorder' && <Toggle checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}
+            </Section>
+
+            <Section label="Resolution" meta={canvas && current ? `${displayW} × ${displayH} px` : undefined}>
+              <Segmented
+                fill
+                ariaLabel="Resolution"
+                value={String(resScale)}
+                onChange={v => setResScale(Number(v))}
+                options={RESOLUTIONS.map(r => {
+                  const blocked = support?.[r.scale]?.blocked ?? null;
+                  return { value: String(r.scale), label: `${r.scale}×`, sub: r.sub, disabled: !!blocked, title: blocked ?? undefined };
+                })}
+              />
+              {resScale > 1 && <Help>Higher resolutions need a higher bitrate to look clean.</Help>}
+              {formatFallback && current && (
+                <Callout tone="warning" title={`Recording as ${formatFallback.label} instead`}>
+                  {preferred!.label} can’t encode {fmtPx(current.width, current.height)} on this device, so the file will be .{formatFallback.ext}.
+                </Callout>
+              )}
+              {blockedScales.map(r => (
+                <Help key={r.scale}>{r.scale}× unavailable: {support![r.scale].blocked}</Help>
+              ))}
+            </Section>
 
             {mode === 'mediarecorder' && (
-              <div style={{ fontSize: '10px', color: ctp.surface1, lineHeight: 1.5 }}>
-                Records in real-time via MediaRecorder. Downloads as{' '}
-                <strong style={{ color: ctp.overlay0 }}>.{current?.format?.ext ?? preferred?.ext ?? 'webm'}</strong> when stopped.
-              </div>
+              <Section label="Bitrate">
+                <Segmented
+                  fill
+                  ariaLabel="Bitrate"
+                  value={String(bitrate)}
+                  onChange={v => setBitrate(Number(v))}
+                  options={[8, 25, 50, 100].map(b => ({ value: String(b), label: `${b}`, sub: 'Mbps' }))}
+                />
+              </Section>
             )}
+
+            <Section label="File name">
+              <Field mono value={filename} onChange={e => setFilename(e.target.value)} placeholder="shader-export" suffix={`.${ext}`} aria-label="File name" />
+              {mode === 'mediarecorder' && <Help>Records in real time. The file downloads when recording stops.</Help>}
+            </Section>
           </>
         )}
 
-        {/* Real-time recording progress */}
         {isRecording && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ color: ctp.green, fontWeight: 600, fontSize: '13px' }}>⏺ Recording…</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: tk.status.danger, animation: 'recPulse 1.2s ease-in-out infinite' }} />
+              Recording…
+            </div>
             {!manualStop && <ProgressBar value={captureProgress} />}
-            <div style={{ color: ctp.overlay0, fontSize: '11px', display: 'flex', gap: '16px' }}>
-              <span>⏱ {elapsed.toFixed(1)}s</span>
-              <span>🎞 {frameCount} frames</span>
-              {!manualStop && <span>📊 {Math.round(captureProgress * 100)}%</span>}
-            </div>
+            {stats}
           </div>
         )}
 
-        {/* FFmpeg encoding progress */}
         {isEncoding && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ color: ctp.mauve, fontWeight: 600, fontSize: '13px' }}>✦ Encoding…</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Encoding…</div>
             <ProgressBar value={captureProgress} />
-            <div style={{ color: ctp.overlay0, fontSize: '11px', display: 'flex', gap: '16px' }}>
-              <span>⏱ {elapsed.toFixed(1)}s</span>
-              <span>🎞 {frameCount} frames</span>
-              <span>📊 {Math.round(captureProgress * 100)}%</span>
-            </div>
-            <div style={{ fontSize: '10px', color: ctp.surface1 }}>
-              Rendering offline — UI may be unresponsive during encoding
-            </div>
+            {stats}
+            <Help>Rendering offline, so the app may be unresponsive until it finishes.</Help>
           </div>
         )}
 
-        {/* Done */}
         {isDone && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', padding: '8px 0' }}>
-            <span style={{ fontSize: '28px' }}>✅</span>
-            <span style={{ color: ctp.green, fontWeight: 600 }}>
-              {mode === 'ffmpeg' ? 'Encoded & saved!' : 'Done — video downloaded!'}
-            </span>
-            {outputPath && (
-              <span style={{ color: ctp.surface1, fontSize: '10px', wordBreak: 'break-all', textAlign: 'center' }}>
-                {outputPath}
-              </span>
-            )}
-            <span style={{ color: ctp.surface2, fontSize: '11px' }}>
-              {frameCount} frames · {elapsed.toFixed(1)}s · {displayW}×{displayH}
-            </span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 0', textAlign: 'center' }}>
+            <span style={{
+              width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: alpha(tk.status.success, 0.14), color: tk.status.success,
+            }}><Icon name="check" size={20} /></span>
+            <b style={{ fontSize: 14, fontWeight: 600 }}>{mode === 'ffmpeg' ? 'Encoded and saved' : 'Recording saved'}</b>
+            {outputPath && <span style={{ font: `11.5px ${fontFamily.mono}`, color: tk.text.muted, wordBreak: 'break-all' }}>{outputPath}</span>}
+            <span style={{ fontSize: 12, color: tk.text.muted }}>{frameCount} frames · {elapsed.toFixed(1)}s · {displayW}×{displayH}</span>
           </div>
         )}
 
-        {/* Error */}
         {(errorMsg || isError) && (
-          <div style={{ color: ctp.red, fontSize: '11px', background: '#2a1a1a', padding: '8px', borderRadius: '6px' }}>
-            {errorMsg || 'An error occurred.'}
-          </div>
+          <Callout title={isError ? 'Recording failed' : 'Can’t start yet'} details={errorMsg && errorMsg.length > 140 ? errorMsg : undefined}>
+            {errorMsg && errorMsg.length <= 140 ? errorMsg : (errorMsg ? 'See the details below.' : 'Something went wrong while recording.')}
+          </Callout>
         )}
-
-        {/* Action buttons */}
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
-          {(isDone || isError) && (
-            <button
-              onClick={() => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); }}
-              style={{ ...BTN_BASE, background: ctp.surface0, color: ctp.text }}
-            >Record Again</button>
-          )}
-          {state === 'idle' && (
-            <button onClick={onClose} style={{ ...BTN_BASE, background: 'none', color: ctp.overlay0 }}>Cancel</button>
-          )}
-          {state === 'idle' && (
-            <button
-              onClick={handleScreenshot}
-              disabled={!canvas}
-              style={{ ...BTN_BASE, background: ctp.mantle, color: ctp.green, borderColor: `${ctp.green}33`, flex: 1 }}
-            >
-              📷 Screenshot
-            </button>
-          )}
-          {state === 'idle' && (
-            <button
-              onClick={handleStart}
-              disabled={!canStart}
-              style={{
-                ...BTN_BASE,
-                background: mode === 'ffmpeg' ? ctp.mauve : ctp.blue,
-                color: ctp.base, fontWeight: 700,
-                borderColor: mode === 'ffmpeg' ? ctp.mauve : ctp.blue,
-                opacity: canStart ? 1 : 0.4,
-              }}
-            >
-              {mode === 'ffmpeg' ? '✦ Encode' : '▶ Record'}
-            </button>
-          )}
-          {isBusy && (
-            <button
-              onClick={handleStop}
-              style={{ ...BTN_BASE, background: ctp.red, color: ctp.base, fontWeight: 700, borderColor: ctp.red }}
-            >
-              {isEncoding ? '✕ Cancel' : '■ Stop'}
-            </button>
-          )}
-          {(isDone || isError) && (
-            <button onClick={onClose} style={{ ...BTN_BASE, background: ctp.surface0, color: ctp.text }}>Close</button>
-          )}
-        </div>
-
       </div>
+    </Modal>
+  );
+}
+
+function Section({ label, meta, children }: { label: string; meta?: string; children: React.ReactNode }) {
+  const tk = useTokens();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>
+        <span style={{ flex: 1 }}>{label}</span>
+        {meta && <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 12, color: tk.text.muted }}>{meta}</span>}
+      </span>
+      {children}
     </div>
   );
+}
+
+function Help({ children }: { children: React.ReactNode }) {
+  const tk = useTokens();
+  return <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{children}</p>;
 }
