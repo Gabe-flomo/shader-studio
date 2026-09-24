@@ -33,12 +33,20 @@ export const PaletteNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color' },
   },
   defaultParams: {
+    value: 0, anim: 0,
     offset:    [0.5, 0.5, 0.5],
     amplitude: [0.5, 0.5, 0.5],
     freq:      [1.0, 1.0, 1.0],
     phase:     [0.0, 0.33, 0.67],
   },
   paramDefs: {
+    // Static fallbacks for Value/Time when neither is wired — lets their
+    // sliders actually preview the palette (0..1 covers one full cosine
+    // cycle for Value; Time is a plain bounded stand-in for u_time, since
+    // wiring the real Time node is how you'd animate this for real) instead
+    // of always compiling to a hardcoded 0.0 with nothing to tune.
+    value:     { label: 'Value',     type: 'float', min: 0.0,      max: 1.0,     step: 0.01 },
+    anim:      { label: 'Time',      type: 'float', min: 0.0,      max: 10.0,    step: 0.1  },
     offset:    { label: 'Offset',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
     amplitude: { label: 'Amplitude', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
     freq:      { label: 'Freq',      type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01 },
@@ -48,8 +56,8 @@ export const PaletteNode: NodeDefinition = {
   glslFunction: PALETTE_GLSL_FN,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_color`;
-    const valVar  = inputVars.value || '0.0';
-    const timeVar = inputVars.anim  || '0.0';
+    const valVar  = inputVars.value || p(node.params.value, 0);
+    const timeVar = inputVars.anim  || p(node.params.anim, 0);
     const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
     const oV = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
     const aV = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];

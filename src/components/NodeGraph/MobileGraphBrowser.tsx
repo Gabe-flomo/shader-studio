@@ -30,6 +30,7 @@ import {
 } from '../../compiler/keyframes';
 import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/keyframes';
 import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
+import { NumberInput } from './NumberInput';
 
 function nodeDotColor(n: GraphNode): string {
   if (n.type === 'output') return '#a6e3a1';
@@ -532,7 +533,7 @@ function TypeIcon({ type }: { type: string }) {
 // would shrink that fixed-size text rather than just sharpen it. Runs on
 // every render (cheap no-op once the size stabilizes) so it also
 // self-corrects on an actual resize (rotation, window resize).
-function InlineVizFrame({ node }: { node: GraphNode }) {
+export function InlineVizFrame({ node }: { node: GraphNode }) {
   const frameRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -576,7 +577,7 @@ function InlineVizFrame({ node }: { node: GraphNode }) {
 // scope probe, or a type that isn't really "a shader" on its own. Same
 // list desktop's own SKIP_PREVIEW (NodeComponent.tsx) excludes from its
 // 👁 in-card preview for the same reason.
-const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
+export const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput']);
 // ── Generic live-render fallback ─────────────────────────────────────────
 // For the ~75% of node types with no custom NodeInlineViz entry, this is
 // the same fallback desktop uses (NodeComponent.tsx's own isPreviewActive
@@ -587,7 +588,7 @@ const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureIn
 // when the focused node changes, not every frame; INLINE_VIZ_TYPES types
 // get true live reactivity from their own canvas draw; this is "show
 // something correct" for everything else, same tradeoff desktop makes.
-function GenericPreviewViz({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
+export function GenericPreviewViz({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     // `nodes` must already be the caller's active scope (getActiveNodes at
@@ -711,16 +712,17 @@ const KF_HIT_PX = 20;
 const KF_HANDLE_R = 6;
 const KF_HANDLE_HIT_PX = 16;
 // The snap grid a dragged keyframe's time gravitates toward once it's close
-// (aim-assist, not a hard quantize) — half-second increments, same idea as
-// desktop's grid snap but always-on and pixel-distance-based rather than a
-// modifier key, since there's no keyboard to hold shift with on mobile.
-const KF_TIME_SNAP = 0.5;
+// (aim-assist, not a hard quantize) — quarter-second increments, same idea
+// as desktop's grid snap but always-on and pixel-distance-based rather than
+// a modifier key, since there's no keyboard to hold shift with on mobile.
+const KF_TIME_SNAP = 0.25;
 const KF_TIME_SNAP_PX = 8;
 type KfTool = 'select' | 'add' | 'delete' | 'draw';
 type KfDrag =
   | { kind: 'move'; index: number }
   | { kind: 'handle'; segIndex: number; which: 'p1' | 'p2' }
-  | { kind: 'draw'; path: Array<{ t: number; v: number }> };
+  | { kind: 'draw'; path: Array<{ t: number; v: number }> }
+  | { kind: 'marquee' };
 
 // A segment the curve is made of, including the synthetic loop-back segment
 // in 'interpolate' mode — mirrors buildSegments in desktop's
@@ -751,7 +753,7 @@ function isLinearEase(e: KeyframeEasing): boolean {
 // segment — not the "coming out at an angle" default that's easy to grab.
 const KF_DEFAULT_BEZIER: KeyframeEasing = { a: 0.3, b: 0.0, c: 0.7, d: 1.0 };
 
-function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, tool, onChange, selectedIndex, onSelect }: {
+function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, tool, onChange, selectedIndex, onSelect, height = 160 }: {
   keyframes: Keyframe[];
   mode: KeyframeLoopMode;
   loopBack: number;
@@ -763,18 +765,34 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
   onChange: (next: Keyframe[]) => void;
   selectedIndex: number | null;
   onSelect: (index: number | null) => void;
+  /** Caller-controlled canvas height (e.g. a "compact" mode toggle) — still
+   *  fully interactive at any height, just less of it, so bezier/marquee
+   *  editing never requires re-expanding first. Defaults to the standard
+   *  160px used everywhere that doesn't offer a compact toggle. */
+  height?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 320, height: 220 });
+  const [size, setSize] = useState({ width: 320, height });
   const dragRef = useRef<KfDrag | null>(null);
+  // Delete tool: dragging from empty canvas (not directly on a point) opens
+  // a marquee rectangle instead of doing nothing — tapping a point directly
+  // still deletes just that one, unchanged.
+  const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+
+  // Follow the `height` prop when it changes (e.g. the compact-mode toggle)
+  // — the ResizeObserver below only fires on width/container changes, not
+  // when this prop alone changes without the container itself resizing.
+  useEffect(() => setSize(s => (s.height === height ? s : { ...s, height })), [height]);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
       const box = entries[0]?.contentRect;
-      if (box && box.width > 0) setSize({ width: box.width, height: 220 });
+      // Preserve whatever height is currently in state (the `height` prop
+      // effect above owns that) — this observer only ever reacts to width.
+      if (box && box.width > 0) setSize(s => ({ width: box.width, height: s.height }));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -861,19 +879,34 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       });
     }
 
+    const marqueeBounds = marqueeRect ? {
+      xMin: Math.min(marqueeRect.x0, marqueeRect.x1), xMax: Math.max(marqueeRect.x0, marqueeRect.x1),
+      yMin: Math.min(marqueeRect.y0, marqueeRect.y1), yMax: Math.max(marqueeRect.y0, marqueeRect.y1),
+    } : null;
+
     keyframes.forEach((kf, i) => {
       const x = toX(kf.t), y = toY(kf.v);
       const isSelected = i === selectedIndex;
+      const isMarqueed = !!marqueeBounds && x >= marqueeBounds.xMin && x <= marqueeBounds.xMax && y >= marqueeBounds.yMin && y <= marqueeBounds.yMax;
       ctx.beginPath();
       ctx.arc(x, y, isSelected ? 7 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#f9e2af' : '#fab387';
+      ctx.fillStyle = isMarqueed ? '#f38ba8' : isSelected ? '#f9e2af' : '#fab387';
       ctx.fill();
       ctx.strokeStyle = '#181825';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
+
+    if (marqueeBounds) {
+      const { xMin, xMax, yMin, yMax } = marqueeBounds;
+      ctx.fillStyle = 'rgba(243,139,168,0.12)';
+      ctx.strokeStyle = '#f38ba8';
+      ctx.lineWidth = 1;
+      ctx.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
+      ctx.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, selectedIndex, size, maxT, showHandles, easeEditSeg]);
+  }, [keyframes, mode, loopBack, offset, loopCount, valueMin, valueMax, selectedIndex, size, maxT, showHandles, easeEditSeg, marqueeRect]);
 
   const hitTest = (x: number, y: number): number | null => {
     let best: number | null = null, bestDist = KF_HIT_PX;
@@ -910,7 +943,11 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     }
     const hit = hitTest(x, y);
     if (tool === 'delete') {
-      if (hit != null) { onChange(keyframes.filter((_, i) => i !== hit)); onSelect(null); }
+      if (hit != null) { onChange(keyframes.filter((_, i) => i !== hit)); onSelect(null); return; }
+      // Missed every point — start a marquee instead of doing nothing, so a
+      // drag over empty canvas can select and delete several points at once.
+      setMarqueeRect({ x0: x, y0: y, x1: x, y1: y });
+      dragRef.current = { kind: 'marquee' };
       return;
     }
     if (tool === 'draw') {
@@ -937,6 +974,10 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     const drag = dragRef.current;
     if (!drag) return;
     const { x, y } = pointerPos(e);
+    if (drag.kind === 'marquee') {
+      setMarqueeRect(r => r ? { ...r, x1: x, y1: y } : null);
+      return;
+    }
     if (drag.kind === 'draw') {
       const t = clampT(fromX(x)), v = clampV(fromY(y));
       const last = drag.path[drag.path.length - 1];
@@ -962,7 +1003,11 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
       onChange(next);
       return;
     }
-    const next = keyframes.map((k, i) => i === drag.index ? { ...k, t: clampT(snapT(fromX(x))), v: clampV(fromY(y)) } : k);
+    // Y (value) is intentionally locked during a point drag — pinpointing a
+    // value by finger on a small canvas is fiddly, so dragging only ever
+    // repositions a keyframe in time; the Value input box in the panel below
+    // is the one way to change what it's actually worth.
+    const next = keyframes.map((k, i) => i === drag.index ? { ...k, t: clampT(snapT(fromX(x))) } : k);
     onChange(next);
   };
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -973,6 +1018,21 @@ function KeyframeCanvasEditor({ keyframes, mode, loopBack, offset, loopCount, va
     if (drag.kind === 'draw') {
       onChange(downsampleDrawPath(drag.path));
       onSelect(null);
+      return;
+    }
+    if (drag.kind === 'marquee') {
+      if (marqueeRect) {
+        const xMin = Math.min(marqueeRect.x0, marqueeRect.x1), xMax = Math.max(marqueeRect.x0, marqueeRect.x1);
+        const yMin = Math.min(marqueeRect.y0, marqueeRect.y1), yMax = Math.max(marqueeRect.y0, marqueeRect.y1);
+        const toDelete = new Set(
+          keyframes
+            .map((kf, i) => ({ i, x: toX(kf.t), y: toY(kf.v) }))
+            .filter(p => p.x >= xMin && p.x <= xMax && p.y >= yMin && p.y <= yMax)
+            .map(p => p.i)
+        );
+        if (toDelete.size > 0) { onChange(keyframes.filter((_, i) => !toDelete.has(i))); onSelect(null); }
+      }
+      setMarqueeRect(null);
       return;
     }
     if (drag.kind === 'handle') return;
@@ -1329,6 +1389,15 @@ export function MobileGraphBrowser() {
   const [homeAddNodeOpen, setHomeAddNodeOpen] = useState(false);
   // Long-press context menu on a Home chip — holds the target node's id.
   const [longPressMenuFor, setLongPressMenuFor] = useState<string | null>(null);
+  // "Insert a node into a connection" — picked from the long-press menu's
+  // own "insert into a connection" section (one entry per existing edge
+  // out of that node). Holds the specific edge being split so the search
+  // palette can filter to types with a compatible socket on both sides,
+  // and so placing one can rewire source->new->target afterward.
+  const [pathInsert, setPathInsert] = useState<{
+    sourceNodeId: string; sourceOutputKey: string; sourceOutputType: string;
+    targetNodeId: string; targetInputKey: string; targetInputType: string;
+  } | null>(null);
   const [homeGraphView, setHomeGraphView] = useState(false);
   // 'rank' is the synthetic BFS-depth grid (computeGraphLayout); 'real' mirrors
   // the desktop canvas's actual spatial layout (computeRealLayout), read-only.
@@ -1384,6 +1453,23 @@ export function MobileGraphBrowser() {
   // desktop's own slider config panel uses (NodeComponent.tsx), so a range
   // customized on one platform carries over to the other.
   const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
+  // Native `dblclick` is unreliable on iOS Safari for range inputs — the
+  // second tap's synthetic dblclick often just doesn't fire — so "double-
+  // tap to reset" silently did nothing on a real phone. This tracks tap
+  // timing by hand as a touch-side fallback alongside onDoubleClick (which
+  // still covers desktop mouse users). Keyed per-control so tapping two
+  // different sliders in quick succession doesn't cross-trigger.
+  const lastTapRef = useRef<{ key: string; time: number } | null>(null);
+  const handleDoubleTap = (tapKey: string, onDouble: () => void) => {
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last && last.key === tapKey && now - last.time < 400) {
+      lastTapRef.current = null;
+      onDouble();
+    } else {
+      lastTapRef.current = { key: tapKey, time: now };
+    }
+  };
   // Which WIRING row is expanded — accordion, same one-key-at-a-time idea
   // as openSliderConfig above, but for the inline "what's this connected
   // to / pick something" panel that replaces the old separate connect
@@ -1397,6 +1483,13 @@ export function MobileGraphBrowser() {
   const [wiringSectionOpen, setWiringSectionOpen] = useState(true);
   // Same whole-section fold as wiringSectionOpen, for the VALUES list below it.
   const [valuesSectionOpen, setValuesSectionOpen] = useState(true);
+  // Keyframe editor's pinned canvas: full-size by default, but a phone
+  // screen is short enough that the scrollable controls under it (Value,
+  // Easing, Playback) can end up squeezed to almost nothing. Toggling this
+  // shrinks the canvas instead of hiding it — it's still fully interactive
+  // (bezier handles, marquee delete, ...) at the smaller size, just less of
+  // it, so you never have to re-expand just to keep editing.
+  const [kfCanvasCompact, setKfCanvasCompact] = useState(false);
   // Track which group scope focusStack/forwardStack belong to — crossing a
   // group boundary (entering via "Enter Group", exiting via a breadcrumb
   // tap) drops both, the same way jumping to a totally different node tree
@@ -1710,6 +1803,24 @@ export function MobileGraphBrowser() {
     if (!newNode) return;
     const inKey = firstCompatibleInputKey(newNode, socket.type);
     if (inKey) connectNodes(socket.nodeId, socket.key, newId, inKey);
+    pushFocus(newId);
+  };
+
+  // Splices a freshly-placed node into an existing source->target edge:
+  // source now feeds the new node instead, and the new node feeds target
+  // in target's original input's place. The search palette that triggers
+  // this was already filtered (filterOutputType=targetInputType,
+  // filterInputType=sourceOutputType) so a compatible pair is guaranteed
+  // to exist; first-match is the same convention every other placement
+  // flow here uses when more than one socket would technically qualify.
+  const handleNodePlacedForPathInsert = (newId: string, edge: NonNullable<typeof pathInsert>) => {
+    const newNode = getFreshActiveNodes().find(n => n.id === newId);
+    if (!newNode) return;
+    const inKey = firstCompatibleInputKey(newNode, edge.sourceOutputType);
+    const outKey = firstCompatibleOutputKey(newNode, edge.targetInputType);
+    if (!inKey || !outKey) return;
+    connectNodes(edge.sourceNodeId, edge.sourceOutputKey, newId, inKey);
+    connectNodes(newId, outKey, edge.targetNodeId, edge.targetInputKey);
     pushFocus(newId);
   };
 
@@ -2042,7 +2153,18 @@ export function MobileGraphBrowser() {
     const paramOnlyEntries: Array<[string, GraphNode['inputs'][string]]> = Object.entries(def?.paramDefs ?? {})
       .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int' || pd.type === 'select') && paramVisible(node, pd))
       .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]]);
-    const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries];
+    // A vec3 paramDef's own r/g/b sockets (Palette's offset_r/g/b, ...) get
+    // their own full row inside that param's card below (renderExtraParamCard)
+    // — excluding them here avoids showing the exact same wire/slider/
+    // keyframe control twice, once generically and once in the dedicated
+    // card, which is exactly the "two sections for one control" duplication
+    // that card redesign exists to fix.
+    const vecComponentKeys = new Set(
+      Object.entries(def?.paramDefs ?? {})
+        .filter(([key, pd]) => !(key in node.inputs) && pd.type === 'vec3' && paramVisible(node, pd))
+        .flatMap(([key]) => ['r', 'g', 'b'].map(axis => `${key}_${axis}`))
+    );
+    const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries].filter(([key]) => !vecComponentKeys.has(key));
     // vec3 / vec3color / bool paramDefs (Palette's Offset/Amplitude/Freq/
     // Phase, any node with a plain on/off toggle, ...) don't fit the plain
     // slider-row shape paramOnlyEntries above assumes — a vec3 needs 3
@@ -2088,7 +2210,12 @@ export function MobileGraphBrowser() {
       const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
       const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
       const isExpanded = wireExpandedKey === key;
-      const candidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type) : [];
+      // Capped to the top 3 — already sorted exact-type-match first (see
+      // allConnectCandidatesFor), so these are the most sensible matches; a
+      // long candidate list buried the actually-useful ones in scroll. Search
+      // ("+ Add New Node" below) still reaches anything past the top 3.
+      const allCandidates = (isExpanded && !upstream && !isPortSourced) ? allConnectCandidatesFor(node.id, inp.type) : [];
+      const candidates = allCandidates.slice(0, 3);
       // Collapsed-row hint — lets a glance down the whole Wiring list show
       // which open sockets already have a good suggestion, without
       // expanding each one to find out.
@@ -2163,6 +2290,11 @@ export function MobileGraphBrowser() {
                       </button>
                     </div>
                   ))}
+                  {allCandidates.length > candidates.length && (
+                    <div style={{ fontSize: '10px', color: '#585b70', marginLeft: '18px' }}>
+                      +{allCandidates.length - candidates.length} more — search below to find them
+                    </div>
+                  )}
                   <button
                     onClick={() => setWireAddNewFor(key)}
                     style={{ alignSelf: 'flex-start', marginTop: '2px', background: 'none', border: '1px dashed #45475a', color: '#89b4fa', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
@@ -2232,7 +2364,27 @@ export function MobileGraphBrowser() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <TypeIcon type={inp.type} />
             <div style={{ flex: 1, minWidth: 0, fontSize: '12px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
-            {isKeyframed && <span style={{ fontSize: '9px', color: '#f9e2af', flexShrink: 0 }}>◆ animated</span>}
+            {/* Quick keyframe access right in the header, not just inside
+                the fold — a keyframed row jumps straight into the editor,
+                an eligible-but-static one straight into "add". The fold's
+                own Add/Edit Keyframes button (below) still works too; this
+                is just a faster path for someone who already knows this
+                row is keyframeable and doesn't want to expand it first. */}
+            {kfEligible && (
+              <button
+                onClick={() => {
+                  const axis = kfAxes ? kfAxes[0] : undefined;
+                  setMobileKeyframeEditor({ nodeId: node.id, socketKey: key, axis });
+                  setMobileKeyframeTool(isKeyframed ? 'select' : 'add');
+                }}
+                title={isKeyframed ? 'Edit keyframes' : 'Add keyframes'}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0, background: 'none', border: 'none',
+                  padding: '2px 4px', cursor: 'pointer', touchAction: 'manipulation',
+                  color: isKeyframed ? '#f9e2af' : '#585b70', fontSize: '9px',
+                }}
+              >◆{isKeyframed ? ' animated' : ''}</button>
+            )}
           </div>
           {isExternallyDriven && (
             <div style={{ fontSize: '10px', color: '#6c7086', fontStyle: 'italic' }}>
@@ -2270,6 +2422,10 @@ export function MobileGraphBrowser() {
                       const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
                       updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
                     }}
+                    onTouchEnd={() => handleDoubleTap(`slider_${key}`, () => {
+                      const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
+                      updateNodeParams(node.id, { [key]: typeof defVal === 'number' ? defVal : (effMin + effMax) / 2 }, { immediate: true });
+                    })}
                     title={isExternallyDriven ? 'Driven by an outer wire into this group — read-only here' : 'Double-tap to reset to default'}
                     style={{ flex: 1, minWidth: 0, opacity: isExternallyDriven ? 0.4 : 1, accentColor: dotColor }}
                   />
@@ -2295,13 +2451,10 @@ export function MobileGraphBrowser() {
                   <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                       <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         step={pd.step ?? 0.01}
                         value={val}
-                        onChange={e => {
-                          const n = parseFloat(e.target.value);
-                          if (isNaN(n)) return;
+                        onCommit={n => {
                           if (Math.abs(n) > effMax) setCustomMax(n);
                           updateNodeParams(node.id, { [key]: n }, { immediate: true });
                         }}
@@ -2319,14 +2472,10 @@ export function MobileGraphBrowser() {
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                       <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Max</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         step={pd.step ?? 0.01}
                         value={effMax}
-                        onChange={e => {
-                          const n = parseFloat(e.target.value);
-                          if (!isNaN(n) && n > 0) setCustomMax(n);
-                        }}
+                        onCommit={n => { if (n > 0) setCustomMax(n); }}
                         style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
                       />
                       {customMax != null && (
@@ -2467,48 +2616,131 @@ export function MobileGraphBrowser() {
           </div>
         );
       }
-      // vec3 — 3 sub-sliders. A component whose own {key}_r/_g/_b socket is
-      // wired shows "wired" instead, since the wire wins at compile time
-      // (same fallback order Palette's own generateGLSL uses).
+      // vec3 — one full row per component, same dot/slider/expand-fold
+      // treatment as a real value row (renderValueRow) rather than three
+      // sliders crammed into one card: tap a component to reach its Value
+      // box and, when that component has its own backing socket (Palette's
+      // offset_r/g/b — not every vec3 paramDef does; Fractal Loop's
+      // offset/amplitude/freq/phase have no component sockets at all, see
+      // FractalLoopNode), keyframe access too. A wired component still just
+      // shows "wired ↑", since the wire wins at compile time (same fallback
+      // order Palette's own generateGLSL uses).
       const vals = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
       const step = pd.step ?? 0.01;
       const min = pd.min ?? 0;
       const max = pd.max ?? 1;
-      const compKeys = [`${key}_r`, `${key}_g`, `${key}_b`];
       const compLabels = ['r', 'g', 'b'];
       const compColors = ['#f38ba8', '#a6e3a1', '#89b4fa'];
       return (
-        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
-          <div style={{ fontSize: '12px', color: '#cdd6f4' }}>{pd.label}</div>
+        <div key={key} style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+          <div style={{ fontSize: '12px', color: '#cdd6f4', padding: '2px 0 4px' }}>{pd.label}</div>
           {[0, 1, 2].map(idx => {
-            const compConnected = node.inputs[compKeys[idx]]?.connection != null;
-            return (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '10px', color: compColors[idx], width: '10px', flexShrink: 0 }}>{compLabels[idx]}</span>
-                {compConnected ? (
+            const axisLabel = compLabels[idx];
+            const axisColor = compColors[idx];
+            const compKey = `${key}_${axisLabel}`;
+            const isCompSocket = compKey in node.inputs;
+            const compConnected = isCompSocket && node.inputs[compKey]?.connection != null;
+            const kfEligible = isCompSocket;
+            const isKeyframed = kfEligible && socketHasKeyframes(node, compKey);
+            const val = vals[idx] ?? 0;
+            const isExpanded = openSliderConfig === compKey;
+            const isLast = idx === 2;
+            const resetToDefault = () => {
+              const defVal = def?.defaultParams?.[key];
+              if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
+            };
+            const AxisDot = () => (
+              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: axisColor, flexShrink: 0, opacity: 0.6 }} />
+            );
+
+            if (compConnected) {
+              return (
+                <div key={axisLabel} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', borderBottom: isLast ? 'none' : '1px solid #24243a' }}>
+                  <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
                   <span style={{ fontSize: '11px', color: '#585b70', fontStyle: 'italic' }}>wired ↑</span>
-                ) : (
-                  <>
-                    <input
-                      type="range"
-                      min={min} max={max} step={step}
-                      value={vals[idx] ?? 0}
-                      onChange={e => {
-                        const next = [...vals];
-                        next[idx] = parseFloat(e.target.value);
-                        updateNodeParams(node.id, { [key]: next }, { immediate: true });
-                      }}
-                      onDoubleClick={() => {
-                        const defVal = def?.defaultParams?.[key];
-                        if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true });
-                      }}
-                      title="Double-tap to reset to default"
-                      style={{ flex: 1, minWidth: 0 }}
-                    />
-                    <span style={{ fontSize: '11px', color: '#a6adc8', width: '48px', textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                      {formatSliderValue(vals[idx] ?? 0, step)}
+                </div>
+              );
+            }
+            if (isKeyframed) {
+              return (
+                <div key={axisLabel} style={{ padding: '4px 0', borderBottom: isLast ? 'none' : '1px solid #24243a' }}>
+                  <button
+                    onClick={() => setOpenSliderConfig(o => o === compKey ? null : compKey)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', touchAction: 'manipulation' }}
+                  >
+                    <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
+                    <span style={{ fontSize: '10px', color: '#f9e2af', flex: 1, textAlign: 'left' }}>◆ animated</span>
+                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                  </button>
+                  {isExpanded && (
+                    <div style={{ marginTop: '4px', marginLeft: '16px' }}>
+                      <button
+                        onClick={() => { setMobileKeyframeEditor({ nodeId: node.id, socketKey: compKey }); setMobileKeyframeTool('select'); }}
+                        style={{ background: 'none', border: '1px solid #f9e2af66', color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
+                      >◆ Edit Keyframes</button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div key={axisLabel} style={{ padding: '4px 0', borderBottom: isLast ? 'none' : '1px solid #24243a', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <span style={{ fontSize: '10px', color: axisColor, width: '10px', flexShrink: 0, textTransform: 'uppercase' }}>{axisLabel}</span>
+                  <AxisDot />
+                  <input
+                    type="range"
+                    min={min} max={max} step={step}
+                    value={val}
+                    onChange={e => {
+                      const next = [...vals];
+                      next[idx] = parseFloat(e.target.value);
+                      updateNodeParams(node.id, { [key]: next }, { immediate: true });
+                    }}
+                    onDoubleClick={resetToDefault}
+                    onTouchEnd={() => handleDoubleTap(`vec3_${key}_${idx}`, resetToDefault)}
+                    title="Double-tap to reset to default"
+                    style={{ flex: 1, minWidth: 0, accentColor: axisColor }}
+                  />
+                  <AxisDot />
+                  <button
+                    onClick={() => setOpenSliderConfig(o => o === compKey ? null : compKey)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+                      background: isExpanded ? '#313244' : 'none',
+                      border: isExpanded ? '1px solid #45475a' : '1px solid transparent',
+                      borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', touchAction: 'manipulation',
+                      color: isExpanded ? '#cdd6f4' : '#a6adc8',
+                    }}
+                  >
+                    <span style={{ fontSize: '10px', minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {formatSliderValue(val, step)}
                     </span>
-                  </>
+                    <span style={{ fontSize: '8px', color: '#585b70' }}>{isExpanded ? '▾' : '▸'}</span>
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div style={{ background: '#181825', border: '1px solid #313244', borderRadius: '6px', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px', marginLeft: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      <span style={{ fontSize: '9px', color: '#6c7086', width: '28px', flexShrink: 0 }}>Value</span>
+                      <NumberInput
+                        step={step}
+                        value={val}
+                        onCommit={n => {
+                          const next = [...vals];
+                          next[idx] = n;
+                          updateNodeParams(node.id, { [key]: next }, { immediate: true });
+                        }}
+                        style={{ ...exprTextInputStyle, width: '64px', minWidth: 0, padding: '3px 5px', fontSize: '10px' }}
+                      />
+                    </div>
+                    {kfEligible && (
+                      <button
+                        onClick={() => { setMobileKeyframeEditor({ nodeId: node.id, socketKey: compKey }); setMobileKeyframeTool('add'); }}
+                        style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed #f9e2af66', color: '#f9e2af', borderRadius: '6px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', touchAction: 'manipulation' }}
+                      >◆ Add Keyframes</button>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -2841,11 +3073,20 @@ export function MobileGraphBrowser() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {renderNodeHeader(node)}
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Pinned, not part of the scroll below — the curve (and the title/
+            Clear/Done/axis row above it) stays on screen while you scroll
+            through Value/Easing/Playback underneath, instead of scrolling
+            away and losing your visual reference to what you're editing. */}
+        <div style={{ flexShrink: 0, padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: '1px solid #313244' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 700, color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {input.label}{axis ? ` · ${axis.toUpperCase()}` : ''}
             </div>
+            <button
+              onClick={() => setKfCanvasCompact(v => !v)}
+              title={kfCanvasCompact ? 'Expand the curve view' : 'Shrink the curve view to make more room below'}
+              style={{ background: 'none', border: '1px solid #45475a', color: '#a6adc8', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+            >{kfCanvasCompact ? '⌄' : '⌃'}</button>
             {keyframes.length > 0 && (
               <button
                 onClick={() => writeKeyframes([])}
@@ -2880,8 +3121,11 @@ export function MobileGraphBrowser() {
             onChange={writeKeyframes}
             selectedIndex={kfSelectedIndex}
             onSelect={setKfSelectedIndex}
+            height={kfCanvasCompact ? 90 : 160}
           />
+        </div>
 
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {keyframes.length === 0 && (
             <div style={{ fontSize: '11px', color: '#585b70' }}>
               Pick "Add" below, then tap in the canvas to place a keyframe — or "Draw" to sketch a curve freehand.
@@ -2892,15 +3136,10 @@ export function MobileGraphBrowser() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '11px', color: '#6c7086' }}>Value</span>
-                <input
-                  type="number"
+                <NumberInput
                   step={pd?.step ?? 0.01}
                   value={selected.v}
-                  onChange={e => {
-                    const n = parseFloat(e.target.value);
-                    if (isNaN(n)) return;
-                    writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, v: n } : k));
-                  }}
+                  onCommit={n => writeKeyframes(keyframes.map((k, i) => i === kfSelectedIndex ? { ...k, v: n } : k))}
                   style={{ ...exprTextInputStyle, width: '60px', padding: '4px 6px', fontSize: '11px' }}
                 />
               </div>
@@ -2947,9 +3186,9 @@ export function MobileGraphBrowser() {
               {mode === 'interpolate' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
                   <span style={{ fontSize: '10px', color: '#6c7086' }}>Loop back over</span>
-                  <input
-                    type="number" min={0.01} step={0.1} value={loopBack}
-                    onChange={e => setLoopBack(Math.max(0.01, parseFloat(e.target.value) || 0.01))}
+                  <NumberInput
+                    min={0.01} step={0.1} value={loopBack}
+                    onCommit={n => setLoopBack(Math.max(0.01, n))}
                     style={{ ...exprTextInputStyle, width: '48px', padding: '4px 6px', fontSize: '11px' }}
                   />
                   <span style={{ fontSize: '10px', color: '#6c7086' }}>sec</span>
@@ -2969,9 +3208,9 @@ export function MobileGraphBrowser() {
                   {loopCount !== null && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '10px', color: '#6c7086' }}>Repeat</span>
-                      <input
-                        type="number" min={1} step={1} value={loopCount}
-                        onChange={e => setLoopCount(Math.max(1, Math.round(parseFloat(e.target.value) || 1)))}
+                      <NumberInput
+                        min={1} step={1} value={loopCount}
+                        onCommit={n => setLoopCount(Math.max(1, Math.round(n)))}
                         style={{ ...exprTextInputStyle, width: '44px', padding: '4px 6px', fontSize: '11px' }}
                       />
                       <span style={{ fontSize: '10px', color: '#6c7086' }}>times</span>
@@ -3879,6 +4118,7 @@ export function MobileGraphBrowser() {
       {renderGraphNavigatorOverlay()}
       {renderGroupPortBuilderOverlay()}
       {renderLongPressMenu()}
+      {renderPathInsertPalette()}
     </div>
   );
 
@@ -3896,6 +4136,19 @@ export function MobileGraphBrowser() {
     const canDelete = node.type !== 'output' && !originalLocked;
     const openInputs = Object.entries(node.inputs).filter(([, inp]) => !inp.connection);
     const outputs = Object.entries(node.outputs);
+    // Every existing edge OUT of this node — one entry per (output, downstream
+    // node+input) pair, since one output can feed several consumers. "Insert
+    // a node into a connection" below offers to splice a new node into any
+    // one of these, same idea as hovering a connection line on desktop.
+    const outgoingEdges = outputs.flatMap(([outKey, out]) =>
+      nodes
+        .filter(n => n.id !== node.id)
+        .flatMap(target => Object.entries(target.inputs)
+          .filter(([, inp]) => inp.connection?.nodeId === node.id && inp.connection?.outputKey === outKey)
+          .map(([inKey, inp]) => ({
+            sourceOutputKey: outKey, sourceOutputLabel: out.label, sourceOutputType: out.type,
+            targetNode: target, targetInputKey: inKey, targetInputLabel: inp.label, targetInputType: inp.type,
+          }))));
     const close = () => setLongPressMenuFor(null);
     const feedInput = (key: string, type: string) => {
       setFocusStack([node.id]); setForwardStack([]);
@@ -3905,6 +4158,13 @@ export function MobileGraphBrowser() {
     const feedOutput = (key: string, type: string) => {
       setFocusStack([node.id]); setForwardStack([]);
       setPending({ dir: 'output', nodeId: node.id, key, type });
+      close();
+    };
+    const insertIntoPath = (edge: typeof outgoingEdges[number]) => {
+      setPathInsert({
+        sourceNodeId: node.id, sourceOutputKey: edge.sourceOutputKey, sourceOutputType: edge.sourceOutputType,
+        targetNodeId: edge.targetNode.id, targetInputKey: edge.targetInputKey, targetInputType: edge.targetInputType,
+      });
       close();
     };
     const rowBtnStyle: React.CSSProperties = {
@@ -3956,11 +4216,42 @@ export function MobileGraphBrowser() {
               ))}
             </>
           )}
+          {outgoingEdges.length > 0 && (
+            <>
+              <div style={sectionLabelStyle}>Insert a node into a connection</div>
+              {outgoingEdges.map((edge, i) => (
+                <button key={i} onClick={() => insertIntoPath(edge)} style={rowBtnStyle}>
+                  <div style={dotStyle(TYPE_COLORS[edge.sourceOutputType] ?? '#888')} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {edge.sourceOutputLabel} → {labelFor(edge.targetNode)}.{edge.targetInputLabel}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
           {!canDelete && openInputs.length === 0 && outputs.length === 0 && (
             <div style={{ fontSize: '11px', color: '#585b70', padding: '4px 0' }}>Nothing available for this node.</div>
           )}
         </div>
       </div>
+    );
+  }
+
+  // Search palette for "Insert a node into a connection" — filtered both
+  // ways at once (needs an input compatible with the edge's source output,
+  // AND an output compatible with the edge's target input), so only types
+  // that can actually sit in the middle of this specific edge show up.
+  function renderPathInsertPalette() {
+    if (!pathInsert) return null;
+    const edge = pathInsert;
+    return (
+      <NodeSearchPalette
+        open
+        onClose={() => setPathInsert(null)}
+        filterOutputType={edge.targetInputType}
+        filterInputType={edge.sourceOutputType}
+        onNodePlaced={newId => { handleNodePlacedForPathInsert(newId, edge); setPathInsert(null); }}
+      />
     );
   }
 

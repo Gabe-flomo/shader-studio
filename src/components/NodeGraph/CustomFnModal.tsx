@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveCustomFnPreset } from '../../store/useNodeGraphStore';
+import { NumberInput } from './NumberInput';
 
 // ─── GLSL function palette (same entries as ExprModal) ───────────────────────
 
@@ -255,9 +256,7 @@ export function CustomFnModal({ node, onClose }: Props) {
     updateNodeSockets(node.id, next, outputType);
   };
 
-  const updateSliderRange = (idx: number, field: 'min' | 'max', raw: string) => {
-    const val = parseFloat(raw);
-    if (isNaN(val)) return;
+  const updateSliderRange = (idx: number, field: 'min' | 'max', val: number) => {
     const inp = customInputs[idx];
     const oldSlider = inp.slider ?? { min: 0, max: 1 };
     const newSlider = { ...oldSlider, [field]: val };
@@ -434,11 +433,10 @@ export function CustomFnModal({ node, onClose }: Props) {
               {inp.slider && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '22px' }}>
                   <span style={{ fontSize: '10px', color: '#585b70' }}>range</span>
-                  <input
-                    type="number"
+                  <NumberInput
                     value={inp.slider.min}
-                    onChange={e => updateSliderRange(idx, 'min', e.target.value)}
-                    step="0.1"
+                    onCommit={n => updateSliderRange(idx, 'min', n)}
+                    step={0.1}
                     style={{
                       background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
                       borderRadius: '3px', fontSize: '11px', padding: '2px 5px',
@@ -446,11 +444,10 @@ export function CustomFnModal({ node, onClose }: Props) {
                     }}
                   />
                   <span style={{ fontSize: '10px', color: '#585b70' }}>→</span>
-                  <input
-                    type="number"
+                  <NumberInput
                     value={inp.slider.max}
-                    onChange={e => updateSliderRange(idx, 'max', e.target.value)}
-                    step="0.1"
+                    onCommit={n => updateSliderRange(idx, 'max', n)}
+                    step={0.1}
                     style={{
                       background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
                       borderRadius: '3px', fontSize: '11px', padding: '2px 5px',

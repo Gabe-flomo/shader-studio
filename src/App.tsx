@@ -14,6 +14,7 @@ import { FunctionBuilder } from './components/FunctionBuilder';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/TopNav';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
+import { MobileNodeBrowser } from './components/NodeGraph/MobileNodeBrowser';
 import { useNodeGraphStore, EXAMPLE_GRAPHS, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
@@ -36,6 +37,9 @@ function getPaletteWidth(bp: ReturnType<typeof useBreakpoint>) {
 
 const MIN_PREVIEW = 200;
 const MIN_GRAPH   = 280;
+// Mobile split mode: default canvas-pane height, restored by double-
+// tapping/double-clicking the drag divider between the two panes.
+const MOBILE_CANVAS_VH_DEFAULT = 42;
 
 // ── Button style helper ───────────────────────────────────────────────────────
 const btnStyle = (active = false): React.CSSProperties => ({
@@ -309,6 +313,18 @@ function App() {
 
   // Mobile: canvas-only / split / graph-only layout mode
   const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph' | 'code'>('split');
+  // Mobile split mode: how much vertical space (in vh) the canvas pane gets
+  // — used to be a fixed 42vh with no way to change it. Now draggable via
+  // the divider between the two panes (see mobileSplitDragRef below), with
+  // the canvas itself always kept square by capping its width to the same
+  // vh value, so a shorter canvas pane doesn't stretch it wide.
+  const [mobileCanvasVh, setMobileCanvasVh] = useState(MOBILE_CANVAS_VH_DEFAULT);
+  const mobileSplitDragRef = useRef(false);
+  // Double-tap/double-click the divider to snap back to the default split.
+  // Manual timing (not just onDoubleClick) since iOS Safari doesn't reliably
+  // synthesize a second-tap dblclick — same fallback pattern used for
+  // slider reset in MobileGraphBrowser.tsx.
+  const lastDividerTapRef = useRef(0);
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -324,6 +340,12 @@ function App() {
   // Examples button opens a browsable gallery of starter graphs.
   const [showMobileActionMenu, setShowMobileActionMenu] = useState(false);
   const [showMobileExamples, setShowMobileExamples]     = useState(false);
+  // Examples sheet has two tabs: starter graphs (existing folder accordion)
+  // and an exploratory Nodes browser (MobileNodeBrowser) — category
+  // accordion, open a node to read its description/preview, then decide to
+  // add it. Deliberately not the same flow as the graph FAB's quick-search
+  // NodeSearchPalette; that already exists, this is for browsing/reference.
+  const [mobileExamplesTab, setMobileExamplesTab] = useState<'examples' | 'nodes'>('examples');
   // Reset's own confirm step, in-app rather than window.confirm() — a native
   // confirm dialog is unreliable (sometimes silently a no-op) inside a Tauri
   // webview, which would make Reset look broken with no error or feedback.
@@ -631,7 +653,25 @@ function App() {
       <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         {/* Floating TopNav */}
-        <TopNav page={page} onPageChange={setPage} floating />
+        <TopNav
+          page={page} onPageChange={setPage} floating
+          saveActive={showSavePanel}
+          loadActive={showLoadPanel}
+          onSaveClick={() => { setShowSavePanel(v => !v); setShowLoadPanel(false); }}
+          onLoadClick={() => { setSavedNames(getSavedGraphNames()); setShowLoadPanel(v => !v); setShowSavePanel(false); }}
+        />
+        {/* Save/load-by-name panels (savePanelEl/loadPanelEl) — same shared
+            elements desktop's node-graph toolbar uses. Both already carry
+            their own `position: absolute; top: 36px; left: 8px`, so this
+            wrapper just needs to BE their offset parent, anchored right
+            below the floating nav, rather than trying to reposition them
+            itself. */}
+        {(showSavePanel || showLoadPanel) && (
+          <div style={{ position: 'absolute', top: 'calc(44px + env(safe-area-inset-top, 0px))', left: 0, right: 0, zIndex: 31 }}>
+            {savePanelEl}
+            {loadPanelEl}
+          </div>
+        )}
 
         {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))' }}>
@@ -639,7 +679,7 @@ function App() {
             <div style={{
               position: 'relative',
               flex: mobileLayout === 'canvas' ? 1 : '0 0 auto',
-              height: mobileLayout === 'canvas' ? undefined : '42vh',
+              height: mobileLayout === 'canvas' ? undefined : `${mobileCanvasVh}vh`,
               minHeight: 0,
               background: '#000',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -647,8 +687,8 @@ function App() {
             }}>
               <div style={{
                 position: 'relative',
-                width: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
-                height: mobileLayout === 'canvas' ? '100%' : 'min(100%, 42vh)',
+                width: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
+                height: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
               }}>
                 <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
                 <AudioMasterVolumeWidget />
@@ -703,6 +743,47 @@ function App() {
               </div>
 
               <MobileNodeGraphOverlay />
+            </div>
+          )}
+
+          {/* Drag to resize the canvas/graph split — used to be a fixed
+              42vh with no way to change it. The canvas pane itself stays
+              square (width capped to the same vh value above), so dragging
+              this only ever changes how much of the screen it gets, not its
+              aspect ratio. Only shown in split mode — canvas-only/graph-only
+              already give one pane the full remaining space. */}
+          {showCanvasPane && showGraphPane && (
+            <div
+              onPointerDown={e => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                mobileSplitDragRef.current = true;
+              }}
+              onPointerMove={e => {
+                if (!mobileSplitDragRef.current) return;
+                const vh = (e.clientY / window.innerHeight) * 100;
+                setMobileCanvasVh(Math.max(15, Math.min(75, vh)));
+              }}
+              onPointerUp={e => {
+                mobileSplitDragRef.current = false;
+                if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                const now = Date.now();
+                if (now - lastDividerTapRef.current < 400) {
+                  setMobileCanvasVh(MOBILE_CANVAS_VH_DEFAULT);
+                  lastDividerTapRef.current = 0;
+                } else {
+                  lastDividerTapRef.current = now;
+                }
+              }}
+              onPointerCancel={() => { mobileSplitDragRef.current = false; }}
+              onDoubleClick={() => setMobileCanvasVh(MOBILE_CANVAS_VH_DEFAULT)}
+              title="Double-tap to reset to the default split"
+              style={{
+                flexShrink: 0, height: '18px', margin: '-9px 0', zIndex: 23, position: 'relative',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'ns-resize', touchAction: 'none',
+              }}
+            >
+              <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#45475a' }} />
             </div>
           )}
 
@@ -805,7 +886,7 @@ function App() {
               the button again just closes the browser and keeps whatever's
               currently on screen. */}
           <button
-            onClick={() => setShowMobileExamples(true)}
+            onClick={() => { setMobileExamplesTab('examples'); setShowMobileExamples(true); }}
             style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#a6e3a1', borderColor: '#a6e3a144', marginLeft: 'auto' }}
             title="Browse examples"
           >
@@ -864,55 +945,77 @@ function App() {
                 boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-                <div style={{ flex: 1, fontSize: '14px', fontWeight: 700, color: '#cdd6f4' }}>Examples</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden' }}>
+                  <button
+                    onClick={() => setMobileExamplesTab('examples')}
+                    style={{
+                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', touchAction: 'manipulation',
+                      background: mobileExamplesTab === 'examples' ? '#313244' : 'none',
+                      color: mobileExamplesTab === 'examples' ? '#cdd6f4' : '#6c7086',
+                    }}
+                  >Examples</button>
+                  <button
+                    onClick={() => setMobileExamplesTab('nodes')}
+                    style={{
+                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', borderLeft: '1px solid #45475a', cursor: 'pointer', touchAction: 'manipulation',
+                      background: mobileExamplesTab === 'nodes' ? '#313244' : 'none',
+                      color: mobileExamplesTab === 'nodes' ? '#cdd6f4' : '#6c7086',
+                    }}
+                  >Nodes</button>
+                </div>
+                <div style={{ flex: 1 }} />
                 <button
                   onClick={() => setShowMobileExamples(false)}
                   style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
                   title="Close"
                 >✕</button>
               </div>
-              {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
-                const isOpen = expandedExampleFolders.has(folder.label);
-                return (
-                  <div key={folder.label} style={{ marginBottom: '12px' }}>
-                    <button
-                      onClick={() => setExpandedExampleFolders(s => {
-                        const next = new Set(s);
-                        if (next.has(folder.label)) next.delete(folder.label); else next.add(folder.label);
-                        return next;
-                      })}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
-                        background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
-                        cursor: 'pointer', touchAction: 'manipulation',
-                      }}
-                    >
-                      <span style={{ fontSize: '9px', color: folder.color }}>{isOpen ? '▾' : '▸'}</span>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em' }}>
-                        {folder.label.toUpperCase()}
-                      </span>
-                    </button>
-                    {isOpen && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
-                          <button
-                            key={k}
-                            onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
-                            style={{
-                              background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-                              padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
-                              cursor: 'pointer', touchAction: 'manipulation',
-                            }}
-                          >
-                            {EXAMPLE_GRAPHS[k].label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {mobileExamplesTab === 'examples' ? (
+                EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
+                  const isOpen = expandedExampleFolders.has(folder.label);
+                  return (
+                    <div key={folder.label} style={{ marginBottom: '12px' }}>
+                      <button
+                        onClick={() => setExpandedExampleFolders(s => {
+                          const next = new Set(s);
+                          if (next.has(folder.label)) next.delete(folder.label); else next.add(folder.label);
+                          return next;
+                        })}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
+                          background: 'none', border: 'none', padding: 0, marginBottom: isOpen ? '6px' : 0,
+                          cursor: 'pointer', touchAction: 'manipulation',
+                        }}
+                      >
+                        <span style={{ fontSize: '9px', color: folder.color }}>{isOpen ? '▾' : '▸'}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, color: folder.color, letterSpacing: '0.05em' }}>
+                          {folder.label.toUpperCase()}
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
+                            <button
+                              key={k}
+                              onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
+                              style={{
+                                background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
+                                padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+                                cursor: 'pointer', touchAction: 'manipulation',
+                              }}
+                            >
+                              {EXAMPLE_GRAPHS[k].label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <MobileNodeBrowser onClose={() => setShowMobileExamples(false)} />
+              )}
             </div>
           </div>
         )}

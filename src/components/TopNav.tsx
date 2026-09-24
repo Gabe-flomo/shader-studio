@@ -9,9 +9,17 @@ interface TopNavProps {
   onPageChange: (page: Page) => void;
   /** On mobile the nav floats over the canvas — pass true to use transparent bg + blur */
   floating?: boolean;
+  /** Mobile-only Save/Load graph buttons, right after Undo/Redo — desktop
+   *  reaches the same save/load-by-name panels from the node graph's own
+   *  toolbar instead, so these are only drawn when both a click handler is
+   *  given (i.e. by the mobile call site). */
+  onSaveClick?: () => void;
+  onLoadClick?: () => void;
+  saveActive?: boolean;
+  loadActive?: boolean;
 }
 
-export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
+export function TopNav({ page, onPageChange, floating = false, onSaveClick, onLoadClick, saveActive, loadActive }: TopNavProps) {
   const bp = useBreakpoint();
   const mobile = isMobile(bp);
   const undo = useNodeGraphStore(s => s.undo);
@@ -118,6 +126,16 @@ export function TopNav({ page, onPageChange, floating = false }: TopNavProps) {
           <TabButton active={false} onClick={undo} label={<IconUndo />} title="Undo" />
           <TabButton active={false} onClick={redo} label={<IconRedo />} title="Redo" />
         </>
+      )}
+
+      {/* Save/load the whole graph by name — mobile-only entry point, right
+          after Undo/Redo. Just the graph: not expr-block or custom-fn
+          presets, which have their own separate save flows elsewhere. */}
+      {mobile && onSaveClick && (
+        <TabButton active={!!saveActive} onClick={onSaveClick} label="💾" title="Save graph" />
+      )}
+      {mobile && onLoadClick && (
+        <TabButton active={!!loadActive} onClick={onLoadClick} label="📂" title="Load graph" />
       )}
 
       {/* Shortcuts tab */}
