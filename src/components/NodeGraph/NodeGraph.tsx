@@ -8,6 +8,8 @@ import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
+import { suggestConnections, type Suggestion } from './smartConnect';
+import { SmartConnectMenu } from './SmartConnectMenu';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -554,6 +556,9 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   }, [deselectAll, applyView]);
 
   // ── Connection drag ─────────────────────────────────────────────────────────
+  // A press on an output socket, to tell a click (→ Smart connect) from a drag (→ wire)
+  const socketPressRef = useRef<{ nodeId: string; key: string; x: number; y: number; t: number } | null>(null);
+  const [smartConnect, setSmartConnect] = useState<{ nodeId: string; key: string; dir: 'in' | 'out'; x: number; y: number } | null>(null);
   const dragRafRef = useRef<number | null>(null);
 
   const [dragConnection, setDragConnection] = useState<{
@@ -671,6 +676,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       fromPos,
       mousePos: screenToWorld(event.clientX, event.clientY),
     });
+    socketPressRef.current = { nodeId, key: outputKey, x: event.clientX, y: event.clientY, t: performance.now() };
   }, [socketWorld, screenToWorld]);
 
   const handleMouseMove = (event: React.MouseEvent) => {
@@ -739,13 +745,50 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     useNodeGraphStore.getState().clearFocusRequest();
   }, [focusRequest, displayNodes, handleMinimapPanTo]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
     if (dragRafRef.current !== null) {
       cancelAnimationFrame(dragRafRef.current);
       dragRafRef.current = null;
     }
+    // A press on an output that didn't travel is a click: offer Smart connect instead of a wire
+    const press = socketPressRef.current;
+    socketPressRef.current = null;
+    if (press && !press.nodeId.startsWith('__')
+      && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4 && performance.now() - press.t < 600) {
+      setSmartConnect({ nodeId: press.nodeId, key: press.key, dir: 'out', x: press.x, y: press.y });
+    }
     setDragConnection(null);
   };
+
+  // ── Smart connect ───────────────────────────────────────────────────────────
+  // Click a socket → the three most likely places to wire it (see smartConnect.ts).
+  const [ghostSuggestion, setGhostSuggestion] = useState<Suggestion | null>(null);
+  const handleSuggestSocket = useCallback((nodeId: string, key: string, dir: 'in' | 'out', x: number, y: number) => {
+    setSmartConnect({ nodeId, key, dir, x, y });
+  }, []);
+  const smartSuggestions = useMemo(() => {
+    if (!smartConnect) return [];
+    return suggestConnections({
+      nodes: displayNodes,
+      from: smartConnect,
+      socketPos: socketWorld,
+      labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
+    });
+  }, [smartConnect, displayNodes, socketWorld]);
+  const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
+  const pickSuggestion = useCallback((s: Suggestion) => {
+    if (!smartConnect) return;
+    if (smartConnect.dir === 'out') connectNodes(smartConnect.nodeId, smartConnect.key, s.nodeId, s.key);
+    else connectNodes(s.nodeId, s.key, smartConnect.nodeId, smartConnect.key);
+    closeSmartConnect();
+  }, [smartConnect, connectNodes, closeSmartConnect]);
+  const ghostWire = useMemo(() => {
+    if (!smartConnect || !ghostSuggestion) return null;
+    const here = socketWorld(smartConnect.nodeId, smartConnect.dir, smartConnect.key);
+    const there = socketWorld(ghostSuggestion.nodeId, smartConnect.dir === 'out' ? 'in' : 'out', ghostSuggestion.key);
+    if (!here || !there) return null;
+    return smartConnect.dir === 'out' ? { from: here, to: there, type: ghostSuggestion.type } : { from: there, to: here, type: ghostSuggestion.type };
+  }, [smartConnect, ghostSuggestion, socketWorld]);
 
   // ── Canvas touch handlers (pan + connection cancel) ──────────────────────
   const handleCanvasTouchStart = useCallback((e: React.TouchEvent) => {
@@ -1385,6 +1428,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           pendingMobileType={pendingMobileType}
           onEdgeEnter={handleEdgeEnter}
           onEdgeLeave={handleEdgeLeave}
+          ghostWire={ghostWire}
         />
 
         {/* Node cards — positioned in world space; off-screen cards are culled */}
@@ -1410,6 +1454,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             onAltClickSocket={handleAltClickSocket}
             isConnectionDragging={dragConnection !== null}
             onSocketHover={handleSocketHover}
+            onSuggestSocket={handleSuggestSocket}
           />
         ))}
 
@@ -1656,6 +1701,26 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       })()}
 
       {/* Feature 1: Alt-click socket filtered palette */}
+      {smartConnect && (() => {
+        const origin = displayNodes.find(n => n.id === smartConnect.nodeId);
+        const sock = smartConnect.dir === 'out' ? origin?.outputs[smartConnect.key] : origin?.inputs[smartConnect.key];
+        if (!origin || !sock) return null;
+        return (
+          <SmartConnectMenu
+            x={smartConnect.x}
+            y={smartConnect.y}
+            title={`${smartConnect.dir === 'out' ? 'CONNECT' : 'FEED'} ${sock.label.toUpperCase()} ${smartConnect.dir === 'out' ? 'TO' : 'FROM'}`}
+            items={smartSuggestions}
+            onPick={pickSuggestion}
+            onHover={setGhostSuggestion}
+            onAddNode={() => {
+              setPendingSocket({ nodeId: smartConnect.nodeId, key: smartConnect.key, dir: smartConnect.dir, type: sock.type, screenX: smartConnect.x, screenY: smartConnect.y });
+              closeSmartConnect();
+            }}
+            onClose={closeSmartConnect}
+          />
+        );
+      })()}
       {pendingSocket && (() => {
         const ps = pendingSocket;
         const worldSpawn = screenToWorld(ps.screenX, ps.screenY);
