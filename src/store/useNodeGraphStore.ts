@@ -14,12 +14,14 @@ import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
 import type { GroupPreset } from '../types/groupPreset';
 import type { SubgraphData } from '../types/nodeGraph';
-import { buildUserNodeDefinition, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
+import { buildUserNodeDefinition, CODE_RETURN_PORT, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
+import { USER_NODE_DEFAULT_CATEGORY } from '../types/userNode';
 import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
 import { compileGraph } from '../compiler/graphCompiler';
 import { recordGraphCompile } from '../lib/perfStats';
+import { convertFragmentShader } from '../nodes/userNodes/glslImport';
 import { paramBindingKey } from '../compiler/uniformPatcher';
 import { saveTextFile, openTextFile, pickJsonFiles, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
 import { planGraphImport, type PreviewAspect } from '../utils/graphImportPlan';
@@ -602,6 +604,8 @@ interface NodeGraphState {
   exportGraph: () => Promise<FileResult>;
   importGraph: (json: string) => FileResult;
   importGraphFromFile: () => Promise<FileResult>;
+  /** Pick a .glsl/.frag file, wrap it as a code-backed node type and build UV → node → Output. */
+  importGlslFromFile: () => Promise<FileResult & { notes?: string[]; label?: string }>;
 
   // Custom-fn presets
   saveCustomFn: (nodeId: string) => Promise<FileResult>;
@@ -4463,6 +4467,43 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
     return { ok: true };
+  },
+
+  importGlslFromFile: async () => {
+    let code: string | null;
+    let fileName = 'Imported shader';
+    try {
+      code = await openTextFile('.glsl,.frag,.fs,.fsh,.shader,.txt');
+    } catch (e) {
+      return { ok: false, error: errorMessage(e) };
+    }
+    if (code === null) return CANCELLED;
+    const titled = /^\s*\/\/\s*(.+)$/m.exec(code);
+    if (titled && titled[1].length < 48) fileName = titled[1].trim();
+    const converted = convertFragmentShader(code, { label: fileName });
+    if (!converted.ok) return { ok: false, error: converted.error };
+    const spec: PublishUserNodeSpec = {
+      label: fileName, category: USER_NODE_DEFAULT_CATEGORY,
+      description: `Imported from a fragment shader. ${converted.notes.join(' ')}`.trim(),
+      inputs: [{ portKey: 'uv', key: 'uv', label: 'UV', type: 'vec2' }],
+      outputs: [{ portKey: CODE_RETURN_PORT, key: 'color', label: 'Color', type: 'vec3' }, { portKey: 'alpha', key: 'alpha', label: 'Alpha', type: 'float' }],
+      params: [], textures: [],
+    };
+    const built = buildUserNodeDefinition({ kind: 'code', code: converted.code, entry: converted.entry, label: fileName }, spec);
+    if (!built.ok) return { ok: false, error: built.error };
+    const reg = await registerUserNode(built.def);
+    if (!reg.ok) return reg;
+    // UV → shader → Output
+    undoManager.push(get().nodes);
+    const uvDef = getNodeDefinition('uv')!, outDef = getNodeDefinition('output')!, def = getNodeDefinition(built.def.id)!;
+    const uv = instantiateNode(idGenerator.next(), 'uv', uvDef, { x: 80, y: 220 });
+    const shader = instantiateNode(idGenerator.next(), built.def.id, def, { x: 520, y: 200 });
+    const out = instantiateNode(idGenerator.next(), 'output', outDef, { x: 980, y: 220 });
+    shader.inputs.uv = { ...shader.inputs.uv, connection: { nodeId: uv.id, outputKey: 'uv' } };
+    out.inputs.color = { ...out.inputs.color, connection: { nodeId: shader.id, outputKey: 'color' } };
+    set({ nodes: [uv, shader, out], activeGroupPath: [], activeGroupId: null, selectedNodeId: shader.id, selectedNodeIds: [shader.id] });
+    get().compile();
+    return { ok: true, notes: converted.notes, label: fileName };
   },
 
   importGraphFromFile: async () => {

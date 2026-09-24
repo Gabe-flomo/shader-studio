@@ -18,6 +18,8 @@ import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
 import type { GraphNode, DataType, LooseGroup, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { NodeSearchPalette } from './NodeSearchPalette';
+import { PublishNodeModal } from './PublishNodeModal';
+import type { PublishSource } from '../../nodes/userNodes/publishUserNode';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
@@ -1446,6 +1448,8 @@ export function MobileGraphBrowser() {
   // it, same as a browser tab's forward history after you follow a new link.
   const [forwardStack, setForwardStack] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSocket | null>(null);
+  // Publish a group as a node type (the same dialog as the desktop card's ✦)
+  const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
   const [connectPicker, setConnectPicker] = useState<PendingSocket | null>(null);
   // Building a brand-new group port from the group's own settings page (its
   // Inputs/Outputs tabs, viewed from outside): 'choose' shows Connect
@@ -2228,6 +2232,15 @@ export function MobileGraphBrowser() {
             >Save</button>
           </div>
         )}
+        {isPlainGroup && (
+          <button
+            onClick={() => setPublishSource({ kind: 'group', node })}
+            style={{ background: tc.mauve, border: 0, color: tc.crust, borderRadius: '8px', padding: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            ✦ Publish as node…
+          </button>
+        )}
+        {publishSource && <PublishNodeModal source={publishSource} onClose={() => setPublishSource(null)} />}
         {isPlainGroup && !node.sealed && (
           <button
             onClick={() => { ungroupNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}

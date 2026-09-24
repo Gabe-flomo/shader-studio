@@ -330,11 +330,193 @@ function WaveRadiusViz({ node }: { node: GraphNode }) {
   );
 }
 
-export const GENERIC_VIZ_TYPES: ReadonlySet<string> = new Set([...Object.keys(SPACE_MAPS), ...Object.keys(CURVES), 'echo', 'waveRadius']);
+
+// ── 3D primitives: a small ray-marched silhouette ────────────────────────────
+type V3 = [number, number, number];
+const v3len = (v: V3) => Math.hypot(v[0], v[1], v[2]);
+const v3sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const v3max0 = (v: V3): V3 => [Math.max(v[0], 0), Math.max(v[1], 0), Math.max(v[2], 0)];
+const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
+const lenXZ = (p: V3) => Math.hypot(p[0], p[2]);
+
+type Sdf3 = (p: V3, n: GraphNode) => number;
+const sdBox = (p: V3, b: V3) => { const q: V3 = [Math.abs(p[0]) - b[0], Math.abs(p[1]) - b[1], Math.abs(p[2]) - b[2]]; return v3len(v3max0(q)) + Math.min(Math.max(q[0], q[1], q[2]), 0); };
+const sdCappedCyl = (p: V3, r: number, h: number) => { const dx = lenXZ(p) - r, dy = Math.abs(p[1]) - h; return Math.min(Math.max(dx, dy), 0) + Math.hypot(Math.max(dx, 0), Math.max(dy, 0)); };
+const sdCapsuleY = (p: V3, h: number, r: number) => { const q: V3 = [p[0], p[1] - clamp(p[1], -h, h), p[2]]; return v3len(q) - r; };
+
+const SDF3: Record<string, Sdf3> = {
+  sphereSDF3D: (p, n) => v3len(p) - num(n, 'radius', 0.5),
+  boxSDF3D: (p, n) => sdBox(p, [num(n, 'sizeX', 0.5), num(n, 'sizeY', 0.5), num(n, 'sizeZ', 0.5)]),
+  roundedBoxSDF3D: (p, n) => { const r = num(n, 'radius', 0.1); return sdBox(p, [num(n, 'sizeX', 0.4) - r, num(n, 'sizeY', 0.4) - r, num(n, 'sizeZ', 0.4) - r]) - r; },
+  boxFrameSDF3D: (p, n) => {
+    const b: V3 = [num(n, 'sizeX', 0.4), num(n, 'sizeY', 0.4), num(n, 'sizeZ', 0.4)], e = num(n, 'thickness', 0.05);
+    const pp: V3 = [Math.abs(p[0]) - b[0], Math.abs(p[1]) - b[1], Math.abs(p[2]) - b[2]];
+    const q: V3 = [Math.abs(pp[0] + e) - e, Math.abs(pp[1] + e) - e, Math.abs(pp[2] + e) - e];
+    const d = (a: number, b2: number, c: number) => v3len(v3max0([a, b2, c])) + Math.min(Math.max(a, b2, c), 0);
+    return Math.min(d(pp[0], q[1], q[2]), d(q[0], pp[1], q[2]), d(q[0], q[1], pp[2]));
+  },
+  torusSDF3D: (p, n) => Math.hypot(lenXZ(p) - num(n, 'majorR', 0.5), p[1]) - num(n, 'minorR', 0.2),
+  cappedTorusSDF3D: (p, n) => {
+    const an = num(n, 'angle', 1.2), ra = num(n, 'majorR', 0.5), rb = num(n, 'minorR', 0.1);
+    const sc = [Math.sin(an), Math.cos(an)];
+    const x = Math.abs(p[0]);
+    const k = sc[1] * x > sc[0] * p[1] ? x * sc[0] + p[1] * sc[1] : Math.hypot(x, p[1]);
+    return Math.sqrt(Math.max(0, x * x + p[1] * p[1] + p[2] * p[2] + ra * ra - 2 * ra * k)) - rb;
+  },
+  linkSDF3D: (p, n) => {
+    const le = num(n, 'length', 0.3), r1 = num(n, 'r1', 0.25), r2 = num(n, 'r2', 0.08);
+    const q: V3 = [p[0], Math.max(Math.abs(p[1]) - le, 0), p[2]];
+    return Math.hypot(Math.hypot(q[0], q[1]) - r1, q[2]) - r2;
+  },
+  capsuleSDF3D: (p, n) => sdCapsuleY(p, num(n, 'height', 0.6) / 2, num(n, 'radius', 0.2)),
+  verticalCapsuleSDF3D: (p, n) => sdCapsuleY(p, num(n, 'height', 0.5), num(n, 'radius', 0.2)),
+  cylinderSDF3D: (p, n) => sdCappedCyl(p, num(n, 'radius', 0.3), num(n, 'height', 0.5)),
+  roundedCylinderSDF3D: (p, n) => { const r = num(n, 'edgeRadius', 0.05); return sdCappedCyl(p, num(n, 'radius', 0.35) - r, num(n, 'height', 0.4) - r) - r; },
+  coneSDF3D: (p, n) => {
+    const an = num(n, 'angle', 0.4), h = num(n, 'height', 1);
+    const q = [h * Math.tan(an), -h]; // half base radius, -height
+    const w = [lenXZ(p), p[1]];
+    const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1];
+    const t = clamp(dot(w, q) / dot(q, q), 0, 1);
+    const a = [w[0] - q[0] * t, w[1] - q[1] * t];
+    const b = [w[0] - q[0] * clamp(w[0] / q[0], 0, 1), w[1] - q[1]];
+    const k = Math.sign(q[1]);
+    const d = Math.min(dot(a, a), dot(b, b));
+    const s = Math.max(k * (w[0] * q[1] - w[1] * q[0]), k * (w[1] - q[1]));
+    return Math.sqrt(d) * Math.sign(s);
+  },
+  cappedConeSDF3D: (p, n) => {
+    const h = num(n, 'height', 0.5), r1 = num(n, 'r1', 0.4), r2 = num(n, 'r2', 0.1);
+    const q = [lenXZ(p), p[1]];
+    const k1 = [r2, h], k2 = [r2 - r1, 2 * h];
+    const ca = [q[0] - Math.min(q[0], q[1] < 0 ? r1 : r2), Math.abs(q[1]) - h];
+    const t = clamp(((k1[0] - q[0]) * k2[0] + (k1[1] - q[1]) * k2[1]) / (k2[0] * k2[0] + k2[1] * k2[1]), 0, 1);
+    const cb = [q[0] - k1[0] + k2[0] * t, q[1] - k1[1] + k2[1] * t];
+    const s = cb[0] < 0 && ca[1] < 0 ? -1 : 1;
+    return s * Math.sqrt(Math.min(ca[0] * ca[0] + ca[1] * ca[1], cb[0] * cb[0] + cb[1] * cb[1]));
+  },
+  octahedronSDF3D: (p, n) => { const s = num(n, 'size', 0.5); return (Math.abs(p[0]) + Math.abs(p[1]) + Math.abs(p[2]) - s) * 0.57735027; },
+  pyramidSDF3D: (p, n) => {
+    const h = num(n, 'height', 0.8);
+    const m2 = h * h + 0.25;
+    let x = Math.abs(p[0]), z = Math.abs(p[2]);
+    if (z > x) [x, z] = [z, x];
+    x -= 0.5; z -= 0.5;
+    const q: V3 = [z, h * p[1] - 0.5 * x, h * x + 0.5 * p[1]];
+    const s = Math.max(-q[0], 0);
+    const t = clamp((q[1] - 0.5 * z) / (m2 + 0.25), 0, 1);
+    const a = m2 * (q[0] + s) * (q[0] + s) + q[1] * q[1];
+    const b = m2 * (q[0] + 0.5 * t) * (q[0] + 0.5 * t) + (q[1] - m2 * t) * (q[1] - m2 * t);
+    const d2 = Math.min(q[1], -q[0] * m2 - q[1] * 0.5) > 0 ? 0 : Math.min(a, b);
+    return Math.sqrt((d2 + q[2] * q[2]) / m2) * Math.sign(Math.max(q[2], -p[1]));
+  },
+  hexPrismSDF3D: (p, n) => {
+    const hr = num(n, 'radius', 0.4), hh = num(n, 'height', 0.2);
+    const k = [-0.8660254, 0.5, 0.57735];
+    let x = Math.abs(p[0]), y = Math.abs(p[2]); const z = Math.abs(p[1]);
+    const dd = 2 * Math.min(k[0] * x + k[1] * y, 0);
+    x -= dd * k[0]; y -= dd * k[1];
+    const d0 = Math.hypot(x - clamp(x, -k[2] * hr, k[2] * hr), y - hr) * Math.sign(y - hr);
+    const d1 = z - hh;
+    return Math.min(Math.max(d0, d1), 0) + Math.hypot(Math.max(d0, 0), Math.max(d1, 0));
+  },
+  triPrismSDF3D: (p, n) => {
+    const hr = num(n, 'radius', 0.4), hh = num(n, 'height', 0.2);
+    const q: V3 = [Math.abs(p[0]), Math.abs(p[1]), Math.abs(p[2])];
+    return Math.max(q[1] - hh, Math.max(q[0] * 0.866025 + p[2] * 0.5, -p[2]) - hr * 0.5);
+  },
+  ellipsoidSDF3D: (p, n) => {
+    const r: V3 = [num(n, 'rx', 0.6), num(n, 'ry', 0.3), num(n, 'rz', 0.4)];
+    const k0 = v3len([p[0] / r[0], p[1] / r[1], p[2] / r[2]]);
+    const k1 = v3len([p[0] / (r[0] * r[0]), p[1] / (r[1] * r[1]), p[2] / (r[2] * r[2])]);
+    return k0 * (k0 - 1) / Math.max(k1, 1e-6);
+  },
+  solidAngleSDF3D: (p, n) => {
+    const an = num(n, 'angle', 1), ra = num(n, 'radius', 0.6);
+    const c = [Math.sin(an), Math.cos(an)];
+    const q = [lenXZ(p), p[1]];
+    const l = Math.hypot(q[0], q[1]) - ra;
+    const m = Math.hypot(q[0] - c[0] * clamp(q[0] * c[0] + q[1] * c[1], 0, ra), q[1] - c[1] * clamp(q[0] * c[0] + q[1] * c[1], 0, ra));
+    return Math.max(l, m * Math.sign(c[1] * q[0] - c[0] * q[1]));
+  },
+  planeSDF3D: (p, n) => p[1] - num(n, 'height', -0.75),
+};
+
+/** A tiny ray march of the primitive from a three-quarter view, lit from the upper left. */
+function Shape3DViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sdf = SDF3[node.type];
+  const paramsKey = JSON.stringify(node.params);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !sdf) return;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz, 160);
+    const img = ctx.createImageData(IW, IH);
+    const bg = hexRgb(pal.crust), body = hexRgb(pal.blue), rim = hexRgb(pal.sky);
+    // Fit the camera to the shape's extent: probe a few directions
+    let extent = 0.4;
+    for (const d of [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0.577, 0.577, 0.577]] as V3[]) {
+      let t = 0;
+      for (let i = 0; i < 24 && t < 8; i++) { const dd = sdf([d[0] * t, d[1] * t, d[2] * t], node); if (dd < 0.002) { extent = Math.max(extent, t + 0.05); break; } t += Math.max(dd, 0.02); }
+    }
+    if (node.type === 'planeSDF3D') extent = 1.2;
+    const camDist = extent * 3.2;
+    const eye: V3 = [camDist * 0.62, camDist * 0.42, camDist * 0.66];
+    const target: V3 = node.type === 'planeSDF3D' ? [0, num(node, 'height', -0.75), 0] : [0, 0, 0];
+    const fwd = v3sub(target, eye); const fl = v3len(fwd); const f: V3 = [fwd[0] / fl, fwd[1] / fl, fwd[2] / fl];
+    const up: V3 = [0, 1, 0];
+    const r0: V3 = [f[1] * up[2] - f[2] * up[1], f[2] * up[0] - f[0] * up[2], f[0] * up[1] - f[1] * up[0]]; const rl = v3len(r0); const right: V3 = [r0[0] / rl, r0[1] / rl, r0[2] / rl];
+    const u: V3 = [right[1] * f[2] - right[2] * f[1], right[2] * f[0] - right[0] * f[2], right[0] * f[1] - right[1] * f[0]];
+    const light: V3 = [-0.5, 0.75, 0.45]; const ll = v3len(light); light[0] /= ll; light[1] /= ll; light[2] /= ll;
+    const aspect = IW / IH, fov = 0.45;
+    for (let j = 0; j < IH; j++) {
+      for (let i = 0; i < IW; i++) {
+        const sx = ((i + 0.5) / IW * 2 - 1) * aspect * fov, sy = (1 - (j + 0.5) / IH * 2) * fov;
+        const d0: V3 = [f[0] + right[0] * sx + u[0] * sy, f[1] + right[1] * sx + u[1] * sy, f[2] + right[2] * sx + u[2] * sy];
+        const dl = v3len(d0); const dir: V3 = [d0[0] / dl, d0[1] / dl, d0[2] / dl];
+        let t = 0, hit = false;
+        for (let s = 0; s < 64; s++) {
+          const p: V3 = [eye[0] + dir[0] * t, eye[1] + dir[1] * t, eye[2] + dir[2] * t];
+          const d = sdf(p, node);
+          if (d < 0.0015 * t + 0.0005) { hit = true; break; }
+          t += d * 0.9;
+          if (t > camDist * 2.5) break;
+        }
+        const k = (j * IW + i) * 4;
+        if (!hit) { img.data[k] = bg[0]; img.data[k + 1] = bg[1]; img.data[k + 2] = bg[2]; img.data[k + 3] = 255; continue; }
+        const p: V3 = [eye[0] + dir[0] * t, eye[1] + dir[1] * t, eye[2] + dir[2] * t];
+        const e = 0.002;
+        const nrm: V3 = [sdf([p[0] + e, p[1], p[2]], node) - sdf([p[0] - e, p[1], p[2]], node), sdf([p[0], p[1] + e, p[2]], node) - sdf([p[0], p[1] - e, p[2]], node), sdf([p[0], p[1], p[2] + e], node) - sdf([p[0], p[1], p[2] - e], node)];
+        const nl = v3len(nrm) || 1; nrm[0] /= nl; nrm[1] /= nl; nrm[2] /= nl;
+        const diff = Math.max(0, nrm[0] * light[0] + nrm[1] * light[1] + nrm[2] * light[2]);
+        const fres = Math.pow(1 + (nrm[0] * dir[0] + nrm[1] * dir[1] + nrm[2] * dir[2]), 3);
+        const shade = 0.25 + 0.75 * diff;
+        img.data[k]     = Math.round(Math.min(255, body[0] * shade + rim[0] * fres * 0.6));
+        img.data[k + 1] = Math.round(Math.min(255, body[1] * shade + rim[1] * fres * 0.6));
+        img.data[k + 2] = Math.round(Math.min(255, body[2] * shade + rim[2] * fres * 0.6));
+        img.data[k + 3] = 255;
+      }
+    }
+    blitImage(ctx, img, W, H);
+    ctx.fillStyle = pal.overlay0; ctx.font = `9px ${MONO}`;
+    ctx.fillText('shape at its current size', 4, H - 4);
+  }, [sdf, node, paramsKey]);
+  return (
+    <div style={vizContainer()}>
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 110 }} />
+    </div>
+  );
+}
+
+export const GENERIC_VIZ_TYPES: ReadonlySet<string> = new Set([...Object.keys(SPACE_MAPS), ...Object.keys(CURVES), ...Object.keys(SDF3), 'echo', 'waveRadius']);
 
 export function GenericViz({ node }: { node: GraphNode }) {
   if (SPACE_MAPS[node.type]) return <SpaceViz node={node} />;
   if (CURVES[node.type]) return <CurveViz node={node} />;
+  if (SDF3[node.type]) return <Shape3DViz node={node} />;
   if (node.type === 'echo') return <EchoViz node={node} />;
   if (node.type === 'waveRadius') return <WaveRadiusViz node={node} />;
   return null;

@@ -26,6 +26,8 @@ import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
+import { openTextFile } from '../../utils/fileIO';
+import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
@@ -463,6 +465,16 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
               <Button size="sm" icon="code" title="Write a GLSL function and publish it as a node"
                 onClick={() => setPublishSource({ kind: 'code', code: '', label: 'My Node' })}>Write GLSL…</Button>
+              <Button size="sm" icon="import" title="Open a fragment shader (Shadertoy or raw) and turn it into a node"
+                onClick={async () => {
+                  let code: string | null;
+                  try { code = await openTextFile('.glsl,.frag,.fs,.fsh,.shader,.txt'); } catch (e) { toast.error('Couldn’t read that file', { message: e instanceof Error ? e.message : String(e) }); return; }
+                  if (code === null) return;
+                  const r = convertFragmentShader(code, { label: 'Imported shader' });
+                  if (!r.ok) { toast.error('Couldn’t convert that shader', { message: r.error }); return; }
+                  if (r.notes.length) toast.info('Check the converted code', { message: r.notes.join(' ') });
+                  setPublishSource({ kind: 'code', code: r.code, entry: r.entry, label: 'Imported shader' });
+                }}>Import GLSL…</Button>
             </div>
             <TabSectionHeader label="From a saved graph" />
             <FolderableList

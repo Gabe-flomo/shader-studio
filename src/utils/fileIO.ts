@@ -254,9 +254,10 @@ export async function openTextFile(
     let path: string | string[] | null;
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
+      const extensions = accept.split(',').map(a => a.trim().replace(/^\./, '')).filter(a => a && !a.includes('/'));
       path = await open({
         multiple: false,
-        filters: [{ name: 'Shader Graph', extensions: ['json'] }],
+        filters: [{ name: extensions.includes('json') && extensions.length === 1 ? 'Shader Graph' : 'Files', extensions: extensions.length ? extensions : ['json'] }],
       });
     } catch (e) {
       console.error('[fileIO] open dialog failed', e);
