@@ -9,6 +9,7 @@ import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag } from './nodeDrag';
 import { midiEngine, midiNoteName, type MidiEvent } from '../../lib/midiEngine';
 import { midiCcList, midiOutputSockets } from '../../lib/midiOutputs';
+import { toneSynth } from '../../lib/toneSynth';
 
 const getZoom = () => getView().zoom;
 
@@ -50,18 +51,20 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
   // ── Backend status + activity (event driven) ──────────────────────────────
   const [webMidi, setWebMidi] = useState(() => midiEngine.webMidi());
   const [keyboard, setKeyboard] = useState(() => midiEngine.keyboard().enabled);
+  const [sound, setSound] = useState(() => toneSynth.isEnabled());
   const [last, setLast] = useState<string>('');
+  // The piano keys only listen while this node is selected, so typing and
+  // shortcuts keep working the rest of the time.
   useEffect(() => {
-    // Ask for MIDI access the first time a MIDI node is on the canvas. If the
-    // browser has no Web MIDI, fall back to the keyboard stand-in right away.
-    void midiEngine.connectWebMidi().then(status => {
-      setWebMidi(midiEngine.webMidi());
-      if (status === 'unsupported' || status === 'denied') {
-        midiEngine.setKeyboardEnabled(true);
-        setKeyboard(true);
-      }
-    });
-    return midiEngine.subscribe((e: MidiEvent) => {
+    if (!isSelected) return;
+    midiEngine.armKeyboard(node.id);
+    return () => midiEngine.disarmKeyboard(node.id);
+  }, [isSelected, node.id]);
+  useEffect(() => {
+    // Ask for MIDI access the first time a MIDI node is on the canvas.
+    void midiEngine.connectWebMidi().then(() => setWebMidi(midiEngine.webMidi()));
+    const offSound = toneSynth.subscribe(setSound);
+    const offMidi = midiEngine.subscribe((e: MidiEvent) => {
       switch (e.kind) {
         case 'devices': setWebMidi(midiEngine.webMidi()); break;
         case 'noteOn':  setLast(`${midiNoteName(e.note)} · vel ${e.velocity}`); break;
@@ -70,6 +73,7 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
         default: break;
       }
     });
+    return () => { offSound(); offMidi(); };
   }, []);
 
   const toggleKeyboard = () => {
@@ -146,9 +150,14 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
           </span>
           <button
             onClick={toggleKeyboard}
-            title="Play notes from the computer keyboard: A–L rows = two octaves, Z/X octave, C/V velocity"
-            style={{ background: keyboard ? tc.surface1 : 'none', border: `1px solid ${keyboard ? tc.sky : tc.surface1}`, color: keyboard ? tc.sky : tc.surface2, fontSize: 10, borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}
+            title={`Play notes from the computer keyboard while this node is selected: A–L rows = two octaves, Z/X octave, C/V velocity${isSelected ? '' : ' (select the node first)'}`}
+            style={{ background: keyboard ? tc.surface1 : 'none', border: `1px solid ${keyboard ? tc.sky : tc.surface1}`, color: keyboard ? (isSelected ? tc.sky : tc.overlay0) : tc.surface2, fontSize: 10, borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}
           >⌨ Keys</button>
+          <button
+            onClick={() => toneSynth.setEnabled(!sound)}
+            title="Hear the notes: a built-in tone so you get sound without a synth"
+            style={{ background: sound ? tc.surface1 : 'none', border: `1px solid ${sound ? tc.sky : tc.surface1}`, color: sound ? tc.sky : tc.surface2, fontSize: 10, borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}
+          >🔊</button>
         </div>
         <div style={rowStyle}>
           <span style={labelStyle}>Channel</span>

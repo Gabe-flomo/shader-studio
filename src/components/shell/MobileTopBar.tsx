@@ -50,7 +50,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
         <Icon name="presets" size={13} />
       </button>
       {page !== 'studio' && (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : 'Builder'}</span>
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : page === 'play' ? 'Play' : 'Builder'}</span>
       )}
       <span style={{ flex: 1 }} />
       <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 40, height: 40 }} />

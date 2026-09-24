@@ -17,6 +17,7 @@ import { reportFileResult } from './reportFileResult';
 
 const TABS: { page: Page; label: string }[] = [
   { page: 'studio', label: 'Studio' },
+  { page: 'play', label: 'Play' },
   { page: 'fn', label: 'Builder' },
   { page: 'glsl', label: 'GLSL' },
   { page: 'shortcuts', label: 'Keys' },

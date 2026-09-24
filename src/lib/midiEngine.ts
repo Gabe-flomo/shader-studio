@@ -31,6 +31,16 @@ export type MidiListener = (e: MidiEvent) => void;
 export type MidiBackendStatus = 'unsupported' | 'idle' | 'requesting' | 'ready' | 'denied';
 
 const OMNI = 0;
+const KEYBOARD_STORAGE_KEY = 'shader-studio:midiKeyboard';
+
+function readStoredFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+}
 
 class ChannelState {
   lastNote = 60;      // MIDI note number of the most recent note-on
@@ -85,8 +95,13 @@ class MidiEngine implements InputSource {
     if (data && data.length >= 1) this.handleBytes(data[0], data[1] ?? 0, data[2] ?? 0);
   };
 
-  // Keyboard stand-in backend
-  private keyboardEnabled = false;
+  // Keyboard stand-in backend. `keyboardEnabled` is the user's preference
+  // (persisted); the piano only actually listens while something has armed
+  // it — a selected MIDI node in Studio, or the Play page — so plain typing
+  // and the app's shortcuts work everywhere else.
+  private keyboardEnabled = readStoredFlag(KEYBOARD_STORAGE_KEY, true);
+  private armers = new Set<string>();
+  private keyboardListening = false;
   private keyboardOctave = 4;    // base octave: KeyA = C4 (60)
   private keyboardVelocity = 100;
   private keyboardHeld = new Map<string, number>(); // code → note number
@@ -280,14 +295,34 @@ class MidiEngine implements InputSource {
 
   // ── Keyboard stand-in backend ────────────────────────────────────────────
 
-  keyboard(): { enabled: boolean; octave: number; velocity: number } {
-    return { enabled: this.keyboardEnabled, octave: this.keyboardOctave, velocity: this.keyboardVelocity };
+  keyboard(): { enabled: boolean; armed: boolean; octave: number; velocity: number } {
+    return { enabled: this.keyboardEnabled, armed: this.armers.size > 0, octave: this.keyboardOctave, velocity: this.keyboardVelocity };
   }
 
   setKeyboardEnabled(on: boolean): void {
-    if (on === this.keyboardEnabled || typeof window === 'undefined') return;
+    if (on === this.keyboardEnabled) return;
     this.keyboardEnabled = on;
-    if (on) {
+    try { localStorage.setItem(KEYBOARD_STORAGE_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+    this.syncKeyboardListeners();
+  }
+
+  /** Something that wants the piano keys (a selected MIDI node, the Play page). */
+  armKeyboard(owner: string): void {
+    this.armers.add(owner);
+    this.syncKeyboardListeners();
+  }
+
+  disarmKeyboard(owner: string): void {
+    this.armers.delete(owner);
+    this.syncKeyboardListeners();
+  }
+
+  private syncKeyboardListeners(): void {
+    if (typeof window === 'undefined') return;
+    const want = this.keyboardEnabled && this.armers.size > 0;
+    if (want === this.keyboardListening) return;
+    this.keyboardListening = want;
+    if (want) {
       window.addEventListener('keydown', this.onKeyDown, true);
       window.addEventListener('keyup', this.onKeyUp, true);
       window.addEventListener('blur', this.onBlur);
