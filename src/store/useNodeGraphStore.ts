@@ -2994,6 +2994,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   updateNodePosition: (nodeId, position) => {
+    // Called once per drag, on release (the card moves imperatively while
+    // dragging — see NodeGraph/nodeDrag.ts), so one call is one undo step.
+    undoManager.push(get().nodes);
     set(state => {
       // Fast path: top-level node
       if (state.nodes.some(n => n.id === nodeId)) {
