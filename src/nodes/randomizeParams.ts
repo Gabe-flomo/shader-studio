@@ -1,4 +1,5 @@
-import type { GraphNode, NodeDefinition, ParamDef } from '../types/nodeGraph';
+import type { GraphNode, NodeDefinition, ParamDef, SubgraphData, SurfacedParam } from '../types/nodeGraph';
+import { getNodeDefinition } from './definitions';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { isKeyframeBypassed, socketHasKeyframes } from '../compiler/keyframes';
 
@@ -13,6 +14,7 @@ import { isKeyframeBypassed, socketHasKeyframes } from '../compiler/keyframes';
  * - Keys listed in `node.params.__randExclude` (unticked in the die's right-click list) are left alone.
  */
 export function randomizedParams(node: GraphNode, def: NodeDefinition, rand: () => number = Math.random): Record<string, unknown> {
+  if (node.type === 'group') return randomizedGroupOverrides(node, rand);
   const out: Record<string, unknown> = {};
   const wired = (key: string) => !!node.inputs[key]?.connection || !!node.inputs[`__param_${key}`]?.connection;
   const keyframed = (key: string) => socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
@@ -62,6 +64,58 @@ export function randomizeExcluded(node: GraphNode): string[] {
 
 /** Every slider Randomize could change, excluded or not, for the right-click list */
 export function randomizableParams(node: GraphNode, def: NodeDefinition): Array<{ key: string; label: string }> {
+  if (node.type === 'group') return groupRandomRows(node).map(r => ({ key: r.key, label: r.label }));
   const all = randomizedParams({ ...node, params: { ...node.params, __randExclude: [] } }, def, () => 0.5);
   return Object.keys(all).map(key => ({ key, label: def.paramDefs?.[key]?.label ?? key }));
+}
+
+// ── Groups ──────────────────────────────────────────────────────────────────
+// A group randomizes the values shown on its card (the group's override keys), never the
+// nodes inside it. The rows mirror NodeComponent's group card: inner nodes' float sliders that
+// aren't hidden or wired, plus params surfaced from nested groups.
+
+interface GroupRow { key: string; label: string; lo: number; hi: number; pd: ParamDef }
+
+function groupRandomRows(group: GraphNode): GroupRow[] {
+  const sg = group.params.subgraph as SubgraphData | undefined;
+  if (!sg || !Array.isArray(sg.nodes)) return [];
+  const hidden = Array.isArray(group.params.hiddenParams) ? group.params.hiddenParams as string[] : [];
+  const surfaced = Array.isArray(group.params.surfacedParams) ? group.params.surfacedParams as SurfacedParam[] : [];
+  const sectionLabel = (inner: GraphNode) => {
+    const custom = group.params[`__sectionLabel_${inner.id}`];
+    if (typeof custom === 'string') return custom;
+    return typeof inner.params.label === 'string' ? inner.params.label : getNodeDefinition(inner.type)?.label ?? inner.type;
+  };
+  const rows: GroupRow[] = [];
+  for (const inner of sg.nodes) {
+    if (inner.type === 'group') {
+      const innerSub = inner.params.subgraph as SubgraphData | undefined;
+      for (const sp of surfaced.filter(x => x.innerGroupId === inner.id)) {
+        const innNode = innerSub?.nodes.find(n => n.id === sp.nodeId);
+        const pd = innNode ? getNodeDefinition(innNode.type)?.paramDefs?.[sp.paramKey] : undefined;
+        if (!innNode || !pd || group.inputs[`ps_${inner.id}_${sp.nodeId}_${sp.paramKey}`]?.connection) continue;
+        rows.push({ key: `${inner.id}::${sp.nodeId}::${sp.paramKey}`, label: `${sectionLabel(inner)} · ${sp.label ?? pd.label}`, lo: pd.min ?? 0, hi: pd.max ?? 1, pd });
+      }
+      continue;
+    }
+    const def = getNodeDefinition(inner.type);
+    for (const [key, pd] of Object.entries(def?.paramDefs ?? {})) {
+      if (pd.type !== 'float' || pd.step === 1 || !isParamVisible(pd, inner.params)) continue;
+      if (inner.inputs[`__param_${key}`]?.connection) continue;
+      if (Object.entries(inner.inputs).some(([k, inp]) => k.toLowerCase() === key.toLowerCase() && inp.connection)) continue;
+      if (hidden.includes(`${inner.id}::${key}`) || group.inputs[`ps_${inner.id}_${key}`]?.connection) continue;
+      const [lo, hi] = floatRange(inner, key, pd);
+      rows.push({ key: `${inner.id}::${key}`, label: `${sectionLabel(inner)} · ${pd.label}`, lo, hi, pd });
+    }
+  }
+  return rows;
+}
+
+function randomizedGroupOverrides(group: GraphNode, rand: () => number): Record<string, unknown> {
+  const excluded = new Set(randomizeExcluded(group));
+  const out: Record<string, unknown> = {};
+  for (const r of groupRandomRows(group)) {
+    if (!excluded.has(r.key)) out[r.key] = snap(r.lo + rand() * (r.hi - r.lo), r.pd);
+  }
+  return out;
 }

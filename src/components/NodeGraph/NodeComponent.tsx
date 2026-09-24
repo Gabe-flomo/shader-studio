@@ -1920,6 +1920,23 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             {nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
+            {canRandomize(node, def) && (
+              <CardButton icon="dice" on={randomizeExcluded(node).length > 0}
+                label="Randomize the values on this card (right-click to choose which)"
+                onClick={() => randomizeNodeParams(node.id)}
+                onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
+            )}
+            {randomizeMenu && (
+              <RandomizeMenu
+                x={randomizeMenu.x}
+                y={randomizeMenu.y}
+                params={randomizableParams(node, def)}
+                excluded={randomizeExcluded(node)}
+                onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
+                onRandomize={() => randomizeNodeParams(node.id)}
+                onClose={() => setRandomizeMenu(null)}
+              />
+            )}
             <CardButton icon="copy" label="Duplicate group (an independent copy)" onClick={() => duplicateGroup(node.id)} />
             <CardButton icon="save" tint="success" on={savedFlash} label="Save as a preset" onClick={() => {
               setSaveLabel(typeof node.params.label === 'string' ? node.params.label : 'Group');
