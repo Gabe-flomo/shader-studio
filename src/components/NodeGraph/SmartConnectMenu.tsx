@@ -102,7 +102,7 @@ export function SmartConnectMenu({ x, y, title, items, quickAdds = [], onPick, o
         const label = isAdd ? e.q.label : e.s.nodeLabel;
         const sockLabel = isAdd ? e.q.socketLabel : e.s.socketLabel;
         const type = isAdd ? e.q.type_ : e.s.type;
-        const right = isAdd ? e.q.note : e.s.pinned ? 'always' : `${Math.round(e.s.distance)} px`;
+        const right = isAdd ? e.q.note : e.s.pinned ? 'always' : e.s.replaces ? 'replaces' : `${Math.round(e.s.distance)} px`;
         return (
           <div key={isAdd ? `add:${e.q.type}` : `${e.s.nodeId}:${e.s.key}`}>
             {first && entries.length > 0 && (items.length > 0 && quickAdds.length > 0) && (
@@ -128,7 +128,7 @@ export function SmartConnectMenu({ x, y, title, items, quickAdds = [], onPick, o
                 </b>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: tk.text.muted, fontSize: 11.5 }}>
                   <i style={{ width: 7, height: 7, borderRadius: '50%', background: TYPE_COLORS[type] ?? tk.text.faint, flexShrink: 0 }} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isAdd ? 'New · ' : ''}{sockLabel} · {type}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isAdd ? 'New · ' : ''}{sockLabel} · {type}{!isAdd && e.s.replaces ? ` · now from ${e.s.replaces}` : ''}</span>
                 </span>
               </span>
               <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>{right}</span>

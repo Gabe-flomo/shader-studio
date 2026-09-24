@@ -18,11 +18,12 @@ describe('suggestConnections', () => {
     expect(got.map(s => `${s.nodeId}.${s.key}`)).toEqual(['near.a', 'far.b', 'far.c']);
   });
 
-  it('skips wired inputs, incompatible types and nodes behind the output', () => {
+  it('skips incompatible types and nodes behind the output; wired inputs only appear as replacements', () => {
     const behind = node('behind', -200, { a: { type: 'float', label: 'A' } }, {});
     const wired = node('wired', 100, { a: { type: 'float', label: 'A', connection: { nodeId: 'x', outputKey: 'y' } } }, {});
     const mat = node('mat', 100, { m: { type: 'mat2', label: 'M' } }, {});
-    expect(run([time, behind, wired, mat], { nodeId: 'time', key: 't', dir: 'out' })).toEqual([]);
+    const got = run([time, behind, wired, mat], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(got.map(s => [s.nodeId, s.replaces])).toEqual([['wired', 'another node']]);
   });
 
   it('never offers a wire that would close a loop', () => {
@@ -54,5 +55,24 @@ describe('suggestConnections', () => {
     expect(ranked[0].pinned).toBeUndefined();
     const fed: GraphNode = { ...output, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'time', outputKey: 't' } } } };
     expect(run([time, fed], { nodeId: 'time', key: 't', dir: 'out' })).toEqual([]);
+  });
+
+  it('offers wired inputs as replacements after the open ones, naming what they displace', () => {
+    const other = node('other', 0, {}, { o: { type: 'float', label: 'Other out' } });
+    const near = node('near', 100, {
+      a: { type: 'float', label: 'A' },
+      b: { type: 'float', label: 'B', connection: { nodeId: 'other', outputKey: 'o' } },
+      c: { type: 'float', label: 'C', connection: { nodeId: 'time', outputKey: 't' } }, // already from this socket
+    }, {});
+    const got = run([time, other, near], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(got.map(s => [s.key, s.replaces ?? null])).toEqual([['a', null], ['b', 'other · Other out']]);
+  });
+
+  it('caps replacements at two, nearest first', () => {
+    const src = node('src', 0, {}, { o: { type: 'float', label: 'O' } });
+    const wired = (id: string, x: number) => node(id, x, { a: { type: 'float', label: 'A', connection: { nodeId: 'src', outputKey: 'o' } } }, {});
+    const got = run([time, src, wired('w3', 300), wired('w1', 100), wired('w2', 200)], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(got.map(s => s.nodeId)).toEqual(['w1', 'w2']);
+    expect(got.every(s => s.replaces)).toBe(true);
   });
 });
