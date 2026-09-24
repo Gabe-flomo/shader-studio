@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, EXAMPLE_GRAPHS, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
@@ -179,11 +179,18 @@ interface ContentPaneProps {
 }
 
 function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
-  const {
-    addNode, saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph,
-    deleteCustomFn, exportCustomFns, importCustomFnsFromFile, loadCustomFnsFromDisk,
-    swapTargetNodeId, setSwapTargetNodeId, swapNode,
-  } = useNodeGraphStore();
+  const addNode                 = useNodeGraphStore(s => s.addNode);
+  const saveGraph               = useNodeGraphStore(s => s.saveGraph);
+  const getSavedGraphNames      = useNodeGraphStore(s => s.getSavedGraphNames);
+  const loadSavedGraph          = useNodeGraphStore(s => s.loadSavedGraph);
+  const deleteSavedGraph        = useNodeGraphStore(s => s.deleteSavedGraph);
+  const deleteCustomFn          = useNodeGraphStore(s => s.deleteCustomFn);
+  const exportCustomFns         = useNodeGraphStore(s => s.exportCustomFns);
+  const importCustomFnsFromFile = useNodeGraphStore(s => s.importCustomFnsFromFile);
+  const loadCustomFnsFromDisk   = useNodeGraphStore(s => s.loadCustomFnsFromDisk);
+  const swapTargetNodeId        = useNodeGraphStore(s => s.swapTargetNodeId);
+  const setSwapTargetNodeId     = useNodeGraphStore(s => s.setSwapTargetNodeId);
+  const swapNode                = useNodeGraphStore(s => s.swapNode);
   const graphNodes        = useNodeGraphStore(s => s.nodes);
   const groupPresets      = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
@@ -292,7 +299,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   <span style={{ fontSize: '7px', opacity: 0.5, color: ctp.surface2, width: '7px' }}>{examplesExpanded ? '▼' : '▶'}</span>
                   <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: ctp.surface2 }}>Examples</span>
                 </button>
-                {examplesExpanded && EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
+                {examplesExpanded && EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_INDEX[k])).map(folder => {
                   const isOpen = openFolders.has(folder.label);
                   return (
                     <div key={folder.label} style={{ marginBottom: '1px' }}>
@@ -304,14 +311,14 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                         <span style={{ fontSize: '8px', opacity: 0.6, width: '8px' }}>{isOpen ? '▼' : '▶'}</span>
                         <span style={{ fontSize: '12px', marginRight: '2px' }}>📁</span>
                         {folder.label}
-                        <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.4 }}>{folder.keys.filter(k => EXAMPLE_GRAPHS[k]).length}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.4 }}>{folder.keys.filter(k => EXAMPLE_INDEX[k]).length}</span>
                       </button>
                       {isOpen && (
                         <div style={{ paddingLeft: '18px', paddingBottom: '2px' }}>
-                          {folder.keys.filter(k => EXAMPLE_GRAPHS[k])
-                            .sort((a, b) => EXAMPLE_GRAPHS[a].label.localeCompare(EXAMPLE_GRAPHS[b].label))
+                          {folder.keys.filter(k => EXAMPLE_INDEX[k])
+                            .sort((a, b) => EXAMPLE_INDEX[a].label.localeCompare(EXAMPLE_INDEX[b].label))
                             .map(k => {
-                              const ex = EXAMPLE_GRAPHS[k];
+                              const ex = EXAMPLE_INDEX[k];
                               return (
                                 <button key={k} onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }}
                                   style={{ display: 'block', width: '100%', padding: '3px 6px', background: ctp.mantle, border: 'none', color: ctp.subtext0, cursor: 'pointer', textAlign: 'left', borderRadius: '4px', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
@@ -574,7 +581,9 @@ function mkPane(activeTab: TabId = 'nodes'): ContentPaneState {
 
 export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, onGlslInsert }: NodePaletteProps) {
   // All hooks must be at the top — no hooks after conditional returns
-  const { addNode, swapTargetNodeId, swapNode } = useNodeGraphStore();
+  const addNode          = useNodeGraphStore(s => s.addNode);
+  const swapTargetNodeId = useNodeGraphStore(s => s.swapTargetNodeId);
+  const swapNode         = useNodeGraphStore(s => s.swapNode);
   const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
 
   const [favorites, setFavorites] = useState<string[]>(() => {

@@ -7,6 +7,7 @@ import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type Ke
 import { TimeControlsStrip } from '../TimeControlsStrip';
 import { NumberInput } from './NumberInput';
 import { ctp } from '../../theme/palette';
+import { subscribeTimeTick } from '../../lib/timeTick';
 
 const MAX_KEYFRAMES = 8;
 const HANDLE_R = 6;
@@ -421,18 +422,11 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     window.dispatchEvent(new CustomEvent('seek-time', { detail: { time: editorT + offset } }));
   }, [setTimePlaying, offset]);
 
-  // Live global time, tracked purely for the playhead — a lightweight DOM
-  // event (see ShaderCanvas's 'time-tick' dispatch) rather than the store,
-  // so this doesn't add a re-render dependency for every other component.
+  // Live global time, tracked purely for the playhead — a lightweight
+  // listener (see ShaderCanvas's emitTimeTick) rather than the store, so this
+  // doesn't add a re-render dependency for every other component.
   const [currentGlobalTime, setCurrentGlobalTime] = useState<number | null>(null);
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const t = (e as CustomEvent<{ time: number }>).detail?.time;
-      if (typeof t === 'number') setCurrentGlobalTime(t);
-    };
-    window.addEventListener('time-tick', handler);
-    return () => window.removeEventListener('time-tick', handler);
-  }, []);
+  useEffect(() => subscribeTimeTick(setCurrentGlobalTime), []);
   const playheadT = currentGlobalTime !== null ? currentGlobalTime - offset : null;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);

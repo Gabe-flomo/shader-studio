@@ -324,22 +324,41 @@ export const ConstantNode: NodeDefinition = {
   type: 'constant',
   label: 'Constant',
   category: 'Sources',
-  description: 'A constant float value — wire an input to override the slider',
+  description: 'A constant value — float, or a vec2/vec3/vec4 built from sliders (pick the type on the card). Wire the input to override.',
   inputs: {
     value: { type: 'float', label: 'Value' },
   },
   outputs: {
     value: { type: 'float', label: 'Value' },
   },
-  defaultParams: { value: 1.0 },
+  // `outputType` is what the type pills on the card write (see
+  // VECTORIZABLE_NODES / changeNodeVectorType); the sliders shown follow it.
+  defaultParams: { value: 1.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0, outputType: 'float' },
   paramDefs: {
-    value: { label: 'Value', type: 'float', step: 0.01 },
+    value: { label: 'Value', type: 'float', step: 0.01, showWhen: { param: 'outputType', value: 'float' } },
+    x:     { label: 'X',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec2', 'vec3', 'vec4'] } },
+    y:     { label: 'Y',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec2', 'vec3', 'vec4'] } },
+    z:     { label: 'Z',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec3', 'vec4'] } },
+    w:     { label: 'W',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: 'vec4' } },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_value`;
-    const val = inputVars.value || p(node.params.value, 1.0);
+    const vt = (node.outputs.value?.type as string) || (node.params.outputType as string) || 'float';
+    let val: string;
+    if (inputVars.value) {
+      val = inputVars.value;
+    } else if (vt === 'vec2') {
+      val = `vec2(${p(node.params.x, 0.0)}, ${p(node.params.y, 0.0)})`;
+    } else if (vt === 'vec3') {
+      val = `vec3(${p(node.params.x, 0.0)}, ${p(node.params.y, 0.0)}, ${p(node.params.z, 0.0)})`;
+    } else if (vt === 'vec4') {
+      val = `vec4(${p(node.params.x, 0.0)}, ${p(node.params.y, 0.0)}, ${p(node.params.z, 0.0)}, ${p(node.params.w, 1.0)})`;
+    } else {
+      val = p(node.params.value, 1.0);
+    }
+    const glslType = vt === 'vec2' || vt === 'vec3' || vt === 'vec4' ? vt : 'float';
     return {
-      code: `    float ${outVar} = ${val};\n`,
+      code: `    ${glslType} ${outVar} = ${val};\n`,
       outputVars: { value: outVar },
     };
   },

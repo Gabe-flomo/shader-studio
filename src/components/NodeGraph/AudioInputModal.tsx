@@ -25,7 +25,9 @@ interface Props {
 }
 
 export function AudioInputModal({ node, onClose }: Props) {
-  const { updateNodeParams, updateNodeOutputs, updateNodeInputs } = useNodeGraphStore();
+  const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeOutputs = useNodeGraphStore(s => s.updateNodeOutputs);
+  const updateNodeInputs  = useNodeGraphStore(s => s.updateNodeInputs);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const rawBands  = node.params._bands;
