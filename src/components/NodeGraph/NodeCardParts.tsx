@@ -73,7 +73,8 @@ export function ParamLabel({ children, title, muted = false, onClick }: { childr
       onMouseEnter={onClick ? e => { e.currentTarget.style.textDecoration = 'underline'; } : undefined}
       onMouseLeave={onClick ? e => { e.currentTarget.style.textDecoration = 'none'; } : undefined}
       style={{
-        width: 66, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        // 66px keeps rulers aligned; a longer label ("Angle offset") may take a little more
+        minWidth: 66, maxWidth: 92, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         color: muted ? tk.text.faint : tk.text.secondary, fontSize: 12.5, cursor: onClick ? 'pointer' : undefined,
         textUnderlineOffset: 2,
       }}

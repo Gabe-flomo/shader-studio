@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
-import { relabelLegacySockets } from './legacyLabels';
+import { upgradeLegacyNode } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -75,7 +75,7 @@ function _upgradeExprNode(node: GraphNode): GraphNode {
  *  nested in subgraph params (groups, SceneGroups, MarchLoopGroups, etc.). */
 function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
   return nodes.map(node => {
-    let n = relabelLegacySockets(_upgradeExprNode(node));
+    let n = upgradeLegacyNode(_upgradeExprNode(node));
     // Recurse into subgraph if present
     if (n.params?.subgraph) {
       const sg = n.params.subgraph as { nodes?: GraphNode[] };
