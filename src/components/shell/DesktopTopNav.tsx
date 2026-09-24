@@ -9,6 +9,7 @@ import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
+import { reportFileResult } from './reportFileResult';
 
 const TABS: { page: Page; label: string }[] = [
   { page: 'studio', label: 'Studio' },
@@ -85,10 +86,10 @@ export function DesktopTopNav({ page, onPageChange, onRecord }: {
         />
         <Divider />
         <Tooltip label="Import a graph file" shortcut={shortcuts.import}>
-          <Button size="sm" icon="import" onClick={() => { void importGraphFromFile(); }}>Import</Button>
+          <Button size="sm" icon="import" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }}>Import</Button>
         </Tooltip>
         <Tooltip label="Export this graph to a file" shortcut={shortcuts.export}>
-          <Button size="sm" icon="export" onClick={() => { void exportGraph(); }}>Export</Button>
+          <Button size="sm" icon="export" onClick={async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); }}>Export</Button>
         </Tooltip>
         <Tooltip label="Record the preview as video or a still" shortcut={shortcuts.toggleRecord}>
           <button
@@ -119,10 +120,11 @@ function SaveGraphButton() {
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const save = () => {
+  const save = async () => {
     const n = name.trim();
     if (!n) return;
-    saveGraph(n);
+    // On failure the popover stays open so the name isn't lost.
+    if (!reportFileResult(await saveGraph(n), { failTitle: `Couldn’t save “${n}”`, success: `Saved “${n}”` })) return;
     setName('');
     setOpen(false);
   };
@@ -168,7 +170,7 @@ function LoadGraphButton() {
             <LoadRow
               key={n}
               name={n}
-              onLoad={() => { loadSavedGraph(n); setNames(null); }}
+              onLoad={() => { reportFileResult(loadSavedGraph(n), { failTitle: `Couldn’t open “${n}”` }); setNames(null); }}
               onDelete={() => { deleteSavedGraph(n); setNames(getSavedGraphNames()); }}
             />
           ))}

@@ -16,6 +16,7 @@ import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
+import { reportFileResult } from '../shell/reportFileResult';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions' | 'keyframes';
@@ -211,10 +212,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const toggleFolder = (label: string) =>
     setOpenFolders(prev => { const n = new Set(prev); if (n.has(label)) n.delete(label); else n.add(label); return n; });
 
-  const saveCurrentGraph = () => {
-    if (!graphSaveInput.trim()) return;
-    saveGraph(graphSaveInput.trim());
+  const saveCurrentGraph = async () => {
+    const name = graphSaveInput.trim();
+    if (!name) return;
+    const ok = reportFileResult(await saveGraph(name), { failTitle: `Couldn’t save “${name}”`, success: `Saved “${name}”` });
     refreshSavedNames();
+    if (!ok) return;
     setShowGraphSaveInput(false);
     setGraphSaveInput('');
   };
@@ -305,7 +308,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               items={savedNames.map(name => ({ id: name, label: name }))}
               renderItem={(item) => (
                 <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')}
-                  onClick={() => { loadSavedGraph(item.id); onNodeAdded?.(); }}
+                  onClick={() => { if (reportFileResult(loadSavedGraph(item.id), { failTitle: `Couldn’t open “${item.label}”` })) onNodeAdded?.(); }}
                   onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }} />
               )}
               emptyHint={!showGraphSaveInput && <EmptyHint>Save the current graph to keep it here.</EmptyHint>}
