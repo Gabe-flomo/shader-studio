@@ -5,6 +5,8 @@ import { NodePalette } from './components/NodeGraph/NodePalette';
 import { MobileGraphBrowser, MobileNodeGraphOverlay } from './components/NodeGraph/MobileGraphBrowser';
 import { CodePanel, tokenizeLine } from './components/CodePanel';
 import { DesktopTopNav } from './components/shell/DesktopTopNav';
+import { IconButton } from './components/ui/Button';
+import { useTokens } from './theme/themeStore';
 import { TopNav } from './components/TopNav';
 import { ExportModal } from './components/ExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -32,8 +34,8 @@ function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
 }
 
 function getPaletteWidth(bp: ReturnType<typeof useBreakpoint>) {
-  if (bp === 'desktop-lg') return 210;
-  if (bp === 'desktop-sm') return 180;
+  if (bp === 'desktop-lg') return 320;
+  if (bp === 'desktop-sm') return 280;
   return 0; // tablet/mobile: no fixed palette sidebar
 }
 
@@ -260,6 +262,7 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
 }
 
 function App() {
+  const tk = useTokens();
   const {
     loadExampleGraph, compilationErrors, glslErrors, pixelSample, hoveredParamHint, fragmentShader,
     saveGraph, getSavedGraphNames, loadSavedGraph, deleteSavedGraph, exportGraph, importGraphFromFile,
@@ -1226,22 +1229,12 @@ function App() {
 
         {/* Left: Node Palette — hidden on GLSL page */}
         {page === 'studio' && paletteBaseW > 0 && (
-          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: ctp.mantle, borderRight: `1px solid ${ctp.surface0}` }}>
+          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
             {/* Collapsed state: show only an expand button */}
             {paletteCollapsed ? (
-              <button
-                onClick={() => setPaletteCollapsed(false)}
-                title="Expand palette"
-                style={{
-                  position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)',
-                  zIndex: 10, background: 'none', border: `1px solid ${ctp.surface0}`,
-                  color: ctp.surface1, cursor: 'pointer', borderRadius: '3px',
-                  fontSize: '10px', padding: '2px 4px', lineHeight: 1,
-                  transition: 'color 0.1s',
-                }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
-              >▶</button>
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
+                <IconButton icon="chevR" label="Expand sidebar" size="sm" onClick={() => setPaletteCollapsed(false)} />
+              </div>
             ) : (
               <>
                 <NodePalette onCollapse={() => setPaletteCollapsed(true)} />
@@ -1254,7 +1247,7 @@ function App() {
                     cursor: 'col-resize', zIndex: 20, background: 'transparent',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = ctp.surface1)}
+                  onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = tk.border.strong)}
                   onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.background = 'transparent')}
                 />
               </>

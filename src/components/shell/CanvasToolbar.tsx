@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
-import { CATEGORY_ACCENTS, alpha, fontFamily, radius } from '../../theme/tokens';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { categoryColor } from '../../theme/categories';
 import type { GraphNode } from '../../types/nodeGraph';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -125,7 +126,6 @@ function GraphStatsPanel({ nodes, topLevel, groupName, onClose }: {
   const errorCount = useNodeGraphStore(s => s.compilationErrors.length + s.glslErrors.length);
   const fragmentShader = useNodeGraphStore(s => s.fragmentShader);
   const stats = useMemo(() => computeGraphStats(nodes, topLevel), [nodes, topLevel]);
-  const accents = CATEGORY_ACCENTS[mode];
   const maxCat = Math.max(1, ...stats.byCategory.map(c => c.count));
   const glslLines = fragmentShader ? fragmentShader.split('\n').length : 0;
   const mainLines = useMemo(() => (fragmentShader ? mainBodyLines(fragmentShader) : null), [fragmentShader]);
@@ -165,7 +165,7 @@ function GraphStatsPanel({ nodes, topLevel, groupName, onClose }: {
             <div key={c.category} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 24px', alignItems: 'center', gap: 10, fontSize: 12 }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.category}</span>
               <span style={{ height: 8, borderRadius: 4, background: tk.bg.field, overflow: 'hidden' }}>
-                <span style={{ display: 'block', height: '100%', width: `${(c.count / maxCat) * 100}%`, borderRadius: 4, background: accents[c.category] ?? tk.text.faint }} />
+                <span style={{ display: 'block', height: '100%', width: `${(c.count / maxCat) * 100}%`, borderRadius: 4, background: categoryColor(c.category, mode) }} />
               </span>
               <span style={{ textAlign: 'right', font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{c.count}</span>
             </div>
@@ -179,7 +179,7 @@ function GraphStatsPanel({ nodes, topLevel, groupName, onClose }: {
             <div style={{ ...caps, marginBottom: 4 }}>Most used</div>
             {stats.mostUsed.length === 0 && <div style={{ fontSize: 12, color: tk.text.faint }}>No repeats</div>}
             {stats.mostUsed.map(t => (
-              <StatRow key={t.type} dot={accents[t.category]} label={t.label} value={`×${t.count}`} action={`Select ${t.count}`} onClick={() => select(t.ids)} />
+              <StatRow key={t.type} dot={categoryColor(t.category, mode)} label={t.label} value={`×${t.count}`} action={`Select ${t.count}`} onClick={() => select(t.ids)} />
             ))}
           </div>
           <div>

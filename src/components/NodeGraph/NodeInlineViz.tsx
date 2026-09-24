@@ -865,7 +865,8 @@ export function SdfPreviewViz({ node }: { node: GraphNode }) {
         ref={canvasRef}
         width={160}
         height={160}
-        style={{ display: 'block', width: '100%', height: '120px', imageRendering: 'pixelated' }}
+        // cover, not stretch: the field is square, and stretching it to a wide box turns circles into ellipses.
+        style={{ display: 'block', width: '100%', height: '120px', objectFit: 'cover', imageRendering: 'pixelated' }}
       />
     </div>
   );

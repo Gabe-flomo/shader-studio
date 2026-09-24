@@ -92,20 +92,6 @@ const DARK: Tokens = {
 
 export const THEMES: Readonly<Record<ThemeMode, Tokens>> = Object.freeze({ light: LIGHT, dark: DARK });
 
-// Node-category accents: Catppuccin Latte on light, Mocha (the current colours) on dark.
-export const CATEGORY_ACCENTS: Readonly<Record<ThemeMode, Record<string, string>>> = Object.freeze({
-  light: {
-    Sources: '#1e66f5', Transforms: '#40a02b', Math: '#7287fd', Color: '#fe640b', Noise: '#209fb5', Effects: '#d20f39',
-    Loops: '#04a5e5', '2D Primitives': '#df8e1d', SDF: '#ea76cb', Combiners: '#8839ef', Spaces: '#dd7878', Science: '#179299',
-    'Group Presets': '#df8e1d', Output: '#179299',
-  },
-  dark: {
-    Sources: '#89b4fa', Transforms: '#a6e3a1', Math: '#b4befe', Color: '#fab387', Noise: '#74c7ec', Effects: '#f38ba8',
-    Loops: '#89dceb', '2D Primitives': '#f9e2af', SDF: '#f5c2e7', Combiners: '#cba6f7', Spaces: '#f2cdcd', Science: '#94e2d5',
-    'Group Presets': '#f9e2af', Output: '#94e2d5',
-  },
-});
-
 /** `#rrggbb` + opacity (0–1) → `#rrggbbaa`. */
 export function alpha(hex: string, a: number): string {
   const byte = Math.round(Math.min(1, Math.max(0, a)) * 255);

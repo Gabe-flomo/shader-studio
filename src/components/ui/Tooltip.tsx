@@ -17,7 +17,7 @@ export function Tooltip({
   label: ReactNode;
   description?: ReactNode;
   shortcut?: string;
-  placement?: 'top' | 'bottom';
+  placement?: 'top' | 'bottom' | 'right';
   delay?: number;
   disabled?: boolean;
   /** Let the anchor fill a flex row (for wide controls like the ruler). */
@@ -45,6 +45,11 @@ export function Tooltip({
     if (!open || !anchorRef.current || !tipRef.current) return;
     const a = anchorRef.current.getBoundingClientRect();
     const t = tipRef.current.getBoundingClientRect();
+    if (placement === 'right') {
+      const top = Math.min(Math.max(MARGIN, a.top + a.height / 2 - t.height / 2), window.innerHeight - t.height - MARGIN);
+      setPos({ left: a.right + GAP, top });
+      return;
+    }
     let top = placement === 'top' ? a.top - t.height - GAP : a.bottom + GAP;
     if (top + t.height > window.innerHeight - MARGIN) top = a.top - t.height - GAP;
     if (top < MARGIN) top = a.bottom + GAP;

@@ -6,14 +6,15 @@ import { Icon } from './Icon';
 
 /** Text field: bg.field at rest, white with a focus ring when focused. No borders. */
 export function Field({
-  suffix, prefix, mono = false, invalid = false, height = 34, style, onFocus, onBlur, ...rest
+  suffix, leading, mono = false, invalid = false, height = 34, style, onFocus, onBlur, ...rest
 }: {
   suffix?: ReactNode;
-  prefix?: ReactNode;
+  /** Icon or text before the input (e.g. a search glyph). */
+  leading?: ReactNode;
   mono?: boolean;
   invalid?: boolean;
   height?: number;
-} & InputHTMLAttributes<HTMLInputElement>) {
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'prefix'>) {
   const tk = useTokens();
   const [focused, setFocused] = useState(false);
   const ring = invalid ? tk.status.danger : focused ? tk.accent.base : null;
@@ -25,7 +26,7 @@ export function Field({
         cursor: 'text', ...style,
       }}
     >
-      {prefix}
+      {leading}
       <input
         onFocus={e => { setFocused(true); onFocus?.(e); }}
         onBlur={e => { setFocused(false); onBlur?.(e); }}

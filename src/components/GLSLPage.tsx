@@ -345,7 +345,7 @@ export function GLSLPage() {
   const lineCount  = code.split('\n').length;
   const lines      = code.split('\n');
 
-  const [paletteWidth, setPaletteWidth] = useState(210);
+  const [paletteWidth, setPaletteWidth] = useState(320);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const paletteResizeRef = useRef<{ startX: number; startW: number } | null>(null);
 
