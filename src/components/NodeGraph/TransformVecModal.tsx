@@ -138,6 +138,7 @@ export function TransformVecModal({ node, onClose }: Props) {
       exprY: (node.params.exprY as string) ?? 'y',
       exprZ: (node.params.exprZ as string) ?? 'z',
       exprW: (node.params.exprW as string) ?? 'w',
+      comment: typeof node.params.__comment === 'string' && node.params.__comment.trim() ? node.params.__comment.trim() : undefined,
     });
     setSavingPreset(false);
     setPresetLabel('');

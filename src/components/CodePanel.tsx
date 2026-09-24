@@ -5,6 +5,8 @@ import { alpha, fontFamily, radius } from '../theme/tokens';
 import { Button, IconButton } from './ui/Button';
 import { Icon } from './ui/Icon';
 import { loadShortcutMap } from '../hooks/useShortcuts';
+import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { glslErrorLines } from '../compiler/nodeErrors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -75,6 +77,26 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap, docked 
 
   const lines = code ? code.split('\n') : ['// No shader compiled yet'];
 
+  // GLSL compile errors marked on their lines, with ↑/↓ to step through them
+  const glslErrors = useNodeGraphStore(s => s.glslErrors);
+  const glslErrorSource = useNodeGraphStore(s => s.glslErrorSource);
+  const errorLines = code ? glslErrorLines(code, glslErrorSource, glslErrors) : new Map<number, string[]>();
+  const errorIdxs = [...errorLines.keys()].sort((a, b) => a - b);
+  const lineEls = useRef(new Map<number, HTMLDivElement>());
+  const [errorCursor, setErrorCursor] = useState(0);
+  const jumpToError = (dir: 1 | -1) => {
+    if (errorIdxs.length === 0) return;
+    const next = (errorCursor + dir + errorIdxs.length) % errorIdxs.length;
+    setErrorCursor(next);
+    lineEls.current.get(errorIdxs[next])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  const firstErrorIdx = errorIdxs[0];
+  useEffect(() => {
+    if (firstErrorIdx === undefined) return;
+    const t = setTimeout(() => lineEls.current.get(firstErrorIdx)?.scrollIntoView({ block: 'center' }), 40);
+    return () => clearTimeout(t);
+  }, [firstErrorIdx, glslErrors]);
+
   // Pre-compute scroll target: prefer first match inside void main
   const scrollToLineIdx = (() => {
     if (!prefix) return -1;
@@ -120,6 +142,17 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap, docked 
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       />
       <CodeBarRow slug={highlightSlug}>
+        {errorIdxs.length > 0 && (
+          <>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, height: 24, padding: '0 9px', borderRadius: 7, background: alpha(tk.status.danger, 0.1), color: tk.status.danger, font: `600 11.5px ${fontFamily.ui}` }}>
+              <i style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.danger }} />
+              {errorIdxs.length} error{errorIdxs.length === 1 ? '' : 's'}
+            </span>
+            <IconButton icon="chevU" label="Previous error" size="sm" onClick={() => jumpToError(-1)} />
+            <IconButton icon="chevD" label="Next error" size="sm" onClick={() => jumpToError(1)} />
+            <span style={{ width: 1, height: 18, background: tk.border.default, margin: '0 2px' }} />
+          </>
+        )}
         <Button size="sm" variant="ghost" icon={copied ? 'check' : 'copy'} onClick={handleCopy} style={{ height: 28 }}>{copied ? 'Copied' : 'Copy'}</Button>
         <IconButton icon="chevD" label="Hide generated code" shortcut={shortcuts.toggleCode} size="sm" onClick={onClose} />
       </CodeBarRow>
@@ -128,22 +161,38 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap, docked 
       <div style={{ flex: 1, overflow: 'auto', padding: '6px 0', font: `11.5px/1.62 ${fontFamily.mono}` }}>
         {lines.map((line, i) => {
           const isMatch = !!(prefix && line.includes(prefix));
+          const lineErrors = errorLines.get(i);
           const tokens = tokenizeLine(line || ' ', pal);
-          return (
+          const row = (
             <div
               key={i}
-              ref={i === scrollToLineIdx ? setFirstMatch : undefined}
-              style={{ display: 'flex', whiteSpace: 'pre', background: isMatch ? tk.bg.selected : 'transparent', transition: 'background 0.15s' }}
+              ref={el => {
+                if (i === scrollToLineIdx) setFirstMatch(el);
+                if (lineErrors && el) lineEls.current.set(i, el); else lineEls.current.delete(i);
+              }}
+              style={{ display: 'flex', whiteSpace: 'pre', background: lineErrors ? alpha(tk.status.danger, 0.08) : isMatch ? tk.bg.selected : 'transparent', transition: 'background 0.15s' }}
             >
-              <span style={{ width: gutter, flexShrink: 0, textAlign: 'right', paddingRight: 14, color: isMatch ? tk.accent.base : tk.text.disabled, userSelect: 'none' }}>{i + 1}</span>
+              <span style={{ width: gutter, flexShrink: 0, textAlign: 'right', paddingRight: 14, color: lineErrors ? tk.status.danger : isMatch ? tk.accent.base : tk.text.disabled, userSelect: 'none', fontWeight: lineErrors ? 700 : undefined }}>{i + 1}</span>
               <span style={{ paddingRight: 16 }}>
                 {tokens.map((tok, j) => (
                   // Dim lines outside the selected node, like an inactive editor.
-                  <span key={j} style={{ color: tok.color, opacity: isMatch || !prefix ? 1 : 0.55 }}>{tok.text}</span>
+                  <span key={j} style={{ color: tok.color, opacity: isMatch || !prefix || lineErrors ? 1 : 0.55 }}>{tok.text}</span>
                 ))}
               </span>
             </div>
           );
+          if (!lineErrors) return row;
+          return [row, ...lineErrors.map((msg, k) => (
+            <div key={`${i}-err-${k}`} style={{ display: 'flex', margin: '2px 0 4px' }}>
+              <span style={{ width: gutter, flexShrink: 0 }} />
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 6,
+                background: alpha(tk.status.danger, 0.1), color: tk.status.danger, font: `500 11.5px ${fontFamily.ui}`, whiteSpace: 'normal',
+              }}>
+                <Icon name="alert" size={13} />{msg}
+              </span>
+            </div>
+          ))];
         })}
       </div>
     </div>

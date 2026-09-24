@@ -7,6 +7,11 @@ import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
+import { buildNodeErrors } from '../../compiler/nodeErrors';
+import { suggestConnections, type Suggestion } from './smartConnect';
+import { SmartConnectMenu } from './SmartConnectMenu';
+import { askConfirm, askText } from '../ui/dialogStore';
+import { toast } from '../ui/toastStore';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -212,18 +217,14 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     return { x: minX, y: midY };
   }, [activeGroupId, displayNodes]);
 
-  const errorNodeIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const err of compilationErrors) {
-      // Format: "Node <id> [source:<sourceId>]: ..." or "Node <id>: ..."
-      const match = err.match(/^Node (\S+?)(?:\s+\[source:(\S+?)\])?:/);
-      if (match) {
-        ids.add(match[1]);
-        if (match[2]) ids.add(match[2]);
-      }
-    }
-    return ids;
-  }, [compilationErrors]);
+  // Compile problems mapped onto the cards that caused them (shown on the card, not only in the error panel)
+  const glslErrors      = useNodeGraphStore(s => s.glslErrors);
+  const glslErrorSource = useNodeGraphStore(s => s.glslErrorSource);
+  const nodeSlugMap     = useNodeGraphStore(s => s.nodeSlugMap);
+  const nodeErrors = useMemo(
+    () => buildNodeErrors({ compilationErrors, glslErrors, glslSource: glslErrorSource, slugs: nodeSlugMap }),
+    [compilationErrors, glslErrors, glslErrorSource, nodeSlugMap],
+  );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
@@ -236,8 +237,21 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     screenX: number; screenY: number;
   } | null>(null);
 
-  // ── Shift+socket spotlight ──────────────────────────────────────────────────
-  const [hoveredSocket, setHoveredSocket] = useState<{ nodeId: string; key: string; dir: 'in' | 'out' } | null>(null);
+  // ── Socket spotlight ────────────────────────────────────────────────────────
+  // Hovering a wired socket lights its wires and the nodes at their other end and dims the rest.
+  // Plain hover waits a beat (settledSocket) so sweeping the pointer across a graph doesn't
+  // flicker; with Shift held it's immediate and works on any socket.
+  type HoveredSocket = { nodeId: string; key: string; dir: 'in' | 'out' };
+  const [hoveredSocket, setHoveredSocket] = useState<HoveredSocket | null>(null);
+  const [settledSocket, setSettledSocket] = useState<HoveredSocket | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSocketHover = useCallback((sock: HoveredSocket | null) => {
+    setHoveredSocket(sock);
+    if (settleTimer.current) { clearTimeout(settleTimer.current); settleTimer.current = null; }
+    if (!sock) { setSettledSocket(null); return; }
+    settleTimer.current = setTimeout(() => setSettledSocket(sock), 120);
+  }, []);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
   const [shiftHeld, setShiftHeld] = useState(false);
 
   // ── Feature 2: Wire hover → + badge ────────────────────────────────────────
@@ -272,11 +286,14 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     return () => ro.disconnect();
   }, []);
 
-  // Auto-clear disconnected-connection notice after 5s
+  // Wires the app removed itself (a group output changed type) → a toast with Undo
   useEffect(() => {
     if (!disconnectedNotice) return;
-    const t = setTimeout(clearDisconnectedNotice, 5000);
-    return () => clearTimeout(t);
+    toast.warning('Connections removed', {
+      message: `${disconnectedNotice}. They no longer fit the new type.`,
+      action: { label: 'Undo', onClick: () => useNodeGraphStore.getState().undo() },
+    });
+    clearDisconnectedNotice();
   }, [disconnectedNotice, clearDisconnectedNotice]);
 
   // ── Minimap toggle (persisted) ──────────────────────────────────────────────
@@ -398,11 +415,23 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     };
   }, []);
 
-  // ── Prevent browser-level pinch-zoom / ctrl+wheel zoom over the canvas ──────
+  // ── Keep the browser's own wheel gestures off the canvas ──────────────────
+  // Pinch / ctrl+wheel would zoom the page, and a sideways two-finger pan would trigger swipe-back
+  // navigation (leaving the app). The canvas pans itself (handleWheel), so it cancels the default,
+  // except inside something that scrolls sideways on its own (a code block on a card).
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
-    const prevent = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    const scrollsSideways = (target: EventTarget | null) => {
+      for (let n = target as HTMLElement | null; n && n !== el; n = n.parentElement) {
+        if (n.scrollWidth > n.clientWidth && /auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
+      }
+      return false;
+    };
+    const prevent = (e: WheelEvent) => {
+      if (e.ctrlKey) { e.preventDefault(); return; }
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && !scrollsSideways(e.target)) e.preventDefault();
+    };
     el.addEventListener('wheel', prevent, { passive: false });
     return () => el.removeEventListener('wheel', prevent);
   }, []);
@@ -544,6 +573,9 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   }, [deselectAll, applyView]);
 
   // ── Connection drag ─────────────────────────────────────────────────────────
+  // A press on an output socket, to tell a click (→ Smart connect) from a drag (→ wire)
+  const socketPressRef = useRef<{ nodeId: string; key: string; x: number; y: number; t: number } | null>(null);
+  const [smartConnect, setSmartConnect] = useState<{ nodeId: string; key: string; dir: 'in' | 'out'; x: number; y: number; justAdded?: boolean } | null>(null);
   const dragRafRef = useRef<number | null>(null);
 
   const [dragConnection, setDragConnection] = useState<{
@@ -649,6 +681,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     event: React.MouseEvent
   ) => {
     event.stopPropagation();
+    if (event.button !== 0) return; // only the left button starts a wire (or a Smart connect click)
     let fromPos = socketWorld(nodeId, 'out', outputKey);
     if (!fromPos) {
       const node = displayNodesRef.current.find(n => n.id === nodeId);
@@ -661,6 +694,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       fromPos,
       mousePos: screenToWorld(event.clientX, event.clientY),
     });
+    socketPressRef.current = { nodeId, key: outputKey, x: event.clientX, y: event.clientY, t: performance.now() };
   }, [socketWorld, screenToWorld]);
 
   const handleMouseMove = (event: React.MouseEvent) => {
@@ -718,13 +752,95 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     applyView({ x: -worldX * z + vw / 2, y: -worldY * z + vh / 2 }, z, 'now');
   }, [applyView]);
 
-  const handleMouseUp = () => {
+  // Centre on a node picked from a group card (store.revealNode) once it is in the displayed level
+  const focusRequest = useNodeGraphStore(s => s.focusRequest);
+  useEffect(() => {
+    if (!focusRequest) return;
+    const target = displayNodes.find(n => n.id === focusRequest.nodeId);
+    if (!target) return;
+    const size = getCardSize(target.id) ?? { w: 360, h: 200 };
+    handleMinimapPanTo(target.position.x + size.w / 2, target.position.y + size.h / 2);
+    useNodeGraphStore.getState().clearFocusRequest();
+  }, [focusRequest, displayNodes, handleMinimapPanTo]);
+
+  const handleMouseUp = (e: React.MouseEvent) => {
     if (dragRafRef.current !== null) {
       cancelAnimationFrame(dragRafRef.current);
       dragRafRef.current = null;
     }
+    // A press on an output that didn't travel is a click: offer Smart connect instead of a wire
+    const press = socketPressRef.current;
+    socketPressRef.current = null;
+    if (press && !press.nodeId.startsWith('__')
+      && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4 && performance.now() - press.t < 600) {
+      setSmartConnect({ nodeId: press.nodeId, key: press.key, dir: 'out', x: press.x, y: press.y });
+    }
     setDragConnection(null);
   };
+
+  // ── Smart connect ───────────────────────────────────────────────────────────
+  // Click a socket → the three most likely places to wire it (see smartConnect.ts).
+  const [ghostSuggestion, setGhostSuggestion] = useState<Suggestion | null>(null);
+  const handleSuggestSocket = useCallback((nodeId: string, key: string, dir: 'in' | 'out', x: number, y: number) => {
+    setSmartConnect({ nodeId, key, dir, x, y });
+  }, []);
+  const smartSuggestions = useMemo(() => {
+    if (!smartConnect) return [];
+    return suggestConnections({
+      nodes: displayNodes,
+      from: smartConnect,
+      socketPos: socketWorld,
+      labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
+    });
+  }, [smartConnect, displayNodes, socketWorld]);
+  const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
+  // Add-then-wire: a node just added from search gets Smart connect on its first output, once
+  // its socket has been measured, and only when there is something to suggest.
+  const smartConnectRequest = useNodeGraphStore(s => s.smartConnectRequest);
+  useEffect(() => {
+    if (!smartConnectRequest) return;
+    const { nodeId, at } = smartConnectRequest;
+    let tries = 0;
+    let raf = 0;
+    const attempt = () => {
+      if (Date.now() - at > 2000) { useNodeGraphStore.getState().requestSmartConnect(null); return; }
+      const node = displayNodesRef.current.find(n => n.id === nodeId);
+      const key = node ? Object.keys(node.outputs)[0] : undefined;
+      const pos = node && key ? socketWorld(node.id, 'out', key) : null;
+      if (!pos || !node || !key) { if (tries++ < 30) raf = requestAnimationFrame(attempt); return; }
+      useNodeGraphStore.getState().requestSmartConnect(null);
+      // Show the node that was just added: select it and bring it to the middle of the view
+      useNodeGraphStore.getState().setSelectedNodeId(nodeId);
+      const size = getCardSize(nodeId) ?? { w: 360, h: 200 };
+      handleMinimapPanTo(node.position.x + size.w / 2, node.position.y + size.h / 2);
+      const suggestions = suggestConnections({
+        nodes: displayNodesRef.current, from: { nodeId, key, dir: 'out' }, socketPos: socketWorld,
+        labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
+      });
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (suggestions.length === 0 || !rect) return;
+      setSmartConnect({
+        nodeId, key, dir: 'out', justAdded: true,
+        x: rect.left + pos.x * zoomRef.current + panRef.current.x,
+        y: rect.top + pos.y * zoomRef.current + panRef.current.y,
+      });
+    };
+    raf = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(raf);
+  }, [smartConnectRequest, socketWorld, handleMinimapPanTo]);
+  const pickSuggestion = useCallback((s: Suggestion) => {
+    if (!smartConnect) return;
+    if (smartConnect.dir === 'out') connectNodes(smartConnect.nodeId, smartConnect.key, s.nodeId, s.key);
+    else connectNodes(s.nodeId, s.key, smartConnect.nodeId, smartConnect.key);
+    closeSmartConnect();
+  }, [smartConnect, connectNodes, closeSmartConnect]);
+  const ghostWire = useMemo(() => {
+    if (!smartConnect || !ghostSuggestion) return null;
+    const here = socketWorld(smartConnect.nodeId, smartConnect.dir, smartConnect.key);
+    const there = socketWorld(ghostSuggestion.nodeId, smartConnect.dir === 'out' ? 'in' : 'out', ghostSuggestion.key);
+    if (!here || !there) return null;
+    return smartConnect.dir === 'out' ? { from: here, to: there, type: ghostSuggestion.type } : { from: there, to: here, type: ghostSuggestion.type };
+  }, [smartConnect, ghostSuggestion, socketWorld]);
 
   // ── Canvas touch handlers (pan + connection cancel) ──────────────────────
   const handleCanvasTouchStart = useCallback((e: React.TouchEvent) => {
@@ -838,9 +954,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
 
   // ── Shift+socket spotlight — which edges are highlighted ─────────────────────
   // Each entry is { fromNodeId, fromOutputKey, toNodeId, toInputKey }
+  const spotSocket = dragConnection ? null : shiftHeld ? hoveredSocket : settledSocket;
   const spotlightEdges = React.useMemo<Set<string>>(() => {
-    if (!shiftHeld || !hoveredSocket) return new Set();
-    const { nodeId, key, dir } = hoveredSocket;
+    if (!spotSocket) return new Set();
+    const { nodeId, key, dir } = spotSocket;
     const result = new Set<string>();
     for (const node of displayNodes) {
       for (const [inputKey, input] of Object.entries(node.inputs)) {
@@ -851,13 +968,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       }
     }
     return result;
-  }, [shiftHeld, hoveredSocket, displayNodes]);
+  }, [spotSocket, displayNodes]);
+  // Without Shift, only a socket that actually has wires spotlights
+  const spotlightOn = spotSocket !== null && (shiftHeld || spotlightEdges.size > 0);
 
   // ── Highlight filter — compute which node IDs match the current filter ───────
   const highlightedIds: Set<string> | null = React.useMemo(() => {
-    // Shift+socket spotlight takes priority over type filter
-    if (shiftHeld && hoveredSocket) {
-      const { nodeId, key, dir } = hoveredSocket;
+    // Socket spotlight takes priority over type filter
+    if (spotlightOn && spotSocket) {
+      const { nodeId, key, dir } = spotSocket;
       const lit = new Set<string>([nodeId]);
       for (const node of displayNodes) {
         for (const [inputKey, input] of Object.entries(node.inputs)) {
@@ -882,7 +1001,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       }
     }
     return matching;
-  }, [nodeHighlightFilter, nodes, shiftHeld, hoveredSocket, displayNodes]);
+  }, [nodeHighlightFilter, nodes, spotlightOn, spotSocket, displayNodes]);
 
   // ── Viewport culling ─────────────────────────────────────────────────────
   // Cards fully outside the visible world rect (plus a margin) aren't mounted.
@@ -1159,26 +1278,6 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
-      {/* Disconnected-connection notice — auto-hides after 5s */}
-      {disconnectedNotice && (
-        <div style={{
-          position: 'absolute',
-          top: compactToolbar ? 80 : 50,
-          left: '50%', transform: 'translateX(-50%)',
-          background: '#2d1b1b', border: `1px solid ${tc.red}55`,
-          color: tc.red, padding: '5px 14px', borderRadius: '8px',
-          fontSize: '11px', zIndex: 25, display: 'flex', alignItems: 'center',
-          gap: '8px', userSelect: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          whiteSpace: 'nowrap',
-        }}>
-          <span>⚠ {disconnectedNotice}</span>
-          <button
-            onClick={clearDisconnectedNotice}
-            style={{ background: 'none', border: `1px solid ${tc.red}55`, color: tc.red, cursor: 'pointer', fontSize: '10px', padding: '1px 6px', borderRadius: '4px' }}
-          >×</button>
-        </div>
-      )}
-
       {/* Right-click context menu — rendered via portal so it's outside the transformed canvas tree */}
       {contextMenu && createPortal(
         <div
@@ -1278,9 +1377,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       Enter Group
                     </button>
                     <button style={ctxBtnStyle} onClick={() => {
-                      const label = window.prompt('Group name:', typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group');
-                      if (label !== null) updateNodeParams(clickedNode.id, { label });
+                      const id = clickedNode.id;
                       setContextMenu(null);
+                      askText('Rename group', { initial: typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group', confirmLabel: 'Rename' })
+                        .then(label => { if (label) updateNodeParams(id, { label }); });
                     }}>
                       Rename Group
                     </button>
@@ -1292,10 +1392,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       Ungroup
                     </button>
                     <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
-                      if (window.confirm(`Delete group "${typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group'}" and all its nodes?`)) {
-                        removeNode(clickedNode.id);
-                        setContextMenu(null);
-                      }
+                      const id = clickedNode.id;
+                      const name = typeof clickedNode.params.label === 'string' ? clickedNode.params.label : 'Group';
+                      const count = ((clickedNode.params.subgraph as { nodes?: unknown[] } | undefined)?.nodes ?? []).length;
+                      setContextMenu(null);
+                      askConfirm(`Delete “${name}”?`, {
+                        message: `This removes the group and the ${count} node${count === 1 ? '' : 's'} inside it. You can undo it.`,
+                        confirmLabel: 'Delete group', danger: true,
+                      }).then(ok => { if (ok) removeNode(id); });
                     }}>
                       Delete Group
                     </button>
@@ -1361,6 +1465,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           pendingMobileType={pendingMobileType}
           onEdgeEnter={handleEdgeEnter}
           onEdgeLeave={handleEdgeLeave}
+          ghostWire={ghostWire}
         />
 
         {/* Node cards — positioned in world space; off-screen cards are culled */}
@@ -1379,12 +1484,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             isTouchDevice={isTouchDevice.current}
             dimmed={highlightedIds !== null && !highlightedIds.has(node.id)}
             onEnterGroup={enterGroup}
-            hasError={errorNodeIds.has(node.id)}
+            hasError={nodeErrors.has(node.id)}
+            errors={nodeErrors.get(node.id)}
             externalInputKeys={externalPortMap?.get(node.id)}
             externalParamKeys={externalParamMap?.get(node.id)}
             onAltClickSocket={handleAltClickSocket}
             isConnectionDragging={dragConnection !== null}
-            onSocketHover={setHoveredSocket}
+            onSocketHover={handleSocketHover}
+            onSuggestSocket={handleSuggestSocket}
           />
         ))}
 
@@ -1631,6 +1738,27 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       })()}
 
       {/* Feature 1: Alt-click socket filtered palette */}
+      {smartConnect && (() => {
+        const origin = displayNodes.find(n => n.id === smartConnect.nodeId);
+        const sock = smartConnect.dir === 'out' ? origin?.outputs[smartConnect.key] : origin?.inputs[smartConnect.key];
+        if (!origin || !sock) return null;
+        return (
+          <SmartConnectMenu
+            x={smartConnect.x}
+            y={smartConnect.y}
+            title={`${smartConnect.dir === 'out' ? 'CONNECT' : 'FEED'} ${sock.label.toUpperCase()} ${smartConnect.dir === 'out' ? 'TO' : 'FROM'}`}
+            items={smartSuggestions}
+            onPick={pickSuggestion}
+            onHover={setGhostSuggestion}
+            onAddNode={() => {
+              setPendingSocket({ nodeId: smartConnect.nodeId, key: smartConnect.key, dir: smartConnect.dir, type: sock.type, screenX: smartConnect.x, screenY: smartConnect.y });
+              closeSmartConnect();
+            }}
+            onClose={closeSmartConnect}
+            justAdded={smartConnect.justAdded}
+          />
+        );
+      })()}
       {pendingSocket && (() => {
         const ps = pendingSocket;
         const worldSpawn = screenToWorld(ps.screenX, ps.screenY);

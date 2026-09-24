@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
-import { relabelLegacySockets } from './legacyLabels';
+import { askText } from '../components/ui/dialogStore';
+import { randomizedParams } from '../nodes/randomizeParams';
+import { upgradeLegacyNode } from './legacyLabels';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -75,7 +77,7 @@ function _upgradeExprNode(node: GraphNode): GraphNode {
  *  nested in subgraph params (groups, SceneGroups, MarchLoopGroups, etc.). */
 function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
   return nodes.map(node => {
-    let n = relabelLegacySockets(_upgradeExprNode(node));
+    let n = upgradeLegacyNode(_upgradeExprNode(node));
     // Recurse into subgraph if present
     if (n.params?.subgraph) {
       const sg = n.params.subgraph as { nodes?: GraphNode[] };
@@ -146,8 +148,11 @@ const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStorageP
  * Writes to localStorage, optionally to disk, and fires the
  * 'customfn-changed' CustomEvent so NodePalette refreshes.
  */
+/** Fired when a saved graph is added or removed, so every list of them (sidebar, top bar) refreshes */
+export const SAVED_GRAPHS_CHANGED = 'saved-graphs-changed';
+
 export function saveCustomFnPreset(
-  data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string },
+  data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string; comment?: string },
 ): Promise<FileResult> {
   const preset: CustomFnPreset = {
     id: `cfp_${Date.now()}`,
@@ -156,6 +161,7 @@ export function saveCustomFnPreset(
     outputType: data.outputType ?? 'float',
     body: data.body ?? '0.0',
     glslFunctions: data.glslFunctions ?? '',
+    comment: data.comment?.trim() || undefined,
     savedAt: Date.now(),
   };
   return customFnPresetManager.save(preset);
@@ -287,6 +293,7 @@ interface NodeGraphState {
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
+  glslErrorSource: string | null; // the source those errors refer to, for mapping them to nodes
   glContextLost: boolean;         // true while the preview's WebGL context is lost (GPU reset / memory pressure)
   pixelSample: [number, number, number, number] | null;  // mouse pixel RGBA 0-255
   hoveredParamHint: string | null;  // param hint shown in status bar on hover
@@ -312,6 +319,14 @@ interface NodeGraphState {
   /** Live-sampled values for the selected node: outputKey → number[] (1–4 components) */
   nodeProbeValues: Record<string, number[]> | null;
   setSelectedNodeId: (id: string | null) => void;
+  /** Open `groupPath` (group ids from the current level inward), select `nodeId` there and ask the canvas to centre on it. */
+  revealNode: (groupPath: string[], nodeId: string) => void;
+  /** Set by revealNode; NodeGraph centres on the node once it is on screen, then clears it. */
+  focusRequest: { nodeId: string; seq: number } | null;
+  clearFocusRequest: () => void;
+  /** After a node is added from search, NodeGraph opens Smart connect on its first output */
+  smartConnectRequest: { nodeId: string; at: number } | null;
+  requestSmartConnect: (nodeId: string | null) => void;
   setNodeProbeValues: (values: Record<string, number[]> | null) => void;
   /** Live-sampled normalized [0,1] values for all scope nodes: nodeId → number */
   scopeProbeValues: Record<string, number>;
@@ -480,6 +495,8 @@ interface NodeGraphState {
   removeNodes: (nodeIds: string[]) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
+  /** New random values for the node's free sliders (see nodes/randomizeParams.ts); one undo step per call */
+  randomizeNodeParams: (nodeId: string) => void;
   updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
   updateNodeInputs: (nodeId: string, inputs: Record<string, import('../types/nodeGraph').InputSocket>) => void;
   setPreviewNodeId: (id: string | null) => void;
@@ -531,8 +548,15 @@ interface NodeGraphState {
   compile: () => void;
   loadExampleGraph: (name?: string) => Promise<void>;
   autoLayout: () => void;
-  setGlslErrors: (errors: string[]) => void;
+  /** `source` is the shader the errors were reported against (their line numbers point into it) */
+  setGlslErrors: (errors: string[], source?: string | null) => void;
   setGlContextLost: (lost: boolean) => void;
+  /** The newest shader failed to compile, so the preview is still drawing the last one that worked */
+  previewStale: boolean;
+  setPreviewStale: (stale: boolean) => void;
+  /** Bumped by restartPreview(); ShaderCanvas remounts on change (a fresh WebGL context) */
+  previewEpoch: number;
+  restartPreview: () => void;
   setPixelSample: (sample: [number, number, number, number] | null) => void;
   setHoveredParamHint: (hint: string | null) => void;
   setCurrentTime: (t: number) => void;
@@ -1098,7 +1122,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   paramUniforms: {},
   paramBindings: {},
   glslErrors: [],
+  glslErrorSource: null,
   glContextLost: false,
+  previewStale: false,
+  previewEpoch: 0,
   pixelSample: null,
   hoveredParamHint: null,
   currentTime: 0,
@@ -2420,7 +2447,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const preset: GroupPreset = {
       id: `gp_${Date.now()}`,
       label: label ?? (typeof groupNode.params.label === 'string' ? groupNode.params.label : 'Group'),
-      description: description || undefined,
+      // The group's comment stands in when the save form's description is left empty
+      description: description || (typeof groupNode.params.__comment === 'string' && groupNode.params.__comment.trim()) || undefined,
       subgraph,
       savedAt: Date.now(),
     };
@@ -2504,7 +2532,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       position: pos,
       inputs: groupInputSockets,
       outputs: groupOutputSockets,
-      params: { label: preset.label, subgraph: newSubgraph },
+      params: { label: preset.label, subgraph: newSubgraph, ...(preset.description ? { __comment: preset.description } : {}) },
       ...(sealed ? { sealed: true } : {}),
     };
 
@@ -3176,6 +3204,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       // String fields (GLSL body, expr formula): debounce to avoid compile-on-every-keystroke
       compilationService.scheduleCompile(() => get().compile(), 500);
     }
+  },
+
+  randomizeNodeParams: (nodeId) => {
+    const { nodes, activeGroupPath } = get();
+    const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
+    const node = scope.find(n => n.id === nodeId);
+    const def = node ? getNodeDefinition(node.type) : undefined;
+    if (!node || !def) return;
+    const patch = randomizedParams(node, def);
+    if (Object.keys(patch).length === 0) return;
+    // Its own undo step, even when clicked again right away (the param-edit burst would merge them)
+    undoManager.push(nodes);
+    _historyParamPending = true;
+    get().updateNodeParams(nodeId, patch, { immediate: true });
+    if (_historyParamTimer) { clearTimeout(_historyParamTimer); _historyParamTimer = null; }
+    _historyParamPending = false;
   },
 
   updateNodeOutputs: (nodeId, outputs) => {
@@ -4015,8 +4059,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
-  setGlslErrors: (errors) => set({ glslErrors: errors }),
+  setGlslErrors: (errors, source = null) => set({ glslErrors: errors, glslErrorSource: errors.length ? source : null }),
   setGlContextLost: (lost) => set({ glContextLost: lost }),
+  setPreviewStale: (stale) => set(s => (s.previewStale === stale ? s : { previewStale: stale })),
+  restartPreview: () => set(s => ({ previewEpoch: s.previewEpoch + 1, glContextLost: false, previewStale: false })),
   // These four are written from ShaderCanvas's frame loop (~10 Hz). Zustand
   // notifies every subscriber on any set(), so each one returns the current
   // state object untouched when the value is unchanged — Object.is() on the
@@ -4031,6 +4077,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   setCurrentTime: (t) => set(state => state.currentTime === t ? state : { currentTime: t }),
   setTimePlaying: (playing) => set(state => state.timePlaying === playing ? state : { timePlaying: playing }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id, nodeProbeValues: null }),
+  revealNode: (groupPath, nodeId) => {
+    for (const groupId of groupPath) get().enterGroup(groupId);
+    set(s => ({
+      selectedNodeId: nodeId, nodeProbeValues: null, selectedNodeIds: [],
+      focusRequest: { nodeId, seq: (s.focusRequest?.seq ?? 0) + 1 },
+    }));
+  },
+  focusRequest: null,
+  clearFocusRequest: () => set({ focusRequest: null }),
+  smartConnectRequest: null,
+  requestSmartConnect: (nodeId) => set({ smartConnectRequest: nodeId ? { nodeId, at: Date.now() } : null }),
   setNodeProbeValues: (values) => set(state => {
     const cur = state.nodeProbeValues;
     if (cur === values) return state;
@@ -4064,6 +4121,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
     const dir = getGraphDir();
     if (dir) {
       const path = `${dir}/${labelToSlug(name || 'graph')}.json`;
@@ -4127,6 +4185,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   deleteSavedGraph: (name) => {
     localStorage.removeItem(`shader-studio:${name}`);
+    window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
   },
 
   exportGraph: async () => {
@@ -4135,11 +4194,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'shader-graph';
     if (!isTauri) {
-      // prompt() returns null on Cancel — that's a cancel, not a request for
-      // the default name. An empty string (OK with the field cleared) keeps it.
-      const typed = window.prompt('File name:', 'shader-graph');
+      // In-app dialog (window.prompt is unreliable in the desktop webview); null = cancelled
+      const typed = await askText('Export graph', { label: 'File name', initial: 'shader-graph', confirmLabel: 'Export' });
       if (typed === null) return CANCELLED;
-      name = typed.trim() || 'shader-graph';
+      name = typed;
     }
     // saveTextFile never throws: Tauri dialog/write failures come back as a result.
     return saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
@@ -4204,6 +4262,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       outputType: (node.params.outputType as CustomFnPreset['outputType']) ?? 'float',
       body: (node.params.body as string) ?? '0.0',
       glslFunctions: (node.params.glslFunctions as string) ?? '',
+      comment: typeof node.params.__comment === 'string' && node.params.__comment.trim() ? node.params.__comment.trim() : undefined,
       savedAt: Date.now(),
     };
     // Always save to localStorage (belt-and-suspenders), and to disk if configured

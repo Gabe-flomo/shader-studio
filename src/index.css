@@ -4,6 +4,12 @@
   box-sizing: border-box;
 }
 
+/* A sideways trackpad pan that reaches the edge would otherwise trigger the browser's
+   swipe-back navigation (leaving the app mid-edit); this also stops pull-to-refresh on phones. */
+html, body {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
