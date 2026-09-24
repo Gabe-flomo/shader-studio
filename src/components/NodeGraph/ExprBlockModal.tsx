@@ -1,13 +1,24 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
 import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
 import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
 import { moveItem } from '../../lib/reorder';
-import { GLSL_PALETTE } from '../../lib/glslPalette';
 import { NumberInput } from './NumberInput';
-import { ctp } from '../../theme/palette';
+import { TYPE_COLORS } from './typeColors';
+import { useTokens } from '../../theme/themeStore';
+import { fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Toggle } from '../ui/Choice';
+import { Field, TypeSelect } from '../ui/Field';
+import { Icon } from '../ui/Icon';
+import { Modal } from '../ui/Modal';
+import { Select } from '../ui/Select';
+import { toast } from '../ui/toastStore';
+import { CodeInput } from '../code/CodeField';
+import { ReferencePanel } from '../code/ReferencePanel';
+import { buildCompletions } from '../code/glslReference';
+import { insertSnippet } from '../code/useCompletion';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -48,72 +59,49 @@ interface WarpLine {
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 const OPS = ['=', '+=', '-=', '*=', '/='];
 
-// ─── GLSL function palette ────────────────────────────────────────────────────
-// Shared with the mobile inline autocomplete — see src/lib/glslPalette.ts.
-
-const GLSL_GROUPS = Array.from(new Set(GLSL_PALETTE.map(e => e.group)));
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const BTN: React.CSSProperties = {
-  background: ctp.surface0,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
-  borderRadius: '4px',
-  padding: '3px 8px',
-  fontSize: '11px',
-  fontFamily: 'monospace',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-};
-
-const SECTION_LABEL: React.CSSProperties = {
-  fontSize: '10px',
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase' as const,
-  color: ctp.surface2,
-  margin: '10px 0 4px',
-};
-
-const INPUT_STYLE: React.CSSProperties = {
-  background: ctp.crust,
-  border: `1px solid ${ctp.surface1}`,
-  color: ctp.text,
-  borderRadius: '4px',
-  padding: '3px 7px',
-  fontSize: '11px',
-  fontFamily: 'monospace',
-  outline: 'none',
-};
 
 // ─── ExprBlockModal ───────────────────────────────────────────────────────────
 
 interface Props {
   node: GraphNode;
+  /** The node sits in a group that iterates — only then can inputs carry between iterations. */
+  insideLoop?: boolean;
   onClose: () => void;
 }
 
 type Snapshot = { lines: WarpLine[]; result: string };
 
-export function ExprBlockModal({ node, onClose }: Props) {
+/** The expression field last focused: reference-panel clicks insert there. */
+interface InsertTarget {
+  el: HTMLInputElement;
+  value: string;
+  set: (v: string) => void;
+  snap: (v: string) => Snapshot;
+}
+
+export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
+  const tk = useTokens();
 
   // Read current params
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];
   const lines: WarpLine[]        = (node.params.lines as WarpLine[] | undefined) ?? [];
   const result: string           = (node.params.result as string | undefined) ?? 'p';
   const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'float';
+  const label = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expr Block';
 
-  const [savedFlash, setSavedFlash]     = useState(false);
-  const [autoWrap, setAutoWrap]         = useState(false);
+  const [autoWrap, setAutoWrap]             = useState(false);
   const [showSaveInput, setShowSaveInput]   = useState(false);
   const [savePresetName, setSavePresetName] = useState('');
+
+  const rawInputs = node.params.inputs;
+  const completions = useMemo(() => buildCompletions((rawInputs as InputDef[] | undefined) ?? []), [rawInputs]);
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
   const history      = useRef<Snapshot[]>([{ lines, result }]);
   const historyIndex = useRef(0);
   const [historyPos, setHistoryPos] = useState(0);
+  const [historyLen, setHistoryLen] = useState(1);
 
   const pushHistory = (snap: Snapshot) => {
     const trimmed = history.current.slice(0, historyIndex.current + 1);
@@ -121,6 +109,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
     history.current      = trimmed;
     historyIndex.current = trimmed.length - 1;
     setHistoryPos(historyIndex.current);
+    setHistoryLen(trimmed.length);
   };
 
   const undo = () => {
@@ -140,93 +129,35 @@ export function ExprBlockModal({ node, onClose }: Props) {
   };
 
   const canUndo = historyPos > 0;
-  const canRedo = historyPos < history.current.length - 1;
+  const canRedo = historyPos < historyLen - 1;
 
-  // Track the last-focused expression input so GLSL function buttons can insert there
-  const lastFocusedRef    = useRef<HTMLInputElement | null>(null);
-  const lastFocusedSetter = useRef<((val: string) => void) | null>(null);
-  const lastFocusedValue  = useRef<string>('');
-  const lastFocusedSnapFn = useRef<((newVal: string) => Snapshot) | null>(null);
-
-  // Available variables collapse state
-  const [varsExpanded, setVarsExpanded]   = useState(false);
-  const varsChipsRef                       = useRef<HTMLDivElement>(null);
-  const [hiddenVarsCount, setHiddenVarsCount] = useState(0);
-
-  // Measure which chips wrap to a second line.
-  // Use .length + varsExpanded as deps — NOT the full array ref, because
-  // customInputs is `?? []` which creates a new reference each render and
-  // would cause the effect to re-run on every render, potentially looping.
-  useLayoutEffect(() => {
-    const container = varsChipsRef.current;
-    if (!container) return;
-    const chips = Array.from(container.children) as HTMLElement[];
-    if (chips.length === 0) { setHiddenVarsCount(0); return; }
-    const firstTop = chips[0].offsetTop;
-    const hidden = chips.filter(c => c.offsetTop > firstTop).length;
-    setHiddenVarsCount(hidden);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customInputs.length, varsExpanded]);
-
-  const flash = () => {
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 800);
-  };
+  const target = useRef<InsertTarget | null>(null);
 
   // ── Input management ───────────────────────────────────────────────────────
 
-  const addInput = () => {
-    const newName = `in${customInputs.length}`;
-    const next: InputDef[] = [...customInputs, { name: newName, type: 'float', slider: null }];
-    updateNodeParams(node.id, { inputs: next });
+  const setInputs = (next: InputDef[], extra: Record<string, unknown> = {}) => {
+    updateNodeParams(node.id, { inputs: next, ...extra });
     updateNodeSockets(node.id, next, outputType);
   };
 
-  const removeInput = (idx: number) => {
-    const next = customInputs.filter((_, i) => i !== idx);
-    updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
-  };
-
-  const updateInputName = (idx: number, name: string) => {
-    const next = customInputs.map((inp, i) => i === idx ? { ...inp, name } : inp);
-    updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
-  };
-
-  const updateInputType = (idx: number, type: DataType) => {
-    const next = customInputs.map((inp, i) =>
-      i === idx ? { ...inp, type, slider: type !== 'float' ? null : inp.slider } : inp
-    );
-    updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
-  };
-
-  const toggleCarry = (idx: number) => {
-    const next = customInputs.map((c, i) => i === idx ? { ...c, carry: !c.carry } : c);
-    updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
-  };
+  const addInput = () => setInputs([...customInputs, { name: `in${customInputs.length}`, type: 'float', slider: null }]);
+  const removeInput = (idx: number) => setInputs(customInputs.filter((_, i) => i !== idx));
+  const updateInputName = (idx: number, name: string) => setInputs(customInputs.map((inp, i) => i === idx ? { ...inp, name } : inp));
+  const updateInputType = (idx: number, type: DataType) =>
+    setInputs(customInputs.map((inp, i) => i === idx ? { ...inp, type, slider: type !== 'float' ? null : inp.slider } : inp));
+  const toggleCarry = (idx: number) => setInputs(customInputs.map((c, i) => i === idx ? { ...c, carry: !c.carry } : c));
 
   const toggleSlider = (idx: number) => {
     const inp = customInputs[idx];
     const newSlider = inp.slider ? null : { min: 0, max: 1 };
     const extraParams: Record<string, unknown> = {};
-    if (newSlider && typeof node.params[inp.name] !== 'number') {
-      extraParams[inp.name] = 0.5;
-    }
-    const next = customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c);
-    updateNodeParams(node.id, { inputs: next, ...extraParams });
-    updateNodeSockets(node.id, next, outputType);
+    if (newSlider && typeof node.params[inp.name] !== 'number') extraParams[inp.name] = 0.5;
+    setInputs(customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c), extraParams);
   };
 
   const updateSliderRange = (idx: number, field: 'min' | 'max', val: number) => {
-    const inp = customInputs[idx];
-    const oldSlider = inp.slider ?? { min: 0, max: 1 };
-    const newSlider = { ...oldSlider, [field]: val };
-    const next = customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c);
-    updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
+    const oldSlider = customInputs[idx].slider ?? { min: 0, max: 1 };
+    setInputs(customInputs.map((c, i) => i === idx ? { ...c, slider: { ...oldSlider, [field]: val } } : c));
   };
 
   const changeOutputType = (type: DataType) => {
@@ -236,39 +167,19 @@ export function ExprBlockModal({ node, onClose }: Props) {
 
   // ── Lines management ───────────────────────────────────────────────────────
 
-  const addLine = () => {
-    const next: WarpLine[] = [...lines, { lhs: 'p', op: '=', rhs: '' }];
-    updateNodeParams(node.id, { lines: next });
-  };
-
-  const removeLine = (idx: number) => {
-    updateNodeParams(node.id, { lines: lines.filter((_, i) => i !== idx) });
-  };
-
-  const moveLine = (idx: number, to: number) => {
-    updateNodeParams(node.id, { lines: moveItem(lines, idx, to) });
-  };
-
-  const updateLine = (idx: number, field: keyof WarpLine, value: string) => {
-    const next = lines.map((l, i) => i === idx ? { ...l, [field]: value } : l);
-    updateNodeParams(node.id, { lines: next });
-  };
-
-  const updateResult = (val: string) => {
-    updateNodeParams(node.id, { result: val });
-  };
+  const addLine = () => updateNodeParams(node.id, { lines: [...lines, { lhs: 'p', op: '=', rhs: '' }] });
+  const removeLine = (idx: number) => updateNodeParams(node.id, { lines: lines.filter((_, i) => i !== idx) });
+  const moveLine = (idx: number, to: number) => updateNodeParams(node.id, { lines: moveItem(lines, idx, to) });
+  const updateLine = (idx: number, field: keyof WarpLine, value: string) =>
+    updateNodeParams(node.id, { lines: lines.map((l, i) => i === idx ? { ...l, [field]: value } : l) });
+  const updateResult = (val: string) => updateNodeParams(node.id, { result: val });
 
   const handleSavePreset = (name: string) => {
-    saveExprPreset({
-      label:      name.trim() || (typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expr Block'),
-      inputs:     customInputs,
-      outputType,
-      lines,
-      result,
-    });
+    const presetLabel = name.trim() || label;
+    saveExprPreset({ label: presetLabel, inputs: customInputs, outputType, lines, result });
     setShowSaveInput(false);
     setSavePresetName('');
-    flash();
+    toast.success(`Saved “${presetLabel}” to Expr Blocks`);
   };
 
   // ── Migrate from old fixed inputs ─────────────────────────────────────────
@@ -281,7 +192,6 @@ export function ExprBlockModal({ node, onClose }: Props) {
     }));
     updateNodeParams(node.id, { inputs: migrated });
     updateNodeSockets(node.id, migrated, outputType);
-    flash();
   };
 
   // Auto-import existing sockets into params.inputs when the modal first opens
@@ -293,49 +203,20 @@ export function ExprBlockModal({ node, onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── GLSL function insert at focused expression input ───────────────────────
+  // ── Reference insert at the focused expression field ──────────────────────
 
-  const insertAtFocused = (text: string) => {
-    const el     = lastFocusedRef.current;
-    const setter = lastFocusedSetter.current;
-    if (!el || !setter) return;
-
-    const current  = lastFocusedValue.current;
-    const start    = el.selectionStart ?? current.length;
-    const end      = el.selectionEnd   ?? current.length;
-    const hasParen = text.includes('(');
-    let next: string;
-    let cursor: number;
-
-    if (autoWrap && hasParen) {
-      const parenIdx = text.indexOf('(');
-      const wrapped  = text.slice(0, parenIdx + 1) + current + text.slice(parenIdx + 1);
-      next   = wrapped;
-      cursor = wrapped.length;
-    } else if (hasParen) {
-      const parenIdx = text.indexOf('(');
-      const selected = current.slice(start, end);
-      if (selected) {
-        const wrapped = text.slice(0, parenIdx + 1) + selected + text.slice(parenIdx + 1);
-        next   = current.slice(0, start) + wrapped + current.slice(end);
-        cursor = start + wrapped.length;
-      } else {
-        next       = current.slice(0, start) + text + current.slice(end);
-        const emptyParen = text.indexOf('()');
-        cursor     = start + (emptyParen >= 0 ? emptyParen + 1 : text.length);
-      }
-    } else {
-      next   = current.slice(0, start) + text + current.slice(end);
-      cursor = start + text.length;
-    }
-
-    setter(next);
-    lastFocusedValue.current = next;
-    if (lastFocusedSnapFn.current) pushHistory(lastFocusedSnapFn.current(next));
-
+  const insertFromReference = (text: string) => {
+    const t = target.current;
+    if (!t) return;
+    const start = t.el.selectionStart ?? t.value.length;
+    const end = t.el.selectionEnd ?? t.value.length;
+    const { next, caret } = insertSnippet(t.value, start, end, text, autoWrap);
+    t.set(next);
+    t.value = next;
+    pushHistory(t.snap(next));
     requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(cursor, cursor);
+      t.el.focus();
+      t.el.setSelectionRange(caret, caret);
     });
   };
 
@@ -355,481 +236,220 @@ export function ExprBlockModal({ node, onClose }: Props) {
     else if (mod && e.key === 'y') { e.preventDefault(); redo(); }
   };
 
-  /** Register a text input so it becomes the insertion target for GLSL buttons. */
-  const makeExprInputProps = (
-    currentValue: string,
-    setter: (v: string) => void,
-    snapFn: (newVal: string) => Snapshot,
-  ) => ({
-    onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
-      lastFocusedRef.current    = e.currentTarget;
-      lastFocusedSetter.current = setter;
-      lastFocusedValue.current  = currentValue;
-      lastFocusedSnapFn.current = snapFn;
-    },
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-      lastFocusedValue.current = e.target.value;
-      setter(e.target.value);
-    },
-    onBlur:    handleAnyBlur,
+  /** Props for an expression field: autocomplete, history, and registering as the insert target. */
+  const exprProps = (value: string, set: (v: string) => void, snap: (v: string) => Snapshot) => ({
+    value,
+    completions,
+    onChange: (v: string) => { set(v); if (target.current) target.current.value = v; },
+    onFocus: (el: HTMLInputElement) => { target.current = { el, value, set, snap }; },
+    onBlur: handleAnyBlur,
     onKeyDown: handleAnyKeyDown,
   });
 
-  return createPortal(
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.65)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+  // Open in Function Builder. fnBuilderFns (the bodies authored there) win; lines convert as a fallback.
+  const hasFnBuilderFns = Array.isArray(node.params.fnBuilderFns) && (node.params.fnBuilderFns as FnDef[]).length > 0;
+  const safeOutputType = (outputType === 'float' || outputType === 'vec2' || outputType === 'vec3') ? outputType : 'float';
+  const linesFns = !hasFnBuilderFns ? linesToFnDefs(lines, safeOutputType) : [];
+  const canOpenInBuilder = hasFnBuilderFns || linesFns.length > 0;
+
+  const showCarry = (inp: InputDef) => insideLoop || !!inp.carry;
+
+  return (
+    <Modal
+      title="Expr Block"
+      subtitle={`${label} · ${customInputs.length} ${customInputs.length === 1 ? 'input' : 'inputs'} → ${outputType}`}
+      icon="expr"
+      iconColor={tk.kind.expr}
+      width={1200}
+      height={700}
+      onClose={onClose}
+      headerActions={
+        <>
+          {canOpenInBuilder && (
+            <Button size="sm" variant="ghost" icon="fn" style={{ marginRight: 4 }}
+              title={hasFnBuilderFns ? 'Re-open in the Function Builder' : 'Open these lines as functions in the Function Builder'}
+              onClick={() => {
+                useFunctionBuilder.getState().openNodeInBuilder(node.id, (hasFnBuilderFns ? node.params.fnBuilderFns : linesFns) as FnDef[]);
+                onClose();
+              }}>
+              Edit in Builder
+            </Button>
+          )}
+          <IconButton icon="undo" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
+          <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
+        </>
+      }
+      footer={
+        showSaveInput ? (
+          <>
+            <Field
+              autoFocus
+              aria-label="Preset name"
+              placeholder={label}
+              value={savePresetName}
+              onChange={e => setSavePresetName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSavePreset(savePresetName);
+                if (e.key === 'Escape') { e.stopPropagation(); setShowSaveInput(false); setSavePresetName(''); }
+              }}
+              style={{ width: 240 }}
+            />
+            <Button onClick={() => handleSavePreset(savePresetName)}>Save preset</Button>
+            <Button variant="ghost" onClick={() => { setShowSaveInput(false); setSavePresetName(''); }}>Cancel</Button>
+            <span style={{ flex: 1 }} />
+            <Button variant="primary" onClick={onClose}>Done</Button>
+          </>
+        ) : (
+          <>
+            <Button icon="export" onClick={() => { setSavePresetName(''); setShowSaveInput(true); }}>Save as preset</Button>
+            <Note>Adds it to Expr Blocks in the sidebar</Note>
+            <span style={{ flex: 1 }} />
+            <Note>Changes apply live</Note>
+            <Button variant="primary" onClick={onClose}>Done</Button>
+          </>
+        )
+      }
     >
-      {/* Panel */}
-      <div
-        style={{
-          background: ctp.base,
-          border: `1px solid ${ctp.surface1}`,
-          borderRadius: '10px',
-          width: 'min(820px, calc(100vw - 32px))',
-          maxHeight: '88vh',
-          overflowY: 'auto',
-          padding: '16px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.65)',
-          color: ctp.text,
-          fontSize: '12px',
-        }}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.green }}>⟴ Expr Block</span>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {savedFlash && (
-              <span style={{ fontSize: '11px', color: ctp.green, fontFamily: 'monospace' }}>✓ saved</span>
-            )}
-            {/* Open in Function Builder.
-                Priority: fnBuilderFns (actual function bodies) > lines conversion (fallback).
-                fnBuilderFns are always present when saved via "Save to ExprBlock" from the
-                Function Builder. Lines-as-functions is only used for manually-written ExprBlocks
-                that have never been through the builder (no fnBuilderFns stored). */}
-            {(() => {
-              const hasFnBuilderFns =
-                Array.isArray(node.params.fnBuilderFns) &&
-                (node.params.fnBuilderFns as FnDef[]).length > 0;
-              const safeOutputType = (outputType === 'float' || outputType === 'vec2' || outputType === 'vec3')
-                ? outputType : 'float';
-              const linesFns = !hasFnBuilderFns ? linesToFnDefs(lines, safeOutputType) : [];
-              const hasConvertibleLines = linesFns.length > 0;
-              if (!hasFnBuilderFns && !hasConvertibleLines) return null;
-              return (
-                <button
-                  onClick={() => {
-                    if (hasFnBuilderFns) {
-                      // Restore the actual function bodies that were authored in the builder
-                      useFunctionBuilder.getState().openNodeInBuilder(node.id, node.params.fnBuilderFns as FnDef[]);
-                    } else {
-                      // No builder history — convert warp lines to f1/f2/f3… functions
-                      useFunctionBuilder.getState().openNodeInBuilder(node.id, linesFns as FnDef[]);
-                    }
-                    onClose();
-                  }}
-                  title={hasFnBuilderFns
-                    ? 'Re-open in the Function Builder'
-                    : 'Open warp lines as functions in the Function Builder'}
-                  style={{ ...BTN, color: ctp.blue, borderColor: `${ctp.blue}55`, background: `${ctp.blue}11` }}
-                >
-                  ƒ( ) Edit in Builder
-                </button>
-              );
-            })()}
-            {showSaveInput ? (
-              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder={typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expr Block'}
-                  value={savePresetName}
-                  onChange={e => setSavePresetName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleSavePreset(savePresetName);
-                    if (e.key === 'Escape') { setShowSaveInput(false); setSavePresetName(''); }
-                  }}
-                  style={{ flex: 1, minWidth: 0, padding: '3px 6px', fontSize: '11px', background: ctp.base, color: ctp.text, border: `1px solid ${ctp.green}`, borderRadius: '4px', outline: 'none' }}
+      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+        {/* ── Inputs ── */}
+        <div style={{ width: 340, flexShrink: 0, overflowY: 'auto', padding: '18px 20px', borderRight: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <SectionLabel>Inputs</SectionLabel>
+          <Note>Each input is a local variable in the lines. Float inputs can show a slider on the node.</Note>
+          {customInputs.map((inp, idx) => (
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 104px 32px', gap: 8, alignItems: 'center' }}>
+                <Field
+                  mono
+                  leading={<span style={{ width: 9, height: 9, borderRadius: '50%', background: TYPE_COLORS[inp.type] ?? tk.text.faint, flexShrink: 0 }} />}
+                  value={inp.name}
+                  onChange={e => updateInputName(idx, e.target.value)}
+                  placeholder="name"
+                  spellCheck={false}
+                  aria-label={`Input ${idx + 1} name`}
                 />
-                <button
-                  onClick={() => handleSavePreset(savePresetName)}
-                  style={{ ...BTN, color: ctp.green, borderColor: `${ctp.green}55`, background: `${ctp.green}11`, padding: '3px 8px' }}
-                >↑</button>
-                <button
-                  onClick={() => { setShowSaveInput(false); setSavePresetName(''); }}
-                  style={{ ...BTN, color: ctp.overlay0, borderColor: `${ctp.overlay0}55`, padding: '3px 6px' }}
-                >✕</button>
+                <TypeSelect value={inp.type} options={TYPE_OPTIONS} onChange={t => updateInputType(idx, t as DataType)} ariaLabel={`Input ${idx + 1} type`} />
+                <IconButton icon="close" label="Remove input" tone="danger" onClick={() => removeInput(idx)} />
               </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setSavePresetName('');
-                  setShowSaveInput(true);
-                }}
-                title="Save as a reusable preset in the palette"
-                style={{ ...BTN, color: ctp.green, borderColor: `${ctp.green}55`, background: `${ctp.green}11` }}
-              >
-                ↑ Save Preset
-              </button>
-            )}
-            <button onClick={onClose} style={{ ...BTN, color: ctp.red, borderColor: `${ctp.red}55` }}>✕ Close</button>
-          </div>
-        </div>
-
-        {/* Two-column layout */}
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-
-          {/* ── Left: Inputs ─────────────────────────────────────────────── */}
-          <div style={{ width: '230px', flexShrink: 0 }}>
-            <p style={SECTION_LABEL}>Inputs</p>
-            <p style={{ fontSize: '10px', color: ctp.surface1, marginBottom: '8px', lineHeight: 1.4 }}>
-              Each input becomes a local variable in the warp. Float inputs can have sliders.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {customInputs.map((inp, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: ctp.mantle,
-                    border: `1px solid ${ctp.surface0}`,
-                    borderRadius: '6px',
-                    padding: '6px 8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  {/* Name + Type + Delete row */}
-                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      value={inp.name}
-                      onChange={e => updateInputName(idx, e.target.value)}
-                      placeholder="name"
-                      style={{ ...INPUT_STYLE, flex: 1, minWidth: 0 }}
-                    />
-                    <select
-                      value={inp.type}
-                      onChange={e => updateInputType(idx, e.target.value as DataType)}
-                      style={{ ...INPUT_STYLE, color: ctp.blue, cursor: 'pointer', padding: '3px 4px' }}
-                    >
-                      {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <button
-                      onClick={() => removeInput(idx)}
-                      style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1 }}
-                      title="Remove input"
-                    >×</button>
-                  </div>
-
-                  {/* Slider toggle (float only) */}
-                  {inp.type === 'float' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: inp.slider ? ctp.green : ctp.surface2 }}>
-                        <input
-                          type="checkbox"
-                          checked={!!inp.slider}
-                          onChange={() => toggleSlider(idx)}
-                          style={{ accentColor: ctp.green, cursor: 'pointer' }}
-                        />
-                        slider
-                      </label>
-                      {inp.slider && (
-                        <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: ctp.overlay0 }}>
-                            <span>min</span>
-                            <NumberInput
-                              value={inp.slider.min}
-                              step={0.1}
-                              onCommit={n => updateSliderRange(idx, 'min', n)}
-                              style={{ ...INPUT_STYLE, width: '44px', padding: '1px 4px', fontSize: '10px' }}
-                            />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: ctp.overlay0 }}>
-                            <span>max</span>
-                            <NumberInput
-                              value={inp.slider.max}
-                              step={0.1}
-                              onCommit={n => updateSliderRange(idx, 'max', n)}
-                              style={{ ...INPUT_STYLE, width: '44px', padding: '1px 4px', fontSize: '10px' }}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
+              {(inp.type === 'float' || showCarry(inp)) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingLeft: 2 }}>
+                  {inp.type === 'float' && <Toggle checked={!!inp.slider} onChange={() => toggleSlider(idx)} label="Slider" />}
+                  {inp.slider && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tk.text.muted }}>
+                      range
+                      <NumberInput value={inp.slider.min} step={0.1} onCommit={n => updateSliderRange(idx, 'min', n)} style={smallField(tk)} />
+                      <NumberInput value={inp.slider.max} step={0.1} onCommit={n => updateSliderRange(idx, 'max', n)} style={smallField(tk)} />
+                    </span>
                   )}
-
-                  {/* Carry toggle — available for all types */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: inp.carry ? ctp.mauve : ctp.surface2 }}>
-                      <input
-                        type="checkbox"
-                        checked={!!inp.carry}
-                        onChange={() => toggleCarry(idx)}
-                        style={{ accentColor: ctp.mauve, cursor: 'pointer' }}
-                      />
-                      carry
-                    </label>
-                    {inp.carry && (
-                      <span style={{ fontSize: '9px', color: ctp.overlay0, fontStyle: 'italic' }}>
-                        + {inp.name}_init slot
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              <button
-                onClick={addInput}
-                style={{ ...BTN, alignSelf: 'flex-start', background: `${ctp.green}11`, borderColor: `${ctp.green}33`, color: ctp.green, marginTop: '2px' }}
-              >
-                + Add Input
-              </button>
-            </div>
-
-            {/* Output Type */}
-            <p style={SECTION_LABEL}>Output Type</p>
-            <select
-              value={outputType}
-              onChange={e => changeOutputType(e.target.value as DataType)}
-              style={{ ...INPUT_STYLE, color: ctp.blue, cursor: 'pointer', width: '100%' }}
-            >
-              {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-
-          {/* ── Right: Warp Lines ─────────────────────────────────────────── */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={SECTION_LABEL}>Warp Lines</p>
-            <p style={{ fontSize: '10px', color: ctp.surface1, marginBottom: '8px', lineHeight: 1.4 }}>
-              Each line is a GLSL assignment statement. Input variable names from the left panel are available.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              {lines.map((line, i) => (
-                <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                  {/* Reorder */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
-                    <button
-                      onClick={() => moveLine(i, i - 1)}
-                      disabled={i === 0}
-                      style={{ background: 'none', border: 'none', color: i === 0 ? ctp.surface0 : ctp.overlay0, cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
-                      title="Move up"
-                    >▲</button>
-                    <button
-                      onClick={() => moveLine(i, i + 1)}
-                      disabled={i === lines.length - 1}
-                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? ctp.surface0 : ctp.overlay0, cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
-                      title="Move down"
-                    >▼</button>
-                  </div>
-                  {/* LHS */}
-                  <input
-                    type="text"
-                    value={line.lhs}
-                    placeholder="p.xy"
-                    spellCheck={false}
-                    style={{ ...INPUT_STYLE, width: '80px' }}
-                    {...makeExprInputProps(line.lhs, v => updateLine(i, 'lhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l), result }))}
-                  />
-                  {/* Operator */}
-                  <select
-                    value={line.op}
-                    onChange={e => updateLine(i, 'op', e.target.value)}
-                    style={{ ...INPUT_STYLE, color: ctp.blue, cursor: 'pointer', padding: '3px 4px' }}
-                  >
-                    {OPS.map(op => <option key={op} value={op}>{op}</option>)}
-                  </select>
-                  {/* RHS */}
-                  <input
-                    type="text"
-                    value={line.rhs}
-                    placeholder="expression…"
-                    spellCheck={false}
-                    style={{ ...INPUT_STYLE, flex: 1, color: ctp.green }}
-                    {...makeExprInputProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
-                  />
-                  {/* Remove */}
-                  <button
-                    onClick={() => removeLine(i)}
-                    style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', padding: '0 3px', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}
-                    title="Remove line"
-                  >×</button>
-                </div>
-              ))}
-
-              {lines.length === 0 && (
-                <div style={{ fontSize: '11px', color: ctp.surface1, fontFamily: 'monospace', padding: '4px 0' }}>
-                  No lines yet — click "+ Add Line" to start
+                  {showCarry(inp) && (
+                    <span title="Carry the value from one loop iteration to the next" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Toggle checked={!!inp.carry} onChange={() => toggleCarry(idx)} label="Carry" />
+                      {inp.carry && (
+                        <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.field, borderRadius: 6, padding: '2px 7px' }}>
+                          + {inp.name}_init socket
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </div>
               )}
-
-              <button
-                onClick={addLine}
-                style={{ ...BTN, alignSelf: 'flex-start', marginTop: '2px', background: `${ctp.green}11`, borderColor: `${ctp.green}33`, color: ctp.green }}
-              >
-                + Add Line
-              </button>
             </div>
+          ))}
+          <AddRow onClick={addInput}>Add input</AddRow>
+        </div>
 
-            {/* Return expression */}
-            <p style={SECTION_LABEL}>Return Expression</p>
-            <p style={{ fontSize: '10px', color: ctp.surface1, marginBottom: '6px', lineHeight: 1.4 }}>
-              The final expression of type <code style={{ color: ctp.blue }}>{outputType}</code> that this block outputs.
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '11px', color: ctp.overlay0, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>return</span>
-              <input
-                type="text"
-                value={result}
+        {/* ── Lines + return ── */}
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SectionLabel meta="run top to bottom">Lines</SectionLabel>
+            {lines.map((line, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '22px 110px 64px minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
+                <span style={{ textAlign: 'right', font: `500 11px ${fontFamily.mono}`, color: tk.text.disabled }}>{i + 1}</span>
+                <CodeInput
+                  ariaLabel={`Line ${i + 1} target`}
+                  placeholder="p.xy"
+                  {...exprProps(line.lhs, v => updateLine(i, 'lhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l), result }))}
+                />
+                <Select
+                  ariaLabel={`Line ${i + 1} operator`}
+                  mono
+                  height={34}
+                  value={line.op}
+                  options={OPS.map(op => ({ value: op, label: op }))}
+                  onChange={v => updateLine(i, 'op', v)}
+                />
+                <CodeInput
+                  ariaLabel={`Line ${i + 1} expression`}
+                  placeholder="expression…"
+                  {...exprProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
+                />
+                <span style={{ display: 'flex' }}>
+                  <IconButton icon="chevU" label="Move up" size="sm" tooltip={false} disabled={i === 0} onClick={() => moveLine(i, i - 1)} />
+                  <IconButton icon="chevD" label="Move down" size="sm" tooltip={false} disabled={i === lines.length - 1} onClick={() => moveLine(i, i + 1)} />
+                  <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
+                </span>
+              </div>
+            ))}
+            {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
+            <AddRow onClick={addLine}>Add line</AddRow>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SectionLabel>Return</SectionLabel>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <TypeSelect value={outputType} options={TYPE_OPTIONS} onChange={t => changeOutputType(t as DataType)} ariaLabel="Return type" />
+              <CodeInput
+                ariaLabel="Return expression"
                 placeholder="p"
-                spellCheck={false}
-                style={{ ...INPUT_STYLE, flex: 1, color: ctp.blue, fontSize: '12px' }}
-                {...makeExprInputProps(result, updateResult, v => ({ lines, result: v }))}
+                style={{ flex: 1 }}
+                {...exprProps(result, updateResult, v => ({ lines, result: v }))}
               />
             </div>
-
-            {/* Available variables — collapses when chips wrap to a second line */}
-            {customInputs.length > 0 && (
-              <div style={{ marginTop: '12px', padding: '8px', background: ctp.mantle, borderRadius: '6px', border: `1px solid ${ctp.surface0}` }}>
-                <p style={{ ...SECTION_LABEL, margin: '0 0 4px' }}>Available Variables</p>
-                <div
-                  ref={varsChipsRef}
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '4px',
-                    overflow: 'hidden',
-                    // Single-line clip: ~22px covers one row of chips; expand shows all
-                    maxHeight: varsExpanded ? 'none' : '22px',
-                  }}
-                >
-                  {customInputs.map(inp => (
-                    <code
-                      key={inp.name}
-                      onClick={() => insertAtFocused(inp.name)}
-                      title={`Insert "${inp.name}" into focused expression`}
-                      style={{
-                        fontSize: '10px',
-                        color: inp.type === 'vec3' ? ctp.green : inp.type === 'float' ? ctp.blue : ctp.yellow,
-                        background: ctp.crust,
-                        padding: '1px 5px',
-                        borderRadius: '3px',
-                        cursor: 'pointer',
-                        userSelect: 'none',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {inp.type} {inp.name}
-                    </code>
-                  ))}
-                </div>
-                {/* Expand / collapse toggle */}
-                {hiddenVarsCount > 0 && !varsExpanded && (
-                  <button
-                    onClick={() => setVarsExpanded(true)}
-                    style={{
-                      ...BTN,
-                      marginTop: '4px',
-                      padding: '1px 7px',
-                      fontSize: '10px',
-                      background: 'none',
-                      border: 'none',
-                      color: ctp.surface2,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    + show {hiddenVarsCount} more
-                  </button>
-                )}
-                {varsExpanded && customInputs.length > 1 && (
-                  <button
-                    onClick={() => setVarsExpanded(false)}
-                    style={{
-                      ...BTN,
-                      marginTop: '4px',
-                      padding: '1px 7px',
-                      fontSize: '10px',
-                      background: 'none',
-                      border: 'none',
-                      color: ctp.surface2,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    − show less
-                  </button>
-                )}
-                <p style={{ fontSize: '9px', color: ctp.surface1, marginTop: '4px', marginBottom: 0 }}>
-                  Click any chip to insert into the focused expression field
-                </p>
-              </div>
-            )}
-
-            {/* ── GLSL Function Reference ──────────────────────────────────── */}
-            <div style={{ marginTop: '14px', padding: '10px', background: ctp.mantle, borderRadius: '6px', border: `1px solid ${ctp.surface0}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
-                <p style={{ ...SECTION_LABEL, margin: 0, flex: 1 }}>GLSL Reference</p>
-                <button onClick={undo} disabled={!canUndo} title="Undo (Cmd/Ctrl+Z)"
-                  style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canUndo ? 1 : 0.35, cursor: canUndo ? 'pointer' : 'default' }}>↩</button>
-                <button onClick={redo} disabled={!canRedo} title="Redo (Cmd/Ctrl+Shift+Z)"
-                  style={{ ...BTN, padding: '2px 7px', fontSize: '12px', opacity: canRedo ? 1 : 0.35, cursor: canRedo ? 'pointer' : 'default' }}>↪</button>
-                <button
-                  onClick={() => setAutoWrap(v => !v)}
-                  title={autoWrap ? 'Auto-wrap ON — clicks wrap entire field value as first arg' : 'Auto-wrap OFF — clicks wrap selected text only'}
-                  style={{ ...BTN, padding: '2px 8px', fontSize: '10px', background: autoWrap ? ctp.surface1 : ctp.surface0, color: autoWrap ? ctp.mauve : ctp.surface2, border: `1px solid ${autoWrap ? ctp.mauve : ctp.surface1}`, transition: 'all 0.15s' }}
-                >⊂ auto-wrap {autoWrap ? 'ON' : 'OFF'}</button>
-              </div>
-              <p style={{ fontSize: '9px', color: ctp.surface1, marginBottom: '8px' }}>
-                Click to insert into the focused expression or return field
-              </p>
-              {GLSL_GROUPS.map(group => (
-                <div key={group} style={{ marginBottom: '6px' }}>
-                  <div style={{ fontSize: '9px', color: ctp.surface1, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
-                    {group}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                    {GLSL_PALETTE.filter(e => e.group === group).map(entry => (
-                      <button
-                        key={entry.label}
-                        onClick={() => insertAtFocused(entry.insert)}
-                        title={`Insert: ${entry.insert}`}
-                        style={{
-                          ...BTN,
-                          padding: '2px 6px',
-                          fontSize: '10px',
-                          background: ctp.crust,
-                          borderColor: ctp.surface0,
-                          color: ctp.overlay0,
-                        }}
-                        onMouseEnter={e => {
-                          (e.currentTarget as HTMLButtonElement).style.color = ctp.text;
-                          (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
-                        }}
-                        onMouseLeave={e => {
-                          (e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0;
-                          (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface0;
-                        }}
-                      >
-                        {entry.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Note>The final expression of type {outputType} that the block outputs.</Note>
           </div>
         </div>
+
+        <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} />
       </div>
-    </div>,
-    document.body
+    </Modal>
+  );
+}
+
+const smallField = (tk: ReturnType<typeof useTokens>): React.CSSProperties => ({
+  width: 52, height: 26, boxSizing: 'border-box', padding: '0 6px', border: 0, outline: 'none', borderRadius: radius.md,
+  background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, textAlign: 'center',
+});
+
+function SectionLabel({ children, meta }: { children: React.ReactNode; meta?: string }) {
+  const tk = useTokens();
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>
+      <span style={{ flex: 1 }}>{children}</span>
+      {meta && <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 12 }}>{meta}</span>}
+    </span>
+  );
+}
+
+function Note({ children }: { children: React.ReactNode }) {
+  const tk = useTokens();
+  return <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{children}</span>;
+}
+
+function AddRow({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
+        border: `1.5px dashed ${hover ? tk.text.faint : tk.border.strong}`, borderRadius: radius.control,
+        background: hover ? tk.bg.hover : 'none', color: tk.text.muted, font: `500 12.5px ${fontFamily.ui}`,
+      }}
+    >
+      <Icon name="plus" size={15} />{children}
+    </button>
   );
 }

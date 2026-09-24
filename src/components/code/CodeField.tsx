@@ -175,7 +175,7 @@ export function CodeField({
  * autocomplete as CodeField. Styled like the app's Field.
  */
 export function CodeInput({
-  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus,
+  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -186,6 +186,9 @@ export function CodeInput({
   style?: CSSProperties;
   inputRef?: (el: HTMLInputElement | null) => void;
   onFocus?: (el: HTMLInputElement) => void;
+  onBlur?: () => void;
+  /** Called for keys the suggestion popup doesn't consume. */
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -232,12 +235,12 @@ export function CodeInput({
         autoCapitalize="off"
         autoCorrect="off"
         onChange={e => { onChange(e.target.value); placePopup(e.target, ac.update(e.target)); }}
-        onKeyDown={e => { ac.handleKey(e); }}
+        onKeyDown={e => { if (!ac.handleKey(e)) onKeyDown?.(e); }}
         onScroll={e => setScrollX(e.currentTarget.scrollLeft)}
         onKeyUp={e => setScrollX(e.currentTarget.scrollLeft)}
         onSelect={e => setScrollX(e.currentTarget.scrollLeft)}
         onFocus={e => { setFocused(true); onFocus?.(e.currentTarget); }}
-        onBlur={() => { setFocused(false); ac.close(); }}
+        onBlur={() => { setFocused(false); ac.close(); onBlur?.(); }}
         onClick={ac.close}
         style={{ ...text, position: 'relative', flex: 1, minWidth: 0, padding: 0, border: 0, outline: 'none', background: 'transparent', color: 'transparent', caretColor: tk.accent.base }}
       />

@@ -3842,7 +3842,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
 
       {/* ── ExprBlock modal ── */}
       {showExprBlockModal && node.type === 'exprNode' && (
-        <ExprBlockModal node={node} onClose={() => setShowExprBlockModal(false)} />
+        <ExprBlockModal node={node} insideLoop={isInsideLoop} onClose={() => setShowExprBlockModal(false)} />
       )}
 
       {/* ── Bezier editor modal ── */}
