@@ -41,6 +41,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
         paramBindings: {},
         textureUniforms: {},
         audioUniforms: {},
+        liveUniforms: {},
         videoUniforms: {},
         isStateful: false,
       };
@@ -50,7 +51,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
     const sortedNodes = topologicalSort(nodes);
 
     // 3. Assemble fragment shader
-    const { fragmentShader, nodeOutputVars, paramUniforms, paramBindings, textureUniforms, audioUniforms, videoUniforms, isStateful, echo, nodeSlugMap, mlgDynamicOutputs } =
+    const { fragmentShader, nodeOutputVars, paramUniforms, paramBindings, textureUniforms, audioUniforms, liveUniforms, videoUniforms, isStateful, echo, nodeSlugMap, mlgDynamicOutputs } =
       generateFragmentShader(sortedNodes, nodes);
 
     // 4. Compile GPU particle chains (pInit → … → pRender)
@@ -71,6 +72,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       paramBindings,
       textureUniforms,
       audioUniforms,
+      liveUniforms,
       videoUniforms,
       isStateful,
       echo,
@@ -89,6 +91,7 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       paramBindings: {},
       textureUniforms: {},
       audioUniforms: {},
+      liveUniforms: {},
       videoUniforms: {},
       isStateful: false,
     };
