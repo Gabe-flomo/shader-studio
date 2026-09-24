@@ -402,6 +402,25 @@ function App() {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
       if (ids.length >= 2) { groupNodes(ids); deselectAll(); }
     },
+    duplicateSelected: () => {
+      const st = useNodeGraphStore.getState();
+      const ids = st.selectedNodeIds.length > 0 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : [];
+      if (ids.length > 0) st.duplicateNodes(ids);
+    },
+    deleteSelected: () => {
+      const st = useNodeGraphStore.getState();
+      const ids = st.selectedNodeIds.length > 0 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : [];
+      if (ids.length === 0) return;
+      st.removeNodes(ids);
+      st.deselectAll();
+      st.setSelectedNodeId(null);
+    },
+    exitGroup: () => {
+      const st = useNodeGraphStore.getState();
+      // Esc belongs to whatever dialog, menu or popover is open first
+      if (st.activeGroupPath.length === 0 || document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return;
+      st.exitGroup();
+    },
     addUV:          () => addRandomNode('uv'),
     addTime:        () => addRandomNode('time'),
     addFloat:       () => addRandomNode('float'),

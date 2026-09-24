@@ -56,6 +56,7 @@ export function Popover({
   return createPortal(
     <div
       ref={ref}
+      data-popover=""
       style={{
         position: 'fixed', left: -9999, top: -9999, zIndex: 9000, width, padding,
         background: tk.bg.panel, color: tk.text.primary, borderRadius: radius.lg, boxShadow: tk.shadow.popover,

@@ -5,13 +5,23 @@ export class UndoManager {
   private readonly maxDepth = 50;
   private history: GraphNode[][] = [];
   private redoStack: GraphNode[][] = [];
+  private suspended = 0;
 
   /** Push a deep-clone of the current node list onto the undo stack — called
    *  before every mutating action, so it also invalidates the redo stack:
    *  a fresh edit abandons whatever branch redo would have replayed. */
   push(nodes: GraphNode[]): void {
+    if (this.suspended > 0) return;
     this.pushOnto(this.history, nodes);
     this.redoStack.length = 0;
+  }
+
+  /** Run several mutating actions as a single undo step: one snapshot of `nodes`, then the
+   *  pushes the actions make themselves are ignored. */
+  batch(nodes: GraphNode[], run: () => void): void {
+    this.push(nodes);
+    this.suspended++;
+    try { run(); } finally { this.suspended--; }
   }
 
   pop(): GraphNode[] | undefined {

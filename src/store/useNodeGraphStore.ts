@@ -459,6 +459,8 @@ interface NodeGraphState {
     edges: Array<{ from: number; fromKey: string; to: number; toKey: string }>,
   ) => void;
   removeNode: (nodeId: string) => void;
+  /** Remove several nodes as one undo step. */
+  removeNodes: (nodeIds: string[]) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
   updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
@@ -2926,6 +2928,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     set(state => ({ nodes: [...state.nodes, ...newNodes] }));
     get().compile();
+  },
+
+  removeNodes: (nodeIds) => {
+    undoManager.batch(get().nodes, () => { for (const id of nodeIds) get().removeNode(id); });
   },
 
   removeNode: (nodeId) => {

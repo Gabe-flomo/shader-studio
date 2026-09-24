@@ -15,6 +15,7 @@ import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
+import { SelectionBar } from '../shell/SelectionBar';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -953,6 +954,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           compact={compactToolbar}
         />
       )}
+      {redesignToolbar && <SelectionBar top={previewNodeId ? 108 : 66} />}
 
       {/* Toolbar — top-right, always in screen space */}
       {!redesignToolbar && <div
@@ -1030,7 +1032,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {/* Breadcrumb when inside a group */}
       {activeGroupPath.length > 0 && (
         <div style={{
-          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+          position: 'absolute', top: redesignToolbar ? 64 : 12, left: 12, zIndex: 20,
           height: 34, display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', borderRadius: 10,
           background: tk.bg.panel, boxShadow: tk.shadow.float, color: tk.accent.text, fontSize: 12.5,
           userSelect: 'none', whiteSpace: 'nowrap',
@@ -1066,6 +1068,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               </React.Fragment>
             );
           })}
+          <span style={{ marginLeft: 6, font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}>esc to exit</span>
         </div>
       )}
 
