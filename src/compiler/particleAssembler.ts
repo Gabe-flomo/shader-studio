@@ -1,5 +1,6 @@
 import type { GraphNode } from '../types/nodeGraph';
 import type { ParticleSystemData } from './types';
+import { paramBindingKey } from './uniformPatcher';
 
 export const PARTICLE_PIPELINE_TYPES = new Set([
   'pInit', 'pRotate', 'pWave', 'pColorDist', 'pSize', 'pRender',
@@ -57,35 +58,43 @@ export function compileParticleChains(allNodes: GraphNode[]): { systems: Particl
     const sizeNode  = chain.find(n => n.type === 'pSize');
 
     // ── Collect all float params as uniforms ─────────────────────────────────
+    // Particle uniforms are named from the raw node id (no slug), so the
+    // binding map records the exact name for the store's slider fast path.
     const paramUniforms: Record<string, number> = {};
+    const paramBindings: Record<string, string> = {};
+    const setUniform = (n: GraphNode, param: string, fallback: number) => {
+      const name = uname(n.id, param);
+      paramUniforms[name] = num(n.params[param], fallback);
+      paramBindings[paramBindingKey(n.id, param)] = name;
+    };
 
-    paramUniforms[uname(initNode.id, 'radius')] = num(initNode.params.radius, 1.0);
+    setUniform(initNode, 'radius', 1.0);
 
     if (rotNode) {
-      paramUniforms[uname(rotNode.id, 'rotSpeed')]    = num(rotNode.params.rotSpeed,    0.3);
-      paramUniforms[uname(rotNode.id, 'rotVariance')] = num(rotNode.params.rotVariance, 2.0);
-      paramUniforms[uname(rotNode.id, 'twirl')]       = num(rotNode.params.twirl,       0.0);
+      setUniform(rotNode, 'rotSpeed', 0.3);
+      setUniform(rotNode, 'rotVariance', 2.0);
+      setUniform(rotNode, 'twirl', 0.0);
     }
     if (waveNode) {
-      paramUniforms[uname(waveNode.id, 'waveAmp')]   = num(waveNode.params.waveAmp,   0.08);
-      paramUniforms[uname(waveNode.id, 'waveFreq')]  = num(waveNode.params.waveFreq,  3.0);
-      paramUniforms[uname(waveNode.id, 'waveSpeed')] = num(waveNode.params.waveSpeed, 2.0);
+      setUniform(waveNode, 'waveAmp', 0.08);
+      setUniform(waveNode, 'waveFreq', 3.0);
+      setUniform(waveNode, 'waveSpeed', 2.0);
     }
     if (colorNode) {
-      paramUniforms[uname(colorNode.id, 'colorCenterR')] = num(colorNode.params.colorCenterR, 0.97);
-      paramUniforms[uname(colorNode.id, 'colorCenterG')] = num(colorNode.params.colorCenterG, 0.70);
-      paramUniforms[uname(colorNode.id, 'colorCenterB')] = num(colorNode.params.colorCenterB, 0.45);
-      paramUniforms[uname(colorNode.id, 'colorEdgeR')]   = num(colorNode.params.colorEdgeR,   0.34);
-      paramUniforms[uname(colorNode.id, 'colorEdgeG')]   = num(colorNode.params.colorEdgeG,   0.53);
-      paramUniforms[uname(colorNode.id, 'colorEdgeB')]   = num(colorNode.params.colorEdgeB,   0.96);
-      paramUniforms[uname(colorNode.id, 'mixPow')]       = num(colorNode.params.mixPow,       0.5);
+      setUniform(colorNode, 'colorCenterR', 0.97);
+      setUniform(colorNode, 'colorCenterG', 0.70);
+      setUniform(colorNode, 'colorCenterB', 0.45);
+      setUniform(colorNode, 'colorEdgeR', 0.34);
+      setUniform(colorNode, 'colorEdgeG', 0.53);
+      setUniform(colorNode, 'colorEdgeB', 0.96);
+      setUniform(colorNode, 'mixPow', 0.5);
     }
     if (sizeNode) {
-      paramUniforms[uname(sizeNode.id, 'sizeBase')]   = num(sizeNode.params.sizeBase,   10.0);
-      paramUniforms[uname(sizeNode.id, 'sizeByDist')] = num(sizeNode.params.sizeByDist, 10.0);
+      setUniform(sizeNode, 'sizeBase', 10.0);
+      setUniform(sizeNode, 'sizeByDist', 10.0);
     }
-    paramUniforms[uname(node.id, 'opacity')]  = num(node.params.opacity,  1.0);
-    paramUniforms[uname(node.id, 'softness')] = num(node.params.softness, 3.0);
+    setUniform(node, 'opacity', 1.0);
+    setUniform(node, 'softness', 3.0);
 
     // ── Build vertex shader ───────────────────────────────────────────────────
     const v: string[] = [
@@ -240,6 +249,7 @@ export function compileParticleChains(allNodes: GraphNode[]): { systems: Particl
       count: num(initNode.params.count, 3000),
       shape: num(initNode.params.shape, 0),
       paramUniforms,
+      paramBindings,
     });
   }
 

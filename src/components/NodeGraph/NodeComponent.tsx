@@ -22,18 +22,30 @@ import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { ExprModal } from './ExprModal';
-import { CustomFnModal } from './CustomFnModal';
-import { ExprBlockModal } from './ExprBlockModal';
-import { BezierEditorModal } from './BezierEditorModal';
-import { TransformVecModal } from './TransformVecModal';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+// Editors that only open on demand load in their own chunks (type-only imports
+// carry the props; they're erased at build time).
+import type { ExprModal as ExprModalT } from './ExprModal';
+import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
+import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
+import type { BezierEditorModal as BezierEditorModalT } from './BezierEditorModal';
+import type { TransformVecModal as TransformVecModalT } from './TransformVecModal';
+import type { AssignInitModal as AssignInitModalT } from './AssignInitModal';
+import type { KeyframeEditorModal as KeyframeEditorModalT } from './KeyframeEditorModal';
+const ExprModal           = lazyWithSuspense<PropsOf<typeof ExprModalT>>(() => import('./ExprModal').then(m => ({ default: m.ExprModal })));
+const CustomFnModal       = lazyWithSuspense<PropsOf<typeof CustomFnModalT>>(() => import('./CustomFnModal').then(m => ({ default: m.CustomFnModal })));
+const ExprBlockModal      = lazyWithSuspense<PropsOf<typeof ExprBlockModalT>>(() => import('./ExprBlockModal').then(m => ({ default: m.ExprBlockModal })));
+const BezierEditorModal   = lazyWithSuspense<PropsOf<typeof BezierEditorModalT>>(() => import('./BezierEditorModal').then(m => ({ default: m.BezierEditorModal })));
+const TransformVecModal   = lazyWithSuspense<PropsOf<typeof TransformVecModalT>>(() => import('./TransformVecModal').then(m => ({ default: m.TransformVecModal })));
+const AssignInitModal     = lazyWithSuspense<PropsOf<typeof AssignInitModalT>>(() => import('./AssignInitModal').then(m => ({ default: m.AssignInitModal })));
+const KeyframeEditorModal = lazyWithSuspense<PropsOf<typeof KeyframeEditorModalT>>(() => import('./KeyframeEditorModal').then(m => ({ default: m.KeyframeEditorModal })));
 import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
 import { GroupParamPicker } from './GroupParamPicker';
-import { AssignInitModal } from './AssignInitModal';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
-import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
-import { registerSocket } from './socketRegistry';
+import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
+import { registerSocket, getView } from './socketRegistry';
+import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
 import { moveItem } from '../../lib/reorder';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
@@ -43,7 +55,6 @@ import type { FileResult } from '../../utils/fileIO';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { AssetContextMenu } from './AssetContextMenu';
-import { KeyframeEditorModal } from './KeyframeEditorModal';
 import { socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -82,7 +93,8 @@ interface Props {
   /** Whether the current device has touch input */
   isTouchDevice?: boolean;
   draggingType?: DataType | null;
-  zoom?: number;
+  /** The group currently drilled into (resolved once in NodeGraph), or null at the top level. */
+  activeGroupNode?: GraphNode | null;
   /** When a highlight filter is active, non-matching nodes are dimmed */
   dimmed?: boolean;
   /** Called when user double-clicks a group node header to drill into it */
@@ -346,21 +358,22 @@ function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string)
   return varName; // fallback: just show the variable name
 }
 
-export function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, zoom = 1, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover }: Props) {
+const EMPTY_NODES: GraphNode[] = [];
+/** Live zoom for drag math — published by NodeGraph, read at each move. */
+const getZoom = () => getView().zoom;
+
+// Memoised: NodeGraph re-renders on every pan commit, selection change and
+// store write, and a plain function component would re-render every card each
+// time. All props are stable references or primitives.
+export const NodeComponent = React.memo(function NodeComponent({ node, onStartConnection, onEndConnection, onTapOutputSocket, onTapInputSocket, pendingMobileConnection, pendingMobileType, isTouchDevice = false, draggingType, activeGroupNode = null, dimmed = false, onEnterGroup, hasError = false, externalInputKeys, externalParamKeys, onAltClickSocket, isConnectionDragging = false, onSocketHover }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const inputStyle_ = inputStyleFor(tc);
-  const nodes           = useNodeGraphStore(s => s.nodes);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
   const activeGroupId   = useNodeGraphStore(s => s.activeGroupId);
   // Check if the active group has iterations > 1 (assignOp / carryMode only meaningful in loops)
-  const activeGroupIterations = useNodeGraphStore(s => {
-    if (!s.activeGroupId) return 1;
-    const g = s.nodes.find(n => n.id === s.activeGroupId);
-    const iters = g?.params?.iterations;
-    return typeof iters === 'number' ? iters : 1;
-  });
+  const activeGroupIterations = typeof activeGroupNode?.params?.iterations === 'number' ? activeGroupNode.params.iterations : 1;
   const isInsideLoop = activeGroupId != null && activeGroupIterations > 1;
   const isPreviewActive = previewNodeId === node.id;
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
@@ -388,12 +401,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const removeMarchLoopInput   = useNodeGraphStore(s => s.removeMarchLoopInput);
   const renameMarchLoopInput   = useNodeGraphStore(s => s.renameMarchLoopInput);
   const toggleMarchLoopOutputPort = useNodeGraphStore(s => s.toggleMarchLoopOutputPort);
-  // NOTE: do NOT inline `?? []` inside the selector — that creates a new array
-  // reference on every call, making Object.is always fail and causing infinite re-renders.
-  const _mlGroupHiddenOutputsRaw = useNodeGraphStore(s =>
-    s.nodes.find(n => n.id === s.activeGroupId)?.params?.hiddenOutputs as string[] | undefined
-  );
-  const mlGroupHiddenOutputs = _mlGroupHiddenOutputsRaw ?? [];
+  const mlGroupHiddenOutputs = (activeGroupNode?.params?.hiddenOutputs as string[] | undefined) ?? [];
   const renameGroupPort        = useNodeGraphStore(s => s.renameGroupPort);
   const removeGroupInputPort   = useNodeGraphStore(s => s.removeGroupInputPort);
   const saveGroupPreset        = useNodeGraphStore(s => s.saveGroupPreset);
@@ -470,7 +478,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const isBypassed = !!node.bypassed;
   const assignOp = node.assignOp ?? '=';
   const isCarry = !!node.carryMode;
-  const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -488,6 +495,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
+  // The full node list is only read by the socket / node tooltips ("connected
+  // to", "sources in graph"). Subscribing to it unconditionally re-rendered
+  // every card on every graph change, so it's selected only while one of
+  // those tooltips is open; otherwise a stable empty array.
+  const nodes = useNodeGraphStore(s => (showNodeTooltip || hoveredInput !== null) ? s.nodes : EMPTY_NODES);
   const [showCommentEditor, setShowCommentEditor] = useState(false);
   const [zIndex, setZIndex] = useState(1);
   // Info tooltip: close on any click outside the tooltip itself or the info
@@ -598,8 +610,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     // Deletable if: in the main graph (no active group), OR inside a group with 2+ loop index nodes
     const loopIndexSiblingCount = (() => {
       if (!activeGroupId) return 0; // main graph — count doesn't matter, always deletable
-      const group = nodes.find(n => n.id === activeGroupId);
-      const sg = group?.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
+      const sg = activeGroupNode?.params.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
       return sg ? sg.nodes.filter(n => n.type === 'loopIndex').length : 0;
     })();
     const canDeleteLoopIndex = !activeGroupId || loopIndexSiblingCount > 1;
@@ -613,12 +624,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           e.stopPropagation();
           setSelectedNodeId(node.id);
           selectNode(node.id, e.shiftKey || e.metaKey);
-          const startX = e.clientX - node.position.x;
-          const startY = e.clientY - node.position.y;
-          const onMove = (me: MouseEvent) => updateNodePosition(node.id, { x: me.clientX - startX, y: me.clientY - startY });
-          const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-          window.addEventListener('mousemove', onMove);
-          window.addEventListener('mouseup', onUp);
+          startNodeMouseDrag({
+            nodeId: node.id,
+            cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+            startClient: { x: e.clientX, y: e.clientY },
+            startPosition: node.position,
+            getZoom,
+            threshold: 0,
+            commit: pos => updateNodePosition(node.id, pos),
+          });
         }}
       >
         {/* Header */}
@@ -684,19 +698,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           onMouseDown={(e) => {
             if (e.button === 2) return;
             e.stopPropagation();
-            dragOffset.current = { x: e.clientX / zoom - node.position.x, y: e.clientY / zoom - node.position.y };
-            const onMove = (ev: MouseEvent) => {
-              if (!dragOffset.current) return;
-              updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
-            };
-            const onUp = () => {
-              dragOffset.current = null;
-              window.removeEventListener('mousemove', onMove);
-              window.removeEventListener('mouseup', onUp);
-              setSelectedNodeId(isSelected ? null : node.id);
-            };
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onUp);
+            startNodeMouseDrag({
+              nodeId: node.id,
+              cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+              startClient: { x: e.clientX, y: e.clientY },
+              startPosition: node.position,
+              getZoom,
+              threshold: 0,
+              commit: pos => updateNodePosition(node.id, pos),
+              onSettle: () => setSelectedNodeId(isSelected ? null : node.id),
+            });
           }}
           style={specialHeadStyle}
         >
@@ -886,19 +897,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             onMouseDown={(e) => {
               if (e.button === 2) return;
               e.stopPropagation();
-              dragOffset.current = { x: e.clientX / zoom - node.position.x, y: e.clientY / zoom - node.position.y };
-              const onMove = (ev: MouseEvent) => {
-                if (!dragOffset.current) return;
-                updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
-              };
-              const onUp = () => {
-                dragOffset.current = null;
-                window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', onUp);
-                setSelectedNodeId(isSelected ? null : node.id);
-              };
-              window.addEventListener('mousemove', onMove);
-              window.addEventListener('mouseup', onUp);
+              startNodeMouseDrag({
+                nodeId: node.id,
+                cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+                startClient: { x: e.clientX, y: e.clientY },
+                startPosition: node.position,
+                getZoom,
+                threshold: 0,
+                commit: pos => updateNodePosition(node.id, pos),
+                onSettle: () => setSelectedNodeId(isSelected ? null : node.id),
+              });
             }}
             style={specialHeadStyle}
           >
@@ -1121,19 +1129,16 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             onMouseDown={(e) => {
               if (e.button === 2) return;
               e.stopPropagation();
-              dragOffset.current = { x: e.clientX / zoom - node.position.x, y: e.clientY / zoom - node.position.y };
-              const onMove = (ev: MouseEvent) => {
-                if (!dragOffset.current) return;
-                updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
-              };
-              const onUp = () => {
-                dragOffset.current = null;
-                window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', onUp);
-                setSelectedNodeId(isSelected ? null : node.id);
-              };
-              window.addEventListener('mousemove', onMove);
-              window.addEventListener('mouseup', onUp);
+              startNodeMouseDrag({
+                nodeId: node.id,
+                cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+                startClient: { x: e.clientX, y: e.clientY },
+                startPosition: node.position,
+                getZoom,
+                threshold: 0,
+                commit: pos => updateNodePosition(node.id, pos),
+                onSettle: () => setSelectedNodeId(isSelected ? null : node.id),
+              });
             }}
             style={specialHeadStyle}
           >
@@ -1257,72 +1262,43 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const handleHeaderTouchStart = (e: React.TouchEvent) => {
     e.stopPropagation();
     const touch = e.touches[0];
-    dragOffset.current = {
-      x: touch.clientX / zoom - node.position.x,
-      y: touch.clientY / zoom - node.position.y,
-    };
-    let hasDragged = false;
-    const startX = touch.clientX;
-    const startY = touch.clientY;
+    startNodeTouchDrag({
+      nodeId: node.id,
+      cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+      startClient: { x: touch.clientX, y: touch.clientY },
+      startPosition: node.position,
+      getZoom,
+      threshold: 5,
+      commit: pos => updateNodePosition(node.id, pos),
+      onSettle: dragged => {
+        if (!dragged) {
+          setSelectedNodeId(isSelected ? null : node.id);
+          selectNode(node.id, false);
+        }
+      },
+    });
+  };
 
-    const handleTouchMove = (ev: TouchEvent) => {
-      const t = ev.touches[0];
-      if (!t || !dragOffset.current) return;
-      if (!hasDragged && (Math.abs(t.clientX - startX) > 5 || Math.abs(t.clientY - startY) > 5)) {
-        hasDragged = true;
-      }
-      if (hasDragged) {
-        ev.preventDefault();
-        updateNodePosition(node.id, {
-          x: t.clientX / zoom - dragOffset.current.x,
-          y: t.clientY / zoom - dragOffset.current.y,
-        });
-      }
-    };
-
-    const handleTouchEnd = () => {
-      dragOffset.current = null;
-      if (!hasDragged) {
-        setSelectedNodeId(isSelected ? null : node.id);
-        selectNode(node.id, false);
-      }
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', handleTouchEnd);
+  // Click (no movement) toggles selection; Cmd/Ctrl-click toggles multi-select.
+  const settleSelection = (e: React.MouseEvent) => (dragged: boolean) => {
+    if (dragged) return;
+    if (e.metaKey || e.ctrlKey) selectNode(node.id, true);
+    else { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }
   };
 
   const handleScopeHeaderMouseDown = (e: React.MouseEvent) => {
     if (e.button === 2) return;
     e.stopPropagation();
     e.preventDefault();
-    dragOffset.current = {
-      x: e.clientX / zoom - node.position.x,
-      y: e.clientY / zoom - node.position.y,
-    };
-    let hasDragged = false;
-    const startX = e.clientX;
-    const startY = e.clientY;
-    document.body.style.userSelect = 'none';
-    const handleMove = (ev: MouseEvent) => {
-      if (!dragOffset.current) return;
-      if (!hasDragged && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) hasDragged = true;
-      updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
-    };
-    const handleUp = () => {
-      dragOffset.current = null;
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-      if (!hasDragged) {
-        if (e.metaKey || e.ctrlKey) selectNode(node.id, true);
-        else { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }
-      }
-    };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    startNodeMouseDrag({
+      nodeId: node.id,
+      cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+      startClient: { x: e.clientX, y: e.clientY },
+      startPosition: node.position,
+      getZoom,
+      commit: pos => updateNodePosition(node.id, pos),
+      onSettle: settleSelection(e),
+    });
   };
 
   // ── Scope node special card ──────────────────────────────────────────────────
@@ -1458,23 +1434,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
     if (e.button === 2) return;
     e.stopPropagation();
     e.preventDefault();
-    dragOffset.current = {
-      x: e.clientX / zoom - node.position.x,
-      y: e.clientY / zoom - node.position.y,
-    };
-    document.body.style.userSelect = 'none';
-    const handleMove = (ev: MouseEvent) => {
-      if (!dragOffset.current) return;
-      updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
-    };
-    const handleUp = () => {
-      dragOffset.current = null;
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    startNodeMouseDrag({
+      nodeId: node.id,
+      cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+      startClient: { x: e.clientX, y: e.clientY },
+      startPosition: node.position,
+      getZoom,
+      threshold: 0,
+      commit: pos => updateNodePosition(node.id, pos),
+    });
   };
 
   if (node.type === 'marchLoopInputs') {
@@ -1781,31 +1749,15 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       if (e.button === 2) return;
       e.stopPropagation();
       e.preventDefault();
-      dragOffset.current = {
-        x: e.clientX / zoom - node.position.x,
-        y: e.clientY / zoom - node.position.y,
-      };
-      let hasDragged = false;
-      const startX = e.clientX;
-      const startY = e.clientY;
-      document.body.style.userSelect = 'none';
-      const handleMove = (ev: MouseEvent) => {
-        if (!dragOffset.current) return;
-        if (!hasDragged && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) hasDragged = true;
-        updateNodePosition(node.id, { x: ev.clientX / zoom - dragOffset.current.x, y: ev.clientY / zoom - dragOffset.current.y });
-      };
-      const handleUp = () => {
-        dragOffset.current = null;
-        document.body.style.userSelect = '';
-        window.removeEventListener('mousemove', handleMove);
-        window.removeEventListener('mouseup', handleUp);
-        if (!hasDragged) {
-          if (e.metaKey || e.ctrlKey) selectNode(node.id, true);
-          else { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }
-        }
-      };
-      window.addEventListener('mousemove', handleMove);
-      window.addEventListener('mouseup', handleUp);
+      startNodeMouseDrag({
+        nodeId: node.id,
+        cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+        startClient: { x: e.clientX, y: e.clientY },
+        startPosition: node.position,
+        getZoom,
+        commit: pos => updateNodePosition(node.id, pos),
+        onSettle: settleSelection(e),
+      });
     };
 
     const groupIcon = isSceneGroup ? 'presets' : isSpaceWarpGroup ? 'loop' : isMarchLoopGroup ? 'wave' : 'nodes';
@@ -2518,58 +2470,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       return;
     }
 
-    // Store offset in world-space units (divide by zoom to compensate for canvas scale)
-    dragOffset.current = {
-      x: e.clientX / zoom - node.position.x,
-      y: e.clientY / zoom - node.position.y,
-    };
-
-    let hasDragged = false;
-    const startX = e.clientX;
-    const startY = e.clientY;
-
-    // Disable all text selection globally for the duration of this drag
-    document.body.style.userSelect = 'none';
-    (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = 'none';
-
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (dragOffset.current) {
-        if (!hasDragged && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) {
-          hasDragged = true;
-        }
-        updateNodePosition(node.id, {
-          x: ev.clientX / zoom - dragOffset.current.x,
-          y: ev.clientY / zoom - dragOffset.current.y,
-        });
-      }
-    };
-
-    const suppressSelect = (ev: Event) => ev.preventDefault();
-
-    const handleMouseUp = () => {
-      dragOffset.current = null;
-      // Restore selection
-      document.body.style.userSelect = '';
-      (document.body.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = '';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('selectstart', suppressSelect);
-      // If mouse didn't move, treat as a click — update selection
-      if (!hasDragged) {
-        if (e.metaKey || e.ctrlKey) {
-          // Cmd/Ctrl+click: toggle this node in the multi-selection
-          selectNode(node.id, true);
-        } else {
-          // Plain click: single-select for probe panel
-          setSelectedNodeId(isSelected ? null : node.id);
-          selectNode(node.id, false);
-        }
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('selectstart', suppressSelect);
+    // The card moves imperatively during the drag and the store is written
+    // once on release (one undo step); a release without movement is a click
+    // and updates the selection instead.
+    startNodeMouseDrag({
+      nodeId: node.id,
+      cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+      startClient: { x: e.clientX, y: e.clientY },
+      startPosition: node.position,
+      getZoom,
+      commit: pos => updateNodePosition(node.id, pos),
+      onSettle: settleSelection(e),
+    });
   };
   const setFloat = (key: string, raw: string) => {
     const v = parseFloat(raw);
@@ -3386,7 +3298,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               onMouseDown={e => e.stopPropagation()}
             >
               <span style={{ fontSize: '10px', color: tc.surface1, marginRight: '2px' }}>type</span>
-              {(['float', 'vec2', 'vec3'] as DataType[]).map(t => {
+              {(VEC4_CAPABLE_NODES.has(node.type) ? ['float', 'vec2', 'vec3', 'vec4'] as DataType[] : ['float', 'vec2', 'vec3'] as DataType[]).map(t => {
                 const active = current === t;
                 return (
                   <button
@@ -3399,7 +3311,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       color: active ? tc.blue : tc.surface2,
                     }}
                   >
-                    {t === 'float' ? 'f' : t === 'vec2' ? 'v2' : 'v3'}
+                    {t === 'float' ? 'f' : t === 'vec2' ? 'v2' : t === 'vec3' ? 'v3' : 'v4'}
                   </button>
                 );
               })}
@@ -3992,4 +3904,4 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       </div>
     </div>
   );
-}
+});

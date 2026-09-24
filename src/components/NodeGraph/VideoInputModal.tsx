@@ -20,7 +20,7 @@ export function VideoInputModal({ node, onClose }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const SECTION_LABEL = SECTION_LABELFor(tc);
-  const { updateNodeParams } = useNodeGraphStore();
+  const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
 
   const fileName  = (node.params._fileName as string) || '';
   const hasFile   = !!(node.params._hasFile);

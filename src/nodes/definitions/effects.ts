@@ -224,7 +224,7 @@ vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
 // ─── Legacy grain variants (hidden from palette, kept for backward compat) ────
 
 export const LumaGrainNode: NodeDefinition = {
-  type: 'lumaGrain', label: 'Luma Grain', category: 'Effects',
+  type: 'lumaGrain', label: 'Luma Grain', category: 'Effects', deprecated: true,
   description: 'Legacy — use Grain node (Luma mode) instead.',
   inputs: { color: { type: 'vec3', label: 'Color' }, uv: { type: 'vec2', label: 'UV' }, seed: { type: 'float', label: 'Seed' } },
   outputs: { color: { type: 'vec3', label: 'Color' } },
@@ -243,7 +243,7 @@ export const LumaGrainNode: NodeDefinition = {
 };
 
 export const TemporalGrainNode: NodeDefinition = {
-  type: 'temporalGrain', label: 'Temporal Grain', category: 'Effects',
+  type: 'temporalGrain', label: 'Temporal Grain', category: 'Effects', deprecated: true,
   description: 'Legacy — use Grain node (Temporal mode) instead.',
   inputs: { color: { type: 'vec3', label: 'Color' }, uv: { type: 'vec2', label: 'UV' }, time: { type: 'float', label: 'Time' } },
   outputs: { color: { type: 'vec3', label: 'Color' } },
@@ -283,7 +283,7 @@ export const LightNode: NodeDefinition = {
       ],
     },
     brightness: { label: 'Brightness', type: 'float', min: 0.1, max: 100, step: 0.1 },
-    ringFreq:   { label: 'Ring Freq',  type: 'float', min: 1.0, max: 30,  step: 0.5 },
+    ringFreq:   { label: 'Ring Freq',  type: 'float', min: 1.0, max: 30,  step: 0.5, showWhen: { param: 'mode', value: 'ring' } },
   },
   glslFunction: `float ringLight(float d, float brightness, float freq) {
   float ring = abs(sin(d * freq));
@@ -488,7 +488,7 @@ export const AccumulateLoopNode: NodeDefinition = {
   defaultParams: {
     iterations: 50, time_scale: 0.2, freq: 60.0, glow: 0.0003,
     color_phase_r: 0.0, color_phase_g: 2.0, color_phase_b: 4.0,
-    pos_scale: 0.05, pos_freq: 0.31, pos_phase: 5.0, arc_freq: 1.0,
+    pos_scale: 0.05, pos_freq: 0.31, pos_phase: 5.0,
     position_mode: 'sinusoidal', distance_mode: 'circle',
     atten_mode: 'inverse', color_mode: 'cos_vec3', tonemap_mode: 'tanh_sq',
   },
@@ -500,10 +500,9 @@ export const AccumulateLoopNode: NodeDefinition = {
     color_phase_r: { label: 'Phase R',      type: 'float',  min: 0.0,     max: 6.28, step: 0.01   },
     color_phase_g: { label: 'Phase G',      type: 'float',  min: 0.0,     max: 6.28, step: 0.01   },
     color_phase_b: { label: 'Phase B',      type: 'float',  min: 0.0,     max: 6.28, step: 0.01   },
-    pos_scale:     { label: 'Pos Scale',    type: 'float',  min: 0.001,   max: 0.5,  step: 0.001  },
-    pos_freq:      { label: 'Pos Freq',     type: 'float',  min: 0.01,    max: 2.0,  step: 0.01   },
-    pos_phase:     { label: 'Pos Phase',    type: 'float',  min: 0.0,     max: 10.0, step: 0.01   },
-    arc_freq:      { label: 'Arc Freq',     type: 'float',  min: 0.1,     max: 10.0, step: 0.1    },
+    pos_scale:     { label: 'Pos Scale',    type: 'float',  min: 0.001,   max: 0.5,  step: 0.001, showWhen: { param: 'position_mode', value: 'radial' }  },
+    pos_freq:      { label: 'Pos Freq',     type: 'float',  min: 0.01,    max: 2.0,  step: 0.01, showWhen: { param: 'position_mode', value: 'radial' }   },
+    pos_phase:     { label: 'Pos Phase',    type: 'float',  min: 0.0,     max: 10.0, step: 0.01, showWhen: { param: 'position_mode', value: 'radial' }   },
     position_mode: { label: 'Position',  type: 'select', options: [
       { value: 'sinusoidal', label: 'Sinusoidal (orbs)' },
       { value: 'radial',     label: 'Radial (stars)'    },
@@ -895,8 +894,8 @@ export const GravitationalLensNode: NodeDefinition = {
       { value: 'yes', label: 'Yes (circular lens)' },
       { value: 'no',  label: 'No (square space)'   },
     ]},
-    ripple_freq:  { label: 'Ripple Freq',  type: 'float', min: 1.0,  max: 100.0, step: 0.5 },
-    ripple_speed: { label: 'Ripple Speed', type: 'float', min: 0.0,  max: 10.0,  step: 0.1 },
+    ripple_freq:  { label: 'Ripple Freq',  type: 'float', min: 1.0,  max: 100.0, step: 0.5, showWhen: { param: 'lens_type', value: 'ripple' } },
+    ripple_speed: { label: 'Ripple Speed', type: 'float', min: 0.0,  max: 10.0,  step: 0.1, showWhen: { param: 'lens_type', value: 'ripple' } },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -918,17 +917,16 @@ export const GravitationalLensNode: NodeDefinition = {
     const photonWidth   = p(node.params.photon_width, 0.008);
 
     // Kerr frame-dragging: rotate displacement direction by spin * time
-    const spinVal = typeof node.params.spin === 'number' ? node.params.spin : 0;
-    const kerrLine = Math.abs(spinVal) > 0.001
-      ? `    float ${id}_kerrA = ${spin} * ${timeVar} * 0.5;\n` +
-        `    ${id}_offset = vec2(${id}_offset.x*cos(${id}_kerrA) - ${id}_offset.y*sin(${id}_kerrA),\n` +
-        `                        ${id}_offset.x*sin(${id}_kerrA) + ${id}_offset.y*cos(${id}_kerrA));\n`
-      : '';
+    // Kerr term stays in the GLSL so the spin slider is live (it's a no-op at 0).
+    const kerrLine =
+      `    float ${id}_kerrA = ${spin} * ${timeVar} * 0.5;\n` +
+      `    ${id}_offset = vec2(${id}_offset.x*cos(${id}_kerrA) - ${id}_offset.y*sin(${id}_kerrA),\n` +
+      `                        ${id}_offset.x*sin(${id}_kerrA) + ${id}_offset.y*cos(${id}_kerrA));\n`;
 
     // Per-mode warp expression
     let warpExpr: string;
     if (lensType === 'fisheye') {
-      const scale = f(typeof node.params.strength === 'number' ? node.params.strength * 5.0 : 0.01);
+      const scale = `(${strength} * 5.0)`;
       warpExpr = `${id}_dir * (tanh(${id}_dist * 10.0) / max(${id}_dist, 0.00001) - 1.0) * ${scale}`;
     } else if (lensType === 'ripple') {
       warpExpr = `${id}_dir * sin(${id}_dist * ${rippleFreq} - ${timeVar} * ${rippleSpeed}) * ${strength}`;
@@ -942,8 +940,7 @@ export const GravitationalLensNode: NodeDefinition = {
       : '';
 
     // Photon sphere ≈ 1.5× Schwarzschild radius
-    const horizonVal = typeof node.params.horizon_radius === 'number' ? node.params.horizon_radius : 0.05;
-    const photonR = f(horizonVal * 1.5);
+    const photonR = `(${horizonRadius} * 1.5)`;
 
     const code = [
       `    // Gravitational Lens (${lensType})\n`,
@@ -1011,8 +1008,7 @@ export const FloatWarpNode: NodeDefinition = {
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       expr = expr.replace(new RegExp(`\\b${escaped}\\b`, 'g'), glslVar);
     }
-    const intensityParam = typeof node.params.intensity === 'number' ? node.params.intensity : 1.0;
-    const intensityVar   = inputVars.intensity || f(intensityParam);
+    const intensityVar   = inputVars.intensity || p(node.params.intensity, 1.0);
     // Blend: mix(original_value, expr_result, intensity) — dial intensity for A/B
     return {
       code: [
@@ -1270,7 +1266,7 @@ export const ChromaticAberrationAutoNode: NodeDefinition = {
     contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05  },
     angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1     },
     animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
-    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01  },
+    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01, showWhen: { param: 'animate', value: 'true' } },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
@@ -1920,7 +1916,7 @@ export const ChromaShiftNode: NodeDefinition = {
     contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05 },
     angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1    },
     animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
-    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01 },
+    anim_speed: { label: 'Anim Speed', type: 'float', min: 0,   max: 3,    step: 0.01, showWhen: { param: 'animate', value: 'true' } },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;

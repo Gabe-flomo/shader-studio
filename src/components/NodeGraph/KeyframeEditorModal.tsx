@@ -14,6 +14,7 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Modal } from '../ui/Modal';
 import { RulerSlider } from '../ui/RulerSlider';
+import { subscribeTimeTick } from '../../lib/timeTick';
 
 const MAX_KEYFRAMES = 8;
 const HANDLE_R = 6;
@@ -441,18 +442,11 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     window.dispatchEvent(new CustomEvent('seek-time', { detail: { time: editorT + offset } }));
   }, [setTimePlaying, offset]);
 
-  // Live global time, tracked purely for the playhead — a lightweight DOM
-  // event (see ShaderCanvas's 'time-tick' dispatch) rather than the store,
-  // so this doesn't add a re-render dependency for every other component.
+  // Live global time, tracked purely for the playhead — a lightweight
+  // listener (see ShaderCanvas's emitTimeTick) rather than the store, so this
+  // doesn't add a re-render dependency for every other component.
   const [currentGlobalTime, setCurrentGlobalTime] = useState<number | null>(null);
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const t = (e as CustomEvent<{ time: number }>).detail?.time;
-      if (typeof t === 'number') setCurrentGlobalTime(t);
-    };
-    window.addEventListener('time-tick', handler);
-    return () => window.removeEventListener('time-tick', handler);
-  }, []);
+  useEffect(() => subscribeTimeTick(setCurrentGlobalTime), []);
   const playheadT = currentGlobalTime !== null ? currentGlobalTime - offset : null;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1263,11 +1257,7 @@ function TimeCluster() {
   const timePlaying = useNodeGraphStore(s => s.timePlaying);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
   const [time, setTime] = useState(0);
-  useEffect(() => {
-    const onTick = (e: Event) => setTime((e as CustomEvent<{ time: number }>).detail.time);
-    window.addEventListener('time-tick', onTick);
-    return () => window.removeEventListener('time-tick', onTick);
-  }, []);
+  useEffect(() => subscribeTimeTick(setTime), []);
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 2, background: tk.bg.field, borderRadius: 10, padding: '3px 10px 3px 3px', marginRight: 6 }}>
       <IconButton icon={timePlaying ? 'pause' : 'play'} label={timePlaying ? 'Pause' : 'Play'} size="sm" onClick={() => setTimePlaying(!timePlaying)} />

@@ -817,14 +817,13 @@ export const ElectronOrbitalNode: NodeDefinition = {
     const n          = p(node.params.n, 2.0);
     const l          = p(node.params.l, 1.0);
     const mq         = p(node.params.m_q, 0.0);
-    const a0Raw      = typeof node.params.a0           === 'number' ? node.params.a0         : 0.05;
     // a0 must be strictly positive — a zero or negative Bohr radius makes rho negative
     // which collapses pow(rho, l) to 0 for non-integer l → all black
-    const a0         = f(Math.max(Math.abs(a0Raw), 0.001));
+    const a0         = `max(abs(${p(node.params.a0, 0.05)}), 0.001)`;
     const scale      = p(node.params.scale, 3.0);
     const sliceZ     = p(node.params.slice_z, 0.0);
     const brightness = p(node.params.brightness, 3.0);
-    const gamma      = f(Math.max(typeof node.params.gamma === 'number' ? node.params.gamma : 0.5, 0.05));
+    const gamma      = `max(${p(node.params.gamma, 0.5)}, 0.05)`;
     const aa         = p(node.params.aa, 1.0);
     const edgeSoft   = p(node.params.edge_soft, 0.8);
     const turbulence = p(node.params.turbulence, 0.0);
@@ -946,7 +945,7 @@ export const Chladni3DNode: NodeDefinition = {
     n:             { label: 'n',             type: 'float',  min: -2,  max: 2,   step: 0.01  },
     l:             { label: 'l',             type: 'float',  min: -2,  max: 2,   step: 0.01  },
     scale:         { label: 'Scale',         type: 'float',  min: 0.5,  max: 3.0,  step: 0.05  },
-    steps:         { label: 'March Steps',   type: 'float',  min: 30,   max: 160,  step: 8     },
+    steps:         { label: 'March Steps',   type: 'float',  min: 30,   max: 160,  step: 8,    compileTime: true },
     surface_width: { label: 'Surface Width', type: 'float',  min: 0.01, max: 0.4,  step: 0.005 },
     opacity:       { label: 'Opacity',       type: 'float',  min: 0.0,  max: 1.0,  step: 0.02  },
     orbit_speed:   { label: 'Orbit Speed',   type: 'float',  min: -2.0, max: 2.0,  step: 0.05  },
@@ -1251,7 +1250,7 @@ export const Chladni3DParticlesNode: NodeDefinition = {
     n:            { label: 'n',              type: 'float',  min: -2,    max: 2,    step: 0.01  },
     l:            { label: 'l',              type: 'float',  min: -2,    max: 2,    step: 0.01  },
     scale:        { label: 'Scale',          type: 'float',  min: 0.5,   max: 3.0,  step: 0.05  },
-    steps:        { label: 'March Steps',    type: 'float',  min: 20,    max: 120,  step: 4     },
+    steps:        { label: 'March Steps',    type: 'float',  min: 20,    max: 120,  step: 4,    compileTime: true },
     turbulence:   { label: 'Turbulence',     type: 'float',  min: 0.0,   max: 0.6,  step: 0.005 },
     noise_speed:  { label: 'Noise Speed',    type: 'float',  min: 0.0,   max: 2.0,  step: 0.05  },
     surface_pull: { label: 'Surface Pull',   type: 'float',  min: 0.5,   max: 20.0, step: 0.5   },
