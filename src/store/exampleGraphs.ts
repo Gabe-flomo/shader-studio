@@ -8419,7 +8419,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           b: { type: 'float', label: 'B', connection: { nodeId: 'frs', outputKey: 'reflectW' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { b: 1 },
+        params: { outputType: 'vec3', b: 1 },
       },
       {
         id: 'sum',
@@ -12061,7 +12061,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           t: { type: 'float', label: 'Blend' },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { t: 0.08 },
+        params: { outputType: 'vec3', t: 0.08 },
       },
       {
         id: 'tone',
@@ -14000,7 +14000,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           t: { type: 'float', label: 'Blend', connection: { nodeId: 't', outputKey: 'result' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { t: 0.5 },
+        params: { outputType: 'vec3', t: 0.5 },
       },
       {
         id: 'half',
