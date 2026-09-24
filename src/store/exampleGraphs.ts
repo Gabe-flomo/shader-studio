@@ -10583,8 +10583,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Lava Lamp ──
   gridLavaLamp: {
     label: 'Lava Lamp',
-    description: 'Metaballs from the Field family: two Gaussian Fields (one follows the mouse) are summed and Metaball Threshold turns the sum into a blob mask with a soft edge; Mask picks the two colours.',
-    counter: 9,
+    description: 'Metaballs from the Field family: two Gaussian Fields (one follows the mouse, one sits off-centre) are summed and Metaball Threshold turns the sum into a blob mask with a soft edge; Mask picks the two colours. Grid Size sets how big a blob is.',
+    counter: 10,
     nodes: [
       {
         id: 'uv',
@@ -10607,6 +10607,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         params: {},
       },
       {
+        id: 'c2',
+        type: 'vec2Const',
+        position: { x: 60, y: 520 },
+        inputs: {},
+        outputs: { val: { type: 'vec2', label: 'Vec2' } },
+        params: { x: 0.5, y: 0.25 },
+      },
+      {
         id: 'g1',
         type: 'gaussianField',
         position: { x: 480, y: 160 },
@@ -10615,7 +10623,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           center: { type: 'vec2', label: 'Center', connection: { nodeId: 'm', outputKey: 'uv' } },
         },
         outputs: { field: { type: 'float', label: 'Field' } },
-        params: { k: 6, gridSize: 8 },
+        params: { k: 1.5, gridSize: 1.5 },
       },
       {
         id: 'g2',
@@ -10623,10 +10631,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 480, y: 400 },
         inputs: {
           pos: { type: 'vec2', label: 'Position', connection: { nodeId: 'uv', outputKey: 'uv' } },
-          center: { type: 'vec2', label: 'Center' },
+          center: { type: 'vec2', label: 'Center', connection: { nodeId: 'c2', outputKey: 'val' } },
         },
         outputs: { field: { type: 'float', label: 'Field' } },
-        params: { k: 6, gridSize: 8 },
+        params: { k: 1.5, gridSize: 1.5 },
       },
       {
         id: 'sum',
@@ -10648,7 +10656,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           threshold: { type: 'float', label: 'Threshold' },
         },
         outputs: { blob: { type: 'float', label: 'Blob' }, edge: { type: 'float', label: 'Edge' } },
-        params: { threshold: 0.5, softness: 0.05 },
+        params: { threshold: 0.45, softness: 0.08 },
       },
       {
         id: 'pink',
