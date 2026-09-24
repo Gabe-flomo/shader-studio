@@ -8,6 +8,56 @@
  * classic browser download-link / hidden-file-input approach.
  */
 
+// ─── Result type ──────────────────────────────────────────────────────────────
+
+/**
+ * Outcome of a user-facing file / storage operation. Failures carry a message
+ * a UI can show verbatim; `cancelled` marks the user backing out of a dialog,
+ * which a UI should treat as a no-op rather than an error.
+ */
+export type FileResult =
+  | { ok: true }
+  | { ok: false; error: string; cancelled?: boolean };
+
+export const CANCELLED: FileResult = { ok: false, error: 'Cancelled', cancelled: true };
+
+/** Human-readable message for an unknown thrown value. */
+export function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message || e.name;
+  if (typeof e === 'string') return e;
+  try { return JSON.stringify(e); } catch { return String(e); }
+}
+
+/**
+ * Is this a localStorage quota error? Browsers disagree on the name/code, so
+ * check all the common spellings.
+ */
+export function isQuotaError(e: unknown): boolean {
+  if (!(e instanceof DOMException)) return false;
+  return e.name === 'QuotaExceededError' ||
+    e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    e.code === 22 || e.code === 1014;
+}
+
+/**
+ * localStorage.setItem that reports failure instead of throwing. Quota
+ * exhaustion (or storage being disabled in a private window) is the usual
+ * cause; the message says so because "QuotaExceededError" alone means little
+ * to a user.
+ */
+export function safeSetItem(key: string, value: string, what = 'data'): FileResult {
+  try {
+    localStorage.setItem(key, value);
+    return { ok: true };
+  } catch (e) {
+    const error = isQuotaError(e)
+      ? `Could not save ${what}: browser storage is full. Delete some saved graphs or presets and try again.`
+      : `Could not save ${what} to browser storage: ${errorMessage(e)}`;
+    console.error('[fileIO] localStorage.setItem failed', key, e);
+    return { ok: false, error };
+  }
+}
+
 // Detect Tauri: the __TAURI_INTERNALS__ global is injected by the Tauri runtime.
 const isTauri = (): boolean =>
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -18,23 +68,31 @@ const isTauri = (): boolean =>
  * Save `content` to a file chosen by the user.
  * - Tauri: native OS Save dialog, writes file to chosen path.
  * - Web:   triggers a browser download with the suggested filename.
+ *
+ * Never throws: a rejected dialog or failed write comes back as
+ * `{ ok: false, error }`, and backing out of the dialog as `cancelled`.
  */
 export async function saveTextFile(
   content: string,
   suggestedName = 'shader-graph.json',
-): Promise<void> {
+): Promise<FileResult> {
   if (isTauri()) {
-    // Dynamic import so the web bundle never fails on these imports
-    const { save } = await import('@tauri-apps/plugin-dialog');
-    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+    try {
+      // Dynamic import so the web bundle never fails on these imports
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
 
-    const path = await save({
-      defaultPath: suggestedName,
-      filters: [{ name: 'Shader Graph', extensions: ['json'] }],
-    });
+      const path = await save({
+        defaultPath: suggestedName,
+        filters: [{ name: 'Shader Graph', extensions: ['json'] }],
+      });
 
-    if (path) {
+      if (!path) return CANCELLED;
       await writeTextFile(path, content);
+      return { ok: true };
+    } catch (e) {
+      console.error('[fileIO] saveTextFile failed', e);
+      return { ok: false, error: `Could not save "${suggestedName}": ${errorMessage(e)}` };
     }
   } else {
     // Browser fallback: blob download
@@ -47,6 +105,7 @@ export async function saveTextFile(
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    return { ok: true };
   }
 }
 
@@ -86,7 +145,8 @@ export async function readJsonFilesFromDir(
 
 /**
  * Write text content to an absolute file path.
- * No-op on web.
+ * No-op on web. Rejects (with the plugin-fs error) when the write fails —
+ * callers await it and report.
  */
 export async function writeTextFileAtPath(filePath: string, content: string): Promise<void> {
   if (!isTauri()) return;
@@ -112,24 +172,34 @@ export async function deleteFileAtPath(filePath: string): Promise<void> {
  * Let the user pick a file and return its text content.
  * - Tauri: native OS Open dialog, reads file from chosen path.
  * - Web:   hidden <input type="file"> picker.
- * Returns `null` if the user cancels.
+ * Returns `null` if the user cancels. Rejects with a descriptive Error when
+ * the dialog or the read itself fails — a cancel and a failure are different
+ * outcomes and callers should be able to tell them apart.
  */
 export async function openTextFile(
   accept = '.json',
 ): Promise<string | null> {
   if (isTauri()) {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const { readTextFile } = await import('@tauri-apps/plugin-fs');
-
-    const path = await open({
-      multiple: false,
-      filters: [{ name: 'Shader Graph', extensions: ['json'] }],
-    });
-
-    if (typeof path === 'string') {
-      return await readTextFile(path);
+    let path: string | string[] | null;
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      path = await open({
+        multiple: false,
+        filters: [{ name: 'Shader Graph', extensions: ['json'] }],
+      });
+    } catch (e) {
+      console.error('[fileIO] open dialog failed', e);
+      throw new Error(`Could not open the file dialog: ${errorMessage(e)}`);
     }
-    return null;
+
+    if (typeof path !== 'string') return null;
+    try {
+      const { readTextFile } = await import('@tauri-apps/plugin-fs');
+      return await readTextFile(path);
+    } catch (e) {
+      console.error('[fileIO] readTextFile failed', path, e);
+      throw new Error(`Could not read "${path}": ${errorMessage(e)}`);
+    }
   } else {
     // Browser fallback: hidden file input. input.click() opens the OS
     // picker asynchronously — removing the input right after calling it
@@ -137,7 +207,7 @@ export async function openTextFile(
     // actually picked a file, and mobile Safari then silently drops the
     // 'change' event instead of firing it on a detached element. Keep the
     // input mounted until a handler actually resolves the promise.
-    return new Promise<string | null>((resolve) => {
+    return new Promise<string | null>((resolve, reject) => {
       const input = Object.assign(document.createElement('input'), {
         type: 'file',
         accept,
@@ -149,7 +219,11 @@ export async function openTextFile(
         if (!file) { cleanup(); return resolve(null); }
         const reader = new FileReader();
         reader.onload = () => { cleanup(); resolve(reader.result as string); };
-        reader.onerror = () => { cleanup(); resolve(null); };
+        reader.onerror = () => {
+          cleanup();
+          console.error('[fileIO] FileReader failed', file.name, reader.error);
+          reject(new Error(`Could not read "${file.name}": ${reader.error?.message || 'unknown read error'}`));
+        };
         reader.readAsText(file);
       };
       input.oncancel = () => { cleanup(); resolve(null); };

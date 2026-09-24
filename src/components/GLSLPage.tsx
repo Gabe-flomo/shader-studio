@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { safeSetItem } from '../utils/fileIO';
+import type { FileResult } from '../utils/fileIO';
 import { tokenizeLine, C } from './CodePanel';
 import { NodePalette } from './NodeGraph/NodePalette';
 import { ctp } from '../theme/palette';
@@ -126,8 +128,13 @@ interface SavedShader { id: string; name: string; code: string; }
 function loadShaders(): SavedShader[] {
   try { return JSON.parse(localStorage.getItem(SHADERS_KEY) ?? '[]'); } catch { return []; }
 }
-function persistShaders(list: SavedShader[]) {
-  try { localStorage.setItem(SHADERS_KEY, JSON.stringify(list)); } catch {}
+/**
+ * Write the shader list to localStorage. Returns the outcome instead of
+ * swallowing it: callers only update the in-memory list when the write
+ * actually landed, so a full quota never shows a shader as "saved".
+ */
+function persistShaders(list: SavedShader[]): FileResult {
+  return safeSetItem(SHADERS_KEY, JSON.stringify(list), 'shaders');
 }
 
 // ── Shared font/padding so overlay lines up perfectly ─────────────────────────
@@ -312,8 +319,9 @@ export function GLSLPage() {
     const next: SavedShader[] = existing
       ? shaders.map(s => s.id === existing.id ? { ...s, code } : s)
       : [...shaders, { id: `sh_${Date.now()}`, name, code }];
+    // Only reflect the save in the list once it's actually in storage.
+    if (!persistShaders(next).ok) return;
     setShaders(next);
-    persistShaders(next);
     setShowSaveInput(false);
     setSaveNameVal('');
   };
@@ -330,15 +338,14 @@ export function GLSLPage() {
 
   const deleteShader = (id: string) => {
     const next = shaders.filter(s => s.id !== id);
+    if (!persistShaders(next).ok) return;
     setShaders(next);
-    persistShaders(next);
   };
 
   const commitRename = (id: string) => {
     if (!renameVal.trim()) { setRenamingId(null); return; }
     const next = shaders.map(s => s.id === id ? { ...s, name: renameVal.trim() } : s);
-    setShaders(next);
-    persistShaders(next);
+    if (persistShaders(next).ok) setShaders(next);
     setRenamingId(null);
   };
 
