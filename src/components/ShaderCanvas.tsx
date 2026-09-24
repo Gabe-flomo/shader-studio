@@ -221,6 +221,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   const perspCameraRef    = useRef<THREE.PerspectiveCamera | null>(null);
   const gpuParticlesRef   = useRef<Map<string, THREE.Points>>(new Map());
   const animFrameRef = useRef<number>(0);
+  // The frame loop's requestRender, for effects outside the setup effect
+  const requestRenderRef = useRef<() => void>(() => {});
   const rtRef = useRef<THREE.WebGLRenderTarget | null>(null);
   // Ping-pong render targets for stateful shaders (PrevFrame node)
   const pingPongA   = useRef<THREE.WebGLRenderTarget | null>(null);
@@ -318,6 +320,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       needsRender = true;
       if (!loopRunning) scheduleFrame();
     };
+    requestRenderRef.current = requestRender;
     // Every store write is a user action (Phase 1 removed the idle ones), so
     // any of them may have changed what the canvas should show.
     const unsubRender = useNodeGraphStore.subscribe(() => requestRender());
@@ -1564,6 +1567,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         if (pMat.uniforms[name]) pMat.uniforms[name].value = value;
       }
     }
+    // The store write already asked for a frame, but that frame can run before this effect (a
+    // pointer-driven slider commits at a lower priority than a native range input) and draw the
+    // old value. Ask again now that the new values are on the material.
+    requestRenderRef.current();
   }, [paramUniforms]);
 
   return (
