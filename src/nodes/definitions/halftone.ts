@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, pv3 } from './helpers';
 
 // ── Grid UV ────────────────────────────────────────────────────────────────────
 
@@ -262,10 +262,7 @@ export const CMYKHalftoneNode: NodeDefinition = {
     const angleMVar = p(node.params.angleM, 75.0);
     const angleYVar = p(node.params.angleY,  0.0);
     const angleKVar = p(node.params.angleK, 45.0);
-    const paperArr  = Array.isArray(node.params.paperColor)
-      ? (node.params.paperColor as number[])
-      : [0.97, 0.95, 0.90];
-    const paperVar  = `vec3(${paperArr.map((n: number) => n.toFixed(3)).join(', ')})`;
+    const paperVar  = pv3(node.params.paperColor, [0.97, 0.95, 0.90]);
     return {
       code: [
         `    float ${id}_k  = 1.0 - max(max(${colorVar}.r, ${colorVar}.g), ${colorVar}.b);\n`,

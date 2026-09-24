@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, vec3Str } from './helpers';
+import { f, p, pv3 } from './helpers';
 
 // Shared palette GLSL function — referenced by both PaletteNode and FractalLoopNode
 // so the compiler's Set-based deduplication keeps exactly one copy in the shader.
@@ -59,16 +59,19 @@ export const PaletteNode: NodeDefinition = {
     const valVar  = inputVars.value || p(node.params.value, 0);
     const timeVar = inputVars.anim  || p(node.params.anim, 0);
     const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
-    const oV = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
-    const aV = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
-    const fV = Array.isArray(node.params.freq)      ? node.params.freq      as number[] : [1.0, 1.0, 1.0];
-    const phV = Array.isArray(node.params.phase)    ? node.params.phase     as number[] : [0.0, 0.33, 0.67];
-    const oR = inputVars.offset_r    || f(oV[0]);  const oG = inputVars.offset_g    || f(oV[1]);  const oB = inputVars.offset_b    || f(oV[2]);
-    const aR = inputVars.amplitude_r || f(aV[0]);  const aG = inputVars.amplitude_g || f(aV[1]);  const aB = inputVars.amplitude_b || f(aV[2]);
-    const fR = inputVars.freq_r      || f(fV[0]);  const fG = inputVars.freq_g      || f(fV[1]);  const fB = inputVars.freq_b      || f(fV[2]);
-    const pR = inputVars.phase_r     || f(phV[0]); const pG = inputVars.phase_g     || f(phV[1]); const pB = inputVars.phase_b     || f(phV[2]);
+    // Each vec3 is a live uniform (or literal); a wired per-channel input overrides that component.
+    const oV  = pv3(node.params.offset,    [0.5, 0.5, 0.5]);
+    const aV  = pv3(node.params.amplitude, [0.5, 0.5, 0.5]);
+    const fV  = pv3(node.params.freq,      [1.0, 1.0, 1.0]);
+    const phV = pv3(node.params.phase,     [0.0, 0.33, 0.67]);
+    const chan = (v: string, r?: string, g?: string, b?: string) =>
+      (r || g || b) ? `vec3(${r || `${v}.x`}, ${g || `${v}.y`}, ${b || `${v}.z`})` : v;
+    const oExpr = chan(oV,  inputVars.offset_r,    inputVars.offset_g,    inputVars.offset_b);
+    const aExpr = chan(aV,  inputVars.amplitude_r, inputVars.amplitude_g, inputVars.amplitude_b);
+    const fExpr = chan(fV,  inputVars.freq_r,      inputVars.freq_g,      inputVars.freq_b);
+    const pExpr = chan(phV, inputVars.phase_r,     inputVars.phase_g,     inputVars.phase_b);
     return {
-      code: `    vec3 ${outVar} = palette(${tVar}, vec3(${oR},${oG},${oB}), vec3(${aR},${aG},${aB}), vec3(${fR},${fG},${fB}), vec3(${pR},${pG},${pB}));\n`,
+      code: `    vec3 ${outVar} = palette(${tVar}, ${oExpr}, ${aExpr}, ${fExpr}, ${pExpr});\n`,
       outputVars: { color: outVar },
     };
   },
@@ -152,10 +155,8 @@ export const GradientNode: NodeDefinition = {
     const modeStr  = (node.params.mode as string) ?? 'linear_x';
     const modeMap: Record<string, number> = { linear_x: 0, linear_y: 1, radial: 2, angular: 3, diagonal: 4 };
     const modeInt  = modeMap[modeStr] ?? 0;
-    const aV = Array.isArray(node.params.color_a) ? node.params.color_a as number[] : [1.0, 0.2, 0.2];
-    const bV = Array.isArray(node.params.color_b) ? node.params.color_b as number[] : [0.2, 0.2, 1.0];
-    const colorA = inputVars.color_a ?? vec3Str(aV);
-    const colorB = inputVars.color_b ?? vec3Str(bV);
+    const colorA = inputVars.color_a ?? pv3(node.params.color_a, [1.0, 0.2, 0.2]);
+    const colorB = inputVars.color_b ?? pv3(node.params.color_b, [0.2, 0.2, 1.0]);
     const outVar = `${id}_color`;
     return {
       code: `    vec3 ${outVar} = gradientBlend(${uvVar}, ${colorA}, ${colorB}, ${modeInt}, ${tOffset});\n`,
@@ -397,22 +398,19 @@ export const ColorRampNode: NodeDefinition = {
     stops:  { label: 'Stops',   type: 'select', options: [2,3,4,5,6,7,8].map(n => ({ value: String(n), label: String(n) })) },
     color0: { label: 'Stop 0',  type: 'vec3color' },
     color1: { label: 'Stop 1',  type: 'vec3color' },
-    color2: { label: 'Stop 2',  type: 'vec3color' },
-    color3: { label: 'Stop 3',  type: 'vec3color' },
-    color4: { label: 'Stop 4',  type: 'vec3color' },
-    color5: { label: 'Stop 5',  type: 'vec3color' },
-    color6: { label: 'Stop 6',  type: 'vec3color' },
-    color7: { label: 'Stop 7',  type: 'vec3color' },
+    // Stops beyond the selected count are hidden (and not read by the shader).
+    color2: { label: 'Stop 2',  type: 'vec3color', showWhen: { param: 'stops', value: ['3','4','5','6','7','8'] } },
+    color3: { label: 'Stop 3',  type: 'vec3color', showWhen: { param: 'stops', value: ['4','5','6','7','8'] } },
+    color4: { label: 'Stop 4',  type: 'vec3color', showWhen: { param: 'stops', value: ['5','6','7','8'] } },
+    color5: { label: 'Stop 5',  type: 'vec3color', showWhen: { param: 'stops', value: ['6','7','8'] } },
+    color6: { label: 'Stop 6',  type: 'vec3color', showWhen: { param: 'stops', value: ['7','8'] } },
+    color7: { label: 'Stop 7',  type: 'vec3color', showWhen: { param: 'stops', value: ['8'] } },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
     const t      = inputVars.t || '0.0';
     const stops  = Math.max(2, Math.min(8, Number(node.params.stops) || 3));
-    const colors = Array.from({ length: stops }, (_, i) => {
-      const raw = node.params[`color${i}`];
-      const arr = Array.isArray(raw) ? raw as number[] : [0.0, 0.0, 0.0];
-      return vec3Str(arr);
-    });
+    const colors = Array.from({ length: stops }, (_, i) => pv3(node.params[`color${i}`], [0.0, 0.0, 0.0]));
     // Build chain: for N stops there are N-1 segments evenly in [0,1]
     const lines: string[] = [];
     // Declare all stop colors
@@ -553,12 +551,9 @@ export const LiftGammaGainNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const c  = inputVars.color ?? 'vec3(0.5)';
-    const lv = Array.isArray(node.params.lift)  ? node.params.lift  as number[] : [0, 0, 0];
-    const gv = Array.isArray(node.params.gamma) ? node.params.gamma as number[] : [1, 1, 1];
-    const kv = Array.isArray(node.params.gain)  ? node.params.gain  as number[] : [1, 1, 1];
-    const lt = inputVars.lift  ?? `vec3(${f(lv[0])}, ${f(lv[1])}, ${f(lv[2])})`;
-    const gm = inputVars.gamma ?? `vec3(${f(gv[0])}, ${f(gv[1])}, ${f(gv[2])})`;
-    const gn = inputVars.gain  ?? `vec3(${f(kv[0])}, ${f(kv[1])}, ${f(kv[2])})`;
+    const lt = inputVars.lift  ?? pv3(node.params.lift,  [0, 0, 0]);
+    const gm = inputVars.gamma ?? pv3(node.params.gamma, [1, 1, 1]);
+    const gn = inputVars.gain  ?? pv3(node.params.gain,  [1, 1, 1]);
     return {
       code: [
         `    vec3 ${id}_g = max(${gm}, vec3(0.001));\n`,

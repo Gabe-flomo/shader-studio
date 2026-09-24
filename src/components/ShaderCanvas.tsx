@@ -1530,7 +1530,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       geo.setAttribute('a_normDist',  new THREE.BufferAttribute(normDists, 1, false));
 
       // Build initial uniforms from paramUniforms + u_time
-      const uniforms: Record<string, { value: number }> = { u_time: { value: 0 } };
+      const uniforms: Record<string, { value: number | number[] }> = { u_time: { value: 0 } };
       for (const [name, value] of Object.entries(pUniforms)) {
         uniforms[name] = { value };
       }

@@ -10,7 +10,7 @@ export interface ParticleSystemData {
   /** Shape index — baked from pInit.shape (0=Sphere, 1=Ball, 2=Box, 3=Disk, 4=Ring, 5=Spiral) */
   shape: number;
   /** Float param uniforms for this chain — merged into CompilationResult.paramUniforms */
-  paramUniforms: Record<string, number>;
+  paramUniforms: Record<string, number | number[]>;
   /** `${nodeId}::${paramKey}` → uniform name — merged into CompilationResult.paramBindings */
   paramBindings: Record<string, string>;
 }
@@ -23,10 +23,11 @@ export interface CompilationResult {
   /** Maps nodeId → { outputKey → glslVarName } — used by ShaderCanvas node-probe. */
   nodeOutputVars: Map<string, Record<string, string>>;
   /**
-   * Maps uniform name (e.g. "u_p_nodeId_scale") → current numeric value.
-   * Slider changes push new values here instead of triggering a recompile.
+   * Maps uniform name (e.g. "u_p_nodeId_scale") → current value: a number for a
+   * float slider, a [r, g, b] array for a vec3 / colour param. Slider and
+   * colour-picker changes push new values here instead of triggering a recompile.
    */
-  paramUniforms: Record<string, number>;
+  paramUniforms: Record<string, number | number[]>;
   /**
    * Maps `${nodeId}::${paramKey}` (the node's ORIGINAL id, the one the store
    * edits — not its slug) → the uniform name in `paramUniforms`. Absent from

@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, vec3Str } from './helpers';
+import { f, p, pv3 } from './helpers';
 
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
@@ -317,10 +317,10 @@ export const FlowFieldNode: NodeDefinition = {
     const quantN     = Math.max(typeof node.params.quant_steps === 'number' ? node.params.quant_steps : 10, 2);
     const quantAngle = f(Math.PI / quantN);
     const palOff     = p(node.params.palette_offset, 0.0);
-    const pA = Array.isArray(node.params.palette_a) ? node.params.palette_a as number[] : [0.5,0.5,0.5];
-    const pB = Array.isArray(node.params.palette_b) ? node.params.palette_b as number[] : [0.5,0.5,0.5];
-    const pC = Array.isArray(node.params.palette_c) ? node.params.palette_c as number[] : [1.0,1.0,1.0];
-    const pD = Array.isArray(node.params.palette_d) ? node.params.palette_d as number[] : [0.0,0.33,0.67];
+    const pA = pv3(node.params.palette_a, [0.5,0.5,0.5]);
+    const pB = pv3(node.params.palette_b, [0.5,0.5,0.5]);
+    const pC = pv3(node.params.palette_c, [1.0,1.0,1.0]);
+    const pD = pv3(node.params.palette_d, [0.0,0.33,0.67]);
 
     // Map field_mode string to GLSL int constant (baked at compile time)
     const modeInt = fieldMode === 'curl' ? 1 : fieldMode === 'quantized' ? 2 : 0;
@@ -338,7 +338,7 @@ export const FlowFieldNode: NodeDefinition = {
       `        vec2  ${id}_pos = (vec2(${id}_hx, ${id}_hy) - 0.5) * 2.4;\n`,
       // Cosine palette colour for this curve (varies by curve index)
       `        float ${id}_ct  = ${id}_cf / float(${curves}) + ${palOff};\n`,
-      `        vec3  ${id}_pc  = ${vec3Str(pA)} + ${vec3Str(pB)} * cos(6.28318 * (${vec3Str(pC)} * ${id}_ct + ${vec3Str(pD)}));\n`,
+      `        vec3  ${id}_pc  = ${pA} + ${pB} * cos(6.28318 * (${pC} * ${id}_ct + ${pD}));\n`,
       // Inner loop: march the curve through the field
       `        for (int ${id}_si = 0; ${id}_si < ${steps}; ${id}_si++) {\n`,
       // Look up angle in flow field at current position (+ time drift)
@@ -454,10 +454,10 @@ export const CirclePackNode: NodeDefinition = {
     const edgeSoft   = p(node.params.edge_softness, 1.0);
     const animate    = p(node.params.animate, 0.0);
     const palOff     = p(node.params.palette_offset, 0.0);
-    const pA = Array.isArray(node.params.palette_a) ? node.params.palette_a as number[] : [0.5,0.5,0.5];
-    const pB = Array.isArray(node.params.palette_b) ? node.params.palette_b as number[] : [0.5,0.5,0.5];
-    const pC = Array.isArray(node.params.palette_c) ? node.params.palette_c as number[] : [1.0,1.0,1.0];
-    const pD = Array.isArray(node.params.palette_d) ? node.params.palette_d as number[] : [0.0,0.33,0.67];
+    const pA = pv3(node.params.palette_a, [0.5,0.5,0.5]);
+    const pB = pv3(node.params.palette_b, [0.5,0.5,0.5]);
+    const pC = pv3(node.params.palette_c, [1.0,1.0,1.0]);
+    const pD = pv3(node.params.palette_d, [0.0,0.33,0.67]);
 
     // Bake mode as integer constant
     const modeInt = circMode === 'ring' ? 2 : circMode === 'flat' ? 0 : circMode === 'noise' ? 3 : 1;
@@ -497,7 +497,7 @@ export const CirclePackNode: NodeDefinition = {
       `        if (${id}_d < ${id}_nearD) { ${id}_nearD = ${id}_d; ${id}_nearest = ${id}_hc; }\n`,
       // Cosine palette colour for this circle
       `        float ${id}_ct  = ${id}_cf / float(${circles}) + ${palOff};\n`,
-      `        vec3  ${id}_pc  = ${vec3Str(pA)} + ${vec3Str(pB)} * cos(6.28318 * (${vec3Str(pC)} * ${id}_ct + ${vec3Str(pD)}));\n`,
+      `        vec3  ${id}_pc  = ${pA} + ${pB} * cos(6.28318 * (${pC} * ${id}_ct + ${pD}));\n`,
       // Fill based on circle_mode
       `        float ${id}_fill = 0.0;\n`,
       // mode 0: flat — hard disc with 1px AA

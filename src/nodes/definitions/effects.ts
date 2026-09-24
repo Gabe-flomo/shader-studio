@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, vec3Str } from './helpers';
+import { f, p, pv3 } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
 
 export const MakeLightNode: NodeDefinition = {
@@ -373,10 +373,10 @@ export const FractalLoopNode: NodeDefinition = {
     const glowPow   = inputVars.glow_pow    ?? p(node.params.glow_pow, 1.0);
     const iterOff   = inputVars.iter_offset ?? p(node.params.iter_offset, 0.4);
     const timeScale = inputVars.time_scale  ?? p(node.params.time_scale, 0.4);
-    const a = Array.isArray(node.params.offset)    ? node.params.offset    as number[] : [0.5, 0.5, 0.5];
-    const b = Array.isArray(node.params.amplitude) ? node.params.amplitude as number[] : [0.5, 0.5, 0.5];
-    const c = Array.isArray(node.params.freq)      ? node.params.freq      as number[] : [1.0, 1.0, 1.0];
-    const d = Array.isArray(node.params.phase)     ? node.params.phase     as number[] : [0.0, 0.33, 0.67];
+    const a = pv3(node.params.offset,    [0.5, 0.5, 0.5]);
+    const b = pv3(node.params.amplitude, [0.5, 0.5, 0.5]);
+    const c = pv3(node.params.freq,      [1.0, 1.0, 1.0]);
+    const d = pv3(node.params.phase,     [0.0, 0.33, 0.67]);
     const scaleExpr = (scaleExp === '1.0' || scaleExp === '1') ? scale : `(${scale} * pow(${scaleExp}, ${id}_i))`;
     const glowExpr = (glowPow === '1.0' || glowPow === '1')
       ? `${glow} / max(${id}_d, 0.0001)`
@@ -389,7 +389,7 @@ export const FractalLoopNode: NodeDefinition = {
       `        ${id}_uv = fract(${id}_uv * ${scaleExpr}) - 0.5;\n`,
       `        float ${id}_d = length(${id}_uv) * exp(-length(${id}_uv0));\n`,
       `        float ${id}_t = length(${id}_uv0) + ${id}_i * ${iterOff} + ${timeVar} * ${timeScale};\n`,
-      `        vec3 ${id}_col = palette(${id}_t, ${vec3Str(a)}, ${vec3Str(b)}, ${vec3Str(c)}, ${vec3Str(d)});\n`,
+      `        vec3 ${id}_col = palette(${id}_t, ${a}, ${b}, ${c}, ${d});\n`,
       `        ${id}_d = sin(${id}_d * ${freq} + ${timeVar}) / ${freq};\n`,
       `        ${id}_d = abs(${id}_d);\n`,
       `        ${id}_d = ${glowExpr};\n`,

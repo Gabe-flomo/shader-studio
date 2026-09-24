@@ -279,11 +279,11 @@ interface NodeGraphState {
    * Uniform name → current value for all float params extracted by the compiler.
    * Updated in-place (without recompile) when sliders change eligible float params.
    */
-  paramUniforms: Record<string, number>;
+  paramUniforms: Record<string, number | number[]>;
   /** `${nodeId}::${paramKey}` → uniform name, from the last compile. See CompilationResult.paramBindings. */
   paramBindings: Record<string, string>;
   /** Push param uniform value changes to ShaderCanvas without triggering a recompile. */
-  updateParamUniforms: (updates: Record<string, number>) => void;
+  updateParamUniforms: (updates: Record<string, number | number[]>) => void;
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
@@ -3150,10 +3150,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // every slider tick used to take the full-recompile path below.
     if (options?.immediate) {
       const { paramUniforms: currentUniforms, paramBindings } = get();
-      const uniformUpdates: Record<string, number> = {};
+      const uniformUpdates: Record<string, number | number[]> = {};
       let allAreUniforms = true;
       for (const [key, val] of Object.entries(params)) {
-        if (typeof val !== 'number') { allAreUniforms = false; break; }
+        // A float slider, or a vec3 / colour picker's [r, g, b].
+        const isVec3 = Array.isArray(val) && val.length === 3 && val.every(n => typeof n === 'number');
+        if (typeof val !== 'number' && !isVec3) { allAreUniforms = false; break; }
         // Editing inside a group passes the inner node's own id with a plain key.
         // Editing a group node's override passes the group id with an
         // `innerNodeId::paramKey` key — which is already the binding key. A param
@@ -3162,7 +3164,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const bindingKey = key.includes('::') ? key.split('::').slice(-2).join('::') : paramBindingKey(nodeId, key);
         const uniformName = paramBindings[bindingKey];
         if (!uniformName || !(uniformName in currentUniforms)) { allAreUniforms = false; break; }
-        uniformUpdates[uniformName] = val;
+        uniformUpdates[uniformName] = val as number | number[];
       }
       if (allAreUniforms && Object.keys(uniformUpdates).length > 0) {
         // Fast path: update uniforms only, skip shader recompile entirely

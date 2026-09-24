@@ -377,7 +377,7 @@ export class ShaderAssembler {
   private nodeMap: Map<string, GraphNode>;
   private functions = new Set<string>();
   private mainCode: string[] = [];
-  private paramUniforms: Record<string, number> = {};
+  private paramUniforms: Record<string, number | number[]> = {};
   // `${originalNodeId}::${paramKey}` → uniform name, for every param that
   // became a uniform. The store's slider fast path looks its param up here.
   private paramBindings: Record<string, string> = {};
@@ -405,7 +405,7 @@ export class ShaderAssembler {
     this.functions.add(GLSL_OP_REPEAT_POLAR);
   }
 
-  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+  assemble(): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
     this.detectStateful();
     for (const node of this.sortedNodes) {
       this.compileNode(node);
@@ -3266,8 +3266,8 @@ export class ShaderAssembler {
 
   private buildResult() {
     const functionCode = dedupeGlslFunctions(Array.from(this.functions)).join('\n');
-    const paramUniformDecls = Object.keys(this.paramUniforms)
-      .map(name => `uniform float ${name};`)
+    const paramUniformDecls = Object.entries(this.paramUniforms)
+      .map(([name, value]) => `uniform ${Array.isArray(value) ? 'vec3' : 'float'} ${name};`)
       .join('\n');
     const textureUniformDecls = [
       ...Object.keys(this.textureUniforms).map(name => `uniform sampler2D ${name};`),
@@ -3320,6 +3320,6 @@ ${this.mainCode.join('')}}`.trim();
 export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
-): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
+): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
   return new ShaderAssembler(sortedNodes, allNodes).assemble();
 }
