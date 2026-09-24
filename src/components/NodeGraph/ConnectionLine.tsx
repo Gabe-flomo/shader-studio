@@ -46,7 +46,7 @@ function rounded(pts: Point[]): string {
  * through a horizontal channel between the two sockets (or below both when they are level), and
  * enters the input from its left.
  */
-function wirePath(from: Point, to: Point): string {
+export function wirePath(from: Point, to: Point): string {
   if (Math.abs(to.y - from.y) < 1 && to.x >= from.x) return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   if (to.x - from.x >= LEAD) {
     const midX = (from.x + to.x) / 2;

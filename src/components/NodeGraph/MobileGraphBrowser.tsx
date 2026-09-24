@@ -35,6 +35,10 @@ import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, type Tokens } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
+import type { IconName } from '../ui/iconPaths';
+import { IconButton } from '../ui/Button';
+import { Sheet } from '../ui/Sheet';
+import { suggestConnections } from './smartConnect';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
@@ -457,6 +461,37 @@ function computeGroupRank(group: LooseGroup, nodes: GraphNode[], nodeRanks: Map<
     if (r != null && r < minMemberRank) minMemberRank = r;
   }
   return minMemberRank === Infinity ? 0 : minMemberRank;
+}
+
+/** One tappable row in a phone sheet: 48px target, leading dot or icon, label and detail */
+function SheetRow({ dot, icon, label, detail, danger = false, onClick }: {
+  dot?: string; icon?: IconName; label: React.ReactNode; detail?: React.ReactNode; danger?: boolean; onClick: () => void;
+}) {
+  const tk = useTokens();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: '100%', minHeight: 48, display: 'flex', alignItems: 'center', gap: 12, padding: '6px 10px', border: 0, borderRadius: 12,
+        background: 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+        color: danger ? tk.status.danger : tk.text.primary, font: `500 14px ${fontFamily.ui}`,
+      }}
+    >
+      {dot && <span style={{ width: 10, height: 10, borderRadius: '50%', background: dot, flexShrink: 0 }} />}
+      {icon && <Icon name={icon} size={18} style={{ color: danger ? tk.status.danger : tk.text.muted, flexShrink: 0 }} />}
+      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        {detail && <span style={{ fontSize: 12, fontWeight: 400, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail}</span>}
+      </span>
+      {!danger && <Icon name="chevR" size={16} style={{ color: tk.text.disabled, flexShrink: 0 }} />}
+    </button>
+  );
+}
+
+function SheetSection({ children }: { children: React.ReactNode }) {
+  const tk = useTokens();
+  return <div style={{ padding: '14px 10px 4px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>{children}</div>;
 }
 
 const dotStyle = (color: string): React.CSSProperties => ({
@@ -3190,34 +3225,37 @@ export function MobileGraphBrowser() {
   function renderSocketOverlays(node: GraphNode) {
     return (
       <>
-        {/* Add New / Connect Existing action sheet */}
-        {pending && pending.nodeId === node.id && (
-          <div
-            onClick={() => setPending(null)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,30,0.32)', zIndex: 40, display: 'flex', alignItems: 'flex-end' }}
-          >
-            <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: tc.base, borderRadius: '16px 16px 0 0', border: `1px solid ${tc.surface1}`, padding: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: tc.blue, marginBottom: '12px' }}>
-                {pending.dir === 'input' ? 'Feed this input' : 'Consume this output'}
-              </div>
-              <button
-                style={{ width: '100%', padding: '12px', marginBottom: '8px', background: tc.surface0, border: `1px solid ${tc.surface1}`, borderRadius: '8px', color: tc.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
-                onClick={() => { setConnectPicker(pending); setPending(null); }}
-              >
-                Connect Existing Node
-              </button>
-              <button
-                style={{ width: '100%', padding: '12px', background: tc.surface0, border: `1px solid ${tc.surface1}`, borderRadius: '8px', color: tc.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation' }}
-                onClick={() => {
-                  const socket = pending;
-                  setPending({ ...socket, key: `__search__${socket.key}` });
-                }}
-              >
-                Add New Node
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Add connected: up to three Smart connect suggestions, then connect another node or add a new one */}
+        {pending && pending.nodeId === node.id && !pending.key.startsWith('__search__') && (() => {
+          const socket = pending.dir === 'input' ? node.inputs[pending.key] : node.outputs[pending.key];
+          const suggestions = suggestConnections({
+            nodes, from: { nodeId: node.id, key: pending.key, dir: pending.dir === 'input' ? 'in' : 'out' },
+            socketPos: () => null, labelOf: labelFor,
+          });
+          const connect = (otherId: string, otherKey: string) => {
+            if (pending.dir === 'input') connectNodes(otherId, otherKey, node.id, pending.key);
+            else connectNodes(node.id, pending.key, otherId, otherKey);
+            setPending(null);
+          };
+          return (
+            <Sheet onClose={() => setPending(null)} title={pending.dir === 'input' ? `Feed ${socket?.label ?? 'this input'}` : `Use ${socket?.label ?? 'this output'} in…`}>
+              {suggestions.length > 0 && (
+                <>
+                  <SheetSection>Suggested</SheetSection>
+                  {suggestions.map(sg => (
+                    <SheetRow key={`${sg.nodeId}:${sg.key}`} dot={TYPE_COLORS[sg.type] ?? '#888'} label={sg.nodeLabel} detail={`${sg.socketLabel} · ${sg.type}`}
+                      onClick={() => connect(sg.nodeId, sg.key)} />
+                  ))}
+                </>
+              )}
+              <SheetSection>{suggestions.length > 0 ? 'Or' : 'Connect'}</SheetSection>
+              <SheetRow icon="nodes" label="Connect another node…" detail="Pick one on the graph"
+                onClick={() => { setConnectPicker(pending); setPending(null); }} />
+              <SheetRow icon="plus" label="Add a new node…" detail="Search the library"
+                onClick={() => setPending({ ...pending, key: `__search__${pending.key}` })} />
+            </Sheet>
+          );
+        })()}
 
         {/* NodeSearchPalette for "Add New Node" */}
         {pending && pending.nodeId === node.id && pending.key.startsWith('__search__') && (
@@ -3238,19 +3276,15 @@ export function MobileGraphBrowser() {
         {/* Connect Existing picker — the graph diagram with the current node
             highlighted; tap any highlighted (compatible) node to wire it up. */}
         {connectPicker && connectPicker.nodeId === node.id && (
-          <div style={{ position: 'absolute', inset: 0, background: tc.mantle, zIndex: 40, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderBottom: `1px solid ${tc.surface0}`, flexShrink: 0 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: tc.blue }}>Tap a node to connect</div>
-                {connectCandidates.length === 0 && (
-                  <div style={{ fontSize: '11px', color: tc.surface2, marginTop: '2px' }}>No compatible nodes yet — try "Add New Node" instead.</div>
-                )}
+          <div style={{ position: 'absolute', inset: 0, background: tk.bg.app, zIndex: 40, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 8px 10px 16px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, flexShrink: 0 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 650, color: tk.text.primary }}>Tap a node to connect</div>
+                <div style={{ fontSize: 12, color: tk.text.muted, marginTop: 2 }}>
+                  {connectCandidates.length === 0 ? 'Nothing on the graph fits. Go back and add a new node instead.' : 'Highlighted nodes fit this socket.'}
+                </div>
               </div>
-              <button
-                onClick={() => setConnectPicker(null)}
-                style={{ background: 'none', border: 'none', color: tc.surface2, fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
-                title="Cancel"
-              >✕</button>
+              <IconButton icon="close" label="Cancel" tooltip={false} onClick={() => setConnectPicker(null)} style={{ width: 40, height: 40 }} />
             </div>
             {renderConnectGraphPicker()}
           </div>
@@ -4145,73 +4179,49 @@ export function MobileGraphBrowser() {
       });
       close();
     };
-    const rowBtnStyle: React.CSSProperties = {
-      display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 10px',
-      background: tc.mantle, border: `1px solid ${tc.surface0}`, borderRadius: '8px', marginBottom: '6px',
-      color: tc.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
-    };
-    const sectionLabelStyle: React.CSSProperties = {
-      fontSize: '10px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
-      color: tc.overlay0, margin: '10px 0 6px',
-    };
     return (
-      <div
-        onClick={close}
-        style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,30,0.32)', zIndex: 46, display: 'flex', alignItems: 'flex-end' }}
+      <Sheet
+        onClose={close}
+        title={<span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: nodeDotColor(node, tc), flexShrink: 0 }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</span>
+        </span>}
       >
-        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '80%', overflowY: 'auto', background: tc.base, borderRadius: '16px 16px 0 0', border: `1px solid ${tc.surface1}`, padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            <div style={dotStyle(nodeDotColor(node, tc))} />
-            <div style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(node)}</div>
+        {openInputs.length > 0 && (
+          <>
+            <SheetSection>Feed an open input</SheetSection>
+            {openInputs.map(([key, inp]) => (
+              <SheetRow key={key} dot={TYPE_COLORS[inp.type] ?? '#888'} label={inp.label} detail={inp.type} onClick={() => feedInput(key, inp.type)} />
+            ))}
+          </>
+        )}
+        {outputs.length > 0 && (
+          <>
+            <SheetSection>Use an output</SheetSection>
+            {outputs.map(([key, out]) => (
+              <SheetRow key={key} dot={TYPE_COLORS[out.type] ?? '#888'} label={out.label} detail={out.type} onClick={() => feedOutput(key, out.type)} />
+            ))}
+          </>
+        )}
+        {outgoingEdges.length > 0 && (
+          <>
+            <SheetSection>Insert a node into a connection</SheetSection>
+            {outgoingEdges.map((edge, i) => (
+              <SheetRow key={i} dot={TYPE_COLORS[edge.sourceOutputType] ?? '#888'}
+                label={`${edge.sourceOutputLabel} → ${labelFor(edge.targetNode)}`} detail={edge.targetInputLabel}
+                onClick={() => insertIntoPath(edge)} />
+            ))}
+          </>
+        )}
+        {!canDelete && openInputs.length === 0 && outputs.length === 0 && (
+          <div style={{ fontSize: 13, color: tk.text.muted, padding: '8px 10px' }}>Nothing available for this node.</div>
+        )}
+        {canDelete && (
+          <div style={{ marginTop: 10, paddingTop: 6, borderTop: `1px solid ${tk.border.subtle}` }}>
+            <SheetRow icon="trash" danger label="Delete node" onClick={() => { removeNode(node.id); close(); }} />
           </div>
-          {canDelete && (
-            <button
-              onClick={() => { removeNode(node.id); close(); }}
-              style={{ ...rowBtnStyle, border: `1px solid ${tc.red}66`, color: tc.red }}
-            >
-              🗑 Delete
-            </button>
-          )}
-          {openInputs.length > 0 && (
-            <>
-              <div style={sectionLabelStyle}>Add a node to an open input</div>
-              {openInputs.map(([key, inp]) => (
-                <button key={key} onClick={() => feedInput(key, inp.type)} style={rowBtnStyle}>
-                  <div style={dotStyle(TYPE_COLORS[inp.type] ?? '#888')} />
-                  {inp.label}
-                </button>
-              ))}
-            </>
-          )}
-          {outputs.length > 0 && (
-            <>
-              <div style={sectionLabelStyle}>Add a node consuming an output</div>
-              {outputs.map(([key, out]) => (
-                <button key={key} onClick={() => feedOutput(key, out.type)} style={rowBtnStyle}>
-                  <div style={dotStyle(TYPE_COLORS[out.type] ?? '#888')} />
-                  {out.label}
-                </button>
-              ))}
-            </>
-          )}
-          {outgoingEdges.length > 0 && (
-            <>
-              <div style={sectionLabelStyle}>Insert a node into a connection</div>
-              {outgoingEdges.map((edge, i) => (
-                <button key={i} onClick={() => insertIntoPath(edge)} style={rowBtnStyle}>
-                  <div style={dotStyle(TYPE_COLORS[edge.sourceOutputType] ?? '#888')} />
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {edge.sourceOutputLabel} → {labelFor(edge.targetNode)}.{edge.targetInputLabel}
-                  </span>
-                </button>
-              ))}
-            </>
-          )}
-          {!canDelete && openInputs.length === 0 && outputs.length === 0 && (
-            <div style={{ fontSize: '11px', color: tc.surface2, padding: '4px 0' }}>Nothing available for this node.</div>
-          )}
-        </div>
-      </div>
+        )}
+      </Sheet>
     );
   }
 
