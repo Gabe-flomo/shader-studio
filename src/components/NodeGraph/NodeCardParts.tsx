@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { getActiveNodes, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { evaluateKeyframes, getKeyframeConfig } from '../../compiler/keyframes';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -83,18 +85,48 @@ export function ParamLabel({ children, title, muted = false, onClick }: { childr
 }
 
 /** "= expr" chip shown in place of a control whose value comes from a wire. */
-export function WiredChip({ expr, locked = false }: { expr: string; locked?: boolean }) {
+/**
+ * Stands in for a control whose value comes from a wire: shows where it comes from ("← Sin", or
+ * "← Sin · Output" when that node has several outputs); the compiled expression is in the tooltip.
+ * Clicking it goes to the source node.
+ */
+export function WiredChip({ source, expr, locked = false }: {
+  source?: { nodeId: string; outputKey: string };
+  expr?: string;
+  locked?: boolean;
+}) {
   const tk = useTokens();
+  const label = useNodeGraphStore(s => (source ? sourceLabelOf(s.nodes, s.activeGroupPath, source.nodeId, source.outputKey) : null));
+  const revealNode = useNodeGraphStore(s => s.revealNode);
+  const text = label ?? (expr ? `= ${expr}` : 'wired');
+  const goTo = source && !source.nodeId.startsWith('__') ? () => revealNode([], source.nodeId) : undefined;
   return (
-    <span title={expr} style={{
-      flex: 1, minWidth: 0, height: 28, boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 8px',
-      borderRadius: 7, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-      font: `500 11.5px ${fontFamily.mono}`,
-      color: locked ? tk.text.faint : tk.accent.text, background: locked ? tk.bg.field : tk.bg.selected,
-    }}>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>= {expr}</span>
+    <span
+      title={expr ? `${label ? `${label}\n` : ''}= ${expr}` : undefined}
+      role={goTo ? 'link' : undefined}
+      onClick={goTo ? e => { e.stopPropagation(); goTo(); } : undefined}
+      style={{
+        flex: 1, minWidth: 0, height: 28, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
+        borderRadius: 7, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+        font: label ? `500 12px ${fontFamily.ui}` : `500 11.5px ${fontFamily.mono}`, cursor: goTo ? 'pointer' : undefined,
+        color: locked ? tk.text.faint : tk.accent.text, background: locked ? tk.bg.field : tk.bg.selected,
+      }}
+    >
+      {label && <span aria-hidden style={{ opacity: 0.7 }}>←</span>}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{text}</span>
     </span>
   );
+}
+
+/** "Sin" or "Sin · Output" for the node feeding a wire, looked up at the level being shown */
+function sourceLabelOf(nodes: GraphNode[], path: string[], nodeId: string, outputKey: string): string | null {
+  if (nodeId === '__group_input__') return 'Group input';
+  const scope = path.length > 0 ? (getActiveNodes(nodes, path) ?? nodes) : nodes;
+  const src = scope.find(n => n.id === nodeId) ?? nodes.find(n => n.id === nodeId);
+  if (!src) return null;
+  const name = (typeof src.params?.label === 'string' && src.params.label.trim()) || getNodeDefinition(src.type)?.label || src.type;
+  const outs = Object.keys(src.outputs);
+  return outs.length > 1 ? `${name} · ${src.outputs[outputKey]?.label ?? outputKey}` : name;
 }
 
 /** Small round socket for a group's surfaced param (typed colour; filled when wired). */

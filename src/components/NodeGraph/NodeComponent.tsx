@@ -1819,7 +1819,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {wired && wire ? (
             <>
-              <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey) || 'wired from outside'} />
+              <WiredChip source={wire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
               <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, o.psKey)} />
             </>
           ) : (
@@ -3484,7 +3484,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               return (
                 <div key={key} style={rowStyle}>
                   <ParamLabel muted>{paramDef.label}{isParamExternal && lockIcon}</ParamLabel>
-                  <WiredChip expr={srcExpr} locked={isParamExternal} />
+                  <WiredChip source={socketConn!} expr={srcExpr} locked={isParamExternal} />
                 </div>
               );
             }
@@ -3510,7 +3510,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
                   )}
                   <ParamLabel muted>{paramDef.label}</ParamLabel>
-                  <WiredChip expr={srcExpr} />
+                  <WiredChip source={paramInputConn!} expr={srcExpr} />
                   <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, paramInputKey)} />
                 </div>
               );
@@ -3597,14 +3597,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 >{paramDef.label}</span>
                 {/* The whole vec3 wired (Palette's Offset, …): one chip instead of three rulers */}
                 {node.inputs[key]?.connection ? (
-                  <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, node.inputs[key].connection!.nodeId, node.inputs[key].connection!.outputKey)} />
+                  <WiredChip source={node.inputs[key].connection!} expr={getSourceExpr(shaderLines, nodeOutputVarMap, node.inputs[key].connection!.nodeId, node.inputs[key].connection!.outputKey)} />
                 ) : [0, 1, 2].map(idx => {
                   const conn = node.inputs[compKeys[idx]]?.connection;
                   return (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
                       <span style={{ width: 10, flexShrink: 0, textAlign: 'center', font: `600 11px ${fontFamily.mono}`, color: compColors[idx] }}>{compLabels[idx]}</span>
                       {conn
-                        ? <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, conn.nodeId, conn.outputKey)} />
+                        ? <WiredChip source={conn} expr={getSourceExpr(shaderLines, nodeOutputVarMap, conn.nodeId, conn.outputKey)} />
                         : (
                           <RulerSlider
                             value={vals[idx] ?? 0}
@@ -3706,7 +3706,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               >
                 <ParamLabel muted={isWired}>{inp.name}</ParamLabel>
                 {isWired && wire
-                  ? <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
+                  ? <WiredChip source={wire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
                   : (
                     <RulerSlider
                       value={val}
