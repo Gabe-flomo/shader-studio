@@ -29,7 +29,9 @@ export function AudioInputModal({ node, onClose }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const SECTION_LABEL = SECTION_LABELFor(tc);
-  const { updateNodeParams, updateNodeOutputs, updateNodeInputs } = useNodeGraphStore();
+  const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeOutputs = useNodeGraphStore(s => s.updateNodeOutputs);
+  const updateNodeInputs  = useNodeGraphStore(s => s.updateNodeInputs);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const rawBands  = node.params._bands;
