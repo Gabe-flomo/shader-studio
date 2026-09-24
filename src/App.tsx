@@ -3,7 +3,8 @@ import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './co
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { MobileGraphBrowser, MobileNodeGraphOverlay } from './components/NodeGraph/MobileGraphBrowser';
-import { CodeBarRow, CodePanel, tokenizeLine } from './components/CodePanel';
+import { CodeBarRow, CodePanel } from './components/CodePanel';
+import { tokenizeLine } from './components/glslSyntax';
 import { DesktopTopNav } from './components/shell/DesktopTopNav';
 import { IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';

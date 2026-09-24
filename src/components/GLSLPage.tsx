@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { safeSetItem } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
-import { tokenizeLine, C, C_LIGHT } from './CodePanel';
+import { tokenizeLine, C, C_LIGHT } from './glslSyntax';
 import { NodePalette } from './NodeGraph/NodePalette';
 import { useThemeMode, useTokens } from '../theme/themeStore';
 import { fontFamily, radius } from '../theme/tokens';
