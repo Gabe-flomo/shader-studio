@@ -4,7 +4,7 @@ import { PALETTE_GLSL_FN } from './color';
 
 export const MakeLightNode: NodeDefinition = {
   type: 'makeLight',
-  label: 'Glow from Distance', aliases: ['Make Light'],
+  label: 'SDF Glow', aliases: ['Make Light', 'Glow from Distance'],
   category: 'Effects',
   description: 'Convert an SDF distance to a glow value using exp falloff',
   inputs: {
