@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
 import { runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
 import type { OfflineRenderHandle } from './ShaderCanvas';
+import { getGpuLimits, pickRecorderFormat, preferredRecorderFormat, type RecorderFormat } from '../utils/exportLimits';
 import { ctp } from '../theme/palette';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -91,6 +92,18 @@ const RESOLUTIONS = [
   { label: '4×  (ultra)', scale: 4 },
 ];
 
+/** What this device can do at a given scale — computed when the modal opens. */
+interface ScaleSupport {
+  width: number;
+  height: number;
+  /** Why this scale can't be exported here; null if it can */
+  blocked: string | null;
+  /** MediaRecorder format that can encode this size (browser mode only) */
+  format: RecorderFormat | null;
+}
+
+const fmtPx = (w: number, h: number) => `${w}×${h}`;
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -124,28 +137,108 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const [outputPath, setOutputPath]             = useState('');
 
   const recorderRef  = useRef<CanvasRecorder | null>(null);
-  const offscreenRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef       = useRef<number>(0);
   const tickRef      = useRef<number>(0);
   const abortRef     = useRef(false);
+  // The in-flight FFmpeg encode, if any. Cancel returns the UI to idle at
+  // once, but the loop only exits at its next frame — a new encode must wait
+  // for that, or the old loop's cleanup would stop the new FFmpeg session.
+  const ffmpegRunRef = useRef<Promise<unknown> | null>(null);
+  // Handle whose render scale we raised, so every exit path (done, error,
+  // cancel, unmount) can put the preview back to 1×.
+  const scaledRef = useRef<OfflineRenderHandle | null>(null);
 
-  // Derive the recording canvas (upscaled offscreen or the real one)
-  const getRecordCanvas = useCallback((): HTMLCanvasElement | null => {
-    if (!canvas) return null;
-    if (resScale === 1) return canvas;
-    if (!offscreenRef.current) offscreenRef.current = document.createElement('canvas');
-    const oc = offscreenRef.current;
-    oc.width  = canvas.width  * resScale;
-    oc.height = canvas.height * resScale;
-    return oc;
-  }, [canvas, resScale]);
+  // ── Device limits per resolution ──────────────────────────────────────────
+  // 2×/4× render the shader at the higher resolution (not an upscale), so
+  // the output must fit the GPU, a memory budget, and — for MediaRecorder —
+  // the browser's video encoder. Check each option up front so ones that
+  // can't work are disabled with a reason instead of failing silently.
+  const [support, setSupport] = useState<Record<number, ScaleSupport> | null>(null);
+  const needsOfflineHandle = mode === 'ffmpeg';
+  // Bumped when the preview is resized so output sizes are re-checked.
+  const [sizeKey, setSizeKey] = useState('');
 
-  const copyToOffscreen = useCallback(() => {
-    if (resScale === 1 || !canvas || !offscreenRef.current) return;
-    const ctx = offscreenRef.current.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(canvas, 0, 0, offscreenRef.current.width, offscreenRef.current.height);
-  }, [canvas, resScale]);
+  useEffect(() => {
+    if (!canvas) return;
+    const ro = new ResizeObserver(() => {
+      if (!scaledRef.current) setSizeKey(`${canvas.width}x${canvas.height}`);
+    });
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [canvas]);
+
+  useEffect(() => {
+    if (!canvas) return;
+    let cancelled = false;
+    // The modal only raises the render scale while busy, so at idle the
+    // canvas is at 1× (restoreScale runs before we return to idle).
+    const w = canvas.width, h = canvas.height;
+    const limits = getGpuLimits(canvas);
+    const preferred = preferredRecorderFormat();
+    (async () => {
+      const out: Record<number, ScaleSupport> = {};
+      for (const { scale } of RESOLUTIONS) {
+        const sw = w * scale, sh = h * scale;
+        let blocked: string | null = null;
+        let format: RecorderFormat | null = null;
+        if (scale > 1 && !offlineRender) {
+          blocked = 'High-resolution rendering isn\u2019t available yet — try again once the preview has loaded.';
+        } else if (Math.max(sw, sh) > limits.maxDim) {
+          blocked = `${fmtPx(sw, sh)} exceeds this GPU\u2019s maximum render size of ${limits.maxDim}px.`;
+        } else if (scale > 1 && sw * sh > limits.maxPixels) {
+          blocked = `${fmtPx(sw, sh)} (${(sw * sh / 1e6).toFixed(1)} MP) is more than this ${limits.isMobile ? 'mobile ' : ''}device can safely render (limit ≈ ${(limits.maxPixels / 1e6).toFixed(1)} MP).`;
+        } else if (!needsOfflineHandle) {
+          format = scale === 1 ? preferred : await pickRecorderFormat(sw, sh);
+          if (!format) {
+            blocked = scale === 1
+              ? 'This browser can\u2019t record video (no MediaRecorder format supported).'
+              : `No video encoder in this browser can encode ${fmtPx(sw, sh)}.`;
+          }
+        }
+        out[scale] = { width: sw, height: sh, blocked, format };
+      }
+      if (!cancelled) setSupport(out);
+    })();
+    return () => { cancelled = true; };
+  }, [canvas, offlineRender, needsOfflineHandle, sizeKey]);
+
+  // If the chosen scale turns out to be unsupported, fall back to the largest one that is.
+  useEffect(() => {
+    if (!support || !support[resScale]?.blocked) return;
+    const best = [...RESOLUTIONS].reverse().find(r => !support[r.scale]?.blocked);
+    if (best) setResScale(best.scale);
+  }, [support, resScale]);
+
+  const current = support?.[resScale] ?? null;
+
+  const restoreScale = () => {
+    if (!scaledRef.current) return;
+    scaledRef.current.setRenderScale(1);
+    scaledRef.current = null;
+    // Resizes while scaled were ignored (see the ResizeObserver above), and
+    // restoring doesn't change CSS size, so re-check in case the preview moved.
+    if (canvas) setSizeKey(`${canvas.width}x${canvas.height}`);
+  };
+
+  /** Checks were computed for a different preview size (resized since) — re-check instead of starting. */
+  const staleSize = (): string | null => {
+    if (!canvas || !current || canvas.width * resScale === current.width && canvas.height * resScale === current.height) return null;
+    setSizeKey(`${canvas.width}x${canvas.height}`);
+    return 'The preview was resized, so the output size has been updated. Press the button again to export.';
+  };
+
+  /** Raise the live renderer to the export scale; returns an error message on failure. */
+  const applyScale = (): string | null => {
+    if (resScale === 1) return null;
+    if (!offlineRender || !current) return 'High-resolution rendering isn\u2019t available.';
+    const got = offlineRender.setRenderScale(resScale);
+    scaledRef.current = offlineRender;
+    if (got.width !== current.width || got.height !== current.height) {
+      restoreScale();
+      return `The GPU could only allocate ${fmtPx(got.width, got.height)} of the requested ${fmtPx(current.width, current.height)} (out of graphics memory). Try a lower resolution.`;
+    }
+    return null;
+  };
 
   const startPolling = useCallback(() => {
     tickRef.current = window.setInterval(() => {
@@ -162,35 +255,55 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const stopPolling = () => clearInterval(tickRef.current);
 
   const captureLoop = useCallback(() => {
-    copyToOffscreen();
     recorderRef.current?.capture();
     rafRef.current = requestAnimationFrame(captureLoop);
-  }, [copyToOffscreen]);
+  }, []);
+
+  // A lost WebGL context mid-export (typically GPU memory exhaustion at
+  // 2×/4× on mobile) otherwise just freezes the video on the last frame.
+  useEffect(() => {
+    if (!canvas || !(state === 'recording' || state === 'encoding')) return;
+    const onLost = () => {
+      abortRef.current = true;
+      cancelAnimationFrame(rafRef.current);
+      stopPolling();
+      if (recorderRef.current?.isRecording) recorderRef.current.stop();
+      setErrorMsg(`The GPU ran out of memory at ${fmtPx(current?.width ?? 0, current?.height ?? 0)} and reset the preview. Try a lower resolution.`);
+      setState('error');
+    };
+    canvas.addEventListener('webglcontextlost', onLost);
+    return () => canvas.removeEventListener('webglcontextlost', onLost);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvas, state]);
 
   // ── MediaRecorder path ────────────────────────────────────────────────────
 
   const handleStartMediaRecorder = async () => {
     if (!canvas) { setErrorMsg('No canvas available.'); return; }
+    if (!current || current.blocked || !current.format) { setErrorMsg(current?.blocked ?? 'Still checking device limits…'); return; }
+    const stale = staleSize();
+    if (stale) { setErrorMsg(stale); return; }
     setErrorMsg('');
     setCaptureProgress(0);
     setElapsed(0);
     setFrameCount(0);
 
-    const recordCanvas = getRecordCanvas();
-    if (!recordCanvas) return;
-
-    // Pre-populate offscreen canvas so the stream has initial content
-    if (resScale > 1) copyToOffscreen();
+    const scaleErr = applyScale();
+    if (scaleErr) { setErrorMsg(scaleErr); setState('error'); return; }
 
     try {
-      const rec = new CanvasRecorder(recordCanvas, {
+      // Record the live canvas directly — at 2×/4× its drawing buffer is
+      // already rendering at the export resolution.
+      const rec = new CanvasRecorder(canvas, {
         format: 'mediarecorder',
         fps,
         duration: manualStop ? null : duration,
         videoBitsPerSecond: bitrate * 1_000_000,
+        mimeType: current.format.mimeType,
         name: filename || `shader-export-${Date.now()}`,
         verbose: false,
         autoDownload: true,
+        onError: (msg) => setErrorMsg(msg),
       });
       recorderRef.current = rec;
       await rec.start();
@@ -198,12 +311,13 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
       startPolling();
       rafRef.current = requestAnimationFrame(captureLoop);
     } catch (err) {
+      restoreScale();
       setErrorMsg(String(err));
       setState('error');
     }
   };
 
-  // Auto-finish when MediaRecorder auto-stops (duration reached)
+  // Auto-finish when MediaRecorder auto-stops (duration reached or encoder error)
   useEffect(() => {
     if (state !== 'recording') return;
     const id = setInterval(() => {
@@ -212,7 +326,10 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
         clearInterval(id);
         cancelAnimationFrame(rafRef.current);
         stopPolling();
-        setTimeout(() => setState('done'), 400);
+        restoreScale();
+        // Wait for the file to be written (Tauri's save dialog waits on the
+        // user) so a save failure is reported instead of showing "done".
+        r.whenStopped().then(() => setTimeout(() => setState(r.error ? 'error' : 'done'), 400));
       }
     }, 200);
     return () => clearInterval(id);
@@ -226,13 +343,19 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
       setErrorMsg('Offline render not available.');
       return;
     }
-
+    if (!current || current.blocked) { setErrorMsg(current?.blocked ?? 'Still checking device limits…'); return; }
+    const stale = staleSize();
+    if (stale) { setErrorMsg(stale); return; }
+    // Switch to 'encoding' first so the Encode button is gone while we wait.
     setErrorMsg('');
     setCaptureProgress(0);
     setElapsed(0);
     setFrameCount(0);
-    abortRef.current = false;
     setState('encoding');
+    if (ffmpegRunRef.current) await ffmpegRunRef.current;
+    const scaleErr = applyScale();
+    if (scaleErr) { setErrorMsg(scaleErr); setState('error'); return; }
+    abortRef.current = false;
 
     // Use the dedicated render target dimensions from the handle.
     // These are fixed at registration time — immune to live canvas resizes.
@@ -240,13 +363,17 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     const startT = performance.now();
 
     try {
-      const path = await runFfmpegEncode({
+      const run = runFfmpegEncode({
         width: w,
         height: h,
         fps,
         duration,
         codec,
-        renderFrame: renderAtTime,
+        // Throwing here is what actually stops the encode loop on Cancel.
+        renderFrame: (t) => {
+          if (abortRef.current) throw new Error('cancelled');
+          renderAtTime(t);
+        },
         readPixels: handleReadPixels,
         onProgress: (fraction, frame) => {
           if (abortRef.current) return;
@@ -255,10 +382,16 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
           setElapsed((performance.now() - startT) / 1000);
         },
       });
+      const settled = run.catch(() => {});
+      ffmpegRunRef.current = settled;
+      settled.then(() => { if (ffmpegRunRef.current === settled) ffmpegRunRef.current = null; });
+      const path = await run;
 
+      restoreScale();
       setOutputPath(path);
       setState('done');
     } catch (err) {
+      restoreScale();
       const msg = String(err);
       if (msg === 'Error: cancelled') {
         setState('idle');
@@ -278,13 +411,18 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
 
   const handleStop = async () => {
     if (mode === 'ffmpeg') {
+      // The encode loop sees this, closes FFmpeg, restores scale, and
+      // returns us to idle via its 'cancelled' error.
       abortRef.current = true;
       setState('idle');
     } else {
       cancelAnimationFrame(rafRef.current);
       stopPolling();
-      await recorderRef.current?.stop();
-      setTimeout(() => setState('done'), 400);
+      const r = recorderRef.current;
+      // If an auto-stop already began, still wait for its save to finish.
+      if (r) await (r.isRecording ? r.stop() : r.whenStopped());
+      restoreScale();
+      setTimeout(() => setState(r?.error ? 'error' : 'done'), 400);
     }
   };
 
@@ -311,6 +449,8 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
       stopPolling();
       if (recorderRef.current?.isRecording) recorderRef.current.stop();
       abortRef.current = true;
+      // Safe even mid-FFmpeg-encode: its next renderFrame sees the abort first.
+      restoreScale();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -320,12 +460,16 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const isError     = state === 'error';
   const isBusy      = isRecording || isEncoding;
 
-  const displayW = mode === 'ffmpeg' && offlineRender
-    ? offlineRender.width
-    : canvas ? canvas.width * resScale : 0;
-  const displayH = mode === 'ffmpeg' && offlineRender
-    ? offlineRender.height
-    : canvas ? canvas.height * resScale : 0;
+  const displayW = current?.width ?? 0;
+  const displayH = current?.height ?? 0;
+  const preferred = preferredRecorderFormat();
+  // Browser mode: H.264 can't encode this size but VP9/VP8 can.
+  const formatFallback = mode === 'mediarecorder' && current?.format && preferred
+    && current.format.label !== preferred.label ? current.format : null;
+  const canStart = mode === 'ffmpeg'
+    ? !!offlineRender && !!current && !current.blocked
+    : !!canvas && !!current && !current.blocked && !!current.format;
+  const blockedScales = support ? RESOLUTIONS.filter(r => support[r.scale]?.blocked) : [];
 
   return (
     <div style={OVERLAY} onMouseDown={e => { if (e.target === e.currentTarget && !isBusy) onClose(); }}>
@@ -479,18 +623,25 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
               <div>
                 <div style={LABEL}>Resolution</div>
                 <div style={ROW}>
-                  {RESOLUTIONS.map(r => (
-                    <button
-                      key={r.scale} onClick={() => setResScale(r.scale)}
-                      style={{
-                        ...BTN_BASE, padding: '4px 10px', flex: 1,
-                        background: resScale === r.scale ? ctp.surface0 : ctp.mantle,
-                        color: resScale === r.scale ? ctp.text : ctp.surface2,
-                        borderColor: resScale === r.scale ? ctp.blue : ctp.surface0,
-                        fontSize: '11px',
-                      }}
-                    >{r.label}</button>
-                  ))}
+                  {RESOLUTIONS.map(r => {
+                    const blocked = support?.[r.scale]?.blocked ?? null;
+                    return (
+                      <button
+                        key={r.scale} onClick={() => setResScale(r.scale)}
+                        disabled={!!blocked}
+                        title={blocked ?? undefined}
+                        style={{
+                          ...BTN_BASE, padding: '4px 10px', flex: 1,
+                          background: resScale === r.scale ? ctp.surface0 : ctp.mantle,
+                          color: resScale === r.scale ? ctp.text : ctp.surface2,
+                          borderColor: resScale === r.scale ? ctp.blue : ctp.surface0,
+                          fontSize: '11px',
+                          opacity: blocked ? 0.4 : 1,
+                          cursor: blocked ? 'not-allowed' : 'pointer',
+                        }}
+                      >{r.label}</button>
+                    );
+                  })}
                 </div>
                 {canvas && (
                   <div style={{ marginTop: '4px', fontSize: '10px', color: ctp.surface1 }}>
@@ -498,6 +649,16 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                     {resScale > 1 && <span style={{ color: ctp.yellow, marginLeft: '6px' }}>⚠ higher bitrate recommended</span>}
                   </div>
                 )}
+                {formatFallback && current && (
+                  <div style={{ marginTop: '4px', fontSize: '10px', color: ctp.yellow, lineHeight: 1.4 }}>
+                    ⚠ {preferred!.label} can’t encode {fmtPx(current.width, current.height)} on this device — recording as {formatFallback.label} (.{formatFallback.ext}) instead.
+                  </div>
+                )}
+                {blockedScales.map(r => (
+                  <div key={r.scale} style={{ marginTop: '4px', fontSize: '10px', color: ctp.surface2, lineHeight: 1.4 }}>
+                    {r.label.split(' ')[0]} unavailable: {support![r.scale].blocked}
+                  </div>
+                ))}
               </div>
 
               {/* Filename */}
@@ -521,7 +682,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
             {mode === 'mediarecorder' && (
               <div style={{ fontSize: '10px', color: ctp.surface1, lineHeight: 1.5 }}>
                 Records in real-time via MediaRecorder. Downloads as{' '}
-                <strong style={{ color: ctp.overlay0 }}>{inTauri ? '.mp4' : '.webm'}</strong> when stopped.
+                <strong style={{ color: ctp.overlay0 }}>.{current?.format?.ext ?? preferred?.ext ?? 'webm'}</strong> when stopped.
               </div>
             )}
           </>
@@ -604,13 +765,13 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
           {state === 'idle' && (
             <button
               onClick={handleStart}
-              disabled={mode === 'ffmpeg' ? !offlineRender : !canvas}
+              disabled={!canStart}
               style={{
                 ...BTN_BASE,
                 background: mode === 'ffmpeg' ? ctp.mauve : ctp.blue,
                 color: ctp.base, fontWeight: 700,
                 borderColor: mode === 'ffmpeg' ? ctp.mauve : ctp.blue,
-                opacity: (mode === 'ffmpeg' ? !offlineRender : !canvas) ? 0.4 : 1,
+                opacity: canStart ? 1 : 0.4,
               }}
             >
               {mode === 'ffmpeg' ? '✦ Encode' : '▶ Record'}

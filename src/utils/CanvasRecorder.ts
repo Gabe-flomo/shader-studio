@@ -16,8 +16,12 @@ export interface CanvasRecorderOptions {
   quality?: number;            // 0-1
   name?: string;
   videoBitsPerSecond?: number;
+  /** MediaRecorder mime type; defaults to the first one the platform supports */
+  mimeType?: string;
   autoDownload?: boolean;
   verbose?: boolean;
+  /** Called if the encoder fails (e.g. frame size beyond its limits). Nothing is downloaded. */
+  onError?: (message: string) => void;
 }
 
 export interface RecordStats {
@@ -33,7 +37,9 @@ export interface RecordStats {
 
 export class CanvasRecorder {
   private canvas: HTMLCanvasElement;
-  private config: Required<CanvasRecorderOptions>;
+  private config: Required<Omit<CanvasRecorderOptions, 'mimeType' | 'onError'>> & Pick<CanvasRecorderOptions, 'mimeType' | 'onError'>;
+  /** Set when MediaRecorder reported an error or produced no data */
+  error: string | null = null;
 
   isRecording = false;
   isPaused    = false;
@@ -44,6 +50,7 @@ export class CanvasRecorder {
   private recordedChunks: Blob[] = [];
   private mediaRecorder: MediaRecorder | null = null;
   private mediaStopResolve: (() => void) | null = null;
+  private stopPromise: Promise<void> | null = null;
 
   /** Fixed delta time in seconds — use in your animation loop while recording */
   get fakeDeltaTime() { return 1 / this.config.fps; }
@@ -59,6 +66,8 @@ export class CanvasRecorder {
       videoBitsPerSecond: options.videoBitsPerSecond ?? 25_000_000,
       autoDownload:       options.autoDownload       !== false,
       verbose:            options.verbose            !== false,
+      mimeType:           options.mimeType,
+      onError:            options.onError,
     };
   }
 
@@ -70,6 +79,7 @@ export class CanvasRecorder {
     this.frames       = [];
     this.recordedChunks = [];
     this.startTime    = performance.now();
+    this.error        = null;
 
     if (this.config.format === 'mediarecorder') {
       await this._initMediaRecorder();
@@ -87,24 +97,41 @@ export class CanvasRecorder {
     }
     // mediarecorder captures from the stream automatically
 
-    // Auto-stop when duration reached
+    // Auto-stop when duration reached. MediaRecorder timestamps frames in
+    // real time, so stop on wall-clock time — counting rAF frames made
+    // videos run long whenever rendering fell below the target fps (e.g. at
+    // 4× resolution) and short on 120 Hz displays. PNG frames are discrete,
+    // so that mode still counts frames.
     if (this.config.duration !== null) {
-      const target = this.config.duration * this.config.fps;
-      if (this.frameCount >= target) this.stop();
+      const done = this.config.format === 'mediarecorder'
+        ? performance.now() - this.startTime >= this.config.duration * 1000
+        : this.frameCount >= this.config.duration * this.config.fps;
+      if (done) this.stop();
     }
   }
 
-  async stop(): Promise<void> {
-    if (!this.isRecording) { console.warn('[CanvasRecorder] not recording'); return; }
+  stop(): Promise<void> {
+    if (!this.isRecording) { console.warn('[CanvasRecorder] not recording'); return this.whenStopped(); }
     this.isRecording = false;
     this._log(`stopping — ${this.frameCount} frames captured`);
+    this.stopPromise = (async () => {
+      if (this.config.format === 'png') {
+        await this._finishPng();
+      } else {
+        await this._finishMediaRecorder();
+      }
+      this._log('done');
+    })();
+    return this.stopPromise;
+  }
 
-    if (this.config.format === 'png') {
-      await this._finishPng();
-    } else {
-      await this._finishMediaRecorder();
-    }
-    this._log('done');
+  /**
+   * Resolves once the file has been finalised and saved (or saving failed —
+   * check `error`). isRecording flips false as soon as stopping begins, which
+   * can be well before this: the Tauri save dialog waits on the user.
+   */
+  whenStopped(): Promise<void> {
+    return this.stopPromise ?? Promise.resolve();
   }
 
   pause()  { this.isPaused = true;  this._log('paused');  }
@@ -169,12 +196,12 @@ export class CanvasRecorder {
 
   private async _initMediaRecorder() {
     const stream   = this.canvas.captureStream(this.config.fps);
-    const mimeType = this._bestMimeType();
+    const mimeType = this.config.mimeType ?? this._bestMimeType();
 
     if (!mimeType) {
       throw new Error(
-        'MediaRecorder: no supported video format found on this platform. ' +
-        'Try switching to PNG frame sequence instead.'
+        'This browser can\u2019t record video: MediaRecorder supports none of ' +
+        'MP4 (H.264), WebM (VP9) or WebM (VP8) here.'
       );
     }
 
@@ -189,10 +216,21 @@ export class CanvasRecorder {
       if (e.data?.size > 0) this.recordedChunks.push(e.data);
     };
 
+    // Without this, an encoder rejection (e.g. H.264 at a frame size above its
+    // level limit) stops the recorder and we'd "download" a 0-byte file.
+    this.mediaRecorder.onerror = (e) => {
+      const err = (e as Event & { error?: DOMException }).error;
+      this._fail(`Video encoder failed at ${this.canvas.width}×${this.canvas.height}: ${err?.message ?? 'unknown error'}`);
+    };
+
     this.mediaRecorder.onstop = async () => {
       const blob = new Blob(this.recordedChunks, { type: mimeType });
       const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
-      if (this.config.autoDownload) await this._downloadBlob(blob, `${this.config.name}.${ext}`);
+      if (!this.error && blob.size === 0) {
+        this._fail(`The video encoder produced no data at ${this.canvas.width}×${this.canvas.height}.`);
+      }
+      if (!this.error && this.config.autoDownload) await this._downloadBlob(blob, `${this.config.name}.${ext}`);
+      stream.getTracks().forEach(t => t.stop());
       this.mediaStopResolve?.();
     };
 
@@ -245,7 +283,7 @@ export class CanvasRecorder {
           this._log(`saved to ${path}`);
         }
       } catch (err) {
-        console.error('[CanvasRecorder] Tauri save failed', err);
+        this._fail(`Couldn\u2019t save the video: ${err instanceof Error ? err.message : String(err)}`);
       }
       return;
     }
@@ -258,6 +296,14 @@ export class CanvasRecorder {
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 100);
+  }
+
+  private _fail(message: string) {
+    if (this.error) return;
+    this.error = message;
+    this.isRecording = false;
+    console.error('[CanvasRecorder]', message);
+    this.config.onError?.(message);
   }
 
   private _log(...args: unknown[]) {
