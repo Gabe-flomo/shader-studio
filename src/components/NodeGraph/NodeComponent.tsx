@@ -66,14 +66,6 @@ function adaptiveStep(value: number, baseStep: number): number {
   return baseStep;
 }
 
-function adaptiveDecimals(step: number): number {
-  if (step < 0.0001) return 6;
-  if (step < 0.001) return 5;
-  if (step < 0.01) return 4;
-  if (step < 0.1) return 3;
-  if (step < 1) return 2;
-  return 1;
-}
 
 interface Props {
   node: GraphNode;
@@ -1470,10 +1462,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [saveLabel, setSaveLabel] = useState('');
   const [saveDescription, setSaveDescription] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
-  const [saveHovered, setSaveHovered] = useState(false);
   const [hoveredSliderKey, setHoveredSliderKey] = useState<string | null>(null);
-  const [editingSliderKey, setEditingSliderKey] = useState<string | null>(null);
-  const [editingSliderValue, setEditingSliderValue] = useState('');
   const [showParamPicker, setShowParamPicker] = useState(false);
   const [showInitModal, setShowInitModal] = useState(false);
 
@@ -1878,6 +1867,52 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
       window.addEventListener('mouseup', handleUp);
     };
 
+    const groupIcon = isSceneGroup ? 'presets' : isSpaceWarpGroup ? 'loop' : isMarchLoopGroup ? 'wave' : 'nodes';
+
+    /** One exposed inner param: typed socket on the card edge, label, and a ruler (or the wire). */
+    const groupParamRow = (o: {
+      rowKey: string; psKey: string; label: string; value: number; min: number; max: number; step: number;
+      overrideKey: string; defaultValue?: number;
+    }) => {
+      const wired = !!node.inputs[o.psKey]?.connection;
+      const wire = node.inputs[o.psKey]?.connection;
+      return (
+        <div key={o.rowKey} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}
+          onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+          <ParamSocket color={TYPE_COLORS.float} wired={wired} touch={isTouchDevice}
+            register={el => { registerSocket(node.id, 'in', o.psKey, el); }}
+            onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, o.psKey); }} />
+          <ParamLabel muted={wired}>{o.label}</ParamLabel>
+          {wired && wire ? (
+            <>
+              <WiredChip expr={getSourceExpr(shaderLines, wire.nodeId, wire.outputKey) || 'wired from outside'} />
+              <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, o.psKey)} />
+            </>
+          ) : (
+            <RulerSlider
+              value={o.value}
+              min={o.min}
+              max={o.max}
+              step={adaptiveStep(o.value, o.step)}
+              defaultValue={o.defaultValue ?? (o.min + o.max) / 2}
+              onChange={v => updateNodeParams(node.id, { [o.overrideKey]: v }, { immediate: true })}
+              onType={n => updateNodeParams(node.id, { [o.overrideKey]: n }, { immediate: true })}
+              ariaLabel={o.label}
+              touch={isTouchDevice}
+            />
+          )}
+        </div>
+      );
+    };
+    const sectionHeadStyle: React.CSSProperties = {
+      display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px 3px', fontSize: 10, fontWeight: 700,
+      letterSpacing: '0.08em', color: tk.text.faint, userSelect: 'none', textTransform: 'uppercase',
+    };
+    const sectionInputStyle: React.CSSProperties = {
+      flex: 1, background: 'transparent', border: 0, borderBottom: `1px solid ${tk.accent.base}`, outline: 'none', padding: 0,
+      color: tk.text.primary, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.08em', textTransform: 'uppercase',
+    };
+
     return (
       <div
         data-node-id={node.id}
@@ -1885,197 +1920,152 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           position: 'absolute',
           left: node.position.x,
           top: node.position.y,
-          background: tc.base,
-          border: isMultiSelected ? `2px solid ${groupAccentColor}` : isSelected ? `1px solid ${groupAccentColor}` : `2px dashed ${groupAccentColor}`,
-          borderRadius: '8px',
-          minWidth: '200px',
-          color: tc.text,
-          fontSize: '12px',
+          width: 360,
+          boxSizing: 'border-box',
+          background: tk.bg.panel,
+          border: `2px ${isSelected || isMultiSelected ? 'solid' : 'dashed'} ${groupAccentColor}`,
+          borderRadius: radius.card,
+          color: tk.text.primary,
+          fontSize: 12.5,
+          fontFamily: fontFamily.ui,
           userSelect: 'none',
           opacity: dimmed ? 0.2 : 1,
-          boxShadow: isMultiSelected ? `0 0 12px ${groupAccentColor}55, 0 4px 12px rgba(0,0,0,0.4)` : '0 4px 12px rgba(0,0,0,0.4)',
+          boxShadow: isMultiSelected ? `0 0 16px ${alpha(groupAccentColor, 0.3)}, ${tk.shadow.card}` : tk.shadow.card,
         }}
       >
-        {/* Group header */}
+        {/* Group header — drag handle; double-click enters the group */}
         <div
           onMouseDown={handleGroupHeaderMouseDown}
           onDoubleClick={() => { if (!savingMode) onEnterGroup?.(node.id); }}
           style={{
-            background: tc.surface0,
-            borderRadius: '6px 6px 0 0',
-            padding: '5px 8px 5px 10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'grab',
-            gap: '6px',
+            display: 'flex', alignItems: 'center', gap: 3, padding: '7px 7px 7px 11px', cursor: 'grab',
+            borderBottom: `1px solid ${tk.border.subtle}`,
           }}
         >
-          {/* Label + count */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
-            <span style={{ fontSize: '13px', flexShrink: 0 }}>{isSceneGroup ? '◉' : isSpaceWarpGroup ? '⟳' : isMarchLoopGroup ? '⟲' : '⬡'}</span>
-            {isEditingTitle ? (
-              <input
-                autoFocus
-                value={editingTitleValue}
-                onChange={e => setEditingTitleValue(e.target.value)}
-                onMouseDown={e => e.stopPropagation()}
-                onBlur={() => {
-                  const trimmed = editingTitleValue.trim();
-                  updateNodeParams(node.id, { label: trimmed || groupLabel });
-                  setIsEditingTitle(false);
-                }}
-                onKeyDown={e => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                  if (e.key === 'Escape') setIsEditingTitle(false);
-                }}
-                style={{ background: tc.base, border: `1px solid ${groupAccentColor}`, color: groupAccentColor, borderRadius: '3px', padding: '0 4px', fontSize: '12px', fontWeight: 600, width: `${Math.max(60, editingTitleValue.length * 8)}px`, outline: 'none' }}
-              />
-            ) : (
-              <span
-                onDoubleClick={e => {
-                  e.stopPropagation();
-                  setEditingTitleValue(groupLabel);
-                  setIsEditingTitle(true);
-                }}
-                title="Double-click to rename"
-                style={{ fontWeight: 600, color: groupAccentColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
-              >{groupLabel}</span>
-            )}
-            <span style={{ fontSize: '10px', color: tc.surface2, flexShrink: 0 }}>({nodeCount})</span>
-          </div>
-          {/* Action icons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-            {/* Duplicate */}
-            <button
+          <span style={{ display: 'flex', color: groupAccentColor, flexShrink: 0 }}><Icon name={groupIcon} size={16} /></span>
+          {isEditingTitle ? (
+            <input
+              autoFocus
+              aria-label="Group name"
+              value={editingTitleValue}
+              onChange={e => setEditingTitleValue(e.target.value)}
               onMouseDown={e => e.stopPropagation()}
               onDoubleClick={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); duplicateGroup(node.id); }}
-              title="Duplicate group (independent copy)"
-              style={{ background: 'none', border: 'none', color: tc.surface2, cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = groupAccentColor)}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = tc.surface2)}
-            >⧉</button>
-            {/* Save preset */}
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => {
-                setSaveLabel(typeof node.params.label === 'string' ? node.params.label : 'Group');
-                setSaveDescription('');
-                setSavingMode(true);
+              onBlur={() => {
+                const trimmed = editingTitleValue.trim();
+                updateNodeParams(node.id, { label: trimmed || groupLabel });
+                setIsEditingTitle(false);
               }}
-              onMouseEnter={() => setSaveHovered(true)}
-              onMouseLeave={() => setSaveHovered(false)}
-              title="Save as preset"
-              className={savedFlash ? 'group-save-flash' : ''}
-              style={{
-                background: 'none', border: 'none',
-                color: saveHovered || savedFlash ? tc.green : tc.surface2,
-                cursor: 'pointer', fontSize: '12px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px',
-                transition: 'color 0.15s',
-              }}
-            >↓</button>
-            {/* Ungroup button — regular groups only */}
-            {node.type === 'group' && (
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); ungroupNode(node.id); }}
-                title={groupIters > 1 ? 'Ungroup (iterations will be flattened to a single pass)' : 'Ungroup (restore nodes to parent)'}
-                style={{ background: 'none', border: 'none', color: tc.surface2, cursor: 'pointer', fontSize: '11px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.green; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}
-              >⤴</button>
-            )}
-            {/* Delete button — all group types */}
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={e => {
+              onKeyDown={e => {
                 e.stopPropagation();
-                removeNode(node.id);
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                if (e.key === 'Escape') setIsEditingTitle(false);
               }}
-              title="Delete group and all its nodes"
-              style={{ background: 'none', border: 'none', color: tc.surface2, cursor: 'pointer', fontSize: '13px', padding: '2px 4px', lineHeight: 1, borderRadius: '3px' }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = tc.red)}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = tc.surface2)}
-            >✕</button>
+              style={{
+                flex: 1, minWidth: 0, height: 26, marginLeft: 5, padding: '0 6px', border: 0, outline: 'none', borderRadius: radius.sm,
+                background: tk.bg.panel, boxShadow: `inset 0 0 0 1.5px ${groupAccentColor}`, color: tk.text.primary,
+                font: `600 13.5px ${fontFamily.ui}`,
+              }}
+            />
+          ) : (
+            <span
+              onDoubleClick={e => {
+                e.stopPropagation();
+                setEditingTitleValue(groupLabel);
+                setIsEditingTitle(true);
+              }}
+              title="Double-click to rename"
+              style={{
+                marginLeft: 5, fontWeight: 600, fontSize: 13.5, color: groupAccentColor, cursor: 'text',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+              }}
+            >{groupLabel}</span>
+          )}
+          <span style={{ flex: 1, minWidth: 0, marginLeft: 4, fontSize: 12, color: tk.text.faint, whiteSpace: 'nowrap' }}>
+            {nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
+            <CardButton icon="copy" label="Duplicate group (an independent copy)" onClick={() => duplicateGroup(node.id)} />
+            <CardButton icon="save" tint="success" on={savedFlash} label="Save as a preset" onClick={() => {
+              setSaveLabel(typeof node.params.label === 'string' ? node.params.label : 'Group');
+              setSaveDescription('');
+              setSavingMode(true);
+            }} />
+            {node.type === 'group' && (
+              <CardButton icon="unlink"
+                label={groupIters > 1 ? 'Ungroup (iterations flatten to a single pass)' : 'Ungroup (put the nodes back in the graph)'}
+                onClick={() => ungroupNode(node.id)} />
+            )}
+            <CardButton icon="close" tone="danger" label="Delete the group and its nodes" onClick={() => removeNode(node.id)} />
           </div>
         </div>
 
-        {/* Save-as-preset inline form — shown below header when savingMode is active */}
-        {savingMode && (
+        {/* Save-as-preset form — below the header while saving */}
+        {savingMode && (() => {
+          const commitSave = () => {
+            if (saveLabel.trim()) {
+              saveGroupPreset(node.id, saveLabel.trim(), saveDescription.trim());
+              setSavedFlash(true);
+              setTimeout(() => setSavedFlash(false), 700);
+            }
+            setSavingMode(false);
+          };
+          const fieldStyle: React.CSSProperties = {
+            height: 30, minWidth: 0, padding: '0 10px', border: 0, outline: 'none', borderRadius: radius.md,
+            background: tk.bg.field, color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`,
+          };
+          return (
+            <div
+              onMouseDown={e => e.stopPropagation()}
+              onDoubleClick={e => e.stopPropagation()}
+              style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', background: tk.bg.subtle, borderBottom: `1px solid ${tk.border.subtle}` }}
+            >
+              <input autoFocus aria-label="Preset name" value={saveLabel} onChange={e => setSaveLabel(e.target.value)} placeholder="Name"
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commitSave(); if (e.key === 'Escape') setSavingMode(false); }}
+                style={fieldStyle} />
+              <input aria-label="Preset description" value={saveDescription} onChange={e => setSaveDescription(e.target.value)} placeholder="Description (optional)"
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commitSave(); if (e.key === 'Escape') setSavingMode(false); }}
+                style={fieldStyle} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                <Button size="sm" variant="ghost" onClick={() => setSavingMode(false)}>Cancel</Button>
+                <Button size="sm" variant="primary" disabled={!saveLabel.trim()} onClick={commitSave}>Save preset</Button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Iterations — regular groups only */}
+        {node.type === 'group' && (
           <div
             onMouseDown={e => e.stopPropagation()}
-            style={{ background: '#252536', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '4px', borderBottom: `1px solid ${tc.surface0}` }}
+            onDoubleClick={e => e.stopPropagation()}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px 6px 14px', background: tk.bg.subtle, borderBottom: `1px solid ${tk.border.subtle}` }}
           >
-            <input
-              autoFocus
-              value={saveLabel}
-              onChange={e => setSaveLabel(e.target.value)}
-              placeholder="Name…"
-              onMouseDown={e => e.stopPropagation()}
-              style={{ flex: 1, minWidth: '70px', background: tc.crust, border: `1px solid ${tc.blue}`, color: tc.text, borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
+            <span style={{ width: 70, flexShrink: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>ITERATIONS</span>
+            <RulerSlider
+              integer
+              value={groupIters}
+              min={1}
+              max={16}
+              defaultValue={1}
+              onChange={v => updateNodeParams(node.id, { iterations: Math.max(1, Math.min(16, Math.round(v))) }, { immediate: true })}
+              ariaLabel="Iterations"
+              touch={isTouchDevice}
             />
-            <input
-              value={saveDescription}
-              onChange={e => setSaveDescription(e.target.value)}
-              placeholder="Description…"
-              onMouseDown={e => e.stopPropagation()}
-              style={{ flex: 2, minWidth: '60px', background: tc.crust, border: `1px solid ${tc.surface1}`, color: tc.text, borderRadius: '3px', padding: '2px 5px', fontSize: '10px', outline: 'none' }}
-            />
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => {
-                if (saveLabel.trim()) {
-                  saveGroupPreset(node.id, saveLabel.trim(), saveDescription.trim());
-                  setSavedFlash(true);
-                  setTimeout(() => setSavedFlash(false), 700);
-                }
-                setSavingMode(false);
-              }}
-              style={{ background: tc.green, border: 'none', color: tc.base, borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer', fontWeight: 700 }}
-            >✓</button>
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => setSavingMode(false)}
-              style={{ background: 'none', border: `1px solid ${tc.surface2}`, color: tc.overlay0, borderRadius: '3px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
-            >✕</button>
           </div>
         )}
 
-        {/* Iterations row — compact param row below header (group only) */}
-        {node.type === 'group' && <div
-          onMouseDown={e => e.stopPropagation()}
-          onDoubleClick={e => e.stopPropagation()}
-          style={{ padding: '3px 10px 3px 10px', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid #252536', background: '#252536' }}
-        >
-          <span style={{ fontSize: '9px', color: tc.surface2, letterSpacing: '0.05em', minWidth: '60px' }}>ITERATIONS</span>
-          <span style={{ fontSize: '10px', color: groupIters > 1 ? groupAccentColor : tc.surface2, minWidth: '16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>×{groupIters}</span>
-          <input
-            type="range"
-            min={1}
-            max={16}
-            step={1}
-            value={groupIters}
-            onChange={e => {
-              const v = Math.max(1, Math.min(16, Math.round(Number(e.target.value))));
-              if (!isNaN(v)) updateNodeParams(node.id, { iterations: v }, { immediate: true });
-            }}
-            style={{ flex: 1, accentColor: groupAccentColor, cursor: 'pointer', margin: 0 }}
-          />
-        </div>}
-
         {/* Port list */}
-        <div style={{ padding: '6px 10px', display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
+        <div style={{ padding: '6px 14px', display: 'flex', gap: 12, justifyContent: 'space-between' }}>
           {/* Inputs */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             {/* MarchLoopGroup: render definition-based inputs */}
             {isMarchLoopGroup && (() => {
               const MLG_FIXED_INPUTS = new Set(['ro', 'rd', 'scene', 'uv', 'time']);
               return Object.entries(node.inputs).map(([key, input]) => {
                 const isExtraInput = !MLG_FIXED_INPUTS.has(key) && !key.startsWith('ps_');
                 return (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px', height: isTouchDevice ? 40 : 30 }}>
                     <div
                       ref={el => { registerSocket(node.id, 'in', key, el); }}
                       onMouseUp={e => {
@@ -2087,13 +2077,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         }
                       }}
                       style={{
-                        width: 10, height: 10, borderRadius: '50%',
+                        width: 12, height: 12, borderRadius: '50%',
                         background: node.inputs[key]?.connection
                           ? (TYPE_COLORS[input.type] ?? '#888')
-                          : tc.base,
+                          : tk.bg.panel,
+                        boxShadow: node.inputs[key]?.connection ? `0 0 0 2px ${tk.bg.panel}` : undefined,
                         border: `2px solid ${TYPE_COLORS[input.type] ?? '#888'}`,
                         cursor: 'crosshair',
-                        position: 'relative', left: -14,
+                        position: 'relative', left: -22,
                         boxSizing: 'border-box',
                       }}
                     />
@@ -2111,11 +2102,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                           if (e.key === 'Escape') setEditingPortKey(null);
                         }}
-                        style={{ width: '60px', fontSize: '10px', background: tc.base, border: '1px solid #88aacc', color: tc.text, borderRadius: '2px', padding: '0 3px', outline: 'none', marginLeft: -14 }}
+                        style={{ width: 96, height: 24, fontSize: 12.5, background: tk.bg.panel, border: 0, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, borderRadius: 6, padding: '0 6px', outline: 'none', marginLeft: -16 }}
                       />
                     ) : (
                       <span
-                        style={{ fontSize: '10px', color: tc.subtext0, marginLeft: -14, cursor: isExtraInput ? 'text' : 'default' }}
+                        style={{ fontSize: 12.5, color: tk.text.secondary, marginLeft: -16, cursor: isExtraInput ? 'text' : 'default' }}
                         title={isExtraInput ? 'Double-click to rename' : undefined}
                         onDoubleClick={isExtraInput ? e => { e.stopPropagation(); setEditingPortKey(`mlgext_${key}`); setEditingPortLabel(input.label); } : undefined}
                       >{input.label}</span>
@@ -2125,7 +2116,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               });
             })()}
             {inputPorts.map((port) => (
-              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', height: isTouchDevice ? 40 : 30 }}>
                 {/* Socket dot */}
                 <div
                   ref={el => { registerSocket(node.id, 'in', port.key, el); }}
@@ -2140,13 +2131,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                     }
                   }}
                   style={{
-                    width: 10, height: 10, borderRadius: '50%',
+                    width: 12, height: 12, borderRadius: '50%',
                     background: node.inputs[port.key]?.connection
                       ? (TYPE_COLORS[port.type] ?? '#888')
-                      : tc.base,
+                      : tk.bg.panel,
+                    boxShadow: node.inputs[port.key]?.connection ? `0 0 0 2px ${tk.bg.panel}` : undefined,
                     border: `2px solid ${TYPE_COLORS[port.type] ?? '#888'}`,
                     cursor: 'crosshair',
-                    position: 'relative', left: -14,
+                    position: 'relative', left: -22,
                     boxSizing: 'border-box',
                   }}
                 />
@@ -2166,11 +2158,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                       if (e.key === 'Escape') setEditingPortKey(null);
                     }}
-                    style={{ width: '70px', fontSize: '10px', background: tc.base, border: `1px solid ${tc.blue}`, color: tc.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                    style={{ width: 96, height: 24, fontSize: 12.5, background: tk.bg.panel, border: 0, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, borderRadius: 6, padding: '0 6px', outline: 'none' }}
                   />
                 ) : (
                   <span
-                    style={{ fontSize: '10px', color: tc.subtext0, marginLeft: -14, cursor: 'text' }}
+                    style={{ fontSize: 12.5, color: tk.text.secondary, marginLeft: -16, cursor: 'text' }}
                     title="Double-click to rename"
                     onDoubleClick={e => { e.stopPropagation(); setEditingPortKey(port.key); setEditingPortLabel(port.label); }}
                   >{port.label}</span>
@@ -2180,7 +2172,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           </div>
 
           {/* Outputs */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, alignItems: 'flex-end', minWidth: 0 }}>
             {/* MarchLoopGroup: always show the full definition output set + any dynamic
                 accumulator outputs (acc0, acc1…) from the stored node, skipping hidden ones */}
             {isMarchLoopGroup && (() => {
@@ -2193,46 +2185,46 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               const hidden = (node.params.hiddenOutputs as string[] | undefined) ?? [];
               return Object.entries(mergedOuts).filter(([key]) => !hidden.includes(key));
             })().map(([key, output]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '10px', color: tc.subtext0 }}>{output.label}</span>
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isTouchDevice ? 40 : 30 }}>
+                <span style={{ fontSize: 12.5, color: tk.text.secondary }}>{output.label}</span>
                 <div
                   data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', key, el); }}
                   onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
                   onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
                   style={{
-                    width: isTouchDevice ? 20 : 10,
-                    height: isTouchDevice ? 20 : 10,
+                    width: isTouchDevice ? 20 : 12,
+                    height: isTouchDevice ? 20 : 12,
                     borderRadius: '50%',
                     background: TYPE_COLORS[output.type] ?? '#888',
                     cursor: 'crosshair',
                     position: 'relative',
-                    right: isTouchDevice ? -20 : -14,
+                    right: isTouchDevice ? -26 : -22,
                     touchAction: 'manipulation',
                     boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key
                       ? `0 0 0 3px ${TYPE_COLORS[output.type] ?? '#888'}, 0 0 10px ${TYPE_COLORS[output.type] ?? '#888'}`
-                      : undefined,
+                      : `0 0 0 2px ${tk.bg.panel}`,
                   }}
                 />
               </div>
             ))}
             {/* SceneGroup: always show the scene output socket */}
             {isSceneGroup && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '10px', color: '#cc88aa' }}>Scene</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isTouchDevice ? 40 : 30 }}>
+                <span style={{ fontSize: 12.5, color: tk.text.secondary }}>Scene</span>
                 <div
                   data-socket="out"
                   ref={el => { registerSocket(node.id, 'out', 'scene', el); }}
                   onMouseDown={e => onStartConnection(node.id, 'scene', e)}
                   onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, 'scene'); }}
                   style={{
-                    width: isTouchDevice ? 20 : 10,
-                    height: isTouchDevice ? 20 : 10,
+                    width: isTouchDevice ? 20 : 12,
+                    height: isTouchDevice ? 20 : 12,
                     borderRadius: '50%',
                     background: TYPE_COLORS['scene3d'] ?? '#cc88aa',
                     cursor: 'crosshair',
                     position: 'relative',
-                    right: isTouchDevice ? -20 : -14,
+                    right: isTouchDevice ? -26 : -22,
                     touchAction: 'manipulation',
                     boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === 'scene'
                       ? `0 0 0 3px ${TYPE_COLORS['scene3d'] ?? '#cc88aa'}, 0 0 10px ${TYPE_COLORS['scene3d'] ?? '#cc88aa'}`
@@ -2242,7 +2234,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               </div>
             )}
             {outputPorts.map(port => (
-              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', height: isTouchDevice ? 40 : 30 }}>
                 {editingPortKey === ('out_' + port.key) ? (
                   <input
                     autoFocus
@@ -2259,11 +2251,11 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                       if (e.key === 'Escape') setEditingPortKey(null);
                     }}
-                    style={{ width: '70px', fontSize: '10px', background: tc.base, border: `1px solid ${tc.blue}`, color: tc.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                    style={{ width: 96, height: 24, fontSize: 12.5, background: tk.bg.panel, border: 0, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, borderRadius: 6, padding: '0 6px', outline: 'none' }}
                   />
                 ) : (
                   <span
-                    style={{ fontSize: '10px', color: tc.subtext0, cursor: 'text' }}
+                    style={{ fontSize: 12.5, color: tk.text.secondary, cursor: 'text' }}
                     title="Double-click to rename"
                     onDoubleClick={e => { e.stopPropagation(); setEditingPortKey('out_' + port.key); setEditingPortLabel(port.label); }}
                   >{port.label}</span>
@@ -2276,10 +2268,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   onMouseDown={e => onStartConnection(node.id, port.key, e)}
                   onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, port.key); }}
                   style={{
-                    width: isTouchDevice ? 20 : 10, height: isTouchDevice ? 20 : 10, borderRadius: '50%',
+                    width: isTouchDevice ? 20 : 12, height: isTouchDevice ? 20 : 12, borderRadius: '50%',
                     background: TYPE_COLORS[port.type] ?? '#888',
                     cursor: 'crosshair',
-                    position: 'relative', right: isTouchDevice ? -20 : -14,
+                    position: 'relative', right: isTouchDevice ? -26 : -22,
                     touchAction: 'manipulation',
                     boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === port.key ? `0 0 0 3px ${TYPE_COLORS[port.type] ?? '#888'}, 0 0 10px ${TYPE_COLORS[port.type] ?? '#888'}` : undefined,
                   }}
@@ -2311,9 +2303,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
               : innerGroupLabel;
 
             return (
-              <div key={innerNode.id} style={{ borderTop: `1px solid ${tc.surface0}` }}>
+              <div key={innerNode.id} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingBottom: 4 }}>
                 <div
-                  style={{ padding: '3px 10px 1px', fontSize: '9px', color: tc.surface2, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px', userSelect: 'none' }}
+                  title="Double-click to rename this section"
+                  style={sectionHeadStyle}
                   onDoubleClick={e => {
                     e.stopPropagation();
                     setEditingSectionId(innerNode.id);
@@ -2340,12 +2333,12 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                         }
                       }}
                       onMouseDown={e => e.stopPropagation()}
-                      style={{ background: 'transparent', border: 'none', borderBottom: `1px solid ${tc.surface2}`, color: tc.subtext0, fontSize: '9px', letterSpacing: '0.05em', outline: 'none', padding: 0, width: '100%', textTransform: 'uppercase' }}
+                      style={sectionInputStyle}
                     />
                   ) : (
-                    <span style={{ flex: 1, cursor: 'text' }}>{sectionLabel.toUpperCase()}</span>
+                    <span style={{ flex: 1, cursor: 'text' }}>{sectionLabel}</span>
                   )}
-                  <span style={{ color: tc.overlay0, fontSize: '9px' }}>⬡</span>
+                  <Icon name="nodes" size={12} />
                 </div>
                 {surfacedParams.map(sp => {
                   const innNode = innerGroupSub?.nodes.find(n => n.id === sp.nodeId);
@@ -2354,90 +2347,14 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                   const paramDef = innDef?.paramDefs?.[sp.paramKey];
                   if (!paramDef) return null;
                   const psKey = `ps_${innerNode.id}_${sp.nodeId}_${sp.paramKey}`;
-                  const psSocket = node.inputs[psKey];
-                  const externallyDriven = !!(psSocket?.connection);
                   const overrideKey = `${innerNode.id}::${sp.nodeId}::${sp.paramKey}`;
                   const rawVal = node.params[overrideKey] ?? innNode.params[sp.paramKey];
                   const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
-                  const step = paramDef.step ?? 0.01;
-                  const baseMax = paramDef.max ?? 1;
-                  const effMin = paramDef.min ?? 0;
-                  return (
-                    <div
-                      key={`${sp.nodeId}::${sp.paramKey}`}
-                      style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
-                      onMouseDown={e => e.stopPropagation()}
-                    >
-                      {/* ps_ socket dot */}
-                      <div
-                        ref={el => { registerSocket(node.id, 'in', psKey, el); }}
-                        onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, psKey); }}
-                        style={{
-                          position: 'absolute',
-                          left: isTouchDevice ? -6 : -5,
-                          width: isTouchDevice ? 16 : 8,
-                          height: isTouchDevice ? 16 : 8,
-                          borderRadius: '50%',
-                          background: externallyDriven ? '#f0a' : 'transparent',
-                          border: `1.5px solid ${externallyDriven ? '#f0a' : tc.surface2}`,
-                          cursor: 'crosshair',
-                          touchAction: 'manipulation',
-                        }}
-                      />
-                      <span style={{ color: externallyDriven ? tc.subtext0 : tc.overlay0, fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
-                        {sp.label ?? paramDef.label}
-                      </span>
-                      {externallyDriven ? (
-                        <>
-                          <span style={{ flex: 1, fontSize: '10px', color: tc.surface2, fontStyle: 'italic' }}>wired</span>
-                          <button
-                            onMouseDown={e => e.stopPropagation()}
-                            onClick={() => disconnectInput(node.id, psKey)}
-                            style={{ fontSize: '9px', color: tc.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                            title="Disconnect"
-                          >×</button>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="range"
-                            min={effMin}
-                            max={baseMax}
-                            step={adaptiveStep(currentVal, step)}
-                            value={Math.max(effMin, Math.min(baseMax, currentVal))}
-                            onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
-                            style={{ flex: 1, accentColor: tc.mauve, cursor: 'pointer' }}
-                          />
-                          {editingSliderKey === `sp_${overrideKey}` ? (
-                            <input
-                              autoFocus
-                              type="text"
-                              style={{ ...inputStyle_, width: '40px', fontSize: '10px', border: `1px solid ${tc.surface2}` }}
-                              value={editingSliderValue}
-                              onChange={e => setEditingSliderValue(e.target.value)}
-                              onBlur={() => {
-                                const v = parseFloat(editingSliderValue);
-                                if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v });
-                                setEditingSliderKey(null);
-                              }}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') { const v = parseFloat(editingSliderValue); if (!isNaN(v)) updateNodeParams(node.id, { [overrideKey]: v }); setEditingSliderKey(null); }
-                                if (e.key === 'Escape') setEditingSliderKey(null);
-                              }}
-                            />
-                          ) : (
-                            <span
-                              title="Double-click to edit"
-                              style={{ color: tc.subtext0, fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
-                              onDoubleClick={() => { setEditingSliderKey(`sp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
-                            >
-                              {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
+                  return groupParamRow({
+                    rowKey: `${sp.nodeId}::${sp.paramKey}`, psKey, label: sp.label ?? paramDef.label, value: currentVal,
+                    min: paramDef.min ?? 0, max: paramDef.max ?? 1, step: paramDef.step ?? 0.01, overrideKey,
+                    defaultValue: typeof innDef?.defaultParams?.[sp.paramKey] === 'number' ? innDef.defaultParams[sp.paramKey] as number : undefined,
+                  });
                 })}
               </div>
             );
@@ -2477,9 +2394,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             : innerLabel;
 
           return (
-            <div key={innerNode.id} style={{ borderTop: `1px solid ${tc.surface0}` }}>
+            <div key={innerNode.id} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingBottom: 4 }}>
               <div
-                style={{ padding: '3px 10px 1px', fontSize: '9px', color: tc.surface2, letterSpacing: '0.05em', cursor: 'text', userSelect: 'none' }}
+                title="Double-click to rename this section"
+                style={{ ...sectionHeadStyle, cursor: 'text' }}
                 onDoubleClick={e => {
                   e.stopPropagation();
                   setEditingSectionId(innerNode.id);
@@ -2506,115 +2424,27 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
                       }
                     }}
                     onMouseDown={e => e.stopPropagation()}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      borderBottom: `1px solid ${tc.surface2}`,
-                      color: tc.subtext0,
-                      fontSize: '9px',
-                      letterSpacing: '0.05em',
-                      outline: 'none',
-                      padding: 0,
-                      width: '100%',
-                      textTransform: 'uppercase',
-                    }}
+                    style={sectionInputStyle}
                   />
                 ) : (
-                  displayLabel.toUpperCase()
+                  displayLabel
                 )}
               </div>
               {visibleParams.map(([paramKey, paramDef]) => {
                 if (paramDef.type !== 'float') return null;
                 const psKey = `ps_${innerNode.id}_${paramKey}`;
-                const psSocket = node.inputs[psKey];
-                const externallyDriven = !!(psSocket?.connection);
                 const overrideKey = `${innerNode.id}::${paramKey}`;
                 const rawVal = node.params[overrideKey] ?? innerNode.params[paramKey];
                 const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
-                const step = paramDef.step ?? 0.01;
                 const innerBidir = innerNode.params[`__scBidir_${paramKey}`] === true;
                 const innerCustomMax = typeof innerNode.params[`__scMax_${paramKey}`] === 'number' ? innerNode.params[`__scMax_${paramKey}`] as number : null;
-                const baseMax = paramDef.max ?? 1;
-                const effMax = innerCustomMax ?? baseMax;
+                const effMax = innerCustomMax ?? (paramDef.max ?? 1);
                 const effMin = innerBidir ? -effMax : (innerCustomMax != null ? 0 : (paramDef.min ?? 0));
-
-                return (
-                  <div
-                    key={paramKey}
-                    style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
-                    onMouseDown={e => e.stopPropagation()}
-                  >
-                    {/* ps_ input socket dot — positioned on left edge */}
-                    <div
-                      ref={el => { registerSocket(node.id, 'in', psKey, el); }}
-                      onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, psKey); }}
-                      style={{
-                        position: 'absolute',
-                        left: isTouchDevice ? -6 : -5,
-                        width: isTouchDevice ? 16 : 8,
-                        height: isTouchDevice ? 16 : 8,
-                        borderRadius: '50%',
-                        background: externallyDriven ? '#f0a' : 'transparent',
-                        border: `1.5px solid ${externallyDriven ? '#f0a' : tc.surface2}`,
-                        cursor: 'crosshair',
-                        touchAction: 'manipulation',
-                      }}
-                    />
-                    <span style={{ color: externallyDriven ? tc.subtext0 : tc.overlay0, fontSize: '10px', minWidth: '60px', flexShrink: 0 }}>
-                      {paramDef.label}
-                    </span>
-                    {externallyDriven ? (
-                      <>
-                        <span style={{ flex: 1, fontSize: '10px', color: tc.surface2, fontStyle: 'italic' }}>wired</span>
-                        <button
-                          onMouseDown={e => e.stopPropagation()}
-                          onClick={() => disconnectInput(node.id, psKey)}
-                          style={{ fontSize: '9px', color: tc.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                          title="Disconnect"
-                        >×</button>
-                      </>
-                    ) : (
-                      <>
-                        <input
-                          type="range"
-                          min={effMin}
-                          max={effMax}
-                          step={adaptiveStep(currentVal, step)}
-                          value={Math.max(effMin, Math.min(effMax, currentVal))}
-                          onChange={e => updateNodeParams(node.id, { [overrideKey]: parseFloat(e.target.value) }, { immediate: true })}
-                          onDoubleClick={() => updateNodeParams(node.id, { [overrideKey]: (effMin + effMax) / 2 })}
-                          style={{ flex: 1, accentColor: tc.blue, cursor: 'pointer' }}
-                        />
-                        {editingSliderKey === `gp_${overrideKey}` ? (
-                          <input
-                            autoFocus
-                            type="text"
-                            style={{ ...inputStyle_, width: '40px', fontSize: '10px', border: `1px solid ${tc.surface2}` }}
-                            value={editingSliderValue}
-                            onChange={e => setEditingSliderValue(e.target.value)}
-                            onBlur={() => {
-                              const n = parseFloat(editingSliderValue);
-                              if (!isNaN(n)) updateNodeParams(node.id, { [overrideKey]: n });
-                              setEditingSliderKey(null);
-                            }}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { const n = parseFloat(editingSliderValue); if (!isNaN(n)) updateNodeParams(node.id, { [overrideKey]: n }); setEditingSliderKey(null); }
-                              if (e.key === 'Escape') setEditingSliderKey(null);
-                            }}
-                          />
-                        ) : (
-                          <span
-                            title="Double-click to edit"
-                            style={{ color: tc.subtext0, fontSize: '10px', minWidth: '32px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', cursor: 'text', userSelect: 'none' }}
-                            onDoubleClick={() => { setEditingSliderKey(`gp_${overrideKey}`); setEditingSliderValue(String(currentVal)); }}
-                          >
-                            {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                );
+                const innerDefault = innerDef?.defaultParams?.[paramKey];
+                return groupParamRow({
+                  rowKey: paramKey, psKey, label: paramDef.label, value: currentVal, min: effMin, max: effMax,
+                  step: paramDef.step ?? 0.01, overrideKey, defaultValue: typeof innerDefault === 'number' ? innerDefault : undefined,
+                });
               })}
             </div>
           );
@@ -2628,52 +2458,45 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           if (outerEntries.length === 0) return null;
           const hidden = node.params.__marchSettingsHidden === true;
           return (
-            <div style={{ borderTop: `1px solid ${tc.surface0}` }} onMouseDown={e => e.stopPropagation()}>
-              <div
-                style={{ padding: '3px 10px 1px', fontSize: '9px', color: tc.surface2, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+            <div style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingBottom: 4 }} onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+              <button
+                type="button"
+                aria-expanded={!hidden}
+                style={{ ...sectionHeadStyle, width: '100%', border: 0, background: 'none', cursor: 'pointer', textAlign: 'left' }}
                 onClick={() => updateNodeParams(node.id, { __marchSettingsHidden: !hidden }, { immediate: true })}
               >
-                <span>MARCH SETTINGS</span>
-                <span style={{ fontSize: '8px', opacity: 0.6 }}>{hidden ? '▶' : '▼'}</span>
-              </div>
+                <span style={{ flex: 1 }}>March settings</span>
+                <Icon name={hidden ? 'chevR' : 'chevD'} size={12} />
+              </button>
               {!hidden && outerEntries.map(([paramKey, paramDef]) => {
                 if (paramDef.type === 'bool') {
-                  const val = node.params[paramKey] === true;
                   return (
-                    <div key={paramKey} style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '9px', color: tc.overlay0, minWidth: '70px' }}>{paramDef.label}</span>
-                      <input
-                        type="checkbox"
-                        checked={val}
-                        onChange={e => updateNodeParams(node.id, { [paramKey]: e.target.checked }, { immediate: true })}
-                        style={{ cursor: 'pointer', accentColor: tc.mauve }}
-                      />
+                    <div key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
+                      <ParamLabel>{paramDef.label}</ParamLabel>
+                      <Toggle checked={node.params[paramKey] === true} onChange={v => updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} />
                     </div>
                   );
                 }
                 const rawVal = node.params[paramKey];
+                const defaultVal = (def.defaultParams as Record<string, unknown> | undefined)?.[paramKey];
                 const currentVal = typeof rawVal === 'number' ? rawVal
-                  : typeof (def.defaultParams as Record<string, unknown> | undefined)?.[paramKey] === 'number'
-                    ? (def.defaultParams as Record<string, number>)[paramKey]
+                  : typeof defaultVal === 'number' ? defaultVal
                     : (typeof paramDef.min === 'number' ? paramDef.min : 0);
                 const step = paramDef.step ?? 1;
-                const effMin = paramDef.min ?? 0;
-                const effMax = paramDef.max ?? 256;
                 return (
-                  <div key={paramKey} style={{ padding: '2px 10px 2px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '9px', color: tc.overlay0, minWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paramDef.label}</span>
-                    <input
-                      type="range"
-                      min={effMin}
-                      max={effMax}
-                      step={adaptiveStep(currentVal, step)}
+                  <div key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
+                    <ParamLabel title={paramDef.label}>{paramDef.label}</ParamLabel>
+                    <RulerSlider
                       value={currentVal}
-                      onChange={e => updateNodeParams(node.id, { [paramKey]: parseFloat(e.target.value) }, { immediate: true })}
-                      style={{ flex: 1, accentColor: '#88aacc', cursor: 'pointer', margin: 0 }}
+                      min={paramDef.min ?? 0}
+                      max={paramDef.max ?? 256}
+                      step={adaptiveStep(currentVal, step)}
+                      integer={step >= 1 && Number.isInteger(currentVal) && (paramDef.max ?? 256) <= 512}
+                      defaultValue={typeof defaultVal === 'number' ? defaultVal : undefined}
+                      onChange={v => updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })}
+                      ariaLabel={paramDef.label}
+                      touch={isTouchDevice}
                     />
-                    <span style={{ fontSize: '10px', color: tc.subtext0, minWidth: '32px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {currentVal.toFixed(adaptiveDecimals(adaptiveStep(currentVal, step)))}
-                    </span>
                   </div>
                 );
               })}
@@ -2705,27 +2528,20 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
           const accentColor = hasInnerGroupNodes ? tc.mauve : tc.blue;
           return (
             <div
-              style={{ borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', position: 'relative' }}
+              style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: '5px 8px', display: 'flex', alignItems: 'center', position: 'relative' }}
               onMouseDown={e => e.stopPropagation()}
+              onDoubleClick={e => e.stopPropagation()}
             >
-              <button
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="plus"
+                style={{ height: 28, color: showParamPicker ? accentColor : undefined }}
+                title={hasInnerGroupNodes ? 'Choose which inner-group params show on this card' : 'Choose which params show on this card'}
                 onClick={e => { e.stopPropagation(); setShowParamPicker(v => !v); }}
-                onDoubleClick={e => e.stopPropagation()}
-                style={{
-                  fontSize: '10px',
-                  color: showParamPicker ? accentColor : tc.surface2,
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '1px 0',
-                  letterSpacing: '0.03em',
-                }}
-                title={hasInnerGroupNodes ? 'Customise which inner-group params appear here' : 'Show or hide params on this group card'}
-                onMouseEnter={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = tc.subtext0; }}
-                onMouseLeave={e => { if (!showParamPicker) (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}
               >
-                ⊕ params
-              </button>
+                Params on card
+              </Button>
               {showParamPicker && (
                 <GroupParamPicker
                   outerNode={node}

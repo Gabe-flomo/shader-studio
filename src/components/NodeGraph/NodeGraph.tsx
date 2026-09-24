@@ -10,8 +10,11 @@ import { socketRegistry, registerSocket } from './socketRegistry';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily } from '../../theme/tokens';
-import { Button } from '../ui/Button';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { Button, IconButton } from '../ui/Button';
+import { Segmented } from '../ui/Choice';
+import { Icon } from '../ui/Icon';
+import { TYPE_COLORS } from './typeColors';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -60,6 +63,23 @@ export function NodeGraph({ transparent = false, redesignToolbar = false }: {
   const ctxBtnStyle = ctxBtnStyleFor(tc);
   const toolbarBtnStyle = toolbarBtnStyleFor(tc);
   const touchToolbarBtnStyle = touchToolbarBtnStyleFor(tc);
+  // Group terminals (the group's inputs and output, shown inside a group)
+  const terminalCard: React.CSSProperties = {
+    position: 'absolute', width: 260, borderRadius: radius.card, overflow: 'visible', userSelect: 'none',
+    background: tk.bg.panel, color: tk.text.primary, fontSize: 12.5, fontFamily: fontFamily.ui,
+  };
+  const terminalHead: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 7, padding: '10px 12px', fontWeight: 600, fontSize: 13,
+    borderBottom: `1px solid ${tk.border.subtle}`,
+  };
+  const terminalRow: React.CSSProperties = { position: 'relative', display: 'flex', alignItems: 'center', gap: 8, height: 32 };
+  const terminalDot: React.CSSProperties = {
+    position: 'absolute', top: '50%', width: 12, height: 12, marginTop: -6, boxSizing: 'border-box', borderRadius: '50%', cursor: 'crosshair',
+  };
+  const terminalInput: React.CSSProperties = {
+    width: 100, height: 24, padding: '0 6px', border: 0, outline: 'none', borderRadius: 6,
+    background: tk.bg.panel, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`,
+  };
   const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
   const compactToolbar = canvasWidth < 700;
   const nodes                 = useNodeGraphStore(s => s.nodes);
@@ -1390,65 +1410,46 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         {activeGroupId && activeSubgraph && groupOutputTerminalPos && !isInsideSceneGroup && (
           <div
             data-node-id="__group_output__"
-            style={{
-              position: 'absolute',
-              left: groupOutputTerminalPos.x,
-              top: groupOutputTerminalPos.y,
-              width: 180,
-              background: tc.base,
-              border: `1px solid ${tc.mauve}55`,
-              borderRadius: '8px',
-              overflow: 'hidden',
-              userSelect: 'none',
-            }}
+            style={{ ...terminalCard, left: groupOutputTerminalPos.x, top: groupOutputTerminalPos.y, boxShadow: `inset 0 0 0 1.5px ${alpha(tk.kind.expr, 0.5)}, ${tk.shadow.card}` }}
             onMouseDown={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div style={{
-              background: '#2a1f3d', padding: '6px 10px',
-              fontSize: '11px', color: tc.mauve, fontWeight: 700,
-              letterSpacing: '0.04em',
-            }}>
-              ⊳ Group Output
+            <div style={{ ...terminalHead, color: tk.kind.expr }}>
+              <Icon name="export" size={15} />Group output
             </div>
 
             {/* One row per output port */}
             {(activeSubgraph.outputPorts ?? []).map(port => {
-              const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
               const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
               const srcDef   = srcNode ? getNodeDefinition(srcNode.type) : null;
               const srcLabel = port.fromNodeId
                 ? (typeof srcNode?.params?.label === 'string' ? srcNode.params.label : (srcDef?.label ?? srcNode?.type ?? '?'))
-                : '— not connected —';
+                : 'not connected';
               const isDraggingCompatible = dragConnection
                 ? (() => { const src = displayNodes.find(n => n.id === dragConnection.sourceNodeId); return !!(src?.outputs[dragConnection.sourceOutputKey]); })()
                 : false;
+              const color = TYPE_COLORS[port.type] ?? tk.text.faint;
               return (
                 <div
                   key={port.key}
                   style={{
-                    padding: '5px 8px 5px 16px',
-                    display: 'flex', alignItems: 'center', gap: '5px',
-                    position: 'relative',
-                    background: isDraggingCompatible ? `${tc.mauve}11` : 'transparent',
+                    ...terminalRow, padding: '0 6px 0 16px',
+                    background: isDraggingCompatible ? alpha(tk.kind.expr, 0.08) : 'transparent',
                   }}
                 >
-                  {/* Input socket dot */}
+                  {/* Input socket */}
                   <div
                     ref={el => { registerSocket('__group_output__', 'in', port.key, el); }}
                     onMouseUp={e => { e.stopPropagation(); handleEndConnection('__group_output__', port.key); }}
                     style={{
-                      position: 'absolute', left: -5,
-                      width: 10, height: 10, borderRadius: '50%',
-                      background: port.fromNodeId ? (TYPE_COLORS[port.type] ?? '#888') : tc.surface1,
-                      cursor: 'crosshair',
-                      border: isDraggingCompatible ? '2px solid white' : 'none',
+                      ...terminalDot, left: -6, border: `2px solid ${color}`,
+                      background: port.fromNodeId ? color : tk.bg.panel,
+                      boxShadow: isDraggingCompatible ? `0 0 0 3px ${alpha(color, 0.35)}` : port.fromNodeId ? `0 0 0 2px ${tk.bg.panel}` : undefined,
                     }}
                   />
-                  {/* Editable label */}
                   {editingOutputPortKey === port.key ? (
                     <input
                       autoFocus
+                      aria-label="Output name"
                       value={editingOutputPortLabel}
                       onMouseDown={e => e.stopPropagation()}
                       onChange={e => setEditingOutputPortLabel(e.target.value)}
@@ -1462,44 +1463,32 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingOutputPortKey(null);
                       }}
-                      style={{ width: '55px', fontSize: '10px', background: tc.base, border: `1px solid ${tc.mauve}`, color: tc.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
+                      style={terminalInput}
                     />
                   ) : (
                     <span
-                      style={{ fontSize: '10px', color: tc.subtext0, minWidth: '30px', cursor: 'text', flexShrink: 0 }}
+                      style={{ color: tk.text.secondary, cursor: 'text', flexShrink: 0 }}
                       title="Double-click to rename"
                       onDoubleClick={() => { setEditingOutputPortKey(port.key); setEditingOutputPortLabel(port.label); }}
                     >{port.label}</span>
                   )}
-                  <span style={{ fontSize: '9px', color: port.fromNodeId ? tc.surface2 : tc.surface1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontStyle: port.fromNodeId ? 'normal' : 'italic' }}>
-                    {srcLabel}
+                  <span style={{
+                    flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5,
+                    color: port.fromNodeId ? tk.text.muted : tk.text.faint, fontStyle: port.fromNodeId ? 'normal' : 'italic',
+                  }}>
+                    {port.fromNodeId ? `← ${srcLabel}` : srcLabel}
                   </span>
-                  {/* Delete button */}
-                  <button
+                  <IconButton icon="close" label="Remove this output" size="sm" tone="danger" tooltip={false}
                     onMouseDown={e => e.stopPropagation()}
-                    onClick={() => activeGroupId && removeGroupOutput(activeGroupId, port.key)}
-                    title="Remove output port"
-                    style={{ fontSize: '10px', color: tc.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
-                    onMouseEnter={e => (e.currentTarget.style.color = tc.red)}
-                    onMouseLeave={e => (e.currentTarget.style.color = tc.surface2)}
-                  >×</button>
+                    onClick={() => activeGroupId && removeGroupOutput(activeGroupId, port.key)} />
                 </div>
               );
             })}
 
-            {/* Add Output button */}
-            <div style={{ padding: '4px 8px 6px' }}>
-              <button
+            <div style={{ padding: '4px 8px 8px' }}>
+              <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
                 onMouseDown={e => e.stopPropagation()}
-                onClick={() => activeGroupId && addGroupOutput(activeGroupId)}
-                style={{
-                  width: '100%', fontSize: '10px', padding: '3px',
-                  background: 'none', border: `1px solid ${tc.mauve}55`,
-                  color: tc.mauve, borderRadius: '3px', cursor: 'pointer',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#2a1f3d')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-              >+ Add Output</button>
+                onClick={() => activeGroupId && addGroupOutput(activeGroupId)}>Add output</Button>
             </div>
           </div>
         )}
@@ -1508,53 +1497,28 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         {activeGroupId && activeSubgraph && groupInputTerminalPos && !isInsideSceneGroup && (
           <div
             data-node-id="__group_input__"
-            style={{
-              position: 'absolute',
-              left: groupInputTerminalPos.x,
-              top: groupInputTerminalPos.y,
-              width: 180,
-              background: tc.base,
-              border: `1px solid ${tc.blue}55`,
-              borderRadius: '8px',
-              overflow: 'hidden',
-              userSelect: 'none',
-            }}
+            style={{ ...terminalCard, left: groupInputTerminalPos.x, top: groupInputTerminalPos.y, boxShadow: `inset 0 0 0 1.5px ${alpha(tk.accent.base, 0.45)}, ${tk.shadow.card}` }}
             onMouseDown={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div style={{
-              background: '#1a2035', padding: '6px 10px',
-              fontSize: '11px', color: tc.blue, fontWeight: 700,
-              letterSpacing: '0.04em',
-            }}>
-              ⊲ Group Inputs
+            <div style={{ ...terminalHead, color: tk.accent.text }}>
+              <Icon name="import" size={15} />Group inputs
             </div>
 
             {/* One row per input port */}
             {(activeSubgraph.inputPorts ?? []).map(port => {
-              const TYPE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
               const isDragging = !!dragConnection;
+              const color = TYPE_COLORS[port.type] ?? tk.text.faint;
               return (
-                <div
-                  key={port.key}
-                  style={{
-                    padding: '5px 14px 5px 10px',
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    position: 'relative',
-                  }}
-                >
-                  <span style={{ fontSize: '10px', color: tc.subtext0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
-                  <span style={{ fontSize: '9px', color: TYPE_COLORS[port.type] ?? '#888', flexShrink: 0 }}>{port.type}</span>
-                  {/* Output socket dot — drag FROM this to an inner node input */}
+                <div key={port.key} style={{ ...terminalRow, padding: '0 16px 0 14px' }}>
+                  <span style={{ flex: 1, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
+                  <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint, flexShrink: 0 }}>{port.type}</span>
+                  {/* Output socket — drag FROM this to an inner node input */}
                   <div
                     ref={el => { registerSocket('__group_input__', 'out', port.key, el); }}
                     onMouseDown={e => { e.stopPropagation(); handleStartConnection('__group_input__', port.key, e); }}
                     style={{
-                      position: 'absolute', right: -5,
-                      width: 10, height: 10, borderRadius: '50%',
-                      background: TYPE_COLORS[port.type] ?? '#888',
-                      cursor: 'crosshair',
-                      border: isDragging ? '2px solid white' : 'none',
+                      ...terminalDot, right: -6, background: color, border: `2px solid ${color}`,
+                      boxShadow: isDragging ? `0 0 0 3px ${alpha(color, 0.35)}` : `0 0 0 2px ${tk.bg.panel}`,
                     }}
                   />
                 </div>
@@ -1562,61 +1526,40 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             })}
 
             {/* Add input form / button */}
-            <div style={{ borderTop: `1px solid ${tc.surface0}`, padding: '4px 8px' }}>
+            <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: 8 }}>
               {addingGroupInput ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} onMouseDown={e => e.stopPropagation()}>
                   <input
                     autoFocus
+                    aria-label="Input name"
                     placeholder="Input name"
                     value={addingGroupInput.name}
                     onChange={e => setAddingGroupInput(prev => prev ? { ...prev, name: e.target.value } : null)}
                     onKeyDown={e => e.stopPropagation()}
-                    style={{
-                      fontSize: '10px', background: tc.crust, border: `1px solid ${tc.surface1}`,
-                      color: tc.text, borderRadius: '3px', padding: '2px 6px', outline: 'none',
-                    }}
+                    style={{ ...terminalInput, width: '100%', height: 30, boxShadow: 'none', background: tk.bg.field }}
                   />
-                  <div style={{ display: 'flex', gap: '3px' }}>
-                    {(['float', 'vec2', 'vec3', 'vec4'] as const).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
-                        style={{
-                          fontSize: '9px', padding: '1px 5px', borderRadius: '3px', cursor: 'pointer',
-                          border: `1px solid ${tc.surface1}`,
-                          background: addingGroupInput.type === t ? tc.surface0 : 'none',
-                          color: addingGroupInput.type === t ? tc.text : tc.surface2,
-                        }}
-                      >{t}</button>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button
+                  <Segmented
+                    fill
+                    size="sm"
+                    ariaLabel="Input type"
+                    value={addingGroupInput.type}
+                    options={(['float', 'vec2', 'vec3', 'vec4'] as const).map(t => ({ value: t, label: t }))}
+                    onChange={t => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
+                  />
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <Button size="sm" variant="ghost" style={{ height: 28 }} onClick={() => setAddingGroupInput(null)}>Cancel</Button>
+                    <Button size="sm" variant="primary" style={{ height: 28 }} disabled={!addingGroupInput.name.trim()}
                       onClick={() => {
                         if (addingGroupInput.name.trim() && activeGroupId) {
                           addGroupInput(activeGroupId, addingGroupInput.type, addingGroupInput.name.trim());
                         }
                         setAddingGroupInput(null);
-                      }}
-                      style={{ flex: 1, fontSize: '10px', padding: '2px', background: tc.surface0, border: `1px solid ${tc.surface1}`, color: tc.green, borderRadius: '3px', cursor: 'pointer' }}
-                    >Add</button>
-                    <button
-                      onClick={() => setAddingGroupInput(null)}
-                      style={{ fontSize: '10px', padding: '2px 6px', background: 'none', border: `1px solid ${tc.surface1}`, color: tc.surface2, borderRadius: '3px', cursor: 'pointer' }}
-                    >✕</button>
+                      }}>Add</Button>
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={() => setAddingGroupInput({ name: '', type: 'float' })}
-                  style={{
-                    width: '100%', fontSize: '10px', padding: '3px',
-                    background: 'none', border: `1px solid ${tc.surface1}`,
-                    color: tc.blue, borderRadius: '3px', cursor: 'pointer',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = tc.surface0)}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                >+ Add Input</button>
+                <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
+                  onClick={() => setAddingGroupInput({ name: '', type: 'float' })}>Add input</Button>
               )}
             </div>
           </div>
@@ -1634,8 +1577,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             style={{
               position: 'fixed',
               left, top, width, height,
-              border: `1px dashed ${tc.blue}`,
-              background: 'rgba(137,180,250,0.05)',
+              border: `1px solid ${alpha(tk.accent.base, 0.6)}`,
+              borderRadius: 4,
+              background: alpha(tk.accent.base, 0.06),
               pointerEvents: 'none',
               zIndex: 50,
             }}
