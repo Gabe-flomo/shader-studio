@@ -1,12 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNodeGraphStore, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
 import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
+import type { GraphNode } from '../../types/nodeGraph';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
+import { useUserNodes } from '../../nodes/userNodes/useUserNodes';
+import { graphToSubgraph } from '../../nodes/userNodes/graphToSubgraph';
+import type { PublishSource } from '../../nodes/userNodes/publishUserNode';
+import { Toggle } from '../ui/Choice';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
+const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import type { TransformPreset } from '../../types/transformPreset';
 import type { KeyframePreset } from '../../types/keyframePreset';
 import { useTokens } from '../../theme/themeStore';
@@ -17,9 +25,10 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult } from '../shell/reportFileResult';
+import { toast } from '../ui/toastStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions' | 'keyframes';
+type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
 
 interface ContentPaneState {
   id: string;
@@ -33,41 +42,94 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
   { id: 'favorites',   label: 'Favorites',       icon: 'star',    color: tk => tk.status.warning },
   { id: 'graphs',      label: 'Saved Graphs',    icon: 'graphs',  color: tk => tk.status.success },
   { id: 'presets',     label: 'Presets',         icon: 'presets', color: tk => tk.accent.base },
+  { id: 'builder',     label: 'Node Builder',    icon: 'spark',   color: tk => tk.kind.fn },
   { id: 'functions',   label: 'Functions',       icon: 'fn',      color: tk => tk.kind.fn },
   { id: 'expressions', label: 'Expression Blocks', icon: 'expr',    color: tk => tk.kind.expr },
   { id: 'keyframes',   label: 'Saved Keyframes', icon: 'kf',      color: tk => tk.status.warning },
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDelete, onRename }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport }: {
   label: string; icon: IconName; color: string;
   onClick: () => void;
+  /** Saved items: click selects (showing `preview`), double-click places */
+  onDoubleClick?: () => void;
+  selected?: boolean;
+  preview?: React.ReactNode;
   onDelete?: () => void;
   onRename?: () => void;
+  /** Open the item for editing (distinct from renaming). */
+  onEdit?: () => void;
+  editLabel?: string;
+  /** Save the item as a shareable file. */
+  onExport?: () => void;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
-  return (
+  const row = (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ height: 32, display: 'flex', alignItems: 'center', gap: 9, padding: '0 4px 0 8px', borderRadius: radius.md, background: hovered ? tk.bg.hover : 'transparent' }}
+      style={{
+        height: 32, display: 'flex', alignItems: 'center', gap: 9, padding: '0 4px 0 8px', borderRadius: radius.md,
+        background: selected ? tk.bg.selected : hovered ? tk.bg.hover : 'transparent',
+      }}
     >
       <Icon name={icon} size={15} style={{ color }} />
       <button
         type="button"
-        onClick={onClick}
-        title={label}
+        // The second click of a double-click shouldn't collapse the preview it just opened
+        onClick={e => { if (onDoubleClick && e.detail > 1) return; onClick(); }}
+        onDoubleClick={onDoubleClick}
+        aria-expanded={preview !== undefined ? selected : undefined}
+        title={onDoubleClick ? `${label} · double-click to add` : label}
         style={{
           flex: 1, minWidth: 0, height: '100%', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}
       >{label}</button>
-      {hovered && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
-      {hovered && onDelete && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
+      {(hovered || selected) && onExport && <IconButton icon="export" label="Export as a file" size="sm" onClick={e => { e.stopPropagation(); onExport(); }} />}
+      {(hovered || selected) && onEdit && <IconButton icon="layoutGraph" label={editLabel} size="sm" onClick={e => { e.stopPropagation(); onEdit(); }} />}
+      {(hovered || selected) && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
+      {(hovered || selected) && onDelete && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
+    </div>
+  );
+  if (!selected || !preview) return row;
+  return <div>{row}{preview}</div>;
+}
+
+/**
+ * Card under a selected saved item: its name and kind, a one-line signature, the comment it was
+ * saved with, and Add to graph (double-clicking the row does the same).
+ */
+function SavedItemPreview({ name, kind, signature, comment, onAdd }: {
+  name: string; kind: string; signature?: string; comment?: string; onAdd: () => void;
+}) {
+  const tk = useTokens();
+  return (
+    <div style={{ margin: '4px 2px 8px', padding: '10px 12px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <b style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
+        <span style={{ fontSize: 11, color: tk.text.faint }}>{kind}</span>
+      </div>
+      {signature && (
+        <code style={{ font: `11.5px/1.5 ${fontFamily.mono}`, color: tk.text.secondary, background: tk.bg.field, borderRadius: 6, padding: '5px 8px', overflowWrap: 'anywhere' }}>{signature}</code>
+      )}
+      {comment ? (
+        <div style={{ display: 'flex', gap: 7, fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
+          <Icon name="comment" size={14} style={{ color: tk.text.faint, flexShrink: 0, marginTop: 1 }} />
+          <span style={{ whiteSpace: 'pre-wrap' }}>{comment}</span>
+        </div>
+      ) : (
+        <span style={{ fontSize: 11.5, color: tk.text.faint }}>No comment. Add one on the node before saving to see it here.</span>
+      )}
+      <Button size="sm" variant="primary" icon="plus" onClick={onAdd} style={{ alignSelf: 'flex-start' }}>Add to graph</Button>
     </div>
   );
 }
+
+const signatureOf = (name: string, outputType: string, inputs: Array<{ name: string; type: string }>) =>
+  `${outputType} ${name.replace(/\s+/g, '_')}(${inputs.map(i => `${i.type} ${i.name}`).join(', ')})`;
 
 function RenameField({ value, onChange, onCommit, onCancel }: {
   value: string; onChange: (v: string) => void; onCommit: () => void; onCancel: () => void;
@@ -121,6 +183,14 @@ interface ContentPaneProps {
 
 function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
   const tk = useTokens();
+  // Saved items: the one showing its preview card
+  const [selectedSaved, setSelectedSaved] = useState<string | null>(null);
+  const toggleSaved = (id: string) => setSelectedSaved(cur => (cur === id ? null : id));
+  /** Where a saved item lands: the middle of the view (a card's top-left, so offset by half a card) */
+  const placeAt = () => {
+    const c = useNodeGraphStore.getState()._viewportCenterGetter?.();
+    return c ? { x: c.x - 180, y: c.y - 90 } : { x: 200 + Math.random() * 120, y: 120 + Math.random() * 200 };
+  };
   const addNode                 = useNodeGraphStore(s => s.addNode);
   const saveGraph               = useNodeGraphStore(s => s.saveGraph);
   const getSavedGraphNames      = useNodeGraphStore(s => s.getSavedGraphNames);
@@ -137,6 +207,31 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const groupPresets      = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
+  const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
+  const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
+  const exportUserNodes    = useNodeGraphStore(s => s.exportUserNodes);
+  const readSavedGraphNodes = useNodeGraphStore(s => s.readSavedGraphNodes);
+  const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
+  const [publishExisting, setPublishExisting] = useState<string | undefined>(undefined);
+  const [exposeUv, setExposeUv] = useState(true);
+  const [exposeTime, setExposeTime] = useState(false);
+  const openPublishFor = (nodes: GraphNode[] | null, label: string) => {
+    if (!nodes) { toast.error(`Couldn’t read “${label}”`); return; }
+    const r = graphToSubgraph(nodes, { exposeUv, exposeTime });
+    if (!r.ok) { toast.error(`Can’t publish “${label}”`, { message: r.error }); return; }
+    setPublishSource({ kind: 'subgraph', subgraph: r.subgraph, label });
+  };
+  const importUserNodesFromFile = useNodeGraphStore(s => s.importUserNodesFromFile);
+  const importUserNodes = async () => {
+    const r = await importUserNodesFromFile();
+    if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import node types' }); return; }
+    const parts = [
+      r.imported?.length ? `${r.imported.length} new: ${r.imported.join(', ')}` : '',
+      r.replaced?.length ? `${r.replaced.length} updated: ${r.replaced.join(', ')}` : '',
+    ].filter(Boolean);
+    toast.success('Node types imported', { message: parts.join(' · ') });
+  };
+  const userNodes          = useUserNodes();
   const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
   const loadExampleGraph  = useNodeGraphStore(s => s.loadExampleGraph);
 
@@ -161,6 +256,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const { activeTab } = state;
 
   const refreshSavedNames     = () => setSavedNames(getSavedGraphNames());
+  // Saves and deletes from anywhere (the top bar too) keep this list current
+  useEffect(() => {
+    const onChange = () => setSavedNames(useNodeGraphStore.getState().getSavedGraphNames());
+    window.addEventListener(SAVED_GRAPHS_CHANGED, onChange);
+    return () => window.removeEventListener(SAVED_GRAPHS_CHANGED, onChange);
+  }, []);
   const refreshExprPresets    = () => setExprPresets(loadExprPresets());
   const refreshTransformPresets = () => setTransformPresets(loadTransformPresets());
   const refreshKeyframePresets = () => setKeyframePresets(loadKeyframePresets());
@@ -323,6 +424,80 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
           </>
         );
 
+      case 'builder':
+        return (
+          <>
+            <div style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.5, padding: '2px 2px 6px' }}>
+              Turn a whole graph into a single node. Whatever is wired into the graph’s Output becomes the node’s output. Every slider in the graph can stay adjustable on the new node or be frozen at its current value.
+            </div>
+            <TabSectionHeader label="Inputs on the new node" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '2px 2px 8px' }}>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <Toggle checked={exposeUv} onChange={setExposeUv} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
+                  <b style={{ color: tk.text.primary }}>UV socket.</b> The graph’s UV nodes are replaced by one input. Wire anything into it (a warp, a tiling, another node) or leave it empty to use the screen, like the graph did.
+                </span>
+              </label>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <Toggle checked={exposeTime} onChange={setExposeTime} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
+                  <b style={{ color: tk.text.primary }}>Time socket.</b> The graph’s Time nodes are replaced by one input, so the node can run on its own clock. Off: it follows the global time.
+                </span>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+              <Button size="sm" variant="primary" icon="spark"
+                disabled={graphNodes.length === 0}
+                onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
+              <Button size="sm" icon="code" title="Write a GLSL function and publish it as a node"
+                onClick={() => setPublishSource({ kind: 'code', code: '', label: 'My Node' })}>Write GLSL…</Button>
+            </div>
+            <TabSectionHeader label="From a saved graph" />
+            <FolderableList
+              scopeKey="builder:saved"
+              color={tabColor('graphs')}
+              items={savedNames.map(name => ({ id: name, label: name }))}
+              renderItem={(item) => (
+                <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')}
+                  onClick={() => openPublishFor(readSavedGraphNodes(item.id), item.label)} />
+              )}
+              emptyHint={<EmptyHint>Save a graph (Saved Graphs tab) and it can be published from here without opening it.</EmptyHint>}
+            />
+            <TabSectionHeader label="My nodes" action={
+              <span style={{ display: 'flex', gap: 2 }}>
+                <IconButton icon="import" label="Import node types from a .json file" size="sm" onClick={importUserNodes} />
+                {userNodes.length > 0 && (
+                  <IconButton icon="export" label="Export all node types as one .json file" size="sm"
+                    onClick={async () => reportFileResult(await exportUserNodes(), { failTitle: 'Couldn’t export node types' })} />
+                )}
+              </span>
+            } />
+            <FolderableList
+              scopeKey="presets:usernodes"
+              color={tabColor('presets')}
+              items={userNodes.map(d => ({ id: d.id, label: d.label }))}
+              renderItem={(item) => {
+                const d = userNodes.find(u => u.id === item.id);
+                if (!d) return null;
+                return (
+                  <ItemRow label={d.label} icon="spark" color={tk.kind.fn}
+                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode(d.id, {x,y}); onNodeAdded?.(); }}
+                    onEdit={d.source ? () => {
+                      if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
+                      const x = 200+Math.random()*120, y = 120+Math.random()*200;
+                      if (openUserNodeSource(d.id, {x,y})) onNodeAdded?.();
+                    } : undefined}
+                    editLabel={d.source?.kind === 'code' ? 'Edit the GLSL (publish again to update)' : 'Open source graph (publish again to update)'}
+                    onExport={async () => reportFileResult(await exportUserNodes([d.id]), { failTitle: `Couldn’t export “${d.label}”` })}
+                    onDelete={() => { if (window.confirm(`Delete node type “${d.label}”? Placed instances will stop compiling.`)) deleteUserNode(d.id); }} />
+                );
+              }}
+              emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes. Or import a .json someone shared.</EmptyHint>}
+            />
+            {publishSource && <PublishNodeModal source={publishSource} existingId={publishExisting} onClose={() => { setPublishSource(null); setPublishExisting(undefined); }} />}
+          </>
+        );
+
       case 'presets':
         return (
           <>
@@ -333,9 +508,14 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               items={(groupPresets as GroupPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
               renderItem={(item) => {
                 const p = (item as typeof item & { _preset: GroupPreset })._preset;
+                const place = () => { instantiateGroupPreset(p.id, placeAt()); onNodeAdded?.(); };
+                const sub = p.subgraph;
                 return (
                   <ItemRow label={p.label} icon="presets" color={tabColor('presets')}
-                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; instantiateGroupPreset(p.id, {x,y}); onNodeAdded?.(); }}
+                    selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)} onDoubleClick={place}
+                    preview={<SavedItemPreview name={p.label} kind="Group"
+                      signature={`${sub.nodes.length} nodes · ${sub.inputPorts.length} in · ${sub.outputPorts.length} out`}
+                      comment={p.description} onAdd={place} />}
                     onDelete={() => deleteGroupPreset(p.id)} />
                 );
               }}
@@ -353,7 +533,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                       onCommit={() => { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
                       onCancel={() => setRenamingTransformId(null)} />
                   : <ItemRow label={p.label} icon="layout" color={tabColor('presets')}
-                      onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('transformVec',{x,y},{outputType:p.outputType,exprX:p.exprX,exprY:p.exprY,exprZ:p.exprZ,exprW:p.exprW}); onNodeAdded?.(); }}
+                      selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
+                      onDoubleClick={() => { addNode('transformVec', placeAt(), { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }}
+                      preview={<SavedItemPreview name={p.label} kind="Transform Vec"
+                        signature={`${p.outputType}(${[p.exprX, p.exprY, p.outputType !== 'vec2' ? p.exprZ : null, p.outputType === 'vec4' ? p.exprW : null].filter(Boolean).join(', ')})`}
+                        comment={p.comment}
+                        onAdd={() => { addNode('transformVec', placeAt(), { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }} />}
                       onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
                       onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }} />;
               }}
@@ -375,9 +560,14 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               items={(userPresets as CustomFnPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
               renderItem={(item) => {
                 const p = (item as typeof item & { _preset: CustomFnPreset })._preset;
+                const place = () => {
+                  addNode('customFn', placeAt(), { label: p.label, inputs: p.inputs, outputType: p.outputType, body: p.body, glslFunctions: p.glslFunctions, ...(p.comment ? { __comment: p.comment } : {}) });
+                  onNodeAdded?.();
+                };
                 return (
                   <ItemRow label={p.label} icon="fn" color={tabColor('functions')}
-                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('customFn',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,body:p.body,glslFunctions:p.glslFunctions}); onNodeAdded?.(); }}
+                    selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)} onDoubleClick={place}
+                    preview={<SavedItemPreview name={p.label} kind="Custom Function" signature={signatureOf(p.label, p.outputType, p.inputs)} comment={p.comment} onAdd={place} />}
                     onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }} />
                 );
               }}
@@ -399,7 +589,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                     onCommit={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
                     onCancel={() => setRenamingExprId(null)} />
                 : <ItemRow label={p.label} icon="expr" color={tabColor('expressions')}
-                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('exprNode',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,lines:p.lines,result:p.result}); onNodeAdded?.(); }}
+                    selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
+                    onDoubleClick={() => { addNode('exprNode', placeAt(), { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }}
+                    preview={<SavedItemPreview name={p.label} kind="Expression Block"
+                      signature={`${signatureOf(p.label, p.outputType, p.inputs)} = ${p.result}`}
+                      comment={p.comment}
+                      onAdd={() => { addNode('exprNode', placeAt(), { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }} />}
                     onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
                     onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }} />;
             }}

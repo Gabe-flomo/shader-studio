@@ -19,6 +19,8 @@ import { subscribeTimeTick } from '../../lib/timeTick';
 const MAX_KEYFRAMES = 8;
 const HANDLE_R = 6;
 const KF_R = 6;
+/** Curves are sampled up to (end − END_EPS) so a loop's wrap-around isn't drawn */
+const END_EPS = 1e-4;
 const HIT_R = 9;
 
 type ToolMode = 'select' | 'add' | 'delete' | 'draw';
@@ -204,7 +206,13 @@ function draw(
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  const W = canvas.width, H = canvas.height;
+  // The backing store is devicePixelRatio× the CSS size (see the <canvas> below); draw in CSS pixels.
+  const dpr = canvas.width / Math.max(1, canvas.clientWidth || canvas.width);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = canvas.width / dpr, H = canvas.height / dpr;
+  // 1px lines land on whole device pixels
+  const crisp = (x: number) => (Math.round(x * dpr) + 0.5) / dpr;
+  const labelFont = `500 10px ${fontFamily.mono}`;
   const { viewT0, valueCenter, pxPerSec, pxPerUnit, gridT, gridV } = view;
 
   const toX = (t: number) => (t - viewT0) * pxPerSec;
@@ -218,39 +226,39 @@ function draw(
   // timeline/value range without needing a live hover.
   ctx.strokeStyle = pal.grid;
   ctx.lineWidth = 1;
-  ctx.font = '10px ui-monospace, Menlo, monospace';
+  ctx.font = labelFont;
   const tStart = Math.floor(viewT0 / gridT) * gridT;
   const tEnd = viewT0 + W / pxPerSec;
   for (let t = tStart; t <= tEnd; t += gridT) {
-    const x = toX(t);
+    const x = crisp(toX(t));
     ctx.strokeStyle = pal.grid;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     ctx.fillStyle = pal.label;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(fmt(t), x + 3, H - 4);
+    ctx.fillText(fmt(t), x + 4, H - 6);
   }
   const vTop = fromY(0), vBot = fromY(H);
   const vStart = Math.floor(Math.min(vTop, vBot) / gridV) * gridV;
   const vEnd = Math.max(vTop, vBot);
   for (let v = vStart; v <= vEnd; v += gridV) {
-    const y = toY(v);
+    const y = crisp(toY(v));
     ctx.strokeStyle = pal.grid;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     ctx.fillStyle = pal.label;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(fmt(v), 3, y - 3);
+    ctx.fillText(fmt(v), 5, y - 4);
   }
 
   // axes (t=0, v=0) — brighter
   ctx.strokeStyle = pal.axis;
   ctx.lineWidth = 1.5;
   if (viewT0 <= 0.0001) {
-    const x0 = toX(0);
+    const x0 = crisp(toX(0));
     ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.stroke();
   }
-  const y0 = toY(0);
+  const y0 = crisp(toY(0));
   if (y0 >= 0 && y0 <= H) {
     ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
   }
@@ -291,7 +299,7 @@ function draw(
 
   if (keyframes.length === 0 && !drawPreview) {
     ctx.fillStyle = pal.empty;
-    ctx.font = '12px system-ui, sans-serif';
+    ctx.font = `12.5px ${fontFamily.ui}`;
     ctx.fillText('Add mode (C) or Draw (D), then click the graph to place keys', 14, 24);
     return;
   }
@@ -304,13 +312,31 @@ function draw(
   // curve — drawn (and evaluated) entirely in absolute time, same as the
   // keyframe markers below, so the line always passes exactly through them.
   if (segs.length > 0) {
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.25;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    // Faint tint between the curve and v=0, so the shape reads at a glance
+    {
+      const zeroY = Math.min(H, Math.max(0, toY(0)));
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const t = Math.min(firstT + (i / steps) * (lastT - firstT), lastT - END_EPS);
+        const cx = toX(t), cy = toY(evalCurveAt(keyframes, mode, loopBack, t));
+        if (i === 0) { ctx.moveTo(cx, zeroY); ctx.lineTo(cx, cy); } else ctx.lineTo(cx, cy);
+      }
+      ctx.lineTo(toX(lastT), zeroY);
+      ctx.closePath();
+      ctx.fillStyle = `${activeColor}14`;
+      ctx.fill();
+    }
     const drawRange = (fromT: number, toT: number, dashed: boolean) => {
       ctx.strokeStyle = dashed ? pal.ghost : activeColor;
       if (dashed) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
       ctx.beginPath();
       for (let i = 0; i <= steps; i++) {
-        const t = fromT + (i / steps) * (toT - fromT);
+        // Stop a hair short of the range end: at exactly the last key a looping track has
+        // already wrapped to its first value, which drew a vertical drop.
+        const t = Math.min(fromT + (i / steps) * (toT - fromT), toT - END_EPS);
         const v = evalCurveAt(keyframes, mode, loopBack, t);
         const cx = toX(t), cy = toY(v);
         if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
@@ -371,11 +397,8 @@ function draw(
       ctx.strokeStyle = pal.playhead;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
+      // Line only: the time ruler above carries the playhead's marker
       ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
-      ctx.fillStyle = pal.playhead;
-      ctx.beginPath();
-      ctx.moveTo(px - 5, 0); ctx.lineTo(px + 5, 0); ctx.lineTo(px, 8); ctx.closePath();
-      ctx.fill();
     }
   }
 
@@ -385,16 +408,16 @@ function draw(
   if (hoverInfo) {
     const hx = toX(hoverInfo.t), hy = toY(hoverInfo.v);
     const label = `t=${fmt(hoverInfo.t)}  v=${fmt(hoverInfo.v)}`;
-    ctx.font = '11px ui-monospace, Menlo, monospace';
+    ctx.font = `500 11px ${fontFamily.mono}`;
     const textW = ctx.measureText(label).width;
-    const padX = 7, boxH = 20;
+    const padX = 8, boxH = 22;
     const boxW = textW + padX * 2;
     const boxX = Math.max(2, Math.min(W - boxW - 2, hx - boxW / 2));
     const boxY = Math.max(2, hy - KF_R - boxH - 8);
     ctx.fillStyle = pal.readoutBg;
     ctx.strokeStyle = pal.readoutBorder;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.rect(boxX, boxY, boxW, boxH); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(boxX, boxY, boxW, boxH, 6); ctx.fill(); ctx.stroke();
     ctx.fillStyle = activeColor;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
@@ -627,7 +650,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     const vSpan = Math.max(vMax - vMin + vPad * 2, 0.0001);
     const newPxPerSec = Math.max(4, Math.min(800, canvasSizeRef.current.w / tSpan));
     const newPxPerUnit = Math.max(4, Math.min(800, canvasSizeRef.current.h / vSpan));
-    setView(v => ({ ...v, viewT0: Math.max(0, tMin - tPad), valueCenter: (vMin + vMax) / 2, pxPerSec: newPxPerSec, pxPerUnit: newPxPerUnit }));
+    // Start a few px before t=0 so a key sitting at 0 isn't cut in half by the edge
+    setView(v => ({ ...v, viewT0: Math.max(-16 / newPxPerSec, tMin - tPad), valueCenter: (vMin + vMax) / 2, pxPerSec: newPxPerSec, pxPerUnit: newPxPerUnit }));
   }, []);
 
   // Open framed on the keys: fit once, after the graph has been measured.
@@ -811,7 +835,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     if (drag.kind === 'pan') {
       const dx = xy.px - drag.startX, dy = xy.py - drag.startY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
-      setView(v => ({ ...v, viewT0: Math.max(0, drag.startViewT0 - dx / v.pxPerSec), valueCenter: drag.startValueCenter + dy / v.pxPerUnit }));
+      setView(v => ({ ...v, viewT0: Math.max(-16 / v.pxPerSec, drag.startViewT0 - dx / v.pxPerSec), valueCenter: drag.startValueCenter + dy / v.pxPerUnit }));
     } else if (drag.kind === 'keyframe') {
       // A few pixels of jitter during a click shouldn't turn it into a move
       if (!drag.moved && Math.hypot(xy.px - drag.startX, xy.py - drag.startY) < 3) return;
@@ -946,7 +970,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       // graph's convention where scrolling never zooms on its own.
       setView(v => ({
         ...v,
-        viewT0: Math.max(0, v.viewT0 + e.deltaX / v.pxPerSec),
+        viewT0: Math.max(-16 / v.pxPerSec, v.viewT0 + e.deltaX / v.pxPerSec),
         valueCenter: v.valueCenter - e.deltaY / v.pxPerUnit,
       }));
     }
@@ -970,6 +994,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
 
   const canvasW = graphSize.w;
   const canvasH = graphSize.h;
+  // Backing-store scale, so the graph is sharp on high-density screens
+  const dpr = typeof window !== 'undefined' ? Math.min(3, window.devicePixelRatio || 1) : 1;
   canvasSizeRef.current = { w: canvasW, h: canvasH };
 
   const cursorForMode = toolMode === 'add' || toolMode === 'draw' ? 'crosshair' : toolMode === 'delete' ? 'not-allowed' : 'default';
@@ -1136,8 +1162,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
           <div ref={graphWrapRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
             <canvas
               ref={canvasRef}
-              width={canvasW}
-              height={canvasH}
+              width={Math.round(canvasW * dpr)}
+              height={Math.round(canvasH * dpr)}
               onMouseDown={handleMouseDown}
               onDoubleClick={handleDoubleClick}
               onContextMenu={handleContextMenu}

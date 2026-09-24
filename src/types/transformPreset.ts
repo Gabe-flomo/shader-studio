@@ -11,6 +11,8 @@ export interface TransformPreset {
   exprY: string;
   exprZ: string;
   exprW: string;
+  /** The node's comment when it was saved; restored on the node when placed */
+  comment?: string;
   /** Unix timestamp (ms) when saved */
   savedAt: number;
 }

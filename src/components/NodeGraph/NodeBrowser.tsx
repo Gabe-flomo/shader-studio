@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { scoreNodeDef } from '../../nodes/searchNodes';
 import { createPortal } from 'react-dom';
-import { getAllCategories, getNodesByCategory, NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
+import { getAllCategories, getNodesByCategory, getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
+import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
+import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
+import { DocText } from '../ui/DocText';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
@@ -29,7 +33,7 @@ const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
   { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces', 'Grid', 'Field'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Transforms', 'Conditionals'] },
-  { label: 'Functions',    categories: ['Functions'] },
+  { label: 'Functions',    categories: ['My Nodes', 'Functions'] },
   { label: 'Utility',      categories: ['Utility', 'Output'] },
 ];
 
@@ -234,15 +238,22 @@ function CategoryChip({ children }: { children: ReactNode }) {
 }
 
 // ── Preview card ──────────────────────────────────────────────────────────────
-function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert, swapMode }: {
+function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert, swapMode, onDismiss }: {
   type: string; onAdd: () => void;
   isFavorite: boolean; onToggleFavorite: () => void;
   context?: 'studio' | 'glsl';
   onGlslInsert?: (code: string) => void;
   swapMode: boolean;
+  /** Close the preview (after the previewed type was deleted). */
+  onDismiss?: () => void;
 }) {
   const tk = useTokens();
   const def = getNodeDefinition(type);
+  // User-published node types can be re-opened for editing or deleted from here.
+  const userNode = getUserNode(type);
+  const deleteUserNode = useNodeGraphStore(s => s.deleteUserNode);
+  const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
+  const exportUserNodes = useNodeGraphStore(s => s.exportUserNodes);
   const node = makeSyntheticNode(type);
   const hasViz = INLINE_VIZ_TYPES.has(type);
   const isGlsl = context === 'glsl';
@@ -272,13 +283,56 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
         <div style={{ borderRadius: radius.md, overflow: 'hidden' }}><NodeInlineViz node={node} /></div>
       ) : null}
       {!isGlsl && def?.description && (
-        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{def.description}</p>
+        <DocText text={Array.isArray(def.description) ? (def.description as string[]).join('\n') : def.description} style={{ fontSize: 12, color: tk.text.muted }} />
       )}
+      {!isGlsl && userNode && (() => {
+        const rows = [
+          ...userNode.inputs.map(i => ({ kind: 'in', label: i.label, type: i.type, hint: i.hint })),
+          ...userNode.params.map(p => ({ kind: 'param', label: p.label, type: `${p.min} – ${p.max}`, hint: p.hint })),
+          ...(userNode.iterations ? [{ kind: 'param', label: userNode.iterations.label, type: `${userNode.iterations.min} – ${userNode.iterations.max} passes`, hint: undefined as string | undefined }] : []),
+          ...userNode.outputs.map(o => ({ kind: 'out', label: o.label, type: o.type, hint: o.hint })),
+        ];
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 8px', borderRadius: radius.md, background: tk.bg.subtle, fontSize: 11.5 }}>
+            {rows.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ color: tk.text.faint, fontSize: 10, width: 34, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{r.kind}</span>
+                <span style={{ fontFamily: fontFamily.mono, color: tk.text.primary }}>{r.label}</span>
+                <span style={{ fontFamily: fontFamily.mono, color: tk.text.faint }}>{r.type}</span>
+                {r.hint && <DocText text={r.hint} style={{ color: tk.text.muted, flexBasis: '100%', paddingLeft: 40, fontSize: 11.5 }} />}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {isGlsl ? (
         <Button size="sm" variant="primary" icon="code" onClick={() => { if (glslSource) onGlslInsert?.(glslSource); }}>Insert at cursor</Button>
       ) : (
         <Button size="sm" variant="primary" icon="plus" onClick={onAdd}>{swapMode ? 'Replace with this' : 'Add to graph'}</Button>
+      )}
+      {userNode && !isGlsl && (
+        <div style={{ display: 'flex', gap: 6, paddingTop: 6, borderTop: `1px solid ${tk.border.subtle}` }}>
+          {userNode.source && (
+            <Button size="sm" icon="layoutGraph" style={{ flex: 1 }} title="Place the node's source graph as a group; publish it again to update this node type"
+              onClick={() => openUserNodeSource(userNode.id, { x: 200 + Math.random() * 120, y: 120 + Math.random() * 200 })}>
+              Open source graph
+            </Button>
+          )}
+          <Button size="sm" icon="export" title="Save this node type as a .json file you can share or import into another project"
+            onClick={() => exportUserNodes([userNode.id])}>
+            Export
+          </Button>
+          <Button size="sm" variant="danger" icon="trash" title="Delete this node type. Placed instances stop compiling."
+            onClick={() => {
+              if (window.confirm(`Delete node type “${userNode.label}”?\n\nAny placed instances will stop compiling until they're removed.`)) {
+                deleteUserNode(userNode.id);
+                onDismiss?.();
+              }
+            }}>
+            Delete node type
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -366,6 +420,7 @@ export function NodeBrowser({
 
   const isSearching = searchQuery.trim().length > 0;
 
+  useUserNodesVersion(); // re-render when a node type is published or deleted
   const allCats = getAllCategories();
   const categories = [
     ...CATEGORY_ORDER.filter(c => allCats.includes(c)),
@@ -375,7 +430,7 @@ export function NodeBrowser({
   useEffect(() => {
     const handler = (e: Event) => {
       const { nodeType } = (e as CustomEvent<{ nodeType: string }>).detail;
-      const def = NODE_REGISTRY[nodeType];
+      const def = getNodeDefinition(nodeType);
       if (!def) return;
       setPath([def.category]);
       setPreviewType(nodeType);
@@ -440,6 +495,7 @@ export function NodeBrowser({
           context={context}
           onGlslInsert={onGlslInsert}
           swapMode={!!swapTargetNodeId}
+          onDismiss={() => setPreviewType(null)}
         />
       )}
     </>
@@ -459,8 +515,8 @@ export function NodeBrowser({
 
   if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
-    const results = Object.values(NODE_REGISTRY)
-      .filter(def => !HIDDEN_NODES.has(def.type) && !def.deprecated)
+    const results = getOfferedDefinitions()
+      .filter(def => !HIDDEN_NODES.has(def.type))
       .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
@@ -470,7 +526,7 @@ export function NodeBrowser({
       : <div>{renderPills(results)}</div>;
 
   } else if (path.length === 0) {
-    const favCount = favorites.filter(t => NODE_REGISTRY[t] && !HIDDEN_NODES.has(t)).length;
+    const favCount = favorites.filter(t => getNodeDefinition(t) && !HIDDEN_NODES.has(t)).length;
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {favCount > 0 && (
@@ -517,7 +573,7 @@ export function NodeBrowser({
 
   } else if (path[0] === '__favorites__') {
     const favDefs = favorites
-      .map(t => NODE_REGISTRY[t])
+      .map(t => getNodeDefinition(t))
       .filter((d): d is NonNullable<typeof d> => !!d && !HIDDEN_NODES.has(d.type));
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

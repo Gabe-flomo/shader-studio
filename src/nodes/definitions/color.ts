@@ -45,22 +45,17 @@ export const PaletteNode: NodeDefinition = {
   type: 'palette',
   label: 'Palette',
   category: 'Color',
-  description: 'Cosine-based color palette. Wire a float to Value to pick a position on the palette, and optionally wire Time to animate it.',
+  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it.',
+  // Offset/Amplitude/Frequency/Phase are one vec3 socket each (they used to be twelve
+  // per-channel floats); unwired, each falls back to its colour param below. Older graphs keep any
+  // per-channel wire they had, and it still drives its channel (see legacyLabels.ts).
   inputs: {
-    value:       { type: 'float', label: 'Value', defaultValue: 0 },
-    anim:        { type: 'float', label: 'Time',  defaultValue: 0 },
-    offset_r:    { type: 'float', label: 'offset.r' },
-    offset_g:    { type: 'float', label: 'offset.g' },
-    offset_b:    { type: 'float', label: 'offset.b' },
-    amplitude_r: { type: 'float', label: 'amplitude.r' },
-    amplitude_g: { type: 'float', label: 'amplitude.g' },
-    amplitude_b: { type: 'float', label: 'amplitude.b' },
-    freq_r:      { type: 'float', label: 'freq.r' },
-    freq_g:      { type: 'float', label: 'freq.g' },
-    freq_b:      { type: 'float', label: 'freq.b' },
-    phase_r:     { type: 'float', label: 'phase.r' },
-    phase_g:     { type: 'float', label: 'phase.g' },
-    phase_b:     { type: 'float', label: 'phase.b' },
+    value:     { type: 'float', label: 'Angle', defaultValue: 0 },
+    anim:      { type: 'float', label: 'Angle offset', defaultValue: 0 },
+    offset:    { type: 'vec3', label: 'Offset' },
+    amplitude: { type: 'vec3', label: 'Amplitude' },
+    freq:      { type: 'vec3', label: 'Frequency' },
+    phase:     { type: 'vec3', label: 'Phase' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -78,14 +73,14 @@ export const PaletteNode: NodeDefinition = {
     // cycle for Value; Time is a plain bounded stand-in for u_time, since
     // wiring the real Time node is how you'd animate this for real) instead
     // of always compiling to a hardcoded 0.0 with nothing to tune.
-    value:     { label: 'Value',     type: 'float', min: 0.0,      max: 1.0,     step: 0.01 },
-    anim:      { label: 'Time',      type: 'float', min: 0.0,      max: 10.0,    step: 0.1  },
+    value:     { label: 'Angle',        type: 'float', min: 0.0,      max: 1.0,     step: 0.01, hint: 'Where on the palette to sample. 0 → 1 goes once around; wire a gradient or distance here to paint with it.' },
+    anim:      { label: 'Angle offset', type: 'float', min: 0.0,      max: 10.0,    step: 0.1,  hint: 'Only added to Angle. Wire Time here to animate.' },
     // Named presets bake the four vec3s; Custom exposes them as live pickers.
-    preset:    { label: 'Preset',    type: 'select', options: [{ value: 'custom', label: 'Custom' }, ...PALETTE_PRESET_OPTIONS] },
-    offset:    { label: 'Offset',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
-    amplitude: { label: 'Amplitude', type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
-    freq:      { label: 'Freq',      type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
-    phase:     { label: 'Phase',     type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, showWhen: { param: 'preset', value: 'custom' } },
+    preset:    { label: 'Preset',       type: 'select', options: [{ value: 'custom', label: 'Custom' }, ...PALETTE_PRESET_OPTIONS] },
+    offset:    { label: 'Offset',       type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The colour at the middle of the wave (per channel).', showWhen: { param: 'preset', value: 'custom' } },
+    amplitude: { label: 'Amplitude',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How far each channel swings either side of Offset.', showWhen: { param: 'preset', value: 'custom' } },
+    freq:      { label: 'Frequency',    type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'How many times each channel cycles as Angle goes 0 → 1.', showWhen: { param: 'preset', value: 'custom' } },
+    phase:     { label: 'Phase',        type: 'vec3', min: -3.14159, max: 3.14159, step: 0.01, hint: 'Shifts each channel along the cycle; spreading r/g/b gives the rainbow.', showWhen: { param: 'preset', value: 'custom' } },
   },
   migrateInputKeys: { t: 'value' },
   glslFunction: PALETTE_GLSL_FN,
@@ -94,21 +89,18 @@ export const PaletteNode: NodeDefinition = {
     const valVar  = inputVars.value || p(node.params.value, 0);
     const timeVar = inputVars.anim  || p(node.params.anim, 0);
     const tVar = (valVar === '0.0') ? timeVar : (timeVar === '0.0') ? valVar : `(${valVar} + ${timeVar})`;
-    // Each vec3 is a live uniform (or literal); a wired per-channel input overrides that component.
-    // A named preset bakes its four vec3s as literals (the pickers are hidden); Custom uses the live uniforms.
+    // A wired vec3 socket wins; otherwise a named preset's literal or the live colour param
+    // (a `u_p_*` vec3 uniform), with any legacy per-channel wire (`offset_r` …, kept on
+    // older graphs) overriding its channel.
     const preset = paletteNodePreset(node.params.preset);
-    const oV  = preset ? vec3Str(preset.offset)    : pv3(node.params.offset,    [0.5, 0.5, 0.5]);
-    const aV  = preset ? vec3Str(preset.amplitude) : pv3(node.params.amplitude, [0.5, 0.5, 0.5]);
-    const fV  = preset ? vec3Str(preset.freq)      : pv3(node.params.freq,      [1.0, 1.0, 1.0]);
-    const phV = preset ? vec3Str(preset.phase)     : pv3(node.params.phase,     [0.0, 0.33, 0.67]);
-    const chan = (v: string, r?: string, g?: string, b?: string) =>
-      (r || g || b) ? `vec3(${r || `${v}.x`}, ${g || `${v}.y`}, ${b || `${v}.z`})` : v;
-    const oExpr = chan(oV,  inputVars.offset_r,    inputVars.offset_g,    inputVars.offset_b);
-    const aExpr = chan(aV,  inputVars.amplitude_r, inputVars.amplitude_g, inputVars.amplitude_b);
-    const fExpr = chan(fV,  inputVars.freq_r,      inputVars.freq_g,      inputVars.freq_b);
-    const pExpr = chan(phV, inputVars.phase_r,     inputVars.phase_g,     inputVars.phase_b);
+    const vec = (key: 'offset' | 'amplitude' | 'freq' | 'phase', fallback: number[]) => {
+      if (inputVars[key]) return inputVars[key];
+      const v = preset ? vec3Str(preset[key]) : pv3(node.params[key], fallback);
+      const [r, g, b] = ['r', 'g', 'b'].map(c => inputVars[`${key}_${c}`]);
+      return (r || g || b) ? `vec3(${r || `${v}.x`}, ${g || `${v}.y`}, ${b || `${v}.z`})` : v;
+    };
     return {
-      code: `    vec3 ${outVar} = palette(${tVar}, ${oExpr}, ${aExpr}, ${fExpr}, ${pExpr});\n`,
+      code: `    vec3 ${outVar} = palette(${tVar}, ${vec('offset', [0.5, 0.5, 0.5])}, ${vec('amplitude', [0.5, 0.5, 0.5])}, ${vec('freq', [1.0, 1.0, 1.0])}, ${vec('phase', [0.0, 0.33, 0.67])});\n`,
       outputVars: { color: outVar },
     };
   },

@@ -18,6 +18,8 @@ export interface CustomFnPreset {
   body: string;
   /** Optional helper GLSL functions injected before main() */
   glslFunctions: string;
+  /** The node's comment when it was saved; restored on the node when placed */
+  comment?: string;
   /** Unix timestamp (ms) when saved */
   savedAt: number;
 }

@@ -5,6 +5,8 @@ export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "s
 export interface Socket {
   type: DataType;
   label: string;
+  /** Optional docstring shown in the node info panel: what the socket expects or produces. */
+  hint?: string;
 }
 
 // Input socket with connection and default value
@@ -40,7 +42,8 @@ export interface GraphNode {
   params: Record<string, unknown>;
   /** When true the node is skipped — inputs are passed through to outputs */
   bypassed?: boolean;
-  /** When true the node is a sealed group preset — compiles as a standalone GLSL function; double-click to enter is disabled */
+  /** When true the group can't be entered (double-click disabled). Compilation is unchanged — it still inlines.
+   *  To get a real standalone GLSL function, publish the group as a node type (see nodes/userNodes). */
   sealed?: boolean;
   /**
    * Assignment operator applied to this node's output via an accumulator variable.
@@ -125,6 +128,19 @@ export interface NodeDefinition {
   // Optional GLSL function(s) to include in shader
   glslFunction?: string;
   glslFunctions?: string[];
+  /**
+   * Helper functions that depend on the instance (e.g. a user node whose
+   * flattened body was pre-built per iteration count). Collected alongside
+   * `glslFunctions` wherever a node is compiled; de-duplicated by name.
+   */
+  glslFunctionsFor?: (node: GraphNode) => string[];
+  /**
+   * Image slots this node owns. For each slot the assembler declares a
+   * per-instance `uniform sampler2D u_tex_<slug>_<slot>` bound to the texture
+   * stored under `nodeTextures["<nodeId>::<slot>"]`; generateGLSL passes it
+   * as `u_tex_${node.id}_${slot}`.
+   */
+  textureSlots?: string[];
 
   // Default parameter values
   defaultParams?: Record<string, unknown>;

@@ -16,8 +16,9 @@ import type React from 'react';
  * node's output feeding an existing input) — same typesCompatible()
  * promotion rules (float -> vec2/vec3, ...) used everywhere else.
  */
-import { useState } from 'react';
-import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
+import { useMemo, useState } from 'react';
+import { getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
+import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { typesCompatible } from '../../lib/typesCompatible';
@@ -34,16 +35,18 @@ function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
 }
 
-// Built once at module load — the registry doesn't change at runtime.
+// Rebuilt when the user-node registry changes (built-ins are static).
 // Types with no subcategory land in a single unnamed group per category;
 // most categories are small enough that this is the only group they get.
 interface SubGroup { name: string | null; types: string[] }
 interface CategoryGroup { name: string; subgroups: SubGroup[] }
 
-const CATEGORIES: CategoryGroup[] = (() => {
+function buildCategories(userNodesVersion: number): CategoryGroup[] {
+  void userNodesVersion; // the argument is what invalidates the memo below
   const catMap = new Map<string, Map<string | null, string[]>>();
-  for (const [type, def] of Object.entries(NODE_REGISTRY)) {
-    if (HIDDEN_TYPES.has(type) || def.deprecated) continue; // deprecated: loadable, not offered
+  for (const def of getOfferedDefinitions()) {
+    const type = def.type;
+    if (HIDDEN_TYPES.has(type)) continue;
     if (!catMap.has(def.category)) catMap.set(def.category, new Map());
     const subMap = catMap.get(def.category)!;
     const sub = def.subcategory ?? null;
@@ -64,7 +67,7 @@ const CATEGORIES: CategoryGroup[] = (() => {
         }),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
-})();
+}
 
 // Full-width list row (node types, pairing targets)
 const rowBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
@@ -108,6 +111,8 @@ function pairingsFor(newDef: NodeDefinition, existing: GraphNode): Pairing[] {
 
 export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   const tc = useCtp();
+  const userNodesVersion = useUserNodesVersion();
+  const CATEGORIES = useMemo(() => buildCategories(userNodesVersion), [userNodesVersion]);
   const mode = useThemeMode();
   const pairHeadStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', margin: '4px 0 6px' };
   const promotedStyle: React.CSSProperties = { font: `500 11px ${fontFamily.ui}`, color: '#a8720a', background: 'rgba(217,154,30,0.14)', borderRadius: 6, padding: '2px 7px' };

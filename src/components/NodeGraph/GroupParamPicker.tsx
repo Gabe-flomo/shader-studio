@@ -29,7 +29,25 @@ interface Props {
 // Node types that never show params in the group card
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant', 'loopIndex', 'loopCarry', 'group']);
 
+/** An inner node's name in the picker: click to open the group centred on that node */
+function NodeHeading({ label, onGo }: { label: string; onGo: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onGo}
+      title="Open the group at this node"
+      onMouseEnter={e => { e.currentTarget.style.color = ctp.text; }}
+      onMouseLeave={e => { e.currentTarget.style.color = ctp.overlay0; }}
+      style={{
+        display: 'block', width: '100%', padding: '3px 10px 2px', border: 0, background: 'none', cursor: 'pointer', textAlign: 'left',
+        fontSize: '9px', color: ctp.overlay0, letterSpacing: '0.06em', textTransform: 'uppercase',
+      }}
+    >{label} →</button>
+  );
+}
+
 export function GroupParamPicker({ outerNode, onClose }: Props) {
+  const revealNode = useNodeGraphStore(s => s.revealNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const subgraph = outerNode.params.subgraph as SubgraphData | undefined;
 
@@ -157,9 +175,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
 
             return (
               <div key={innerGroup.id} style={{ marginTop: '4px' }}>
-                <div style={{ padding: '3px 10px 2px', fontSize: '9px', color: ctp.overlay0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  {innerLabel}
-                </div>
+                <NodeHeading label={innerLabel} onGo={() => { revealNode([outerNode.id], innerGroup.id); onClose(); }} />
                 {rows.map(row => {
                   const checked = row.wired || isSurfaced(innerGroup.id, row.nodeId, row.paramKey);
                   return (
@@ -243,9 +259,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
 
               return (
                 <div key={innerNode.id} style={{ marginTop: '4px' }}>
-                  <div style={{ padding: '3px 10px 2px', fontSize: '9px', color: ctp.overlay0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    {innerLabel}
-                  </div>
+                  <NodeHeading label={innerLabel} onGo={() => { revealNode([outerNode.id], innerNode.id); onClose(); }} />
                   {rows.map(row => {
                     const visible = row.wired || !isHidden(innerNode.id, row.paramKey);
                     return (

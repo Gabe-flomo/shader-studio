@@ -149,8 +149,10 @@ void main() {
 // has finished compiling — which defeats KHR_parallel_shader_compile. So the
 // wrapper only records the shader, and the per-frame flush polls
 // COMPLETION_STATUS_KHR and reads the log once the compile is actually done.
-function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): () => string[] {
+function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): { flush: () => string[]; failedSource: () => string | null } {
   const errors: string[] = [];
+  // Source of the last shader that failed: error line numbers point into it
+  let lastFailedSource: string | null = null;
   const pending: WebGLShader[] = [];
   const parallel = gl.getExtension('KHR_parallel_shader_compile') as { COMPLETION_STATUS_KHR: number } | null;
   const origCompile = gl.compileShader.bind(gl);
@@ -158,7 +160,7 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
     origCompile(shader);
     pending.push(shader);
   };
-  return () => {
+  const flush = () => {
     for (let i = pending.length - 1; i >= 0; i--) {
       const sh = pending[i];
       // Three.js deletes shader objects once their program linked — nothing to report.
@@ -169,6 +171,7 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
         const log = gl.getShaderInfoLog(sh);
         // ANGLE terminates the log with a NUL byte; drop it along with blank lines.
         if (log) errors.push(...log.split('\n').map(l => l.replace(/\0/g, '')).filter(l => l.trim()));
+        lastFailedSource = gl.getShaderSource(sh);
       }
     }
     if (errors.length === 0) return NO_ERRORS;
@@ -176,6 +179,7 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
     errors.length = 0;
     return copy;
   };
+  return { flush, failedSource: () => lastFailedSource };
 }
 const NO_ERRORS: string[] = [];
 
@@ -210,7 +214,53 @@ interface Props {
 }
 export { HIST_BINS };
 
-export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, onHistogram }: Props = {}) {
+/**
+ * The live preview. Wraps the WebGL canvas with its two status overlays (the chip shown while a
+ * broken shader leaves the last working one on screen, and the notice after a GPU reset), and
+ * remounts the canvas when the user restarts the preview.
+ */
+export default function ShaderCanvas(props: Props = {}) {
+  const epoch = useNodeGraphStore(s => s.previewEpoch);
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <ShaderCanvasSurface key={epoch} {...props} />
+      <PreviewStatus />
+    </div>
+  );
+}
+
+function PreviewStatus() {
+  const stale = useNodeGraphStore(s => s.previewStale);
+  const lost = useNodeGraphStore(s => s.glContextLost);
+  const restart = useNodeGraphStore(s => s.restartPreview);
+  if (lost) {
+    return (
+      <div role="alert" style={{
+        position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+        background: 'rgba(13,13,18,0.86)', color: '#e8e9ef', font: '13px system-ui, -apple-system, sans-serif', textAlign: 'center', padding: 20,
+      }}>
+        <b style={{ fontSize: 14 }}>Preview paused</b>
+        <span style={{ color: '#a9abb6' }}>The graphics driver reset. Your graph is fine.</span>
+        <button type="button" onClick={restart} style={{
+          height: 32, padding: '0 14px', border: 0, borderRadius: 8, cursor: 'pointer',
+          background: '#e8e9ef', color: '#0d0d12', font: '600 12.5px system-ui, -apple-system, sans-serif',
+        }}>Restart preview</button>
+      </div>
+    );
+  }
+  if (!stale) return null;
+  return (
+    <div role="status" title="The newest change doesn't compile. See the node with the red ring, or Generated code." style={{
+      position: 'absolute', left: 10, top: 10, zIndex: 5, display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 10px',
+      borderRadius: 8, background: 'rgba(13,13,18,0.78)', color: '#fca5a5', font: '600 11.5px system-ui, -apple-system, sans-serif', pointerEvents: 'auto',
+    }}>
+      <i style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444' }} />
+      Showing the last working version
+    </div>
+  );
+}
+
+function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogram }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -285,12 +335,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   useEffect(() => {
     const container = canvasRef.current!;
 
-    // 'high-performance' forces the discrete GPU on dual-GPU laptops and hints
-    // max clocks on phones; the preview is one full-screen quad, so 'default'
-    // is plenty, and phones get 'low-power' for battery.
+    // The preview is one full-screen quad, but its fragment shader can be very heavy (raymarching,
+    // fractals). Desktop/tablet ask for the fast GPU: with 'default', dual-GPU Macs can land on the
+    // integrated one, where a heavy shader misses the frame budget and vsync halves it to 30 fps.
+    // Phones keep 'low-power' for battery.
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
-      powerPreference: isMobile(getBreakpoint(window.innerWidth)) ? 'low-power' : 'default',
+      powerPreference: isMobile(getBreakpoint(window.innerWidth)) ? 'low-power' : 'high-performance',
     });
     renderer.setSize(1, 1);
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
@@ -336,7 +387,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     // Enable parallel shader compilation — keeps previous frame rendering while new shader compiles
     const gl = renderer.getContext();
     gl.getExtension('KHR_parallel_shader_compile');
-    const flushGlErrors = captureGlslErrors(gl);
+    const { flush: flushGlErrors, failedSource: glFailedSource } = captureGlslErrors(gl);
 
     // Half-float RT support check — eliminates 8-bit quantization banding in dark areas
     const supportsHalfFloat = renderer.capabilities.isWebGL2 ||
@@ -402,7 +453,11 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     compileScene.add(compileMesh);
     let compileGeneration = 0;
     swapShaderRef.current = async (vsSrc, fsSrc) => {
-      if (material.vertexShader === vsSrc && material.fragmentShader === fsSrc) return true;
+      if (material.vertexShader === vsSrc && material.fragmentShader === fsSrc) {
+        // e.g. an edit that fixed an error, landing back on the shader still on screen
+        useNodeGraphStore.getState().setPreviewStale(false);
+        return true;
+      }
       const gen = ++compileGeneration;
       const next = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
       compileMesh.material = next;
@@ -413,6 +468,19 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         console.warn('[ShaderCanvas] compileAsync rejected', e);
       }
       if (gen !== compileGeneration) { next.dispose(); return false; }
+      // A shader that didn't link would draw nothing: keep drawing the last one that worked and
+      // say so. Read its error log first; disposing it deletes the shader objects the log is on.
+      const gl = renderer.getContext();
+      const linked = (renderer.properties.get(next) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+      if (linked && gl.getProgramParameter(linked, gl.LINK_STATUS) === false) {
+        const errors = flushGlErrors();
+        if (errors.length > 0) useNodeGraphStore.getState().setGlslErrors(errors, glFailedSource());
+        compileMesh.material = material;
+        next.dispose();
+        useNodeGraphStore.getState().setPreviewStale(true);
+        return false;
+      }
+      useNodeGraphStore.getState().setPreviewStale(false);
       const prev = material;
       material = next;
       mesh.material = next;
@@ -750,6 +818,9 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
       if (timePlayingRef.current) virtualTime += dt;
       const elapsed = virtualTime;
       material.uniforms.u_time.value = elapsed;
+      // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
+      // cheap, and throttling it made the readout visibly choppy once frames were throttled.
+      if (hasTimeTickListeners()) emitTimeTick(elapsed);
 
       // ── GPU particle tick: just keep u_time in sync ────────────────────────
       for (const [, points] of gpuParticlesRef.current) {
@@ -834,7 +905,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();
         if (newErrors.length > 0) {
-          setGlslErrors(newErrors);
+          setGlslErrors(newErrors, glFailedSource());
         }
 
         // Throttled updates every N frames while animating. A frame drawn on
@@ -851,7 +922,6 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
           if (hasTimeNodeRef.current) {
             setCurrentTime(material.uniforms.u_time.value);
           }
-          if (hasTimeTickListeners()) emitTimeTick(material.uniforms.u_time.value);
           const mp = mousePosRef.current;
           if (mp === null) {
             // Mouse not over canvas — hide the overlay
@@ -1260,12 +1330,22 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         }
       } else {
         idleFrames++;
+        // Nothing to redraw, but the clock still runs while playing: keep the time readout (and
+        // anything following it) current without drawing.
+        if (playing && ++frameCount % SAMPLE_EVERY === 0) {
+          if (hasTimeNodeRef.current) setCurrentTime(material.uniforms.u_time.value);
+        }
       }
 
-      // Keep the loop alive while something is moving or was just drawn; after
-      // a short idle run stop requesting frames until a trigger asks again.
-      if (dynamic || needsRender || idleFrames < IDLE_FRAMES_BEFORE_STOP) scheduleFrame();
-      else loopRunning = false;
+      // Keep the loop alive while something is moving, was just drawn, or the clock is running
+      // (a frame with nothing to draw is cheap); otherwise, after a short idle run, stop
+      // requesting frames until a trigger asks again. Stopping while playing froze the clock:
+      // it only advanced when some store write woke the loop, then jumped.
+      if (dynamic || needsRender || playing || idleFrames < IDLE_FRAMES_BEFORE_STOP) scheduleFrame();
+      else {
+        loopRunning = false;
+        lastRafTime = null; // the next start counts from its own first frame, not across the stop
+      }
     }
     scheduleFrame();
 

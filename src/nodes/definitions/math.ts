@@ -76,13 +76,19 @@ export const SinNode: NodeDefinition = {
   type: 'sin', label: 'Sin', category: 'Math', subcategory: 'Trigonometry', description: 'Sine of input: amp * sin(input * freq).',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
-  defaultParams: { freq: 1.0, amp: 1.0 },
-  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 } },
+  defaultParams: { input: 0.0, freq: 1.0, amp: 1.0 },
+  paramDefs: {
+    // Used when Input isn't wired, so the node does something on its own (it was sin(0) = 0)
+    input: { label: 'Input', type: 'float', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The angle in radians, when nothing is wired to Input.' },
+    freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 },
+    amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 },
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
     const amp  = inputVars.amp  || p(node.params.amp, 1.0);
-    return { code: `    ${t} ${o} = ${amp} * sin(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
+    const input = inputVars.input || (t === 'float' ? p(node.params.input, 0.0) : `${t}(${p(node.params.input, 0.0)})`);
+    return { code: `    ${t} ${o} = ${amp} * sin(${input} * ${freq});\n`, outputVars: { output: o } };
   },
 };
 
@@ -90,13 +96,19 @@ export const CosNode: NodeDefinition = {
   type: 'cos', label: 'Cos', category: 'Math', subcategory: 'Trigonometry', description: 'Cosine of input: amp * cos(input * freq).',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
-  defaultParams: { freq: 1.0, amp: 1.0 },
-  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 } },
+  defaultParams: { input: 0.0, freq: 1.0, amp: 1.0 },
+  paramDefs: {
+    // Used when Input isn't wired, so the node does something on its own (it was sin(0) = 0)
+    input: { label: 'Input', type: 'float', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The angle in radians, when nothing is wired to Input.' },
+    freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 },
+    amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 },
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
     const amp  = inputVars.amp  || p(node.params.amp, 1.0);
-    return { code: `    ${t} ${o} = ${amp} * cos(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
+    const input = inputVars.input || (t === 'float' ? p(node.params.input, 0.0) : `${t}(${p(node.params.input, 0.0)})`);
+    return { code: `    ${t} ${o} = ${amp} * cos(${input} * ${freq});\n`, outputVars: { output: o } };
   },
 };
 
@@ -104,13 +116,19 @@ export const TanNode: NodeDefinition = {
   type: 'tan', label: 'Tan', category: 'Math', subcategory: 'Trigonometry', description: 'Tangent of input: amp * tan(input * freq). Approaches ±∞ at ±π/2.',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
-  defaultParams: { freq: 1.0, amp: 1.0 },
-  paramDefs: { freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 }, amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 } },
+  defaultParams: { input: 0.0, freq: 1.0, amp: 1.0 },
+  paramDefs: {
+    // Used when Input isn't wired, so the node does something on its own (it was sin(0) = 0)
+    input: { label: 'Input', type: 'float', min: -3.14159, max: 3.14159, step: 0.01, hint: 'The angle in radians, when nothing is wired to Input.' },
+    freq: { label: 'Freq', type: 'float', min: 0.01, max: 20, step: 0.01 },
+    amp: { label: 'Amp', type: 'float', min: 0, max: 5, step: 0.01 },
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
     const freq = inputVars.freq || p(node.params.freq, 1.0);
     const amp  = inputVars.amp  || p(node.params.amp, 1.0);
-    return { code: `    ${t} ${o} = ${amp} * tan(${inputVars.input || zeroFor(t)} * ${freq});\n`, outputVars: { output: o } };
+    const input = inputVars.input || (t === 'float' ? p(node.params.input, 0.0) : `${t}(${p(node.params.input, 0.0)})`);
+    return { code: `    ${t} ${o} = ${amp} * tan(${input} * ${freq});\n`, outputVars: { output: o } };
   },
 };
 
