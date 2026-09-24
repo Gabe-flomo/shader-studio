@@ -58,7 +58,8 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
-import { canRandomize, randomizableParams, randomizeExcluded } from '../../nodes/randomizeParams';
+import { canRandomize, randomizableParams, randomizeAmount, randomizeExcluded } from '../../nodes/randomizeParams';
+import { useFoldState } from './foldState';
 import { RandomizeMenu } from './RandomizeMenu';
 import { timeReadoutRef } from '../../lib/timeTick';
 import type { NodeError } from '../../compiler/nodeErrors';
@@ -392,6 +393,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams       = useNodeGraphStore(s => s.updateNodeParams);
   const randomizeNodeParams    = useNodeGraphStore(s => s.randomizeNodeParams);
+  const foldedSections = useFoldState(s => s.folded);
+  const toggleFold     = useFoldState(s => s.toggle);
   const [randomizeMenu, setRandomizeMenu] = useState<{ x: number; y: number } | null>(null);
   const changeNodeVectorType   = useNodeGraphStore(s => s.changeNodeVectorType);
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
@@ -1946,6 +1949,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 params={randomizableParams(node, def)}
                 excluded={randomizeExcluded(node)}
                 onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
+                amount={randomizeAmount(node)}
+                onAmountChange={a => updateNodeParams(node.id, { __randAmount: a >= 1 ? undefined : a })}
                 onRandomize={() => randomizeNodeParams(node.id)}
                 onClose={() => setRandomizeMenu(null)}
               />
@@ -3624,19 +3629,35 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const compLabels = ['r', 'g', 'b'];
             const compColors = [tc.red, tc.green, tc.blue];
             const defVal = def?.defaultParams?.[key];
+            // Each vec3 section folds on its own to a one-line summary (see foldState.ts)
+            const foldId = `${node.id}:${key}`;
+            const isFolded = !!foldedSections[foldId];
             return (
               <div
                 key={key}
                 style={{ padding: '6px 12px 6px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}
                 onMouseDown={e => e.stopPropagation()}
               >
-                <span
-                  style={{ color: tk.text.secondary, fontWeight: 600, marginBottom: 2, cursor: 'default' }}
-                  title={`${paramDef.hint ? `${paramDef.hint}\n` : ''}Double-click to reset to default`}
-                  onDoubleClick={() => { if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true }); }}
-                >{paramDef.label}</span>
+                <button
+                  type="button"
+                  aria-expanded={!isFolded}
+                  onClick={() => toggleFold(foldId)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4, width: '100%', padding: 0, margin: '0 0 2px -4px', border: 0, background: 'none',
+                    cursor: 'pointer', textAlign: 'left', color: tk.text.secondary, font: `600 12.5px ${fontFamily.ui}`,
+                  }}
+                  title={`${paramDef.hint ? `${paramDef.hint}\n` : ''}Click to ${isFolded ? 'expand' : 'fold'} · double-click the name to reset`}
+                >
+                  <Icon name={isFolded ? 'chevR' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
+                  <span onDoubleClick={e => { e.stopPropagation(); if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true }); }}>{paramDef.label}</span>
+                  {isFolded && (
+                    <span style={{ marginLeft: 'auto', font: `500 11.5px ${fontFamily.mono}`, color: tk.text.muted }}>
+                      {node.inputs[key]?.connection ? 'wired' : vals.slice(0, 3).map(v => (+(v ?? 0)).toFixed(2)).join('  ')}
+                    </span>
+                  )}
+                </button>
                 {/* The whole vec3 wired (Palette's Offset, …): one chip instead of three rulers */}
-                {node.inputs[key]?.connection ? (
+                {isFolded ? null : node.inputs[key]?.connection ? (
                   <WiredChip source={node.inputs[key].connection!} expr={getSourceExpr(shaderLines, nodeOutputVarMap, node.inputs[key].connection!.nodeId, node.inputs[key].connection!.outputKey)} />
                 ) : [0, 1, 2].map(idx => {
                   const conn = node.inputs[compKeys[idx]]?.connection;
@@ -3999,6 +4020,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           params={randomizableParams(node, def)}
           excluded={randomizeExcluded(node)}
           onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
+                amount={randomizeAmount(node)}
+                onAmountChange={a => updateNodeParams(node.id, { __randAmount: a >= 1 ? undefined : a })}
           onRandomize={() => randomizeNodeParams(node.id)}
           onClose={() => setRandomizeMenu(null)}
         />
