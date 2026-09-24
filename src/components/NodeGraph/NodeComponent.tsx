@@ -16,6 +16,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   `;
   document.head.appendChild(s);
 }
+import { toast } from '../ui/toastStore';
 import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
@@ -703,7 +704,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           setNodeTexture(node.id, texture);
           updateNodeParams(node.id, { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect }, { immediate: true });
         })
-        .catch(err => console.error('Failed to load texture image:', err));
+        .catch(err => toast.error('Couldn’t load that image', { message: 'The file may be damaged or in a format the browser can’t read. Your graph wasn’t changed.', details: errorMessage(err) }));
     };
 
     return (
