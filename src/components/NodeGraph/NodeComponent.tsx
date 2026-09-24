@@ -44,6 +44,7 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { KeyframeEditorModal } from './KeyframeEditorModal';
+import { computeNodeSlug } from '../../compiler/nodeSlug';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -319,11 +320,13 @@ function SocketTooltip({ lines, side }: TooltipProps) {
   );
 }
 
-// Extract the lines from the compiled fragment shader that belong to a specific node
-function extractNodeCodeFromShader(lines: string[], nodeId: string): string {
+// Extract the lines of the compiled fragment shader that belong to a node: the ones declaring or
+// assigning one of its variables. Those are named after the node's slug (`circ_3_dist`), not its id.
+function extractNodeCodeFromShader(lines: string[], node: GraphNode): string {
   if (!lines.length) return '';
-  const relevant = lines.filter(l => l.includes(nodeId));
-  return relevant.join('\n');
+  const slug = computeNodeSlug(node, new Set());
+  const ownAssignment = new RegExp(`^\\s*(?:\\w+\\s+)?${slug}_\\w*(?:\\.\\w+)?\\s*[-+*/]?=(?!=)`);
+  return lines.filter(l => ownAssignment.test(l)).join('\n');
 }
 
 // Extract the RHS expression for a specific output variable from compiled GLSL
@@ -484,7 +487,6 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
   const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
-  const [codeEditMode, setCodeEditMode] = useState(false);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [kfChipHover, setKfChipHover] = useState(false);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -2590,13 +2592,10 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
   const sectionRule = <div aria-hidden style={{ height: 1, background: tk.border.subtle, margin: '6px 0' }} />;
 
   // Generate code snippet for this node (pass empty inputVars for template display)
-  const generatedCode = showCode ? def.generateGLSL(node, {}).code : '';
+  // Prefer this node's lines from the compiled shader (real variable names); fall back to the template
+  const generatedCode = showCode ? (extractNodeCodeFromShader(shaderLines, node) || def.generateGLSL(node, {}).code) : '';
   const hasOverride = typeof node.params?.__codeOverride === 'string' && (node.params.__codeOverride as string).trim().length > 0;
   const codeSnippet = hasOverride ? (node.params.__codeOverride as string) : generatedCode;
-  // The value shown in the editable textarea
-  const codeEditValue = codeEditMode
-    ? (typeof node.params?.__codeOverride === 'string' ? node.params.__codeOverride as string : generatedCode)
-    : codeSnippet;
 
   // ─── Build tooltip for an input socket ─────────────────────────────────────
   const buildInputTooltip = (inputKey: string): React.ReactNode[] => {
@@ -3932,7 +3931,7 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
         </div>
       )}
 
-      {/* ── Generated GLSL code (editable, hidden when collapsed) ── */}
+      {/* ── Generated GLSL code (read-only, hidden when collapsed) ── */}
       {showCode && !collapsed && (
         <div style={{ borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle }} onMouseDown={e => e.stopPropagation()}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
@@ -3940,47 +3939,18 @@ export function NodeComponent({ node, onStartConnection, onEndConnection, onTapO
             {hasOverride && <CardBadge>EDITED</CardBadge>}
             {hasOverride && (
               <Button size="sm" variant="ghost" style={{ height: 26 }}
-                title="Discard the edits and go back to the generated GLSL"
-                onClick={() => { updateNodeParams(node.id, { __codeOverride: '' }); setCodeEditMode(false); }}>
+                title="This node's GLSL was edited by hand (an older feature). Revert to the generated code."
+                onClick={() => updateNodeParams(node.id, { __codeOverride: '' })}>
                 Revert
               </Button>
             )}
-            <Button size="sm" style={{ height: 26 }} icon={codeEditMode ? 'check' : 'edit'}
-              onClick={() => {
-                if (codeEditMode) {
-                  setCodeEditMode(false); // value already stored via onChange
-                } else {
-                  // Seed the editor with the LIVE compiled code (real variable names) if there's no override yet
-                  if (!hasOverride) {
-                    const liveCode = extractNodeCodeFromShader(shaderLines, node.id);
-                    updateNodeParams(node.id, { __codeOverride: liveCode || generatedCode });
-                  }
-                  setCodeEditMode(true);
-                }
-              }}>
-              {codeEditMode ? 'Done' : 'Edit'}
-            </Button>
           </div>
-          {codeEditMode ? (
-            <textarea
-              aria-label="Node GLSL"
-              value={codeEditValue}
-              onChange={e => updateNodeParams(node.id, { __codeOverride: e.target.value })}
-              spellCheck={false}
-              rows={8}
-              style={{
-                display: 'block', width: '100%', boxSizing: 'border-box', margin: 0, padding: '8px 12px', border: 0, outline: 'none',
-                resize: 'vertical', background: tk.bg.panel, color: tk.text.primary, font: `11.5px/1.55 ${fontFamily.mono}`,
-              }}
-            />
-          ) : (
             <pre style={{
               margin: 0, padding: '8px 12px', maxHeight: 400, overflow: 'auto', whiteSpace: 'pre',
               color: hasOverride ? tk.status.warningText : tk.text.secondary, font: `11.5px/1.55 ${fontFamily.mono}`,
             }}>
               {codeSnippet || '// (no code generated)'}
             </pre>
-          )}
         </div>
       )}
 
