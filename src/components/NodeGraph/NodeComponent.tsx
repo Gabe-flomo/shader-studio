@@ -348,21 +348,19 @@ function extractNodeCodeFromShader(lines: string[], node: GraphNode): string {
 }
 
 // Extract the RHS expression for a specific output variable from compiled GLSL
-// e.g. for nodeId="make_3", outputKey="glow" finds "float make_3_glow = ..." and returns the RHS
-function getSourceExpr(lines: string[], sourceNodeId: string, outputKey: string): string {
+function getSourceExpr(lines: string[], varMap: ReadonlyMap<string, Record<string, string>>, sourceNodeId: string, outputKey: string): string {
   if (!lines.length) return '';
-  const varName = `${sourceNodeId}_${outputKey}`;
+  // Compiled variables are named from the node's slug (`circ_3_dist`), not its id or output key:
+  // the compiler's map says which one this output became.
+  const varName = varMap.get(sourceNodeId)?.[outputKey] ?? `${sourceNodeId}_${outputKey}`;
+  const assign = new RegExp(`(?:^|\\s)${varName.replace(/[^A-Za-z0-9_]/g, '')}\\s*=(?!=)`);
   for (const line of lines) {
     const trimmed = line.trim();
-    // Match: "float varName = ..." or "vec2 varName = ..." etc.
-    if (trimmed.includes(varName)) {
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx !== -1) {
-        const rhs = trimmed.slice(eqIdx + 1).trim().replace(/;$/, '');
-        // Truncate long expressions
-        return rhs.length > 60 ? rhs.slice(0, 57) + '...' : rhs;
-      }
-    }
+    if (!assign.test(trimmed)) continue;
+    const eqIdx = trimmed.search(/=(?!=)/);
+    const rhs = trimmed.slice(eqIdx + 1).trim().replace(/;$/, '');
+    // Truncate long expressions
+    return rhs.length > 60 ? rhs.slice(0, 57) + '...' : rhs;
   }
   return varName; // fallback: just show the variable name
 }
@@ -379,6 +377,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const tk = useTokens();
   const inputStyle_ = inputStyleFor(tc);
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
+  const nodeOutputVarMap = useNodeGraphStore(s => s.nodeOutputVarMap);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
   const activeGroupId   = useNodeGraphStore(s => s.activeGroupId);
   // Check if the active group has iterations > 1 (assignOp / carryMode only meaningful in loops)
@@ -1813,7 +1812,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {wired && wire ? (
             <>
-              <WiredChip expr={getSourceExpr(shaderLines, wire.nodeId, wire.outputKey) || 'wired from outside'} />
+              <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey) || 'wired from outside'} />
               <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, o.psKey)} />
             </>
           ) : (
@@ -3474,7 +3473,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const isParamInternallyWired = paramInputConn != null;
             const lockIcon = <span style={{ marginLeft: 4, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={11} /></span>;
             if (isSocketConnected) {
-              const srcExpr = getSourceExpr(shaderLines, socketConn!.nodeId, socketConn!.outputKey);
+              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, socketConn!.nodeId, socketConn!.outputKey);
               return (
                 <div key={key} style={rowStyle}>
                   <ParamLabel muted>{paramDef.label}{isParamExternal && lockIcon}</ParamLabel>
@@ -3495,7 +3494,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             }
             // Wired inside the group through the param's own socket
             if (isParamInternallyWired) {
-              const srcExpr = getSourceExpr(shaderLines, paramInputConn!.nodeId, paramInputConn!.outputKey);
+              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, paramInputConn!.nodeId, paramInputConn!.outputKey);
               return (
                 <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                   {activeGroupId && (
@@ -3586,16 +3585,19 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               >
                 <span
                   style={{ color: tk.text.secondary, fontWeight: 600, marginBottom: 2, cursor: 'default' }}
-                  title="Double-click to reset to default"
+                  title={`${paramDef.hint ? `${paramDef.hint}\n` : ''}Double-click to reset to default`}
                   onDoubleClick={() => { if (Array.isArray(defVal)) updateNodeParams(node.id, { [key]: defVal }, { immediate: true }); }}
                 >{paramDef.label}</span>
-                {[0, 1, 2].map(idx => {
+                {/* The whole vec3 wired (Palette's Offset, …): one chip instead of three rulers */}
+                {node.inputs[key]?.connection ? (
+                  <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, node.inputs[key].connection!.nodeId, node.inputs[key].connection!.outputKey)} />
+                ) : [0, 1, 2].map(idx => {
                   const conn = node.inputs[compKeys[idx]]?.connection;
                   return (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
                       <span style={{ width: 10, flexShrink: 0, textAlign: 'center', font: `600 11px ${fontFamily.mono}`, color: compColors[idx] }}>{compLabels[idx]}</span>
                       {conn
-                        ? <WiredChip expr={getSourceExpr(shaderLines, conn.nodeId, conn.outputKey)} />
+                        ? <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, conn.nodeId, conn.outputKey)} />
                         : (
                           <RulerSlider
                             value={vals[idx] ?? 0}
@@ -3697,7 +3699,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               >
                 <ParamLabel muted={isWired}>{inp.name}</ParamLabel>
                 {isWired && wire
-                  ? <WiredChip expr={getSourceExpr(shaderLines, wire.nodeId, wire.outputKey)} />
+                  ? <WiredChip expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
                   : (
                     <RulerSlider
                       value={val}
