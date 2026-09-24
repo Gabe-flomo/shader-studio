@@ -7,7 +7,7 @@ export const GridLayoutNode: NodeDefinition = {
   type: 'gridLayout',
   label: 'Grid',
   category: 'Grid',
-  description: 'Divides UV space into an aspect-corrected grid. Outputs cell UV [-0.5,0.5], dist to center, cell ID, grid pos, cell size, and aspect ratio.',
+  description: 'Divides UV space into an aspect-corrected grid. Outputs cell UV [-0.5,0.5], dist to center, cell ID, grid pos, cell size, and aspect ratio. Use with Neighbor Dist, Cell Filter, Cell Displace, Animated Cell Center, Attract Circles, Wave Radius and Grid Density Warp, which consume its outputs.',
   inputs: {
     uv:      { type: 'vec2',  label: 'UV' },
     columns: { type: 'float', label: 'Columns' },
@@ -23,7 +23,7 @@ export const GridLayoutNode: NodeDefinition = {
   },
   defaultParams: { columns: 10.0 },
   paramDefs: {
-    columns: { label: 'Columns', type: 'float', min: 1.0, max: 80.0, step: 1.0 },
+    columns: { label: 'Columns', type: 'float', min: 1.0, max: 80.0, step: 1.0, hint: 'How many cells across the width. Rows follow from the aspect ratio.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -59,19 +59,19 @@ export const WaveRadiusNode: NodeDefinition = {
   type: 'waveRadius',
   label: 'Wave Radius',
   category: 'Grid',
-  description: 'Outputs a time-animated radius: sin((distance − time) × speed × freq) × amp + base. Wire dist_to_center from Grid for a radial wave, or leave distance unconnected for uniform pulsing.',
+  description: 'Outputs a time-animated radius: sin((distance − time) × speed × freq) × amp + base. Wire dist_to_center from Grid for a radial wave, or leave distance unconnected for uniform pulsing. Use with Grid (Dist to Center) and Neighbor Dist.',
   inputs: {
-    distance: { type: 'float', label: 'Distance' },
+    distance: { type: 'float', label: 'Distance', hint: 'Wire Dist to Center from Grid for a radial wave; unwired every cell pulses together.' },
   },
   outputs: {
     wave_radius: { type: 'float', label: 'Wave Radius' },
   },
   defaultParams: { speed: 0.52, freq: 3.24, amp: 0.19, base: 0.25 },
   paramDefs: {
-    speed: { label: 'Speed',     type: 'float', min: 0.0,  max: 5.0,  step: 0.01 },
-    freq:  { label: 'Frequency', type: 'float', min: 0.1,  max: 20.0, step: 0.01 },
-    amp:   { label: 'Amplitude', type: 'float', min: 0.0,  max: 0.5,  step: 0.005 },
-    base:  { label: 'Base',      type: 'float', min: 0.0,  max: 1.0,  step: 0.005 },
+    speed: { label: 'Speed',     type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the wave travels outward.' },
+    freq:  { label: 'Frequency', type: 'float', min: 0.1,  max: 20.0, step: 0.01, hint: 'Number of wave crests per unit distance. Higher = tighter rings.' },
+    amp:   { label: 'Amplitude', type: 'float', min: 0.0,  max: 0.5,  step: 0.005, hint: 'How much the radius swings. 0 is a constant radius of Base.' },
+    base:  { label: 'Base',      type: 'float', min: 0.0,  max: 1.0,  step: 0.005, hint: 'Radius at rest; the wave swings above and below it.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -98,19 +98,19 @@ export const NeighborDistNode: NodeDefinition = {
   type: 'neighborDist',
   label: 'Neighbor Dist',
   category: 'Grid',
-  description: 'Minimum distance to the nearest dot center across a 3×3 neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift.',
+  description: 'Minimum distance to the nearest dot center across a 3×3 neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift. Use with Grid (Cell UV and Cell ID).',
   inputs: {
     uv:           { type: 'vec2',  label: 'UV' },
-    cellID:       { type: 'vec2',  label: 'Cell ID' },
-    displacement: { type: 'vec2',  label: 'Displacement' },
-    dispScale:    { type: 'float', label: 'Disp Scale' },
+    cellID:       { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid for per-cell random scatter.' },
+    displacement: { type: 'vec2',  label: 'Displacement', hint: 'Uniform shift for every dot; overrides the Cell ID hash when wired.' },
+    dispScale:    { type: 'float', label: 'Disp Scale', hint: 'Wire a float to drive the scatter amount live.' },
   },
   outputs: {
     minDist: { type: 'float', label: 'Min Dist' },
   },
   defaultParams: { neighborhood_size: 1, dispScale: 0.35 },
   paramDefs: {
-    dispScale: { label: 'Disp Scale', type: 'float', min: 0, max: 0.5, step: 0.005 },
+    dispScale: { label: 'Disp Scale', type: 'float', min: 0, max: 0.5, step: 0.005, hint: 'How far each dot may wander from its cell center. 0.35 scatters without gaps.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
@@ -161,9 +161,9 @@ export const CellFilterNode: NodeDefinition = {
   type: 'cellFilter',
   label: 'Cell Filter',
   category: 'Grid',
-  description: 'Produces a 0/1 mask for a specific grid cell. Set X and Y independently via sliders or input ports. Mode controls exact match vs modulo repeat.',
+  description: 'Produces a 0/1 mask for a specific grid cell. Set X and Y independently via sliders or input ports. Mode controls exact match vs modulo repeat. Use with Grid (Cell ID).',
   inputs: {
-    cellID: { type: 'vec2',  label: 'Cell ID' },
+    cellID: { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid.' },
     x:      { type: 'float', label: 'X' },
     y:      { type: 'float', label: 'Y' },
   },
@@ -173,9 +173,9 @@ export const CellFilterNode: NodeDefinition = {
   },
   defaultParams: { mode: '0.0', x: 0.0, y: 0.0 },
   paramDefs: {
-    mode: { label: 'Mode', type: 'select', options: [{ value: '0.0', label: 'Exact' }, { value: '1.0', label: 'Modulo' }] },
-    x:    { label: 'X', type: 'float', min: 0, max: 32, step: 1 },
-    y:    { label: 'Y', type: 'float', min: 0, max: 32, step: 1 },
+    mode: { label: 'Mode', type: 'select', options: [{ value: '0.0', label: 'Exact' }, { value: '1.0', label: 'Modulo' }], hint: 'Exact picks one cell; Modulo repeats the pick every X and Y cells.' },
+    x:    { label: 'X', type: 'float', min: 0, max: 32, step: 1, hint: 'Column index to select (0 is the first).' },
+    y:    { label: 'Y', type: 'float', min: 0, max: 32, step: 1, hint: 'Row index to select (0 is the first).' },
   },
   glslFunction: `float cellFilterFn(vec2 cellID, float mode, float cx, float cy) {
     float mx = mode < 0.5 ? step(0.5, 1.0 - abs(cellID.x - cx)) : step(0.5, 1.0 - abs(mod(cellID.x, max(cx, 1.0))));
@@ -201,11 +201,11 @@ export const CellDisplaceNode: NodeDefinition = {
   type: 'cellDisplace',
   label: 'Cell Displace',
   category: 'Grid',
-  description: 'Displaces cell UV toward an attractor in world space. Close cells move a lot, far cells barely move. Returns displaced UV and attract amount 0–1.',
+  description: 'Displaces cell UV toward an attractor in world space. Close cells move a lot, far cells barely move. Returns displaced UV and attract amount 0–1. Use with Grid (Cell UV and Cell Center); Mouse makes a good attractor.',
   inputs: {
     cellUV:       { type: 'vec2', label: 'Cell UV' },
-    cellCenter:   { type: 'vec2', label: 'Cell Center' },
-    attractorPos: { type: 'vec2', label: 'Attractor Pos' },
+    cellCenter:   { type: 'vec2', label: 'Cell Center', hint: 'Wire Cell Center from Grid.' },
+    attractorPos: { type: 'vec2', label: 'Attractor Pos', hint: 'World-space point cells are pulled toward; try Mouse UV.' },
   },
   outputs: {
     displacedUV:   { type: 'vec2',  label: 'Displaced UV' },
@@ -213,8 +213,8 @@ export const CellDisplaceNode: NodeDefinition = {
   },
   defaultParams: { radius: 2.5, maxDisplace: 0.35 },
   paramDefs: {
-    radius:      { label: 'Radius',       type: 'float', min: 0.1, max: 8.0,  step: 0.05 },
-    maxDisplace: { label: 'Max Displace', type: 'float', min: 0.0, max: 0.48, step: 0.005 },
+    radius:      { label: 'Radius',       type: 'float', min: 0.1, max: 8.0,  step: 0.05, hint: 'Distance from the attractor where cells stop being pulled.' },
+    maxDisplace: { label: 'Max Displace', type: 'float', min: 0.0, max: 0.48, step: 0.005, hint: 'How far a cell right next to the attractor moves. Keep under 0.5 to stay in-cell.' },
   },
   glslFunction: `vec2 cellDisplaceFn(vec2 cellUV, vec2 cellCenter, vec2 attractor, float radius, float maxDisplace) {
     vec2  delta   = attractor - cellCenter;
@@ -243,25 +243,25 @@ export const GridDensityWarpNode: NodeDefinition = {
   type: 'gridDensityWarp',
   label: 'Grid Density Warp',
   category: 'Grid',
-  description: 'Applies a wave warp to UV before grid or Fract, producing non-uniform cell density. Connect a Time node to animate. Keep amplitude < 1/(2*gridSize) to avoid cell folding.',
+  description: 'Applies a wave warp to UV before grid or Fract, producing non-uniform cell density. Connect a Time node to animate. Keep amplitude < 1/(2*gridSize) to avoid cell folding. Use with Grid or Tile downstream of this node.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Wire Time to make the density bands travel; unwired they are fixed.' },
   },
   outputs: {
     warpedUV: { type: 'vec2', label: 'Warped UV' },
   },
   defaultParams: { amplitude: 0.06, frequency: 2.0, phase: 0.0, axis: '0.0', shape: '0.0' },
   paramDefs: {
-    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,   max: 0.15,  step: 0.001 },
-    frequency: { label: 'Frequency', type: 'float', min: 0.5,   max: 12.0,  step: 0.1   },
-    phase:     { label: 'Phase',     type: 'float', min: -3.14, max: 3.14,  step: 0.05  },
-    axis: { label: 'Axis', type: 'select', options: [
+    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,   max: 0.15,  step: 0.001, hint: 'How far the wave pushes cells. Keep below half a cell width to avoid folds.' },
+    frequency: { label: 'Frequency', type: 'float', min: 0.5,   max: 12.0,  step: 0.1, hint: 'Number of waves across the space. Higher = more density bands.' },
+    phase:     { label: 'Phase',     type: 'float', min: -3.14, max: 3.14,  step: 0.05, hint: 'Shifts the wave along, in radians.' },
+    axis: { label: 'Axis', type: 'select', hint: 'Which direction the cells bunch up in.', options: [
       { value: '0.0', label: 'X' },
       { value: '1.0', label: 'Y' },
       { value: '2.0', label: 'Both' },
     ]},
-    shape: { label: 'Shape', type: 'select', options: [
+    shape: { label: 'Shape', type: 'select', hint: 'Sine is smooth, Triangle is linear, Sawtooth ramps then snaps.', options: [
       { value: '0.0', label: 'Sine'     },
       { value: '1.0', label: 'Triangle' },
       { value: '2.0', label: 'Sawtooth' },
@@ -306,16 +306,16 @@ export const NeighborOffset2dNode: NodeDefinition = {
   type: 'neighborOffset2d',
   label: 'Neighbor Offset 2D',
   category: 'Grid',
-  description: 'Converts a flat Loop Index (0 to N²-1) to a 2D (dx,dy) offset. Use inside a looped group with radius=1 (9 iters) or radius=2 (25 iters) to iterate a cell neighborhood.',
+  description: 'Converts a flat Loop Index (0 to N²-1) to a 2D (dx,dy) offset. Use inside a looped group with radius=1 (9 iters) or radius=2 (25 iters) to iterate a cell neighborhood. Use with Loop Index inside an iterated group.',
   inputs: {
-    idx: { type: 'float', label: 'Index' },
+    idx: { type: 'float', label: 'Index', hint: 'Wire Loop Index here.' },
   },
   outputs: {
     offset: { type: 'vec2', label: 'Offset' },
   },
   defaultParams: { radius: 1 },
   paramDefs: {
-    radius: { label: 'Radius', type: 'select', options: [
+    radius: { label: 'Radius', type: 'select', hint: 'Neighborhood size. Set the group\'s iterations to 9 for radius 1, 25 for radius 2.', options: [
       { value: '1', label: '1 (3×3, 9 iters)' },
       { value: '2', label: '2 (5×5, 25 iters)' },
     ]},
@@ -342,18 +342,18 @@ export const AnimatedCellCenterNode: NodeDefinition = {
   type: 'animatedCellCenter',
   label: 'Animated Cell Center',
   category: 'Grid',
-  description: 'Returns an animated dot center position with per-cell sin oscillation. Phase is seeded by cellID for independent motion per cell.',
+  description: 'Returns an animated dot center position with per-cell sin oscillation. Phase is seeded by cellID for independent motion per cell. Use with Grid (Cell ID), feeding Center into Gaussian Field or Neighbor Dist.',
   inputs: {
-    cellID: { type: 'vec2', label: 'Cell ID' },
+    cellID: { type: 'vec2', label: 'Cell ID', hint: 'Wire Cell ID from Grid; it seeds each cell\'s phase.' },
   },
   outputs: {
     center: { type: 'vec2', label: 'Center' },
   },
   defaultParams: { gridSize: 8.0, speed: 0.3, amplitude: 0.7 },
   paramDefs: {
-    gridSize:  { label: 'Grid Size',  type: 'float', min: 1.0,  max: 24.0, step: 1.0  },
-    speed:     { label: 'Speed',      type: 'float', min: 0.0,  max: 1.0,  step: 0.01 },
-    amplitude: { label: 'Amplitude',  type: 'float', min: 0.0,  max: 1.5,  step: 0.01 },
+    gridSize:  { label: 'Grid Size',  type: 'float', min: 1.0,  max: 24.0, step: 1.0, hint: 'Must match the Grid column count so centers land in their cells.' },
+    speed:     { label: 'Speed',      type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: 'How fast each dot orbits its cell center.' },
+    amplitude: { label: 'Amplitude',  type: 'float', min: 0.0,  max: 1.5,  step: 0.01, hint: 'How far each dot wanders, as a fraction of a cell. 0 pins dots to the center.' },
   },
   glslFunction: `vec2 animatedCellCenterFn(vec2 cellID, float gridSize, float time, float speed, float amplitude) {
     float phase = cellID.x * 1.618034 + cellID.y * 2.618034;
@@ -385,12 +385,12 @@ export const NeighborAttractCirclesNode: NodeDefinition = {
   type: 'neighborAttractCircles',
   label: 'Attract Circles',
   category: 'Grid',
-  description: 'Min-SDF of attractor-displaced circles over a 3×3 neighborhood. Circles follow the attractor without clipping at cell boundaries. Connect sdf → smoothstep for fill; attractAmount → palette for color.',
+  description: 'Min-SDF of attractor-displaced circles over a 3×3 neighborhood. Circles follow the attractor without clipping at cell boundaries. Connect sdf → smoothstep for fill; attractAmount → palette for color. Use with Grid (Grid Pos, Cell ID and Cell Size).',
   inputs: {
-    gridPos:      { type: 'vec2',  label: 'Grid Pos'  },
-    cellID:       { type: 'vec2',  label: 'Cell ID'   },
-    attractorPos: { type: 'vec2',  label: 'Attractor' },
-    cellSize:     { type: 'float', label: 'Cell Size' },
+    gridPos:      { type: 'vec2',  label: 'Grid Pos', hint: 'Wire Grid Pos from Grid.' },
+    cellID:       { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid.' },
+    attractorPos: { type: 'vec2',  label: 'Attractor', hint: 'World-space point circles are pulled toward; try Mouse UV.' },
+    cellSize:     { type: 'float', label: 'Cell Size', hint: 'Wire Cell Size from Grid.' },
   },
   outputs: {
     sdf:          { type: 'float', label: 'SDF'         },
@@ -398,9 +398,9 @@ export const NeighborAttractCirclesNode: NodeDefinition = {
   },
   defaultParams: { circleRadius: 0.28, maxDisplace: 0.42, influenceRadius: 2.5 },
   paramDefs: {
-    circleRadius:    { label: 'Radius',     type: 'float', min: 0.05, max: 0.49, step: 0.01  },
-    maxDisplace:     { label: 'Max Displace', type: 'float', min: 0.0, max: 0.48, step: 0.005 },
-    influenceRadius: { label: 'Influence',  type: 'float', min: 0.1,  max: 5.0,  step: 0.05  },
+    circleRadius:    { label: 'Radius',     type: 'float', min: 0.05, max: 0.49, step: 0.01, hint: 'Circle size as a fraction of a cell. 0.5 makes neighbors touch.' },
+    maxDisplace:     { label: 'Max Displace', type: 'float', min: 0.0, max: 0.48, step: 0.005, hint: 'How far circles next to the attractor slide toward it.' },
+    influenceRadius: { label: 'Influence',  type: 'float', min: 0.1,  max: 5.0,  step: 0.05, hint: 'Distance from the attractor where the pull fades to nothing.' },
   },
   glslFunction: `vec2 neighborAttractCirclesFn(vec2 gridPos, vec2 cellID, vec2 attractorPos, float cellSize, float circleRadius, float maxDisplace, float influenceRadius) {
     // attractAmount for current cell only (for consistent color gradient)

@@ -26,11 +26,11 @@ export const LoopCarryNode: NodeDefinition = {
   type: 'loopCarry',
   label: 'Loop Carry',
   category: 'Loops',
-  description: 'Carry variable across loop iterations. Init = starting value, Next = updated value each iteration, Value = current iteration value.',
+  description: 'Carry variable across loop iterations. Init = starting value, Next = updated value each iteration, Value = current iteration value. Use with an iterated group (iterations > 1) and Loop Index; step nodes like Ring Step or Domain Fold produce Next.',
 
   inputs: {
-    init: { type: 'vec2', label: 'Init' },
-    next: { type: 'vec2', label: 'Next' },
+    init: { type: 'vec2', label: 'Init', hint: 'Starting value, evaluated once before the first iteration.' },
+    next: { type: 'vec2', label: 'Next', hint: 'Value fed forward into the next iteration.' },
   },
   outputs: {
     value: { type: 'vec2', label: 'Value' },
@@ -43,7 +43,7 @@ export const LoopCarryNode: NodeDefinition = {
   paramDefs: {
     dataType: {
       label: 'Type',
-      type: 'select',
+      type: 'select', hint: 'Type of the carried value. Must match what Init and Next are wired to.',
       options: [
         { value: 'float', label: 'float' },
         { value: 'vec2',  label: 'vec2'  },

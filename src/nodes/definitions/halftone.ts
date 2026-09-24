@@ -7,7 +7,7 @@ export const GridUVNode: NodeDefinition = {
   type: 'gridUV',
   label: 'Grid UV',
   category: 'Halftone',
-  description: 'Tile UV space into a grid of cells. Returns per-cell UV (0→1) and integer cell index. Enable Stagger to offset every other row by half a cell for denser packing.',
+  description: 'Tile UV space into a grid of cells. Returns per-cell UV (0→1) and integer cell index. Enable Stagger to offset every other row by half a cell for denser packing. Use with Dot Mask or SDF Mask (Cell UV) to build halftone dots by hand; CMYK Halftone does the whole chain in one node.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV' },
     scale: { type: 'float', label: 'Scale' },
@@ -18,8 +18,8 @@ export const GridUVNode: NodeDefinition = {
   },
   defaultParams: { scale: 12.0, stagger: 0 },
   paramDefs: {
-    scale:   { label: 'Scale',        type: 'float', min: 1.0, max: 80.0, step: 0.5 },
-    stagger: { label: 'Stagger rows', type: 'bool' },
+    scale:   { label: 'Scale',        type: 'float', min: 1.0, max: 80.0, step: 0.5, hint: 'Cells across the space. Higher = smaller dots.' },
+    stagger: { label: 'Stagger rows', type: 'bool', hint: 'Shifts every other row by half a cell for a honeycomb-like packing.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -54,7 +54,7 @@ export const PixelateNode: NodeDefinition = {
   },
   defaultParams: { pixelSize: 0.05 },
   paramDefs: {
-    pixelSize: { label: 'Pixel Size', type: 'float', min: 0.005, max: 0.25, step: 0.005 },
+    pixelSize: { label: 'Pixel Size', type: 'float', min: 0.005, max: 0.25, step: 0.005, hint: 'Size of each flat block in UV units. Match it to 1 / Grid UV scale.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
@@ -73,9 +73,9 @@ export const DotMaskNode: NodeDefinition = {
   type: 'dotMask',
   label: 'Dot Mask',
   category: 'Halftone',
-  description: 'Generate a circular dot mask within a grid cell. Returns 1 inside the dot, 0 outside. Wire cellUV from a Grid UV node. Modulate Radius with a Luma Radius node to make dots grow with brightness.',
+  description: 'Generate a circular dot mask within a grid cell. Returns 1 inside the dot, 0 outside. Wire cellUV from a Grid UV node. Modulate Radius with a Luma Radius node to make dots grow with brightness. Use with Grid UV (Cell UV) and Luma Radius (Radius).',
   inputs: {
-    cellUV:   { type: 'vec2',  label: 'Cell UV' },
+    cellUV:   { type: 'vec2',  label: 'Cell UV', hint: 'Wire Cell UV from Grid UV.' },
     radius:   { type: 'float', label: 'Radius' },
     softness: { type: 'float', label: 'Softness' },
   },
@@ -84,8 +84,8 @@ export const DotMaskNode: NodeDefinition = {
   },
   defaultParams: { radius: 0.38, softness: 0.01 },
   paramDefs: {
-    radius:   { label: 'Radius',   type: 'float', min: 0.0, max: 0.7,  step: 0.01  },
-    softness: { label: 'Softness', type: 'float', min: 0.0, max: 0.1,  step: 0.005 },
+    radius:   { label: 'Radius',   type: 'float', min: 0.0, max: 0.7,  step: 0.01, hint: 'Dot size within the cell. 0.5 touches the cell edges.' },
+    softness: { label: 'Softness', type: 'float', min: 0.0, max: 0.1,  step: 0.005, hint: 'Blur on the dot edge. 0 is crisp, 0.05 is soft.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
@@ -108,7 +108,7 @@ export const SdfMaskNode: NodeDefinition = {
   type: 'sdfMask',
   label: 'SDF Mask',
   category: 'Halftone',
-  description: 'Threshold any float SDF value into a 0/1 mask via smoothstep. Connect any SDF node (Ring, Box, Shape…) to the SDF input to use custom shapes as halftone dots.',
+  description: 'Threshold any float SDF value into a 0/1 mask via smoothstep. Connect any SDF node (Ring, Box, Shape…) to the SDF input to use custom shapes as halftone dots. Use with Grid UV feeding an SDF node, in place of Dot Mask.',
   inputs: {
     sdf:       { type: 'float', label: 'SDF' },
     threshold: { type: 'float', label: 'Threshold' },
@@ -119,8 +119,8 @@ export const SdfMaskNode: NodeDefinition = {
   },
   defaultParams: { threshold: 0.07, softness: 0.01 },
   paramDefs: {
-    threshold: { label: 'Threshold', type: 'float', min: -0.5, max: 1.0, step: 0.005 },
-    softness:  { label: 'Softness',  type: 'float', min: 0.0,  max: 0.1, step: 0.005 },
+    threshold: { label: 'Threshold', type: 'float', min: -0.5, max: 1.0, step: 0.005, hint: 'SDF value where the mask flips. 0 is the shape edge; higher grows the shape.' },
+    softness:  { label: 'Softness',  type: 'float', min: 0.0,  max: 0.1, step: 0.005, hint: 'Blur on the mask edge. 0 is crisp.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
@@ -140,7 +140,7 @@ export const LumaRadiusNode: NodeDefinition = {
   type: 'lumaRadius',
   label: 'Luma Radius',
   category: 'Halftone',
-  description: 'Scale a dot radius by the luminance of a color — brighter pixels produce larger dots, recreating the classic halftone tonal illusion. Wire output into the Radius input of a Dot Mask node.',
+  description: 'Scale a dot radius by the luminance of a color — brighter pixels produce larger dots, recreating the classic halftone tonal illusion. Wire output into the Radius input of a Dot Mask node. Use with Dot Mask (Radius) and Grid UV.',
   inputs: {
     color:      { type: 'vec3',  label: 'Color' },
     baseRadius: { type: 'float', label: 'Base Radius' },
@@ -151,9 +151,9 @@ export const LumaRadiusNode: NodeDefinition = {
   },
   defaultParams: { baseRadius: 0.44, minScale: 0.05, maxScale: 0.95 },
   paramDefs: {
-    baseRadius: { label: 'Base Radius', type: 'float', min: 0.1, max: 0.7, step: 0.01  },
-    minScale:   { label: 'Min Scale',   type: 'float', min: 0.0, max: 1.0, step: 0.01  },
-    maxScale:   { label: 'Max Scale',   type: 'float', min: 0.0, max: 1.0, step: 0.01  },
+    baseRadius: { label: 'Base Radius', type: 'float', min: 0.1, max: 0.7, step: 0.01, hint: 'Dot radius for a fully white pixel.' },
+    minScale:   { label: 'Min Scale',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Fraction of Base Radius kept in the darkest areas. 0 lets dots vanish.' },
+    maxScale:   { label: 'Max Scale',   type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Fraction of Base Radius reached in the brightest areas.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
@@ -211,7 +211,7 @@ export const CMYKHalftoneNode: NodeDefinition = {
   type: 'cmykHalftone',
   label: 'CMYK Halftone',
   category: 'Halftone',
-  description: 'Full CMYK halftone effect. Decomposes the input color into C, M, Y, K channels and renders each as a rotated dot grid at the traditional screen angles (C=15°, M=75°, Y=0°, K=45°), then composites them subtractively on a paper color.',
+  description: 'Full CMYK halftone effect. Decomposes the input color into C, M, Y, K channels and renders each as a rotated dot grid at the traditional screen angles (C=15°, M=75°, Y=0°, K=45°), then composites them subtractively on a paper color. Use with Pixelate on the UV so each cell samples one flat color; Grid UV, Dot Mask and Luma Radius build the same effect by hand.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
     uv:    { type: 'vec2', label: 'UV' },
@@ -230,14 +230,14 @@ export const CMYKHalftoneNode: NodeDefinition = {
     angleK:     45.0,
   },
   paramDefs: {
-    gridSize:   { label: 'Grid Size',   type: 'float', min: 4.0,  max: 60.0, step: 1.0   },
-    dotRadius:  { label: 'Dot Radius',  type: 'float', min: 0.1,  max: 0.65, step: 0.01  },
-    softness:   { label: 'Softness',    type: 'float', min: 0.0,  max: 0.05, step: 0.005 },
-    paperColor: { label: 'Paper Color', type: 'vec3color' },
-    angleC:     { label: 'Angle C',     type: 'float', min: -90,  max: 90,   step: 1.0   },
-    angleM:     { label: 'Angle M',     type: 'float', min: -90,  max: 90,   step: 1.0   },
-    angleY:     { label: 'Angle Y',     type: 'float', min: -90,  max: 90,   step: 1.0   },
-    angleK:     { label: 'Angle K',     type: 'float', min: -90,  max: 90,   step: 1.0   },
+    gridSize:   { label: 'Grid Size',   type: 'float', min: 4.0,  max: 60.0, step: 1.0, hint: 'Dots across the space. Higher = finer screen.' },
+    dotRadius:  { label: 'Dot Radius',  type: 'float', min: 0.1,  max: 0.65, step: 0.01, hint: 'Max dot size within a cell. Above 0.5 dots overlap in dark areas.' },
+    softness:   { label: 'Softness',    type: 'float', min: 0.0,  max: 0.05, step: 0.005, hint: 'Blur on dot edges. 0 is crisp print.' },
+    paperColor: { label: 'Paper Color', type: 'vec3color', hint: 'Color showing through where no ink lands.' },
+    angleC:     { label: 'Angle C',     type: 'float', min: -90,  max: 90,   step: 1.0, hint: 'Screen angle of the cyan grid, in degrees. Print default is 15.' },
+    angleM:     { label: 'Angle M',     type: 'float', min: -90,  max: 90,   step: 1.0, hint: 'Screen angle of the magenta grid, in degrees. Print default is 75.' },
+    angleY:     { label: 'Angle Y',     type: 'float', min: -90,  max: 90,   step: 1.0, hint: 'Screen angle of the yellow grid, in degrees. Print default is 0.' },
+    angleK:     { label: 'Angle K',     type: 'float', min: -90,  max: 90,   step: 1.0, hint: 'Screen angle of the black grid, in degrees. Print default is 45.' },
   },
   glslFunctions: [
 `vec2 cmykHT_rot(vec2 uv, float a) {

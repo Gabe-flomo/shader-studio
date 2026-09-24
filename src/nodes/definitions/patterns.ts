@@ -25,7 +25,7 @@ export const TruchetNode: NodeDefinition = {
   description: 'Truchet tiling pattern — quarter-circle arcs randomly oriented per cell. Classic woven/maze aesthetic.',
   inputs: {
     uv:      { type: 'vec2',  label: 'UV'      },
-    time:    { type: 'float', label: 'Time'     },
+    time:    { type: 'float', label: 'Time', hint: 'Wire Time to scroll the tiles (with Animate above 0).' },
     color_a: { type: 'vec3',  label: 'Color A'  },
     color_b: { type: 'vec3',  label: 'Color B'  },
   },
@@ -44,12 +44,12 @@ export const TruchetNode: NodeDefinition = {
     color_b:    [0.8, 0.8, 0.9],
   },
   paramDefs: {
-    scale:      { label: 'Scale',      type: 'float', min: 1,    max: 32,   step: 0.5   },
-    line_width: { label: 'Line Width', type: 'float', min: 0.01, max: 0.49, step: 0.01  },
-    aa:         { label: 'Smoothness', type: 'float', min: 0.001,max: 0.1,  step: 0.001 },
-    animate:    { label: 'Animate',    type: 'float', min: 0,    max: 1,    step: 0.01  },
-    color_a:    { label: 'Color A',    type: 'vec3',  min: 0,    max: 1,    step: 0.01  },
-    color_b:    { label: 'Color B',    type: 'vec3',  min: 0,    max: 1,    step: 0.01  },
+    scale:      { label: 'Scale',      type: 'float', min: 1,    max: 32,   step: 0.5, hint: 'Tiles across the space. Higher = smaller arcs.' },
+    line_width: { label: 'Line Width', type: 'float', min: 0.01, max: 0.49, step: 0.01, hint: 'Thickness of the arcs as a fraction of a tile.' },
+    aa:         { label: 'Smoothness', type: 'float', min: 0.001,max: 0.1,  step: 0.001, hint: 'Edge blur of the arcs. Small values keep them crisp.' },
+    animate:    { label: 'Animate',    type: 'float', min: 0,    max: 1,    step: 0.01, hint: 'Scrolls the pattern sideways over time. 0 is still. Needs Time wired.' },
+    color_a:    { label: 'Color A',    type: 'vec3',  min: 0,    max: 1,    step: 0.01, hint: 'Background color.' },
+    color_b:    { label: 'Color B',    type: 'vec3',  min: 0,    max: 1,    step: 0.01, hint: 'Arc color.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -101,10 +101,10 @@ export const MetaballsNode: NodeDefinition = {
   description: 'Three animated 2D metaballs with implicit surface coloring. Wire Time for motion, or override positions.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
-    time: { type: 'float', label: 'Time' },
-    pos1: { type: 'vec2',  label: 'Ball 1 Pos' },
-    pos2: { type: 'vec2',  label: 'Ball 2 Pos' },
-    pos3: { type: 'vec2',  label: 'Ball 3 Pos' },
+    time: { type: 'float', label: 'Time', hint: 'Wire Time to animate the balls; unwired they sit still.' },
+    pos1: { type: 'vec2',  label: 'Ball 1 Pos', hint: 'Overrides ball 1\'s animated position.' },
+    pos2: { type: 'vec2',  label: 'Ball 2 Pos', hint: 'Overrides ball 2\'s animated position.' },
+    pos3: { type: 'vec2',  label: 'Ball 3 Pos', hint: 'Overrides ball 3\'s animated position.' },
   },
   outputs: {
     field: { type: 'float', label: 'Field'  },
@@ -125,16 +125,16 @@ export const MetaballsNode: NodeDefinition = {
     color_scale:    1.0,
   },
   paramDefs: {
-    radius1:        { label: 'Ball 1 Radius',  type: 'float', min: 0.05, max: 0.5, step: 0.01 },
-    radius2:        { label: 'Ball 2 Radius',  type: 'float', min: 0.05, max: 0.5, step: 0.01 },
-    radius3:        { label: 'Ball 3 Radius',  type: 'float', min: 0.05, max: 0.5, step: 0.01 },
-    speed1:         { label: 'Ball 1 Speed',   type: 'float', min: 0.0,  max: 3.0, step: 0.1  },
-    speed2:         { label: 'Ball 2 Speed',   type: 'float', min: 0.0,  max: 3.0, step: 0.1  },
-    speed3:         { label: 'Ball 3 Speed',   type: 'float', min: 0.0,  max: 3.0, step: 0.1  },
-    threshold:      { label: 'Threshold',      type: 'float', min: -2.0, max: 2.0, step: 0.01 },
-    aa:             { label: 'Smoothness',     type: 'float', min: 0.001,max: 0.1, step: 0.001 },
-    palette_preset: { label: 'Palette',        type: 'select', options: PALETTE_PRESET_OPTIONS },
-    color_scale:    { label: 'Color Scale',    type: 'float', min: 0.1,  max: 5.0, step: 0.1  },
+    radius1:        { label: 'Ball 1 Radius',  type: 'float', min: 0.05, max: 0.5, step: 0.01, hint: 'Size of ball 1. Bigger balls merge sooner.' },
+    radius2:        { label: 'Ball 2 Radius',  type: 'float', min: 0.05, max: 0.5, step: 0.01, hint: 'Size of ball 2. Bigger balls merge sooner.' },
+    radius3:        { label: 'Ball 3 Radius',  type: 'float', min: 0.05, max: 0.5, step: 0.01, hint: 'Size of ball 3. Bigger balls merge sooner.' },
+    speed1:         { label: 'Ball 1 Speed',   type: 'float', min: 0.0,  max: 3.0, step: 0.1, hint: 'How fast ball 1 orbits. Ignored when its position is wired.' },
+    speed2:         { label: 'Ball 2 Speed',   type: 'float', min: 0.0,  max: 3.0, step: 0.1, hint: 'How fast ball 2 orbits. Ignored when its position is wired.' },
+    speed3:         { label: 'Ball 3 Speed',   type: 'float', min: 0.0,  max: 3.0, step: 0.1, hint: 'How fast ball 3 orbits. Ignored when its position is wired.' },
+    threshold:      { label: 'Threshold',      type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Field level that counts as inside. Higher shrinks the blobs.' },
+    aa:             { label: 'Smoothness',     type: 'float', min: 0.001,max: 0.1, step: 0.001, hint: 'Edge blur of the blob outline.' },
+    palette_preset: { label: 'Palette',        type: 'select', options: PALETTE_PRESET_OPTIONS, hint: 'Color ramp applied across the field strength.' },
+    color_scale:    { label: 'Color Scale',    type: 'float', min: 0.1,  max: 5.0, step: 0.1, hint: 'How fast the palette cycles with field strength.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -214,8 +214,8 @@ export const LissajousNode: NodeDefinition = {
   description: 'Lissajous curve SDF with configurable frequency ratios. Wire Time → delta for spinning animation.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'    },
-    time:  { type: 'float', label: 'Time'  },
-    delta: { type: 'float', label: 'Phase' },
+    time:  { type: 'float', label: 'Time', hint: 'Wire Time to spin the figure; unwired it holds still.' },
+    delta: { type: 'float', label: 'Phase', hint: 'Overrides Phase and Phase Speed with a wired value.' },
   },
   outputs: {
     distance: { type: 'float', label: 'Distance' },
@@ -234,14 +234,14 @@ export const LissajousNode: NodeDefinition = {
     color_outer: [0.0, 0.0, 0.0],
   },
   paramDefs: {
-    freq_a:      { label: 'Freq A',     type: 'float', min: 1,    max: 10,  step: 1    },
-    freq_b:      { label: 'Freq B',     type: 'float', min: 1,    max: 10,  step: 1    },
-    thickness:   { label: 'Thickness',  type: 'float', min: 0.005,max: 0.1, step: 0.005 },
-    aa:          { label: 'Smoothness', type: 'float', min: 0.001,max: 0.02,step: 0.001 },
-    delta:       { label: 'Phase',      type: 'float', min: 0.0,  max: 6.28,step: 0.01 },
-    delta_speed: { label: 'Phase Speed',type: 'float', min: 0.0,  max: 3.0, step: 0.05 },
-    color_inner: { label: 'Line Color', type: 'vec3',  min: 0,    max: 1,   step: 0.01 },
-    color_outer: { label: 'BG Color',   type: 'vec3',  min: 0,    max: 1,   step: 0.01 },
+    freq_a:      { label: 'Freq A',     type: 'float', min: 1,    max: 10,  step: 1, hint: 'Horizontal frequency. The ratio to Freq B sets the figure.' },
+    freq_b:      { label: 'Freq B',     type: 'float', min: 1,    max: 10,  step: 1, hint: 'Vertical frequency. 3:2 gives the classic pretzel.' },
+    thickness:   { label: 'Thickness',  type: 'float', min: 0.005,max: 0.1, step: 0.005, hint: 'Line thickness.' },
+    aa:          { label: 'Smoothness', type: 'float', min: 0.001,max: 0.02,step: 0.001, hint: 'Edge blur of the line.' },
+    delta:       { label: 'Phase',      type: 'float', min: 0.0,  max: 6.28,step: 0.01, hint: 'Starting phase offset, in radians. Changes the figure\'s shape.' },
+    delta_speed: { label: 'Phase Speed',type: 'float', min: 0.0,  max: 3.0, step: 0.05, hint: 'How fast the phase advances. Needs Time wired; ignored when Phase is wired.' },
+    color_inner: { label: 'Line Color', type: 'vec3',  min: 0,    max: 1,   step: 0.01, hint: 'Color of the curve.' },
+    color_outer: { label: 'BG Color',   type: 'vec3',  min: 0,    max: 1,   step: 0.01, hint: 'Color behind the curve.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {

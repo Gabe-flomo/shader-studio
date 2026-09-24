@@ -14,6 +14,7 @@ const LIGHT = {
     app: '#eef0f4',       // app backdrop, graph canvas
     panel: '#ffffff',     // nav, sidebar, cards, modals
     subtle: '#fbfbfc',    // icon rail, inspectors, editor headers
+    head: '#e1e4ec',      // node card headers — darker than the body so cards read as separate blocks
     field: '#f4f5f8',     // inputs, value boxes, ruler track, chips
     hover: '#f2f3f6',
     selected: '#eef3ff',
@@ -71,7 +72,7 @@ export type Tokens = typeof LIGHT;
 
 const DARK: Tokens = {
   bg: {
-    app: '#11111b', panel: '#1e1e2e', subtle: '#181825', field: '#2a2b3d', hover: '#262738',
+    app: '#11111b', panel: '#1e1e2e', subtle: '#181825', head: '#141420', field: '#2a2b3d', hover: '#262738',
     selected: '#273150', render: '#0d0d12', scrim: 'rgba(0,0,0,0.55)',
   },
   border: { default: '#313244', subtle: '#28293b', strong: '#45475a' },

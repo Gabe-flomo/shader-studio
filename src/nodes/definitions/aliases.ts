@@ -74,6 +74,9 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
                   params: o => ({ ...o, outputType: 'vec3', t: num(o.factor, 0.5), factor: undefined }),
                   socketTypes: { inputs: { a: 'vec3', b: 'vec3' }, outputs: { result: 'vec3' } } },
 
+  // ── SDF Outline became SDF Fill: same sockets and params, plus a background and a stroke alignment ──
+  sdfOutline: { to: 'sdfFill' },
+
   // ── D6: strict subsets ──
   extractX:      { to: 'splitVec2' },
   extractY:      { to: 'splitVec2' },

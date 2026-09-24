@@ -12,6 +12,8 @@ import { Field } from './ui/Field';
 import { Icon } from './ui/Icon';
 import { Modal } from './ui/Modal';
 import { RulerSlider } from './ui/RulerSlider';
+import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -52,12 +54,26 @@ const CODEC_DESCRIPTIONS: Record<FfmpegCodec, string> = {
   ffv1:   'Lossless · .mkv · largest file',
 };
 
-// Resolution multipliers relative to the canvas's natural size
-const RESOLUTIONS = [
-  { scale: 1, sub: 'native' },
-  { scale: 2, sub: '2K / 4K' },
-  { scale: 4, sub: 'ultra' },
+// Output sizes. "Preview" is the canvas as shown; the rest are standard
+// short sides (720p, 1080p, 1440p, 2160p) laid out in the preview's shape,
+// so a 16:9 preview gives 1920×1080 and a 9:16 preview 1080×1920.
+const RESOLUTIONS: ReadonlyArray<{ id: string; label: string; sub: string; shortSide: number | null }> = [
+  { id: 'preview', label: 'Preview', sub: 'as shown', shortSide: null },
+  { id: '720',     label: '720p',    sub: 'HD',       shortSide: 720 },
+  { id: '1080',    label: '1080p',   sub: 'Full HD',  shortSide: 1080 },
+  { id: '1440',    label: '1440p',   sub: '2K',       shortSide: 1440 },
+  { id: '2160',    label: '2160p',   sub: '4K',       shortSide: 2160 },
 ];
+
+/** Even pixel dimensions for `shortSide` in the canvas's aspect (video encoders want even sizes). */
+function sizeFor(canvasW: number, canvasH: number, shortSide: number | null): { width: number; height: number } {
+  if (!shortSide) return { width: canvasW, height: canvasH };
+  const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+  const ratio = canvasW / Math.max(1, canvasH);
+  return ratio >= 1
+    ? { width: even(shortSide * ratio), height: shortSide }
+    : { width: shortSide, height: even(shortSide / ratio) };
+}
 
 /** What this device can do at a given scale — computed when the modal opens. */
 interface ScaleSupport {
@@ -92,7 +108,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const [duration, setDuration]     = useState(5);
   const [manualStop, setManualStop] = useState(false);
   const [bitrate, setBitrate]       = useState(50); // Mbps
-  const [resScale, setResScale]     = useState(1);
+  const [resId, setResId]           = useState('preview');
+  const previewAspect    = useNodeGraphStore(s => s.previewAspect);
+  const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const [codec, setCodec]           = useState<FfmpegCodec>('h264');
   const [mode, setMode]             = useState<RecordMode>(inTauri ? 'ffmpeg' : 'mediarecorder');
   const [filename, setFilename]     = useState('shader-export');
@@ -121,7 +139,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   // the output must fit the GPU, a memory budget, and — for MediaRecorder —
   // the browser's video encoder. Check each option up front so ones that
   // can't work are disabled with a reason instead of failing silently.
-  const [support, setSupport] = useState<Record<number, ScaleSupport> | null>(null);
+  const [support, setSupport] = useState<Record<string, ScaleSupport> | null>(null);
   const needsOfflineHandle = mode === 'ffmpeg';
   // Bumped when the preview is resized so output sizes are re-checked.
   const [sizeKey, setSizeKey] = useState('');
@@ -144,9 +162,10 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     const limits = getGpuLimits(canvas);
     const preferred = preferredRecorderFormat();
     (async () => {
-      const out: Record<number, ScaleSupport> = {};
-      for (const { scale } of RESOLUTIONS) {
-        const sw = w * scale, sh = h * scale;
+      const out: Record<string, ScaleSupport> = {};
+      for (const { id, shortSide } of RESOLUTIONS) {
+        const { width: sw, height: sh } = sizeFor(w, h, shortSide);
+        const scale = id === 'preview' ? 1 : 2; // any non-preview size renders off the CSS size
         let blocked: string | null = null;
         let format: RecorderFormat | null = null;
         if (scale > 1 && !offlineRender) {
@@ -163,7 +182,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
               : `No video encoder in this browser can encode ${fmtPx(sw, sh)}.`;
           }
         }
-        out[scale] = { width: sw, height: sh, blocked, format };
+        out[id] = { width: sw, height: sh, blocked, format };
       }
       if (!cancelled) setSupport(out);
     })();
@@ -172,16 +191,16 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
 
   // If the chosen scale turns out to be unsupported, fall back to the largest one that is.
   useEffect(() => {
-    if (!support || !support[resScale]?.blocked) return;
-    const best = [...RESOLUTIONS].reverse().find(r => !support[r.scale]?.blocked);
-    if (best) setResScale(best.scale);
-  }, [support, resScale]);
+    if (!support || !support[resId]?.blocked) return;
+    const best = [...RESOLUTIONS].reverse().find(r => !support[r.id]?.blocked);
+    if (best) setResId(best.id);
+  }, [support, resId]);
 
-  const current = support?.[resScale] ?? null;
+  const current = support?.[resId] ?? null;
 
   const restoreScale = () => {
     if (!scaledRef.current) return;
-    scaledRef.current.setRenderScale(1);
+    scaledRef.current.setRenderSize(null);
     scaledRef.current = null;
     // Resizes while scaled were ignored (see the ResizeObserver above), and
     // restoring doesn't change CSS size, so re-check in case the preview moved.
@@ -190,16 +209,18 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
 
   /** Checks were computed for a different preview size (resized since) — re-check instead of starting. */
   const staleSize = (): string | null => {
-    if (!canvas || !current || canvas.width * resScale === current.width && canvas.height * resScale === current.height) return null;
+    if (!canvas || !current) return null;
+    const expect = sizeFor(canvas.width, canvas.height, RESOLUTIONS.find(r => r.id === resId)?.shortSide ?? null);
+    if (expect.width === current.width && expect.height === current.height) return null;
     setSizeKey(`${canvas.width}x${canvas.height}`);
     return 'The preview was resized, so the output size has been updated. Press the button again to export.';
   };
 
   /** Raise the live renderer to the export scale; returns an error message on failure. */
   const applyScale = (): string | null => {
-    if (resScale === 1) return null;
+    if (resId === 'preview') return null;
     if (!offlineRender || !current) return 'High-resolution rendering isn\u2019t available.';
-    const got = offlineRender.setRenderScale(resScale);
+    const got = offlineRender.setRenderSize({ width: current.width, height: current.height });
     scaledRef.current = offlineRender;
     if (got.width !== current.width || got.height !== current.height) {
       restoreScale();
@@ -437,7 +458,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const canStart = mode === 'ffmpeg'
     ? !!offlineRender && !!current && !current.blocked
     : !!canvas && !!current && !current.blocked && !!current.format;
-  const blockedScales = support ? RESOLUTIONS.filter(r => support[r.scale]?.blocked) : [];
+  const blockedScales = support ? RESOLUTIONS.filter(r => support[r.id]?.blocked) : [];
 
   const ext = mode === 'ffmpeg' ? (codec === 'prores' ? 'mov' : codec === 'ffv1' ? 'mkv' : 'mp4') : (current?.format?.ext ?? preferred?.ext ?? 'webm');
   const resetToIdle = () => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); };
@@ -552,25 +573,37 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
               {mode === 'mediarecorder' && <Toggle checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}
             </Section>
 
+            <Section label="Shape" meta={PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.hint}>
+              <Segmented
+                fill
+                ariaLabel="Aspect ratio"
+                value={previewAspect}
+                onChange={v => setPreviewAspect(v as typeof previewAspect)}
+                options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.label, title: a.hint }))}
+              />
+              <Help>The preview takes this shape too, so what you see is what you export. Free follows the panel.</Help>
+            </Section>
+
             <Section label="Resolution" meta={canvas && current ? `${displayW} × ${displayH} px` : undefined}>
               <Segmented
                 fill
                 ariaLabel="Resolution"
-                value={String(resScale)}
-                onChange={v => setResScale(Number(v))}
+                value={resId}
+                onChange={v => setResId(v)}
                 options={RESOLUTIONS.map(r => {
-                  const blocked = support?.[r.scale]?.blocked ?? null;
-                  return { value: String(r.scale), label: `${r.scale}×`, sub: r.sub, disabled: !!blocked, title: blocked ?? undefined };
+                  const sup = support?.[r.id];
+                  const blocked = sup?.blocked ?? null;
+                  return { value: r.id, label: r.label, sub: sup ? fmtPx(sup.width, sup.height) : r.sub, disabled: !!blocked, title: blocked ?? undefined };
                 })}
               />
-              {resScale > 1 && <Help>Higher resolutions need a higher bitrate to look clean.</Help>}
+              {resId !== 'preview' && <Help>Rendered at that exact size in the preview's shape. Higher resolutions need a higher bitrate to look clean.</Help>}
               {formatFallback && current && (
                 <Callout tone="warning" title={`Recording as ${formatFallback.label} instead`}>
                   {preferred!.label} can’t encode {fmtPx(current.width, current.height)} on this device, so the file will be .{formatFallback.ext}.
                 </Callout>
               )}
               {blockedScales.map(r => (
-                <Help key={r.scale}>{r.scale}× unavailable: {support![r.scale].blocked}</Help>
+                <Help key={r.id}>{r.label} unavailable: {support![r.id].blocked}</Help>
               ))}
             </Section>
 

@@ -23,23 +23,23 @@ export const LFONode: NodeDefinition = {
   category: 'Animation',
   description: 'Low-frequency oscillator: a sine, square, sawtooth or triangle wave of Time, scaled by amplitude and shifted by offset.',
   inputs: {
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Falls back to the global clock when unwired.' },
   },
   outputs: {
     value: { type: 'float', label: 'Value' },
   },
   defaultParams: { waveform: 'sine', freq: 1.0, phase: 0.0, amplitude: 1.0, offset: 0.0 },
   paramDefs: {
-    waveform:  { label: 'Waveform', type: 'select', options: [
+    waveform:  { label: 'Waveform', type: 'select', hint: 'Shape of the wave: smooth sine, hard square, ramping sawtooth or linear triangle.', options: [
       { value: 'sine',     label: 'Sine' },
       { value: 'square',   label: 'Square' },
       { value: 'sawtooth', label: 'Sawtooth' },
       { value: 'triangle', label: 'Triangle' },
     ]},
-    freq:      { label: 'Frequency',  type: 'float', min: 0.01, max: 20.0,   step: 0.01 },
-    phase:     { label: 'Phase',      type: 'float', min: 0.0,  max: 6.2832, step: 0.01 },
-    amplitude: { label: 'Amplitude',  type: 'float', min: 0.0,  max: 2.0,    step: 0.01 },
-    offset:    { label: 'Offset',     type: 'float', min: -1.0, max: 1.0,    step: 0.01 },
+    freq:      { label: 'Frequency',  type: 'float', min: 0.01, max: 20.0,   step: 0.01, hint: 'Cycles per second. 1 is one full wave each second.' },
+    phase:     { label: 'Phase',      type: 'float', min: 0.0,  max: 6.2832, step: 0.01, hint: 'Shifts the wave along, in radians. 3.14 flips it.' },
+    amplitude: { label: 'Amplitude',  type: 'float', min: 0.0,  max: 2.0,    step: 0.01, hint: 'Height of the wave. Output swings between -amplitude and +amplitude.' },
+    offset:    { label: 'Offset',     type: 'float', min: -1.0, max: 1.0,    step: 0.01, hint: 'Shifts the whole wave up or down. 1 with amplitude 1 gives 0 to 2.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
@@ -63,15 +63,15 @@ export const BPMSyncNode: NodeDefinition = {
   category: 'Animation',
   description: 'Outputs a 0–1 sawtooth phase synced to a BPM. Wire into an LFO\'s phase input for tempo-synced animation.',
   inputs: {
-    time: { type: 'float', label: 'Time' },
+    time: { type: 'float', label: 'Time', hint: 'Falls back to the global clock when unwired.' },
   },
   outputs: {
     phase: { type: 'float', label: 'Phase (0–1)' },
   },
   defaultParams: { bpm: 120.0, beats: 1.0 },
   paramDefs: {
-    bpm:   { label: 'BPM',          type: 'float', min: 20.0,  max: 300.0, step: 0.5  },
-    beats: { label: 'Beats/Cycle',  type: 'float', min: 0.125, max: 16.0,  step: 0.125 },
+    bpm:   { label: 'BPM',          type: 'float', min: 20.0,  max: 300.0, step: 0.5, hint: 'Tempo. 120 is one beat every half second.' },
+    beats: { label: 'Beats/Cycle',  type: 'float', min: 0.125, max: 16.0,  step: 0.125, hint: 'Beats per 0-1 cycle. 4 wraps once per bar in 4/4.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;

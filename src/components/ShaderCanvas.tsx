@@ -1,6 +1,7 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { PREVIEW_ASPECTS, fitAspect } from '../utils/graphImportPlan';
 import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
@@ -8,6 +9,8 @@ import { inputBus } from '../lib/inputBus';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
+import { GpuTimer } from '../lib/gpuTimer';
+import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
@@ -89,6 +92,12 @@ export interface OfflineRenderHandle {
    * buffers, so callers should compare it against what they asked for.
    */
   setRenderScale: (scale: number) => { width: number; height: number };
+  /**
+   * Render the live canvas at an exact pixel size (export presets such as
+   * 1920×1080) regardless of its CSS size; null returns to the CSS size.
+   * Same contract as setRenderScale: returns what the GPU allocated.
+   */
+  setRenderSize: (size: { width: number; height: number } | null) => { width: number; height: number };
 }
 
 // Font texture: 16×16 grid of ASCII chars (codes 0-255), 64×64 px per cell.
@@ -281,6 +290,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const pingPongIdx = useRef<0 | 1>(0);  // 0 = A is read target, B is write; 1 = vice versa
   // Ref mirrors for stateful flag so rAF loop sees latest without re-boot
   const isStatefulRef = useRef(false);
+  const echoRef = useRef<{ copies: number; delay: number } | null>(null);
   // Track mouse pixel position in canvas — null when mouse is not over canvas
   const mousePosRef = useRef<{ x: number; y: number } | null>(null);
   // Ref mirror for onHistogram so rAF loop sees latest without re-boot
@@ -306,6 +316,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const videoUniforms      = useNodeGraphStore((state) => state.videoUniforms);
   const videoTextures      = useNodeGraphStore((state) => state.videoTextures);
   const isStateful         = useNodeGraphStore((state) => state.isStateful);
+  const echoConfig         = useNodeGraphStore((state) => state.echoConfig);
+  useEffect(() => { echoRef.current = echoConfig; }, [echoConfig]);
   const particleSystems    = useNodeGraphStore((state) => state.particleSystems);
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
@@ -315,6 +327,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const timePlayingRef = useRef(true);
   useEffect(() => { timePlayingRef.current = timePlaying; }, [timePlaying]);
   const setNodeProbeValues = useNodeGraphStore((state) => state.setNodeProbeValues);
+  const setPreviewStats = useNodeGraphStore((state) => state.setPreviewStats);
   // (scope probe values are written directly to canvas via scopeRegistry — no React state)
   // Only broadcast currentTime when a Time node is in the graph — avoids 10fps
   // re-renders of all NodeComponents on graphs that don't use time at all.
@@ -348,6 +361,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
     // exporting at 2×/4× (see OfflineRenderHandle.setRenderScale).
     let renderScale = 1;
+    // Exact drawing-buffer size for export presets; null = CSS size × renderScale.
+    let exportSize: { width: number; height: number } | null = null;
     let cssW = 1;
     let cssH = 1;
     container.appendChild(renderer.domElement);
@@ -390,10 +405,33 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     gl.getExtension('KHR_parallel_shader_compile');
     const { flush: flushGlErrors, failedSource: glFailedSource } = captureGlslErrors(gl);
 
+    // ── Performance counters (see lib/perfStats.ts) ─────────────────────────
+    // GPU pass times come from timer queries; 'cost' queries belong to the
+    // node-cost measurer below and are routed to it instead of the frame history.
+    const gpuTimer = new GpuTimer(gl);
+    setGpuTimerSupport(gpuTimer.supported);
+    const costResults: number[] = [];
+    const pollGpuTimer = () => {
+      for (const r of gpuTimer.poll()) {
+        if (r.name === 'cost') costResults.push(r.ms);
+        else recordGpuPass(r.name, r.ms);
+      }
+    };
+    let readbackCount = 0;
+    const origReadPixels = renderer.readRenderTargetPixels.bind(renderer);
+    renderer.readRenderTargetPixels = ((...args: Parameters<typeof origReadPixels>) => {
+      readbackCount++;
+      return origReadPixels(...args);
+    }) as typeof renderer.readRenderTargetPixels;
+
     // Half-float RT support check — eliminates 8-bit quantization banding in dark areas
     const supportsHalfFloat = renderer.capabilities.isWebGL2 ||
       (!!gl.getExtension('OES_texture_half_float') && !!gl.getExtension('EXT_color_buffer_half_float'));
     const RT_TYPE = supportsHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    // Tiny 8-bit copy of the frame for the preview caption's stats (see lib/previewExplain.ts)
+    const statsRT = new THREE.WebGLRenderTarget(32, 18, { depthBuffer: false, stencilBuffer: false });
+    const statsBuf = new Uint8Array(32 * 18 * 4);
+    let statsWasOn = false;
 
     // Blit scene: renders a float RT to screen with triangular dithering
     const blitScene = new THREE.Scene();
@@ -423,6 +461,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       u_resolution:  { value: new THREE.Vector2(1, 1) },
       u_mouse:       { value: new THREE.Vector2(0, 0) },
       u_prevFrame:   { value: null },
+      // Echo snapshot ring (see nodes/definitions/echo.ts); the shader declares only the ones it uses.
+      ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
       u_fontTexture: { value: FONT_TEXTURE },
     };
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
@@ -464,6 +504,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const gen = ++compileGeneration;
       const next = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
       compileMesh.material = next;
+      const compileT0 = performance.now();
       try {
         await renderer.compileAsync(compileScene, camera);
       } catch (e) {
@@ -484,6 +525,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         return false;
       }
       useNodeGraphStore.getState().setPreviewStale(false);
+      recordGpuCompile(performance.now() - compileT0);
       const prev = material;
       material = next;
       mesh.material = next;
@@ -492,6 +534,56 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       requestRender();
       return true;
     };
+
+    // ── Node cost measurer (Performance panel, see lib/nodeCost.ts) ─────────
+    // Compiles a shader variant off to the side, draws it a few times into an
+    // offscreen target and returns the median GPU ms per draw. Without timer
+    // queries it falls back to CPU time around a gl.finish().
+    const costScene = new THREE.Scene();
+    const costMesh = new THREE.Mesh(geometry, material);
+    costScene.add(costMesh);
+    let costRt: THREE.WebGLRenderTarget | null = null;
+    const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => r()));
+    registerShaderCostMeasurer(async (fsSrc, vsSrc, signal) => {
+      if (glContextLost) return null;
+      const mat = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
+      costMesh.material = mat;
+      const done = () => { costMesh.material = material; mat.dispose(); };
+      try { await renderer.compileAsync(costScene, camera); } catch { done(); return null; }
+      const prog = (renderer.properties.get(mat) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+      if (!prog || gl.getProgramParameter(prog, gl.LINK_STATUS) === false || signal?.aborted) { flushGlErrors(); done(); return null; }
+      if (!costRt || costRt.width !== floatRt.width || costRt.height !== floatRt.height) {
+        costRt?.dispose();
+        costRt = new THREE.WebGLRenderTarget(floatRt.width, floatRt.height, { type: RT_TYPE, depthBuffer: false, stencilBuffer: false });
+      }
+      const WARMUP = 2, RUNS = 8;
+      const samples: number[] = [];
+      costResults.length = 0;
+      for (let i = 0; i < WARMUP + RUNS && !signal?.aborted; i++) {
+        const timed = i >= WARMUP;
+        let t0 = 0;
+        if (timed) { if (!gpuTimer.begin('cost')) t0 = performance.now(); }
+        renderer.setRenderTarget(costRt);
+        renderer.render(costScene, camera);
+        renderer.setRenderTarget(null);
+        if (timed) {
+          if (t0) { gl.finish(); samples.push(performance.now() - t0); }
+          else gpuTimer.end();
+        }
+        await nextFrame();
+      }
+      // Timer results land a few frames later
+      for (let tries = 0; tries < 60 && samples.length + costResults.length < RUNS && !signal?.aborted; tries++) {
+        pollGpuTimer();
+        if (samples.length + costResults.length < RUNS) await nextFrame();
+      }
+      pollGpuTimer();
+      samples.push(...costResults.splice(0));
+      done();
+      if (samples.length === 0) return null;
+      samples.sort((a, b) => a - b);
+      return samples[Math.floor(samples.length / 2)];
+    });
 
     // ── 3D particle scene + perspective camera ────────────────────────────────
     const particleScene = new THREE.Scene();
@@ -542,6 +634,16 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           exportReadbackRT?.dispose(); exportReadbackRT = null;
           exportW = 0; exportH = 0;
           renderScale = scale;
+          exportSize = null;
+          applySize();
+          return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+        },
+        setRenderSize: (size) => {
+          exportRT?.dispose(); exportRT = null;
+          exportReadbackRT?.dispose(); exportReadbackRT = null;
+          exportW = 0; exportH = 0;
+          exportSize = size ? { width: Math.max(1, Math.round(size.width)), height: Math.max(1, Math.round(size.height)) } : null;
+          renderScale = 1;
           applySize();
           return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
         },
@@ -628,6 +730,24 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Build a 1-px probe shader: insert a new gl_FragColor at the very end of main()
     // using lastIndexOf('}') so it works even when nodes compile after the output node's
     // gl_FragColor (i.e. when the scope node isn't connected to the Output node).
+    // A probe reads a node's variable out of the *current* fragment shader. The
+    // variable map and the shader text are updated by different paths (store
+    // write vs. async compile swap), so around a recompile — a renamed node
+    // changes its slug — one can be ahead of the other. Probing a name the
+    // shader doesn't declare is an "undeclared identifier" error, so skip it
+    // until both agree. Cached per shader text since this runs every frame.
+    let declaresFs: string | null = null;
+    const declaresCache = new Map<string, boolean>();
+    const fsDeclares = (fs: string, varName: string): boolean => {
+      if (declaresFs !== fs) { declaresFs = fs; declaresCache.clear(); }
+      let hit = declaresCache.get(varName);
+      if (hit === undefined) {
+        hit = new RegExp(`\\b${varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(fs);
+        declaresCache.set(varName, hit);
+      }
+      return hit;
+    };
+
     const buildProbeShader = (fs: string, varName: string, varType: string): string => {
       let packed: string;
       switch (varType) {
@@ -681,8 +801,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // CSS size is floored so the drawing buffer at render scale N is exactly
     // N× the 1× buffer — the export modal predicts output size that way.
     const applySize = () => {
-      renderer.setPixelRatio(renderScale);
-      renderer.setSize(cssW, cssH);
+      if (exportSize) {
+        renderer.setPixelRatio(1);
+        renderer.setSize(exportSize.width, exportSize.height, false); // keep the CSS size
+      } else {
+        renderer.setPixelRatio(renderScale);
+        renderer.setSize(cssW, cssH);
+      }
       const w = renderer.domElement.width;
       const h = renderer.domElement.height;
       material.uniforms.u_resolution.value.set(w, h);
@@ -694,6 +819,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
       pingPongIdx.current = 0;
+      disposeEchoRing();
       if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = null;
       requestRender();
     };
@@ -757,6 +883,42 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
     };
 
+    // ── Echo snapshot ring ────────────────────────────────────────────────
+    // `echoRing[i]` holds the picture (i + 1) × delay frames ago. Every `delay`
+    // frames the ring rotates (the oldest slot becomes the newest) and the
+    // frame just rendered is copied into slot 0 — one extra full-screen copy
+    // per `delay` frames, and copies × one frame of GPU memory.
+    let echoRing: THREE.WebGLRenderTarget[] = [];
+    let echoFrame = 0;
+    const disposeEchoRing = () => { for (const rt of echoRing) rt.dispose(); echoRing = []; echoFrame = 0; };
+    const captureEcho = (frameTex: THREE.Texture) => {
+      const cfg = echoRef.current;
+      if (!cfg) { if (echoRing.length) disposeEchoRing(); return; }
+      const w = renderer.domElement.width || 1, h = renderer.domElement.height || 1;
+      if (echoRing.length !== cfg.copies || (echoRing[0] && (echoRing[0].width !== w || echoRing[0].height !== h))) {
+        disposeEchoRing();
+        for (let i = 0; i < cfg.copies; i++) {
+          const rt = new THREE.WebGLRenderTarget(w, h, { type: RT_TYPE, format: THREE.RGBAFormat, depthBuffer: false });
+          renderer.setRenderTarget(rt); renderer.clear();
+          echoRing.push(rt);
+        }
+        renderer.setRenderTarget(null);
+      }
+      echoFrame++;
+      if (echoFrame % Math.max(1, cfg.delay) === 0) {
+        echoRing.unshift(echoRing.pop()!);              // oldest slot becomes the newest
+        blitMat.uniforms.tInput.value = frameTex;
+        blitMat.uniforms.u_seed.value = 0;
+        renderer.setRenderTarget(echoRing[0]);
+        renderer.render(blitScene, camera);
+        renderer.setRenderTarget(null);
+      }
+      for (let i = 0; i < echoRing.length; i++) {
+        const u = material.uniforms[`u_echo${i}`];
+        if (u) u.value = echoRing[i].texture;
+      }
+    };
+
     // Manual virtual-time accumulator (replaces THREE.Clock) so playback can be
     // paused without resetting to 0 — THREE.Clock.start() always zeroes
     // elapsedTime, so there's no clean way to "resume" with it.
@@ -804,6 +966,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // While the WebGL context is lost every GL call is a no-op (and the
       // readbacks below would return garbage), so idle until it's restored.
       if (glContextLost) { lastRafTime = now; scheduleFrame(); return; }
+      const frameT0 = performance.now();
+      pollGpuTimer();
 
       // FPS counter — updated every second
       fpsFrameCount++;
@@ -871,7 +1035,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
       const dynamic = renderKeepAlive.active() || (playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
-        audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current ||
+        audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
       ));
       const doRender = dynamic || needsRender;
@@ -888,26 +1052,34 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (material.uniforms.u_prevFrame) {
             material.uniforms.u_prevFrame.value = readRT.texture;
           }
+          gpuTimer.begin('main');
           renderer.setRenderTarget(writeRT);
           renderer.render(scene, camera);
+          if (echoRef.current) captureEcho(writeRT.texture);
           blitMat.uniforms.tInput.value = writeRT.texture;
           blitMat.uniforms.u_seed.value = frameCount * 1.618;
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
+          gpuTimer.end();
           pingPongIdx.current = pingPongIdx.current === 0 ? 1 : 0;
         } else {
+          gpuTimer.begin('main');
           renderer.setRenderTarget(floatRt);
           renderer.render(scene, camera);
+          if (echoRef.current) captureEcho(floatRt.texture);
           blitMat.uniforms.tInput.value = floatRt.texture;
           blitMat.uniforms.u_seed.value = frameCount * 1.618;
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
+          gpuTimer.end();
         }
 
         // ── GPU particles: render additively on top of the blitted background ──
         if (gpuParticlesRef.current.size > 0) {
           renderer.autoClear = false;
+          gpuTimer.begin('particles');
           renderer.render(particleScene, perspCamera);
+          gpuTimer.end();
           renderer.autoClear = true;
         }
 
@@ -916,6 +1088,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         if (newErrors.length > 0) {
           setGlslErrors(newErrors, glFailedSource());
         }
+        // Everything from here to the end of the drawn frame is probes and readbacks
+        const probeT0 = performance.now();
+        readbackCount = 0;
 
         // Throttled updates every N frames while animating. A frame drawn on
         // demand (slider, hover, recompile) may be the only one for a while, so
@@ -930,6 +1105,29 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           // update, so no wasted re-renders on graphs that don't listen.
           if (hasTimeNodeRef.current) {
             setCurrentTime(material.uniforms.u_time.value);
+          }
+          // ── Preview caption stats: how much of the isolated node's frame clips, is black, or is flat ──
+          if (previewNodeIdRef.current) {
+            renderer.setRenderTarget(statsRT);
+            renderer.render(scene, camera);
+            renderer.setRenderTarget(null);
+            renderer.readRenderTargetPixels(statsRT, 0, 0, 32, 18, statsBuf);
+            let clipped = 0, black = 0, sum = 0, flat = true;
+            const r0 = statsBuf[0], g0 = statsBuf[1], b0 = statsBuf[2];
+            for (let i = 0; i < statsBuf.length; i += 4) {
+              const r = statsBuf[i], g = statsBuf[i + 1], b = statsBuf[i + 2];
+              const mx = Math.max(r, g, b);
+              if (mx >= 254) clipped++;
+              if (mx <= 2) black++;
+              sum += (r + g + b) / 765;
+              if (flat && (Math.abs(r - r0) > 6 || Math.abs(g - g0) > 6 || Math.abs(b - b0) > 6)) flat = false;
+            }
+            const n = 32 * 18;
+            setPreviewStats({ clipped: clipped / n, black: black / n, flat, mean: sum / n });
+            statsWasOn = true;
+          } else if (statsWasOn) {
+            statsWasOn = false;
+            setPreviewStats(null);
           }
           const mp = mousePosRef.current;
           if (mp === null) {
@@ -1012,6 +1210,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               for (const [outKey, varName] of Object.entries(outputVars)) {
                 const outSocket = selNode.outputs[outKey];
                 const varType   = outSocket?.type ?? 'float';
+                if (!fsDeclares(curFs, varName)) continue; // map and shader out of step; next frame
 
                 // Skip until the active shader actually declares this variable (see the scope probe).
                 if (!curFs.includes(varName)) continue;
@@ -1081,10 +1280,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
               if (!outputVars?.value) continue;
               const varName = outputVars.value;
-              // The var map can run ahead of the active shader for a frame or two after a
-              // recompile; a probe built from a shader that doesn't declare the variable
-              // would only surface a bogus "undeclared identifier" error. Wait for the swap.
-              if (!curScopeFs.includes(varName)) continue;
+              if (!fsDeclares(curScopeFs, varName)) continue;
               // Scope node uses min/max params; LFO nodes derive range from offset ± amplitude
               let scopeMin: number;
               let scopeMax: number;
@@ -1150,7 +1346,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               if (floatOutputKey) {
                 const outputVars = nodeOutputVarMapRef.current.get(previewId);
                 const varName    = outputVars?.[floatOutputKey];
-                if (varName && curFs.includes(varName)) {
+                if (varName && fsDeclares(curFs, varName)) {
                   const cacheKey = `${varName}::-1::1`;
                   let pm = previewScopeMatCache.get(cacheKey);
                   if (!pm) {
@@ -1203,7 +1399,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 const upType = upNode.outputs[upKey]?.type;
                 if (!upType) continue;
                 const upVarName = nodeOutputVarMapRef.current.get(upId)?.[upKey];
-                if (!upVarName || !curFs.includes(upVarName)) continue;
+                if (!upVarName || !fsDeclares(curFs, upVarName)) continue;
 
                 const probeKey = `__preview__${upId}:${upKey}`;
 
@@ -1282,7 +1478,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               for (const [outKey, outSocket] of Object.entries(previewNode.outputs)) {
                 if (outSocket.type !== 'vec2' && outSocket.type !== 'vec3') continue;
                 const ownVarName = nodeOutputVarMapRef.current.get(previewId)?.[outKey];
-                if (!ownVarName || !curFs.includes(ownVarName)) continue;
+                if (!ownVarName || !fsDeclares(curFs, ownVarName)) continue;
                 const ownProbeKey = `__preview__${previewId}:${outKey}`;
 
                 if (outSocket.type === 'vec2') {
@@ -1337,6 +1533,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             }
           }
         }
+        recordFrame({
+          cpuMs: performance.now() - frameT0, probeMs: performance.now() - probeT0, readbacks: readbackCount,
+          fps: currentFps, width: gl.drawingBufferWidth, height: gl.drawingBufferHeight,
+        });
       } else {
         idleFrames++;
         // Nothing to redraw, but the clock still runs while playing: keep the time readout (and
@@ -1449,6 +1649,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       sceneRef.current = null;
       const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
       loseCtx?.loseContext();
+      gpuTimer.dispose();
+      statsRT.dispose();
+      costRt?.dispose();
+      registerShaderCostMeasurer(null);
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
@@ -1680,10 +1884,35 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     requestRenderRef.current();
   }, [paramUniforms]);
 
+  // ── Aspect: hold the canvas to a chosen ratio inside the panel ─────────────
+  // The export renders at the canvas size × scale, so a 16:9 preview gives a
+  // 16:9 video whatever shape the panel is. The inner div keeps its own
+  // ResizeObserver above, so the renderer follows the fitted size.
+  const previewAspect = useNodeGraphStore(s => s.previewAspect);
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const ratio = PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.ratio ?? null;
+    const outer = outerRef.current;
+    if (!ratio || !outer) { setFit(null); return; }
+    const apply = () => {
+      const r = outer.getBoundingClientRect();
+      setFit(fitAspect(r.width, r.height, ratio));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(outer);
+    return () => ro.disconnect();
+  }, [previewAspect]);
+
   return (
-    <div
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden' }}
-    />
+    <div ref={outerRef} style={{ width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        ref={canvasRef}
+        style={fit
+          ? { width: fit.width, height: fit.height, background: '#000', position: 'relative', overflow: 'hidden', flexShrink: 0 }
+          : { width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden' }}
+      />
+    </div>
   );
 }

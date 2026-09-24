@@ -13,8 +13,8 @@ export const Vec2ConstNode: NodeDefinition = {
   outputs: { val: { type: 'vec2', label: 'Vec2' } },
   defaultParams: { x: 0, y: 0 },
   paramDefs: {
-    x: { label: 'X', type: 'float', step: 0.01 },
-    y: { label: 'Y', type: 'float', step: 0.01 },
+    x: { label: 'X', type: 'float', step: 0.01, hint: 'Horizontal component.' },
+    y: { label: 'Y', type: 'float', step: 0.01, hint: 'Vertical component.' },
   },
   generateGLSL: (node: GraphNode) => {
     const id = node.id;
@@ -46,7 +46,7 @@ export const MatConstNode: NodeDefinition = {
   paramDefs: {
     size: {
       label: 'Size',
-      type: 'select',
+      type: 'select', hint: '2x2 for pure 2D rotation/scale; 3x3 adds a translation column.',
       options: [
         { value: 'mat2', label: '2 × 2' },
         { value: 'mat3', label: '3 × 3' },
@@ -54,15 +54,15 @@ export const MatConstNode: NodeDefinition = {
     },
     // individual matrix cell params — m[row][col]
     // m02/m12/m20/m21/m22 only visible for mat3
-    m00: { label: 'm00', type: 'float', step: 0.01 },
-    m01: { label: 'm01', type: 'float', step: 0.01 },
-    m02: { label: 'm02', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
-    m10: { label: 'm10', type: 'float', step: 0.01 },
-    m11: { label: 'm11', type: 'float', step: 0.01 },
-    m12: { label: 'm12', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
-    m20: { label: 'm20', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
-    m21: { label: 'm21', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
-    m22: { label: 'm22', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' } },
+    m00: { label: 'm00', type: 'float', step: 0.01, hint: 'Row 0, column 0 of the matrix.' },
+    m01: { label: 'm01', type: 'float', step: 0.01, hint: 'Row 0, column 1 of the matrix.' },
+    m02: { label: 'm02', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' }, hint: 'Row 0, column 2 of the matrix.' },
+    m10: { label: 'm10', type: 'float', step: 0.01, hint: 'Row 1, column 0 of the matrix.' },
+    m11: { label: 'm11', type: 'float', step: 0.01, hint: 'Row 1, column 1 of the matrix.' },
+    m12: { label: 'm12', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' }, hint: 'Row 1, column 2 of the matrix.' },
+    m20: { label: 'm20', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' }, hint: 'Row 2, column 0 of the matrix.' },
+    m21: { label: 'm21', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' }, hint: 'Row 2, column 1 of the matrix.' },
+    m22: { label: 'm22', type: 'float', step: 0.01, showWhen: { param: 'size', value: 'mat3' }, hint: 'Row 2, column 2 of the matrix.' },
   },
   generateGLSL: (node: GraphNode) => {
     const id   = node.id;
@@ -99,7 +99,7 @@ export const Mat2ConstructNode: NodeDefinition = {
   },
   defaultParams: { mode: 'cols' },
   paramDefs: {
-    mode: { label: 'Input as', type: 'select', options: [
+    mode: { label: 'Input as', type: 'select', hint: 'Columns fills the matrix column by column (GLSL order); Rows transposes.', options: [
       { value: 'cols', label: 'Columns' },
       { value: 'rows', label: 'Rows' },
     ]},
@@ -136,7 +136,7 @@ export const Mat3ConstructNode: NodeDefinition = {
   },
   defaultParams: { mode: 'cols' },
   paramDefs: {
-    mode: { label: 'Input as', type: 'select', options: [
+    mode: { label: 'Input as', type: 'select', hint: 'Columns fills the matrix column by column (GLSL order); Rows transposes.', options: [
       { value: 'cols', label: 'Columns' },
       { value: 'rows', label: 'Rows' },
     ]},
@@ -174,7 +174,7 @@ export const Mat2InspectNode: NodeDefinition = {
   },
   defaultParams: { mode: 'cols' },
   paramDefs: {
-    mode: { label: 'Output as', type: 'select', options: [
+    mode: { label: 'Output as', type: 'select', hint: 'Columns returns the matrix columns; Rows returns its rows.', options: [
       { value: 'cols', label: 'Columns' },
       { value: 'rows', label: 'Rows' },
     ]},
@@ -220,7 +220,7 @@ export const Mat3InspectNode: NodeDefinition = {
   },
   defaultParams: { mode: 'cols' },
   paramDefs: {
-    mode: { label: 'Output as', type: 'select', options: [
+    mode: { label: 'Output as', type: 'select', hint: 'Columns returns the matrix columns; Rows returns its rows.', options: [
       { value: 'cols', label: 'Columns' },
       { value: 'rows', label: 'Rows' },
     ]},
@@ -298,6 +298,45 @@ export const Mat3MulVecNode: NodeDefinition = {
     return {
       code: `    vec3 ${id}_output = ${mat} * ${vec};\n`,
       outputVars: { output: `${id}_output` },
+    };
+  },
+};
+
+// ─── Rotation Matrix ─────────────────────────────────────────────────────────
+// Cos/Sin/Negate → Make Vec → Mat Construct, in one node.
+
+export const RotationMatrixNode: NodeDefinition = {
+  type: 'rotationMatrix',
+  label: 'Rotation Matrix',
+  category: 'Matrix',
+  aliases: ['Rotate Matrix', 'Rot Mat'],
+  description: 'A rotation matrix from an angle: `mat2` for 2D, and a `mat3` about the chosen axis for 3D. Multiply a vec2 or vec3 by it with Mat2×Vec2 / Mat3×Vec3. Replaces the Cos → Sin → Negate → Make Vec → Mat Construct chain.',
+  inputs: { angle: { type: 'float', label: 'Angle (rad)', hint: 'Wire Time for a spin. 3.14 is half a turn.' } },
+  outputs: {
+    mat2: { type: 'mat2', label: 'Mat2 (2D)' },
+    mat3: { type: 'mat3', label: 'Mat3 (3D)' },
+  },
+  defaultParams: { angle: 0.0, axis: 'z' },
+  paramDefs: {
+    angle: { label: 'Angle (rad)', type: 'float', min: -6.2832, max: 6.2832, step: 0.01, hint: 'Used when nothing is wired to Angle.' },
+    axis:  { label: 'Axis (Mat3)', type: 'select', hint: 'Which axis the 3D matrix rotates around. The 2D matrix ignores it.', options: [
+      { value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' },
+    ] },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const a = inputVars.angle ?? p(node.params.angle, 0.0);
+    const axis = typeof node.params.axis === 'string' ? node.params.axis : 'z';
+    const m3 = axis === 'x' ? `mat3(1.0, 0.0, 0.0, 0.0, ${id}_c, ${id}_s, 0.0, -${id}_s, ${id}_c)`
+             : axis === 'y' ? `mat3(${id}_c, 0.0, -${id}_s, 0.0, 1.0, 0.0, ${id}_s, 0.0, ${id}_c)`
+             :                `mat3(${id}_c, ${id}_s, 0.0, -${id}_s, ${id}_c, 0.0, 0.0, 0.0, 1.0)`;
+    return {
+      code: [
+        `    float ${id}_c = cos(${a}), ${id}_s = sin(${a});\n`,
+        `    mat2 ${id}_m2 = mat2(${id}_c, ${id}_s, -${id}_s, ${id}_c);\n`,
+        `    mat3 ${id}_m3 = ${m3};\n`,
+      ].join(''),
+      outputVars: { mat2: `${id}_m2`, mat3: `${id}_m3` },
     };
   },
 };

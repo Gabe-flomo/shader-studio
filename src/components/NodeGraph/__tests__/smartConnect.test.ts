@@ -18,11 +18,12 @@ describe('suggestConnections', () => {
     expect(got.map(s => `${s.nodeId}.${s.key}`)).toEqual(['near.a', 'far.b', 'far.c']);
   });
 
-  it('skips wired inputs, incompatible types and nodes behind the output', () => {
+  it('skips incompatible types and nodes behind the output; wired inputs only appear as replacements', () => {
     const behind = node('behind', -200, { a: { type: 'float', label: 'A' } }, {});
     const wired = node('wired', 100, { a: { type: 'float', label: 'A', connection: { nodeId: 'x', outputKey: 'y' } } }, {});
     const mat = node('mat', 100, { m: { type: 'mat2', label: 'M' } }, {});
-    expect(run([time, behind, wired, mat], { nodeId: 'time', key: 't', dir: 'out' })).toEqual([]);
+    const got = run([time, behind, wired, mat], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(got.map(s => [s.nodeId, s.replaces])).toEqual([['wired', 'another node']]);
   });
 
   it('never offers a wire that would close a loop', () => {
@@ -35,5 +36,43 @@ describe('suggestConnections', () => {
   it('from an input, offers outputs to its left', () => {
     const target = node('target', 300, { g: { type: 'float', label: 'Glow' } }, {});
     expect(run([time, target], { nodeId: 'target', key: 'g', dir: 'in' }).map(s => s.nodeId)).toEqual(['time']);
+  });
+
+  it('from an output, always offers the Output node as well, pinned after the three', () => {
+    const near = node('near', 100, { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, c: { type: 'float', label: 'C' } }, {});
+    // Behind the origin and already fed by something else: still offered
+    const output = { ...node('out1', -300, { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'x', outputKey: 'y' } } }, {}), type: 'output' };
+    const got = run([time, near, output], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(got.map(s => s.nodeId)).toEqual(['near', 'near', 'near', 'out1']);
+    expect(got[3].pinned).toBe(true);
+    expect(got[3].key).toBe('color');
+  });
+
+  it('does not repeat the Output node when it is already ranked, or when this socket already feeds it', () => {
+    const output = { ...node('out1', 300, { color: { type: 'vec3', label: 'Color' } }, {}), type: 'output' };
+    const ranked = run([time, output], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(ranked.map(s => s.nodeId)).toEqual(['out1']);
+    expect(ranked[0].pinned).toBeUndefined();
+    const fed: GraphNode = { ...output, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'time', outputKey: 't' } } } };
+    expect(run([time, fed], { nodeId: 'time', key: 't', dir: 'out' })).toEqual([]);
+  });
+
+  it('offers wired inputs as replacements after the open ones, naming what they displace', () => {
+    const other = node('other', 0, {}, { o: { type: 'float', label: 'Other out' } });
+    const near = node('near', 100, {
+      a: { type: 'float', label: 'A' },
+      b: { type: 'float', label: 'B', connection: { nodeId: 'other', outputKey: 'o' } },
+      c: { type: 'float', label: 'C', connection: { nodeId: 'time', outputKey: 't' } }, // already from this socket
+    }, {});
+    const got = run([time, other, near], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(got.map(s => [s.key, s.replaces ?? null])).toEqual([['a', null], ['b', 'other · Other out']]);
+  });
+
+  it('caps replacements at two, nearest first', () => {
+    const src = node('src', 0, {}, { o: { type: 'float', label: 'O' } });
+    const wired = (id: string, x: number) => node(id, x, { a: { type: 'float', label: 'A', connection: { nodeId: 'src', outputKey: 'o' } } }, {});
+    const got = run([time, src, wired('w3', 300), wired('w1', 100), wired('w2', 200)], { nodeId: 'time', key: 't', dir: 'out' });
+    expect(got.map(s => s.nodeId)).toEqual(['w1', 'w2']);
+    expect(got.every(s => s.replaces)).toBe(true);
   });
 });

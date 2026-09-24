@@ -52,26 +52,26 @@ const SHAPE_OPTIONS = [
 
 // Shape-specific param defs (showWhen conditions)
 const SHAPE_PARAM_DEFS = {
-  shape:     { label: 'Shape',       type: 'select' as const, options: SHAPE_OPTIONS },
-  r:         { label: 'Radius',      type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_R    } },
-  r2:        { label: 'Radius 2',    type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_R2   } },
-  rx:        { label: 'Width / 2',   type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_RXRY } },
-  ry:        { label: 'Height / 2',  type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_RY   } },
-  roundness: { label: 'Roundness',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, showWhen: { param: 'shape', value: WITH_RND  } },
-  chamfer:   { label: 'Chamfer',     type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, showWhen: { param: 'shape', value: WITH_CHF  } },
-  rf:        { label: 'Inner ratio', type: 'float' as const, min: 0.1,  max: 0.9,  step: 0.01,  showWhen: { param: 'shape', value: WITH_RF   } },
-  th:        { label: 'Thickness',   type: 'float' as const, min: 0.001,max: 0.5,  step: 0.001, showWhen: { param: 'shape', value: WITH_TH   } },
-  nx:        { label: 'Normal X',    type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_N    } },
-  ny:        { label: 'Normal Y',    type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_N    } },
-  cx:        { label: 'Angle cos',   type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_CXY  } },
-  cy:        { label: 'Angle sin',   type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_CXY  } },
-  he:        { label: 'Height',      type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_HE   } },
-  sk:        { label: 'Skew',        type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_SK   } },
-  k:         { label: 'Curvature',   type: 'float' as const, min: 0.1,  max: 5.0,  step: 0.05,  showWhen: { param: 'shape', value: WITH_K    } },
-  d:         { label: 'Distance',    type: 'float' as const, min: 0.0,  max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_D    } },
-  tb:        { label: 'Wave',        type: 'float' as const, min: 0.01, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_TB   } },
-  n_pts:     { label: 'Count / Pts', type: 'float' as const, min: 3.0,  max: 12.0, step: 1.0,   showWhen: { param: 'shape', value: WITH_NPTS } },
-  m_pts:     { label: 'Inner pts',   type: 'float' as const, min: 2.0,  max: 6.0,  step: 0.1,   showWhen: { param: 'shape', value: WITH_MPTS } },
+  shape:     { label: 'Shape',       type: 'select' as const, options: SHAPE_OPTIONS, hint: 'Which SDF shape each ring traces.' },
+  r:         { label: 'Radius',      type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_R    }, hint: 'Overall size of the shape.' },
+  r2:        { label: 'Radius 2',    type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_R2   }, hint: 'Second radius, e.g. the inner ring or second circle.' },
+  rx:        { label: 'Width / 2',   type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_RXRY }, hint: 'Half the shape\'s width.' },
+  ry:        { label: 'Height / 2',  type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_RY   }, hint: 'Half the shape\'s height.' },
+  roundness: { label: 'Roundness',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, showWhen: { param: 'shape', value: WITH_RND  }, hint: 'Rounds the corners. 0 is sharp.' },
+  chamfer:   { label: 'Chamfer',     type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, showWhen: { param: 'shape', value: WITH_CHF  }, hint: 'Cuts the corners at 45 degrees. 0 is sharp.' },
+  rf:        { label: 'Inner ratio', type: 'float' as const, min: 0.1,  max: 0.9,  step: 0.01,  showWhen: { param: 'shape', value: WITH_RF   }, hint: 'Inner radius as a fraction of the outer. Smaller = spikier.' },
+  th:        { label: 'Thickness',   type: 'float' as const, min: 0.001,max: 0.5,  step: 0.001, showWhen: { param: 'shape', value: WITH_TH   }, hint: 'Line thickness of the stroke.' },
+  nx:        { label: 'Normal X',    type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_N    }, hint: 'X of the cut direction (normal).' },
+  ny:        { label: 'Normal Y',    type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_N    }, hint: 'Y of the cut direction (normal).' },
+  cx:        { label: 'Angle cos',   type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_CXY  }, hint: 'Cosine of the opening angle. Pair with Angle sin.' },
+  cy:        { label: 'Angle sin',   type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_CXY  }, hint: 'Sine of the opening angle. Pair with Angle cos.' },
+  he:        { label: 'Height',      type: 'float' as const, min: 0.01, max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_HE   }, hint: 'Height of the shape.' },
+  sk:        { label: 'Skew',        type: 'float' as const, min: -1.0, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_SK   }, hint: 'Leans the shape sideways. 0 is upright.' },
+  k:         { label: 'Curvature',   type: 'float' as const, min: 0.1,  max: 5.0,  step: 0.05,  showWhen: { param: 'shape', value: WITH_K    }, hint: 'How sharply the curve bends.' },
+  d:         { label: 'Distance',    type: 'float' as const, min: 0.0,  max: 2.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_D    }, hint: 'Offset distance, e.g. how far the cut sits from center.' },
+  tb:        { label: 'Wave',        type: 'float' as const, min: 0.01, max: 1.0,  step: 0.01,  showWhen: { param: 'shape', value: WITH_TB   }, hint: 'Wave amplitude around the circle.' },
+  n_pts:     { label: 'Count / Pts', type: 'float' as const, min: 3.0,  max: 12.0, step: 1.0,   showWhen: { param: 'shape', value: WITH_NPTS }, hint: 'Number of points or sides.' },
+  m_pts:     { label: 'Inner pts',   type: 'float' as const, min: 2.0,  max: 6.0,  step: 0.1,   showWhen: { param: 'shape', value: WITH_MPTS }, hint: 'Inner point angle of the star. Higher = fatter star.' },
 };
 
 const SHAPE_DEFAULT_PARAMS = {
@@ -99,7 +99,7 @@ export const LoopRippleStepNode: NodeDefinition = {
   label: 'Ripple Step',
   category: 'Loops',
   deprecated: true,
-  description: 'Applies one iteration of UV ripple distortion (vec2 carry). Each pass warps UV by sin/cos of scaled coordinates + time. Connect floats to scale/speed/strength to animate them.',
+  description: 'Applies one iteration of UV ripple distortion (vec2 carry). Each pass warps UV by sin/cos of scaled coordinates + time. Connect floats to scale/speed/strength to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     uv:       { type: 'vec2',  label: 'UV' },
@@ -111,9 +111,9 @@ export const LoopRippleStepNode: NodeDefinition = {
 
   defaultParams: { scale: 3.0, speed: 1.0, strength: 0.12 },
   paramDefs: {
-    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 20.0, step: 0.1   },
-    speed:    { label: 'Speed',    type: 'float', min: 0.0, max: 5.0,  step: 0.01  },
-    strength: { label: 'Strength', type: 'float', min: 0.0, max: 1.0,  step: 0.005 },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 20.0, step: 0.1, hint: 'Frequency of the ripple. Higher = tighter waves each pass.' },
+    speed:    { label: 'Speed',    type: 'float', min: 0.0, max: 5.0,  step: 0.01, hint: 'How fast the ripple animates.' },
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 1.0,  step: 0.005, hint: 'How far each pass displaces UV. Small values compound over iterations.' },
   },
 
   generateGLSL: (node, inputVars) => {
@@ -144,7 +144,7 @@ export const LoopRotateStepNode: NodeDefinition = {
   label: 'Rotate Step',
   category: 'Loops',
   deprecated: true,
-  description: 'Rotates a vec2 UV by `angle` radians each iteration (vec2 carry). Great for spiral and kaleidoscope effects. Wire floats to angle/scale to animate them.',
+  description: 'Rotates a vec2 UV by `angle` radians each iteration (vec2 carry). Great for spiral and kaleidoscope effects. Wire floats to angle/scale to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     uv:    { type: 'vec2',  label: 'UV' },
@@ -155,8 +155,8 @@ export const LoopRotateStepNode: NodeDefinition = {
 
   defaultParams: { angle: 0.3, scale: 1.02 },
   paramDefs: {
-    angle: { label: 'Angle (rad)', type: 'float', min: -3.14159, max: 3.14159, step: 0.01 },
-    scale: { label: 'Scale/iter',  type: 'float', min: 0.5,      max: 2.0,     step: 0.01 },
+    angle: { label: 'Angle (rad)', type: 'float', min: -3.14159, max: 3.14159, step: 0.01, hint: 'Rotation per iteration, in radians. 0.3 over 8 passes is a gentle spiral.' },
+    scale: { label: 'Scale/iter',  type: 'float', min: 0.5,      max: 2.0,     step: 0.01, hint: 'Zoom per iteration. Above 1 grows, below 1 shrinks each pass.' },
   },
 
   generateGLSL: (node, inputVars) => {
@@ -184,7 +184,7 @@ export const LoopDomainFoldNode: NodeDefinition = {
   label: 'Domain Fold',
   category: 'Loops',
   deprecated: true,
-  description: 'Applies abs()-mirror fold + scale + offset each iteration (vec2 carry). Classic IFS/fractal technique. Wire floats to scale/offsetX/offsetY to animate them.',
+  description: 'Applies abs()-mirror fold + scale + offset each iteration (vec2 carry). Classic IFS/fractal technique. Wire floats to scale/offsetX/offsetY to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     uv:      { type: 'vec2',  label: 'UV' },
@@ -196,9 +196,9 @@ export const LoopDomainFoldNode: NodeDefinition = {
 
   defaultParams: { scale: 1.8, offsetX: 0.5, offsetY: 0.3 },
   paramDefs: {
-    scale:   { label: 'Scale',    type: 'float', min: 0.5,  max: 4.0, step: 0.01 },
-    offsetX: { label: 'Offset X', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
-    offsetY: { label: 'Offset Y', type: 'float', min: -2.0, max: 2.0, step: 0.01 },
+    scale:   { label: 'Scale',    type: 'float', min: 0.5,  max: 4.0, step: 0.01, hint: 'Zoom per fold. 1.8 to 2.0 gives classic fractal branching.' },
+    offsetX: { label: 'Offset X', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Horizontal shift after each fold.' },
+    offsetY: { label: 'Offset Y', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Vertical shift after each fold.' },
   },
 
   generateGLSL: (node, inputVars) => {
@@ -225,7 +225,7 @@ export const LoopFloatAccumulateNode: NodeDefinition = {
   label: 'Float Accumulate',
   category: 'Loops',
   deprecated: true,
-  description: 'Accumulates a float carry by adding sin(carry × scale + time × speed) × amplitude each iteration. Wire floats to scale/speed/amplitude to animate them.',
+  description: 'Accumulates a float carry by adding sin(carry × scale + time × speed) × amplitude each iteration. Wire floats to scale/speed/amplitude to animate them. Use with Loop Carry (float) inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     value:     { type: 'float', label: 'Value' },
@@ -237,9 +237,9 @@ export const LoopFloatAccumulateNode: NodeDefinition = {
 
   defaultParams: { scale: 2.0, speed: 1.0, amplitude: 0.15 },
   paramDefs: {
-    scale:     { label: 'Scale',     type: 'float', min: 0.01, max: 20.0, step: 0.1  },
-    speed:     { label: 'Speed',     type: 'float', min: 0.0,  max: 5.0,  step: 0.01 },
-    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,  max: 2.0,  step: 0.01 },
+    scale:     { label: 'Scale',     type: 'float', min: 0.01, max: 20.0, step: 0.1, hint: 'Frequency of the sine term. Higher = more chaotic accumulation.' },
+    speed:     { label: 'Speed',     type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the accumulation animates.' },
+    amplitude: { label: 'Amplitude', type: 'float', min: 0.0,  max: 2.0,  step: 0.01, hint: 'How much each pass adds. Small values compound over iterations.' },
   },
 
   generateGLSL: (node, inputVars) => {
@@ -271,10 +271,10 @@ export const LoopColorRingStepNode: NodeDefinition = {
   label: 'Color Ring Step',
   category: 'Loops',
   deprecated: true,
-  description: 'Fractal ring step with color accumulation (vec3 carry). Each iteration folds UV by (iter+1)×scale, computes a ring glow on the chosen shape SDF, and adds palette color shifted by iter_index. Wire any float to animatable params.',
+  description: 'Fractal ring step with color accumulation (vec3 carry). Each iteration folds UV by (iter+1)×scale, computes a ring glow on the chosen shape SDF, and adds palette color shifted by iter_index. Wire any float to animatable params. Use with Loop Carry (vec3) inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
-    color:     { type: 'vec3',  label: 'Color in'   },
+    color:     { type: 'vec3',  label: 'Color in', hint: 'Wire Loop Carry\'s Value (vec3): the color accumulated by earlier passes.' },
     uv:        { type: 'vec2',  label: 'UV'          },
     scale:     { type: 'float', label: 'UV Scale'    },
     freq:      { type: 'float', label: 'Ring Freq'   },
@@ -286,11 +286,11 @@ export const LoopColorRingStepNode: NodeDefinition = {
 
   defaultParams: { scale: 1.5, freq: 8.0, glow: 0.005, timeScale: 0.4, phaseStep: 0.4, ...SHAPE_DEFAULT_PARAMS },
   paramDefs: {
-    scale:     { label: 'UV Scale',   type: 'float', min: 0.5,    max: 5.0,  step: 0.01   },
-    freq:      { label: 'Ring Freq',  type: 'float', min: 1.0,    max: 20.0, step: 0.1    },
-    glow:      { label: 'Glow',       type: 'float', min: 0.0001, max: 0.01, step: 0.0001 },
-    timeScale: { label: 'Speed', type: 'float', min: 0.0,    max: 2.0,  step: 0.01   },
-    phaseStep: { label: 'Phase Step', type: 'float', min: 0.0,    max: 2.0,  step: 0.01   },
+    scale:     { label: 'UV Scale',   type: 'float', min: 0.5,    max: 5.0,  step: 0.01, hint: 'Zoom per iteration, multiplied by the iteration index.' },
+    freq:      { label: 'Ring Freq',  type: 'float', min: 1.0,    max: 20.0, step: 0.1, hint: 'Number of rings per unit distance. Higher = denser rings.' },
+    glow:      { label: 'Glow',       type: 'float', min: 0.0001, max: 0.01, step: 0.0001, hint: 'Brightness of each ring. Tiny values; 0.005 is a thin neon line.' },
+    timeScale: { label: 'Speed', type: 'float', min: 0.0,    max: 2.0,  step: 0.01, hint: 'How fast rings and colors animate.' },
+    phaseStep: { label: 'Phase Step', type: 'float', min: 0.0,    max: 2.0,  step: 0.01, hint: 'Color shift per iteration. 0 makes every ring the same hue.' },
     ...SHAPE_PARAM_DEFS,
   },
 
@@ -332,11 +332,11 @@ export const LoopRingStepNode: NodeDefinition = {
   label: 'Ring Step',
   category: 'Loops',
   deprecated: true,
-  description: 'One iteration of the fractal rings effect: folds UV with fract, computes a ring glow on the chosen shape SDF, and accumulates palette color. Use inside a Loop Start/End chain or an iterated group. Wire floats to animatable params.',
+  description: 'One iteration of the fractal rings effect: folds UV with fract, computes a ring glow on the chosen shape SDF, and accumulates palette color. Use inside a Loop Start/End chain or an iterated group. Wire floats to animatable params. Use with Loop Carry (vec2 for UV, vec3 for color) inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'         },
-    color:     { type: 'vec3',  label: 'Color in'   },
+    color:     { type: 'vec3',  label: 'Color in', hint: 'Wire the carried color from the previous pass; leave empty on the first.' },
     scale:     { type: 'float', label: 'Scale'       },
     freq:      { type: 'float', label: 'Freq'        },
     glow:      { type: 'float', label: 'Glow'        },
@@ -349,10 +349,10 @@ export const LoopRingStepNode: NodeDefinition = {
 
   defaultParams: { scale: 1.5, freq: 8.0, glow: 0.01, timeScale: 0.4, ...SHAPE_DEFAULT_PARAMS },
   paramDefs: {
-    scale:     { label: 'Scale',      type: 'float', min: 0.5,   max: 5.0,  step: 0.01  },
-    freq:      { label: 'Freq',       type: 'float', min: 1.0,   max: 20.0, step: 0.1   },
-    glow:      { label: 'Glow',       type: 'float', min: 0.001, max: 0.5,  step: 0.001 },
-    timeScale: { label: 'Speed', type: 'float', min: 0.0,   max: 2.0,  step: 0.01  },
+    scale:     { label: 'Scale',      type: 'float', min: 0.5,   max: 5.0,  step: 0.01, hint: 'Zoom per iteration. 1.5 to 2 gives nested rings.' },
+    freq:      { label: 'Freq',       type: 'float', min: 1.0,   max: 20.0, step: 0.1, hint: 'Number of rings per unit distance.' },
+    glow:      { label: 'Glow',       type: 'float', min: 0.001, max: 0.5,  step: 0.001, hint: 'Brightness of each ring. 0.01 is a soft line, 0.1 a bright bloom.' },
+    timeScale: { label: 'Speed', type: 'float', min: 0.0,   max: 2.0,  step: 0.01, hint: 'How fast rings and colors animate.' },
     ...SHAPE_PARAM_DEFS,
   },
 

@@ -28,11 +28,11 @@ const HIDDEN_NODES = new Set([
 ]);
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
-  { label: 'Shapes',       categories: ['2D Primitives', '3D Primitives', 'SDF', '3D Transforms', 'Combiners'] },
+  { label: 'Shapes',       categories: ['2D Primitives', 'SDF', '2D Space', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
   { label: '3D',           categories: ['3D Scene', '3D Lighting', '3D Fractals', 'Loops'] },
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
-  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Spaces', 'Grid', 'Field'] },
-  { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Transforms', 'Conditionals'] },
+  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Grid', 'Field'] },
+  { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
   { label: 'Functions',    categories: ['My Nodes', 'Functions'] },
   { label: 'Utility',      categories: ['Utility', 'Output'] },
 ];
@@ -66,8 +66,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Color: [
     { label: 'Palette', types: ['palette', 'gradient', 'colorRamp', 'blackbody'] },
     { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast'] },
-    { label: 'Convert', types: ['hsv'] },
-    { label: 'Blend',   types: ['blendModes'] },
+    { label: 'Convert', types: ['hsv', 'normalToColor'] },
+    { label: 'Blend',   types: ['blendModes', 'oklabMix'] },
   ],
   Math: [
     { label: 'Arithmetic', types: ['add', 'subtract', 'multiply', 'divide'] },
@@ -92,7 +92,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Effects: [
     { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
     { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
-    { label: 'Lighting', types: ['light', 'light2d', 'radianceCascadesApprox'] },
+    { label: 'Lighting', types: ['light', 'glowToColor', 'light2d', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
     { label: 'Other',    types: ['particleEmitter'] },
   ],
@@ -101,16 +101,21 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Color', types: ['hueRotate', 'colorSaturation'] },
     { label: 'Film',  types: ['grain'] },
   ],
+  SDF: [
+    { label: 'Combine', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract'] },
+    { label: 'Modify',  types: ['sdfOffset', 'sdfOnion', 'sdfSharpen'] },
+    { label: 'Style',   types: ['sdfFill', 'sdfColorize'] },
+  ],
+  '2D Space': [
+    { label: 'Basic',   types: ['uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
+    { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
+    { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
+    { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace'] },
+    { label: 'Pattern', types: ['waveTexture', 'magicTexture'] },
+  ],
   Combiners: [
-    { label: 'SDF Ops', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract', 'sdfOffset', 'sdfOnion', 'sdfSharpen', 'sdfOutline', 'sdfColorize'] },
     { label: 'Blend',   types: ['mix', 'blendModes', 'mask', 'addColor', 'alphaBlend'] },
     { label: 'Layer',   types: ['glowLayer', 'deepGlow'] },
-  ],
-  Spaces: [
-    { label: 'Warp',       types: ['displace', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp'] },
-    { label: 'Repeat',     types: ['fract', 'infiniteRepeatSpace', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D'] },
-    { label: 'Distort',    types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'swirlSpace', 'kaleidoSpace', 'sphericalSpace', 'rippleSpace', 'perspective2d', 'shear'] },
-    { label: 'Texture',    types: ['waveTexture', 'magicTexture'] },
   ],
   Grid: [
     { label: 'Layout',   types: ['gridLayout'] },

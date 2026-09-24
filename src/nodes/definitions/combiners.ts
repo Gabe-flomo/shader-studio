@@ -163,37 +163,61 @@ vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float sat
   },
 };
 
-export const SDFOutlineNode: NodeDefinition = {
-  type: 'sdfOutline',
-  label: 'SDF Outline',
-  category: 'Combiners',
-  description: 'Draws a colored filled shape + optional outline from a single SDF. Fill color inside, stroke color at the edge band, transparent outside.',
+export const SDFFillNode: NodeDefinition = {
+  type: 'sdfFill',
+  label: 'SDF Fill',
+  aliases: ['SDF Outline', 'Fill', 'Stroke'],
+  category: 'SDF', subcategory: 'Style',
+  description: 'Paints a shape from its SDF: the inside takes the `Fill` colour, an optional `Stroke` runs along the edge, and everything else stays the `Background`. `Softness` blurs both sides of the fill edge and the stroke alike; `Stroke Align` puts the stroke on the line, just inside it, or just outside.',
   inputs: {
-    d:           { type: 'float', label: 'SDF' },
-    fillColor:   { type: 'vec3',  label: 'Fill' },
-    strokeColor: { type: 'vec3',  label: 'Stroke' },
+    d:           { type: 'float', label: 'SDF', hint: 'Signed distance: negative inside the shape.' },
+    fillColor:   { type: 'vec3',  label: 'Fill', hint: 'Colour inside the shape.' },
+    strokeColor: { type: 'vec3',  label: 'Stroke', hint: 'Colour of the edge line. Set Stroke Width to 0 for no stroke.' },
+    background:  { type: 'vec3',  label: 'Background', hint: 'Colour outside the shape. Black when empty; use the Alpha output to composite instead.' },
     strokeWidth: { type: 'float', label: 'Stroke Width' },
-    antialias:   { type: 'float', label: 'AA Width' },
+    antialias:   { type: 'float', label: 'Softness' },
   },
-  outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
-  defaultParams: { strokeWidth: 0.02, antialias: 0.005 },
+  outputs: {
+    result: { type: 'vec3', label: 'Color' },
+    alpha:  { type: 'float', label: 'Alpha', hint: '1 on the fill and stroke, 0 on the background — for Alpha Blend or Mask.' },
+  },
+  defaultParams: { strokeWidth: 0.0, antialias: 0.005, strokeAlign: 'center', aaMode: 'pixel' },
   paramDefs: {
-    strokeWidth: { label: 'Stroke Width', type: 'float', min: 0.0,   max: 0.2,   step: 0.001 },
-    antialias:   { label: 'AA Width',     type: 'float', min: 0.001, max: 0.05,  step: 0.001 },
+    strokeWidth: { label: 'Stroke Width', type: 'float', min: 0.0,   max: 0.2,   step: 0.001, hint: '0 draws no stroke.' },
+    aaMode:      { label: 'Edge', type: 'select', options: [
+      { value: 'pixel', label: 'Crisp (one pixel, any resolution)' },
+      { value: 'fixed', label: 'Softness slider' },
+    ], hint: 'Crisp anti-aliases by exactly one pixel using fwidth, so it looks right at every resolution. Softness lets you blur the edge by a fixed amount.' },
+    antialias:   { label: 'Softness',     type: 'float', min: 0.001, max: 0.1,   step: 0.001, hint: 'How far the fill edge and the stroke fade, on both sides.', showWhen: { param: 'aaMode', value: 'fixed' } },
+    strokeAlign: { label: 'Stroke Align', type: 'select', options: [
+      { value: 'center',  label: 'Centred on the edge' },
+      { value: 'inside',  label: 'Inside the edge' },
+      { value: 'outside', label: 'Outside the edge' },
+    ], hint: 'Where the stroke sits relative to the shape\'s edge.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    const dVar = inputVars.d           || '1.0';
-    const fVar = inputVars.fillColor   || 'vec3(1.0)';
-    const sVar = inputVars.strokeColor || 'vec3(0.0)';
-    const swVar= inputVars.strokeWidth || p(node.params.strokeWidth, 0.02);
-    const aaVar= inputVars.antialias   || p(node.params.antialias, 0.005);
+    const id    = node.id;
+    const dVar  = inputVars.d           || '1.0';
+    const fVar  = inputVars.fillColor   || 'vec3(1.0)';
+    const sVar  = inputVars.strokeColor || 'vec3(0.0)';
+    const bgVar = inputVars.background  || 'vec3(0.0)';
+    const swVar = inputVars.strokeWidth || p(node.params.strokeWidth, 0.0);
+    const pixelAA = node.params.aaMode !== 'fixed' && !inputVars.antialias;
+    const aaVar = inputVars.antialias   || p(node.params.antialias, 0.005);
+    const align = typeof node.params.strokeAlign === 'string' ? node.params.strokeAlign : 'center';
+    // Signed distance to the stroke band: ≤ 0 inside the band
+    const band = align === 'inside'  ? `max(${id}_d, -${id}_d - ${id}_sw)`
+               : align === 'outside' ? `max(-${id}_d, ${id}_d - ${id}_sw)`
+               :                       `abs(${id}_d) - ${id}_sw * 0.5`;
     return {
       code: [
-        `    float ${id}_fill   = 1.0 - smoothstep(-${aaVar}, ${aaVar}, ${dVar});\n`,
-        `    float ${id}_stroke = (1.0 - smoothstep(-${aaVar}, ${aaVar}, abs(${dVar}) - ${swVar})) * (1.0 - ${id}_fill);\n`,
-        `    vec3  ${id}_result = mix(${fVar}, ${sVar}, ${id}_stroke / max(${id}_fill + ${id}_stroke, 0.001));\n`,
-        `    float ${id}_alpha  = clamp(${id}_fill + ${id}_stroke, 0.0, 1.0);\n`,
+        `    float ${id}_d  = ${dVar};\n`,
+        `    float ${id}_sw = ${swVar};\n`,
+        pixelAA ? `    float ${id}_aa = max(fwidth(${id}_d), 0.00001);\n` : `    float ${id}_aa = max(${aaVar}, 0.00001);\n`,
+        `    float ${id}_fill   = 1.0 - smoothstep(-${id}_aa, ${id}_aa, ${id}_d);\n`,
+        `    float ${id}_stroke = (1.0 - smoothstep(-${id}_aa, ${id}_aa, ${band})) * step(0.000001, ${id}_sw);\n`,
+        `    vec3  ${id}_result = mix(mix(${bgVar}, ${fVar}, ${id}_fill), ${sVar}, ${id}_stroke);\n`,
+        `    float ${id}_alpha  = max(${id}_fill, ${id}_stroke);\n`,
       ].join(''),
       outputVars: { result: `${id}_result`, alpha: `${id}_alpha` },
     };
@@ -350,7 +374,7 @@ export const Light2DNode: NodeDefinition = {
 export const SDFColorizeNode: NodeDefinition = {
   type: 'sdfColorize',
   label: 'SDF Colorize',
-  category: 'Combiners',
+  category: 'SDF', subcategory: 'Style',
   description: 'Turn a raw SDF float into a visualized color — fills inside with one color, outside with another, anti-aliased edge. Good for quickly visualizing any distance field.',
   inputs: {
     d:       { type: 'float', label: 'SDF' },

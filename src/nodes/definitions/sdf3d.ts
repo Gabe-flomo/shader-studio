@@ -901,7 +901,7 @@ const BLEND_K = {
 const kExpr = (id: string, k: string) => `    float ${id}_k = max(${k}, 1e-5);\n`;
 
 export const SDFUnionNode: NodeDefinition = {
-  type: 'sdfUnion', label: 'Union', category: 'SDF', aliases: ['min', 'smooth min', 'smooth union', 'merge'],
+  type: 'sdfUnion', label: 'Union', category: 'SDF', subcategory: 'Combine', aliases: ['min', 'smooth min', 'smooth union', 'merge'],
   description: 'Union of two SDFs (min). A blend radius above 0 gives a smooth union; Blend is the 0–1 mix factor between the shapes.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
@@ -922,7 +922,7 @@ export const SDFUnionNode: NodeDefinition = {
 };
 
 export const SDFIntersectNode: NodeDefinition = {
-  type: 'sdfIntersect', label: 'Intersect', category: 'SDF', aliases: ['max', 'smooth max', 'smooth intersect'],
+  type: 'sdfIntersect', label: 'Intersect', category: 'SDF', subcategory: 'Combine', aliases: ['max', 'smooth max', 'smooth intersect'],
   description: 'Intersection of two SDFs (max). A blend radius above 0 rounds the crease where the shapes meet.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, k: { type: 'float', label: 'Blend radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
@@ -943,7 +943,7 @@ export const SDFIntersectNode: NodeDefinition = {
 };
 
 export const SDFSubtractNode: NodeDefinition = {
-  type: 'sdfSubtract', label: 'Subtract', category: 'SDF', aliases: ['cut', 'smooth subtract', 'difference'],
+  type: 'sdfSubtract', label: 'Subtract', category: 'SDF', subcategory: 'Combine', aliases: ['cut', 'smooth subtract', 'difference'],
   description: 'Cuts B out of A (max(a, -b)). A blend radius above 0 softens the cut edge.',
   inputs: { a: { type: 'float', label: 'Shape' }, b: { type: 'float', label: 'Cutter' }, k: { type: 'float', label: 'Blend radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
@@ -966,7 +966,7 @@ export const SDFSubtractNode: NodeDefinition = {
 };
 
 export const SDFOnionNode: NodeDefinition = {
-  type: 'sdfOnion', label: 'Onion', category: 'SDF', aliases: ['shell', 'outline', 'ring'],
+  type: 'sdfOnion', label: 'Onion', category: 'SDF', subcategory: 'Modify', aliases: ['shell', 'outline', 'ring'],
   description: 'Turns a solid SDF into a shell of the given thickness (abs(d) - r).',
   inputs: { dist: { type: 'float', label: 'Distance' }, r: { type: 'float', label: 'Thickness' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },

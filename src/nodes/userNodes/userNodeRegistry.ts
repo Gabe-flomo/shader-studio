@@ -212,6 +212,10 @@ export function userNodeToDefinition(def: UserNodeDefinition): NodeDefinition {
   }
   for (const out of def.outputs) outputs[out.key] = { type: out.type, label: out.label, hint: out.hint || undefined };
   for (const prm of def.params) {
+    // Same-named socket + paramDef is the built-in convention: a slider when
+    // nothing is wired, the wire when something is — so a Time or LFO node can
+    // drive any live param of a published node.
+    inputs[prm.key] = { type: 'float', label: prm.label, hint: prm.hint || undefined };
     paramDefs[prm.key] = { label: prm.label, type: 'float', min: prm.min, max: prm.max, step: prm.step ?? 0.01, hint: prm.hint };
     defaultParams[prm.key] = prm.default;
   }
@@ -241,7 +245,7 @@ export function userNodeToDefinition(def: UserNodeDefinition): NodeDefinition {
       else if (port.slider && port.type === 'float') args.push(p(node.params[port.key], port.slider.default));
       else args.push(zeroFor(port.type));
     }
-    for (const prm of def.params) args.push(p(node.params[prm.key], prm.default));
+    for (const prm of def.params) args.push(inputVars[prm.key] || p(node.params[prm.key], prm.default));
 
     const outputVars: Record<string, string> = {};
     let code = '';

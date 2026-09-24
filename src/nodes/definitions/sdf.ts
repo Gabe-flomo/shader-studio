@@ -54,7 +54,7 @@ export const SdEllipseNode: NodeDefinition = {
 export const SdfOffsetNode: NodeDefinition = {
   type: 'sdfOffset',
   label: 'Offset',
-  category: 'SDF', aliases: ['round', 'inflate', 'erode'],
+  category: 'SDF', subcategory: 'Modify', aliases: ['round', 'inflate', 'erode'],
   description: 'Expands or shrinks a shape by offsetting the zero-crossing: sdf + amount. Negative = expand, positive = shrink. Rounds corners as a side effect.',
   inputs: {
     sdf:    { type: 'float', label: 'SDF'    },
@@ -81,7 +81,7 @@ export const SdfOffsetNode: NodeDefinition = {
 export const SdfSharpenNode: NodeDefinition = {
   type: 'sdfSharpen',
   label: 'Sharpen',
-  category: 'SDF',
+  category: 'SDF', subcategory: 'Modify',
   description: 'Steepens (>1) or flattens (<1) the distance gradient without moving the zero-crossing. Use before smoothstep for harder or softer edges.',
   inputs: { sdf: { type: 'float', label: 'SDF' } },
   outputs: { result: { type: 'float', label: 'Result' } },

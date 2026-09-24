@@ -197,25 +197,33 @@ vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
 export const LightNode: NodeDefinition = {
   type: 'light',
   label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light'],
-  description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Ring adds concentric rings; Simple is 1/d.',
+  description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Haze has a fatter tail; Bounded stops at a set radius; Ring adds concentric rings; Simple is 1/d. `Inner` lights the inside of the shape from the edge inward — add it to Glow for a neon tube. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node — it replaces the SDF Glow → Palette → Multiply chain.',
   category: 'Effects',
   inputs: {
     distance:   { type: 'float', label: 'Distance'   },
     brightness: { type: 'float', label: 'Brightness' },
+    tint:       { type: 'vec3',  label: 'Tint', hint: 'Colour of the Tinted output. Wire a Palette for a gradient, or pick a colour below.' },
   },
   outputs: {
-    glow: { type: 'float', label: 'Glow' },
+    glow:   { type: 'float', label: 'Glow' },
+    inner:  { type: 'float', label: 'Inner', hint: 'Glow inside the shape, from the edge inward (Inner falloff). Add it to Glow for a neon tube.' },
+    tinted: { type: 'vec3',  label: 'Tinted', hint: 'Glow × Tint, ready for the Output.' },
   },
-  defaultParams: { mode: 'glow', brightness: 10.0, ringFreq: 8.0 },
+  defaultParams: { mode: 'glow', brightness: 10.0, ringFreq: 8.0, tint: [1.0, 0.85, 0.6], innerFalloff: 8.0 },
   paramDefs: {
+    tint: { label: 'Tint', type: 'vec3color', hint: 'Colour of the Tinted output when nothing is wired to Tint.' },
     mode: {
       label: 'Mode', type: 'select',
       options: [
-        { value: 'glow',   label: 'Glow (exp)'   },
-        { value: 'ring',   label: 'Ring Light'    },
-        { value: 'simple', label: 'Simple (1/d)'  },
+        { value: 'glow',    label: 'Glow (exp)'   },
+        { value: 'haze',    label: 'Haze (1 / (1 + k·d²))' },
+        { value: 'bounded', label: 'Bounded (stops at 1/k)' },
+        { value: 'ring',    label: 'Ring Light'    },
+        { value: 'simple',  label: 'Simple (1/d)'  },
       ],
+      hint: 'Glow is the classic tight halo. Haze has a fatter tail and reads as fog. Bounded stops at a definite radius (1/Falloff), for a hard budget on how far light spreads.',
     },
+    innerFalloff: { label: 'Inner falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'Falloff of the Inner output: light inside the shape, measured from the edge inward. Low floods the interior (frosted glass); high hugs the rim (neon tube).' },
     brightness: { label: 'Falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'How fast the glow fades with distance. Higher is tighter and dimmer.' },
     ringFreq:   { label: 'Ring Freq',  type: 'float', min: 1.0, max: 30,  step: 0.5, showWhen: { param: 'mode', value: 'ring' } },
   },
@@ -232,17 +240,87 @@ float simpleLight(float d, float brightness) {
     const brightVar = inputVars.brightness ?? p(node.params.brightness, 10.0);
     const mode     = (node.params.mode as string) ?? 'glow';
     const ringFreq = p(node.params.ringFreq, 8.0);
+    const tintVar  = inputVars.tint ?? pv3(node.params.tint, [1.0, 0.85, 0.6]);
 
+    const innerFalloff = p(node.params.innerFalloff, 8.0);
     let code: string;
     if (mode === 'ring') {
       code = `    float ${outVar} = ringLight(${distVar}, ${brightVar}, ${ringFreq});\n`;
     } else if (mode === 'simple') {
       code = `    float ${outVar} = simpleLight(${distVar}, ${brightVar});\n`;
+    } else if (mode === 'haze') {
+      // Fatter tail than exp: reads as fog rather than a tight bloom
+      code = `    float ${outVar} = 1.0 / (1.0 + clamp(${brightVar}, 0.1, 100.0) * max(${distVar}, 0.0) * max(${distVar}, 0.0));\n`;
+    } else if (mode === 'bounded') {
+      // Stops at a definite radius of 1/falloff: a hard budget on how far light spreads
+      code = `    float ${outVar} = smoothstep(1.0 / clamp(${brightVar}, 0.1, 100.0), 0.0, max(${distVar}, 0.0));\n`;
     } else {
       // Same curve the old makeLight node emitted (unclamped distance: the inside of a shape glows > 1).
       code = `    float ${outVar} = exp(-clamp(${brightVar}, 0.1, 100.0) * ${distVar});\n`;
     }
-    return { code, outputVars: { glow: outVar } };
+    // Inner light: distance measured from the edge inward, zero outside
+    code += `    float ${outVar}_inner = exp(-clamp(${innerFalloff}, 0.1, 100.0) * max(-(${distVar}), 0.0)) * step(${distVar}, 0.0);\n`;
+    code += `    vec3 ${outVar}_tinted = ${tintVar} * ${outVar};\n`;
+    return { code, outputVars: { glow: outVar, inner: `${outVar}_inner`, tinted: `${outVar}_tinted` } };
+  },
+};
+
+/**
+ * Glow to Color — the "after the loop" half of every volumetric example:
+ * Multiply(exposure) → Tanh → Make Vec3 → Multiply(tint) as one node.
+ */
+export const GlowToColorNode: NodeDefinition = {
+  type: 'glowToColor',
+  label: 'Glow to Color',
+  category: 'Effects',
+  aliases: ['Tanh Color', 'Exposure Tint'],
+  description: 'Turns an accumulated glow (any float, often the carry out of a March Loop Group) into a colour: `tint × tanh(glow × exposure)`. Tanh keeps bright cores from blowing out to white. Replaces the Multiply → Tanh → Make Vec3 → Multiply chain.',
+  inputs: {
+    glow: { type: 'float', label: 'Glow', hint: 'Accumulated brightness, any range.' },
+    tint: { type: 'vec3',  label: 'Tint' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { exposure: 1.0, tint: [1.0, 0.6, 0.3] },
+  paramDefs: {
+    exposure: { label: 'Exposure', type: 'float', min: 0.01, max: 20.0, step: 0.01, hint: 'Multiplies the glow before the tanh. Higher saturates sooner.' },
+    tint:     { label: 'Tint', type: 'vec3color', hint: 'Colour of the glow when nothing is wired to Tint.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const glow = inputVars.glow ?? '0.0';
+    const tint = inputVars.tint ?? pv3(node.params.tint, [1.0, 0.6, 0.3]);
+    const exposure = p(node.params.exposure, 1.0);
+    return {
+      code: `    vec3 ${id}_color = ${tint} * tanh(clamp(${glow} * ${exposure}, 0.0, 40.0));\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+/**
+ * Normal to Color — Multiply(0.5) → Add(0.5) in one node, for showing normals, positions or any
+ * signed vec3 as a colour.
+ */
+export const NormalToColorNode: NodeDefinition = {
+  type: 'normalToColor',
+  label: 'Normal to Color',
+  category: 'Color',
+  aliases: ['Signed to Color', 'Vec3 to Color'],
+  description: 'Maps a signed vec3 (a normal, a position, a direction) onto colours: `v × 0.5 + 0.5`, so −1 → 0 and +1 → 1. `Abs` mode uses |v| instead. Replaces the Multiply(0.5) → Add(0.5) chain.',
+  inputs: { v: { type: 'vec3', label: 'Vector' } },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: { mode: 'remap' },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', hint: 'Remap puts −1…1 onto 0…1; Abs mirrors negative values up.', options: [
+      { value: 'remap', label: 'Remap −1…1 → 0…1' },
+      { value: 'abs',   label: 'Absolute value' },
+    ] },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const v = inputVars.v ?? 'vec3(0.0)';
+    const expr = node.params.mode === 'abs' ? `abs(${v})` : `${v} * 0.5 + 0.5`;
+    return { code: `    vec3 ${id}_color = ${expr};\n`, outputVars: { color: `${id}_color` } };
   },
 };
 
@@ -1901,6 +1979,64 @@ export const ChromaShiftNode: NodeDefinition = {
         `    vec3  ${id}_result = clamp(${id}_col + vec3(${id}_fringe, 0.0, -${id}_fringe), 0.0, 1.0);\n`,
       ].join(''),
       outputVars: { result: `${id}_result` },
+    };
+  },
+};
+
+/**
+ * CRT Mask — the RGB shadow mask, pulse and scanlines of a cathode-ray tube, applied to a colour.
+ * After Xor's GM Shaders Mini: CRT. Pair it with CRT Screen (2D Space) for the curvature and
+ * cell pixelation, which have to happen before the picture is drawn.
+ */
+export const CrtMaskNode: NodeDefinition = {
+  type: 'crtMask',
+  label: 'CRT Mask',
+  category: 'Post Processing',
+  aliases: ['Shadow Mask', 'RGB Cells', 'Retro TV'],
+  description: 'Multiplies a colour by a CRT shadow mask: staggered red/green/blue sub-cells with soft borders, a slow brightness pulse across the screen, and optional scanlines. Use with **CRT Screen** on the UV first (curvature, cell pixelation) and its Vignette output here. Add Chromatic Aberration and Bloom for the full look. After Xor\'s GM Shaders Mini: CRT.',
+  inputs: {
+    color:    { type: 'vec3',  label: 'Color' },
+    uv:       { type: 'vec2',  label: 'UV', hint: 'Screen UV, so the mask follows real pixels. Leave empty for the screen.' },
+    vignette: { type: 'float', label: 'Vignette', hint: 'Wire CRT Screen\'s Vignette; 1 when empty.' },
+  },
+  outputs: { result: { type: 'vec3', label: 'Color' }, mask: { type: 'vec3', label: 'Mask', hint: 'The RGB cell mask alone, brightness-preserving.' } },
+  defaultParams: { cellSize: 6.0, border: 0.6, stagger: 'on', pulse: 0.03, pulseWidth: 60.0, pulseRate: 20.0, scanlines: 0.0 },
+  paramDefs: {
+    cellSize:   { label: 'Cell size',  type: 'float', min: 2, max: 16, step: 0.5, hint: 'Width of one RGB cell in pixels. 6 reads as a TV up close; 3 as a fine monitor.' },
+    border:     { label: 'Cell border', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How dark the gap between sub-cells is. 0 removes the grille.' },
+    stagger:    { label: 'Stagger', type: 'select', options: [{ value: 'on', label: 'Staggered rows' }, { value: 'off', label: 'Aligned grid' }], hint: 'Offsets every other column by half a cell, as a real shadow mask does.' },
+    pulse:      { label: 'Pulse', type: 'float', min: 0, max: 0.2, step: 0.005, hint: 'Brightness ripple travelling across the screen. 0.03 is subtle; 0 is off.' },
+    pulseWidth: { label: 'Pulse width', type: 'float', min: 5, max: 300, step: 1, hint: 'Ripple wavelength in pixels.' },
+    pulseRate:  { label: 'Pulse rate', type: 'float', min: 0, max: 60, step: 0.5, hint: 'Ripple speed. Needs the clock running.' },
+    scanlines:  { label: 'Scanlines', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Darkens every other row of cells.' },
+  },
+  glslFunction: `vec3 crtMaskFn(vec2 pixel, float cellSize, float border, float stagger, float scan) {
+  vec2 coord = pixel / cellSize;
+  vec2 subcoord = coord * vec2(3.0, 1.0);
+  vec2 cellOffset = vec2(0.0, fract(floor(coord.x) * 0.5)) * stagger;
+  float ind = mod(floor(subcoord.x), 3.0);
+  vec3 mask = vec3(ind == 0.0 ? 1.0 : 0.0, ind == 1.0 ? 1.0 : 0.0, ind == 2.0 ? 1.0 : 0.0) * 3.0;
+  vec2 cellUv = fract(subcoord + cellOffset) * 2.0 - 1.0;
+  vec2 b = 1.0 - cellUv * cellUv * border;
+  mask *= b.x * b.y;
+  float row = mod(floor(coord.y + cellOffset.y), 2.0);
+  mask *= 1.0 - scan * row * 0.6;
+  return mask;
+}`,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const color = inputVars.color ?? 'vec3(0.0)';
+    const uv = inputVars.uv ?? 'g_uv';
+    const vig = inputVars.vignette ?? '1.0';
+    const stagger = node.params.stagger === 'off' ? '0.0' : '1.0';
+    return {
+      code: [
+        `    vec2 ${id}_px = (${uv} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5) * u_resolution;\n`,
+        `    vec3 ${id}_mask = crtMaskFn(${id}_px, ${p(node.params.cellSize, 6.0)}, ${p(node.params.border, 0.6)}, ${stagger}, ${p(node.params.scanlines, 0.0)});\n`,
+        `    float ${id}_pulse = 1.0 + ${p(node.params.pulse, 0.03)} * cos(${id}_px.x / ${p(node.params.pulseWidth, 60.0)} + u_time * ${p(node.params.pulseRate, 20.0)});\n`,
+        `    vec3 ${id}_result = ${color} * ${id}_mask * ${id}_pulse * ${vig};\n`,
+      ].join(''),
+      outputVars: { result: `${id}_result`, mask: `${id}_mask` },
     };
   },
 };
