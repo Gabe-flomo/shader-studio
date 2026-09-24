@@ -3,7 +3,8 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import {
-  TICK_HEIGHT, TICK_WIDTH, clampToStep, formatValue, rangeEdges, rulerTicks, rulerUnit, valueAfterDrag,
+  COUNT_MAX_MARKS, TICK_HEIGHT, TICK_WIDTH, clampToStep, countAfterDrag, formatValue, rangeEdges, rulerTicks, rulerUnit,
+  valueAfterDrag,
 } from './rulerMath';
 import { Tooltip } from './Tooltip';
 
@@ -12,6 +13,9 @@ import { Tooltip } from './Tooltip';
  * fixed centre needle. Drag to change (⇧ for ×0.1), double-click to reset, ← / → to step
  * (⇧ ×10), horizontal trackpad scroll to nudge. Vertical scroll is left alone so the canvas
  * and panels keep scrolling.
+ *
+ * `integer` params are counts, so they get a different track: one mark per item, spread evenly and
+ * squeezing together as the count grows. Dragging right adds items.
  *
  * `keyframed` greys the ruler out and stops edits: the value is animated, so the chip shows the
  * live value and hovering explains why.
@@ -42,8 +46,8 @@ export function RulerSlider({
   const fmt = useCallback((n: number) => formatValue(n, effectiveStep, integer), [effectiveStep, integer]);
 
   const trackRef = useRef<HTMLDivElement>(null);
-  const live = useRef({ value, locked, unit, min, max, step: effectiveStep, onChange });
-  useEffect(() => { live.current = { value, locked, unit, min, max, step: effectiveStep, onChange }; });
+  const live = useRef({ value, locked, unit, min, max, step: effectiveStep, integer, onChange });
+  useEffect(() => { live.current = { value, locked, unit, min, max, step: effectiveStep, integer, onChange }; });
 
   // Horizontal wheel/trackpad nudges the value. Needs a non-passive listener to preventDefault.
   useEffect(() => {
@@ -53,7 +57,8 @@ export function RulerSlider({
       const s = live.current;
       if (s.locked || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
       e.preventDefault();
-      s.onChange(clampToStep(valueAfterDrag(s.value, -e.deltaX, s.unit, e.shiftKey), s.min, s.max, s.step));
+      const next = s.integer ? countAfterDrag(s.value, e.deltaX, e.shiftKey) : valueAfterDrag(s.value, -e.deltaX, s.unit, e.shiftKey);
+      s.onChange(clampToStep(next, s.min, s.max, s.step));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -73,7 +78,9 @@ export function RulerSlider({
     const d = drag.current;
     if (!d) return;
     // Integrate per event so pressing/releasing ⇧ mid-drag changes speed without a jump.
-    d.acc = Math.min(max, Math.max(min, valueAfterDrag(d.acc, e.clientX - d.lastX, unit, e.shiftKey)));
+    const dx = e.clientX - d.lastX;
+    const moved = integer ? countAfterDrag(d.acc, dx, e.shiftKey) : valueAfterDrag(d.acc, dx, unit, e.shiftKey);
+    d.acc = Math.min(max, Math.max(min, moved));
     d.lastX = e.clientX;
     const next = clampToStep(d.acc, min, max, effectiveStep);
     if (next !== value) onChange(next);
@@ -89,9 +96,28 @@ export function RulerSlider({
     else if (e.key === 'End') { e.preventDefault(); onChange(max); }
   };
 
-  const ticks = rulerTicks(value, min, max, unit, integer);
-  const edges = rangeEdges(value, min, max, unit);
   const inkTick = locked ? tk.text.faint : tk.text.primary;
+  const ticks = integer ? [] : rulerTicks(value, min, max, unit);
+
+  // Count track: `n` marks evenly spread across the track; past COUNT_MAX_MARKS they'd be
+  // sub-pixel apart anyway, so draw a solid band instead.
+  const n = Math.max(0, Math.round(value));
+  const countMarks = (
+    <span style={{ position: 'absolute', left: 12, right: 12, top: 0, bottom: 0 }}>
+      {n > COUNT_MAX_MARKS
+        ? <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 12, marginTop: -6, borderRadius: 2, background: inkTick, opacity: 0.55 }} />
+        : Array.from({ length: n }, (_, i) => (
+          <span
+            key={i}
+            style={{
+              position: 'absolute', top: '50%', left: `${((i + 0.5) / n) * 100}%`, width: 2, height: 14, marginLeft: -1, marginTop: -7,
+              borderRadius: 1, background: inkTick, opacity: 0.75, transition: 'left 0.12s ease-out',
+            }}
+          />
+        ))}
+    </span>
+  );
+  const edges = rangeEdges(value, min, max, unit);
   const needle = locked ? tk.text.faint : tk.accent.base;
   const outShade: CSSProperties = { position: 'absolute', top: 0, bottom: 0, background: alpha(tk.text.primary, 0.05) };
   const edgeLine = `1.5px solid ${alpha(tk.text.primary, 0.25)}`;
@@ -122,6 +148,7 @@ export function RulerSlider({
       onFocus={e => { if (!locked) e.currentTarget.style.boxShadow = `inset 0 0 0 1.5px ${tk.accent.base}`; }}
       onBlur={e => { e.currentTarget.style.boxShadow = 'none'; }}
     >
+      {integer ? countMarks : <>
       {edges.lo !== null && <span style={{ ...outShade, left: 0, width: `calc(50% + ${edges.lo}px)`, borderRight: edgeLine }} />}
       {edges.hi !== null && <span style={{ ...outShade, right: 0, left: `calc(50% + ${edges.hi}px)`, borderLeft: edgeLine }} />}
       {ticks.map(t => (
@@ -135,6 +162,7 @@ export function RulerSlider({
         />
       ))}
       <span style={{ position: 'absolute', left: '50%', top: 3, bottom: 3, width: 2, marginLeft: -1, borderRadius: 1, background: needle }} />
+      </>}
     </div>
   );
 

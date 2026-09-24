@@ -37,7 +37,7 @@ const LIGHT = {
     text: '#2f5fe0',      // accent text on bg.selected
   },
   status: {
-    success: '#1f9d55',   // previewing node, saved graphs
+    success: '#177a45',   // previewing node, saved graphs (5.4:1 on white)
     warning: '#d99a1e',   // bypass, keyframes, favourites
     warningText: '#8a5d05',
     danger: '#ef4444',    // record, playhead, errors

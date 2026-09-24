@@ -68,6 +68,15 @@ export function valueAfterDrag(start: number, dx: number, unit: number, fine: bo
   return start - (dx / PX_PER_UNIT) * unit * (fine ? 0.1 : 1);
 }
 
+/** Integer (count) params: drag distance per item, and how many marks are drawn before they merge into a band. */
+export const COUNT_PX_PER_STEP = 14;
+export const COUNT_MAX_MARKS = 96;
+
+/** Count after dragging by `dx` px — right adds items. ⇧ slows it to a third. */
+export function countAfterDrag(start: number, dx: number, fine: boolean): number {
+  return start + (dx / COUNT_PX_PER_STEP) * (fine ? 1 / 3 : 1);
+}
+
 export function formatValue(v: number, step: number, integer = false): string {
   if (integer) return String(Math.round(v));
   const decimals = Math.abs(v) >= 10 ? 2 : step >= 0.1 ? 2 : 3;

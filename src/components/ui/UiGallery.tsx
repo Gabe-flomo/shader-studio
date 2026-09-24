@@ -50,6 +50,7 @@ function Column({ mode }: { mode: ThemeMode }) {
   const [radiusV, setRadius] = useState(0.3);
   const [bright, setBright] = useState(10);
   const [count, setCount] = useState(6);
+  const [iters, setIters] = useState(24);
   const [edge, setEdge] = useState(0.05);
   const [name, setName] = useState('Wobbly Disc');
   const [type, setType] = useState('vec2');
@@ -123,6 +124,7 @@ function Column({ mode }: { mode: ThemeMode }) {
             ['Radius', <RulerSlider key="r" ariaLabel="Radius" value={radiusV} min={0.01} max={2} defaultValue={0.3} onChange={setRadius} />],
             ['Brightness', <RulerSlider key="b" ariaLabel="Brightness" value={bright} min={0.1} max={100} step={0.1} defaultValue={10} onChange={setBright} />],
             ['Count', <RulerSlider key="c" ariaLabel="Count" value={count} min={1} max={12} integer defaultValue={6} onChange={setCount} />],
+            ['Iterations', <RulerSlider key="i" ariaLabel="Iterations" value={iters} min={1} max={64} integer defaultValue={24} onChange={setIters} />],
             ['Near min', <RulerSlider key="e" ariaLabel="Edge" value={edge} min={0.01} max={2} defaultValue={0.05} onChange={setEdge} />],
             ['Keyframed', <RulerSlider key="k" ariaLabel="Keyframed" value={0.41} min={0.01} max={2} onChange={() => {}} keyframed={{ summary: '4 keys · loop' }} />],
           ].map(([label, control]) => (
