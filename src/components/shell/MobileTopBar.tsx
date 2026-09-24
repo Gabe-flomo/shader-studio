@@ -50,7 +50,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
         <Icon name="presets" size={13} />
       </button>
       {page !== 'studio' && (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : 'Builder'}</span>
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : page === 'play' ? 'Play' : 'Builder'}</span>
       )}
       <span style={{ flex: 1 }} />
       <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 40, height: 40 }} />
@@ -79,6 +79,9 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
           onClose={() => setMenu(null)}
           items={[
             { label: 'Record', icon: 'record', onSelect: onRecord },
+            page === 'play'
+              ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
+              : { label: 'Play this graph', icon: 'play', onSelect: () => onPageChange('play') },
             'separator',
             { label: 'Import a graph', icon: 'import', onSelect: async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); } },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },

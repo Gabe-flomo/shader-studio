@@ -5,6 +5,8 @@ import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry } from '../lib
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
 import { inputBus } from '../lib/inputBus';
+import { playEngine } from '../lib/playEngine';
+import { readBaseValues } from '../play/playControls';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
@@ -376,6 +378,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Every store write is a user action (Phase 1 removed the idle ones), so
     // any of them may have changed what the canvas should show.
     const unsubRender = useNodeGraphStore.subscribe(() => requestRender());
+    // An input arriving while the loop sleeps (MIDI, a Play key or the pointer) draws a frame.
+    const unsubWake = inputBus.onWake(requestRender);
     // Hidden container (another page is showing) → treat like a hidden tab.
     const io = typeof IntersectionObserver !== 'undefined'
       ? new IntersectionObserver(entries => {
@@ -838,12 +842,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const u = material.uniforms[uName];
         if (u) u.value = amp;
       }
-      // ── Input bus tick: MIDI (and later mouse/keyboard/envelope) float uniforms ──
+      // ── Input bus tick: MIDI node outputs and Play mappings (float or [r,g,b]) ──
       const liveValues = inputBus.tick(dt, elapsed);
       for (const [uName, v] of liveValues) {
         const u = material.uniforms[uName];
         if (u) u.value = v;
       }
+      // A knob turned while the clock is paused still has to show.
+      if (inputBus.changed()) needsRender = true;
       // Draw live spectrum into any open AudioInputModal canvases
       for (const audioId of audioIdsRef.current) {
         if (!audioSpectrumRegistry.has(audioId)) continue;
@@ -1414,6 +1420,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       cancelAnimationFrame(animFrameRef.current);
       loopRunning = false;
       unsubRender();
+      unsubWake();
       io?.disconnect();
       ro.disconnect();
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
@@ -1483,14 +1490,28 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // This fires on *every* store write, including the ~10 Hz frame-loop
     // writes above, so rebuilding the node Map/Set is gated on the `nodes`
     // reference actually changing.
-    let lastLive = useNodeGraphStore.getState().liveUniforms;
+    const init = useNodeGraphStore.getState();
+    let lastLive = init.liveUniforms;
+    let lastBindings = init.paramBindings;
+    let lastPlay = init.play;
+    let lastPlayNodes = init.nodes;
     inputBus.setBindings(lastLive);
+    inputBus.setParamBindings(lastBindings);
+    playEngine.setRecord(lastPlay);
+    playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
     const unsub = useNodeGraphStore.subscribe(state => {
       selectedNodeIdRef.current   = state.selectedNodeId;
       previewNodeIdRef.current    = state.previewNodeId;
       nodeOutputVarMapRef.current = state.nodeOutputVarMap;
       if (state.nodes !== nodesRef.current) syncNodes(state.nodes);
       if (state.liveUniforms !== lastLive) { lastLive = state.liveUniforms; inputBus.setBindings(lastLive); }
+      if (state.paramBindings !== lastBindings) { lastBindings = state.paramBindings; inputBus.setParamBindings(lastBindings); }
+      // Play mappings: the record itself, and the sliders' values the engine falls back to.
+      if (state.play !== lastPlay) { lastPlay = state.play; playEngine.setRecord(lastPlay); }
+      if (state.play !== lastPlay || state.nodes !== lastPlayNodes) {
+        lastPlayNodes = state.nodes;
+        if (lastPlay.controls.length > 0) playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
+      }
     });
     // Initialize immediately
     const s = useNodeGraphStore.getState();

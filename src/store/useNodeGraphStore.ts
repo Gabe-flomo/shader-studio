@@ -6,6 +6,7 @@ import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyL
 import { askText } from '../components/ui/dialogStore';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
+import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -296,6 +297,14 @@ interface NodeGraphState {
   paramBindings: Record<string, string>;
   /** Push param uniform value changes to ShaderCanvas without triggering a recompile. */
   updateParamUniforms: (updates: Record<string, number | number[]>) => void;
+
+  /**
+   * The graph's Play instrument: exposed controls and input mappings (see
+   * types/play.ts). Saved with the graph under `play`. Not part of undo — Play
+   * never edits the graph, and its edits are cheap to redo by hand.
+   */
+  play: PlayRecord;
+  setPlay: (next: PlayRecord | ((play: PlayRecord) => PlayRecord)) => void;
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
@@ -1136,6 +1145,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   particleSystems: [],
   paramUniforms: {},
   paramBindings: {},
+  play: emptyPlayRecord(),
   glslErrors: [],
   glslErrorSource: null,
   glContextLost: false,
@@ -4063,6 +4073,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(state => ({ paramUniforms: { ...state.paramUniforms, ...updates } }));
   },
 
+  setPlay: (next) => set(state => {
+    const play = typeof next === 'function' ? next(state.play) : next;
+    return play === state.play ? state : { play };
+  }),
+
   autoLayout: () => {
     const state = get();
     const { nodes } = state;
@@ -4156,7 +4171,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Example graphs don't carry their own loose groups yet — reset rather
     // than leave a previous graph's groups referencing node ids that don't
     // exist in this one.
-    set({ nodes, looseGroups: [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    set({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
   },
 
@@ -4221,8 +4236,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: async (name) => {
-    const { nodes, looseGroups } = get();
-    const payload = JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION, savedAt: Date.now() });
+    const { nodes, looseGroups, play } = get();
+    // `play` is left out when empty so graphs without an instrument look as they always did.
+    const playField = isPlayRecordEmpty(play) ? {} : { play };
+    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now() });
     // localStorage is the primary store; a quota failure here means nothing
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
@@ -4232,7 +4249,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (dir) {
       const path = `${dir}/${labelToSlug(name || 'graph')}.json`;
       try {
-        await writeTextFileAtPath(path, JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION }, null, 2));
+        await writeTextFileAtPath(path, JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION }, null, 2));
       } catch (e) {
         console.error('[saveGraph] disk write failed', path, e);
         return { ok: false, error: `Graph "${name}" was saved in the browser, but writing ${path} failed: ${errorMessage(e)}` };
@@ -4262,10 +4279,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // undo history / live graph once the saved data is known to be usable.
     let nodes: GraphNode[];
     let looseGroups: unknown;
+    let play: PlayRecord;
     try {
-      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown; layout?: unknown };
+      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown; play?: unknown; layout?: unknown };
       if (!Array.isArray(parsed?.nodes)) throw new Error('missing "nodes" array');
       looseGroups = parsed.looseGroups;
+      play = parsePlayRecord(parsed.play);
       // Strip in-memory audio state — audio buffers are not persisted, so
       // _isPlaying / _hasFile would crash the audio engine on load.
       const sanitized = (parsed.nodes as GraphNode[]).map(n => {
@@ -4284,7 +4303,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     idGenerator.syncFromGraph(nodes);
     // Reset group navigation so a saved graph that was captured inside a
     // subgraph doesn't leave the editor stranded in a non-existent group.
-    set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
     return { ok: true };
   },
@@ -4295,8 +4314,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportGraph: async () => {
-    const { nodes, looseGroups } = get();
-    const json = JSON.stringify({ nodes, looseGroups, layout: LAYOUT_VERSION }, null, 2);
+    const { nodes, looseGroups, play } = get();
+    const json = JSON.stringify({ nodes, looseGroups, ...(isPlayRecordEmpty(play) ? {} : { play }), layout: LAYOUT_VERSION }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'shader-graph';
     if (!isTauri) {
@@ -4314,11 +4333,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // leave the current graph and its undo history exactly as they were.
     let nodes: GraphNode[];
     let looseGroups: unknown;
+    let play: PlayRecord;
     try {
-      const parsed = JSON.parse(json) as { nodes?: unknown; looseGroups?: unknown; layout?: unknown } | null;
+      const parsed = JSON.parse(json) as { nodes?: unknown; looseGroups?: unknown; play?: unknown; layout?: unknown } | null;
       if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
       if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Shader Studio graph file?');
       looseGroups = parsed.looseGroups;
+      play = parsePlayRecord(parsed.play);
       nodes = upgradeExprNodes(resolveNodeAliases(parsed.nodes as GraphNode[], getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
@@ -4327,7 +4348,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     undoManager.clear();
     idGenerator.syncFromGraph(nodes);
-    set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
     return { ok: true };
   },

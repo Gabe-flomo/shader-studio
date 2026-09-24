@@ -14,7 +14,7 @@
  * exponential filter (time constant = the node's `smooth_ms`).
  */
 
-import type { InputSource, InputWriter } from './inputBus';
+import { inputBus, type InputSource, type InputWriter } from './inputBus';
 import { midiCcList, midiCcKey, liveChannelKey } from './midiOutputs';
 
 // ─── Message model ────────────────────────────────────────────────────────────
@@ -38,6 +38,11 @@ class ChannelState {
   held = new Set<number>();
   bend = 0;           // -1..1
   cc = new Float32Array(128); // 0..127 raw
+  // "Has this ever been received?" — a Play mapping only takes a param over
+  // once its knob has actually moved, so an untouched CC doesn't pin a slider.
+  seenNote = false;
+  seenBend = false;
+  seenCc = new Uint8Array(128);
 }
 
 interface NodeState {
@@ -190,25 +195,29 @@ class MidiEngine implements InputSource {
           ch.lastNote = e.note;
           ch.lastVelocity = e.velocity;
           ch.held.add(e.note);
+          ch.seenNote = true;
           break;
         case 'noteOff':
           ch.held.delete(e.note);
           break;
         case 'cc':
           ch.cc[e.cc & 127] = e.value;
+          ch.seenCc[e.cc & 127] = 1;
           break;
         case 'bend':
           ch.bend = e.value;
+          ch.seenBend = true;
           break;
       }
     }
+    inputBus.wake();
     this.emit(e);
   }
 
   /** Current raw state for a channel (0 = omni). Read by UI, not per frame. */
-  channelState(channel: number): { lastNote: number; lastVelocity: number; heldCount: number; bend: number; cc: Float32Array } {
+  channelState(channel: number): { lastNote: number; lastVelocity: number; heldCount: number; bend: number; cc: Float32Array; seenNote: boolean; seenBend: boolean; seenCc: Uint8Array } {
     const ch = this.channels[Math.max(0, Math.min(16, channel))];
-    return { lastNote: ch.lastNote, lastVelocity: ch.lastVelocity, heldCount: ch.held.size, bend: ch.bend, cc: ch.cc };
+    return { lastNote: ch.lastNote, lastVelocity: ch.lastVelocity, heldCount: ch.held.size, bend: ch.bend, cc: ch.cc, seenNote: ch.seenNote, seenBend: ch.seenBend, seenCc: ch.seenCc };
   }
 
   // ── Per-frame output (InputSource) ───────────────────────────────────────
@@ -306,3 +315,6 @@ class MidiEngine implements InputSource {
 }
 
 export const midiEngine = new MidiEngine();
+// The engine is a bus source for as long as the app runs; the bus only ticks
+// it while a compiled shader binds a MIDI uniform.
+inputBus.addSource(midiEngine);

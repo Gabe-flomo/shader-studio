@@ -4,7 +4,7 @@ import type { InputWriter } from '../inputBus';
 
 function collect(dt = 1 / 60): Map<string, number> {
   const out = new Map<string, number>();
-  const write: InputWriter = (k, v) => { out.set(k, v); };
+  const write: InputWriter = (k, v) => { if (typeof v === 'number') out.set(k, v); };
   midiEngine.tickInputs(dt, 0, write);
   return out;
 }

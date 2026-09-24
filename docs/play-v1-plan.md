@@ -4,6 +4,15 @@
 
 ---
 
+## Where it stands
+
+- **Step 1, the input bus: done.** It also carries Play's param writes now (`param:nodeId::key`, resolved through the compiler's binding map), tells the render loop when a value actually moved, and wakes a sleeping loop when an input arrives.
+- **Step 2, the MIDI Input node: done.** Web MIDI plus the QWERTY stand-in. The Tauri/macOS bridge (`midir`) is still to do.
+- **Step 3, the Play page: done** (`src/components/play/PlayPage.tsx`, `src/lib/playEngine.ts`, `src/play/`). Controls from the candidate list (floats and colours), a mappings drawer with range, curve, smoothing and colour channel, Learn for MIDI and keys, mouse and key sources. Saved under the graph's `play` key. Bool toggles are not offered: a `bool` param bakes into the shader, so it can't be a live control.
+- **Steps 4 and 5: not started.**
+
+---
+
 ## The one-sentence version
 
 **Studio is where you build the instrument. Play is where you perform it.**

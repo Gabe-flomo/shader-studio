@@ -1,0 +1,323 @@
+/**
+ * playEngine.ts — turns the graph's Play record (controls + mappings) into
+ * per-frame uniform writes on the input bus. No React, no store.
+ *
+ *   source (MIDI / mouse / key)  →  range → curve → smoothing  →  control's uniform
+ *
+ * A control is a float or colour param the compiler made a live uniform. The
+ * engine writes it by `param:${nodeId}::${paramKey}` and the bus translates
+ * that through the compiler's binding map, so nothing here knows a slug.
+ *
+ * The store's param value is the control's *base*: what the picture shows
+ * when no mapping drives it, and (for colours) the channels a mapping leaves
+ * alone. When a control stops being driven the base is written once more, so
+ * the picture snaps back to what the slider says.
+ *
+ * Mouse and keyboard sources only listen while the Play page is showing
+ * (`setPerforming`), so they never fight the Studio's own shortcuts. MIDI
+ * mappings are live everywhere.
+ */
+
+import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
+import { midiEngine, type MidiEvent } from './midiEngine';
+import type { PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
+import { emptyPlayRecord } from '../types/play';
+
+export type ControlValue = number | number[];
+
+/** `nodeId::paramKey`: the last two segments of a control's target path. */
+export function bindingKeyOf(target: string): string {
+  const parts = target.split('::');
+  return parts.slice(-2).join('::');
+}
+
+/** Source unit value → 0..1 shaped by the curve. */
+export function applyCurve(u: number, curve: PlayCurve): number {
+  const x = u < 0 ? 0 : u > 1 ? 1 : u;
+  switch (curve) {
+    case 'exp': return x * x;
+    case 'log': return Math.sqrt(x);
+    default: return x;
+  }
+}
+
+/** Range + curve: the value a mapping produces for a unit source reading, before smoothing. */
+export function mapValue(u: number, m: Pick<PlayMapping, 'outMin' | 'outMax' | 'curve'>): number {
+  return m.outMin + (m.outMax - m.outMin) * applyCurve(u, m.curve);
+}
+
+function isTypingTarget(el: EventTarget | null): boolean {
+  const node = el as HTMLElement | null;
+  const tag = node?.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!node?.isContentEditable;
+}
+
+interface MappingState {
+  /** Smoothed output, in param units. */
+  value: number | undefined;
+}
+
+class PlayEngine implements InputSource {
+  private record: PlayRecord = emptyPlayRecord();
+  private controls = new Map<string, PlayControl>();
+  private state = new Map<string, MappingState>();
+  /** Store param value per control id (what the slider says). */
+  private base = new Map<string, ControlValue>();
+  /** Last written value per control id, for the panel's live readout. */
+  private live = new Map<string, ControlValue>();
+  /** Colour buffers written each frame; owned here and mutated in place (no allocation per frame). */
+  private colour = new Map<string, number[]>();
+  /** Controls that were driven last frame; a control that drops out gets its base written once. */
+  private drivenLastFrame = new Set<string>();
+  private restoreOnce = new Set<string>();
+
+  // Mouse + keyboard sources (Play page only)
+  private performing = false;
+  private mouseIsBound = false;
+  private mouseX = 0.5;
+  private mouseY = 0.5;
+  private mouseDown = 0;
+  private keysHeld = new Set<string>();
+  private learnCb: ((source: PlaySource) => void) | null = null;
+  private learnOffMidi: (() => void) | null = null;
+
+  private onPointerMove = (e: PointerEvent) => {
+    if (typeof window === 'undefined') return;
+    const w = window.innerWidth || 1;
+    const h = window.innerHeight || 1;
+    this.mouseX = Math.max(0, Math.min(1, e.clientX / w));
+    this.mouseY = Math.max(0, Math.min(1, 1 - e.clientY / h));
+    if (this.mouseIsBound) inputBus.wake();
+  };
+  private onPointerDown = () => { this.mouseDown = 1; if (this.mouseIsBound) inputBus.wake(); };
+  private onPointerUp = () => { this.mouseDown = 0; if (this.mouseIsBound) inputBus.wake(); };
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+    if (this.learnCb) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) this.finishLearn({ kind: 'key', code: e.code });
+      return;
+    }
+    if (!this.keyIsBound(e.code)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.keysHeld.add(e.code);
+    inputBus.wake();
+  };
+  private onKeyUp = (e: KeyboardEvent) => {
+    if (!this.keysHeld.delete(e.code)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    inputBus.wake();
+  };
+  private onBlur = () => { this.keysHeld.clear(); this.mouseDown = 0; };
+
+  // ── Configuration (from the store, via ShaderCanvas) ──────────────────────
+
+  setRecord(record: PlayRecord): void {
+    this.record = record;
+    this.controls.clear();
+    for (const c of record.controls) this.controls.set(c.id, c);
+    this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
+    // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
+    inputBus.wake();
+    // Drop state for mappings that are gone; keep the rest so a re-label doesn't jump.
+    const ids = new Set(record.mappings.map(m => m.id));
+    for (const id of [...this.state.keys()]) if (!ids.has(id)) this.state.delete(id);
+    for (const id of [...this.colour.keys()]) if (!this.controls.has(id)) this.colour.delete(id);
+    for (const id of [...this.live.keys()]) if (!this.controls.has(id)) this.live.delete(id);
+  }
+
+  /** Current store values of the controls' params, keyed by control id. */
+  setBaseValues(values: Map<string, ControlValue>): void {
+    this.base = values;
+  }
+
+  getRecord(): PlayRecord {
+    return this.record;
+  }
+
+  // ── Queries for the panel ─────────────────────────────────────────────────
+
+  /** Does an enabled mapping drive this control right now? */
+  isDriven(controlId: string): boolean {
+    for (const m of this.record.mappings) if (m.enabled && m.controlId === controlId) return true;
+    return false;
+  }
+
+  /** The value written last frame (undefined when the control isn't driven). */
+  liveValue(controlId: string): ControlValue | undefined {
+    return this.live.get(controlId);
+  }
+
+  /**
+   * Raw unit reading of a source right now, or null while the source has never
+   * produced one (a knob nobody has touched yet): such a mapping leaves its
+   * control alone, so opening Play doesn't pin every mapped slider to its range
+   * minimum before the performer touches anything.
+   */
+  readSource(source: PlaySource): number | null {
+    switch (source.kind) {
+      case 'midi': {
+        const ch = midiEngine.channelState(source.channel);
+        switch (source.signal) {
+          case 'note': return ch.seenNote ? ch.lastNote / 127 : null;
+          case 'velocity': return ch.seenNote ? ch.lastVelocity / 127 : null;
+          case 'gate': return ch.seenNote ? (ch.heldCount > 0 ? 1 : 0) : null;
+          case 'bend': return ch.seenBend ? (ch.bend + 1) / 2 : null;
+          case 'cc': { const n = (source.cc ?? 1) & 127; return ch.seenCc[n] ? ch.cc[n] / 127 : null; }
+        }
+        return null;
+      }
+      case 'mouse':
+        return source.axis === 'x' ? this.mouseX : source.axis === 'y' ? this.mouseY : this.mouseDown;
+      case 'key':
+        return this.keysHeld.has(source.code) ? 1 : 0;
+    }
+  }
+
+  // ── Per-frame output (InputSource) ────────────────────────────────────────
+
+  tickInputs(dt: number, _time: number, write: InputWriter): void {
+    const driven = new Set<string>();
+    // Colour controls start each frame from their base so an un-mapped channel keeps the slider's value.
+    for (const m of this.record.mappings) {
+      if (!m.enabled) continue;
+      const control = this.controls.get(m.controlId);
+      if (!control) continue;
+      const reading = this.readSource(m.source);
+      if (reading === null) continue;
+      const target = mapValue(reading, m);
+      let st = this.state.get(m.id);
+      if (!st) { st = { value: undefined }; this.state.set(m.id, st); }
+      let v: number;
+      if (m.smoothMs <= 0 || st.value === undefined) {
+        v = target;
+      } else {
+        const alpha = 1 - Math.exp(-(dt * 1000) / m.smoothMs);
+        v = st.value + (target - st.value) * alpha;
+        // Settle exactly so a held knob stops producing sub-epsilon churn.
+        if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target;
+      }
+      st.value = v;
+      const key = paramChannelKey(bindingKeyOf(control.target));
+      if (control.kind === 'color') {
+        const buf = this.colourBuffer(control.id, driven.has(control.id));
+        if (m.channel === undefined) {
+          // Brightness: scale the base colour.
+          const base = this.baseColour(control.id);
+          buf[0] = base[0] * v; buf[1] = base[1] * v; buf[2] = base[2] * v;
+        } else {
+          buf[m.channel] = v;
+        }
+        write(key, buf);
+        this.live.set(control.id, buf);
+      } else {
+        write(key, v);
+        this.live.set(control.id, v);
+      }
+      driven.add(control.id);
+    }
+    // A control that was driven last frame and isn't now: put the slider's value back once.
+    for (const id of this.drivenLastFrame) if (!driven.has(id)) this.restoreOnce.add(id);
+    for (const id of this.restoreOnce) {
+      if (driven.has(id)) continue;
+      const control = this.controls.get(id);
+      const base = this.base.get(id);
+      if (control && base !== undefined) {
+        write(paramChannelKey(bindingKeyOf(control.target)), Array.isArray(base) ? [...base] : base);
+      }
+      this.live.delete(id);
+    }
+    this.restoreOnce.clear();
+    this.drivenLastFrame = driven;
+  }
+
+  private baseColour(controlId: string): number[] {
+    const b = this.base.get(controlId);
+    return Array.isArray(b) && b.length >= 3 ? b : ZERO3;
+  }
+
+  private colourBuffer(controlId: string, alreadyTouchedThisFrame: boolean): number[] {
+    let buf = this.colour.get(controlId);
+    if (!buf) { buf = [0, 0, 0]; this.colour.set(controlId, buf); }
+    if (!alreadyTouchedThisFrame) {
+      const base = this.baseColour(controlId);
+      buf[0] = base[0]; buf[1] = base[1]; buf[2] = base[2];
+    }
+    return buf;
+  }
+
+  // ── Mouse + keyboard backends ─────────────────────────────────────────────
+
+  /** The Play page is showing: listen to the pointer and the keyboard. */
+  setPerforming(on: boolean): void {
+    if (on === this.performing || typeof window === 'undefined') return;
+    this.performing = on;
+    if (on) {
+      window.addEventListener('pointermove', this.onPointerMove);
+      window.addEventListener('pointerdown', this.onPointerDown);
+      window.addEventListener('pointerup', this.onPointerUp);
+      window.addEventListener('keydown', this.onKeyDown, true);
+      window.addEventListener('keyup', this.onKeyUp, true);
+      window.addEventListener('blur', this.onBlur);
+    } else {
+      window.removeEventListener('pointermove', this.onPointerMove);
+      window.removeEventListener('pointerdown', this.onPointerDown);
+      window.removeEventListener('pointerup', this.onPointerUp);
+      window.removeEventListener('keydown', this.onKeyDown, true);
+      window.removeEventListener('keyup', this.onKeyUp, true);
+      window.removeEventListener('blur', this.onBlur);
+      this.onBlur();
+      this.cancelLearn();
+    }
+  }
+
+  private keyIsBound(code: string): boolean {
+    for (const m of this.record.mappings) if (m.enabled && m.source.kind === 'key' && m.source.code === code) return true;
+    return false;
+  }
+
+  // ── Learn ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Wait for the next MIDI message or key press and hand it back as a source.
+   * A note → its velocity, a knob → that CC, the wheel → pitch bend. Returns a
+   * cancel function; only one learn runs at a time.
+   */
+  startLearn(cb: (source: PlaySource) => void): () => void {
+    this.cancelLearn();
+    this.learnCb = cb;
+    this.learnOffMidi = midiEngine.subscribe((e: MidiEvent) => {
+      switch (e.kind) {
+        case 'noteOn': this.finishLearn({ kind: 'midi', signal: 'velocity', channel: e.channel }); break;
+        case 'cc': this.finishLearn({ kind: 'midi', signal: 'cc', channel: e.channel, cc: e.cc }); break;
+        case 'bend': this.finishLearn({ kind: 'midi', signal: 'bend', channel: e.channel }); break;
+        default: break;
+      }
+    });
+    return () => this.cancelLearn();
+  }
+
+  isLearning(): boolean {
+    return this.learnCb !== null;
+  }
+
+  cancelLearn(): void {
+    this.learnOffMidi?.();
+    this.learnOffMidi = null;
+    this.learnCb = null;
+  }
+
+  private finishLearn(source: PlaySource): void {
+    const cb = this.learnCb;
+    this.cancelLearn();
+    cb?.(source);
+  }
+}
+
+const ZERO3 = [0, 0, 0];
+
+export const playEngine = new PlayEngine();
+inputBus.addSource(playEngine);

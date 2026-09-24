@@ -1,0 +1,184 @@
+/**
+ * play.ts — the per-graph "instrument" record (docs/play-v1-plan.md, step 3).
+ *
+ * Play never edits the graph. It only turns knobs: every control here points
+ * at a float or colour param that the compiler already turns into a live
+ * uniform, and every mapping is `source → range/curve/smoothing → control`.
+ *
+ * Stored under the graph file's top-level `play` key. Save, load, export and
+ * import carry it verbatim; `parsePlayRecord` is the one gate that turns
+ * unknown JSON back into a well-formed record.
+ */
+
+// ── Controls (the panel) ────────────────────────────────────────────────────
+
+export type PlayControlKind = 'float' | 'color';
+
+export interface PlayControl {
+  /** Stable id mappings point at (a control keeps its mappings when re-labelled). */
+  id: string;
+  /**
+   * Which param: `nodeId::paramKey` for a top-level node, or
+   * `groupId::innerNodeId::paramKey` for a slider one level inside a group —
+   * the same path the publish dialog's candidate list uses.
+   */
+  target: string;
+  kind: PlayControlKind;
+  /** Author-chosen label; defaults to "Node · Param" when added. */
+  label: string;
+  /** Slider range shown in the panel (floats only). */
+  min: number;
+  max: number;
+  step?: number;
+}
+
+// ── Sources (what drives a control) ─────────────────────────────────────────
+
+export type MidiSignal = 'note' | 'velocity' | 'gate' | 'bend' | 'cc';
+
+export type PlaySource =
+  /** A MIDI stream: `channel` 0 = all, `cc` only for the `cc` signal. Outputs 0..1 (bend −1..1). */
+  | { kind: 'midi'; signal: MidiSignal; channel: number; cc?: number }
+  /** Pointer position over the window (0..1, `y` up) or 1 while a button is held. Active on the Play page. */
+  | { kind: 'mouse'; axis: 'x' | 'y' | 'down' }
+  /** 1 while a keyboard key (KeyboardEvent.code) is held. Active on the Play page. */
+  | { kind: 'key'; code: string };
+
+export type PlayCurve = 'linear' | 'exp' | 'log';
+
+export interface PlayMapping {
+  id: string;
+  controlId: string;
+  source: PlaySource;
+  /** Output range in param units: source 0 → `outMin`, source 1 → `outMax`. Can be inverted. */
+  outMin: number;
+  outMax: number;
+  curve: PlayCurve;
+  /** Exponential smoothing time constant in ms (0 = snap). */
+  smoothMs: number;
+  /** Colour controls only: which channel the mapping writes (all three when unset). */
+  channel?: 0 | 1 | 2;
+  enabled: boolean;
+}
+
+export interface PlayRecord {
+  version: 1;
+  controls: PlayControl[];
+  mappings: PlayMapping[];
+}
+
+export const PLAY_VERSION = 1 as const;
+
+export function emptyPlayRecord(): PlayRecord {
+  return { version: PLAY_VERSION, controls: [], mappings: [] };
+}
+
+// ── Parsing ─────────────────────────────────────────────────────────────────
+
+const CURVES: ReadonlySet<string> = new Set<PlayCurve>(['linear', 'exp', 'log']);
+const MIDI_SIGNALS: ReadonlySet<string> = new Set<MidiSignal>(['note', 'velocity', 'gate', 'bend', 'cc']);
+
+function num(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
+function str(v: unknown): string | null {
+  return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+function parseSource(raw: unknown): PlaySource | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const s = raw as Record<string, unknown>;
+  switch (s.kind) {
+    case 'midi': {
+      const signal = str(s.signal);
+      if (!signal || !MIDI_SIGNALS.has(signal)) return null;
+      const channel = Math.max(0, Math.min(16, Math.round(num(s.channel, 0))));
+      const out: PlaySource = { kind: 'midi', signal: signal as MidiSignal, channel };
+      if (signal === 'cc') out.cc = Math.max(0, Math.min(127, Math.round(num(s.cc, 1))));
+      return out;
+    }
+    case 'mouse': {
+      const axis = s.axis;
+      return axis === 'x' || axis === 'y' || axis === 'down' ? { kind: 'mouse', axis } : null;
+    }
+    case 'key': {
+      const code = str(s.code);
+      return code ? { kind: 'key', code } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+function parseControl(raw: unknown): PlayControl | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const c = raw as Record<string, unknown>;
+  const id = str(c.id);
+  const target = str(c.target);
+  if (!id || !target || !target.includes('::')) return null;
+  const kind: PlayControlKind = c.kind === 'color' ? 'color' : 'float';
+  const min = num(c.min, 0);
+  const max = num(c.max, 1);
+  const out: PlayControl = {
+    id, target, kind,
+    label: str(c.label) ?? target,
+    min: Math.min(min, max),
+    max: Math.max(min, max),
+  };
+  if (typeof c.step === 'number' && c.step > 0) out.step = c.step;
+  return out;
+}
+
+function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const m = raw as Record<string, unknown>;
+  const id = str(m.id);
+  const controlId = str(m.controlId);
+  const source = parseSource(m.source);
+  if (!id || !controlId || !source || !controlIds.has(controlId)) return null;
+  const curve = str(m.curve);
+  const out: PlayMapping = {
+    id, controlId, source,
+    outMin: num(m.outMin, 0),
+    outMax: num(m.outMax, 1),
+    curve: curve && CURVES.has(curve) ? (curve as PlayCurve) : 'linear',
+    smoothMs: Math.max(0, num(m.smoothMs, 0)),
+    enabled: m.enabled !== false,
+  };
+  if (m.channel === 0 || m.channel === 1 || m.channel === 2) out.channel = m.channel;
+  return out;
+}
+
+/**
+ * Turn whatever a graph file holds under `play` into a record. Anything
+ * malformed is dropped (a control without a target, a mapping whose control is
+ * gone) rather than failing the whole load; a missing key is an empty record.
+ */
+export function parsePlayRecord(raw: unknown): PlayRecord {
+  const empty = emptyPlayRecord();
+  if (!raw || typeof raw !== 'object') return empty;
+  const r = raw as Record<string, unknown>;
+  const controls: PlayControl[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(r.controls)) {
+    for (const c of r.controls) {
+      const parsed = parseControl(c);
+      if (parsed && !seen.has(parsed.id)) { seen.add(parsed.id); controls.push(parsed); }
+    }
+  }
+  const mappings: PlayMapping[] = [];
+  const seenM = new Set<string>();
+  if (Array.isArray(r.mappings)) {
+    for (const m of r.mappings) {
+      const parsed = parseMapping(m, seen);
+      if (parsed && !seenM.has(parsed.id)) { seenM.add(parsed.id); mappings.push(parsed); }
+    }
+  }
+  return { version: PLAY_VERSION, controls, mappings };
+}
+
+/** True when there is nothing to save (the key is then left out of the file). */
+export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
+  return !play || (play.controls.length === 0 && play.mappings.length === 0);
+}

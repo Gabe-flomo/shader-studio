@@ -33,6 +33,7 @@ import type { ExportModal as ExportModalT } from './components/ExportModal';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
 import type { GLSLPage as GLSLPageT } from './components/GLSLPage';
+import type { PlayPage as PlayPageT } from './components/play/PlayPage';
 import type { FunctionBuilder as FunctionBuilderT } from './components/FunctionBuilder/FunctionBuilder';
 import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay as MobileNodeGraphOverlayT } from './components/NodeGraph/MobileGraphBrowser';
 import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
@@ -47,6 +48,7 @@ const ExportModal            = lazyWithSuspense<PropsOf<typeof ExportModalT>>(()
 const KeyboardShortcutsModal = lazyWithSuspense<PropsOf<typeof KeyboardShortcutsModalT>>(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
 const ShortcutsPage          = lazyWithSuspense<PropsOf<typeof ShortcutsPageT>>(() => import('./components/ShortcutsPage').then(m => ({ default: m.ShortcutsPage })));
 const GLSLPage               = lazyWithSuspense<PropsOf<typeof GLSLPageT>>(() => import('./components/GLSLPage').then(m => ({ default: m.GLSLPage })));
+const PlayPage               = lazyWithSuspense<PropsOf<typeof PlayPageT>>(() => import('./components/play/PlayPage').then(m => ({ default: m.PlayPage })));
 const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>>(() => import('./components/FunctionBuilder/FunctionBuilder').then(m => ({ default: m.FunctionBuilder })));
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
 const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
@@ -914,6 +916,29 @@ function App() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // MOBILE PLAY PAGE — the picture on top, the control panel under it
+  // ══════════════════════════════════════════════════════════════════════════
+
+  if (mobile && page === 'play') {
+    return (
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        <ThemeOverrideContext.Provider value="dark">
+          <div style={{ position: 'relative', height: `${mobileCanvasVh}vh`, flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', width: `min(100vw, ${mobileCanvasVh}vh)`, height: '100%' }}>
+              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+            </div>
+          </div>
+        </ThemeOverrideContext.Provider>
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <PlayPage compact />
+        </div>
+        {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // MOBILE LEARN PAGE
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -947,10 +972,10 @@ function App() {
         {page === 'shortcuts' && <ShortcutsPage />}
         {page === 'glsl' && <GLSLPage />}
 
-        <div style={{ display: page === 'studio' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: (page === 'studio' || page === 'play') ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
 
-          {/* Collapsible palette — icon strip when collapsed, 200px when expanded */}
-          <div style={{
+          {/* Collapsible palette — icon strip when collapsed, 200px when expanded. Not on Play. */}
+          {page === 'studio' && <div style={{
             width: paletteExpanded ? '200px' : '36px',
             flexShrink: 0,
             background: tc.base,
@@ -980,10 +1005,17 @@ function App() {
                 <NodePalette mode="drawer" onNodeAdded={() => setPaletteExpanded(false)} />
               </div>
             )}
-          </div>
+          </div>}
+
+          {/* Play: the control panel takes the graph's place, the picture gets the rest */}
+          {page === 'play' && (
+            <div style={{ width: 340, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
+              <PlayPage />
+            </div>
+          )}
 
           {/* Center: Node Graph */}
-          <div style={{ flex: 1, position: 'relative', minWidth: 0, userSelect: isDragging ? 'none' : undefined }}>
+          {page === 'studio' && <div style={{ flex: 1, position: 'relative', minWidth: 0, userSelect: isDragging ? 'none' : undefined }}>
 
             {/* Code toggle */}
             <button onClick={() => setShowCode(v => !v)} style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(tc, showCode) }}>
@@ -998,17 +1030,17 @@ function App() {
             <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
               <TimeControlsStrip direction="column" />
             </div>
-          </div>
+          </div>}
 
           {/* Divider — wider touch target for tablet */}
-          <div
+          {page === 'studio' && <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
             style={{ width: '8px', flexShrink: 0, background: isDragging ? tc.surface1 : tc.surface0, cursor: 'col-resize', transition: 'background 0.15s' }}
-          />
+          />}
 
           {/* Right: Preview */}
-          <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
               <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" />
@@ -1043,7 +1075,7 @@ function App() {
         </div>
       )}
 
-      <div style={{ display: (page === 'studio' || page === 'glsl') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
+      <div style={{ display: (page === 'studio' || page === 'glsl' || page === 'play') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
         {/* Left: Node Palette — hidden on GLSL page */}
         {page === 'studio' && paletteBaseW > 0 && (
@@ -1073,8 +1105,11 @@ function App() {
           </div>
         )}
 
-        {/* Center content */}
-        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+        {/* Center content. On Play the panel is a fixed column and the picture takes the rest. */}
+        <div style={page === 'play'
+          ? { width: 380, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }
+          : { flex: 1, position: 'relative', minWidth: 0 }}>
+          {page === 'play' && <PlayPage />}
           {page === 'studio' && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -1095,8 +1130,8 @@ function App() {
           {page === 'glsl' && <GLSLPage />}
         </div>
 
-        {/* Resize Divider — hidden when preview is floated */}
-        {!previewFloated && (
+        {/* Resize Divider — hidden when preview is floated, and on Play (the picture fills the space) */}
+        {!previewFloated && page !== 'play' && (
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
@@ -1109,7 +1144,7 @@ function App() {
         {/* Right: Shader Preview — hidden when floated. A render surface, so it's dark in both themes. */}
         {!previewFloated && (
           <ThemeOverrideContext.Provider value="dark">
-            <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
+            <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
               <PreviewHeader>
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
