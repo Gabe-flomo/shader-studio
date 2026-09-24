@@ -23,14 +23,14 @@ const LIGHT = {
   border: {
     default: '#e7e8ee',
     subtle: '#eef0f3',    // dividers inside cards and panels
-    strong: '#d7d9e2',    // dashed "add" buttons, canvas dots
+    strong: '#d7d9e2',    // dashed "add" buttons
   },
   text: {
     primary: '#1a1b23',
     secondary: '#3a3d47',
     muted: '#6b6f7a',
     faint: '#9a9da8',     // caps labels, placeholders, resting icons
-    disabled: '#c3c5cf',
+    disabled: '#c3c5cf',  // also the canvas dot grid
   },
   accent: {
     base: '#3a6ff7',      // selection, needle, focus ring

@@ -836,7 +836,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   }, [nodeHighlightFilter, nodes, shiftHeld, hoveredSocket, displayNodes]);
 
   // Dot grid background size scales with zoom
-  const gridSize = 24 * zoom;
+  // Dot grid: 24 world units apart, doubling when zoomed out so it never turns into a haze
+  let gridSize = 24 * zoom;
+  while (gridSize < 14) gridSize *= 2;
   const gridOffX = pan.x % gridSize;
   const gridOffY = pan.y % gridSize;
 
@@ -865,13 +867,13 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         position: 'relative',
         width: '100%',
         height: '100%',
-        background: transparent ? 'transparent' : tc.crust,
+        backgroundColor: transparent ? 'transparent' : tc.crust,
         overflow: 'hidden',
         cursor: 'default',
         userSelect: 'none',
         backgroundImage: transparent
           ? 'none'
-          : `radial-gradient(circle, ${tk.border.strong} 1px, transparent 1px)`,
+          : `radial-gradient(circle at 1.5px 1.5px, ${tk.text.disabled} 1.1px, transparent 1.6px)`,
         backgroundSize: `${gridSize}px ${gridSize}px`,
         backgroundPosition: `${gridOffX}px ${gridOffY}px`,
       }}
