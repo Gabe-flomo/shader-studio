@@ -9,6 +9,7 @@ import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
 import type { TransformPreset } from '../../types/transformPreset';
 import type { KeyframePreset } from '../../types/keyframePreset';
+import { ctp } from '../../theme/palette';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'functions' | 'expressions' | 'keyframes';
@@ -73,13 +74,13 @@ const KeyframesIcon = () => (
 );
 
 const SIDEBAR_TABS: Array<{ id: TabId; label: string; color: string; Icon: () => React.ReactElement }> = [
-  { id: 'nodes',       label: 'Nodes',        color: '#89b4fa', Icon: NodesIcon },
-  { id: 'favorites',   label: 'Favorites',    color: '#f9e2af', Icon: FavoritesIcon },
-  { id: 'graphs',      label: 'Saved Graphs', color: '#a6e3a1', Icon: GraphsIcon },
-  { id: 'presets',     label: 'Presets',      color: '#f9e2af', Icon: PresetsIcon },
-  { id: 'functions',   label: 'Functions',    color: '#89dceb', Icon: FunctionsIcon },
-  { id: 'expressions', label: 'Expr Blocks',  color: '#cba6f7', Icon: ExpressionsIcon },
-  { id: 'keyframes',   label: 'Saved Keyframes', color: '#f9e2af', Icon: KeyframesIcon },
+  { id: 'nodes',       label: 'Nodes',        color: ctp.blue, Icon: NodesIcon },
+  { id: 'favorites',   label: 'Favorites',    color: ctp.yellow, Icon: FavoritesIcon },
+  { id: 'graphs',      label: 'Saved Graphs', color: ctp.green, Icon: GraphsIcon },
+  { id: 'presets',     label: 'Presets',      color: ctp.yellow, Icon: PresetsIcon },
+  { id: 'functions',   label: 'Functions',    color: ctp.sky, Icon: FunctionsIcon },
+  { id: 'expressions', label: 'Expr Blocks',  color: ctp.mauve, Icon: ExpressionsIcon },
+  { id: 'keyframes',   label: 'Saved Keyframes', color: ctp.yellow, Icon: KeyframesIcon },
 ];
 
 // ── TabPill ───────────────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ function TabPill({ label, color, onClick, onDelete, onRename, prefix }: {
           background: hovered ? '#2a2a3e' : '#252535',
           border: `1px solid ${hovered ? color + '55' : '#3a3a4e'}`,
           borderRadius: '20px',
-          color: hovered ? color : '#a6adc8',
+          color: hovered ? color : ctp.subtext0,
           fontSize: '11px', fontWeight: 500,
           cursor: 'pointer', userSelect: 'none',
           transition: 'background 0.12s, border-color 0.12s, color 0.12s',
@@ -124,16 +125,16 @@ function TabPill({ label, color, onClick, onDelete, onRename, prefix }: {
 
       {hovered && onRename && (
         <button onClick={e => { e.stopPropagation(); onRename(); }}
-          style={{ position: 'absolute', right: renameBtnRight, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#585b70', fontSize: '11px', padding: '0 2px', lineHeight: 1 }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89b4fa')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+          style={{ position: 'absolute', right: renameBtnRight, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: ctp.surface2, fontSize: '11px', padding: '0 2px', lineHeight: 1 }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.blue)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
         >✎</button>
       )}
       {hovered && onDelete && (
         <button onClick={e => { e.stopPropagation(); onDelete(); }}
-          style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#585b70', fontSize: '11px', padding: '0 2px', lineHeight: 1 }}
-          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#585b70')}
+          style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: ctp.surface2, fontSize: '11px', padding: '0 2px', lineHeight: 1 }}
+          onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
+          onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface2)}
         >✕</button>
       )}
     </div>
@@ -143,7 +144,7 @@ function TabPill({ label, color, onClick, onDelete, onRename, prefix }: {
 // ── EmptyHint ─────────────────────────────────────────────────────────────────
 function EmptyHint({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: '10px', color: '#45475a', paddingLeft: '2px', fontStyle: 'italic', lineHeight: 1.6 }}>
+    <div style={{ fontSize: '10px', color: ctp.surface1, paddingLeft: '2px', fontStyle: 'italic', lineHeight: 1.6 }}>
       {children}
     </div>
   );
@@ -280,16 +281,16 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
             <input
               type="text" placeholder="Search nodes…" value={query}
               onChange={e => setQuery(e.target.value)}
-              style={{ background: '#181825', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '5px', padding: '5px 8px', fontSize: '11px', outline: 'none', marginBottom: '4px', width: '100%', boxSizing: 'border-box' }}
+              style={{ background: ctp.mantle, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '5px', padding: '5px 8px', fontSize: '11px', outline: 'none', marginBottom: '4px', width: '100%', boxSizing: 'border-box' }}
             />
             <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} />
             {query.trim().length === 0 && (
-              <div style={{ marginTop: '8px', borderTop: '1px solid #313244', paddingTop: '8px' }}>
+              <div style={{ marginTop: '8px', borderTop: `1px solid ${ctp.surface0}`, paddingTop: '8px' }}>
                 <button onClick={() => setExamplesExpanded(v => !v)}
                   style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', marginBottom: '3px', textAlign: 'left' }}
                 >
-                  <span style={{ fontSize: '7px', opacity: 0.5, color: '#585b70', width: '7px' }}>{examplesExpanded ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#585b70' }}>Examples</span>
+                  <span style={{ fontSize: '7px', opacity: 0.5, color: ctp.surface2, width: '7px' }}>{examplesExpanded ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: ctp.surface2 }}>Examples</span>
                 </button>
                 {examplesExpanded && EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
                   const isOpen = openFolders.has(folder.label);
@@ -297,7 +298,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                     <div key={folder.label} style={{ marginBottom: '1px' }}>
                       <button onClick={() => toggleFolder(folder.label)}
                         style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', borderRadius: '4px', color: folder.color, fontSize: '11px', fontWeight: 600, textAlign: 'left' }}
-                        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#313244')}
+                        onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = ctp.surface0)}
                         onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}
                       >
                         <span style={{ fontSize: '8px', opacity: 0.6, width: '8px' }}>{isOpen ? '▼' : '▶'}</span>
@@ -313,9 +314,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                               const ex = EXAMPLE_GRAPHS[k];
                               return (
                                 <button key={k} onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }}
-                                  style={{ display: 'block', width: '100%', padding: '3px 6px', background: '#181825', border: 'none', color: '#a6adc8', cursor: 'pointer', textAlign: 'left', borderRadius: '4px', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#313244'; (e.currentTarget as HTMLButtonElement).style.color = folder.color; }}
-                                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#181825'; (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
+                                  style={{ display: 'block', width: '100%', padding: '3px 6px', background: ctp.mantle, border: 'none', color: ctp.subtext0, cursor: 'pointer', textAlign: 'left', borderRadius: '4px', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = ctp.surface0; (e.currentTarget as HTMLButtonElement).style.color = folder.color; }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = ctp.mantle; (e.currentTarget as HTMLButtonElement).style.color = ctp.subtext0; }}
                                   title={ex.label}
                                 >{ex.label}</button>
                               );
@@ -338,7 +339,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               {favorites.map(t => {
                 const def = NODE_REGISTRY[t];
                 if (!def) return null;
-                return <TabPill key={t} label={def.label} color="#f9e2af" onClick={() => handleAdd(t)} onDelete={() => onToggleFavorite(t)} />;
+                return <TabPill key={t} label={def.label} color={ctp.yellow} onClick={() => handleAdd(t)} onDelete={() => onToggleFavorite(t)} />;
               })}
             </div>
           );
@@ -348,7 +349,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
           <>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '6px' }}>
               <button onClick={() => { setShowGraphSaveInput(v => !v); setGraphSaveInput(''); }}
-                style={{ background: '#1a2535', border: '1px solid #89b4fa44', color: '#89b4fa', borderRadius: '5px', fontSize: '10px', padding: '3px 10px', cursor: 'pointer' }}
+                style={{ background: '#1a2535', border: `1px solid ${ctp.blue}44`, color: ctp.blue, borderRadius: '5px', fontSize: '10px', padding: '3px 10px', cursor: 'pointer' }}
                 onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1e3040')}
                 onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#1a2535')}
               >+ Save Current</button>
@@ -361,22 +362,22 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                     if (e.key === 'Enter' && graphSaveInput.trim()) { saveGraph(graphSaveInput.trim()); refreshSavedNames(); setShowGraphSaveInput(false); setGraphSaveInput(''); }
                     if (e.key === 'Escape') setShowGraphSaveInput(false);
                   }}
-                  style={{ flex: 1, background: '#181825', border: '1px solid #89b4fa', color: '#cdd6f4', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', outline: 'none' }}
+                  style={{ flex: 1, background: ctp.mantle, border: `1px solid ${ctp.blue}`, color: ctp.text, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', outline: 'none' }}
                 />
                 <button onClick={() => { if (graphSaveInput.trim()) { saveGraph(graphSaveInput.trim()); refreshSavedNames(); setShowGraphSaveInput(false); setGraphSaveInput(''); } }}
                   disabled={!graphSaveInput.trim()}
-                  style={{ background: graphSaveInput.trim() ? '#89b4fa22' : 'none', border: `1px solid ${graphSaveInput.trim() ? '#89b4fa55' : '#313244'}`, color: graphSaveInput.trim() ? '#89b4fa' : '#45475a', borderRadius: '3px', fontSize: '10px', padding: '2px 6px', cursor: 'pointer' }}
+                  style={{ background: graphSaveInput.trim() ? `${ctp.blue}22` : 'none', border: `1px solid ${graphSaveInput.trim() ? `${ctp.blue}55` : ctp.surface0}`, color: graphSaveInput.trim() ? ctp.blue : ctp.surface1, borderRadius: '3px', fontSize: '10px', padding: '2px 6px', cursor: 'pointer' }}
                 >✓</button>
               </div>
             )}
             <FolderableList
               scopeKey="graphs"
-              color="#a6e3a1"
+              color={ctp.green}
               items={savedNames.map(name => ({ id: name, label: name }))}
               renderItem={(item) => (
                 <TabPill
                   label={item.label}
-                  color="#a6e3a1"
+                  color={ctp.green}
                   onClick={() => { loadSavedGraph(item.id); onNodeAdded?.(); }}
                   onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }}
                 />
@@ -389,15 +390,15 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
       case 'presets':
         return (
           <>
-            <TabSectionHeader label="Group Presets" color="#f9e2af" />
+            <TabSectionHeader label="Group Presets" color={ctp.yellow} />
             <FolderableList
               scopeKey="presets:group"
-              color="#f9e2af"
+              color={ctp.yellow}
               items={(groupPresets as GroupPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
               renderItem={(item) => {
                 const p = (item as typeof item & { _preset: GroupPreset })._preset;
                 return (
-                  <TabPill label={p.label} color="#f9e2af" prefix="⬡"
+                  <TabPill label={p.label} color={ctp.yellow} prefix="⬡"
                     onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; instantiateGroupPreset(p.id, {x,y}); onNodeAdded?.(); }}
                     onDelete={() => deleteGroupPreset(p.id)}
                   />
@@ -405,10 +406,10 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               }}
               emptyHint={<EmptyHint>Select a group node and click ⬇ Save to create a preset.</EmptyHint>}
             />
-            <TabSectionHeader label="Transform Vec" color="#89b4fa" />
+            <TabSectionHeader label="Transform Vec" color={ctp.blue} />
             <FolderableList
               scopeKey="presets:transform"
-              color="#89b4fa"
+              color={ctp.blue}
               items={(transformPresets as TransformPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
               renderItem={(item) => {
                 const p = (item as typeof item & { _preset: TransformPreset })._preset;
@@ -416,9 +417,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   ? <input key={p.id} autoFocus value={renameTransformValue} onChange={e => setRenameTransformValue(e.target.value)}
                       onBlur={() => { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
                       onKeyDown={e => { if (e.key === 'Enter') { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); } if (e.key === 'Escape') setRenamingTransformId(null); e.stopPropagation(); }}
-                      style={{ background: '#11111b', border: '1px solid #89b4fa', color: '#89b4fa', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                      style={{ background: ctp.crust, border: `1px solid ${ctp.blue}`, color: ctp.blue, borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
                     />
-                  : <TabPill label={p.label} color="#89b4fa" prefix="⊞"
+                  : <TabPill label={p.label} color={ctp.blue} prefix="⊞"
                       onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('transformVec',{x,y},{outputType:p.outputType,exprX:p.exprX,exprY:p.exprY,exprZ:p.exprZ,exprW:p.exprW}); onNodeAdded?.(); }}
                       onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
                       onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }}
@@ -435,25 +436,25 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
               {userPresets.length > 0 && (
                 <button onClick={() => exportCustomFns()} title="Export functions"
-                  style={{ background: 'none', border: '1px solid #313244', color: '#6c7086', borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+                  style={{ background: 'none', border: `1px solid ${ctp.surface0}`, color: ctp.overlay0, borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.sky)}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
                 >↑ Export</button>
               )}
               <button onClick={async () => { await importCustomFnsFromFile(); await refreshPresets(); }} title="Import functions"
-                style={{ background: 'none', border: '1px solid #313244', color: '#6c7086', borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#89dceb')}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#6c7086')}
+                style={{ background: 'none', border: `1px solid ${ctp.surface0}`, color: ctp.overlay0, borderRadius: '5px', fontSize: '10px', padding: '3px 8px', cursor: 'pointer' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.sky)}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0)}
               >↓ Import</button>
             </div>
             <FolderableList
               scopeKey="functions"
-              color="#89dceb"
+              color={ctp.sky}
               items={(userPresets as CustomFnPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
               renderItem={(item) => {
                 const p = (item as typeof item & { _preset: CustomFnPreset })._preset;
                 return (
-                  <TabPill label={p.label} color="#89dceb" prefix="ƒ"
+                  <TabPill label={p.label} color={ctp.sky} prefix="ƒ"
                     onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('customFn',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,body:p.body,glslFunctions:p.glslFunctions}); onNodeAdded?.(); }}
                     onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }}
                   />
@@ -468,7 +469,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
         return (
           <FolderableList
             scopeKey="expressions"
-            color="#cba6f7"
+            color={ctp.mauve}
             items={(exprPresets as ExprPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
             renderItem={(item) => {
               const p = (item as typeof item & { _preset: ExprPreset })._preset;
@@ -476,9 +477,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 ? <input key={p.id} autoFocus value={renameExprValue} onChange={e => setRenameExprValue(e.target.value)}
                     onBlur={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
                     onKeyDown={e => { if (e.key === 'Enter') { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); } if (e.key === 'Escape') setRenamingExprId(null); e.stopPropagation(); }}
-                    style={{ background: '#11111b', border: '1px solid #cba6f7', color: '#cba6f7', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                    style={{ background: ctp.crust, border: `1px solid ${ctp.mauve}`, color: ctp.mauve, borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
                   />
-                : <TabPill label={p.label} color="#cba6f7" prefix="⟴"
+                : <TabPill label={p.label} color={ctp.mauve} prefix="⟴"
                     onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode('exprNode',{x,y},{label:p.label,inputs:p.inputs,outputType:p.outputType,lines:p.lines,result:p.result}); onNodeAdded?.(); }}
                     onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
                     onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }}
@@ -492,7 +493,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
         return (
           <FolderableList
             scopeKey="keyframes"
-            color="#f9e2af"
+            color={ctp.yellow}
             items={(keyframePresets as KeyframePreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
             renderItem={(item) => {
               const p = (item as typeof item & { _preset: KeyframePreset })._preset;
@@ -500,9 +501,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 ? <input key={p.id} autoFocus value={renameKeyframeValue} onChange={e => setRenameKeyframeValue(e.target.value)}
                     onBlur={() => { renameKeyframePreset(p.id, renameKeyframeValue); setRenamingKeyframeId(null); refreshKeyframePresets(); }}
                     onKeyDown={e => { if (e.key === 'Enter') { renameKeyframePreset(p.id, renameKeyframeValue); setRenamingKeyframeId(null); refreshKeyframePresets(); } if (e.key === 'Escape') setRenamingKeyframeId(null); e.stopPropagation(); }}
-                    style={{ background: '#11111b', border: '1px solid #f9e2af', color: '#f9e2af', borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
+                    style={{ background: ctp.crust, border: `1px solid ${ctp.yellow}`, color: ctp.yellow, borderRadius: '20px', padding: '3px 10px', fontSize: '11px', outline: 'none', width: '120px' }}
                   />
-                : <TabPill label={p.label} color="#f9e2af" prefix="◆"
+                : <TabPill label={p.label} color={ctp.yellow} prefix="◆"
                     onClick={() => window.dispatchEvent(new CustomEvent('apply-keyframe-preset', { detail: { keyframes: p.keyframes } }))}
                     onDelete={() => { deleteKeyframePreset(p.id); refreshKeyframePresets(); }}
                     onRename={() => { setRenameKeyframeValue(p.label); setRenamingKeyframeId(p.id); }}
@@ -522,29 +523,29 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
       style={{ flex: `${flexGrow} ${flexGrow} 0`, minHeight: '80px', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: isFocused ? '1px solid #3a3a5a' : '1px solid #252535' }}
     >
       {/* Pane header: tab name + close button */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px', height: '22px', background: isFocused ? '#1e1e2e' : '#181825', borderBottom: `1px solid ${isFocused ? '#3a3a5a' : '#252535'}`, flexShrink: 0, gap: '5px' }}>
-        <span style={{ color: isFocused ? tabInfo.color : '#45475a', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px', height: '22px', background: isFocused ? ctp.base : ctp.mantle, borderBottom: `1px solid ${isFocused ? '#3a3a5a' : '#252535'}`, flexShrink: 0, gap: '5px' }}>
+        <span style={{ color: isFocused ? tabInfo.color : ctp.surface1, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <tabInfo.Icon />
         </span>
-        <span style={{ fontSize: '9px', color: isFocused ? '#a6adc8' : '#45475a', fontWeight: 600, letterSpacing: '0.06em', flex: 1, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: '9px', color: isFocused ? ctp.subtext0 : ctp.surface1, fontWeight: 600, letterSpacing: '0.06em', flex: 1, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {tabInfo.label}
         </span>
         {!isOnly && (
           <button
             onMouseDown={e => e.stopPropagation()}
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '10px', padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
-            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+            style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '10px', padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
+            onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
+            onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
           >✕</button>
         )}
       </div>
 
       {/* Swap banner */}
       {swapTargetNodeId && (
-        <div style={{ background: '#f9e2af22', borderBottom: '1px solid #f9e2af33', padding: '4px 8px', fontSize: '11px', color: '#f9e2af', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexShrink: 0 }}>
+        <div style={{ background: `${ctp.yellow}22`, borderBottom: `1px solid ${ctp.yellow}33`, padding: '4px 8px', fontSize: '11px', color: ctp.yellow, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexShrink: 0 }}>
           <span>↔ Replace <strong>{swapTargetLabel}</strong></span>
-          <button onClick={() => setSwapTargetNodeId(null)} style={{ background: 'none', border: 'none', color: '#f9e2af', cursor: 'pointer', fontSize: '11px', padding: '0 2px', opacity: 0.7 }}>✕</button>
+          <button onClick={() => setSwapTargetNodeId(null)} style={{ background: 'none', border: 'none', color: ctp.yellow, cursor: 'pointer', fontSize: '11px', padding: '0 2px', opacity: 0.7 }}>✕</button>
         </div>
       )}
 
@@ -604,9 +605,9 @@ export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, o
       onNodeAdded?.();
     };
     return (
-      <div style={{ width: '100%', background: '#1e1e2e', color: '#cdd6f4', padding: '4px 12px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0, boxSizing: 'border-box' }}>
+      <div style={{ width: '100%', background: ctp.base, color: ctp.text, padding: '4px 12px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0, boxSizing: 'border-box' }}>
         <input type="text" placeholder="Search nodes…" value={drawerQuery} onChange={e => setDrawerQuery(e.target.value)}
-          style={{ background: '#181825', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '5px', padding: '5px 8px', fontSize: '11px', outline: 'none', marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}
+          style={{ background: ctp.mantle, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '5px', padding: '5px 8px', fontSize: '11px', outline: 'none', marginBottom: '6px', width: '100%', boxSizing: 'border-box' }}
         />
         <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={toggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={drawerQuery} />
       </div>
@@ -682,13 +683,13 @@ export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, o
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden', background: '#1e1e2e', color: '#cdd6f4' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'hidden', background: ctp.base, color: ctp.text }}>
 
       {/* Main row: sidebar + panes */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
         {/* Sidebar */}
-        <div style={{ width: 36, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: '2px', borderRight: '1px solid #313244', background: '#181825' }}>
+        <div style={{ width: 36, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: '2px', borderRight: `1px solid ${ctp.surface0}`, background: ctp.mantle }}>
           {SIDEBAR_TABS.map(({ id, label, color, Icon }) => {
             const isActive = focusedPane.activeTab === id;
             return (
@@ -696,9 +697,9 @@ export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, o
                 key={id}
                 onClick={() => updatePane(focusedPane.id, { activeTab: id })}
                 title={label}
-                style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isActive ? '#313244' : 'none', border: isActive ? `1px solid ${color}33` : '1px solid transparent', borderRadius: 6, color: isActive ? color : '#585b70', cursor: 'pointer', transition: 'background 0.1s, color 0.1s, border-color 0.1s', padding: 0 }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8'; }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+                style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isActive ? ctp.surface0 : 'none', border: isActive ? `1px solid ${color}33` : '1px solid transparent', borderRadius: 6, color: isActive ? color : ctp.surface2, cursor: 'pointer', transition: 'background 0.1s, color 0.1s, border-color 0.1s', padding: 0 }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = ctp.subtext0; }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
               >
                 <Icon />
               </button>
@@ -710,9 +711,9 @@ export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, o
             <button
               onClick={onCollapse}
               title="Collapse palette"
-              style={{ marginTop: 'auto', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid transparent', borderRadius: 6, color: '#45475a', cursor: 'pointer', fontSize: '10px', padding: 0, transition: 'color 0.1s' }}
-              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
-              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+              style={{ marginTop: 'auto', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid transparent', borderRadius: 6, color: ctp.surface1, cursor: 'pointer', fontSize: '10px', padding: 0, transition: 'color 0.1s' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
+              onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
             >◀</button>
           )}
         </div>
@@ -753,9 +754,9 @@ export function NodePalette({ mode = 'full', onNodeAdded, onCollapse, context, o
         <button
           onClick={addPane}
           title="Add pane"
-          style={{ height: '22px', flexShrink: 0, background: 'none', border: 'none', borderTop: '1px solid #252535', color: '#45475a', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'background 0.1s, color 0.1s' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#252535'; (e.currentTarget as HTMLButtonElement).style.color = '#89b4fa'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = '#45475a'; }}
+          style={{ height: '22px', flexShrink: 0, background: 'none', border: 'none', borderTop: '1px solid #252535', color: ctp.surface1, cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', transition: 'background 0.1s, color 0.1s' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#252535'; (e.currentTarget as HTMLButtonElement).style.color = ctp.blue; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = ctp.surface1; }}
         >
           <span style={{ fontSize: '12px', lineHeight: 1 }}>+</span>
           <span>pane</span>

@@ -1,21 +1,22 @@
 import React, { useRef, useCallback, useEffect } from 'react';
+import { ctp } from '../../theme/palette';
 
 // ── Token colour palette (Catppuccin Mocha) ───────────────────────────────────
 const C = {
-  keyword:    '#cba6f7',  // mauve  — return, if, for, …
-  typeFloat:  '#f38ba8',  // red    — float
-  typeVec2:   '#89b4fa',  // blue   — vec2
-  typeVec3:   '#a6e3a1',  // green  — vec3
-  typeVec4:   '#b4befe',  // lavender — vec4
-  typeInt:    '#fab387',  // peach  — int, bool
-  typeMat:    '#94e2d5',  // teal   — mat2/3/4
-  builtin:    '#f9e2af',  // yellow — sin, cos, mix, …
-  number:     '#fab387',  // peach  — 1.0, 3.14
-  comment:    '#45475a',  // dimmed
-  swizzle:    '#89b4fa',  // blue   — .xyz, .rgb
-  operator:   '#89dceb',  // sky    — + - * / = …
-  ident:      '#cdd6f4',  // text   — identifiers
-  punct:      '#6c7086',  // overlay0 — ( ) { } , ;
+  keyword:    ctp.mauve,  // mauve  — return, if, for, …
+  typeFloat:  ctp.red,  // red    — float
+  typeVec2:   ctp.blue,  // blue   — vec2
+  typeVec3:   ctp.green,  // green  — vec3
+  typeVec4:   ctp.lavender,  // lavender — vec4
+  typeInt:    ctp.peach,  // peach  — int, bool
+  typeMat:    ctp.teal,  // teal   — mat2/3/4
+  builtin:    ctp.yellow,  // yellow — sin, cos, mix, …
+  number:     ctp.peach,  // peach  — 1.0, 3.14
+  comment:    ctp.surface1,  // dimmed
+  swizzle:    ctp.blue,  // blue   — .xyz, .rgb
+  operator:   ctp.sky,  // sky    — + - * / = …
+  ident:      ctp.text,  // text   — identifiers
+  punct:      ctp.overlay0,  // overlay0 — ( ) { } , ;
 };
 
 const KEYWORDS = new Set([
@@ -254,7 +255,7 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
           zIndex:      2,
           background:  'transparent',
           color:       'transparent',
-          caretColor:  hasError ? '#f38ba8' : '#cdd6f4',
+          caretColor:  hasError ? ctp.red : ctp.text,
           resize:      'none',
           display:     'block',
           overflow:    'hidden',

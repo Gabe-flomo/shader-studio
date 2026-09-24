@@ -1,35 +1,36 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { ctp } from '../theme/palette';
 
 // ── GLSL syntax-highlight palette ────────────────────────────────────────────
 // Types use the same hues as the node-socket colours so the shader output
 // feels visually connected to the graph.
 const C = {
   // Control-flow / storage qualifiers
-  keyword:    '#cba6f7', // mauve   — void, if, for, return, uniform, …
+  keyword:    ctp.mauve, // mauve   — void, if, for, return, uniform, …
   // Data types (match socket colours)
-  typeFloat:  '#f38ba8', // red     — float
-  typeVec2:   '#89b4fa', // blue    — vec2
-  typeVec3:   '#a6e3a1', // green   — vec3
-  typeVec4:   '#b4befe', // lavender — vec4
-  typeInt:    '#fab387', // peach   — int, uint, bool
-  typeMat:    '#94e2d5', // teal    — mat2/3/4
-  typeSampler:'#89dceb', // sky     — sampler2D/Cube
+  typeFloat:  ctp.red, // red     — float
+  typeVec2:   ctp.blue, // blue    — vec2
+  typeVec3:   ctp.green, // green   — vec3
+  typeVec4:   ctp.lavender, // lavender — vec4
+  typeInt:    ctp.peach, // peach   — int, uint, bool
+  typeMat:    ctp.teal, // teal    — mat2/3/4
+  typeSampler:ctp.sky, // sky     — sampler2D/Cube
   // Built-in GLSL functions
-  builtin:    '#f9e2af', // yellow  — sin, cos, mix, …
+  builtin:    ctp.yellow, // yellow  — sin, cos, mix, …
   // Numeric literals
-  number:     '#fab387', // peach   — 1.0, 0, 3.14
+  number:     ctp.peach, // peach   — 1.0, 0, 3.14
   // Comments
-  comment:    '#45475a', // dimmed
+  comment:    ctp.surface1, // dimmed
   // Preprocessor (#version, #define, precision mediump)
-  preproc:    '#f38ba8', // same as float — stands out
+  preproc:    ctp.red, // same as float — stands out
   // Swizzle members / dot access (.x, .rgb, …)
-  swizzle:    '#89b4fa', // blue (accessed as vec component)
+  swizzle:    ctp.blue, // blue (accessed as vec component)
   // Operators  + - * / = < > ! & | …
-  operator:   '#89dceb', // sky
+  operator:   ctp.sky, // sky
   // Default identifier / variable name
-  ident:      '#cdd6f4', // text
+  ident:      ctp.text, // text
   // Punctuation  ( ) { } [ ] , ; :
-  punct:      '#6c7086', // overlay0
+  punct:      ctp.overlay0, // overlay0
 };
 
 const KEYWORDS = new Set([
@@ -301,7 +302,7 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props
   return (
     <div style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, height,
-      background: '#181825', borderTop: '1px solid #313244',
+      background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`,
       display: 'flex', flexDirection: 'column', zIndex: 20,
       boxShadow: '0 -4px 16px rgba(0,0,0,0.4)',
     }}>
@@ -313,21 +314,21 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props
           cursor: 'ns-resize', zIndex: 1,
           background: 'transparent',
         }}
-        onMouseEnter={e => (e.currentTarget.style.background = '#89b4fa33')}
+        onMouseEnter={e => (e.currentTarget.style.background = `${ctp.blue}33`)}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       />
       {/* Toolbar */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '5px 12px', background: '#1e1e2e', borderBottom: '1px solid #313244',
+        padding: '5px 12px', background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`,
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 600, color: '#89b4fa', letterSpacing: '0.04em' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: ctp.blue, letterSpacing: '0.04em' }}>
             Fragment Shader
           </span>
           {highlightSlug && (
-            <span style={{ fontSize: '10px', color: '#f9e2af', fontFamily: 'monospace', opacity: 0.8 }}>
+            <span style={{ fontSize: '10px', color: ctp.yellow, fontFamily: 'monospace', opacity: 0.8 }}>
               ↳ {highlightSlug}
             </span>
           )}
@@ -337,9 +338,9 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props
             onClick={handleCopy}
             title="Copy shader code to clipboard"
             style={{
-              background: copied ? '#a6e3a122' : '#313244',
-              border: `1px solid ${copied ? '#a6e3a155' : '#45475a'}`,
-              color: copied ? '#a6e3a1' : '#cdd6f4',
+              background: copied ? `${ctp.green}22` : ctp.surface0,
+              border: `1px solid ${copied ? `${ctp.green}55` : ctp.surface1}`,
+              color: copied ? ctp.green : ctp.text,
               borderRadius: '4px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer',
             }}
           >
@@ -349,7 +350,7 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props
             onClick={onClose}
             title="Close code panel"
             style={{
-              background: 'none', border: 'none', color: '#585b70',
+              background: 'none', border: 'none', color: ctp.surface2,
               cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '0 2px',
             }}
           >
@@ -372,8 +373,8 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap }: Props
               ref={i === scrollToLineIdx ? setFirstMatch : undefined}
               style={{
                 padding: '0 14px',
-                background: isMatch ? '#89b4fa18' : 'transparent',
-                borderLeft: isMatch ? '2px solid #89b4fa88' : '2px solid transparent',
+                background: isMatch ? `${ctp.blue}18` : 'transparent',
+                borderLeft: isMatch ? `2px solid ${ctp.blue}88` : '2px solid transparent',
                 whiteSpace: 'pre',
                 transition: 'background 0.15s',
               }}

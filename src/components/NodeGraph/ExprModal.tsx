@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { ctp } from '../../theme/palette';
 
 const TYPE_COLORS: Record<string, string> = {
   float: '#f0a',
@@ -123,9 +124,9 @@ interface Props {
 }
 
 const BTN: React.CSSProperties = {
-  background: '#313244',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  background: ctp.surface0,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '4px',
   padding: '3px 8px',
   fontSize: '11px',
@@ -139,7 +140,7 @@ const SECTION_LABEL: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: '#585b70',
+  color: ctp.surface2,
   margin: '10px 0 4px',
 };
 
@@ -294,8 +295,8 @@ export function ExprModal({ node, onClose }: Props) {
       {/* Panel */}
       <div
         style={{
-          background: '#1e1e2e',
-          border: '1px solid #45475a',
+          background: ctp.base,
+          border: `1px solid ${ctp.surface1}`,
           borderRadius: '10px',
           width: '680px',
           maxHeight: '85vh',
@@ -305,24 +306,24 @@ export function ExprModal({ node, onClose }: Props) {
           flexDirection: 'column',
           gap: '0',
           boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
         }}
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: '#89b4fa' }}>Expr Editor</span>
+          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.blue }}>Expr Editor</span>
           <button
             onClick={onClose}
-            style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', padding: '0 4px' }}
+            style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, fontSize: '16px', padding: '0 4px' }}
           >
             ✕
           </button>
         </div>
 
         {/* Presets */}
-        <div style={{ ...(SECTION_LABEL as React.CSSProperties), color: '#94e2d5' }}>Presets</div>
+        <div style={{ ...(SECTION_LABEL as React.CSSProperties), color: ctp.teal }}>Presets</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
           {isFloatWarp
             ? FLOAT_WARP_PRESETS.map(preset => (
@@ -332,8 +333,8 @@ export function ExprModal({ node, onClose }: Props) {
                   title={preset.hint ? `${preset.hint} — ${preset.expr}` : preset.expr}
                   style={{
                     ...BTN,
-                    color: '#94e2d5',
-                    borderColor: '#94e2d533',
+                    color: ctp.teal,
+                    borderColor: `${ctp.teal}33`,
                     background: '#1e3a3a',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2a4a4a'; }}
@@ -349,8 +350,8 @@ export function ExprModal({ node, onClose }: Props) {
                   title={`${preset.outputType}: ${preset.expr}`}
                   style={{
                     ...BTN,
-                    color: '#94e2d5',
-                    borderColor: '#94e2d533',
+                    color: ctp.teal,
+                    borderColor: `${ctp.teal}33`,
                     background: '#1e3a3a',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2a4a4a'; }}
@@ -377,7 +378,7 @@ export function ExprModal({ node, onClose }: Props) {
                     key={name}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '4px',
-                      background: '#181825', border: '1px solid #313244',
+                      background: ctp.mantle, border: `1px solid ${ctp.surface0}`,
                       borderRadius: '5px', padding: '4px 8px',
                       opacity: isIntensity ? 0.7 : 1,
                     }}
@@ -392,15 +393,15 @@ export function ExprModal({ node, onClose }: Props) {
                       title={isConnected ? 'Click to disconnect' : 'Not wired'}
                       onClick={() => { if (isConnected) disconnectInput(node.id, name); }}
                     />
-                    <span style={{ color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace' }}>{name}</span>
-                    <span style={{ fontSize: '10px', color: '#585b70' }}>float</span>
+                    <span style={{ color: ctp.text, fontSize: '11px', fontFamily: 'monospace' }}>{name}</span>
+                    <span style={{ fontSize: '10px', color: ctp.surface2 }}>float</span>
                     {isIntensity
-                      ? <span style={{ fontSize: '10px', color: '#585b70', fontStyle: 'italic' }}>blend knob</span>
+                      ? <span style={{ fontSize: '10px', color: ctp.surface2, fontStyle: 'italic' }}>blend knob</span>
                       : (
                         <button
                           onClick={() => insertAtCursor(name)}
                           title={`Insert "${name}" into expression`}
-                          style={{ ...BTN, padding: '1px 5px', fontSize: '10px', background: '#313244' }}
+                          style={{ ...BTN, padding: '1px 5px', fontSize: '10px', background: ctp.surface0 }}
                         >
                           ↵
                         </button>
@@ -421,7 +422,7 @@ export function ExprModal({ node, onClose }: Props) {
                     key={i}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '4px',
-                      background: '#181825', border: '1px solid #313244',
+                      background: ctp.mantle, border: `1px solid ${ctp.surface0}`,
                       borderRadius: '5px', padding: '4px 8px',
                     }}
                   >
@@ -442,16 +443,16 @@ export function ExprModal({ node, onClose }: Props) {
                       spellCheck={false}
                       style={{
                         background: 'transparent', border: 'none',
-                        borderBottom: '1px solid #313244',
-                        color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace',
+                        borderBottom: `1px solid ${ctp.surface0}`,
+                        color: ctp.text, fontSize: '11px', fontFamily: 'monospace',
                         outline: 'none', width: '60px', padding: '0 2px',
                       }}
                     />
-                    <span style={{ fontSize: '10px', color: '#585b70' }}>{input?.type ?? 'float'}</span>
+                    <span style={{ fontSize: '10px', color: ctp.surface2 }}>{input?.type ?? 'float'}</span>
                     <button
                       onClick={() => insertAtCursor(name)}
                       title={`Insert "${name}" into expression`}
-                      style={{ ...BTN, padding: '1px 5px', fontSize: '10px', background: '#313244' }}
+                      style={{ ...BTN, padding: '1px 5px', fontSize: '10px', background: ctp.surface0 }}
                     >
                       ↵
                     </button>
@@ -464,13 +465,13 @@ export function ExprModal({ node, onClose }: Props) {
         {/* Output type — hidden for FloatWarp (always float) */}
         {!isFloatWarp && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <span style={{ color: '#6c7086', fontSize: '11px' }}>Output type</span>
+          <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Output type</span>
           <select
             value={outputType}
             onChange={e => updateNodeParams(node.id, { outputType: e.target.value })}
             style={{
-              background: '#181825', border: '1px solid #45475a',
-              color: '#cdd6f4', borderRadius: '3px',
+              background: ctp.mantle, border: `1px solid ${ctp.surface1}`,
+              color: ctp.text, borderRadius: '3px',
               fontSize: '11px', padding: '2px 6px', outline: 'none', cursor: 'pointer',
             }}
           >
@@ -527,9 +528,9 @@ export function ExprModal({ node, onClose }: Props) {
               ...BTN,
               padding: '2px 8px',
               fontSize: '10px',
-              background: autoWrap ? '#45475a' : '#313244',
-              color: autoWrap ? '#cba6f7' : '#585b70',
-              border: `1px solid ${autoWrap ? '#cba6f7' : '#45475a'}`,
+              background: autoWrap ? ctp.surface1 : ctp.surface0,
+              color: autoWrap ? ctp.mauve : ctp.surface2,
+              border: `1px solid ${autoWrap ? ctp.mauve : ctp.surface1}`,
               transition: 'all 0.15s',
             }}
           >
@@ -545,8 +546,8 @@ export function ExprModal({ node, onClose }: Props) {
           spellCheck={false}
           rows={4}
           style={{
-            background: '#11111b', border: '1px solid #45475a',
-            color: '#a6e3a1', padding: '8px 10px',
+            background: ctp.crust, border: `1px solid ${ctp.surface1}`,
+            color: ctp.green, padding: '8px 10px',
             borderRadius: '5px', fontSize: '12px', fontFamily: 'monospace',
             width: '100%', resize: 'vertical', outline: 'none',
             boxSizing: 'border-box', lineHeight: 1.5,

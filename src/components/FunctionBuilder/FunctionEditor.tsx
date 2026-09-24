@@ -3,6 +3,7 @@ import type { FnDef } from './useFunctionBuilder';
 import { useFunctionBuilder, TYPE_DEFAULTS } from './useFunctionBuilder';
 import { CURVE_COLORS } from './glslCompiler';
 import { GlslTextarea } from './GlslTextarea';
+import { ctp } from '../../theme/palette';
 
 interface Props {
   fn: FnDef;
@@ -37,18 +38,18 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
     <div
       onClick={() => setActiveId(fn.id)}
       style={{
-        border: `1px solid ${isActive ? '#45475a' : '#313244'}`,
-        borderLeft: `3px solid ${isActive ? dotColor : '#313244'}`,
+        border: `1px solid ${isActive ? ctp.surface1 : ctp.surface0}`,
+        borderLeft: `3px solid ${isActive ? dotColor : ctp.surface0}`,
         borderRadius: '6px',
         marginBottom: '6px',
-        background: isActive ? '#1e1e2e' : '#181825',
+        background: isActive ? ctp.base : ctp.mantle,
         cursor: 'default',
         overflow: 'hidden',
         transition: 'border-color 0.15s',
       }}
     >
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px', borderBottom: '1px solid #313244' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px', borderBottom: `1px solid ${ctp.surface0}` }}>
         {/* Left: dot + name (fills remaining space, name capped at 20 chars) */}
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
         <input
@@ -57,7 +58,7 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           onChange={e => updateFunction(fn.id, { name: e.target.value })}
           onClick={e => e.stopPropagation()}
           style={{
-            background: 'none', border: 'none', color: '#cdd6f4',
+            background: 'none', border: 'none', color: ctp.text,
             fontFamily: 'monospace', fontSize: '13px', fontWeight: 700,
             flex: 1, minWidth: 0, outline: 'none', padding: 0,
           }}
@@ -65,7 +66,7 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
 
         {/* Right: type dropdown + error + lib + remove — always visible */}
         {hasError && (
-          <span title={errors[0]} style={{ fontSize: '10px', color: '#f38ba8', flexShrink: 0 }}>⚠</span>
+          <span title={errors[0]} style={{ fontSize: '10px', color: ctp.red, flexShrink: 0 }}>⚠</span>
         )}
         <select
           value={fn.returnType}
@@ -79,7 +80,7 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           }}
           onClick={e => e.stopPropagation()}
           style={{
-            background: '#313244', border: '1px solid #45475a', color: '#a6adc8',
+            background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.subtext0,
             borderRadius: '4px', fontSize: '11px', fontFamily: 'monospace',
             padding: '1px 4px', cursor: 'pointer', outline: 'none', flexShrink: 0,
           }}
@@ -91,8 +92,8 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
           title="Save to function library"
           style={{
             background: 'none',
-            border: '1px solid #a6e3a144',
-            color: '#a6e3a1',
+            border: `1px solid ${ctp.green}44`,
+            color: ctp.green,
             borderRadius: '10px',
             padding: '1px 7px',
             fontSize: '10px',
@@ -101,12 +102,12 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
             flexShrink: 0,
             lineHeight: 1.4,
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#a6e3a122'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a188'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#a6e3a144'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${ctp.green}22`; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}88`; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = `${ctp.green}44`; }}
         >↓ lib</button>
         <button
           onClick={e => { e.stopPropagation(); removeFunction(fn.id); }}
-          style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
+          style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '13px', padding: '0 2px', lineHeight: 1, flexShrink: 0 }}
           title="Remove function"
         >✕</button>
       </div>
@@ -123,7 +124,7 @@ export function FunctionEditor({ fn, index, isActive, errors, onTextareaFocus }:
       </div>
 
       {hasError && (
-        <div style={{ padding: '3px 10px 5px', fontSize: '10px', color: '#f38ba8', fontFamily: 'monospace', borderTop: '1px solid #2a1a1a' }}>
+        <div style={{ padding: '3px 10px 5px', fontSize: '10px', color: ctp.red, fontFamily: 'monospace', borderTop: '1px solid #2a1a1a' }}>
           {errors[0]}
         </div>
       )}

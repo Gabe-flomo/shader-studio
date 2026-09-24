@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
+import { ctp } from '../../theme/palette';
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 
@@ -14,9 +15,9 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 const BTN: React.CSSProperties = {
-  background: '#313244',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  background: ctp.surface0,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '4px',
   padding: '3px 8px',
   fontSize: '11px',
@@ -30,7 +31,7 @@ const SECTION_LABEL: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: '#585b70',
+  color: ctp.surface2,
   margin: '10px 0 4px',
 };
 
@@ -122,8 +123,8 @@ export function LoopModal({ node, onClose }: Props) {
     >
       <div
         style={{
-          background: '#1e1e2e',
-          border: '1px solid #45475a',
+          background: ctp.base,
+          border: `1px solid ${ctp.surface1}`,
           borderRadius: '10px',
           width: '540px',
           maxHeight: '82vh',
@@ -133,17 +134,17 @@ export function LoopModal({ node, onClose }: Props) {
           flexDirection: 'column',
           gap: '0',
           boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
         }}
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: '#89dceb' }}>⟳ Loop</span>
+          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.sky }}>⟳ Loop</span>
           <button
             onClick={onClose}
-            style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', padding: '0 4px' }}
+            style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, fontSize: '16px', padding: '0 4px' }}
           >
             ✕
           </button>
@@ -152,12 +153,12 @@ export function LoopModal({ node, onClose }: Props) {
         {/* Carry type + Iterations */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#6c7086', fontSize: '11px' }}>Carry type</span>
+            <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Carry type</span>
             <select
               value={carryType}
               onChange={e => changeCarryType(e.target.value as DataType)}
               style={{
-                background: '#181825', border: '1px solid #45475a', color: '#cdd6f4',
+                background: ctp.mantle, border: `1px solid ${ctp.surface1}`, color: ctp.text,
                 borderRadius: '3px', fontSize: '11px', padding: '2px 6px',
                 outline: 'none', cursor: 'pointer',
               }}
@@ -166,22 +167,22 @@ export function LoopModal({ node, onClose }: Props) {
             </select>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#6c7086', fontSize: '11px' }}>Iterations</span>
+            <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Iterations</span>
             <input
               type="range"
               min={1} max={16} step={1}
               value={iterations}
               onChange={e => changeIterations(Number(e.target.value))}
-              style={{ width: '80px', accentColor: '#89dceb' }}
+              style={{ width: '80px', accentColor: ctp.sky }}
             />
-            <span style={{ color: '#cdd6f4', fontSize: '11px', minWidth: '16px' }}>{iterations}</span>
+            <span style={{ color: ctp.text, fontSize: '11px', minWidth: '16px' }}>{iterations}</span>
           </div>
         </div>
 
         {/* Steps list */}
         <div style={SECTION_LABEL as React.CSSProperties}>Steps (executed in order, {iterations}×)</div>
         {steps.length === 0 ? (
-          <div style={{ color: '#45475a', fontSize: '10px', fontStyle: 'italic', padding: '4px 0 8px' }}>
+          <div style={{ color: ctp.surface1, fontSize: '10px', fontStyle: 'italic', padding: '4px 0 8px' }}>
             No steps yet — add nodes below whose primary output is <strong>{carryType}</strong>
           </div>
         ) : (
@@ -194,13 +195,13 @@ export function LoopModal({ node, onClose }: Props) {
                   key={stepId}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
-                    background: deleted ? '#2a1a1a' : '#181825',
-                    border: `1px solid ${deleted ? '#f38ba833' : '#313244'}`,
+                    background: deleted ? '#2a1a1a' : ctp.mantle,
+                    border: `1px solid ${deleted ? `${ctp.red}33` : ctp.surface0}`,
                     borderRadius: '5px', padding: '5px 8px',
                   }}
                 >
                   {/* Order */}
-                  <span style={{ color: '#585b70', fontSize: '10px', minWidth: '16px' }}>{idx + 1}</span>
+                  <span style={{ color: ctp.surface2, fontSize: '10px', minWidth: '16px' }}>{idx + 1}</span>
                   {/* Move up/down */}
                   <button
                     onClick={() => moveStep(idx, -1)}
@@ -213,7 +214,7 @@ export function LoopModal({ node, onClose }: Props) {
                     style={{ ...BTN, padding: '1px 5px', fontSize: '10px', opacity: idx === steps.length - 1 ? 0.3 : 1 }}
                   >↓</button>
                   {/* Label */}
-                  <span style={{ flex: 1, color: deleted ? '#f38ba8' : '#cdd6f4', fontFamily: 'monospace', fontSize: '11px' }}>
+                  <span style={{ flex: 1, color: deleted ? ctp.red : ctp.text, fontFamily: 'monospace', fontSize: '11px' }}>
                     {deleted ? '⚠ ' : ''}{nodeLabel(stepId)}
                   </span>
                   {/* Output type badge */}
@@ -228,7 +229,7 @@ export function LoopModal({ node, onClose }: Props) {
                   {/* Remove */}
                   <button
                     onClick={() => removeStep(idx)}
-                    style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', padding: '1px 4px', fontSize: '13px' }}
+                    style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, padding: '1px 4px', fontSize: '13px' }}
                   >×</button>
                 </div>
               );
@@ -240,7 +241,7 @@ export function LoopModal({ node, onClose }: Props) {
         <div style={SECTION_LABEL as React.CSSProperties}>Add Step</div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {eligible.length === 0 ? (
-            <span style={{ color: '#45475a', fontSize: '10px', fontStyle: 'italic' }}>
+            <span style={{ color: ctp.surface1, fontSize: '10px', fontStyle: 'italic' }}>
               No eligible nodes — add nodes with a <strong>{carryType}</strong> output to the graph
             </span>
           ) : (
@@ -250,7 +251,7 @@ export function LoopModal({ node, onClose }: Props) {
                 onChange={e => setSelectedAdd(e.target.value)}
                 style={{
                   flex: 1,
-                  background: '#181825', border: '1px solid #45475a', color: '#cdd6f4',
+                  background: ctp.mantle, border: `1px solid ${ctp.surface1}`, color: ctp.text,
                   borderRadius: '4px', fontSize: '11px', padding: '4px 6px',
                   outline: 'none', cursor: 'pointer',
                 }}
@@ -269,7 +270,7 @@ export function LoopModal({ node, onClose }: Props) {
                 disabled={!selectedAdd}
                 style={{
                   ...BTN,
-                  color: '#a6e3a1', borderColor: '#a6e3a133',
+                  color: ctp.green, borderColor: `${ctp.green}33`,
                   opacity: selectedAdd ? 1 : 0.4,
                 }}
               >
@@ -280,10 +281,10 @@ export function LoopModal({ node, onClose }: Props) {
         </div>
 
         {/* Usage hint */}
-        <div style={{ marginTop: '14px', padding: '8px 10px', background: '#11111b', borderRadius: '5px', border: '1px solid #313244' }}>
-          <div style={{ fontSize: '10px', color: '#585b70', lineHeight: 1.6 }}>
-            <strong style={{ color: '#89dceb' }}>How it works:</strong> Each iteration feeds the loop's carry value into step 1, then step 1's output into step 2, and so on. The final step's output becomes the new carry for the next iteration. After all iterations, the result is the loop's output.<br/>
-            <strong style={{ color: '#f9e2af' }}>Tip:</strong> On each step node, leave the <em>{carryType}</em> input <em>disconnected</em> — the loop injects the carry value automatically. Other inputs (params, time, etc.) are used normally.
+        <div style={{ marginTop: '14px', padding: '8px 10px', background: ctp.crust, borderRadius: '5px', border: `1px solid ${ctp.surface0}` }}>
+          <div style={{ fontSize: '10px', color: ctp.surface2, lineHeight: 1.6 }}>
+            <strong style={{ color: ctp.sky }}>How it works:</strong> Each iteration feeds the loop's carry value into step 1, then step 1's output into step 2, and so on. The final step's output becomes the new carry for the next iteration. After all iterations, the result is the loop's output.<br/>
+            <strong style={{ color: ctp.yellow }}>Tip:</strong> On each step node, leave the <em>{carryType}</em> input <em>disconnected</em> — the loop injects the carry value automatically. Other inputs (params, time, etc.) are used normally.
           </div>
         </div>
       </div>

@@ -9,6 +9,7 @@ import {
   normaliseCombo,
   comboFromEvent,
 } from '../hooks/useShortcuts';
+import { ctp } from '../theme/palette';
 
 export function ShortcutsPage() {
   const [map, setMap]         = useState<ShortcutMap>(loadShortcutMap);
@@ -60,11 +61,11 @@ export function ShortcutsPage() {
   }, {});
 
   const groupColors: Record<string, string> = {
-    'Graph':      '#89b4fa',
-    'View':       '#a6e3a1',
-    'Add Nodes':  '#cba6f7',
-    'Filter':     '#f9e2af',
-    'Help':       '#74c7ec',
+    'Graph':      ctp.blue,
+    'View':       ctp.green,
+    'Add Nodes':  ctp.mauve,
+    'Filter':     ctp.yellow,
+    'Help':       ctp.sapphire,
   };
 
   return (
@@ -72,8 +73,8 @@ export function ShortcutsPage() {
       style={{
         flex: 1,
         overflowY: 'auto',
-        background: '#11111b',
-        color: '#cdd6f4',
+        background: ctp.crust,
+        color: ctp.text,
         fontFamily: 'system-ui, sans-serif',
         padding: '32px',
       }}
@@ -81,10 +82,10 @@ export function ShortcutsPage() {
       {/* Page header */}
       <div style={{ maxWidth: '720px', margin: '0 auto' }}>
         <div style={{ marginBottom: '28px' }}>
-          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#cdd6f4' }}>
+          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: ctp.text }}>
             ⌨ Keyboard Shortcuts
           </h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#585b70' }}>
+          <p style={{ margin: '6px 0 0', fontSize: '13px', color: ctp.surface2 }}>
             Click any binding to rebind it — then press the new key combo. Changes save automatically.
           </p>
         </div>
@@ -99,13 +100,13 @@ export function ShortcutsPage() {
           }}
         >
           {Object.entries(groups).map(([group, actions]) => {
-            const accent = groupColors[group] ?? '#585b70';
+            const accent = groupColors[group] ?? ctp.surface2;
             return (
               <div
                 key={group}
                 style={{
-                  background: '#1e1e2e',
-                  border: '1px solid #313244',
+                  background: ctp.base,
+                  border: `1px solid ${ctp.surface0}`,
                   borderRadius: '10px',
                   overflow: 'hidden',
                 }}
@@ -114,8 +115,8 @@ export function ShortcutsPage() {
                 <div
                   style={{
                     padding: '10px 14px',
-                    background: '#181825',
-                    borderBottom: '1px solid #313244',
+                    background: ctp.mantle,
+                    borderBottom: `1px solid ${ctp.surface0}`,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
@@ -155,28 +156,28 @@ export function ShortcutsPage() {
                           justifyContent: 'space-between',
                           padding: '7px 6px',
                           borderRadius: '6px',
-                          background: isConflict ? '#f38ba822' : isSaved ? '#a6e3a111' : 'transparent',
+                          background: isConflict ? `${ctp.red}22` : isSaved ? `${ctp.green}11` : 'transparent',
                           transition: 'background 0.2s',
                           gap: '12px',
                         }}
                       >
                         {/* Label + description */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '13px', color: '#cdd6f4', fontWeight: 500 }}>
+                          <div style={{ fontSize: '13px', color: ctp.text, fontWeight: 500 }}>
                             {action.label}
                             {isSaved && (
-                              <span style={{ color: '#a6e3a1', fontSize: '11px', marginLeft: '8px' }}>
+                              <span style={{ color: ctp.green, fontSize: '11px', marginLeft: '8px' }}>
                                 ✓ saved
                               </span>
                             )}
                             {isConflict && (
-                              <span style={{ color: '#f38ba8', fontSize: '11px', marginLeft: '8px' }}>
+                              <span style={{ color: ctp.red, fontSize: '11px', marginLeft: '8px' }}>
                                 ⚠ conflict!
                               </span>
                             )}
                           </div>
                           {action.description && (
-                            <div style={{ fontSize: '11px', color: '#45475a', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '11px', color: ctp.surface1, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {action.description}
                             </div>
                           )}
@@ -187,9 +188,9 @@ export function ShortcutsPage() {
                           onClick={() => setBinding(isBinding ? null : action.id)}
                           style={{
                             flexShrink: 0,
-                            background: isBinding ? '#89b4fa22' : '#313244',
-                            border: isBinding ? `1px solid #89b4fa` : `1px solid #45475a`,
-                            color: isBinding ? '#89b4fa' : '#cdd6f4',
+                            background: isBinding ? `${ctp.blue}22` : ctp.surface0,
+                            border: isBinding ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
+                            color: isBinding ? ctp.blue : ctp.text,
                             borderRadius: '6px',
                             padding: '4px 12px',
                             fontSize: '13px',
@@ -219,7 +220,7 @@ export function ShortcutsPage() {
           style={{
             marginTop: '32px',
             paddingTop: '20px',
-            borderTop: '1px solid #313244',
+            borderTop: `1px solid ${ctp.surface0}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -227,15 +228,15 @@ export function ShortcutsPage() {
             gap: '12px',
           }}
         >
-          <p style={{ margin: 0, fontSize: '12px', color: '#45475a' }}>
+          <p style={{ margin: 0, fontSize: '12px', color: ctp.surface1 }}>
             Shortcuts are stored locally in your browser. They survive page refreshes.
           </p>
           <button
             onClick={handleReset}
             style={{
               background: 'none',
-              border: '1px solid #45475a',
-              color: '#a6adc8',
+              border: `1px solid ${ctp.surface1}`,
+              color: ctp.subtext0,
               borderRadius: '6px',
               padding: '6px 16px',
               fontSize: '12px',
@@ -243,12 +244,12 @@ export function ShortcutsPage() {
               transition: 'border-color 0.15s, color 0.15s',
             }}
             onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = '#f38ba8';
-              (e.currentTarget as HTMLButtonElement).style.color = '#f38ba8';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.red;
+              (e.currentTarget as HTMLButtonElement).style.color = ctp.red;
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = '#45475a';
-              (e.currentTarget as HTMLButtonElement).style.color = '#a6adc8';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
+              (e.currentTarget as HTMLButtonElement).style.color = ctp.subtext0;
             }}
           >
             Reset all to defaults

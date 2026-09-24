@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
 import { runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
 import type { OfflineRenderHandle } from './ShaderCanvas';
+import { ctp } from '../theme/palette';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -12,8 +13,8 @@ const OVERLAY: React.CSSProperties = {
 };
 
 const PANEL: React.CSSProperties = {
-  background: '#1e1e2e',
-  border: '1px solid #45475a',
+  background: ctp.base,
+  border: `1px solid ${ctp.surface1}`,
   borderRadius: '12px',
   width: '420px',
   maxWidth: '95vw',
@@ -22,12 +23,12 @@ const PANEL: React.CSSProperties = {
   flexDirection: 'column',
   gap: '14px',
   boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
-  color: '#cdd6f4',
+  color: ctp.text,
   fontSize: '12px',
 };
 
 const BTN_BASE: React.CSSProperties = {
-  border: '1px solid #45475a',
+  border: `1px solid ${ctp.surface1}`,
   borderRadius: '6px',
   fontSize: '12px',
   fontFamily: 'system-ui, sans-serif',
@@ -41,7 +42,7 @@ const LABEL: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: '#585b70',
+  color: ctp.surface2,
   marginBottom: '4px',
 };
 
@@ -55,11 +56,11 @@ const ROW: React.CSSProperties = {
 
 function ProgressBar({ value }: { value: number }) {
   return (
-    <div style={{ background: '#313244', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+    <div style={{ background: ctp.surface0, borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
       <div style={{
         height: '100%',
         width: `${Math.min(Math.round(value * 100), 100)}%`,
-        background: 'linear-gradient(90deg, #89b4fa, #cba6f7)',
+        background: `linear-gradient(90deg, ${ctp.blue}, ${ctp.mauve})`,
         borderRadius: '4px',
         transition: 'width 0.15s linear',
       }} />
@@ -332,11 +333,11 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '15px', color: '#89b4fa' }}>⬡ Export Video</span>
+          <span style={{ fontWeight: 700, fontSize: '15px', color: ctp.blue }}>⬡ Export Video</span>
           <button
             onClick={onClose}
             disabled={isBusy}
-            style={{ ...BTN_BASE, background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', padding: '0 4px', opacity: isBusy ? 0.4 : 1 }}
+            style={{ ...BTN_BASE, background: 'none', border: 'none', color: ctp.red, fontSize: '16px', padding: '0 4px', opacity: isBusy ? 0.4 : 1 }}
           >✕</button>
         </div>
 
@@ -349,9 +350,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                 onClick={() => setMode('ffmpeg')}
                 style={{
                   ...BTN_BASE, flex: 1, padding: '5px 8px',
-                  background: mode === 'ffmpeg' ? '#313244' : '#181825',
-                  color: mode === 'ffmpeg' ? '#cdd6f4' : '#585b70',
-                  borderColor: mode === 'ffmpeg' ? '#cba6f7' : '#313244',
+                  background: mode === 'ffmpeg' ? ctp.surface0 : ctp.mantle,
+                  color: mode === 'ffmpeg' ? ctp.text : ctp.surface2,
+                  borderColor: mode === 'ffmpeg' ? ctp.mauve : ctp.surface0,
                   fontSize: '11px',
                 }}
               >✦ FFmpeg (HQ)</button>
@@ -359,15 +360,15 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                 onClick={() => setMode('mediarecorder')}
                 style={{
                   ...BTN_BASE, flex: 1, padding: '5px 8px',
-                  background: mode === 'mediarecorder' ? '#313244' : '#181825',
-                  color: mode === 'mediarecorder' ? '#cdd6f4' : '#585b70',
-                  borderColor: mode === 'mediarecorder' ? '#89b4fa' : '#313244',
+                  background: mode === 'mediarecorder' ? ctp.surface0 : ctp.mantle,
+                  color: mode === 'mediarecorder' ? ctp.text : ctp.surface2,
+                  borderColor: mode === 'mediarecorder' ? ctp.blue : ctp.surface0,
                   fontSize: '11px',
                 }}
               >◉ Real-time</button>
             </div>
             {mode === 'ffmpeg' && (
-              <div style={{ marginTop: '4px', fontSize: '10px', color: '#45475a', lineHeight: 1.4 }}>
+              <div style={{ marginTop: '4px', fontSize: '10px', color: ctp.surface1, lineHeight: 1.4 }}>
                 Renders offline at exact timing — no dropped frames. Requires FFmpeg (auto-downloaded on first use).
               </div>
             )}
@@ -390,14 +391,14 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                         onClick={() => setCodec(c)}
                         style={{
                           ...BTN_BASE, padding: '5px 10px', textAlign: 'left',
-                          background: codec === c ? '#313244' : '#181825',
-                          color: codec === c ? '#cdd6f4' : '#585b70',
-                          borderColor: codec === c ? '#cba6f7' : '#313244',
+                          background: codec === c ? ctp.surface0 : ctp.mantle,
+                          color: codec === c ? ctp.text : ctp.surface2,
+                          borderColor: codec === c ? ctp.mauve : ctp.surface0,
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         }}
                       >
                         <span style={{ fontWeight: codec === c ? 600 : 400 }}>{CODEC_LABELS[c]}</span>
-                        <span style={{ fontSize: '10px', color: '#45475a', marginLeft: '8px' }}>
+                        <span style={{ fontSize: '10px', color: ctp.surface1, marginLeft: '8px' }}>
                           {CODEC_DESCRIPTIONS[c]}
                         </span>
                       </button>
@@ -415,9 +416,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                       key={f} onClick={() => setFps(f)}
                       style={{
                         ...BTN_BASE, padding: '4px 18px',
-                        background: fps === f ? '#313244' : '#181825',
-                        color: fps === f ? '#cdd6f4' : '#585b70',
-                        borderColor: fps === f ? '#89b4fa' : '#313244',
+                        background: fps === f ? ctp.surface0 : ctp.mantle,
+                        color: fps === f ? ctp.text : ctp.surface2,
+                        borderColor: fps === f ? ctp.blue : ctp.surface0,
                       }}
                     >{f}</button>
                   ))}
@@ -429,12 +430,12 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                 <div style={LABEL}>Duration</div>
                 <div style={ROW}>
                   {mode === 'mediarecorder' && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6c7086' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: ctp.overlay0 }}>
                       <input
                         type="checkbox"
                         checked={manualStop}
                         onChange={e => setManualStop(e.target.checked)}
-                        style={{ accentColor: '#89b4fa' }}
+                        style={{ accentColor: ctp.blue }}
                       />
                       Manual stop
                     </label>
@@ -445,9 +446,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                         type="range" min={1} max={60} step={1}
                         value={duration}
                         onChange={e => setDuration(Number(e.target.value))}
-                        style={{ flex: 1, accentColor: '#89b4fa' }}
+                        style={{ flex: 1, accentColor: ctp.blue }}
                       />
-                      <span style={{ color: '#cdd6f4', minWidth: '34px', textAlign: 'right' }}>{duration}s</span>
+                      <span style={{ color: ctp.text, minWidth: '34px', textAlign: 'right' }}>{duration}s</span>
                     </>
                   )}
                 </div>
@@ -463,13 +464,13 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                         key={b} onClick={() => setBitrate(b)}
                         style={{
                           ...BTN_BASE, padding: '4px 10px',
-                          background: bitrate === b ? '#313244' : '#181825',
-                          color: bitrate === b ? '#cdd6f4' : '#585b70',
-                          borderColor: bitrate === b ? '#89b4fa' : '#313244',
+                          background: bitrate === b ? ctp.surface0 : ctp.mantle,
+                          color: bitrate === b ? ctp.text : ctp.surface2,
+                          borderColor: bitrate === b ? ctp.blue : ctp.surface0,
                         }}
                       >{b}</button>
                     ))}
-                    <span style={{ color: '#45475a', fontSize: '10px' }}>Mbps</span>
+                    <span style={{ color: ctp.surface1, fontSize: '10px' }}>Mbps</span>
                   </div>
                 </div>
               )}
@@ -483,18 +484,18 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                       key={r.scale} onClick={() => setResScale(r.scale)}
                       style={{
                         ...BTN_BASE, padding: '4px 10px', flex: 1,
-                        background: resScale === r.scale ? '#313244' : '#181825',
-                        color: resScale === r.scale ? '#cdd6f4' : '#585b70',
-                        borderColor: resScale === r.scale ? '#89b4fa' : '#313244',
+                        background: resScale === r.scale ? ctp.surface0 : ctp.mantle,
+                        color: resScale === r.scale ? ctp.text : ctp.surface2,
+                        borderColor: resScale === r.scale ? ctp.blue : ctp.surface0,
                         fontSize: '11px',
                       }}
                     >{r.label}</button>
                   ))}
                 </div>
                 {canvas && (
-                  <div style={{ marginTop: '4px', fontSize: '10px', color: '#45475a' }}>
+                  <div style={{ marginTop: '4px', fontSize: '10px', color: ctp.surface1 }}>
                     Output: {displayW} × {displayH}px
-                    {resScale > 1 && <span style={{ color: '#f9e2af', marginLeft: '6px' }}>⚠ higher bitrate recommended</span>}
+                    {resScale > 1 && <span style={{ color: ctp.yellow, marginLeft: '6px' }}>⚠ higher bitrate recommended</span>}
                   </div>
                 )}
               </div>
@@ -508,8 +509,8 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                   placeholder="shader-export"
                   style={{
                     width: '100%', boxSizing: 'border-box',
-                    background: '#181825', border: '1px solid #45475a',
-                    color: '#cdd6f4', borderRadius: '6px',
+                    background: ctp.mantle, border: `1px solid ${ctp.surface1}`,
+                    color: ctp.text, borderRadius: '6px',
                     padding: '5px 10px', fontSize: '12px', outline: 'none',
                     fontFamily: 'system-ui, sans-serif',
                   }}
@@ -518,9 +519,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
             </div>
 
             {mode === 'mediarecorder' && (
-              <div style={{ fontSize: '10px', color: '#45475a', lineHeight: 1.5 }}>
+              <div style={{ fontSize: '10px', color: ctp.surface1, lineHeight: 1.5 }}>
                 Records in real-time via MediaRecorder. Downloads as{' '}
-                <strong style={{ color: '#6c7086' }}>{inTauri ? '.mp4' : '.webm'}</strong> when stopped.
+                <strong style={{ color: ctp.overlay0 }}>{inTauri ? '.mp4' : '.webm'}</strong> when stopped.
               </div>
             )}
           </>
@@ -529,9 +530,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
         {/* Real-time recording progress */}
         {isRecording && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ color: '#a6e3a1', fontWeight: 600, fontSize: '13px' }}>⏺ Recording…</div>
+            <div style={{ color: ctp.green, fontWeight: 600, fontSize: '13px' }}>⏺ Recording…</div>
             {!manualStop && <ProgressBar value={captureProgress} />}
-            <div style={{ color: '#6c7086', fontSize: '11px', display: 'flex', gap: '16px' }}>
+            <div style={{ color: ctp.overlay0, fontSize: '11px', display: 'flex', gap: '16px' }}>
               <span>⏱ {elapsed.toFixed(1)}s</span>
               <span>🎞 {frameCount} frames</span>
               {!manualStop && <span>📊 {Math.round(captureProgress * 100)}%</span>}
@@ -542,14 +543,14 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
         {/* FFmpeg encoding progress */}
         {isEncoding && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ color: '#cba6f7', fontWeight: 600, fontSize: '13px' }}>✦ Encoding…</div>
+            <div style={{ color: ctp.mauve, fontWeight: 600, fontSize: '13px' }}>✦ Encoding…</div>
             <ProgressBar value={captureProgress} />
-            <div style={{ color: '#6c7086', fontSize: '11px', display: 'flex', gap: '16px' }}>
+            <div style={{ color: ctp.overlay0, fontSize: '11px', display: 'flex', gap: '16px' }}>
               <span>⏱ {elapsed.toFixed(1)}s</span>
               <span>🎞 {frameCount} frames</span>
               <span>📊 {Math.round(captureProgress * 100)}%</span>
             </div>
-            <div style={{ fontSize: '10px', color: '#45475a' }}>
+            <div style={{ fontSize: '10px', color: ctp.surface1 }}>
               Rendering offline — UI may be unresponsive during encoding
             </div>
           </div>
@@ -559,15 +560,15 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
         {isDone && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', padding: '8px 0' }}>
             <span style={{ fontSize: '28px' }}>✅</span>
-            <span style={{ color: '#a6e3a1', fontWeight: 600 }}>
+            <span style={{ color: ctp.green, fontWeight: 600 }}>
               {mode === 'ffmpeg' ? 'Encoded & saved!' : 'Done — video downloaded!'}
             </span>
             {outputPath && (
-              <span style={{ color: '#45475a', fontSize: '10px', wordBreak: 'break-all', textAlign: 'center' }}>
+              <span style={{ color: ctp.surface1, fontSize: '10px', wordBreak: 'break-all', textAlign: 'center' }}>
                 {outputPath}
               </span>
             )}
-            <span style={{ color: '#585b70', fontSize: '11px' }}>
+            <span style={{ color: ctp.surface2, fontSize: '11px' }}>
               {frameCount} frames · {elapsed.toFixed(1)}s · {displayW}×{displayH}
             </span>
           </div>
@@ -575,7 +576,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
 
         {/* Error */}
         {(errorMsg || isError) && (
-          <div style={{ color: '#f38ba8', fontSize: '11px', background: '#2a1a1a', padding: '8px', borderRadius: '6px' }}>
+          <div style={{ color: ctp.red, fontSize: '11px', background: '#2a1a1a', padding: '8px', borderRadius: '6px' }}>
             {errorMsg || 'An error occurred.'}
           </div>
         )}
@@ -585,17 +586,17 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
           {(isDone || isError) && (
             <button
               onClick={() => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); }}
-              style={{ ...BTN_BASE, background: '#313244', color: '#cdd6f4' }}
+              style={{ ...BTN_BASE, background: ctp.surface0, color: ctp.text }}
             >Record Again</button>
           )}
           {state === 'idle' && (
-            <button onClick={onClose} style={{ ...BTN_BASE, background: 'none', color: '#6c7086' }}>Cancel</button>
+            <button onClick={onClose} style={{ ...BTN_BASE, background: 'none', color: ctp.overlay0 }}>Cancel</button>
           )}
           {state === 'idle' && (
             <button
               onClick={handleScreenshot}
               disabled={!canvas}
-              style={{ ...BTN_BASE, background: '#181825', color: '#a6e3a1', borderColor: '#a6e3a133', flex: 1 }}
+              style={{ ...BTN_BASE, background: ctp.mantle, color: ctp.green, borderColor: `${ctp.green}33`, flex: 1 }}
             >
               📷 Screenshot
             </button>
@@ -606,9 +607,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
               disabled={mode === 'ffmpeg' ? !offlineRender : !canvas}
               style={{
                 ...BTN_BASE,
-                background: mode === 'ffmpeg' ? '#cba6f7' : '#89b4fa',
-                color: '#1e1e2e', fontWeight: 700,
-                borderColor: mode === 'ffmpeg' ? '#cba6f7' : '#89b4fa',
+                background: mode === 'ffmpeg' ? ctp.mauve : ctp.blue,
+                color: ctp.base, fontWeight: 700,
+                borderColor: mode === 'ffmpeg' ? ctp.mauve : ctp.blue,
                 opacity: (mode === 'ffmpeg' ? !offlineRender : !canvas) ? 0.4 : 1,
               }}
             >
@@ -618,13 +619,13 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
           {isBusy && (
             <button
               onClick={handleStop}
-              style={{ ...BTN_BASE, background: '#f38ba8', color: '#1e1e2e', fontWeight: 700, borderColor: '#f38ba8' }}
+              style={{ ...BTN_BASE, background: ctp.red, color: ctp.base, fontWeight: 700, borderColor: ctp.red }}
             >
               {isEncoding ? '✕ Cancel' : '■ Stop'}
             </button>
           )}
           {(isDone || isError) && (
-            <button onClick={onClose} style={{ ...BTN_BASE, background: '#313244', color: '#cdd6f4' }}>Close</button>
+            <button onClick={onClose} style={{ ...BTN_BASE, background: ctp.surface0, color: ctp.text }}>Close</button>
           )}
         </div>
 

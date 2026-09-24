@@ -7,6 +7,7 @@
  */
 
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
+import { ctp } from '../theme/palette';
 
 export const scopeCanvasRegistry = new CanvasProbeRegistry();
 
@@ -65,7 +66,7 @@ export function drawScopeCanvas(
   ctx.fillRect(0, 0, W, H);
 
   // Grid lines
-  ctx.strokeStyle = '#1e1e2e';
+  ctx.strokeStyle = ctp.base;
   ctx.lineWidth = 1;
   for (let g = 1; g < 4; g++) {
     const y = mg + (g / 4) * (H - 2 * mg);
@@ -79,7 +80,7 @@ export function drawScopeCanvas(
   const range = (max - min) || 1;
   const zeroNorm = (0 - min) / range;
   const zeroY = mg + (1 - Math.max(0, Math.min(1, zeroNorm))) * (H - 2 * mg);
-  ctx.strokeStyle = '#313244';
+  ctx.strokeStyle = ctp.surface0;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, zeroY);
@@ -90,7 +91,7 @@ export function drawScopeCanvas(
   const isClipping = rawNorm <= 0.01 || rawNorm >= 0.99;
 
   // Signal line
-  ctx.strokeStyle = isClipping ? '#f38ba8' : '#89b4fa';
+  ctx.strokeStyle = isClipping ? ctp.red : ctp.blue;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   for (let i = 0; i < buf.length; i++) {
@@ -105,12 +106,12 @@ export function drawScopeCanvas(
   const currentVal = rawNorm * range + min;
   ctx.font = '9px monospace';
   ctx.textAlign = 'right';
-  ctx.fillStyle = isClipping ? '#f38ba8' : '#6c7086';
+  ctx.fillStyle = isClipping ? ctp.red : ctp.overlay0;
   ctx.fillText(currentVal.toFixed(3), W - 4, H - 4);
 
   // CLIP warning
   if (isClipping) {
-    ctx.fillStyle = '#f38ba844';
+    ctx.fillStyle = `${ctp.red}44`;
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'left';
     ctx.fillText('CLIP', 4, H - 4);

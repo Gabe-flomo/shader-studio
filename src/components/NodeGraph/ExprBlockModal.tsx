@@ -7,6 +7,7 @@ import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
 import { NumberInput } from './NumberInput';
+import { ctp } from '../../theme/palette';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -55,9 +56,9 @@ const GLSL_GROUPS = Array.from(new Set(GLSL_PALETTE.map(e => e.group)));
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const BTN: React.CSSProperties = {
-  background: '#313244',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  background: ctp.surface0,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '4px',
   padding: '3px 8px',
   fontSize: '11px',
@@ -71,14 +72,14 @@ const SECTION_LABEL: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase' as const,
-  color: '#585b70',
+  color: ctp.surface2,
   margin: '10px 0 4px',
 };
 
 const INPUT_STYLE: React.CSSProperties = {
-  background: '#11111b',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  background: ctp.crust,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '4px',
   padding: '3px 7px',
   fontSize: '11px',
@@ -386,8 +387,8 @@ export function ExprBlockModal({ node, onClose }: Props) {
       {/* Panel */}
       <div
         style={{
-          background: '#1e1e2e',
-          border: '1px solid #45475a',
+          background: ctp.base,
+          border: `1px solid ${ctp.surface1}`,
           borderRadius: '10px',
           width: 'min(820px, calc(100vw - 32px))',
           maxHeight: '88vh',
@@ -397,17 +398,17 @@ export function ExprBlockModal({ node, onClose }: Props) {
           flexDirection: 'column',
           gap: '0',
           boxShadow: '0 8px 32px rgba(0,0,0,0.65)',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
         }}
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px', color: '#a6e3a1' }}>⟴ Expr Block</span>
+          <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.green }}>⟴ Expr Block</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {savedFlash && (
-              <span style={{ fontSize: '11px', color: '#a6e3a1', fontFamily: 'monospace' }}>✓ saved</span>
+              <span style={{ fontSize: '11px', color: ctp.green, fontFamily: 'monospace' }}>✓ saved</span>
             )}
             {/* Open in Function Builder.
                 Priority: fnBuilderFns (actual function bodies) > lines conversion (fallback).
@@ -438,7 +439,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                   title={hasFnBuilderFns
                     ? 'Re-open in the Function Builder'
                     : 'Open warp lines as functions in the Function Builder'}
-                  style={{ ...BTN, color: '#89b4fa', borderColor: '#89b4fa55', background: '#89b4fa11' }}
+                  style={{ ...BTN, color: ctp.blue, borderColor: `${ctp.blue}55`, background: `${ctp.blue}11` }}
                 >
                   ƒ( ) Edit in Builder
                 </button>
@@ -456,15 +457,15 @@ export function ExprBlockModal({ node, onClose }: Props) {
                     if (e.key === 'Enter') handleSavePreset(savePresetName);
                     if (e.key === 'Escape') { setShowSaveInput(false); setSavePresetName(''); }
                   }}
-                  style={{ flex: 1, minWidth: 0, padding: '3px 6px', fontSize: '11px', background: '#1e1e2e', color: '#cdd6f4', border: '1px solid #a6e3a1', borderRadius: '4px', outline: 'none' }}
+                  style={{ flex: 1, minWidth: 0, padding: '3px 6px', fontSize: '11px', background: ctp.base, color: ctp.text, border: `1px solid ${ctp.green}`, borderRadius: '4px', outline: 'none' }}
                 />
                 <button
                   onClick={() => handleSavePreset(savePresetName)}
-                  style={{ ...BTN, color: '#a6e3a1', borderColor: '#a6e3a155', background: '#a6e3a111', padding: '3px 8px' }}
+                  style={{ ...BTN, color: ctp.green, borderColor: `${ctp.green}55`, background: `${ctp.green}11`, padding: '3px 8px' }}
                 >↑</button>
                 <button
                   onClick={() => { setShowSaveInput(false); setSavePresetName(''); }}
-                  style={{ ...BTN, color: '#6c7086', borderColor: '#6c708655', padding: '3px 6px' }}
+                  style={{ ...BTN, color: ctp.overlay0, borderColor: `${ctp.overlay0}55`, padding: '3px 6px' }}
                 >✕</button>
               </div>
             ) : (
@@ -474,12 +475,12 @@ export function ExprBlockModal({ node, onClose }: Props) {
                   setShowSaveInput(true);
                 }}
                 title="Save as a reusable preset in the palette"
-                style={{ ...BTN, color: '#a6e3a1', borderColor: '#a6e3a155', background: '#a6e3a111' }}
+                style={{ ...BTN, color: ctp.green, borderColor: `${ctp.green}55`, background: `${ctp.green}11` }}
               >
                 ↑ Save Preset
               </button>
             )}
-            <button onClick={onClose} style={{ ...BTN, color: '#f38ba8', borderColor: '#f38ba855' }}>✕ Close</button>
+            <button onClick={onClose} style={{ ...BTN, color: ctp.red, borderColor: `${ctp.red}55` }}>✕ Close</button>
           </div>
         </div>
 
@@ -489,7 +490,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
           {/* ── Left: Inputs ─────────────────────────────────────────────── */}
           <div style={{ width: '230px', flexShrink: 0 }}>
             <p style={SECTION_LABEL}>Inputs</p>
-            <p style={{ fontSize: '10px', color: '#45475a', marginBottom: '8px', lineHeight: 1.4 }}>
+            <p style={{ fontSize: '10px', color: ctp.surface1, marginBottom: '8px', lineHeight: 1.4 }}>
               Each input becomes a local variable in the warp. Float inputs can have sliders.
             </p>
 
@@ -498,8 +499,8 @@ export function ExprBlockModal({ node, onClose }: Props) {
                 <div
                   key={idx}
                   style={{
-                    background: '#181825',
-                    border: '1px solid #313244',
+                    background: ctp.mantle,
+                    border: `1px solid ${ctp.surface0}`,
                     borderRadius: '6px',
                     padding: '6px 8px',
                     display: 'flex',
@@ -519,13 +520,13 @@ export function ExprBlockModal({ node, onClose }: Props) {
                     <select
                       value={inp.type}
                       onChange={e => updateInputType(idx, e.target.value as DataType)}
-                      style={{ ...INPUT_STYLE, color: '#89b4fa', cursor: 'pointer', padding: '3px 4px' }}
+                      style={{ ...INPUT_STYLE, color: ctp.blue, cursor: 'pointer', padding: '3px 4px' }}
                     >
                       {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <button
                       onClick={() => removeInput(idx)}
-                      style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1 }}
+                      style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1 }}
                       title="Remove input"
                     >×</button>
                   </div>
@@ -533,18 +534,18 @@ export function ExprBlockModal({ node, onClose }: Props) {
                   {/* Slider toggle (float only) */}
                   {inp.type === 'float' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: inp.slider ? '#a6e3a1' : '#585b70' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: inp.slider ? ctp.green : ctp.surface2 }}>
                         <input
                           type="checkbox"
                           checked={!!inp.slider}
                           onChange={() => toggleSlider(idx)}
-                          style={{ accentColor: '#a6e3a1', cursor: 'pointer' }}
+                          style={{ accentColor: ctp.green, cursor: 'pointer' }}
                         />
                         slider
                       </label>
                       {inp.slider && (
                         <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: '#6c7086' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: ctp.overlay0 }}>
                             <span>min</span>
                             <NumberInput
                               value={inp.slider.min}
@@ -553,7 +554,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                               style={{ ...INPUT_STYLE, width: '44px', padding: '1px 4px', fontSize: '10px' }}
                             />
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: '#6c7086' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: ctp.overlay0 }}>
                             <span>max</span>
                             <NumberInput
                               value={inp.slider.max}
@@ -569,17 +570,17 @@ export function ExprBlockModal({ node, onClose }: Props) {
 
                   {/* Carry toggle — available for all types */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: inp.carry ? '#cba6f7' : '#585b70' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: inp.carry ? ctp.mauve : ctp.surface2 }}>
                       <input
                         type="checkbox"
                         checked={!!inp.carry}
                         onChange={() => toggleCarry(idx)}
-                        style={{ accentColor: '#cba6f7', cursor: 'pointer' }}
+                        style={{ accentColor: ctp.mauve, cursor: 'pointer' }}
                       />
                       carry
                     </label>
                     {inp.carry && (
-                      <span style={{ fontSize: '9px', color: '#6c7086', fontStyle: 'italic' }}>
+                      <span style={{ fontSize: '9px', color: ctp.overlay0, fontStyle: 'italic' }}>
                         + {inp.name}_init slot
                       </span>
                     )}
@@ -589,7 +590,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
 
               <button
                 onClick={addInput}
-                style={{ ...BTN, alignSelf: 'flex-start', background: '#a6e3a111', borderColor: '#a6e3a133', color: '#a6e3a1', marginTop: '2px' }}
+                style={{ ...BTN, alignSelf: 'flex-start', background: `${ctp.green}11`, borderColor: `${ctp.green}33`, color: ctp.green, marginTop: '2px' }}
               >
                 + Add Input
               </button>
@@ -600,7 +601,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
             <select
               value={outputType}
               onChange={e => changeOutputType(e.target.value as DataType)}
-              style={{ ...INPUT_STYLE, color: '#89b4fa', cursor: 'pointer', width: '100%' }}
+              style={{ ...INPUT_STYLE, color: ctp.blue, cursor: 'pointer', width: '100%' }}
             >
               {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -609,7 +610,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
           {/* ── Right: Warp Lines ─────────────────────────────────────────── */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={SECTION_LABEL}>Warp Lines</p>
-            <p style={{ fontSize: '10px', color: '#45475a', marginBottom: '8px', lineHeight: 1.4 }}>
+            <p style={{ fontSize: '10px', color: ctp.surface1, marginBottom: '8px', lineHeight: 1.4 }}>
               Each line is a GLSL assignment statement. Input variable names from the left panel are available.
             </p>
 
@@ -621,13 +622,13 @@ export function ExprBlockModal({ node, onClose }: Props) {
                     <button
                       onClick={() => moveLine(i, i - 1)}
                       disabled={i === 0}
-                      style={{ background: 'none', border: 'none', color: i === 0 ? '#313244' : '#6c7086', cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
+                      style={{ background: 'none', border: 'none', color: i === 0 ? ctp.surface0 : ctp.overlay0, cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
                       title="Move up"
                     >▲</button>
                     <button
                       onClick={() => moveLine(i, i + 1)}
                       disabled={i === lines.length - 1}
-                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? '#313244' : '#6c7086', cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
+                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? ctp.surface0 : ctp.overlay0, cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '9px', lineHeight: 1 }}
                       title="Move down"
                     >▼</button>
                   </div>
@@ -644,7 +645,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                   <select
                     value={line.op}
                     onChange={e => updateLine(i, 'op', e.target.value)}
-                    style={{ ...INPUT_STYLE, color: '#89b4fa', cursor: 'pointer', padding: '3px 4px' }}
+                    style={{ ...INPUT_STYLE, color: ctp.blue, cursor: 'pointer', padding: '3px 4px' }}
                   >
                     {OPS.map(op => <option key={op} value={op}>{op}</option>)}
                   </select>
@@ -654,27 +655,27 @@ export function ExprBlockModal({ node, onClose }: Props) {
                     value={line.rhs}
                     placeholder="expression…"
                     spellCheck={false}
-                    style={{ ...INPUT_STYLE, flex: 1, color: '#a6e3a1' }}
+                    style={{ ...INPUT_STYLE, flex: 1, color: ctp.green }}
                     {...makeExprInputProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
                   />
                   {/* Remove */}
                   <button
                     onClick={() => removeLine(i)}
-                    style={{ background: 'none', border: 'none', color: '#f38ba8', cursor: 'pointer', padding: '0 3px', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}
+                    style={{ background: 'none', border: 'none', color: ctp.red, cursor: 'pointer', padding: '0 3px', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}
                     title="Remove line"
                   >×</button>
                 </div>
               ))}
 
               {lines.length === 0 && (
-                <div style={{ fontSize: '11px', color: '#45475a', fontFamily: 'monospace', padding: '4px 0' }}>
+                <div style={{ fontSize: '11px', color: ctp.surface1, fontFamily: 'monospace', padding: '4px 0' }}>
                   No lines yet — click "+ Add Line" to start
                 </div>
               )}
 
               <button
                 onClick={addLine}
-                style={{ ...BTN, alignSelf: 'flex-start', marginTop: '2px', background: '#a6e3a111', borderColor: '#a6e3a133', color: '#a6e3a1' }}
+                style={{ ...BTN, alignSelf: 'flex-start', marginTop: '2px', background: `${ctp.green}11`, borderColor: `${ctp.green}33`, color: ctp.green }}
               >
                 + Add Line
               </button>
@@ -682,24 +683,24 @@ export function ExprBlockModal({ node, onClose }: Props) {
 
             {/* Return expression */}
             <p style={SECTION_LABEL}>Return Expression</p>
-            <p style={{ fontSize: '10px', color: '#45475a', marginBottom: '6px', lineHeight: 1.4 }}>
-              The final expression of type <code style={{ color: '#89b4fa' }}>{outputType}</code> that this block outputs.
+            <p style={{ fontSize: '10px', color: ctp.surface1, marginBottom: '6px', lineHeight: 1.4 }}>
+              The final expression of type <code style={{ color: ctp.blue }}>{outputType}</code> that this block outputs.
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '11px', color: '#6c7086', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>return</span>
+              <span style={{ fontSize: '11px', color: ctp.overlay0, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>return</span>
               <input
                 type="text"
                 value={result}
                 placeholder="p"
                 spellCheck={false}
-                style={{ ...INPUT_STYLE, flex: 1, color: '#89b4fa', fontSize: '12px' }}
+                style={{ ...INPUT_STYLE, flex: 1, color: ctp.blue, fontSize: '12px' }}
                 {...makeExprInputProps(result, updateResult, v => ({ lines, result: v }))}
               />
             </div>
 
             {/* Available variables — collapses when chips wrap to a second line */}
             {customInputs.length > 0 && (
-              <div style={{ marginTop: '12px', padding: '8px', background: '#181825', borderRadius: '6px', border: '1px solid #313244' }}>
+              <div style={{ marginTop: '12px', padding: '8px', background: ctp.mantle, borderRadius: '6px', border: `1px solid ${ctp.surface0}` }}>
                 <p style={{ ...SECTION_LABEL, margin: '0 0 4px' }}>Available Variables</p>
                 <div
                   ref={varsChipsRef}
@@ -719,8 +720,8 @@ export function ExprBlockModal({ node, onClose }: Props) {
                       title={`Insert "${inp.name}" into focused expression`}
                       style={{
                         fontSize: '10px',
-                        color: inp.type === 'vec3' ? '#a6e3a1' : inp.type === 'float' ? '#89b4fa' : '#f9e2af',
-                        background: '#11111b',
+                        color: inp.type === 'vec3' ? ctp.green : inp.type === 'float' ? ctp.blue : ctp.yellow,
+                        background: ctp.crust,
                         padding: '1px 5px',
                         borderRadius: '3px',
                         cursor: 'pointer',
@@ -743,7 +744,7 @@ export function ExprBlockModal({ node, onClose }: Props) {
                       fontSize: '10px',
                       background: 'none',
                       border: 'none',
-                      color: '#585b70',
+                      color: ctp.surface2,
                       cursor: 'pointer',
                     }}
                   >
@@ -760,21 +761,21 @@ export function ExprBlockModal({ node, onClose }: Props) {
                       fontSize: '10px',
                       background: 'none',
                       border: 'none',
-                      color: '#585b70',
+                      color: ctp.surface2,
                       cursor: 'pointer',
                     }}
                   >
                     − show less
                   </button>
                 )}
-                <p style={{ fontSize: '9px', color: '#45475a', marginTop: '4px', marginBottom: 0 }}>
+                <p style={{ fontSize: '9px', color: ctp.surface1, marginTop: '4px', marginBottom: 0 }}>
                   Click any chip to insert into the focused expression field
                 </p>
               </div>
             )}
 
             {/* ── GLSL Function Reference ──────────────────────────────────── */}
-            <div style={{ marginTop: '14px', padding: '10px', background: '#181825', borderRadius: '6px', border: '1px solid #313244' }}>
+            <div style={{ marginTop: '14px', padding: '10px', background: ctp.mantle, borderRadius: '6px', border: `1px solid ${ctp.surface0}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
                 <p style={{ ...SECTION_LABEL, margin: 0, flex: 1 }}>GLSL Reference</p>
                 <button onClick={undo} disabled={!canUndo} title="Undo (Cmd/Ctrl+Z)"
@@ -784,15 +785,15 @@ export function ExprBlockModal({ node, onClose }: Props) {
                 <button
                   onClick={() => setAutoWrap(v => !v)}
                   title={autoWrap ? 'Auto-wrap ON — clicks wrap entire field value as first arg' : 'Auto-wrap OFF — clicks wrap selected text only'}
-                  style={{ ...BTN, padding: '2px 8px', fontSize: '10px', background: autoWrap ? '#45475a' : '#313244', color: autoWrap ? '#cba6f7' : '#585b70', border: `1px solid ${autoWrap ? '#cba6f7' : '#45475a'}`, transition: 'all 0.15s' }}
+                  style={{ ...BTN, padding: '2px 8px', fontSize: '10px', background: autoWrap ? ctp.surface1 : ctp.surface0, color: autoWrap ? ctp.mauve : ctp.surface2, border: `1px solid ${autoWrap ? ctp.mauve : ctp.surface1}`, transition: 'all 0.15s' }}
                 >⊂ auto-wrap {autoWrap ? 'ON' : 'OFF'}</button>
               </div>
-              <p style={{ fontSize: '9px', color: '#45475a', marginBottom: '8px' }}>
+              <p style={{ fontSize: '9px', color: ctp.surface1, marginBottom: '8px' }}>
                 Click to insert into the focused expression or return field
               </p>
               {GLSL_GROUPS.map(group => (
                 <div key={group} style={{ marginBottom: '6px' }}>
-                  <div style={{ fontSize: '9px', color: '#45475a', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
+                  <div style={{ fontSize: '9px', color: ctp.surface1, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
                     {group}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
@@ -805,17 +806,17 @@ export function ExprBlockModal({ node, onClose }: Props) {
                           ...BTN,
                           padding: '2px 6px',
                           fontSize: '10px',
-                          background: '#11111b',
-                          borderColor: '#313244',
-                          color: '#6c7086',
+                          background: ctp.crust,
+                          borderColor: ctp.surface0,
+                          color: ctp.overlay0,
                         }}
                         onMouseEnter={e => {
-                          (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4';
-                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#45475a';
+                          (e.currentTarget as HTMLButtonElement).style.color = ctp.text;
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface1;
                         }}
                         onMouseLeave={e => {
-                          (e.currentTarget as HTMLButtonElement).style.color = '#6c7086';
-                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#313244';
+                          (e.currentTarget as HTMLButtonElement).style.color = ctp.overlay0;
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = ctp.surface0;
                         }}
                       >
                         {entry.label}

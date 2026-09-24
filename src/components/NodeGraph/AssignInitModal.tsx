@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { ctp } from '../../theme/palette';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
@@ -54,15 +55,15 @@ const TYPE_COLOR: Record<DataType, string> = {
   mat3:        '#f5c842',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
-  particle:    '#f9e2af',
+  particle:    ctp.yellow,
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const BTN: React.CSSProperties = {
-  background: '#313244',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  background: ctp.surface0,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '4px',
   padding: '3px 8px',
   fontSize: '11px',
@@ -76,7 +77,7 @@ const SECTION: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase' as const,
-  color: '#585b70',
+  color: ctp.surface2,
   margin: '10px 0 4px',
 };
 
@@ -219,8 +220,8 @@ export function AssignInitModal({ node, onClose }: Props) {
       <div
         onMouseDown={e => e.stopPropagation()}
         style={{
-          background: '#1e1e2e',
-          border: '1px solid #45475a',
+          background: ctp.base,
+          border: `1px solid ${ctp.surface1}`,
           borderRadius: '10px',
           width: 'min(580px, calc(100vw - 32px))',
           maxHeight: '82vh',
@@ -230,22 +231,22 @@ export function AssignInitModal({ node, onClose }: Props) {
           flexDirection: 'column',
           gap: 0,
           boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          color: '#cdd6f4',
+          color: ctp.text,
         }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: '#585b70', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '11px', color: ctp.surface2, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               init expression
             </span>
-            <span style={{ fontSize: '12px', color: '#89b4fa', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: '12px', color: ctp.blue, fontFamily: 'monospace' }}>
               {nodeLabel}
             </span>
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 2px' }}
+            style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 2px' }}
           >
             ✕
           </button>
@@ -264,10 +265,10 @@ export function AssignInitModal({ node, onClose }: Props) {
           spellCheck={false}
           autoFocus
           style={{
-            background: '#11111b',
-            border: '1px solid #45475a',
+            background: ctp.crust,
+            border: `1px solid ${ctp.surface1}`,
             borderRadius: '6px',
-            color: '#cdd6f4',
+            color: ctp.text,
             fontFamily: 'monospace',
             fontSize: '13px',
             padding: '10px 12px',
@@ -278,7 +279,7 @@ export function AssignInitModal({ node, onClose }: Props) {
             boxSizing: 'border-box',
           }}
         />
-        <div style={{ fontSize: '10px', color: '#45475a', marginTop: '4px', marginBottom: '4px' }}>
+        <div style={{ fontSize: '10px', color: ctp.surface1, marginTop: '4px', marginBottom: '4px' }}>
           ⌘ Enter to apply · Esc to cancel · Click a variable or function to insert
         </div>
 
@@ -321,7 +322,7 @@ export function AssignInitModal({ node, onClose }: Props) {
                         onClick={() => insertAtCursor(v.varName)}
                         style={{
                           ...BTN,
-                          background: '#1e1e2e',
+                          background: ctp.base,
                           border: `1px solid ${color}44`,
                           color,
                         }}
@@ -354,13 +355,13 @@ export function AssignInitModal({ node, onClose }: Props) {
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px', justifyContent: 'flex-end' }}>
           <button
             onClick={onClose}
-            style={{ ...BTN, color: '#6c7086', background: 'none', border: '1px solid #313244' }}
+            style={{ ...BTN, color: ctp.overlay0, background: 'none', border: `1px solid ${ctp.surface0}` }}
           >
             Cancel
           </button>
           <button
             onClick={handleApply}
-            style={{ ...BTN, background: '#89b4fa22', border: '1px solid #89b4fa88', color: '#89b4fa' }}
+            style={{ ...BTN, background: `${ctp.blue}22`, border: `1px solid ${ctp.blue}88`, color: ctp.blue }}
           >
             Apply
           </button>

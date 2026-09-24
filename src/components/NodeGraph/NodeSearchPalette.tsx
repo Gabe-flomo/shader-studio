@@ -11,6 +11,7 @@ import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
+import { ctp } from '../../theme/palette';
 
 // ── Build searchable list once ─────────────────────────────────────────────────
 interface SearchEntry {
@@ -205,8 +206,8 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
           zIndex: 901,
           width: '420px',
           maxWidth: 'calc(100vw - 32px)',
-          background: '#1e1e2e',
-          border: '1px solid #45475a',
+          background: ctp.base,
+          border: `1px solid ${ctp.surface1}`,
           borderRadius: '12px',
           boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
           display: 'flex',
@@ -218,12 +219,12 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
         {/* Search input */}
         <div style={{
           padding: '12px 14px',
-          borderBottom: '1px solid #313244',
+          borderBottom: `1px solid ${ctp.surface0}`,
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
         }}>
-          <span style={{ color: '#585b70', fontSize: '15px' }}>🔍</span>
+          <span style={{ color: ctp.surface2, fontSize: '15px' }}>🔍</span>
           <input
             ref={inputRef}
             value={query}
@@ -236,12 +237,12 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
               background: 'transparent',
               border: 'none',
               outline: 'none',
-              color: '#cdd6f4',
+              color: ctp.text,
               fontSize: '14px',
               fontFamily: 'inherit',
             }}
           />
-          <span style={{ fontSize: '11px', color: '#45475a', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: '11px', color: ctp.surface1, whiteSpace: 'nowrap' }}>
             {flatList.length} node{flatList.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -269,7 +270,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                 fontWeight: 700,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: '#f9e2af',
+                color: ctp.yellow,
               }}>
                 Group Presets
               </div>
@@ -289,7 +290,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                         padding: '5px 14px',
                         cursor: 'pointer',
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#313244')}
+                      onMouseEnter={e => (e.currentTarget.style.background = ctp.surface0)}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       onClick={() => {
                         const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
@@ -297,14 +298,14 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                         onClose();
                       }}
                     >
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f9e2af', flexShrink: 0 }} />
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: ctp.yellow, flexShrink: 0 }} />
                       <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: '13px', color: '#cdd6f4' }}>{preset.label}</span>
+                        <span style={{ fontSize: '13px', color: ctp.text }}>{preset.label}</span>
                         {preset.description && (
                           <span style={{
                             display: 'block',
                             fontSize: '10px',
-                            color: '#585b70',
+                            color: ctp.surface2,
                             marginTop: '1px',
                             overflow: 'hidden',
                             whiteSpace: 'nowrap',
@@ -314,7 +315,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                           </span>
                         )}
                       </span>
-                      <span style={{ fontSize: '10px', color: '#45475a', flexShrink: 0 }}>
+                      <span style={{ fontSize: '10px', color: ctp.surface1, flexShrink: 0 }}>
                         {preset.subgraph.nodes.length}n
                       </span>
                       <button
@@ -327,7 +328,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#585b70',
+                          color: ctp.surface2,
                           cursor: 'pointer',
                           fontSize: '12px',
                           padding: '0 2px',
@@ -343,7 +344,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
           )}
 
           {flatList.length === 0 && (
-            <li style={{ padding: '24px 16px', textAlign: 'center', color: '#585b70', fontSize: '13px' }}>
+            <li style={{ padding: '24px 16px', textAlign: 'center', color: ctp.surface2, fontSize: '13px' }}>
               No nodes match "{query}"
             </li>
           )}
@@ -367,7 +368,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                     fontWeight: 700,
                     letterSpacing: '0.08em',
                     textTransform: 'uppercase',
-                    color: CATEGORY_COLORS[category] ?? '#585b70',
+                    color: CATEGORY_COLORS[category] ?? ctp.surface2,
                   }}>
                     {category}
                   </div>
@@ -393,11 +394,11 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
         {/* Footer hint */}
         <div style={{
           padding: '7px 14px',
-          borderTop: '1px solid #313244',
+          borderTop: `1px solid ${ctp.surface0}`,
           display: 'flex',
           gap: '14px',
           fontSize: '10px',
-          color: '#45475a',
+          color: ctp.surface1,
         }}>
           <span><kbd style={kbdStyle}>↑↓</kbd> navigate</span>
           <span><kbd style={kbdStyle}>↵</kbd> place</span>
@@ -418,7 +419,7 @@ interface RowProps {
 }
 
 function NodeRow({ entry, active, onHover, onSelect }: RowProps) {
-  const accent = CATEGORY_COLORS[entry.def.category] ?? '#585b70';
+  const accent = CATEGORY_COLORS[entry.def.category] ?? ctp.surface2;
   return (
     <li
       data-active={active ? 'true' : undefined}
@@ -430,7 +431,7 @@ function NodeRow({ entry, active, onHover, onSelect }: RowProps) {
         gap: '10px',
         padding: '5px 14px',
         cursor: 'pointer',
-        background: active ? '#313244' : 'transparent',
+        background: active ? ctp.surface0 : 'transparent',
         transition: 'background 0.08s',
       }}
     >
@@ -445,11 +446,11 @@ function NodeRow({ entry, active, onHover, onSelect }: RowProps) {
 
       {/* Label + description */}
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: '13px', color: '#cdd6f4' }}>{entry.def.label}</span>
+        <span style={{ fontSize: '13px', color: ctp.text }}>{entry.def.label}</span>
         {entry.def.description && (
           <span style={{
             fontSize: '11px',
-            color: '#585b70',
+            color: ctp.surface2,
             marginLeft: '8px',
             overflow: 'hidden',
             whiteSpace: 'nowrap',
@@ -478,12 +479,12 @@ function NodeRow({ entry, active, onHover, onSelect }: RowProps) {
 
 const kbdStyle: React.CSSProperties = {
   display: 'inline-block',
-  background: '#313244',
-  border: '1px solid #45475a',
+  background: ctp.surface0,
+  border: `1px solid ${ctp.surface1}`,
   borderRadius: '4px',
   padding: '1px 5px',
   fontSize: '10px',
   fontFamily: 'inherit',
-  color: '#cdd6f4',
+  color: ctp.text,
   marginRight: '3px',
 };

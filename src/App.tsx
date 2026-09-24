@@ -20,6 +20,7 @@ import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useTimeHotkeys } from './hooks/useTimeHotkeys';
+import { ctp } from './theme/palette';
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -43,9 +44,9 @@ const MOBILE_CANVAS_VH_DEFAULT = 42;
 
 // ── Button style helper ───────────────────────────────────────────────────────
 const btnStyle = (active = false): React.CSSProperties => ({
-  background: active ? '#89b4fa22' : '#313244',
-  border: `1px solid ${active ? '#89b4fa55' : '#45475a'}`,
-  color: active ? '#89b4fa' : '#cdd6f4',
+  background: active ? `${ctp.blue}22` : ctp.surface0,
+  border: `1px solid ${active ? `${ctp.blue}55` : ctp.surface1}`,
+  color: active ? ctp.blue : ctp.text,
   borderRadius: '6px',
   padding: '4px 10px',
   fontSize: '11px',
@@ -76,26 +77,26 @@ function AudioMasterVolumeWidget() {
   return (
     <div style={{
       position: 'absolute', bottom: 12, right: 12, zIndex: 20,
-      background: 'rgba(17,17,27,0.92)', border: '1px solid #45475a',
+      background: 'rgba(17,17,27,0.92)', border: `1px solid ${ctp.surface1}`,
       borderRadius: '8px', padding: '6px 10px',
       display: 'flex', alignItems: 'center', gap: '8px',
       backdropFilter: 'blur(8px)',
       boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
     }}>
-      <span style={{ fontSize: '11px', color: '#89dceb' }}>♫</span>
+      <span style={{ fontSize: '11px', color: ctp.sky }}>♫</span>
       <button
         onClick={togglePause}
         title={paused ? 'Resume all audio' : 'Pause all audio'}
-        style={{ background: 'none', border: 'none', color: paused ? '#f38ba8' : '#a6e3a1', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+        style={{ background: 'none', border: 'none', color: paused ? ctp.red : ctp.green, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
       >{paused ? '▶' : '⏸'}</button>
       <input
         type="range"
         min={0} max={1} step={0.01}
         value={masterVolume}
         onChange={e => setVolume(parseFloat(e.target.value))}
-        style={{ width: 72, accentColor: '#89dceb', cursor: 'pointer', opacity: paused ? 0.4 : 1 }}
+        style={{ width: 72, accentColor: ctp.sky, cursor: 'pointer', opacity: paused ? 0.4 : 1 }}
       />
-      <span style={{ fontSize: '10px', color: '#6c7086', fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
+      <span style={{ fontSize: '10px', color: ctp.overlay0, fontFamily: 'monospace', width: '30px', textAlign: 'right' }}>
         {Math.round(masterVolume * 100)}%
       </span>
     </div>
@@ -117,21 +118,21 @@ function MobileCodeView({ code }: { code: string }) {
     } catch { /* silent */ }
   };
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, background: '#181825' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, background: ctp.mantle }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 12px', background: '#1e1e2e', borderBottom: '1px solid #313244', flexShrink: 0,
+        padding: '8px 12px', background: ctp.base, borderBottom: `1px solid ${ctp.surface0}`, flexShrink: 0,
       }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#89b4fa', letterSpacing: '0.04em' }}>FRAGMENT SHADER</span>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: ctp.blue, letterSpacing: '0.04em' }}>FRAGMENT SHADER</span>
         <button
           onClick={handleCopy}
-          style={{ background: 'none', border: '1px solid #45475a', color: copied ? '#a6e3a1' : '#a6adc8', borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
+          style={{ background: 'none', border: `1px solid ${ctp.surface1}`, color: copied ? ctp.green : ctp.subtext0, borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
         >{copied ? 'Copied' : 'Copy'}</button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.6 }}>
         {lines.map((line, i) => (
           <div key={i} style={{ whiteSpace: 'pre' }}>
-            <span style={{ color: '#45475a', userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
+            <span style={{ color: ctp.surface1, userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
             {tokenizeLine(line).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}
           </div>
         ))}
@@ -143,7 +144,7 @@ function MobileCodeView({ code }: { code: string }) {
 type HistChannel = 'luma' | 'r' | 'g' | 'b';
 
 const HIST_CH_COLORS: Record<HistChannel, string> = {
-  luma: '#cdd6f4', r: '#f38ba8', g: '#a6e3a1', b: '#89b4fa',
+  luma: ctp.text, r: ctp.red, g: ctp.green, b: ctp.blue,
 };
 const HIST_CH_LABELS: Record<HistChannel, string> = {
   luma: 'L', r: 'R', g: 'G', b: 'B',
@@ -177,15 +178,15 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
     padding: '1px 6px', fontSize: '9px', borderRadius: '3px', cursor: 'pointer',
     fontFamily: 'monospace', letterSpacing: '0.04em',
     background: active.has(ch) ? `${HIST_CH_COLORS[ch]}22` : 'transparent',
-    border: `1px solid ${active.has(ch) ? HIST_CH_COLORS[ch] : '#45475a'}`,
-    color: active.has(ch) ? HIST_CH_COLORS[ch] : '#585b70',
+    border: `1px solid ${active.has(ch) ? HIST_CH_COLORS[ch] : ctp.surface1}`,
+    color: active.has(ch) ? HIST_CH_COLORS[ch] : ctp.surface2,
   });
 
   return (
     <div style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, height: '84px',
       background: 'rgba(17,17,27,0.92)', backdropFilter: 'blur(4px)',
-      borderTop: '1px solid #31324466',
+      borderTop: `1px solid ${ctp.surface0}66`,
       display: 'flex', flexDirection: 'column',
       padding: '5px 8px 3px',
       zIndex: 5,
@@ -199,7 +200,7 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
         ))}
         <div style={{ flex: 1 }} />
         {hoverInfo !== null && (
-          <span style={{ fontSize: '9px', color: '#cdd6f4', fontFamily: 'monospace' }}>
+          <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace' }}>
             {(hoverInfo.binIdx / (data.luma.length - 1)).toFixed(3)}
             {channels.map(ch => (
               <span key={ch} style={{ color: HIST_CH_COLORS[ch], marginLeft: '5px' }}>
@@ -209,8 +210,8 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
           </span>
         )}
         {data.fps > 0 && (
-          <span style={{ fontSize: '9px', color: '#585b70', fontFamily: 'monospace', marginLeft: '6px' }}>
-            {data.fps}<span style={{ color: '#45475a' }}>fps</span>
+          <span style={{ fontSize: '9px', color: ctp.surface2, fontFamily: 'monospace', marginLeft: '6px' }}>
+            {data.fps}<span style={{ color: ctp.surface1 }}>fps</span>
           </span>
         )}
       </div>
@@ -250,7 +251,7 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
       </div>
 
       {/* Scale labels */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#45475a', marginTop: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: ctp.surface1, marginTop: '2px' }}>
         <span>0</span><span>0.5</span><span>1.0</span>
       </div>
     </div>
@@ -278,7 +279,7 @@ function App() {
         const label = outSocket?.label ?? outKey;
         const type  = outSocket?.type ?? 'float';
         const COLOR_MAP: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
-        const col = COLOR_MAP[type] || '#cdd6f4';
+        const col = COLOR_MAP[type] || ctp.text;
         const formatted = vals.map(v => v.toFixed(3)).join(', ');
         return { label, col, formatted, type };
       })
@@ -524,15 +525,15 @@ function App() {
     <button
       onClick={() => setShowErrors(v => !v)}
       style={{
-        background: showErrors ? '#f38ba822' : 'none',
-        border: `1px solid ${showErrors ? '#f38ba855' : '#f38ba844'}`,
-        color: '#f38ba8', borderRadius: '4px',
+        background: showErrors ? `${ctp.red}22` : 'none',
+        border: `1px solid ${showErrors ? `${ctp.red}55` : `${ctp.red}44`}`,
+        color: ctp.red, borderRadius: '4px',
         padding: '3px 8px', fontSize: '10px', cursor: 'pointer',
         display: 'flex', alignItems: 'center', gap: '5px',
         fontFamily: 'monospace', touchAction: 'manipulation',
       }}
     >
-      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#f38ba8' }} />
+      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: ctp.red }} />
       {errorCount} err
     </button>
   ) : null;
@@ -540,19 +541,19 @@ function App() {
   // ── Error popup ───────────────────────────────────────────────────────────
   const errorPopup = showErrors && errorCount > 0 ? (
     <div style={{
-      background: '#1e1e2e', border: '1px solid #f38ba8', borderBottom: 'none',
-      padding: '8px 12px', fontSize: '11px', color: '#f38ba8',
+      background: ctp.base, border: `1px solid ${ctp.red}`, borderBottom: 'none',
+      padding: '8px 12px', fontSize: '11px', color: ctp.red,
       maxHeight: '160px', overflowY: 'auto', fontFamily: 'monospace', flexShrink: 0,
     }}>
       {compilationErrors.length > 0 && (
         <div style={{ marginBottom: glslErrors.length > 0 ? '6px' : 0 }}>
-          <span style={{ color: '#f38ba888', fontSize: '10px', letterSpacing: '0.05em' }}>GRAPH</span>
+          <span style={{ color: `${ctp.red}88`, fontSize: '10px', letterSpacing: '0.05em' }}>GRAPH</span>
           {compilationErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
         </div>
       )}
       {glslErrors.length > 0 && (
         <div>
-          <span style={{ color: '#f38ba888', fontSize: '10px', letterSpacing: '0.05em' }}>GLSL</span>
+          <span style={{ color: `${ctp.red}88`, fontSize: '10px', letterSpacing: '0.05em' }}>GLSL</span>
           {glslErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
         </div>
       )}
@@ -563,36 +564,36 @@ function App() {
   const savePanelEl = showSavePanel ? (
     <div style={{
       position: 'absolute', top: 36, left: 8, zIndex: 20,
-      background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+      background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
       padding: '8px', display: 'flex', gap: '6px', alignItems: 'center',
       boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
     }}>
       <input autoFocus value={saveNameInput} onChange={e => setSaveNameInput(e.target.value)}
         placeholder="Graph name..."
         onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setShowSavePanel(false); }}
-        style={{ background: '#313244', border: '1px solid #45475a', color: '#cdd6f4', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', outline: 'none', width: '150px' }}
+        style={{ background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.text, borderRadius: '4px', padding: '3px 8px', fontSize: '11px', outline: 'none', width: '150px' }}
       />
       <button onClick={handleSave} disabled={!saveNameInput.trim()} style={btnStyle(!!saveNameInput.trim())}>Save</button>
-      <button onClick={() => setShowSavePanel(false)} style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}>✕</button>
+      <button onClick={() => setShowSavePanel(false)} style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}>✕</button>
     </div>
   ) : null;
 
   const loadPanelEl = showLoadPanel ? (
     <div style={{
       position: 'absolute', top: 36, left: 8, zIndex: 20,
-      background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+      background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
       padding: '4px', minWidth: '200px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
     }}>
       {savedNames.length === 0 ? (
-        <div style={{ padding: '8px 10px', fontSize: '11px', color: '#585b70' }}>No saved graphs yet</div>
+        <div style={{ padding: '8px 10px', fontSize: '11px', color: ctp.surface2 }}>No saved graphs yet</div>
       ) : savedNames.map(name => (
         <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 6px', borderRadius: '4px' }}
-          onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = '#313244'}
+          onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = ctp.surface0}
           onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
         >
-          <span style={{ flex: 1, fontSize: '11px', color: '#cdd6f4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-          <button onClick={() => { loadSavedGraph(name); setShowLoadPanel(false); }} style={{ background: '#313244', border: '1px solid #45475a', color: '#89b4fa', borderRadius: '4px', padding: '1px 7px', fontSize: '10px', cursor: 'pointer' }}>Load</button>
-          <button onClick={() => { deleteSavedGraph(name); setSavedNames(getSavedGraphNames()); }} style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '11px', padding: '1px 3px' }} title="Delete">✕</button>
+          <span style={{ flex: 1, fontSize: '11px', color: ctp.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          <button onClick={() => { loadSavedGraph(name); setShowLoadPanel(false); }} style={{ background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.blue, borderRadius: '4px', padding: '1px 7px', fontSize: '10px', cursor: 'pointer' }}>Load</button>
+          <button onClick={() => { deleteSavedGraph(name); setSavedNames(getSavedGraphNames()); }} style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '11px', padding: '1px 3px' }} title="Delete">✕</button>
         </div>
       ))}
     </div>
@@ -614,7 +615,7 @@ function App() {
           <div
             style={{
               position: 'absolute', top: 'calc(100% + 4px)', left: 0,
-              background: '#1e1e2e', border: '1px solid #45475a',
+              background: ctp.base, border: `1px solid ${ctp.surface1}`,
               borderRadius: '8px', padding: '4px',
               display: 'flex', flexDirection: 'column', gap: '3px',
               boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
@@ -624,18 +625,18 @@ function App() {
           >
             <button onClick={() => { exportGraph(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
             <button onClick={() => { importGraphFromFile(); setShowToolbarMenu(false); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
-            <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
-            <button onClick={() => { setShowExport(true); setShowToolbarMenu(false); }} style={{ ...btnStyle(), color: '#cba6f7', borderColor: '#cba6f744', textAlign: 'left', width: '100%' }}>🎬 Record</button>
+            <div style={{ height: '1px', background: ctp.surface0, margin: '2px 0' }} />
+            <button onClick={() => { setShowExport(true); setShowToolbarMenu(false); }} style={{ ...btnStyle(), color: ctp.mauve, borderColor: `${ctp.mauve}44`, textAlign: 'left', width: '100%' }}>🎬 Record</button>
           </div>
         )}
       </div>
 
-      <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: '#89b4fa', borderColor: '#89b4fa44' }} title="Keyboard shortcuts">
+      <button onClick={() => setShowShortcuts(true)} style={{ ...btnStyle(), color: ctp.blue, borderColor: `${ctp.blue}44` }} title="Keyboard shortcuts">
         {compact ? '⌨' : '⌨ Keys'}
       </button>
       <button
         onClick={() => loadExampleGraph('blank')}
-        style={{ ...btnStyle(), color: '#f38ba8' }}
+        style={{ ...btnStyle(), color: ctp.red }}
         title="Clear all nodes"
       >✕</button>
     </div>
@@ -650,7 +651,7 @@ function App() {
     const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
     const showCodePane   = mobileLayout === 'code';
     return (
-      <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: '#11111b', touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: ctp.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         {/* Floating TopNav */}
         <TopNav
@@ -701,21 +702,21 @@ function App() {
                   background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
                   borderRadius: '6px', padding: '4px 8px',
                   display: 'flex', alignItems: 'center', gap: '6px',
-                  fontSize: '10px', fontFamily: 'monospace', color: '#585b70',
-                  border: '1px solid #313244',
+                  fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2,
+                  border: `1px solid ${ctp.surface0}`,
                   maxWidth: '320px',
                 }}>
                   {hoveredParamHint ? (
                     <>
-                      <span style={{ color: '#cba6f7', fontSize: '11px', flexShrink: 0 }}>?</span>
-                      <span style={{ color: '#cdd6f4', whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
+                      <span style={{ color: ctp.mauve, fontSize: '11px', flexShrink: 0 }}>?</span>
+                      <span style={{ color: ctp.text, whiteSpace: 'normal', lineHeight: '1.4', fontFamily: 'system-ui, sans-serif' }}>{hoveredParamHint}</span>
                     </>
                   ) : pixelSample ? (
                     <>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a', flexShrink: 0 }} />
-                      <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(2)}</span>
-                      <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(2)}</span>
-                      <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(2)}</span>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}`, flexShrink: 0 }} />
+                      <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(2)}</span>
+                      <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(2)}</span>
+                      <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(2)}</span>
                     </>
                   ) : null}
                 </div>
@@ -734,9 +735,9 @@ function App() {
                   onClick={() => setMobileNodeOverlayOpen(!mobileNodeOverlayOpen)}
                   title="Show the node graph over the canvas (read-only)"
                   style={{
-                    background: mobileNodeOverlayOpen ? '#89b4fa22' : 'rgba(24,24,37,0.7)',
-                    border: `1px solid ${mobileNodeOverlayOpen ? '#89b4fa' : '#45475a'}`,
-                    color: mobileNodeOverlayOpen ? '#89b4fa' : '#a6adc8',
+                    background: mobileNodeOverlayOpen ? `${ctp.blue}22` : 'rgba(24,24,37,0.7)',
+                    border: `1px solid ${mobileNodeOverlayOpen ? ctp.blue : ctp.surface1}`,
+                    color: mobileNodeOverlayOpen ? ctp.blue : ctp.subtext0,
                     borderRadius: '6px', width: '30px', height: '30px', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
                   }}
                 >⊞</button>
@@ -783,12 +784,12 @@ function App() {
                 cursor: 'ns-resize', touchAction: 'none',
               }}
             >
-              <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: '#45475a' }} />
+              <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: ctp.surface1 }} />
             </div>
           )}
 
           {showGraphPane && (
-            <div style={{ flex: 1, minHeight: 0, borderTop: showCanvasPane ? '1px solid #313244' : undefined }}>
+            <div style={{ flex: 1, minHeight: 0, borderTop: showCanvasPane ? `1px solid ${ctp.surface0}` : undefined }}>
               <MobileGraphBrowser />
             </div>
           )}
@@ -817,14 +818,14 @@ function App() {
           background: 'rgba(24,24,37,0.90)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
-          borderTop: '1px solid #313244',
+          borderTop: `1px solid ${ctp.surface0}`,
           padding: '8px calc(12px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px))',
           display: 'flex', alignItems: 'center', gap: '8px',
           minHeight: '56px',
           boxSizing: 'border-box',
         }}>
           {/* Layout mode: canvas-only / split / graph-only */}
-          <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ display: 'flex', border: `1px solid ${ctp.surface1}`, borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
             <button
               onClick={() => setMobileLayout('canvas')}
               style={{ ...btnStyle(mobileLayout === 'canvas'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px' }}
@@ -832,12 +833,12 @@ function App() {
             >▣</button>
             <button
               onClick={() => setMobileLayout('split')}
-              style={{ ...btnStyle(mobileLayout === 'split'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderLeft: '1px solid #45475a', borderRight: '1px solid #45475a' }}
+              style={{ ...btnStyle(mobileLayout === 'split'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderLeft: `1px solid ${ctp.surface1}`, borderRight: `1px solid ${ctp.surface1}` }}
               title="Split view"
             >▥</button>
             <button
               onClick={() => setMobileLayout('graph')}
-              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderRight: '1px solid #45475a' }}
+              style={{ ...btnStyle(mobileLayout === 'graph'), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px', borderRight: `1px solid ${ctp.surface1}` }}
               title="Graph fullscreen"
             >☰</button>
             <button
@@ -857,7 +858,7 @@ function App() {
               Select/Add/Delete/Draw toolbar (KeyframeEditorModal.tsx) one
               for one, just relocated to the bottom bar. */}
           {mobileKeyframeEditor && (
-            <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ display: 'flex', border: `1px solid ${ctp.surface1}`, borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
               {([
                 { id: 'select', icon: '↖' },
                 // Plain "+" rather than a pencil glyph (✏) — the pencil
@@ -873,7 +874,7 @@ function App() {
                   onClick={() => setMobileKeyframeTool(m.id)}
                   style={{
                     ...btnStyle(mobileKeyframeTool === m.id), border: 'none', borderRadius: 0, padding: '8px 10px', fontSize: '13px',
-                    borderLeft: i > 0 ? '1px solid #45475a' : undefined,
+                    borderLeft: i > 0 ? `1px solid ${ctp.surface1}` : undefined,
                   }}
                   title={m.id}
                 >{m.icon}</button>
@@ -887,7 +888,7 @@ function App() {
               currently on screen. */}
           <button
             onClick={() => { setMobileExamplesTab('examples'); setShowMobileExamples(true); }}
-            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#a6e3a1', borderColor: '#a6e3a144', marginLeft: 'auto' }}
+            style={{ ...btnStyle(), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: ctp.green, borderColor: `${ctp.green}44`, marginLeft: 'auto' }}
             title="Browse examples"
           >
             ✦
@@ -899,7 +900,7 @@ function App() {
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowMobileActionMenu(v => !v)}
-              style={{ ...btnStyle(showMobileActionMenu), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: '#cba6f7', borderColor: '#cba6f744' }}
+              style={{ ...btnStyle(showMobileActionMenu), padding: '8px 12px', fontSize: '13px', flexShrink: 0, color: ctp.mauve, borderColor: `${ctp.mauve}44` }}
               title="Record, reset, import, export"
             >
               🎬
@@ -909,20 +910,20 @@ function App() {
                 onMouseLeave={() => setShowMobileActionMenu(false)}
                 style={{
                   position: 'absolute', bottom: 'calc(100% + 4px)', right: 0,
-                  background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '8px', padding: '4px',
+                  background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '8px', padding: '4px',
                   display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '140px',
                   boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
                 }}
               >
                 <button
                   onClick={() => { setShowMobileActionMenu(false); setShowExport(true); }}
-                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#cba6f7', borderColor: '#cba6f744' }}
+                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: ctp.mauve, borderColor: `${ctp.mauve}44` }}
                 >🎬 Record</button>
                 <button
                   onClick={() => { setShowMobileActionMenu(false); setShowMobileResetConfirm(true); }}
-                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: '#f38ba8', borderColor: '#f38ba844' }}
+                  style={{ ...btnStyle(), textAlign: 'left', width: '100%', color: ctp.red, borderColor: `${ctp.red}44` }}
                 >✕ Reset</button>
-                <div style={{ height: '1px', background: '#313244', margin: '2px 0' }} />
+                <div style={{ height: '1px', background: ctp.surface0, margin: '2px 0' }} />
                 <button onClick={() => { setShowMobileActionMenu(false); importGraphFromFile(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬆ Import</button>
                 <button onClick={() => { setShowMobileActionMenu(false); exportGraph(); }} style={{ ...btnStyle(), textAlign: 'left', width: '100%' }}>⬇ Export</button>
               </div>
@@ -939,35 +940,35 @@ function App() {
             <div
               onClick={e => e.stopPropagation()}
               style={{
-                width: '100%', maxHeight: '75vh', overflowY: 'auto', background: '#181825',
-                borderRadius: '16px 16px 0 0', border: '1px solid #313244',
+                width: '100%', maxHeight: '75vh', overflowY: 'auto', background: ctp.mantle,
+                borderRadius: '16px 16px 0 0', border: `1px solid ${ctp.surface0}`,
                 padding: '12px 12px calc(12px + env(safe-area-inset-bottom, 0px)) 12px',
                 boxSizing: 'border-box',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', border: '1px solid #45475a', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', border: `1px solid ${ctp.surface1}`, borderRadius: '8px', overflow: 'hidden' }}>
                   <button
                     onClick={() => setMobileExamplesTab('examples')}
                     style={{
                       padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', touchAction: 'manipulation',
-                      background: mobileExamplesTab === 'examples' ? '#313244' : 'none',
-                      color: mobileExamplesTab === 'examples' ? '#cdd6f4' : '#6c7086',
+                      background: mobileExamplesTab === 'examples' ? ctp.surface0 : 'none',
+                      color: mobileExamplesTab === 'examples' ? ctp.text : ctp.overlay0,
                     }}
                   >Examples</button>
                   <button
                     onClick={() => setMobileExamplesTab('nodes')}
                     style={{
-                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', borderLeft: '1px solid #45475a', cursor: 'pointer', touchAction: 'manipulation',
-                      background: mobileExamplesTab === 'nodes' ? '#313244' : 'none',
-                      color: mobileExamplesTab === 'nodes' ? '#cdd6f4' : '#6c7086',
+                      padding: '6px 12px', fontSize: '12px', fontWeight: 700, border: 'none', borderLeft: `1px solid ${ctp.surface1}`, cursor: 'pointer', touchAction: 'manipulation',
+                      background: mobileExamplesTab === 'nodes' ? ctp.surface0 : 'none',
+                      color: mobileExamplesTab === 'nodes' ? ctp.text : ctp.overlay0,
                     }}
                   >Nodes</button>
                 </div>
                 <div style={{ flex: 1 }} />
                 <button
                   onClick={() => setShowMobileExamples(false)}
-                  style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
+                  style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '18px', lineHeight: 1, cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
                   title="Close"
                 >✕</button>
               </div>
@@ -1000,8 +1001,8 @@ function App() {
                               key={k}
                               onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
                               style={{
-                                background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px',
-                                padding: '8px 10px', fontSize: '12px', color: '#cdd6f4',
+                                background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px',
+                                padding: '8px 10px', fontSize: '12px', color: ctp.text,
                                 cursor: 'pointer', touchAction: 'manipulation',
                               }}
                             >
@@ -1030,18 +1031,18 @@ function App() {
             <div
               onClick={e => e.stopPropagation()}
               style={{
-                width: '100%', background: '#1e1e2e', borderRadius: '16px 16px 0 0',
-                border: '1px solid #45475a', padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px',
+                width: '100%', background: ctp.base, borderRadius: '16px 16px 0 0',
+                border: `1px solid ${ctp.surface1}`, padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px',
                 boxSizing: 'border-box',
               }}
             >
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#cdd6f4', marginBottom: '6px' }}>Clear all nodes?</div>
-              <div style={{ fontSize: '12px', color: '#a6adc8', marginBottom: '16px' }}>This starts over from a blank graph. This can't be undone.</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: ctp.text, marginBottom: '6px' }}>Clear all nodes?</div>
+              <div style={{ fontSize: '12px', color: ctp.subtext0, marginBottom: '16px' }}>This starts over from a blank graph. This can't be undone.</div>
               <button
                 onClick={() => { setShowMobileResetConfirm(false); loadExampleGraph('blank'); }}
                 style={{
-                  width: '100%', padding: '12px', marginBottom: '8px', background: '#f38ba822',
-                  border: '1px solid #f38ba866', borderRadius: '8px', color: '#f38ba8', fontSize: '13px',
+                  width: '100%', padding: '12px', marginBottom: '8px', background: `${ctp.red}22`,
+                  border: `1px solid ${ctp.red}66`, borderRadius: '8px', color: ctp.red, fontSize: '13px',
                   fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
                 }}
               >
@@ -1050,8 +1051,8 @@ function App() {
               <button
                 onClick={() => setShowMobileResetConfirm(false)}
                 style={{
-                  width: '100%', padding: '12px', background: '#313244', border: '1px solid #45475a',
-                  borderRadius: '8px', color: '#cdd6f4', fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
+                  width: '100%', padding: '12px', background: ctp.surface0, border: `1px solid ${ctp.surface1}`,
+                  borderRadius: '8px', color: ctp.text, fontSize: '13px', cursor: 'pointer', touchAction: 'manipulation',
                 }}
               >
                 Cancel
@@ -1076,7 +1077,7 @@ function App() {
 
   if (mobile && page === 'shortcuts') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
         <TopNav page={page} onPageChange={setPage} />
         <ShortcutsPage />
       </div>
@@ -1085,7 +1086,7 @@ function App() {
 
   if (mobile && page === 'glsl') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
         <TopNav page={page} onPageChange={setPage} />
         <GLSLPage />
       </div>
@@ -1098,7 +1099,7 @@ function App() {
   // ══════════════════════════════════════════════════════════════════════════
   if (tablet) {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
         <TopNav page={page} onPageChange={setPage} />
 
         {page === 'shortcuts' && <ShortcutsPage />}
@@ -1110,8 +1111,8 @@ function App() {
           <div style={{
             width: paletteExpanded ? '200px' : '36px',
             flexShrink: 0,
-            background: '#1e1e2e',
-            borderRight: '1px solid #313244',
+            background: ctp.base,
+            borderRight: `1px solid ${ctp.surface0}`,
             transition: 'width 0.2s ease',
             overflow: 'hidden',
             display: 'flex',
@@ -1123,7 +1124,7 @@ function App() {
               title={paletteExpanded ? 'Collapse palette' : 'Expand palette'}
               style={{
                 background: 'none', border: 'none',
-                color: '#89b4fa', cursor: 'pointer',
+                color: ctp.blue, cursor: 'pointer',
                 padding: '10px 0', fontSize: '16px',
                 width: '100%', flexShrink: 0,
                 touchAction: 'manipulation',
@@ -1165,26 +1166,26 @@ function App() {
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
-            style={{ width: '8px', flexShrink: 0, background: isDragging ? '#45475a' : '#313244', cursor: 'col-resize', transition: 'background 0.15s' }}
+            style={{ width: '8px', flexShrink: 0, background: isDragging ? ctp.surface1 : ctp.surface0, cursor: 'col-resize', transition: 'background 0.15s' }}
           />
 
           {/* Right: Preview */}
           <div style={{ width: previewWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
-            <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
+            <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
-                  <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                  <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                  <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
+                  <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
+                  <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
+                  <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
                 </div>
               ) : probeDisplay ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
                   {probeDisplay.map(({ label, col, formatted }) => (
                     <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
                       <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                      <span style={{ color: '#cdd6f4' }}>{formatted}</span>
+                      <span style={{ color: ctp.text }}>{formatted}</span>
                     </span>
                   ))}
                 </div>
@@ -1210,7 +1211,7 @@ function App() {
   const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
 
   return (
-    <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#11111b' }}>
+    <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: ctp.crust }}>
       <TopNav page={page} onPageChange={setPage} />
 
       {page === 'shortcuts' && <ShortcutsPage />}
@@ -1224,7 +1225,7 @@ function App() {
 
         {/* Left: Node Palette — hidden on GLSL page */}
         {page === 'studio' && paletteBaseW > 0 && (
-          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: '#181825', borderRight: '1px solid #313244' }}>
+          <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: ctp.mantle, borderRight: `1px solid ${ctp.surface0}` }}>
             {/* Collapsed state: show only an expand button */}
             {paletteCollapsed ? (
               <button
@@ -1232,13 +1233,13 @@ function App() {
                 title="Expand palette"
                 style={{
                   position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)',
-                  zIndex: 10, background: 'none', border: '1px solid #313244',
-                  color: '#45475a', cursor: 'pointer', borderRadius: '3px',
+                  zIndex: 10, background: 'none', border: `1px solid ${ctp.surface0}`,
+                  color: ctp.surface1, cursor: 'pointer', borderRadius: '3px',
                   fontSize: '10px', padding: '2px 4px', lineHeight: 1,
                   transition: 'color 0.1s',
                 }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4')}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.text)}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
               >▶</button>
             ) : (
               <>
@@ -1252,7 +1253,7 @@ function App() {
                     cursor: 'col-resize', zIndex: 20, background: 'transparent',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = '#45475a')}
+                  onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = ctp.surface1)}
                   onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.background = 'transparent')}
                 />
               </>
@@ -1271,8 +1272,8 @@ function App() {
               <button
                 onClick={() => setShowCode(v => !v)}
                 style={{ position: 'absolute', bottom: showCode ? 248 : 8, right: 8, zIndex: 15, ...btnStyle(showCode), fontFamily: 'monospace' }}
-                onMouseEnter={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#45475a'; }}
-                onMouseLeave={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = '#313244'; }}
+                onMouseEnter={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = ctp.surface1; }}
+                onMouseLeave={e => { if (!showCode) (e.currentTarget as HTMLButtonElement).style.background = ctp.surface0; }}
               >
                 {'{ } Code'}
               </button>
@@ -1297,9 +1298,9 @@ function App() {
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
-            style={{ width: '5px', flexShrink: 0, background: isDragging ? '#45475a' : '#313244', cursor: 'col-resize', transition: 'background 0.15s' }}
-            onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#45475a'; }}
-            onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = '#313244'; }}
+            style={{ width: '5px', flexShrink: 0, background: isDragging ? ctp.surface1 : ctp.surface0, cursor: 'col-resize', transition: 'background 0.15s' }}
+            onMouseEnter={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = ctp.surface1; }}
+            onMouseLeave={e => { if (!isDragging) (e.currentTarget as HTMLDivElement).style.background = ctp.surface0; }}
           />
         )}
 
@@ -1314,34 +1315,34 @@ function App() {
                 <button
                   onClick={() => setShowHistogram(v => !v)}
                   title="Toggle brightness histogram"
-                  style={{ background: showHistogram ? '#cba6f722' : '#1e1e2e99', border: `1px solid ${showHistogram ? '#cba6f7' : '#45475a'}`, color: showHistogram ? '#cba6f7' : '#585b70', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cba6f7'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? '#cba6f7' : '#585b70'; }}
+                  style={{ background: showHistogram ? `${ctp.mauve}22` : `${ctp.base}99`, border: `1px solid ${showHistogram ? ctp.mauve : ctp.surface1}`, color: showHistogram ? ctp.mauve : ctp.surface2, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.mauve; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? ctp.mauve : ctp.surface2; }}
                 >∿</button>
                 <button
                   onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }}
                   title="Float preview"
-                  style={{ background: '#1e1e2e99', border: '1px solid #45475a', color: '#585b70', borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+                  style={{ background: `${ctp.base}99`, border: `1px solid ${ctp.surface1}`, color: ctp.surface2, borderRadius: '4px', padding: '3px 7px', fontSize: '11px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
                 >⊞</button>
               </div>
             </div>
             {/* Status bar */}
-            <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '28px', flexShrink: 0 }}>
+            <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '28px', flexShrink: 0 }}>
               {pixelSample ? (
                 <div title="Pixel color under cursor (0.0–1.0)" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
-                  <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                  <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                  <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0, background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
+                  <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
+                  <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
+                  <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
                 </div>
               ) : probeDisplay ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
                   {probeDisplay.map(({ label, col, formatted }) => (
                     <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
                       <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                      <span style={{ color: '#cdd6f4' }}>{formatted}</span>
+                      <span style={{ color: ctp.text }}>{formatted}</span>
                     </span>
                   ))}
                 </div>
@@ -1367,8 +1368,8 @@ function App() {
             zIndex: 500,
             display: 'flex',
             flexDirection: 'column',
-            background: '#181825',
-            border: '1px solid #45475a',
+            background: ctp.mantle,
+            border: `1px solid ${ctp.surface1}`,
             borderRadius: '8px',
             boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
             overflow: 'hidden',
@@ -1381,8 +1382,8 @@ function App() {
           <div
             onMouseDown={handleFloatHeaderMouseDown}
             style={{
-              background: '#1e1e2e',
-              borderBottom: '1px solid #313244',
+              background: ctp.base,
+              borderBottom: `1px solid ${ctp.surface0}`,
               padding: '4px 8px',
               display: 'flex',
               alignItems: 'center',
@@ -1392,23 +1393,23 @@ function App() {
               userSelect: 'none',
             }}
           >
-            <span style={{ fontSize: '10px', color: '#585b70', letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
+            <span style={{ fontSize: '10px', color: ctp.surface2, letterSpacing: '0.06em', flex: 1 }}>PREVIEW</span>
             <span onMouseDown={e => e.stopPropagation()}><TimeControlsStrip /></span>
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setShowHistogram(v => !v)}
               title="Toggle brightness histogram"
-              style={{ background: 'none', border: 'none', color: showHistogram ? '#cba6f7' : '#585b70', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cba6f7'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? '#cba6f7' : '#585b70'; }}
+              style={{ background: 'none', border: 'none', color: showHistogram ? ctp.mauve : ctp.surface2, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.mauve; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = showHistogram ? ctp.mauve : ctp.surface2; }}
             >∿</button>
             <button
               onMouseDown={e => e.stopPropagation()}
               onClick={() => setPreviewFloated(false)}
               title="Dock preview"
-              style={{ background: 'none', border: 'none', color: '#585b70', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#cdd6f4'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+              style={{ background: 'none', border: 'none', color: ctp.surface2, cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: '0 2px' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.text; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
             >⊟</button>
           </div>
 
@@ -1419,20 +1420,20 @@ function App() {
           </div>
 
           {/* Status bar */}
-          <div style={{ background: '#181825', borderTop: '1px solid #313244', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: '#585b70', minHeight: '24px', flexShrink: 0 }}>
+          <div style={{ background: ctp.mantle, borderTop: `1px solid ${ctp.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2, minHeight: '24px', flexShrink: 0 }}>
             {pixelSample ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: '1px solid #45475a' }} />
-                <span style={{ color: '#f38ba8' }}>r</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[0]/255).toFixed(3)}</span>
-                <span style={{ color: '#a6e3a1' }}>g</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[1]/255).toFixed(3)}</span>
-                <span style={{ color: '#89b4fa' }}>b</span><span style={{ color: '#cdd6f4' }}>{(pixelSample[2]/255).toFixed(3)}</span>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: `rgb(${pixelSample[0]},${pixelSample[1]},${pixelSample[2]})`, border: `1px solid ${ctp.surface1}` }} />
+                <span style={{ color: ctp.red }}>r</span><span style={{ color: ctp.text }}>{(pixelSample[0]/255).toFixed(3)}</span>
+                <span style={{ color: ctp.green }}>g</span><span style={{ color: ctp.text }}>{(pixelSample[1]/255).toFixed(3)}</span>
+                <span style={{ color: ctp.blue }}>b</span><span style={{ color: ctp.text }}>{(pixelSample[2]/255).toFixed(3)}</span>
               </div>
             ) : probeDisplay ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                 {probeDisplay.map(({ label, col, formatted }) => (
                   <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
                     <span style={{ color: col, fontWeight: 700 }}>{label}</span>
-                    <span style={{ color: '#cdd6f4' }}>{formatted}</span>
+                    <span style={{ color: ctp.text }}>{formatted}</span>
                   </span>
                 ))}
               </div>

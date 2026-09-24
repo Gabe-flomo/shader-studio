@@ -17,6 +17,7 @@ import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
+import { ctp } from '../../theme/palette';
 
 interface Props {
   /** The group node whose params we are editing */
@@ -99,18 +100,18 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
           top: '100%',
           left: 0,
           zIndex: 1000,
-          background: '#181825',
-          border: '1px solid #45475a',
+          background: ctp.mantle,
+          border: `1px solid ${ctp.surface1}`,
           borderRadius: '6px',
           minWidth: '220px',
           maxWidth: '280px',
           boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
           padding: '8px 0 6px',
           fontSize: '11px',
-          color: '#cdd6f4',
+          color: ctp.text,
         }}
       >
-        <div style={{ padding: '0 10px 6px', fontSize: '10px', color: '#585b70', letterSpacing: '0.08em', borderBottom: '1px solid #313244' }}>
+        <div style={{ padding: '0 10px 6px', fontSize: '10px', color: ctp.surface2, letterSpacing: '0.08em', borderBottom: `1px solid ${ctp.surface0}` }}>
           {isOuterGroupMode ? 'SURFACE PARAMS' : 'SHOW / HIDE PARAMS'}
         </div>
 
@@ -156,7 +157,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
 
             return (
               <div key={innerGroup.id} style={{ marginTop: '4px' }}>
-                <div style={{ padding: '3px 10px 2px', fontSize: '9px', color: '#6c7086', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <div style={{ padding: '3px 10px 2px', fontSize: '9px', color: ctp.overlay0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   {innerLabel}
                 </div>
                 {rows.map(row => {
@@ -173,7 +174,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
                         opacity: row.wired ? 0.45 : 1,
                         userSelect: 'none',
                       }}
-                      onMouseEnter={e => { if (!row.wired) (e.currentTarget as HTMLLabelElement).style.background = '#313244'; }}
+                      onMouseEnter={e => { if (!row.wired) (e.currentTarget as HTMLLabelElement).style.background = ctp.surface0; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.background = ''; }}
                     >
                       <input
@@ -183,14 +184,14 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
                         onChange={() => {
                           if (!row.wired) toggleSurfaced(innerGroup.id, row.nodeId, row.paramKey, row.paramLabel);
                         }}
-                        style={{ accentColor: '#cba6f7', cursor: row.wired ? 'default' : 'pointer', margin: 0 }}
+                        style={{ accentColor: ctp.mauve, cursor: row.wired ? 'default' : 'pointer', margin: 0 }}
                       />
-                      <span style={{ color: '#a6adc8', flexShrink: 0, minWidth: '55px' }}>{row.paramLabel}</span>
-                      <span style={{ color: '#585b70', fontSize: '9px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: ctp.subtext0, flexShrink: 0, minWidth: '55px' }}>{row.paramLabel}</span>
+                      <span style={{ color: ctp.surface2, fontSize: '9px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {row.nodeLabel}
                       </span>
                       {row.wired && (
-                        <span style={{ color: '#585b70', fontSize: '9px', marginLeft: 'auto' }}>wired</span>
+                        <span style={{ color: ctp.surface2, fontSize: '9px', marginLeft: 'auto' }}>wired</span>
                       )}
                     </label>
                   );
@@ -242,7 +243,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
 
               return (
                 <div key={innerNode.id} style={{ marginTop: '4px' }}>
-                  <div style={{ padding: '3px 10px 2px', fontSize: '9px', color: '#6c7086', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  <div style={{ padding: '3px 10px 2px', fontSize: '9px', color: ctp.overlay0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                     {innerLabel}
                   </div>
                   {rows.map(row => {
@@ -259,7 +260,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
                           opacity: row.wired ? 0.45 : 1,
                           userSelect: 'none',
                         }}
-                        onMouseEnter={e => { if (!row.wired) (e.currentTarget as HTMLLabelElement).style.background = '#313244'; }}
+                        onMouseEnter={e => { if (!row.wired) (e.currentTarget as HTMLLabelElement).style.background = ctp.surface0; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLLabelElement).style.background = ''; }}
                       >
                         <input
@@ -269,11 +270,11 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
                           onChange={() => {
                             if (!row.wired) toggleHidden(innerNode.id, row.paramKey);
                           }}
-                          style={{ accentColor: '#89b4fa', cursor: row.wired ? 'default' : 'pointer', margin: 0 }}
+                          style={{ accentColor: ctp.blue, cursor: row.wired ? 'default' : 'pointer', margin: 0 }}
                         />
-                        <span style={{ color: '#a6adc8', flexShrink: 0 }}>{row.paramLabel}</span>
+                        <span style={{ color: ctp.subtext0, flexShrink: 0 }}>{row.paramLabel}</span>
                         {row.wired && (
-                          <span style={{ color: '#585b70', fontSize: '9px', marginLeft: 'auto' }}>wired</span>
+                          <span style={{ color: ctp.surface2, fontSize: '9px', marginLeft: 'auto' }}>wired</span>
                         )}
                       </label>
                     );
@@ -283,11 +284,11 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
             })
         )}
 
-        <div style={{ borderTop: '1px solid #313244', marginTop: '6px', padding: '5px 10px 0' }}>
+        <div style={{ borderTop: `1px solid ${ctp.surface0}`, marginTop: '6px', padding: '5px 10px 0' }}>
           <button
             onMouseDown={e => e.stopPropagation()}
             onClick={onClose}
-            style={{ fontSize: '10px', color: '#585b70', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            style={{ fontSize: '10px', color: ctp.surface2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
             Done
           </button>

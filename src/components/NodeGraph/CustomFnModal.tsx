@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore, saveCustomFnPreset } from '../../store/useNodeGraphStore';
 import { NumberInput } from './NumberInput';
+import { ctp } from '../../theme/palette';
 
 // ─── GLSL function palette (same entries as ExprModal) ───────────────────────
 
@@ -49,9 +50,9 @@ const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const BTN: React.CSSProperties = {
-  background: '#313244',
-  border: '1px solid #45475a',
-  color: '#cdd6f4',
+  background: ctp.surface0,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.text,
   borderRadius: '4px',
   padding: '3px 8px',
   fontSize: '11px',
@@ -65,7 +66,7 @@ const SECTION_LABEL: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: '#585b70',
+  color: ctp.surface2,
   margin: '10px 0 4px',
 };
 
@@ -284,8 +285,8 @@ export function CustomFnModal({ node, onClose }: Props) {
       {/* Panel */}
       <div
         style={{
-          background: '#1e1e2e',
-          border: '1px solid #45475a',
+          background: ctp.base,
+          border: `1px solid ${ctp.surface1}`,
           borderRadius: '10px',
           width: 'min(700px, calc(100vw - 32px))',
           maxHeight: '88vh',
@@ -295,7 +296,7 @@ export function CustomFnModal({ node, onClose }: Props) {
           flexDirection: 'column',
           gap: '0',
           boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          color: '#cdd6f4',
+          color: ctp.text,
           fontSize: '12px',
         }}
         onMouseDown={e => e.stopPropagation()}
@@ -303,7 +304,7 @@ export function CustomFnModal({ node, onClose }: Props) {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 700, fontSize: '14px', color: '#cba6f7' }}>ƒ Custom Function</span>
+            <span style={{ fontWeight: 700, fontSize: '14px', color: ctp.mauve }}>ƒ Custom Function</span>
             <input
               type="text"
               value={labelParam}
@@ -311,9 +312,9 @@ export function CustomFnModal({ node, onClose }: Props) {
               placeholder="Node name"
               spellCheck={false}
               style={{
-                background: '#181825',
-                border: '1px solid #45475a',
-                color: '#cdd6f4',
+                background: ctp.mantle,
+                border: `1px solid ${ctp.surface1}`,
+                color: ctp.text,
                 borderRadius: '4px',
                 fontSize: '12px',
                 padding: '3px 8px',
@@ -328,9 +329,9 @@ export function CustomFnModal({ node, onClose }: Props) {
               title="Save this function as a reusable preset in the palette"
               style={{
                 ...BTN,
-                background: savedFlash ? '#a6e3a122' : '#1a2e1a',
-                border: `1px solid ${savedFlash ? '#a6e3a1' : '#a6e3a133'}`,
-                color: savedFlash ? '#a6e3a1' : '#a6e3a1aa',
+                background: savedFlash ? `${ctp.green}22` : '#1a2e1a',
+                border: `1px solid ${savedFlash ? ctp.green : `${ctp.green}33`}`,
+                color: savedFlash ? ctp.green : `${ctp.green}aa`,
                 transition: 'all 0.2s',
                 fontSize: '11px',
                 padding: '3px 10px',
@@ -340,7 +341,7 @@ export function CustomFnModal({ node, onClose }: Props) {
             </button>
             <button
               onClick={onClose}
-              style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', fontSize: '16px', padding: '0 4px' }}
+              style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, fontSize: '16px', padding: '0 4px' }}
             >
               ✕
             </button>
@@ -355,13 +356,13 @@ export function CustomFnModal({ node, onClose }: Props) {
               key={idx}
               style={{
                 display: 'flex', flexDirection: 'column', gap: '4px',
-                background: '#181825', border: '1px solid #313244',
+                background: ctp.mantle, border: `1px solid ${ctp.surface0}`,
                 borderRadius: '5px', padding: '5px 8px',
               }}
             >
               {/* Main row: index · name · type · insert · slider toggle · remove */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: '#585b70', fontSize: '10px', minWidth: '16px' }}>{idx}</span>
+                <span style={{ color: ctp.surface2, fontSize: '10px', minWidth: '16px' }}>{idx}</span>
                 <input
                   type="text"
                   value={inp.name}
@@ -371,8 +372,8 @@ export function CustomFnModal({ node, onClose }: Props) {
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    borderBottom: '1px solid #313244',
-                    color: '#cdd6f4',
+                    borderBottom: `1px solid ${ctp.surface0}`,
+                    color: ctp.text,
                     fontSize: '12px',
                     fontFamily: 'monospace',
                     outline: 'none',
@@ -384,9 +385,9 @@ export function CustomFnModal({ node, onClose }: Props) {
                   value={inp.type}
                   onChange={e => updateInputType(idx, e.target.value as DataType)}
                   style={{
-                    background: '#181825',
-                    border: '1px solid #45475a',
-                    color: '#cdd6f4',
+                    background: ctp.mantle,
+                    border: `1px solid ${ctp.surface1}`,
+                    color: ctp.text,
                     borderRadius: '3px',
                     fontSize: '11px',
                     padding: '2px 4px',
@@ -413,9 +414,9 @@ export function CustomFnModal({ node, onClose }: Props) {
                       ...BTN,
                       padding: '2px 7px',
                       fontSize: '10px',
-                      color: inp.slider ? '#cba6f7' : '#585b70',
-                      borderColor: inp.slider ? '#cba6f755' : '#45475a',
-                      background: inp.slider ? '#cba6f711' : '#313244',
+                      color: inp.slider ? ctp.mauve : ctp.surface2,
+                      borderColor: inp.slider ? `${ctp.mauve}55` : ctp.surface1,
+                      background: inp.slider ? `${ctp.mauve}11` : ctp.surface0,
                     }}
                   >
                     ⊟ slider
@@ -423,7 +424,7 @@ export function CustomFnModal({ node, onClose }: Props) {
                 )}
                 <button
                   onClick={() => removeInput(idx)}
-                  style={{ ...BTN, background: 'none', border: 'none', color: '#f38ba8', padding: '2px 4px', fontSize: '13px', marginLeft: 'auto' }}
+                  style={{ ...BTN, background: 'none', border: 'none', color: ctp.red, padding: '2px 4px', fontSize: '13px', marginLeft: 'auto' }}
                   title="Remove input"
                 >
                   ×
@@ -432,29 +433,29 @@ export function CustomFnModal({ node, onClose }: Props) {
               {/* Slider range row — visible only when slider is enabled */}
               {inp.slider && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '22px' }}>
-                  <span style={{ fontSize: '10px', color: '#585b70' }}>range</span>
+                  <span style={{ fontSize: '10px', color: ctp.surface2 }}>range</span>
                   <NumberInput
                     value={inp.slider.min}
                     onCommit={n => updateSliderRange(idx, 'min', n)}
                     step={0.1}
                     style={{
-                      background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
+                      background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text,
                       borderRadius: '3px', fontSize: '11px', padding: '2px 5px',
                       outline: 'none', width: '64px', fontFamily: 'monospace',
                     }}
                   />
-                  <span style={{ fontSize: '10px', color: '#585b70' }}>→</span>
+                  <span style={{ fontSize: '10px', color: ctp.surface2 }}>→</span>
                   <NumberInput
                     value={inp.slider.max}
                     onCommit={n => updateSliderRange(idx, 'max', n)}
                     step={0.1}
                     style={{
-                      background: '#11111b', border: '1px solid #45475a', color: '#cdd6f4',
+                      background: ctp.crust, border: `1px solid ${ctp.surface1}`, color: ctp.text,
                       borderRadius: '3px', fontSize: '11px', padding: '2px 5px',
                       outline: 'none', width: '64px', fontFamily: 'monospace',
                     }}
                   />
-                  <span style={{ fontSize: '10px', color: '#585b70' }}>
+                  <span style={{ fontSize: '10px', color: ctp.surface2 }}>
                     (current: {typeof node.params[inp.name] === 'number' ? (node.params[inp.name] as number).toFixed(3) : '—'})
                   </span>
                 </div>
@@ -463,7 +464,7 @@ export function CustomFnModal({ node, onClose }: Props) {
           ))}
           <button
             onClick={addInput}
-            style={{ ...BTN, alignSelf: 'flex-start', marginTop: '4px', color: '#a6e3a1', borderColor: '#a6e3a133' }}
+            style={{ ...BTN, alignSelf: 'flex-start', marginTop: '4px', color: ctp.green, borderColor: `${ctp.green}33` }}
           >
             + Add Input
           </button>
@@ -471,14 +472,14 @@ export function CustomFnModal({ node, onClose }: Props) {
 
         {/* Output type */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <span style={{ color: '#6c7086', fontSize: '11px' }}>Output type</span>
+          <span style={{ color: ctp.overlay0, fontSize: '11px' }}>Output type</span>
           <select
             value={outputType}
             onChange={e => changeOutputType(e.target.value as DataType)}
             style={{
-              background: '#181825',
-              border: '1px solid #45475a',
-              color: '#cdd6f4',
+              background: ctp.mantle,
+              border: `1px solid ${ctp.surface1}`,
+              color: ctp.text,
               borderRadius: '3px',
               fontSize: '11px',
               padding: '2px 6px',
@@ -518,14 +519,14 @@ export function CustomFnModal({ node, onClose }: Props) {
               : 'Auto-wrap OFF — clicking a function while text is selected wraps just the selection. Click to toggle on.'}
             style={{
               ...BTN, padding: '2px 8px', fontSize: '10px',
-              background: autoWrap ? '#45475a' : '#313244',
-              color: autoWrap ? '#cba6f7' : '#585b70',
-              border: `1px solid ${autoWrap ? '#cba6f7' : '#45475a'}`,
+              background: autoWrap ? ctp.surface1 : ctp.surface0,
+              color: autoWrap ? ctp.mauve : ctp.surface2,
+              border: `1px solid ${autoWrap ? ctp.mauve : ctp.surface1}`,
               transition: 'all 0.15s',
             }}
           >⊂ auto-wrap {autoWrap ? 'ON' : 'OFF'}</button>
         </div>
-        <div style={{ fontSize: '10px', color: '#585b70', marginBottom: '4px' }}>
+        <div style={{ fontSize: '10px', color: ctp.surface2, marginBottom: '4px' }}>
           Use your input names directly. Single expression or multi-line block. The result is assigned to the output.
         </div>
         <textarea
@@ -537,9 +538,9 @@ export function CustomFnModal({ node, onClose }: Props) {
           spellCheck={false}
           rows={6}
           style={{
-            background: '#11111b',
-            border: '1px solid #45475a',
-            color: '#a6e3a1',
+            background: ctp.crust,
+            border: `1px solid ${ctp.surface1}`,
+            color: ctp.green,
             padding: '8px 10px',
             borderRadius: '5px',
             fontSize: '12px',
@@ -589,7 +590,7 @@ export function CustomFnModal({ node, onClose }: Props) {
 
         {/* Helper GLSL functions */}
         <div style={SECTION_LABEL as React.CSSProperties}>Helper Functions (optional)</div>
-        <div style={{ fontSize: '10px', color: '#585b70', marginBottom: '4px' }}>
+        <div style={{ fontSize: '10px', color: ctp.surface2, marginBottom: '4px' }}>
           Paste external GLSL functions here. They are injected before main() and available in the body above.
         </div>
         <textarea
@@ -600,9 +601,9 @@ export function CustomFnModal({ node, onClose }: Props) {
           rows={6}
           placeholder={'// e.g.\nfloat sdBox(vec2 p, vec2 b) {\n  vec2 d = abs(p) - b;\n  return length(max(d,0.0)) + min(max(d.x,d.y),0.0);\n}'}
           style={{
-            background: '#11111b',
-            border: '1px solid #45475a',
-            color: '#89b4fa',
+            background: ctp.crust,
+            border: `1px solid ${ctp.surface1}`,
+            color: ctp.blue,
             padding: '8px 10px',
             borderRadius: '5px',
             fontSize: '11px',

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useFunctionBuilder } from './useFunctionBuilder';
 import { normalizeBodyExpr, emitFunction } from './glslCompiler';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { ctp } from '../../theme/palette';
 
 interface Props {
   hasErrors: boolean;
@@ -9,10 +10,10 @@ interface Props {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: '#181825',
-  border: '1px solid #45475a',
+  background: ctp.mantle,
+  border: `1px solid ${ctp.surface1}`,
   borderRadius: '4px',
-  color: '#cdd6f4',
+  color: ctp.text,
   fontFamily: 'monospace',
   fontSize: '11px',
   padding: '3px 6px',
@@ -24,7 +25,7 @@ function RangeInput({ label, value, onChange }: { label: string; value: number; 
   const [local, setLocal] = useState(String(value));
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-      <span style={{ fontSize: '10px', color: '#585b70', fontFamily: 'monospace' }}>{label}</span>
+      <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>{label}</span>
       <input
         style={inputStyle}
         value={local}
@@ -168,19 +169,19 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
       alignItems: 'center',
       gap: '10px',
       padding: '6px 10px',
-      borderTop: '1px solid #313244',
-      background: '#1e1e2e',
+      borderTop: `1px solid ${ctp.surface0}`,
+      background: ctp.base,
       flexShrink: 0,
       flexWrap: 'wrap',
     }}>
       {/* Active function selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ fontSize: '10px', color: '#585b70', fontFamily: 'monospace' }}>Visualize</span>
+        <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>Visualize</span>
         <select
           value={activeId}
           onChange={e => setActiveId(e.target.value)}
           style={{
-            background: '#313244', border: '1px solid #45475a', color: '#cdd6f4',
+            background: ctp.surface0, border: `1px solid ${ctp.surface1}`, color: ctp.text,
             borderRadius: '4px', fontSize: '11px', fontFamily: 'monospace',
             padding: '3px 6px', cursor: 'pointer', outline: 'none',
           }}
@@ -191,24 +192,24 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
         </select>
       </div>
 
-      <div style={{ width: '1px', height: '16px', background: '#313244', flexShrink: 0 }} />
+      <div style={{ width: '1px', height: '16px', background: ctp.surface0, flexShrink: 0 }} />
 
       {/* X / Y range inputs — float mode only */}
       {activeFn?.returnType === 'float' && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '10px', color: '#585b70', fontFamily: 'monospace' }}>x</span>
+            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>x</span>
             <RangeInput label="[" value={xRange[0]} onChange={v => setXRange([v, xRange[1]])} />
             <RangeInput label="," value={xRange[1]} onChange={v => setXRange([xRange[0], v])} />
-            <span style={{ fontSize: '10px', color: '#585b70', fontFamily: 'monospace' }}>]</span>
+            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>]</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '10px', color: '#585b70', fontFamily: 'monospace' }}>y</span>
+            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>y</span>
             <RangeInput label="[" value={yRange[0]} onChange={v => setYRange([v, yRange[1]])} />
             <RangeInput label="," value={yRange[1]} onChange={v => setYRange([yRange[0], v])} />
-            <span style={{ fontSize: '10px', color: '#585b70', fontFamily: 'monospace' }}>]</span>
+            <span style={{ fontSize: '10px', color: ctp.surface2, fontFamily: 'monospace' }}>]</span>
           </div>
-          <div style={{ width: '1px', height: '16px', background: '#313244', flexShrink: 0 }} />
+          <div style={{ width: '1px', height: '16px', background: ctp.surface0, flexShrink: 0 }} />
         </>
       )}
 
@@ -224,27 +225,27 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
               onKeyDown={e => { if (e.key === 'Enter') handleSaveGroup(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveName(''); } }}
               placeholder="Group name…"
               style={{
-                background: '#181825', border: '1px solid #45475a', borderRadius: '4px',
-                color: '#cdd6f4', fontSize: '11px', fontFamily: 'monospace',
+                background: ctp.mantle, border: `1px solid ${ctp.surface1}`, borderRadius: '4px',
+                color: ctp.text, fontSize: '11px', fontFamily: 'monospace',
                 padding: '3px 7px', outline: 'none', width: '110px',
               }}
             />
-            <button onClick={handleSaveGroup} style={smallBtn('#a6e3a1')}>Save</button>
-            <button onClick={() => { setShowSaveInput(false); setSaveName(''); }} style={smallBtn('#585b70')}>✕</button>
+            <button onClick={handleSaveGroup} style={smallBtn(ctp.green)}>Save</button>
+            <button onClick={() => { setShowSaveInput(false); setSaveName(''); }} style={smallBtn(ctp.surface2)}>✕</button>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <button
               onClick={() => { setShowSaveInput(true); setShowSessions(false); }}
               title="Save current tabs as a named group"
-              style={smallBtn('#a6e3a1')}
+              style={smallBtn(ctp.green)}
             >
               ↑ Save Group
             </button>
             <button
               onClick={() => setShowSessions(v => !v)}
               title="Open a saved group"
-              style={smallBtn(showSessions ? '#cba6f7' : '#585b70')}
+              style={smallBtn(showSessions ? ctp.mauve : ctp.surface2)}
             >
               Sessions {savedGroups.length > 0 ? `(${savedGroups.length})` : ''}
             </button>
@@ -255,36 +256,36 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
         {showSessions && (
           <div style={{
             position: 'absolute', bottom: '100%', right: 0, marginBottom: '4px',
-            background: '#1e1e2e', border: '1px solid #45475a', borderRadius: '6px',
+            background: ctp.base, border: `1px solid ${ctp.surface1}`, borderRadius: '6px',
             minWidth: '200px', maxHeight: '220px', overflowY: 'auto',
             boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100,
           }}>
             {savedGroups.length === 0 ? (
-              <div style={{ padding: '10px 12px', fontSize: '11px', color: '#45475a', fontFamily: 'monospace' }}>
+              <div style={{ padding: '10px 12px', fontSize: '11px', color: ctp.surface1, fontFamily: 'monospace' }}>
                 No saved groups yet
               </div>
             ) : savedGroups.map(g => (
               <div
                 key={g.id}
-                style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #313244', gap: '6px' }}
+                style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', borderBottom: `1px solid ${ctp.surface0}`, gap: '6px' }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '11px', color: '#cdd6f4', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '11px', color: ctp.text, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {g.name}
                   </div>
-                  <div style={{ fontSize: '9px', color: '#45475a' }}>
+                  <div style={{ fontSize: '9px', color: ctp.surface1 }}>
                     {g.tabs.length} tab{g.tabs.length !== 1 ? 's' : ''} · {new Date(g.savedAt).toLocaleDateString()}
                   </div>
                 </div>
                 <button
                   onClick={() => { loadGroup(g); setShowSessions(false); }}
-                  style={smallBtn('#89b4fa')}
+                  style={smallBtn(ctp.blue)}
                 >Load</button>
                 <button
                   onClick={() => deleteGroup(g.id)}
-                  style={{ background: 'none', border: 'none', color: '#45475a', cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = '#f38ba8')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = '#45475a')}
+                  style={{ background: 'none', border: 'none', color: ctp.surface1, cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.red)}
+                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = ctp.surface1)}
                 >✕</button>
               </div>
             ))}
@@ -292,19 +293,19 @@ export function Toolbar({ hasErrors, onNavigateToStudio }: Props) {
         )}
       </div>
 
-      <div style={{ width: '1px', height: '16px', background: '#313244', flexShrink: 0 }} />
+      <div style={{ width: '1px', height: '16px', background: ctp.surface0, flexShrink: 0 }} />
       <div style={{ flex: 1 }} />
 
       {hasErrors && (
-        <span style={{ fontSize: '10px', color: '#f38ba8', fontFamily: 'monospace' }}>⚠ GLSL error</span>
+        <span style={{ fontSize: '10px', color: ctp.red, fontFamily: 'monospace' }}>⚠ GLSL error</span>
       )}
 
       <button
         onClick={handleSave}
         style={{
-          background: '#89b4fa',
+          background: ctp.blue,
           border: 'none',
-          color: '#1e1e2e',
+          color: ctp.base,
           borderRadius: '5px',
           padding: '4px 12px',
           fontSize: '11px',

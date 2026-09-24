@@ -7,6 +7,7 @@
  */
 
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
+import { ctp } from '../theme/palette';
 
 export const audioSpectrumRegistry = new CanvasProbeRegistry();
 
@@ -36,7 +37,7 @@ export function drawSpectrumCanvas(
   const maxHz = (binCount * hzPerBin);
 
   // Clear
-  ctx.fillStyle = '#11111b';
+  ctx.fillStyle = ctp.crust;
   ctx.fillRect(0, 0, W, H);
 
   // Draw frequency bars (log-scaled x axis feels more natural for audio)
@@ -81,7 +82,7 @@ export function drawSpectrumCanvas(
   if (mode !== 'full') {
     const centerT = (Math.log10(Math.max(20, freqCenter)) - logMin) / (logMax - logMin);
     const cx = Math.round(centerT * W);
-    ctx.strokeStyle = '#cdd6f4';
+    ctx.strokeStyle = ctp.text;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx, 0);
@@ -90,7 +91,7 @@ export function drawSpectrumCanvas(
   }
 
   // Frequency axis labels
-  ctx.fillStyle = '#585b70';
+  ctx.fillStyle = ctp.surface2;
   ctx.font = '8px monospace';
   const labelHz = [100, 500, 1000, 5000, 10000];
   for (const hz of labelHz) {

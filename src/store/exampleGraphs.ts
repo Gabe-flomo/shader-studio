@@ -1,5 +1,6 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
+import { ctp } from '../theme/palette';
 
 export type ExampleGraph = { label: string; nodes: GraphNode[]; counter: number };
 
@@ -11268,19 +11269,19 @@ export const DEFAULT_EXAMPLE = 'fractalRings';
 export type ExKey = keyof typeof EXAMPLE_GRAPHS;
 
 export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: ExKey[] }> = [
-  { label: 'GI Lighting',     color: '#a6e3a1', keys: ['giSphereGround','giGoldTorus','giBlobCluster','giBoxFrame'] as ExKey[] },
+  { label: 'GI Lighting',     color: ctp.green, keys: ['giSphereGround','giGoldTorus','giBlobCluster','giBoxFrame'] as ExKey[] },
   { label: '3D Lighting',     color: '#f9c468', keys: ['aoSphere','phaseHGForwardCloud','phaseHGBacklit','fresnelSchlickRim','fresnelSchlickTwoTone','refractDirFakeGlass','refractDirDispersion','glassPhysical','spectralPrism','blinnPhongSphere','glassMetaballs','glassRoundBox','glassOrbTrio','glassLavaBlob','glassSceneOrbPillars','glassSceneTorusBlobs','glassSceneLensVoid','glassIridescentRim','glassTintedReflection','glassFlatBlend'] as ExKey[] },
-  { label: '3D SDF',          color: '#89dceb', keys: ['sdfPolarRepeat','sdfSmoothMetaballs','sdfBend3D','sdfIntersectDemo','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','mirrorFoldSpheres','mirrorFoldBoxes','domainWarpSphere','swizzle3DNormalMap','swizzle3DPosGradient'] as ExKey[] },
-  { label: 'Blur & Lens',     color: '#89b4fa', keys: ['gaussianBlurDemo','motionBlurTrails','tiltShiftScene','lensBokeh','dofOrbitOrbs','dofForwardDepth','dofDepthBlur'] as ExKey[] },
-  { label: 'Color & Lighting',color: '#fab387', keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV'] as ExKey[] },
+  { label: '3D SDF',          color: ctp.sky, keys: ['sdfPolarRepeat','sdfSmoothMetaballs','sdfBend3D','sdfIntersectDemo','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','mirrorFoldSpheres','mirrorFoldBoxes','domainWarpSphere','swizzle3DNormalMap','swizzle3DPosGradient'] as ExKey[] },
+  { label: 'Blur & Lens',     color: ctp.blue, keys: ['gaussianBlurDemo','motionBlurTrails','tiltShiftScene','lensBokeh','dofOrbitOrbs','dofForwardDepth','dofDepthBlur'] as ExKey[] },
+  { label: 'Color & Lighting',color: ctp.peach, keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV'] as ExKey[] },
   { label: 'Color Grading',   color: '#f9a86b', keys: ['cgHueRotate','cgLiftGammaGain','cgChain'] as ExKey[] },
-  { label: 'Grid',            color: '#89dceb', keys: ['gridBasic','gridCircles','gridWave','gridNeighborDots','gridNeighborDisplaced','gridGravity','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','gridOnionRings','gridIronFilings','gridFreqColumns'] as ExKey[] },
+  { label: 'Grid',            color: ctp.sky, keys: ['gridBasic','gridCircles','gridWave','gridNeighborDots','gridNeighborDisplaced','gridGravity','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','gridOnionRings','gridIronFilings','gridFreqColumns'] as ExKey[] },
   { label: 'Halftone',        color: '#a6e3d5', keys: ['halftoneNoise','cmykNoise','ringHalftone'] as ExKey[] },
-  { label: 'Iterated Groups', color: '#a6e3a1', keys: ['groupCarryRings','groupCarryZoom','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
+  { label: 'Iterated Groups', color: ctp.green, keys: ['groupCarryRings','groupCarryZoom','groupCarryFBM','groupCarryDomainWarp','groupCarryPowerFold'] as ExKey[] },
   { label: 'Matrix',          color: '#f5c842', keys: ['matrixAnisotropicScale','matrixShear','matrixXZYZ','matrixColorGrade'] as ExKey[] },
-  { label: 'Patterns',        color: '#a6e3a1', keys: ['angularFlowerRepeat','angularGearRepeat','ringGlow','sphereFaceLight'] as ExKey[] },
-  { label: 'Physics',         color: '#94e2d5', keys: ['chladniFieldQuickDemo','chladniFieldCircularDemo','chladniComposableDemo','waveTermManualMixDemo','quantizeChladniDemo','chladniModeFreqDemo'] as ExKey[] },
-  { label: 'Rings',           color: '#f38ba8', keys: ['fractalRings','exprRings','fractalRingsGroup','exprOrbit'] as ExKey[] },
-  { label: 'Space & Texture', color: '#f2cdcd', keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid','mlgWiggleTunnel'] as ExKey[] },
+  { label: 'Patterns',        color: ctp.green, keys: ['angularFlowerRepeat','angularGearRepeat','ringGlow','sphereFaceLight'] as ExKey[] },
+  { label: 'Physics',         color: ctp.teal, keys: ['chladniFieldQuickDemo','chladniFieldCircularDemo','chladniComposableDemo','waveTermManualMixDemo','quantizeChladniDemo','chladniModeFreqDemo'] as ExKey[] },
+  { label: 'Rings',           color: ctp.red, keys: ['fractalRings','exprRings','fractalRingsGroup','exprOrbit'] as ExKey[] },
+  { label: 'Space & Texture', color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','waveBands','magicTextureDemo','gridDemo','gridCellPattern','gridChecker','gridMagic','mirroredTileRepeat','limitedRepeatGrid','mlgWiggleTunnel'] as ExKey[] },
   { label: 'Volumetric',      color: '#f5a97f', keys: ['glowMarcher','volHollowShell','volTorus','volRepeatLattice','volOctahedron','volAnimatedRepeat','jitterFogSphere','jitterTorusCloud'] as ExKey[] },
 ];

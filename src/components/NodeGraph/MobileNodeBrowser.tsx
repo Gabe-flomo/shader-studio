@@ -23,6 +23,7 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
 import { InlineVizFrame, GenericPreviewViz, SKIP_INLINE_PREVIEW } from './MobileGraphBrowser';
 import { INLINE_VIZ_TYPES } from './NodeInlineViz';
+import { ctp } from '../../theme/palette';
 
 function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
@@ -63,10 +64,10 @@ const CATEGORIES: CategoryGroup[] = (() => {
 const rowBtnStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
   background: 'none', border: 'none', padding: '8px 4px', textAlign: 'left',
-  fontSize: '13px', color: '#cdd6f4', cursor: 'pointer', touchAction: 'manipulation',
+  fontSize: '13px', color: ctp.text, cursor: 'pointer', touchAction: 'manipulation',
 };
 const backBtnStyle: React.CSSProperties = {
-  alignSelf: 'flex-start', background: 'none', border: 'none', color: '#89b4fa',
+  alignSelf: 'flex-start', background: 'none', border: 'none', color: ctp.blue,
   fontSize: '12px', cursor: 'pointer', padding: '2px 0', touchAction: 'manipulation',
 };
 
@@ -128,7 +129,23 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       // Fixed spawn spot, not NodeSearchPalette's randomized one — that
       // exists to keep several quick FAB-adds from stacking exactly on top
       // of each other, not a concern for this one-at-a-time browse flow.
-      const id = addNode(selectedType, { x: 300, y: 200 });
+      let spawnPos = { x: 300, y: 200 };
+      if (!pairing) {
+        // Disconnected: (300, 200) tends to land right in the middle of the
+        // existing wired chain (same row, between two connected nodes),
+        // which visually reads as connected even though it isn't. Land it
+        // in the same column as — and below — the graph's other unwired
+        // nodes (UV, Time, ...) instead, clearly outside the wired flow.
+        const unwired = scopedNodes.filter(n => !Object.values(n.inputs).some(inp => inp?.connection != null));
+        const basis = unwired.length > 0 ? unwired : scopedNodes;
+        if (basis.length > 0) {
+          spawnPos = {
+            x: Math.min(...basis.map(n => n.position.x)),
+            y: Math.max(...basis.map(n => n.position.y)) + 160,
+          };
+        }
+      }
+      const id = addNode(selectedType, spawnPos);
       if (id && pairing && connectTargetId) {
         if (pairing.direction === 'intoNew') connectNodes(connectTargetId, pairing.existingKey, id, pairing.newKey);
         else connectNodes(id, pairing.newKey, connectTargetId, pairing.existingKey);
@@ -146,17 +163,17 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button onClick={() => setConnectTargetId(null)} style={backBtnStyle}>‹ Back to node list</button>
-          <div style={{ fontSize: '13px', color: '#a6adc8' }}>
-            Wire <span style={{ color: '#cdd6f4', fontWeight: 700 }}>{def.label}</span> to <span style={{ color: '#cdd6f4', fontWeight: 700 }}>{labelFor(target)}</span>
+          <div style={{ fontSize: '13px', color: ctp.subtext0 }}>
+            Wire <span style={{ color: ctp.text, fontWeight: 700 }}>{def.label}</span> to <span style={{ color: ctp.text, fontWeight: 700 }}>{labelFor(target)}</span>
           </div>
           {into.length > 0 && (
             <div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '4px' }}>INTO THE NEW NODE</div>
-              <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '4px' }}>INTO THE NEW NODE</div>
+              <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
                 {into.map((p, i) => (
                   <button key={i} onClick={() => place(p)} style={{ ...rowBtnStyle, borderBottom: i === into.length - 1 ? 'none' : '1px solid #24243a' }}>
                     <span style={{ flex: 1 }}>{labelFor(target)}.{p.existingLabel} → {def.label}.{p.newLabel}</span>
-                    {!p.exact && <span style={{ fontSize: '9px', color: '#585b70' }}>promoted</span>}
+                    {!p.exact && <span style={{ fontSize: '9px', color: ctp.surface2 }}>promoted</span>}
                   </button>
                 ))}
               </div>
@@ -164,19 +181,19 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
           )}
           {from.length > 0 && (
             <div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: '#585b70', letterSpacing: '0.05em', marginBottom: '4px' }}>FROM THE NEW NODE</div>
-              <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: ctp.surface2, letterSpacing: '0.05em', marginBottom: '4px' }}>FROM THE NEW NODE</div>
+              <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
                 {from.map((p, i) => (
                   <button key={i} onClick={() => place(p)} style={{ ...rowBtnStyle, borderBottom: i === from.length - 1 ? 'none' : '1px solid #24243a' }}>
                     <span style={{ flex: 1 }}>{def.label}.{p.newLabel} → {labelFor(target)}.{p.existingLabel}</span>
-                    {!p.exact && <span style={{ fontSize: '9px', color: '#585b70' }}>promoted</span>}
+                    {!p.exact && <span style={{ fontSize: '9px', color: ctp.surface2 }}>promoted</span>}
                   </button>
                 ))}
               </div>
             </div>
           )}
           {pairings.length === 0 && (
-            <div style={{ fontSize: '11px', color: '#585b70' }}>No compatible sockets between these two after all.</div>
+            <div style={{ fontSize: '11px', color: ctp.surface2 }}>No compatible sockets between these two after all.</div>
           )}
         </div>
       );
@@ -188,17 +205,17 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button onClick={() => setConnectTargetId(null)} style={backBtnStyle}>‹ Back</button>
-          <div style={{ fontSize: '13px', color: '#a6adc8' }}>
-            Connect <span style={{ color: '#cdd6f4', fontWeight: 700 }}>{def.label}</span> to which node?
+          <div style={{ fontSize: '13px', color: ctp.subtext0 }}>
+            Connect <span style={{ color: ctp.text, fontWeight: 700 }}>{def.label}</span> to which node?
           </div>
           {candidates.length === 0 ? (
-            <div style={{ fontSize: '11px', color: '#585b70' }}>Nothing in the current graph has a compatible input or output.</div>
+            <div style={{ fontSize: '11px', color: ctp.surface2 }}>Nothing in the current graph has a compatible input or output.</div>
           ) : (
-            <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+            <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
               {candidates.map((n, i) => (
                 <button key={n.id} onClick={() => setConnectTargetId(n.id)} style={{ ...rowBtnStyle, borderBottom: i === candidates.length - 1 ? 'none' : '1px solid #24243a' }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
-                  <span style={{ fontSize: '11px', color: '#45475a', flexShrink: 0 }}>›</span>
+                  <span style={{ fontSize: '11px', color: ctp.surface1, flexShrink: 0 }}>›</span>
                 </button>
               ))}
             </div>
@@ -215,9 +232,9 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: CATEGORY_COLORS[def.category] ?? '#888', flexShrink: 0 }} />
-            <span style={{ fontSize: '16px', fontWeight: 700, color: '#cdd6f4' }}>{def.label}</span>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: ctp.text }}>{def.label}</span>
           </div>
-          <div style={{ fontSize: '10px', color: '#6c7086', letterSpacing: '0.05em', marginTop: '2px', marginLeft: '18px' }}>
+          <div style={{ fontSize: '10px', color: ctp.overlay0, letterSpacing: '0.05em', marginTop: '2px', marginLeft: '18px' }}>
             {def.category.toUpperCase()}{def.subcategory ? ` · ${def.subcategory}` : ''}
           </div>
         </div>
@@ -229,22 +246,22 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
         )}
 
         {def.description && (
-          <div style={{ fontSize: '12px', color: '#a6adc8', lineHeight: 1.5 }}>{def.description}</div>
+          <div style={{ fontSize: '12px', color: ctp.subtext0, lineHeight: 1.5 }}>{def.description}</div>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
           <button
             onClick={() => setConnectTargetId('')}
             style={{
-              padding: '10px', borderRadius: '8px', border: '1px solid #89b4fa66', background: '#89b4fa18',
-              color: '#89b4fa', fontSize: '13px', fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
+              padding: '10px', borderRadius: '8px', border: `1px solid ${ctp.blue}66`, background: `${ctp.blue}18`,
+              color: ctp.blue, fontSize: '13px', fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
             }}
           >+ Add Connected…</button>
           <button
             onClick={() => place()}
             style={{
-              padding: '10px', borderRadius: '8px', border: '1px solid #45475a', background: 'none',
-              color: '#cdd6f4', fontSize: '13px', fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
+              padding: '10px', borderRadius: '8px', border: `1px solid ${ctp.surface1}`, background: 'none',
+              color: ctp.text, fontSize: '13px', fontWeight: 600, cursor: 'pointer', touchAction: 'manipulation',
             }}
           >+ Add Disconnected</button>
         </div>
@@ -273,7 +290,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
               <span style={{ fontSize: '10px', fontWeight: 700, color: CATEGORY_COLORS[cat.name] ?? '#888', letterSpacing: '0.05em' }}>
                 {cat.name.toUpperCase()}
               </span>
-              <span style={{ fontSize: '10px', color: '#585b70' }}>({total})</span>
+              <span style={{ fontSize: '10px', color: ctp.surface2 }}>({total})</span>
             </button>
             {isOpen && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -284,7 +301,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
                         {group.name.toUpperCase()}
                       </div>
                     )}
-                    <div style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: '8px', overflow: 'hidden' }}>
+                    <div style={{ background: ctp.base, border: `1px solid ${ctp.surface0}`, borderRadius: '8px', overflow: 'hidden' }}>
                       {group.types.map((type, i) => {
                         const d = getNodeDefinition(type)!;
                         return (
@@ -294,7 +311,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
                             style={{ ...rowBtnStyle, borderBottom: i === group.types.length - 1 ? 'none' : '1px solid #24243a' }}
                           >
                             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label}</span>
-                            <span style={{ fontSize: '11px', color: '#45475a', flexShrink: 0 }}>›</span>
+                            <span style={{ fontSize: '11px', color: ctp.surface1, flexShrink: 0 }}>›</span>
                           </button>
                         );
                       })}

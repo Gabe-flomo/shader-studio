@@ -1,10 +1,11 @@
 import type { CSSProperties } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { ctp } from '../theme/palette';
 
 const btnStyle: CSSProperties = {
-  background: '#1e1e2e99',
-  border: '1px solid #45475a',
-  color: '#585b70',
+  background: `${ctp.base}99`,
+  border: `1px solid ${ctp.surface1}`,
+  color: ctp.surface2,
   borderRadius: '4px',
   width: '26px',
   height: '26px',
@@ -34,15 +35,15 @@ export function TimeControlsStrip({ direction = 'row' }: { direction?: 'row' | '
         onClick={() => setTimePlaying(!timePlaying)}
         title={timePlaying ? 'Pause' : 'Play'}
         style={btnStyle}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a6e3a1'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.green; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
       >{timePlaying ? '⏸' : '▶'}</button>
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))}
         title="Reset time to 0"
         style={btnStyle}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f9e2af'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#585b70'; }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.yellow; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = ctp.surface2; }}
       >↺</button>
     </div>
   );

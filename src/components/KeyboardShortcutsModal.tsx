@@ -17,6 +17,7 @@ import {
 } from '../store/useNodeGraphStore';
 import { pickDirectory } from '../utils/fileIO';
 import { exportBackupZip } from '../utils/backupExport';
+import { ctp } from '../theme/palette';
 
 const isTauri = (): boolean =>
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -122,8 +123,8 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   };
   const modal: React.CSSProperties = {
-    background: '#1e1e2e',
-    border: '1px solid #45475a',
+    background: ctp.base,
+    border: `1px solid ${ctp.surface1}`,
     borderRadius: '12px',
     padding: '24px',
     width: '520px',
@@ -131,7 +132,7 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
     maxHeight: '80vh',
     overflowY: 'auto',
     boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
-    color: '#cdd6f4',
+    color: ctp.text,
     fontFamily: 'system-ui, sans-serif',
     fontSize: '13px',
   };
@@ -141,17 +142,17 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
       <div style={modal}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: '#cdd6f4' }}>Settings</div>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: ctp.text }}>Settings</div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#585b70', fontSize: '18px', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}
+            style={{ background: 'none', border: 'none', color: ctp.surface2, fontSize: '18px', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}
           >
             ✕
           </button>
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '1px solid #313244', paddingBottom: '0' }}>
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: `1px solid ${ctp.surface0}`, paddingBottom: '0' }}>
           {(['shortcuts', 'preferences'] as Tab[]).map(t => (
             <button
               key={t}
@@ -159,8 +160,8 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
               style={{
                 background: 'none',
                 border: 'none',
-                borderBottom: tab === t ? '2px solid #89b4fa' : '2px solid transparent',
-                color: tab === t ? '#cdd6f4' : '#585b70',
+                borderBottom: tab === t ? `2px solid ${ctp.blue}` : '2px solid transparent',
+                color: tab === t ? ctp.text : ctp.surface2,
                 padding: '6px 14px',
                 fontSize: '13px',
                 fontWeight: tab === t ? 600 : 400,
@@ -177,7 +178,7 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
         {/* Preferences tab */}
         {tab === 'preferences' && (
           <div>
-            <div style={{ fontSize: '11px', color: '#585b70', marginBottom: '16px' }}>
+            <div style={{ fontSize: '11px', color: ctp.surface2, marginBottom: '16px' }}>
               {isTauri()
                 ? 'Paste or type an absolute path — saves write there automatically alongside localStorage.'
                 : 'Disk saves require the desktop app. Configure paths here and they\'ll be active when you run the Tauri build.'}
@@ -190,7 +191,7 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
               { label: 'Group Presets', value: groupPresetDir, onChange: makeTextChange(setGroupPresetDirState, setGroupPresetDir), onBrowse: makeBrowse(setGroupPresetDirState, setGroupPresetDir) },
             ] as Array<{ label: string; value: string; onChange: React.ChangeEventHandler<HTMLInputElement>; onBrowse: () => void }>).map(({ label, value, onChange, onBrowse }) => (
               <div key={label} style={{ marginBottom: '14px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#a6adc8', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: ctp.subtext0, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                   {label}
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -201,10 +202,10 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
                     placeholder="/absolute/path/to/folder"
                     style={{
                       flex: 1,
-                      background: '#181825',
-                      border: '1px solid #45475a',
+                      background: ctp.mantle,
+                      border: `1px solid ${ctp.surface1}`,
                       borderRadius: '6px',
-                      color: '#cdd6f4',
+                      color: ctp.text,
                       fontSize: '12px',
                       fontFamily: 'monospace',
                       padding: '5px 10px',
@@ -215,9 +216,9 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
                     <button
                       onClick={onBrowse}
                       style={{
-                        background: '#313244',
-                        border: '1px solid #45475a',
-                        color: '#cdd6f4',
+                        background: ctp.surface0,
+                        border: `1px solid ${ctp.surface1}`,
+                        color: ctp.text,
                         borderRadius: '6px',
                         padding: '5px 12px',
                         fontSize: '12px',
@@ -238,8 +239,8 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
                       }}
                       style={{
                         background: 'none',
-                        border: '1px solid #45475a',
-                        color: '#585b70',
+                        border: `1px solid ${ctp.surface1}`,
+                        color: ctp.surface2,
                         borderRadius: '6px',
                         padding: '5px 8px',
                         fontSize: '12px',
@@ -256,20 +257,20 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
             ))}
 
             {/* ── Backup ── */}
-            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #313244' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#a6adc8', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: `1px solid ${ctp.surface0}` }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: ctp.subtext0, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Backup
               </div>
-              <div style={{ fontSize: '11px', color: '#585b70', marginBottom: '10px', lineHeight: 1.5 }}>
+              <div style={{ fontSize: '11px', color: ctp.surface2, marginBottom: '10px', lineHeight: 1.5 }}>
                 Export all saved graphs, group presets, and functions as a ZIP — organized into your existing folders.
               </div>
               <button
                 onClick={handleExportBackup}
                 disabled={backupState === 'busy'}
                 style={{
-                  background: backupState === 'done' ? '#a6e3a122' : '#313244',
-                  border: `1px solid ${backupState === 'done' ? '#a6e3a1' : '#45475a'}`,
-                  color: backupState === 'done' ? '#a6e3a1' : '#cdd6f4',
+                  background: backupState === 'done' ? `${ctp.green}22` : ctp.surface0,
+                  border: `1px solid ${backupState === 'done' ? ctp.green : ctp.surface1}`,
+                  color: backupState === 'done' ? ctp.green : ctp.text,
                   borderRadius: '6px',
                   padding: '6px 16px',
                   fontSize: '12px',
@@ -289,8 +290,8 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
           <div key={group} style={{ marginBottom: '20px' }}>
             <div style={{
               fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: '0.08em', color: '#585b70', marginBottom: '8px',
-              paddingBottom: '4px', borderBottom: '1px solid #313244',
+              letterSpacing: '0.08em', color: ctp.surface2, marginBottom: '8px',
+              paddingBottom: '4px', borderBottom: `1px solid ${ctp.surface0}`,
             }}>
               {group}
             </div>
@@ -310,14 +311,14 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
                   }}
                 >
                   <div>
-                    <span style={{ color: '#cdd6f4' }}>{action.label}</span>
+                    <span style={{ color: ctp.text }}>{action.label}</span>
                     {action.description && (
-                      <span style={{ color: '#585b70', fontSize: '11px', marginLeft: '8px' }}>
+                      <span style={{ color: ctp.surface2, fontSize: '11px', marginLeft: '8px' }}>
                         {action.description}
                       </span>
                     )}
                     {isConflict && (
-                      <span style={{ color: '#f38ba8', fontSize: '11px', marginLeft: '8px' }}>
+                      <span style={{ color: ctp.red, fontSize: '11px', marginLeft: '8px' }}>
                         ⚠ Conflict!
                       </span>
                     )}
@@ -325,9 +326,9 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
                   <button
                     onClick={() => setBinding(isBinding ? null : action.id)}
                     style={{
-                      background: isBinding ? '#89b4fa22' : '#313244',
-                      border: isBinding ? '1px solid #89b4fa' : '1px solid #45475a',
-                      color: isBinding ? '#89b4fa' : '#cdd6f4',
+                      background: isBinding ? `${ctp.blue}22` : ctp.surface0,
+                      border: isBinding ? `1px solid ${ctp.blue}` : `1px solid ${ctp.surface1}`,
+                      color: isBinding ? ctp.blue : ctp.text,
                       borderRadius: '5px',
                       padding: '3px 10px',
                       fontSize: '12px',
@@ -349,12 +350,12 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
         ))}
 
         {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #313244' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: `1px solid ${ctp.surface0}` }}>
           {tab === 'shortcuts' && (
             <button
               onClick={handleReset}
               style={{
-                background: 'none', border: '1px solid #45475a', color: '#a6adc8',
+                background: 'none', border: `1px solid ${ctp.surface1}`, color: ctp.subtext0,
                 borderRadius: '6px', padding: '5px 14px', fontSize: '12px', cursor: 'pointer',
               }}
             >
@@ -364,7 +365,7 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
           <button
             onClick={onClose}
             style={{
-              background: '#89b4fa', border: 'none', color: '#1e1e2e',
+              background: ctp.blue, border: 'none', color: ctp.base,
               borderRadius: '6px', padding: '5px 14px', fontSize: '12px',
               fontWeight: 700, cursor: 'pointer',
             }}
