@@ -51,8 +51,10 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint }: {
   label: string; icon: IconName; color: string;
+  /** One line shown in the row's tooltip (an example's description) */
+  hint?: string;
   onClick: () => void;
   /** Saved items: click selects (showing `preview`), double-click places */
   onDoubleClick?: () => void;
@@ -84,7 +86,7 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
         onClick={e => { if (onDoubleClick && e.detail > 1) return; onClick(); }}
         onDoubleClick={onDoubleClick}
         aria-expanded={preview !== undefined ? selected : undefined}
-        title={onDoubleClick ? `${label} · double-click to add` : label}
+        title={hint ? `${label} — ${hint}` : onDoubleClick ? `${label} · double-click to add` : label}
         style={{
           flex: 1, minWidth: 0, height: '100%', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -381,7 +383,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                           {folder.keys.filter(k => EXAMPLE_INDEX[k])
                             .sort((a, b) => EXAMPLE_INDEX[a].label.localeCompare(EXAMPLE_INDEX[b].label))
                             .map(k => (
-                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success}
+                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} hint={EXAMPLE_INDEX[k].description}
                                 onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
                             ))}
                         </div>

@@ -11,7 +11,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { ctp } from '../theme/palette';
 
-export type ExampleGraph = { label: string; nodes: GraphNode[]; counter: number };
+export type ExampleGraph = { label: string; nodes: GraphNode[]; counter: number; /** One line on what the example teaches, shown in the Examples list */ description?: string };
 
 // A brand-new graph used to be just UV -> Output with nothing wired — a
 // black screen with no hint of what to do next. A minimal UV -> Circle SDF
@@ -50,14 +50,14 @@ export const BLANK_GRAPH: ExampleGraph = {
   };
 
 /** Key → label for every bundled example (generated from exampleGraphs.ts). */
-export const EXAMPLE_INDEX: Record<string, { label: string }> = {
+export const EXAMPLE_INDEX: Record<string, { label: string; description?: string }> = {
   blank: { label: BLANK_GRAPH.label },
   fractalRings: { label: "Fractal Rings" },
   forLoopRings: { label: "For Loop Rings" },
   exprOrbit: { label: "Expr Orbit" },
   shapeShowcase: { label: "Shape Showcase" },
   toneMapDemo: { label: "Tone Map — ACES" },
-  glowCircle: { label: "Glowing Circle" },
+  glowCircle: { label: "Glowing Circle", description: "The smallest complete graph: UV → Circle SDF → SDF Glow → Tone Map → Output. SDF Glow's Tinted output already carries the colour, so no Palette or Multiply is needed." },
   fbmLandscape: { label: "FBM Landscape" },
   angularGradient: { label: "Angular Gradient" },
   raymarchSpheres: { label: "Raymarch Spheres" },
@@ -66,7 +66,6 @@ export const EXAMPLE_INDEX: Record<string, { label: string }> = {
   chladniComposableDemo: { label: "Chladni (Composable)" },
   chladniModeFreqDemo: { label: "Chladni Mode Frequency" },
   noiseFloatDemo: { label: "Noise Float — Wobbly Circle" },
-  posterizeDemo: { label: "Posterize" },
   groupCarryRings: { label: "Group: Fractal Rings (Carry)" },
   groupCarryFBM: { label: "Group: FBM Octaves (Carry)" },
   groupCarryDomainWarp: { label: "Group: Domain Warp (Carry)" },
@@ -91,7 +90,7 @@ export const EXAMPLE_INDEX: Record<string, { label: string }> = {
   particleOrbitCloud: { label: "Particles: Orbit Cloud" },
   particleRain: { label: "Particles: Rain" },
   motionBlurTrails: { label: "Motion Blur Trails" },
-  tiltShiftScene: { label: "Tilt-Shift" },
+  tiltShiftScene: { label: "Tilt-Shift", description: "Tilt-Shift Blur keeps one horizontal band sharp and blurs away from it, like a miniature. The scene is a perspective floor grid so the depth reads." },
   lensBokeh: { label: "Lens Blur Bokeh" },
   weightedSdfBlend: { label: "Weighted SDF Blend" },
   fractalGlowBlur: { label: "Fractal + Blur Glow" },
@@ -127,7 +126,7 @@ export const EXAMPLE_INDEX: Record<string, { label: string }> = {
   dofDepthBlur: { label: "Depth of Field: Post-Process Blur" },
   ringGlow: { label: "Ring Glow" },
   matrixShear: { label: "Matrix: Shear" },
-  matrixColorGrade: { label: "Matrix: RGB Color Grade" },
+  matrixColorGrade: { label: "Matrix: RGB Color Grade", description: "A mat3 as a colour grade: Mat Const holds the 3×3 mixing matrix and Mat3×Vec3 applies it to every pixel of the palette. Off-diagonal values bleed one channel into another." },
   cgHueRotate: { label: "Color Grade: Hue Rotate" },
   cgChain: { label: "Color Grade: Full Chain" },
   glassPhysical: { label: "Glass 3D: Physical" },
@@ -145,12 +144,22 @@ export const EXAMPLE_INDEX: Record<string, { label: string }> = {
   gridWave: { label: "Grid: Wave" },
   gridGravity: { label: "Grid: Gravity" },
   gridMetaballs: { label: "Grid: Metaballs" },
-  gridBreathing: { label: "Grid: Breathing" },
+  gridBreathing: { label: "Grid: Breathing", description: "Animated Cell Center moves each cell's dot on its own phase (seeded by Cell ID); Circle SDF takes that as its centre and SDF Fill paints it." },
   gridDensityWave: { label: "Grid: Density Wave" },
-  gridLavaLamp: { label: "Grid: Lava Lamp" },
+  gridLavaLamp: { label: "Lava Lamp", description: "Metaballs from the Field family: two Gaussian Fields (one follows the mouse) are summed and Metaball Threshold turns the sum into a blob mask with a soft edge; Mask picks the two colours." },
   gridOnionRings: { label: "Grid: Onion Rings" },
   gridIronFilings: { label: "Grid: Iron Filings" },
-  gridNeighborDisplaced: { label: "Grid: Scatter" },
+  gridNeighborDisplaced: { label: "Grid: Attract", description: "Cell Displace pulls each cell's UV toward the mouse (strongly nearby, barely far away); its Attract Amount colours the dots through Palette." },
+  echoTrails: { label: "Echo Trails", description: "Echo layers dimmer copies of earlier frames. A circle orbits (Rotate 2D driven by Time), SDF Glow tints it, and Add Color lays the live glow over the echoes." },
+  feedbackSmear: { label: "Feedback Smear", description: "The feedback loop: Previous Frame is sampled through a slightly rotated, shrunk UV, then mixed 92/8 with fresh noise colour. Every frame smears the last one inward." },
+  beatGrid: { label: "Beat Grid", description: "Grid Layout cuts the screen into cells; BPM Sync pulses every box on the beat and Audio Input (load a track) pushes them further. Cell Filter strokes every other cell; Palette colours by column with its Scale param." },
+  webcamCmyk: { label: "Webcam CMYK", description: "Video Input (choose a file or the camera) sampled through Pixelate, then CMYK Halftone prints it as four rotated dot screens. Swap the halftone for Grid UV → Luma Radius → Dot Mask for a single-ink version." },
+  particleGalaxy: { label: "Particle Galaxy", description: "The particle pipeline: P: Init seeds points on a disc, P: Rotate spins them with differential twist, P: Wave adds a breathing ripple, P: Color by Distance and P: Size shade them, P: Render draws them additively over the FBM nebula below." },
+  litStillLife: { label: "Lit Still Life", description: "The full 3D lighting stack. A Scene Group holds a capsule, a cone and a ground plane joined by smooth Union; the March Loop Group finds the surface; SDF AO and Soft Shadow read the scene again; Multi Light combines sun, sky and bounce; Tone Map finishes." },
+  spaceAtlas: { label: "Space Atlas", description: "A 2D space node reshapes the plane before any pattern sees it. Möbius Transform (pole animated by Time) feeds Truchet tiles; Scanlines finish it. Swap in Polar, Log-Polar or Kaleidoscope to compare the maps — the card preview shows each one as a checkerboard." },
+  shaperPlayground: { label: "Shaper Playground", description: "Shapers bend a 0–1 value. Here uv.x becomes the circle's radius after a Logistic Sigmoid, so the shape's outline is the curve itself; Scope graphs the Cubic Bezier version live and Print Float shows the number at the pointer height. Swap the shaper to see the outline change." },
+  colorAdjust: { label: "Color Adjust", description: "The Adjust family in one chain: Hue Range boosts one band of hues, Brightness / Contrast, Posterize steps the levels, Saturation pushes the result. Invert drops in anywhere. Reorder the chain to see why order matters." },
+  publishAndKeyframes: { label: "Publish a Node + Keyframes", description: "An iterated group (3 passes: rotate, tile, circle) is a node in waiting — select it and press ✦ Publish as node to make it one, with Iterations as a slider. SDF Glow's Falloff has a keyframe track (see the Keys tab): 6 → 40 over three seconds, looping." },
 };
 
 // The default graph to load on startup
@@ -167,25 +176,27 @@ export async function loadExampleGraphs(): Promise<Record<string, ExampleGraph>>
 // browser and the mobile examples picker (App.tsx) — one taxonomy, shared, so
 // the two surfaces never drift.
 export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string[] }> = [
-  { label: "Basics",           color: ctp.lavender, keys: ['forLoopRings','noiseFloatDemo','alphaLayerDemo','weightedSdfBlend'] },
-  { label: "Color & Lighting", color: ctp.peach, keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV','colorRampFBM'] },
-  { label: "Color Grading",    color: '#f9a86b', keys: ['cgHueRotate','cgChain','lumaGrainDemo','posterizeDemo'] },
-  { label: "Space & Texture",  color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','gridDemo','mirroredTileRepeat','neonFloorGrid'] },
-  { label: "Patterns",         color: ctp.green, keys: ['angularFlowerRepeat','complexPowFlower'] },
-  { label: "Grid",             color: ctp.sky, keys: ['gridBasic','gridWave','gridNeighborDisplaced','gridGravity','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','gridOnionRings','gridIronFilings'] },
-  { label: "Halftone",         color: '#a6e3d5', keys: ['halftoneNoise','cmykNoise','ringHalftone'] },
-  { label: "Rings",            color: ctp.red, keys: ['fractalRings','exprOrbit'] },
-  { label: "Iterated Groups",  color: ctp.green, keys: ['groupCarryRings','groupCarryFBM','groupCarryDomainWarp'] },
-  { label: "Conditionals",     color: ctp.yellow, keys: ['conditionalCircle','conditionalBrightnessGate','conditionalApproxMatch'] },
-  { label: "Fractals",         color: ctp.mauve, keys: ['newtonFractalZ5','gravitationalLens'] },
-  { label: "Physics",          color: ctp.teal, keys: ['chladniFieldQuickDemo','chladniComposableDemo','chladniModeFreqDemo'] },
-  { label: "Particles",        color: ctp.pink, keys: ['particleFlowDrift','particleOrbitCloud','particleRain'] },
-  { label: "Blur & Lens",      color: ctp.blue, keys: ['motionBlurTrails','tiltShiftScene','lensBokeh','dofOrbitOrbs','dofDepthBlur','fractalGlowBlur'] },
-  { label: "Matrix",           color: '#f5c842', keys: ['matrixShear','matrixColorGrade'] },
-  { label: "Functions",        color: ctp.sapphire, keys: ['ringGlow'] },
-  { label: "3D Basics",        color: ctp.sky, keys: ['raymarchSpheres','rayMarchOutputs3D','shapesAndGround3D','rotate3D','fold3D','sinWarp3D','repeat3D','softMetaballs3D','depthIterAO3D','ray3DVignette','kaleido3DBox'] },
-  { label: "3D SDF",           color: ctp.sky, keys: ['sdfPolarRepeat','sdfBend3D','sdfIntersectDemo','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','mirrorFoldSpheres','mlgWiggleTunnel'] },
-  { label: "3D Lighting",      color: '#f9c468', keys: ['aoSphere','phaseHGForwardCloud','fresnelSchlickRim','refractDirFakeGlass','glassPhysical','spectralPrism','blinnPhongSphere','glassMetaballs','glassSceneOrbPillars','glassIridescentRim'] },
-  { label: "GI Lighting",      color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
-  { label: "Volumetric",       color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat'] },
+  { label: "Basics",            color: ctp.lavender, keys: ['forLoopRings','noiseFloatDemo','alphaLayerDemo','weightedSdfBlend'] },
+  { label: "Color & Lighting",  color: ctp.peach, keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV','colorRampFBM'] },
+  { label: "Color Grading",     color: '#f9a86b', keys: ['cgHueRotate','cgChain','lumaGrainDemo','colorAdjust'] },
+  { label: "Effects & Feedback",color: ctp.mauve, keys: ['echoTrails','feedbackSmear'] },
+  { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','gridDemo','mirroredTileRepeat','neonFloorGrid','spaceAtlas'] },
+  { label: "Patterns",          color: ctp.green, keys: ['angularFlowerRepeat','complexPowFlower'] },
+  { label: "Grid",              color: ctp.sky, keys: ['gridBasic','gridWave','gridNeighborDisplaced','gridGravity','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','gridOnionRings','gridIronFilings','beatGrid'] },
+  { label: "Halftone",          color: '#a6e3d5', keys: ['halftoneNoise','cmykNoise','ringHalftone','webcamCmyk'] },
+  { label: "Rings",             color: ctp.red, keys: ['fractalRings','exprOrbit'] },
+  { label: "Iterated Groups",   color: ctp.green, keys: ['groupCarryRings','groupCarryFBM','groupCarryDomainWarp','publishAndKeyframes'] },
+  { label: "Shapers",           color: ctp.yellow, keys: ['shaperPlayground'] },
+  { label: "Conditionals",      color: ctp.yellow, keys: ['conditionalCircle','conditionalBrightnessGate','conditionalApproxMatch'] },
+  { label: "Fractals",          color: ctp.mauve, keys: ['newtonFractalZ5','gravitationalLens'] },
+  { label: "Physics",           color: ctp.teal, keys: ['chladniFieldQuickDemo','chladniComposableDemo','chladniModeFreqDemo'] },
+  { label: "Particles",         color: ctp.pink, keys: ['particleFlowDrift','particleOrbitCloud','particleRain','particleGalaxy'] },
+  { label: "Blur & Lens",       color: ctp.blue, keys: ['motionBlurTrails','tiltShiftScene','lensBokeh','dofOrbitOrbs','dofDepthBlur','fractalGlowBlur'] },
+  { label: "Matrix",            color: '#f5c842', keys: ['matrixShear','matrixColorGrade'] },
+  { label: "Functions",         color: ctp.sapphire, keys: ['ringGlow'] },
+  { label: "3D Basics",         color: ctp.sky, keys: ['raymarchSpheres','rayMarchOutputs3D','shapesAndGround3D','rotate3D','fold3D','sinWarp3D','repeat3D','softMetaballs3D','depthIterAO3D','ray3DVignette','kaleido3DBox'] },
+  { label: "3D SDF",            color: ctp.sky, keys: ['sdfPolarRepeat','sdfBend3D','sdfIntersectDemo','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','mirrorFoldSpheres','mlgWiggleTunnel'] },
+  { label: "3D Lighting",       color: '#f9c468', keys: ['aoSphere','phaseHGForwardCloud','fresnelSchlickRim','refractDirFakeGlass','glassPhysical','spectralPrism','blinnPhongSphere','glassMetaballs','glassSceneOrbPillars','glassIridescentRim','litStillLife'] },
+  { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
+  { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat'] },
 ];
