@@ -157,7 +157,7 @@ export const MarchCameraNode: NodeDefinition = {
 // the warp lives entirely in the march loop body.
 
 export const ForwardCameraNode: NodeDefinition = {
-  type: 'forwardCamera', label: 'Camera (Forward)', category: '3D Scene',
+  type: 'forwardCamera', label: 'Camera (Forward)', category: '3D Scene', deprecated: true,
   description: 'Fixed forward-facing camera. ro sits at (0,0,−camDist) and rd = normalize(vec3(uv, fov)). No orbit — all motion lives inside the MLG body warp.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV' },
@@ -392,7 +392,7 @@ export const MarchLoopGroupNode: NodeDefinition = {
     albedoR: 0.6, albedoG: 0.7, albedoB: 0.9,
   },
   paramDefs: {
-    maxSteps:    { label: 'Max Steps',   type: 'float' as const,   min: 8,    max: 256,   step: 4,    hint: 'Maximum ray march iterations per pixel. Higher = deeper into geometry, more GPU cost.' },
+    maxSteps:    { label: 'Max Steps',   type: 'float' as const,   min: 8,    max: 256,   step: 4,    compileTime: true, hint: 'Maximum ray march iterations per pixel. Higher = deeper into geometry, more GPU cost.' },
     maxDist:     { label: 'Max Dist',    type: 'float' as const,   min: 5.0,  max: 100.0, step: 1.0,  hint: 'How far the ray travels before giving up and returning the background color.' },
     stepScale:   { label: 'Step Scale',  type: 'float' as const,   min: 0.3,  max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower. Not used in volumetric mode.' },
     volumetric:  { label: 'Volumetric',  type: 'bool'  as const,                                       hint: 'When on, the ray passes through the scene accumulating color at every step. No hit detection. Use with marchSceneDist + accumulator nodes in the body.' },
@@ -466,7 +466,7 @@ export const GILitMarchGroupNode: NodeDefinition = {
     specStrength: 0.5,
   },
   paramDefs: {
-    maxSteps:    { label: 'Max Steps',    type: 'float' as const, min: 8,    max: 256,  step: 4,    hint: 'Maximum ray march iterations per pixel.' },
+    maxSteps:    { label: 'Max Steps',    type: 'float' as const, min: 8,    max: 256,  step: 4,    compileTime: true, hint: 'Maximum ray march iterations per pixel.' },
     maxDist:     { label: 'Max Dist',     type: 'float' as const, min: 5.0,  max: 100,  step: 1.0,  hint: 'How far the ray travels before returning background.' },
     stepScale:   { label: 'Step Scale',   type: 'float' as const, min: 0.3,  max: 1.0,  step: 0.05, hint: 'Fraction of SDF distance to step. Lower = safer, slower.' },
     volumetric:  { label: 'Volumetric',   type: 'bool'  as const,                                   hint: 'Accumulate density along the ray. GI/specular are disabled in this mode.' },
@@ -575,7 +575,7 @@ const COMMON_MARCH_PARAM_DEFS = {
   camAngle:  { label: 'Cam Angle', type: 'float' as const, min: 0.0, max: 6.28,  step: 0.02 },
   rotSpeed:  { label: 'Rot Speed', type: 'float' as const, min: 0.0, max: 2.0,   step: 0.01 },
   fov:       { label: 'FOV',       type: 'float' as const, min: 0.5, max: 3.14,  step: 0.05 },
-  maxSteps:  { label: 'Max Steps', type: 'float' as const, min: 8,   max: 256,   step: 4    },
+  maxSteps:  { label: 'Max Steps', type: 'float' as const, min: 8,   max: 256,   step: 4,   compileTime: true },
   maxDist:   { label: 'Max Dist',  type: 'float' as const, min: 5.0, max: 100.0, step: 1.0  },
 };
 
@@ -661,7 +661,7 @@ export const RayMarchNode: NodeDefinition = {
 // New graphs should use RayMarchNode instead.
 
 export const RayRenderNode: NodeDefinition = {
-  type: 'rayRender', label: 'Ray Render (Legacy)', category: '3D Scene',
+  type: 'rayRender', label: 'Ray Render (Legacy)', category: '3D Scene', deprecated: true,
   description: 'Legacy sphere-tracer. Use RayMarch or RayMarchLit for new graphs.',
   inputs: {
     scene:     { type: 'scene3d', label: 'Scene' },
@@ -712,11 +712,11 @@ export const RayRenderNode: NodeDefinition = {
     fov:         { label: 'FOV',         type: 'float', min: 0.5, max: 3.14,  step: 0.05 },
     maxSteps: { label: 'Max Steps', type: 'select', options: [32,64,96,128].map(n => ({ value: String(n), label: String(n) })) },
     maxDist:  { label: 'Max Dist',  type: 'float', min: 5.0, max: 100.0, step: 1.0 },
-    dist_scale:  { label: 'Dist Scale',  type: 'float', min: 0.0, max: 0.3,  step: 0.001 },
-    iter_scale:  { label: 'Iter Scale',  type: 'float', min: 0.0, max: 0.05, step: 0.0005 },
-    pal_r:       { label: 'Palette R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
-    pal_g:       { label: 'Palette G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
-    pal_b:       { label: 'Palette B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01 },
+    dist_scale:  { label: 'Dist Scale',  type: 'float', min: 0.0, max: 0.3,  step: 0.001, showWhen: { param: 'color_mode', value: ['distance'] } },
+    iter_scale:  { label: 'Iter Scale',  type: 'float', min: 0.0, max: 0.05, step: 0.0005, showWhen: { param: 'color_mode', value: ['iter'] } },
+    pal_r:       { label: 'Palette R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance', 'iter'] } },
+    pal_g:       { label: 'Palette G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance', 'iter'] } },
+    pal_b:       { label: 'Palette B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance', 'iter'] } },
     bgR:      { label: 'BG R',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     bgG:      { label: 'BG G',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     bgB:      { label: 'BG B',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
