@@ -16,7 +16,7 @@ import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, onClear,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, onClear, compact = false,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -29,6 +29,8 @@ export function CanvasToolbar({
   showMinimap: boolean;
   onToggleMinimap: () => void;
   onClear: () => void;
+  /** Narrow canvas (tablet): Fit and Auto layout become icon buttons. */
+  compact?: boolean;
 }) {
   const tk = useTokens();
   const selected = useNodeGraphStore(s => s.selectedNodeIds.length);
@@ -76,8 +78,17 @@ export function CanvasToolbar({
       </Tooltip>
       <IconButton icon="plus" label="Zoom in" size="sm" onClick={() => onZoom(zoom * 1.2)} />
       <Sep />
-      <Tooltip label="Fit all nodes in view" shortcut="f"><ToolButton icon="fit" onClick={onFit}>Fit</ToolButton></Tooltip>
-      <Tooltip label="Arrange left-to-right by data flow"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>
+      {compact ? (
+        <>
+          <IconButton icon="fit" label="Fit all nodes in view" shortcut="f" size="sm" onClick={onFit} />
+          <IconButton icon="layout" label="Arrange left-to-right by data flow" size="sm" onClick={onAutoLayout} />
+        </>
+      ) : (
+        <>
+          <Tooltip label="Fit all nodes in view" shortcut="f"><ToolButton icon="fit" onClick={onFit}>Fit</ToolButton></Tooltip>
+          <Tooltip label="Arrange left-to-right by data flow"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>
+        </>
+      )}
       <Sep />
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
       <IconButton icon="trash" label="Clear all nodes" size="sm" tone="danger" onClick={onClear} />

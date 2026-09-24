@@ -950,6 +950,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           showMinimap={showMinimap}
           onToggleMinimap={toggleMinimap}
           onClear={() => loadExampleGraph('blank')}
+          compact={compactToolbar}
         />
       )}
 

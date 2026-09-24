@@ -9,7 +9,7 @@ import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
 import type { TransformPreset } from '../../types/transformPreset';
 import type { KeyframePreset } from '../../types/keyframePreset';
-import { ThemeOverrideContext, useTokens } from '../../theme/themeStore';
+import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
@@ -471,10 +471,6 @@ function mkPane(activeTab: TabId = 'nodes'): ContentPaneState {
 }
 
 export function NodePalette(props: NodePaletteProps) {
-  // The tablet drawer keeps the dark look until the tablet/mobile phase.
-  if (props.mode === 'drawer') {
-    return <ThemeOverrideContext.Provider value="dark"><PaletteBody {...props} /></ThemeOverrideContext.Provider>;
-  }
   return <PaletteBody {...props} />;
 }
 

@@ -3,7 +3,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
-import type { Page } from '../TopNav';
+import type { Page } from '../page';
 import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
@@ -23,10 +23,12 @@ const TABS: { page: Page; label: string }[] = [
  * in the canvas "···" menu — undo/redo, save/load by name, theme, import/export, record.
  * Mobile and tablet keep TopNav until their own phase.
  */
-export function DesktopTopNav({ page, onPageChange, onRecord }: {
+export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }: {
   page: Page;
   onPageChange: (page: Page) => void;
   onRecord: () => void;
+  /** Tablet: no wordmark, icon-only Import/Export. */
+  compact?: boolean;
 }) {
   const tk = useTokens();
   const mode = useThemeStore(s => s.mode);
@@ -46,11 +48,11 @@ export function DesktopTopNav({ page, onPageChange, onRecord }: {
         font: `12.5px ${fontFamily.ui}`, userSelect: 'none',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: 250, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: compact ? 'auto' : 250, flexShrink: 0 }}>
         <span style={{ width: 26, height: 26, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="presets" size={13} />
         </span>
-        <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em' }}>Shader Studio</span>
+        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em' }}>Shader Studio</span>}
       </div>
 
       <div role="tablist" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover }}>
@@ -85,12 +87,23 @@ export function DesktopTopNav({ page, onPageChange, onRecord }: {
           onClick={toggleTheme}
         />
         <Divider />
-        <Tooltip label="Import a graph file" shortcut={shortcuts.import}>
-          <Button size="sm" icon="import" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }}>Import</Button>
-        </Tooltip>
-        <Tooltip label="Export this graph to a file" shortcut={shortcuts.export}>
-          <Button size="sm" icon="export" onClick={async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); }}>Export</Button>
-        </Tooltip>
+        {compact ? (
+          <>
+            <IconButton icon="import" label="Import a graph file" shortcut={shortcuts.import}
+              onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
+            <IconButton icon="export" label="Export this graph to a file" shortcut={shortcuts.export}
+              onClick={async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); }} />
+          </>
+        ) : (
+          <>
+            <Tooltip label="Import a graph file" shortcut={shortcuts.import}>
+              <Button size="sm" icon="import" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }}>Import</Button>
+            </Tooltip>
+            <Tooltip label="Export this graph to a file" shortcut={shortcuts.export}>
+              <Button size="sm" icon="export" onClick={async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); }}>Export</Button>
+            </Tooltip>
+          </>
+        )}
         <Tooltip label="Record the preview as video or a still" shortcut={shortcuts.toggleRecord}>
           <button
             type="button"
@@ -115,7 +128,7 @@ function Divider() {
   return <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 6px', flexShrink: 0 }} />;
 }
 
-function SaveGraphButton() {
+export function SaveGraphButton() {
   const saveGraph = useNodeGraphStore(s => s.saveGraph);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
@@ -151,7 +164,7 @@ function SaveGraphButton() {
   );
 }
 
-function LoadGraphButton() {
+export function LoadGraphButton() {
   const tk = useTokens();
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const loadSavedGraph = useNodeGraphStore(s => s.loadSavedGraph);
