@@ -39,7 +39,7 @@ const C = {
 };
 
 // The same roles in Catppuccin Latte, for the light theme's white code panel.
-const C_LIGHT: typeof C = {
+export const C_LIGHT: typeof C = {
   keyword: '#8839ef', typeFloat: '#d20f39', typeVec2: '#1e66f5', typeVec3: '#40a02b', typeVec4: '#7287fd',
   typeInt: '#fe640b', typeMat: '#179299', typeSampler: '#04a5e5', builtin: '#c26a0a', number: '#fe640b',
   comment: '#9ca0b0', preproc: '#d20f39', swizzle: '#1e66f5', operator: '#04a5e5', ident: '#1a1b23', punct: '#7c7f93',
