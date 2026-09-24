@@ -1,6 +1,7 @@
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { GraphNode, DataType, InputSocket, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
+import { f as formatFloat } from '../nodes/definitions/helpers';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
@@ -103,11 +104,12 @@ function getNodeOutputType(node: GraphNode, defType: DataType): DataType {
 
 /**
  * Convert a JS number or number[] into a GLSL literal string.
- * Ensures integers are emitted as "N.0" so GLSL sees them as floats.
+ * Values are emitted exactly (no rounding); integers get a ".0" suffix so
+ * GLSL sees them as floats.
  */
 export function formatGlslLiteral(val: number | number[], type: string): string {
-  if (typeof val === 'number') return Number.isInteger(val) ? `${val}.0` : `${val}`;
-  return `${type}(${val.map(v => v.toFixed(1)).join(', ')})`;
+  if (typeof val === 'number') return formatFloat(val);
+  return `${type}(${val.map(formatFloat).join(', ')})`;
 }
 
 // ── Input-variable resolution ─────────────────────────────────────────────────
