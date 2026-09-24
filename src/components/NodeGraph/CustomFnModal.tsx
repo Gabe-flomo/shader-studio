@@ -113,6 +113,7 @@ export function CustomFnModal({ node, onClose }: Props) {
       outputType:    ((node.params.outputType as string) || 'float') as Parameters<typeof saveCustomFnPreset>[0]['outputType'],
       body:          typeof node.params.body === 'string' ? node.params.body : '0.0',
       glslFunctions: typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '',
+      comment:       typeof node.params.__comment === 'string' ? node.params.__comment : undefined,
     });
     toast.success(`Saved “${labelParam}” to Functions`);
   };

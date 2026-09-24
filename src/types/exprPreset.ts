@@ -18,6 +18,8 @@ export interface ExprPreset {
   lines: Array<{ lhs: string; op: string; rhs: string }>;
   /** Return expression */
   result: string;
+  /** The node's comment when it was saved; restored on the node when placed */
+  comment?: string;
   /** Unix timestamp (ms) when saved */
   savedAt: number;
 }
