@@ -401,6 +401,8 @@ interface NodeGraphState {
   textureUniforms: Record<string, string>;
   // audioUniforms from last compilation: uniformName → nodeId
   audioUniforms: Record<string, string>;
+  // liveUniforms from last compilation: uniformName → `${nodeId}::${channel}` (input bus)
+  liveUniforms: Record<string, string>;
   // Video inputs — maps nodeId → VideoTexture (or null)
   videoTextures: Record<string, import('three').VideoTexture | null>;
   setVideoTexture: (nodeId: string, texture: import('three').VideoTexture | null) => void;
@@ -1162,6 +1164,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodeTextures: {},
   textureUniforms: {},
   audioUniforms: {},
+  liveUniforms: {},
   videoTextures: {},
   videoUniforms: {},
   audioMasterVolume: 0.7,
@@ -4045,6 +4048,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       paramBindings: result.paramBindings,
       textureUniforms: result.textureUniforms,
       audioUniforms: result.audioUniforms,
+      liveUniforms: result.liveUniforms,
       videoUniforms: result.videoUniforms,
       isStateful: result.isStateful,
       particleSystems: result.particleSystems ?? [],

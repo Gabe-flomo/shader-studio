@@ -53,7 +53,7 @@ const STATEFUL_TYPES = new Set([
   'gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'motionBlur', 'depthOfField',
 ]);
 // textureInput is allowed: each one becomes a sampler2D argument (see spec.textures).
-const MEDIA_TYPES = new Set(['audioInput', 'videoInput']);
+const MEDIA_TYPES = new Set(['audioInput', 'videoInput', 'midiInput']);
 const OUTPUT_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
 export interface FlattenSpec {
@@ -119,7 +119,7 @@ export function findUnsupportedNode(subgraph: SubgraphData, depth = 0): { node: 
   for (const n of subgraph.nodes) {
     if (PARTICLE_PIPELINE_TYPES.has(n.type)) return { node: n, reason: 'particle pipeline nodes compile outside the main shader' };
     if (STATEFUL_TYPES.has(n.type)) return { node: n, reason: 'it reads the previous frame' };
-    if (MEDIA_TYPES.has(n.type)) return { node: n, reason: 'texture, audio and video inputs are bound per instance' };
+    if (MEDIA_TYPES.has(n.type)) return { node: n, reason: 'texture, audio, video and MIDI inputs are bound per instance' };
     if (OUTPUT_TYPES.has(n.type)) return { node: n, reason: 'output nodes belong to the graph, not a node' };
     if (!getNodeDefinition(n.type)) return { node: n, reason: `unknown node type "${n.type}"` };
     if (n.type === 'group') {
@@ -219,7 +219,7 @@ export function flattenSubgraphToFunction(spec: FlattenSpec): FlattenResult {
     return { ok: false, error: e instanceof Error ? e.message : 'The group failed to compile.' };
   }
 
-  if (parts.isStateful || Object.keys(parts.textureUniforms).length || Object.keys(parts.audioUniforms).length || Object.keys(parts.videoUniforms).length) {
+  if (parts.isStateful || Object.keys(parts.textureUniforms).length || Object.keys(parts.audioUniforms).length || Object.keys(parts.videoUniforms).length || Object.keys(parts.liveUniforms).length) {
     return { ok: false, error: 'The group depends on per-instance uniforms (media or previous frame) and can\'t be flattened.' };
   }
 

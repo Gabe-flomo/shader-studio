@@ -4,6 +4,7 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
+import { inputBus } from '../lib/inputBus';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
@@ -415,7 +416,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     camera.position.z = 1;
 
     const geometry = new THREE.PlaneGeometry(2, 2);
-    const { vertexShader: vs, fragmentShader: fs, rawGlslShader: rawFs, paramUniforms: pu, textureUniforms: tu, audioUniforms: au, videoUniforms: vu } = useNodeGraphStore.getState();
+    const { vertexShader: vs, fragmentShader: fs, rawGlslShader: rawFs, paramUniforms: pu, textureUniforms: tu, audioUniforms: au, liveUniforms: lu, videoUniforms: vu } = useNodeGraphStore.getState();
     const activeFs = rawFs ?? fs;
     const initialUniforms: Record<string, { value: unknown }> = {
       u_time:        { value: 0 },
@@ -427,6 +428,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
     for (const name of Object.keys(au))              initialUniforms[name] = { value: 0 };
+    for (const name of Object.keys(lu))              initialUniforms[name] = { value: 0 };
     audioEngine.setUniformNames(au);
     for (const name of Object.keys(vu))              initialUniforms[name] = { value: null };
     // `let`: the shader-change effect swaps in a freshly compiled material
@@ -836,6 +838,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const u = material.uniforms[uName];
         if (u) u.value = amp;
       }
+      // ── Input bus tick: MIDI (and later mouse/keyboard/envelope) float uniforms ──
+      const liveValues = inputBus.tick(dt, elapsed);
+      for (const [uName, v] of liveValues) {
+        const u = material.uniforms[uName];
+        if (u) u.value = v;
+      }
       // Draw live spectrum into any open AudioInputModal canvases
       for (const audioId of audioIdsRef.current) {
         if (!audioSpectrumRegistry.has(audioId)) continue;
@@ -863,7 +871,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
       const dynamic = renderKeepAlive.active() || (playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
-        audioAmps.size > 0 || videoActive || isStatefulRef.current ||
+        audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
       ));
       const doRender = dynamic || needsRender;
@@ -1475,11 +1483,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // This fires on *every* store write, including the ~10 Hz frame-loop
     // writes above, so rebuilding the node Map/Set is gated on the `nodes`
     // reference actually changing.
+    let lastLive = useNodeGraphStore.getState().liveUniforms;
+    inputBus.setBindings(lastLive);
     const unsub = useNodeGraphStore.subscribe(state => {
       selectedNodeIdRef.current   = state.selectedNodeId;
       previewNodeIdRef.current    = state.previewNodeId;
       nodeOutputVarMapRef.current = state.nodeOutputVarMap;
       if (state.nodes !== nodesRef.current) syncNodes(state.nodes);
+      if (state.liveUniforms !== lastLive) { lastLive = state.liveUniforms; inputBus.setBindings(lastLive); }
     });
     // Initialize immediately
     const s = useNodeGraphStore.getState();
@@ -1521,6 +1532,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Register float audio uniforms (initial value 0 — updated each rAF frame)
     const currentAudioUniforms = useNodeGraphStore.getState().audioUniforms;
     for (const uniformName of Object.keys(currentAudioUniforms)) {
+      if (!mat.uniforms[uniformName]) {
+        mat.uniforms[uniformName] = { value: 0 };
+      }
+    }
+    // Register float input-bus uniforms (initial value 0 — written each rAF frame)
+    for (const uniformName of Object.keys(useNodeGraphStore.getState().liveUniforms)) {
       if (!mat.uniforms[uniformName]) {
         mat.uniforms[uniformName] = { value: 0 };
       }
