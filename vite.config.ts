@@ -18,4 +18,18 @@ export default defineConfig({
   server: {
     watch: usePolling ? { usePolling: true, interval: 500 } : undefined,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Vendor code in its own chunks so an app change doesn't make returning
+        // users re-download Three.js and React; example graphs and the
+        // secondary pages split off through dynamic import() in the app.
+        manualChunks(id) {
+          if (id.includes('node_modules/three/')) return 'three';
+          if (/node_modules\/(react|react-dom|scheduler|zustand)\//.test(id)) return 'react';
+          return undefined;
+        },
+      },
+    },
+  },
 })

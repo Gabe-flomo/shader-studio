@@ -145,17 +145,32 @@ void main() {
 }`.trim();
 
 // Intercept WebGL shader compile errors from Three.js
+// Reading COMPILE_STATUS right after compileShader() blocks until the driver
+// has finished compiling — which defeats KHR_parallel_shader_compile. So the
+// wrapper only records the shader, and the per-frame flush polls
+// COMPLETION_STATUS_KHR and reads the log once the compile is actually done.
 function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): () => string[] {
   const errors: string[] = [];
+  const pending: WebGLShader[] = [];
+  const parallel = gl.getExtension('KHR_parallel_shader_compile') as { COMPLETION_STATUS_KHR: number } | null;
   const origCompile = gl.compileShader.bind(gl);
   (gl as unknown as Record<string, unknown>).compileShader = (shader: WebGLShader) => {
     origCompile(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const log = gl.getShaderInfoLog(shader);
-      if (log) errors.push(...log.split('\n').filter(l => l.trim()));
-    }
+    pending.push(shader);
   };
   return () => {
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const sh = pending[i];
+      // Three.js deletes shader objects once their program linked — nothing to report.
+      if (!gl.isShader(sh)) { pending.splice(i, 1); continue; }
+      if (parallel && !gl.getShaderParameter(sh, parallel.COMPLETION_STATUS_KHR)) continue;
+      pending.splice(i, 1);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(sh);
+        // ANGLE terminates the log with a NUL byte; drop it along with blank lines.
+        if (log) errors.push(...log.split('\n').map(l => l.replace(/\0/g, '')).filter(l => l.trim()));
+      }
+    }
     if (errors.length === 0) return NO_ERRORS;
     const copy = [...errors];
     errors.length = 0;
@@ -199,6 +214,8 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   const canvasRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  // Installed by the boot effect: compiles (vs, fs) off to the side and swaps it in. Resolves false if superseded.
+  const swapShaderRef = useRef<((vs: string, fs: string) => Promise<boolean>) | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const particleSceneRef  = useRef<THREE.Scene | null>(null);
   const perspCameraRef    = useRef<THREE.PerspectiveCamera | null>(null);
@@ -357,7 +374,10 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
     for (const name of Object.keys(au))              initialUniforms[name] = { value: 0 };
     for (const name of Object.keys(vu))              initialUniforms[name] = { value: null };
-    const material = new THREE.ShaderMaterial({
+    // `let`: the shader-change effect swaps in a freshly compiled material
+    // (see swapShaderRef below); everything in this closure reads `material`
+    // and so follows the swap. The uniforms object is shared across swaps.
+    let material = new THREE.ShaderMaterial({
       vertexShader: vs || FALLBACK_VERTEX,
       fragmentShader: activeFs || FALLBACK_FRAGMENT,
       uniforms: initialUniforms,
@@ -367,6 +387,37 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
     sceneRef.current = scene;
+
+    // ── Asynchronous recompile ───────────────────────────────────────────────
+    // Setting needsUpdate on the live material made the next render() link the
+    // new program synchronously and stall that frame. Instead a new material
+    // with the same uniforms is compiled off to the side (compileAsync polls
+    // KHR_parallel_shader_compile, so the previous program keeps drawing) and
+    // swapped in when ready. A compile superseded by a newer one is dropped.
+    const compileScene = new THREE.Scene();
+    const compileMesh = new THREE.Mesh(geometry, material);
+    compileScene.add(compileMesh);
+    let compileGeneration = 0;
+    swapShaderRef.current = async (vsSrc, fsSrc) => {
+      if (material.vertexShader === vsSrc && material.fragmentShader === fsSrc) return true;
+      const gen = ++compileGeneration;
+      const next = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
+      compileMesh.material = next;
+      try {
+        await renderer.compileAsync(compileScene, camera);
+      } catch (e) {
+        // Link/compile errors surface through captureGlslErrors on the next frame.
+        console.warn('[ShaderCanvas] compileAsync rejected', e);
+      }
+      if (gen !== compileGeneration) { next.dispose(); return false; }
+      const prev = material;
+      material = next;
+      mesh.material = next;
+      materialRef.current = next;
+      prev.dispose();
+      requestRender();
+      return true;
+    };
 
     // ── 3D particle scene + perspective camera ────────────────────────────────
     const particleScene = new THREE.Scene();
@@ -471,6 +522,27 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
     probeScene.add(probeMesh);
     const probeRT     = new THREE.WebGLRenderTarget(1, 1, { type: THREE.UnsignedByteType, depthBuffer: false });
     const probeBuf    = new Uint8Array(4);
+
+    // Probe programs compile off-thread as well: a freshly built probe material
+    // goes through compileAsync and is skipped until ready, so selecting a node
+    // with N outputs no longer links N programs synchronously in one frame.
+    const readyProbeMats = new WeakSet<THREE.ShaderMaterial>();
+    const compilingProbeMats = new WeakSet<THREE.ShaderMaterial>();
+    const probeCompileScene = new THREE.Scene();
+    const probeCompileMesh = new THREE.Mesh(probeGeo, probeDummy);
+    probeCompileScene.add(probeCompileMesh);
+    const probeReady = (pm: THREE.ShaderMaterial): boolean => {
+      if (readyProbeMats.has(pm)) return true;
+      if (!compilingProbeMats.has(pm)) {
+        compilingProbeMats.add(pm);
+        probeCompileMesh.material = pm;
+        renderer.compileAsync(probeCompileScene, camera).then(
+          () => { readyProbeMats.add(pm); requestRender(); },
+          () => { readyProbeMats.add(pm); },
+        );
+      }
+      return false;
+    };
     let lastProbedNodeId: string | null = null;
     let lastProbeFs: string | null = null;   // invalidate cache when shader recompiles
     const probeMatCache = new Map<string, THREE.ShaderMaterial>();
@@ -874,6 +946,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
                   });
                   probeMatCache.set(varName, pm);
                 }
+                if (!probeReady(pm)) continue; // still compiling — probe it next sample
                 // Keep uniforms in sync with the live material
                 pm.uniforms.u_time.value = material.uniforms.u_time.value;
                 pm.uniforms.u_resolution.value = material.uniforms.u_resolution.value;
@@ -952,6 +1025,7 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
                 });
                 scopeMatCache.set(cacheKey, pm);
               }
+              if (!probeReady(pm)) continue; // still compiling — sample it next time
               for (const [k, u] of Object.entries(material.uniforms)) {
                 if (pm.uniforms[k]) pm.uniforms[k].value = u.value;
               }
@@ -1329,16 +1403,13 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
   // Update shader when compiled output changes — flush old errors first.
   // Also registers all param uniforms so THREE knows about them from the start.
   useEffect(() => {
-    if (!materialRef.current || !vertexShader || !activeFragmentShader) return;
+    if (!materialRef.current || !vertexShader || !activeFragmentShader || !swapShaderRef.current) return;
     setGlslErrors([]);
-    fragmentShaderRef.current = activeFragmentShader;
-    vertexShaderRef.current = vertexShader;
     // Every shader *declares* u_time in its preamble; what matters is whether
     // the body reads it (a Time node, keyframe curves, rotate(..., u_time)…).
     usesTimeRef.current = /\bu_time\b/.test(activeFragmentShader.replace(/uniform\s+float\s+u_time\s*;/g, ''));
-    materialRef.current.vertexShader = vertexShader;
-    materialRef.current.fragmentShader = activeFragmentShader;
-    // Register param uniforms on the material (initial values from compilation)
+    // Register uniforms on the shared uniforms object — the new program is
+    // compiled against it, and the old one ignores names it doesn't declare.
     const mat = materialRef.current;
     for (const [name, value] of Object.entries(paramUniforms)) {
       if (mat.uniforms[name]) {
@@ -1371,17 +1442,24 @@ export default function ShaderCanvas({ onCanvasReady, onRegisterOfflineRender, o
         mat.uniforms[uniformName] = { value: null };
       }
     }
-    mat.needsUpdate = true;
-    // On structural recompile, reset ping-pong state to prevent stale frame bleed
-    if (pingPongA.current && pingPongB.current) {
-      const r = rendererRef.current;
-      if (r) {
-        r.setRenderTarget(pingPongA.current); r.clear();
-        r.setRenderTarget(pingPongB.current); r.clear();
-        r.setRenderTarget(null);
+    swapShaderRef.current(vertexShader, activeFragmentShader).then(swapped => {
+      if (!swapped) return; // superseded by a newer shader
+      // Only now is this the live program: probe programs are built from these
+      // refs, so they must not point at source that isn't drawing yet.
+      fragmentShaderRef.current = activeFragmentShader;
+      vertexShaderRef.current = vertexShader;
+      // On structural recompile, reset ping-pong state to prevent stale frame
+      // bleed — after the swap, so the old program never draws into cleared history.
+      if (pingPongA.current && pingPongB.current) {
+        const r = rendererRef.current;
+        if (r) {
+          r.setRenderTarget(pingPongA.current); r.clear();
+          r.setRenderTarget(pingPongB.current); r.clear();
+          r.setRenderTarget(null);
+        }
+        pingPongIdx.current = 0;
       }
-      pingPongIdx.current = 0;
-    }
+    });
   }, [vertexShader, activeFragmentShader]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bind sampler2D texture uniforms — runs when textureUniforms or nodeTextures change.

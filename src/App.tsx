@@ -1,27 +1,44 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { lazyWithSuspense, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
-import { MobileGraphBrowser, MobileNodeGraphOverlay } from './components/NodeGraph/MobileGraphBrowser';
 import { CodePanel, tokenizeLine } from './components/CodePanel';
 import { TopNav } from './components/TopNav';
-import { ExportModal } from './components/ExportModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-import { ShortcutsPage } from './components/ShortcutsPage';
-import { GLSLPage } from './components/GLSLPage';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
-import { FunctionBuilder } from './components/FunctionBuilder';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/TopNav';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
-import { MobileNodeBrowser } from './components/NodeGraph/MobileNodeBrowser';
 import { useShallow } from 'zustand/react/shallow';
-import { useNodeGraphStore, EXAMPLE_GRAPHS, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
+import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useTimeHotkeys } from './hooks/useTimeHotkeys';
 import { ctp } from './theme/palette';
+// Type-only: erased at build time, so these don't pull the lazy chunks into the main bundle.
+import type { ExportModal as ExportModalT } from './components/ExportModal';
+import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
+import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
+import type { GLSLPage as GLSLPageT } from './components/GLSLPage';
+import type { FunctionBuilder as FunctionBuilderT } from './components/FunctionBuilder/FunctionBuilder';
+import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay as MobileNodeGraphOverlayT } from './components/NodeGraph/MobileGraphBrowser';
+import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
+
+// ── Code splitting ───────────────────────────────────────────────────────────
+// Everything that isn't the studio editor itself loads on first use: the
+// secondary pages, the modals, and the mobile editor (desktop never downloads
+// it, and vice versa for the desktop-only pieces it doesn't need). Each lazy
+// component carries its own Suspense boundary so a chunk loading never blanks
+// the rest of the app.
+const ExportModal            = lazyWithSuspense<PropsOf<typeof ExportModalT>>(() => import('./components/ExportModal').then(m => ({ default: m.ExportModal })));
+const KeyboardShortcutsModal = lazyWithSuspense<PropsOf<typeof KeyboardShortcutsModalT>>(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
+const ShortcutsPage          = lazyWithSuspense<PropsOf<typeof ShortcutsPageT>>(() => import('./components/ShortcutsPage').then(m => ({ default: m.ShortcutsPage })));
+const GLSLPage               = lazyWithSuspense<PropsOf<typeof GLSLPageT>>(() => import('./components/GLSLPage').then(m => ({ default: m.GLSLPage })));
+const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>>(() => import('./components/FunctionBuilder/FunctionBuilder').then(m => ({ default: m.FunctionBuilder })));
+const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
+const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
+const MobileNodeBrowser      = lazyWithSuspense<PropsOf<typeof MobileNodeBrowserT>>(() => import('./components/NodeGraph/MobileNodeBrowser').then(m => ({ default: m.MobileNodeBrowser })));
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -1027,7 +1044,7 @@ function App() {
                 >✕</button>
               </div>
               {mobileExamplesTab === 'examples' ? (
-                EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_GRAPHS[k])).map(folder => {
+                EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_INDEX[k])).map(folder => {
                   const isOpen = expandedExampleFolders.has(folder.label);
                   return (
                     <div key={folder.label} style={{ marginBottom: '12px' }}>
@@ -1050,7 +1067,7 @@ function App() {
                       </button>
                       {isOpen && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {folder.keys.filter(k => EXAMPLE_GRAPHS[k]).map(k => (
+                          {folder.keys.filter(k => EXAMPLE_INDEX[k]).map(k => (
                             <button
                               key={k}
                               onClick={() => { loadExampleGraph(k); setShowMobileExamples(false); }}
@@ -1060,7 +1077,7 @@ function App() {
                                 cursor: 'pointer', touchAction: 'manipulation',
                               }}
                             >
-                              {EXAMPLE_GRAPHS[k].label}
+                              {EXAMPLE_INDEX[k].label}
                             </button>
                           ))}
                         </div>

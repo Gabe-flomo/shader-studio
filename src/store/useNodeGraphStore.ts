@@ -11,7 +11,8 @@ import { compileGraph } from '../compiler/graphCompiler';
 import { paramBindingKey } from '../compiler/uniformPatcher';
 import { saveTextFile, openTextFile, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
-import { EXAMPLE_GRAPHS } from './exampleGraphs';
+import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
+import type { ExampleGraph } from './exampleIndex';
 import { groupNodesByRank } from './graphLayout';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
@@ -520,7 +521,7 @@ interface NodeGraphState {
   undo: () => void;
   redo: () => void;
   compile: () => void;
-  loadExampleGraph: (name?: string) => void;
+  loadExampleGraph: (name?: string) => Promise<void>;
   autoLayout: () => void;
   setGlslErrors: (errors: string[]) => void;
   setGlContextLost: (lost: boolean) => void;
@@ -557,7 +558,7 @@ interface NodeGraphState {
 
 // ─── Example graph data ───────────────────────────────────────────────────────
 
-export { EXAMPLE_GRAPHS, DEFAULT_EXAMPLE, EXAMPLE_FOLDERS } from './exampleGraphs';
+export { EXAMPLE_INDEX, DEFAULT_EXAMPLE, EXAMPLE_FOLDERS } from './exampleIndex';
 
 
 // ─── Preview sub-graph builder ────────────────────────────────────────────────
@@ -3964,10 +3965,23 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
   },
 
-  loadExampleGraph: (name?: string) => {
+  loadExampleGraph: async (name?: string) => {
+    const example = name ?? DEFAULT_EXAMPLE;
+    // The blank starter is bundled with the app; every other example lives in
+    // a lazily loaded chunk (see exampleIndex.ts).
+    let graph: ExampleGraph | undefined = example === 'blank' ? BLANK_GRAPH : undefined;
+    if (!graph) {
+      try {
+        const all = await loadExampleGraphs();
+        graph = all[example] ?? all[DEFAULT_EXAMPLE];
+      } catch (e) {
+        console.error('[loadExampleGraph] could not load the example graphs chunk', e);
+        return;
+      }
+    }
+    // Only now — nothing above touched the current graph or its history.
     undoManager.clear();
-    const example = name ?? 'fractalRings';
-    const { nodes: rawNodes } = EXAMPLE_GRAPHS[example] ?? EXAMPLE_GRAPHS['fractalRings'];
+    const { nodes: rawNodes } = graph;
 
     const nodes = upgradeExprNodes(rawNodes).map(n => migrateNodeParams(
       n.params ? n : { ...n, params: {} },
