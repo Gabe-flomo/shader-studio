@@ -14,6 +14,8 @@ import { describe, it, expect } from 'vitest';
 import { NODE_REGISTRY } from '../../nodes/definitions';
 import { compileGraph } from '../graphCompiler';
 import type { GraphNode, NodeDefinition, InputSocket, DataType } from '../../types/nodeGraph';
+import { coerce, coerceLossy, typesCompatible } from '../../lib/typesCompatible';
+import { validateGraph } from '../validate';
 
 const SKIP = new Set(['output', 'vec4Output']);
 
@@ -135,5 +137,33 @@ describe('node registry', () => {
       void name;
     }
     expect(duplicated, `duplicate GLSL definitions:\n  ${duplicated.join('\n  ')}`).toEqual([]);
+  });
+});
+
+// ── D12: one promotion table for every site ──────────────────────────────────
+describe('type promotion (D12)', () => {
+  it('coerce() expresses exactly the wire-compatible promotions', () => {
+    const types = ['float', 'vec2', 'vec3', 'vec4'];
+    for (const a of types) for (const b of types) {
+      expect(typesCompatible(a, b), `${a}→${b}`).toBe(coerce('x', a, b) !== null);
+    }
+    expect(coerce('c', 'vec3', 'vec4')).toBe('vec4(c, 1.0)');
+    expect(coerce('f', 'float', 'vec4')).toBe('vec4(f)');
+    expect(coerce('v', 'vec3', 'vec2')).toBe('(v).xy');
+    expect(coerce('v', 'vec4', 'vec3')).toBeNull();
+    expect(coerceLossy('v', 'vec4', 'float')).toBe('v.x');
+  });
+
+  it('a vec3 wire into vec4Output.color validates and assembles as vec4(c, 1.0)', () => {
+    const grad = makeNode('g', 'gradient', NODE_REGISTRY['gradient']);
+    const out: GraphNode = {
+      id: 'out', type: 'vec4Output', position: { x: 600, y: 0 },
+      inputs: { color: { type: 'vec4', label: 'Color (RGBA)', connection: { nodeId: 'g', outputKey: 'color' } } },
+      outputs: {}, params: {},
+    } as GraphNode;
+    expect(validateGraph([grad, out])).toEqual({ valid: true });
+    const res = compileGraph({ nodes: [grad, out] });
+    expect(res.errors ?? []).toEqual([]);
+    expect(res.fragmentShader).toMatch(/gl_FragColor = vec4\([A-Za-z0-9_]+, 1\.0\);/);
   });
 });

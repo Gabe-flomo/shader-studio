@@ -4,6 +4,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
+import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -150,21 +151,10 @@ export function resolveInputVars(
       const sourceOutputs = nodeOutputs.get(input.connection.nodeId);
       if (sourceOutputs) {
         const rawVar = sourceOutputs[input.connection.outputKey];
-        const src = sourceOutputType as string;
-        const tgt = input.type as string;
-        if (src === tgt) {
-          inputVars[inputKey] = rawVar;
-        } else if (src === 'float' && tgt === 'vec2') {
-          inputVars[inputKey] = `vec2(${rawVar})`;
-        } else if (src === 'float' && tgt === 'vec3') {
-          inputVars[inputKey] = `vec3(${rawVar})`;
-        } else if (src === 'vec2' && tgt === 'vec3') {
-          inputVars[inputKey] = `vec3(${rawVar}, 0.0)`;
-        } else if (src === 'vec3' && tgt === 'vec2') {
-          inputVars[inputKey] = `(${rawVar}).xy`;
-        } else {
-          inputVars[inputKey] = rawVar;
-        }
+        // One promotion table for every site (D12): validate() rejects what
+        // coerce() can't express, so a null here only happens for a wire
+        // validation already flagged — pass the raw var through and let GLSL report it.
+        inputVars[inputKey] = coerce(rawVar, sourceOutputType as string, input.type as string) ?? rawVar;
       }
     } else if (kfCfg && registerFn) {
       const fnName = `kf_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}_${inputKey}`;
@@ -728,15 +718,7 @@ export class ShaderAssembler {
                   const outputDefs = Object.entries(subDef.outputs);
                   for (const [outKey, outSocket] of outputDefs) {
                     const varName = `${subNode.id}_${outKey}`;
-                    let coerced = passthroughVar;
-                    if (srcType !== outSocket.type) {
-                      if (outSocket.type === 'float' && (srcType === 'vec2' || srcType === 'vec3' || srcType === 'vec4')) coerced = `${passthroughVar}.x`;
-                      else if (outSocket.type === 'vec2' && srcType === 'float') coerced = `vec2(${passthroughVar})`;
-                      else if (outSocket.type === 'vec3' && srcType === 'float') coerced = `vec3(${passthroughVar})`;
-                      else if (outSocket.type === 'vec3' && srcType === 'vec2') coerced = `vec3(${passthroughVar}, 0.0)`;
-                      else if (outSocket.type === 'vec4' && srcType === 'float') coerced = `vec4(${passthroughVar})`;
-                      else if (outSocket.type === 'vec4' && srcType === 'vec3') coerced = `vec4(${passthroughVar}, 1.0)`;
-                    }
+                    const coerced = coerceLossy(passthroughVar, srcType, outSocket.type);
                     bypassCode += `    ${outSocket.type} ${varName} = ${coerced};\n`;
                     bypassOutVars[outKey] = varName;
                   }
@@ -3154,16 +3136,8 @@ export class ShaderAssembler {
             for (const [outKey, outSocket] of outputEntries) {
               const varName = `${nodeSlug}_${outKey}`;
               const srcType = (Object.values(def.inputs)[0]?.type ?? 'float');
-              let coerced = passthroughVar;
+              let coerced = coerceLossy(passthroughVar, srcType, outSocket.type);
               if (srcType !== outSocket.type) {
-                if (outSocket.type === 'float' && srcType === 'vec2') coerced = `${passthroughVar}.x`;
-                else if (outSocket.type === 'float' && srcType === 'vec3') coerced = `${passthroughVar}.x`;
-                else if (outSocket.type === 'float' && srcType === 'vec4') coerced = `${passthroughVar}.x`;
-                else if (outSocket.type === 'vec2' && srcType === 'float') coerced = `vec2(${passthroughVar})`;
-                else if (outSocket.type === 'vec3' && srcType === 'float') coerced = `vec3(${passthroughVar})`;
-                else if (outSocket.type === 'vec3' && srcType === 'vec2') coerced = `vec3(${passthroughVar}, 0.0)`;
-                else if (outSocket.type === 'vec4' && srcType === 'float') coerced = `vec4(${passthroughVar})`;
-                else if (outSocket.type === 'vec4' && srcType === 'vec3') coerced = `vec4(${passthroughVar}, 1.0)`;
                 const matchingInput = inputEntries.find(([, v]) => v !== passthroughVar);
                 if (matchingInput) coerced = matchingInput[1];
               }
