@@ -44,7 +44,9 @@ export function LoopModal({ node, onClose }: Props) {
   const tc = useCtp();
   const BTN = BTNFor(tc);
   const SECTION_LABEL = SECTION_LABELFor(tc);
-  const { updateNodeParams, updateNodeSockets, nodes } = useNodeGraphStore();
+  const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
+  const nodes             = useNodeGraphStore(s => s.nodes);
 
   const carryType  = ((node.params.carryType as DataType) ?? 'vec2') as DataType;
   const iterations = typeof node.params.iterations === 'number' ? node.params.iterations : 4;

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
+import { subscribeTimeTick } from '../../lib/timeTick';
 
 // Header and footer bars for the shader preview. The preview is a render surface, so callers
 // render these under ThemeOverrideContext 'dark' — they look the same in both app themes.
@@ -26,12 +27,25 @@ export interface ProbeValue { label: string; col: string; formatted: string }
  * Time controls on the left; on the right, the pixel under the cursor (or the selected node's
  * output values) and the compile-error pill.
  */
-export function PreviewFooter({ pixelSample, probe, idleHint }: {
-  pixelSample: readonly number[] | null;
-  probe: ProbeValue[] | null;
-  idleHint: string;
-}) {
+const PROBE_COLORS: Record<string, string> = { float: '#f0a', vec2: '#0af', vec3: '#0fa', vec4: '#fa0' };
+
+/**
+ * Subscribes to the per-frame readouts itself (pixel sample, probe values) so those writes
+ * re-render only this bar, not App.
+ */
+export function PreviewFooter({ idleHint }: { idleHint: string }) {
   const tk = useTokens();
+  const pixelSample = useNodeGraphStore(s => s.pixelSample);
+  const nodeProbeValues = useNodeGraphStore(s => s.nodeProbeValues);
+  const selectedNode = useNodeGraphStore(s => s.selectedNodeId ? s.nodes.find(n => n.id === s.selectedNodeId) ?? null : null);
+  const hasSelection = useNodeGraphStore(s => !!s.selectedNodeId);
+  const probe = useMemo<ProbeValue[] | null>(() => selectedNode && nodeProbeValues
+    ? Object.entries(nodeProbeValues).map(([outKey, vals]) => {
+        const outSocket = selectedNode.outputs[outKey];
+        return { label: outSocket?.label ?? outKey, col: PROBE_COLORS[outSocket?.type ?? 'float'] ?? tk.text.primary, formatted: vals.map(v => v.toFixed(3)).join(', ') };
+      })
+    : null, [selectedNode, nodeProbeValues, tk]);
+  if (hasSelection && !probe && !pixelSample) idleHint = 'computing…';
   const timePlaying = useNodeGraphStore(s => s.timePlaying);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
   const mono = `11px ${fontFamily.mono}`;
@@ -65,11 +79,7 @@ export function PreviewFooter({ pixelSample, probe, idleHint }: {
 function TimeReadout() {
   const tk = useTokens();
   const [time, setTime] = useState(0);
-  useEffect(() => {
-    const onTick = (e: Event) => setTime((e as CustomEvent<{ time: number }>).detail.time);
-    window.addEventListener('time-tick', onTick);
-    return () => window.removeEventListener('time-tick', onTick);
-  }, []);
+  useEffect(() => subscribeTimeTick(setTime), []);
   return <span style={{ margin: '0 4px 0 6px', color: tk.text.primary, fontVariantNumeric: 'tabular-nums' }}>{time.toFixed(2)}s</span>;
 }
 

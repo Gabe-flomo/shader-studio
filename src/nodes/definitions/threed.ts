@@ -232,7 +232,7 @@ export const RaymarchNode: NodeDefinition = {
       { value: 'twisted_box',  label: 'Twisted Box'  },
       { value: 'menger',       label: 'Menger Sponge'},
     ]},
-    max_steps:      { label: 'Max Steps',     type: 'float', min: 20,    max: 200,  step: 5      },
+    max_steps:      { label: 'Max Steps',     type: 'float', min: 20,    max: 200,  step: 5,     compileTime: true },
     max_dist:       { label: 'Max Distance',  type: 'float', min: 5,     max: 100,  step: 1      },
     surf_dist:      { label: 'Surface Eps',   type: 'float', min: 0.0001,max: 0.01, step: 0.0001 },
     cam_dist:       { label: 'Camera Dist',   type: 'float', min: 1,     max: 20,   step: 0.1    },
@@ -240,9 +240,9 @@ export const RaymarchNode: NodeDefinition = {
     cam_speed:      { label: 'Orbit Speed',   type: 'float', min: 0,     max: 2,    step: 0.01   },
     cam_fov:        { label: 'FOV',           type: 'float', min: 0.5,   max: 3,    step: 0.05   },
     shape_r:        { label: 'Shape Radius',  type: 'float', min: 0.1,   max: 3,    step: 0.05   },
-    blend_k:        { label: 'Blend K',       type: 'float', min: 0.01,  max: 2,    step: 0.01   },
-    repeat_x:       { label: 'Repeat X',      type: 'float', min: 1,     max: 10,   step: 0.5    },
-    repeat_z:       { label: 'Repeat Z',      type: 'float', min: 1,     max: 10,   step: 0.5    },
+    blend_k:        { label: 'Blend K',       type: 'float', min: 0.01,  max: 2,    step: 0.01, showWhen: { param: 'shape', value: 'blend' }   },
+    repeat_x:       { label: 'Repeat X',      type: 'float', min: 1,     max: 10,   step: 0.5, showWhen: { param: 'shape', value: 'repeat' }    },
+    repeat_z:       { label: 'Repeat Z',      type: 'float', min: 1,     max: 10,   step: 0.5, showWhen: { param: 'shape', value: 'repeat' }    },
     light_x:        { label: 'Light X',       type: 'float', min: -10,   max: 10,   step: 0.1    },
     light_y:        { label: 'Light Y',       type: 'float', min: 0,     max: 20,   step: 0.1    },
     light_z:        { label: 'Light Z',       type: 'float', min: -10,   max: 10,   step: 0.1    },
@@ -253,11 +253,11 @@ export const RaymarchNode: NodeDefinition = {
     palette_preset: { label: 'Object Palette',type: 'select', options: PALETTE_PRESET_OPTIONS },
     bg_preset:      { label: 'BG Palette',    type: 'select', options: PALETTE_PRESET_OPTIONS },
     ao_steps:       { label: 'AO Steps',      type: 'float', min: 0,     max: 10,   step: 1      },
-    noise_scale:    { label: 'Noise Scale',   type: 'float', min: 0.1,   max: 5,    step: 0.1    },
-    noise_strength: { label: 'Noise Warp',    type: 'float', min: 0,     max: 1,    step: 0.01   },
-    cone_angle:     { label: 'Cone Angle',    type: 'float', min: 0.05,  max: 1.2,  step: 0.01   },
-    twist_k:        { label: 'Twist Amount',  type: 'float', min: -5,    max: 5,    step: 0.1    },
-    round_r:        { label: 'Round Radius',  type: 'float', min: 0.0,   max: 0.5,  step: 0.01   },
+    noise_scale:    { label: 'Noise Scale',   type: 'float', min: 0.1,   max: 5,    step: 0.1, showWhen: { param: 'shape', value: 'noisy_sphere' }    },
+    noise_strength: { label: 'Noise Warp',    type: 'float', min: 0,     max: 1,    step: 0.01, showWhen: { param: 'shape', value: 'noisy_sphere' }   },
+    cone_angle:     { label: 'Cone Angle',    type: 'float', min: 0.05,  max: 1.2,  step: 0.01, showWhen: { param: 'shape', value: 'cone' }   },
+    twist_k:        { label: 'Twist Amount',  type: 'float', min: -5,    max: 5,    step: 0.1, showWhen: { param: 'shape', value: 'twisted_box' }    },
+    round_r:        { label: 'Round Radius',  type: 'float', min: 0.0,   max: 0.5,  step: 0.01, showWhen: { param: 'shape', value: 'round_box' }   },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -509,7 +509,7 @@ export const MandelbulbNode: NodeDefinition = {
     power:          { label: 'Power',         type: 'float', min: 2,    max: 16,   step: 0.5  },
     bailout:        { label: 'Bailout',       type: 'float', min: 1.5,  max: 8.0,  step: 0.1  },
     max_iter:       { label: 'DE Iterations', type: 'float', min: 4,    max: 24,   step: 1    },
-    max_steps:      { label: 'Max Steps',     type: 'float', min: 20,   max: 200,  step: 5    },
+    max_steps:      { label: 'Max Steps',     type: 'float', min: 20,   max: 200,  step: 5,   compileTime: true },
     max_dist:       { label: 'Max Distance',  type: 'float', min: 2,    max: 20,   step: 0.1  },
     cam_dist:       { label: 'Camera Dist',   type: 'float', min: 1,    max: 10,   step: 0.1  },
     cam_height:     { label: 'Camera Height', type: 'float', min: -3,   max: 5,    step: 0.1  },
@@ -671,7 +671,7 @@ export const VolumeCloudsNode: NodeDefinition = {
     phaseG:         0.0,
   },
   paramDefs: {
-    steps:        { label: 'March Steps',  type: 'float', min: 8,    max: 80,  step: 2     },
+    steps:        { label: 'March Steps',  type: 'float', min: 8,    max: 80,  step: 2,    compileTime: true },
     cloud_min_y:  { label: 'Cloud Min Y',  type: 'float', min: 0,    max: 10,  step: 0.1   },
     cloud_max_y:  { label: 'Cloud Max Y',  type: 'float', min: 0,    max: 20,  step: 0.1   },
     coverage:     { label: 'Coverage',     type: 'float', min: -1,   max: 1,   step: 0.01  },
@@ -838,7 +838,7 @@ export const ChromaticAberrationNode: NodeDefinition = {
       { value: 'false', label: 'Off' },
       { value: 'true',  label: 'On'  },
     ]},
-    anim_speed: { label: 'Anim Speed', type: 'float',  min: 0.0, max: 3.0,   step: 0.01  },
+    anim_speed: { label: 'Anim Speed', type: 'float',  min: 0.0, max: 3.0,   step: 0.01, showWhen: { param: 'animate', value: 'true' } },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -1110,7 +1110,7 @@ export const OrbitalVolume3DNode: NodeDefinition = {
     m:             { label: 'm (magnetic)',  type: 'float', min: -4,    max: 4,    step: 1     },
     a0:            { label: 'Bohr radius',   type: 'float', min: 0.01,  max: 2.0,  step: 0.01  },
     scale:         { label: 'Scale',         type: 'float', min: 0.001, max: 1.0,  step: 0.001 },
-    steps:         { label: 'March Steps',   type: 'float', min: 16,    max: 128,  step: 4     },
+    steps:         { label: 'March Steps',   type: 'float', min: 16,    max: 128,  step: 4,    compileTime: true },
     step_size:     { label: 'Step Size',     type: 'float', min: 0.005, max: 0.15, step: 0.005 },
     density_scale: { label: 'Density Scale', type: 'float', min: 0.5,   max: 40.0, step: 0.25  },
     gamma:         { label: 'Gamma',         type: 'float', min: 0.05,  max: 2.0,  step: 0.05  },
@@ -1135,11 +1135,11 @@ export const OrbitalVolume3DNode: NodeDefinition = {
     const l            = p(node.params.l, 1.0);
     const m            = p(node.params.m, 0.0);
     const a0           = p(node.params.a0, 0.5);
-    const scale        = f(Math.max(typeof node.params.scale === 'number' ? node.params.scale : 0.3, 0.001));
+    const scale        = `max(${p(node.params.scale, 0.3)}, 0.001)`;
     const steps        = Math.round(typeof node.params.steps === 'number' ? node.params.steps : 80);
     const stepSize     = p(node.params.step_size, 0.04);
     const densScale    = p(node.params.density_scale, 6.0);
-    const gamma        = f(Math.max(typeof node.params.gamma === 'number' ? node.params.gamma : 0.4, 0.05));
+    const gamma        = `max(${p(node.params.gamma, 0.4)}, 0.05)`;
     const edgeSoft     = p(node.params.edge_softness, 0.6);
     const turbulence   = p(node.params.turbulence, 0.0);
     const turbSpeed    = p(node.params.turb_speed, 0.3);
@@ -1148,9 +1148,10 @@ export const OrbitalVolume3DNode: NodeDefinition = {
     const camAngle     = p(node.params.cam_angle, 0.0);
     // cam_pitch: vertical angle in radians — 0=equatorial, π/2=top-down
     // Legacy cam_height kept as fallback if cam_pitch absent
-    const camPitch     = f(typeof node.params.cam_pitch     === 'number' ? node.params.cam_pitch
-                         : typeof node.params.cam_height    === 'number' ? Math.atan2(node.params.cam_height as number, parseFloat(camDist))
-                         : 0.35);
+    // cam_pitch is a live uniform when present; a legacy cam_height (old graphs) is converted once, baked.
+    const camPitch     = node.params.cam_pitch !== undefined
+                         ? p(node.params.cam_pitch, 0.35)
+                         : f(typeof node.params.cam_height === 'number' ? Math.atan2(node.params.cam_height as number, parseFloat(camDist)) : 0.35);
     const pA = Array.isArray(node.params.color_a) ? node.params.color_a as number[] : [0.3, 0.6, 1.0];
     const pB = Array.isArray(node.params.color_b) ? node.params.color_b as number[] : [1.0, 0.4, 0.2];
 
