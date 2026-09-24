@@ -334,6 +334,12 @@ export const ConstantNode: NodeDefinition = {
   // `outputType` is what the type pills on the card write (see
   // VECTORIZABLE_NODES / changeNodeVectorType); the sliders shown follow it.
   defaultParams: { value: 1.0, x: 0.0, y: 0.0, z: 0.0, w: 1.0, outputType: 'float' },
+  // v2 added `outputType`. Constants saved before it were float-only, and without the param
+  // every showWhen below fails: the Value slider disappears and `value` stops being a
+  // fast-path uniform, so each slider tick recompiled the shader.
+  version: 2,
+  migrateParams: (params, fromVersion) =>
+    fromVersion < 2 && typeof params.outputType !== 'string' ? { ...params, outputType: 'float' } : params,
   paramDefs: {
     value: { label: 'Value', type: 'float', step: 0.01, showWhen: { param: 'outputType', value: 'float' } },
     x:     { label: 'X',     type: 'float', step: 0.01, showWhen: { param: 'outputType', value: ['vec2', 'vec3', 'vec4'] } },
