@@ -39,6 +39,7 @@ import type { IconName } from '../ui/iconPaths';
 import { IconButton } from '../ui/Button';
 import { Sheet } from '../ui/Sheet';
 import { suggestConnections } from './smartConnect';
+import { wirePath } from './ConnectionLine';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
@@ -355,36 +356,45 @@ export function MobileNodeGraphOverlay() {
   if (!open) return null;
 
   return (
+    // Sits on the render, so it's dark in both themes (like the preview pill)
     <div style={{
       position: 'absolute', inset: 0, zIndex: 19,
-      background: 'rgba(17,17,27,0.74)', backdropFilter: 'blur(1px)', WebkitBackdropFilter: 'blur(1px)',
-      display: 'flex', flexDirection: 'column',
+      background: 'rgba(13,13,18,0.72)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+      display: 'flex', flexDirection: 'column', font: `12px ${fontFamily.ui}`,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', flexShrink: 0 }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, color: tc.blue, letterSpacing: '0.06em' }}>
-          NODE GRAPH{activeGroupPath.length > 0 ? ' — inside group' : ''} · read-only
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 6px 12px', flexShrink: 0 }}>
+        <span style={{
+          display: 'flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: 9,
+          background: 'rgba(26,27,34,0.88)', color: '#d8d9e0', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+        }}>
+          <Icon name="overlay" size={13} />
+          NODE GRAPH{activeGroupPath.length > 0 ? ' · IN GROUP' : ''}
+          <span style={{ fontWeight: 500, letterSpacing: 0, color: '#8a8d9b' }}>read-only</span>
         </span>
+        <span style={{ flex: 1 }} />
         <button
+          type="button"
+          aria-label="Close the node graph"
           onClick={() => setOpen(false)}
-          style={{ background: 'rgba(24,24,37,0.8)', border: `1px solid ${tc.surface1}`, color: tc.subtext0, borderRadius: '5px', width: '22px', height: '22px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
-        >✕</button>
+          style={{
+            width: 36, height: 36, padding: 0, border: 0, borderRadius: 10, cursor: 'pointer', touchAction: 'manipulation',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(26,27,34,0.88)', color: '#d8d9e0',
+          }}
+        ><Icon name="close" size={16} /></button>
       </div>
       {nodes.length === 0 ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: tc.surface2 }}>No nodes yet.</div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#8a8d9b' }}>No nodes yet.</div>
       ) : (
         <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
             <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
-              {layout.edges.map(e => {
-                const midX = (e.x1 + e.x2) / 2;
-                return (
-                  <path
-                    key={e.key}
-                    d={`M ${e.x1} ${e.y1} C ${midX} ${e.y1}, ${midX} ${e.y2}, ${e.x2} ${e.y2}`}
-                    stroke={TYPE_COLORS[e.type] ?? tc.surface2} strokeWidth={1.5} fill="none" opacity={0.85}
-                  />
-                );
-              })}
+              {layout.edges.map(e => (
+                <path
+                  key={e.key}
+                  d={wirePath({ x: e.x1, y: e.y1 }, { x: e.x2, y: e.y2 })}
+                  stroke={TYPE_COLORS[e.type] ?? '#8a8d99'} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.9}
+                />
+              ))}
             </svg>
             {nodes.map(n => {
               const l = layout.layouts.get(n.id);
@@ -394,23 +404,23 @@ export function MobileNodeGraphOverlay() {
                 <div
                   key={n.id}
                   style={{
-                    position: 'absolute', left: l.x, top: l.y, width: l.w, height: l.h,
-                    background: 'rgba(30,30,46,0.92)', border: `1px solid ${tc.surface1}`, borderRadius: '6px',
+                    position: 'absolute', left: l.x, top: l.y, width: l.w, height: l.h, boxSizing: 'border-box',
+                    background: 'rgba(26,27,34,0.94)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)', borderRadius: 8,
                   }}
                 >
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: '5px', height: OVERLAY_TITLE_H, padding: '0 8px',
-                    borderBottom: hasPorts ? `1px solid ${tc.surface0}` : 'none', overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', gap: 6, height: OVERLAY_TITLE_H, padding: '0 8px',
+                    borderBottom: hasPorts ? '1px solid rgba(255,255,255,0.06)' : 'none', overflow: 'hidden',
                   }}>
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: nodeDotColor(n, tc), flexShrink: 0 }} />
-                    <span style={{ fontSize: '10px', color: tc.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: '#e8e9ef', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(n)}</span>
                   </div>
                   {l.inputs.map(p => (
                     <div
                       key={`i-${p.key}`} title={p.label}
                       style={{
                         position: 'absolute', left: -4, top: p.y - 4, width: 8, height: 8, borderRadius: '50%',
-                        background: TYPE_COLORS[p.type] ?? '#888', border: `1px solid ${tc.crust}`,
+                        background: TYPE_COLORS[p.type] ?? '#888', boxShadow: '0 0 0 1.5px rgba(26,27,34,0.94)',
                       }}
                     />
                   ))}
@@ -419,7 +429,7 @@ export function MobileNodeGraphOverlay() {
                       key={`o-${p.key}`} title={p.label}
                       style={{
                         position: 'absolute', right: -4, top: p.y - 4, width: 8, height: 8, borderRadius: '50%',
-                        background: TYPE_COLORS[p.type] ?? '#888', border: `1px solid ${tc.crust}`,
+                        background: TYPE_COLORS[p.type] ?? '#888', boxShadow: '0 0 0 1.5px rgba(26,27,34,0.94)',
                       }}
                     />
                   ))}
