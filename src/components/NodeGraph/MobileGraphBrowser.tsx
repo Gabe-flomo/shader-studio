@@ -39,7 +39,7 @@ import type { IconName } from '../ui/iconPaths';
 import { IconButton } from '../ui/Button';
 import { Sheet } from '../ui/Sheet';
 import { suggestConnections } from './smartConnect';
-import { wirePath } from './ConnectionLine';
+import { wirePath } from './wirePath';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
