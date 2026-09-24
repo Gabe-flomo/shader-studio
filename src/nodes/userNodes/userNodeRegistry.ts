@@ -197,17 +197,31 @@ export function userNodeToDefinition(def: UserNodeDefinition): NodeDefinition {
   const defaultParams: Record<string, unknown> = {};
 
   for (const port of def.inputs) {
-    inputs[port.key] = { type: port.type, label: port.label };
+    inputs[port.key] = { type: port.type, label: port.label, hint: port.hint || undefined };
     if (port.slider && port.type === 'float') {
-      paramDefs[port.key] = { label: port.label, type: 'float', min: port.slider.min, max: port.slider.max, step: port.slider.step ?? 0.01 };
+      paramDefs[port.key] = { label: port.label, type: 'float', min: port.slider.min, max: port.slider.max, step: port.slider.step ?? 0.01, hint: port.hint || undefined };
       defaultParams[port.key] = port.slider.default;
     }
   }
-  for (const out of def.outputs) outputs[out.key] = { type: out.type, label: out.label };
+  for (const out of def.outputs) outputs[out.key] = { type: out.type, label: out.label, hint: out.hint || undefined };
   for (const prm of def.params) {
     paramDefs[prm.key] = { label: prm.label, type: 'float', min: prm.min, max: prm.max, step: prm.step ?? 0.01, hint: prm.hint };
     defaultParams[prm.key] = prm.default;
   }
+  const iters = def.iterations;
+  if (iters) {
+    // Integer, compile-time: the uniform patcher leaves it baked and a change
+    // recompiles with the matching pre-built variant (see glslFunctionsFor).
+    paramDefs[iters.key] = { label: iters.label, type: 'float', min: iters.min, max: iters.max, step: 1, compileTime: true, hint: 'How many passes the node runs. Changing it recompiles.' };
+    defaultParams[iters.key] = iters.default;
+  }
+  const iterationCount = (node: GraphNode): number => {
+    if (!iters) return 0;
+    const raw = node.params[iters.key];
+    const n = typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : iters.default;
+    return Math.max(iters.min, Math.min(iters.max, n));
+  };
+  const fnNameFor = (node: GraphNode): string => (iters ? `${def.fnName}_i${iterationCount(node)}` : def.fnName);
 
   const generateGLSL = (node: GraphNode, inputVars: Record<string, string>) => {
     const args: string[] = [...def.implicitGlobals];
@@ -229,7 +243,7 @@ export function userNodeToDefinition(def: UserNodeDefinition): NodeDefinition {
       args.push(v);
     }
     const pv = `${node.id}_${primary.key}`;
-    code += `    ${primary.type} ${pv} = ${def.fnName}(${args.join(', ')});\n`;
+    code += `    ${primary.type} ${pv} = ${fnNameFor(node)}(${args.join(', ')});\n`;
     outputVars[primary.key] = pv;
     return { code, outputVars };
   };
@@ -243,7 +257,10 @@ export function userNodeToDefinition(def: UserNodeDefinition): NodeDefinition {
     outputs,
     defaultParams,
     paramDefs: Object.keys(paramDefs).length ? paramDefs : undefined,
-    glslFunctions: [...def.helperFunctions, def.functionCode],
+    // With iteration variants the body is chosen per instance; otherwise the
+    // single flattened function rides along with the helpers.
+    glslFunctions: iters ? [...def.helperFunctions] : [...def.helperFunctions, def.functionCode],
+    glslFunctionsFor: iters ? (node) => [iters.functions[String(iterationCount(node))] ?? def.functionCode] : undefined,
     generateGLSL,
   };
 }

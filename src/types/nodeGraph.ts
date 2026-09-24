@@ -5,6 +5,8 @@ export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "s
 export interface Socket {
   type: DataType;
   label: string;
+  /** Optional docstring shown in the node info panel: what the socket expects or produces. */
+  hint?: string;
 }
 
 // Input socket with connection and default value
@@ -126,6 +128,12 @@ export interface NodeDefinition {
   // Optional GLSL function(s) to include in shader
   glslFunction?: string;
   glslFunctions?: string[];
+  /**
+   * Helper functions that depend on the instance (e.g. a user node whose
+   * flattened body was pre-built per iteration count). Collected alongside
+   * `glslFunctions` wherever a node is compiled; de-duplicated by name.
+   */
+  glslFunctionsFor?: (node: GraphNode) => string[];
 
   // Default parameter values
   defaultParams?: Record<string, unknown>;

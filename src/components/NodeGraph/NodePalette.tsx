@@ -368,14 +368,22 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
         return (
           <>
             <div style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.5, padding: '2px 2px 6px' }}>
-              Turn a whole graph into a node. Its Output becomes the node’s output, every slider can stay live or bake into the code, and the result is one GLSL function you can place, share and reuse.
+              Turn a whole graph into a single node. Whatever is wired into the graph’s Output becomes the node’s output. Every slider in the graph can stay adjustable on the new node or be frozen at its current value.
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 2px 8px' }}>
-              <Toggle checked={exposeUv} onChange={setExposeUv} label="UV nodes → a UV input" />
-              <Toggle checked={exposeTime} onChange={setExposeTime} label="Time nodes → a Time input" />
-              <div style={{ fontSize: 11.5, color: tk.text.faint, lineHeight: 1.45 }}>
-                Exposed sources become sockets on the node, so it can be fed warped coordinates or its own clock. Unexposed ones keep reading the screen and the global time.
-              </div>
+            <TabSectionHeader label="Inputs on the new node" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '2px 2px 8px' }}>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <Toggle checked={exposeUv} onChange={setExposeUv} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
+                  <b style={{ color: tk.text.primary }}>UV socket.</b> The graph’s UV nodes are replaced by one input. Wire anything into it (a warp, a tiling, another node) or leave it empty to use the screen, like the graph did.
+                </span>
+              </label>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <Toggle checked={exposeTime} onChange={setExposeTime} />
+                <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
+                  <b style={{ color: tk.text.primary }}>Time socket.</b> The graph’s Time nodes are replaced by one input, so the node can run on its own clock. Off: it follows the global time.
+                </span>
+              </label>
             </div>
             <Button size="sm" variant="primary" icon="spark" style={{ alignSelf: 'flex-start', marginBottom: 6 }}
               disabled={graphNodes.length === 0}

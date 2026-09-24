@@ -21,6 +21,8 @@ export interface UserNodePort {
   type: DataType;
   label: string;
   slider?: { min: number; max: number; step?: number; default: number } | null;
+  /** Docstring: what this socket expects (inputs) or produces (outputs). Supports `code`, **bold**, - bullets. */
+  hint?: string;
 }
 
 /** A live float param: becomes a function argument, so per-instance sliders
@@ -36,6 +38,22 @@ export interface UserNodeParam {
   /** Where this param came from in the source subgraph
    *  ("nodeId::paramKey" or "innerGroupId::nodeId::paramKey"). Edit metadata only. */
   sourcePath?: string;
+}
+
+/**
+ * A live iteration count. The group compiler unrolls iterations at compile
+ * time, so the count can't be a uniform; instead one function variant is
+ * pre-built per count and an instance's stepped slider picks which variant
+ * is emitted (changing it recompiles, like loop counts on built-ins).
+ */
+export interface UserNodeIterations {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+  default: number;
+  /** Iteration count (as a string key) → complete GLSL function named `${fnName}_i${count}`. */
+  functions: Record<string, string>;
 }
 
 export interface UserNodeSource {
@@ -62,6 +80,8 @@ export interface UserNodeDefinition {
   /** main()-scope variables the body references that must be passed in as
    *  leading hidden arguments (today only `g_uv`). */
   implicitGlobals: string[];
+  /** Present when the iteration count is exposed as a slider; `functionCode` is then the default count's variant. */
+  iterations?: UserNodeIterations;
   /** Kept so the node can be re-opened in the builder. Not used by the compiler. */
   source?: UserNodeSource;
   version: 1;

@@ -5,7 +5,7 @@
  */
 
 import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
-import type { UserNodeDefinition, UserNodeParam, UserNodePort } from '../../types/userNode';
+import type { UserNodeDefinition, UserNodeIterations, UserNodeParam, UserNodePort } from '../../types/userNode';
 import { flattenSubgraphToFunction } from '../../compiler/flattenSubgraph';
 import { makeUserNodeId } from './userNodeRegistry';
 
@@ -17,6 +17,7 @@ export interface PublishPortSpec {
   label: string;
   type: DataType;
   slider?: { min: number; max: number; step?: number; default: number } | null;
+  hint?: string;
 }
 
 export interface PublishParamSpec extends UserNodeParam {
@@ -32,6 +33,8 @@ export interface PublishUserNodeSpec {
   params: PublishParamSpec[];
   /** Re-publish over an existing definition (keeps its id and function name). */
   existingId?: string;
+  /** Expose the group's iteration count as a stepped slider (one pre-built variant per count in [min, max]). */
+  iterations?: { key: string; label: string; min: number; max: number; default: number };
 }
 
 export type PublishResult =
@@ -74,20 +77,41 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
   const id = spec.existingId ?? makeUserNodeId(label);
   const fnName = fnNameFor(id);
 
-  const flat = flattenSubgraphToFunction({
+  const flattenAt = (count: number, name: string) => flattenSubgraphToFunction({
     subgraph,
-    iterations,
-    fnName,
+    iterations: count,
+    fnName: name,
     inputs: spec.inputs.map(i => ({ key: i.key, portKey: i.portKey, type: i.type, label: i.label, slider: i.slider ?? null })),
     outputs: spec.outputs.map(o => ({ key: o.key, portKey: o.portKey, type: o.type, label: o.label })),
     params: spec.params,
   });
-  if (!flat.ok) return flat;
 
-  const inputs: UserNodePort[] = spec.inputs.map(i => ({ key: i.key, type: i.type, label: i.label, slider: i.type === 'float' ? (i.slider ?? null) : null }));
-  const outputs: UserNodePort[] = spec.outputs.map(o => ({ key: o.key, type: o.type, label: o.label }));
+  let iterationsOut: UserNodeIterations | undefined;
+  let flat;
+  if (spec.iterations) {
+    const it = spec.iterations;
+    const min = Math.max(1, Math.min(16, Math.round(it.min)));
+    const max = Math.max(min, Math.min(16, Math.round(it.max)));
+    const def = Math.max(min, Math.min(max, Math.round(it.default)));
+    if (keys.has(it.key)) return { ok: false, error: `The iterations slider key "${it.key}" clashes with a socket or param.` };
+    const functions: Record<string, string> = {};
+    for (let n = min; n <= max; n++) {
+      const r = flattenAt(n, `${fnName}_i${n}`);
+      if (!r.ok) return r;
+      functions[String(n)] = r.functionCode;
+    }
+    flat = flattenAt(def, `${fnName}_i${def}`);
+    if (!flat.ok) return flat;
+    iterationsOut = { key: it.key, label: it.label, min, max, default: def, functions };
+  } else {
+    flat = flattenAt(iterations, fnName);
+    if (!flat.ok) return flat;
+  }
+
+  const inputs: UserNodePort[] = spec.inputs.map(i => ({ key: i.key, type: i.type, label: i.label, slider: i.type === 'float' ? (i.slider ?? null) : null, hint: i.hint?.trim() || undefined }));
+  const outputs: UserNodePort[] = spec.outputs.map(o => ({ key: o.key, type: o.type, label: o.label, hint: o.hint?.trim() || undefined }));
   const params: UserNodeParam[] = spec.params.map(p => ({
-    key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.default, hint: p.hint, sourcePath: p.sourcePath,
+    key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.default, hint: p.hint?.trim() || undefined, sourcePath: p.sourcePath,
   }));
 
   return {
@@ -104,6 +128,7 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
       functionCode: flat.functionCode,
       helperFunctions: flat.helperFunctions,
       implicitGlobals: flat.implicitGlobals,
+      iterations: iterationsOut,
       source: { kind: 'subgraph', subgraph, iterations },
       version: 1,
       savedAt: Date.now(),

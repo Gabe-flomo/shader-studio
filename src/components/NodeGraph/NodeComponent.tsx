@@ -60,6 +60,7 @@ import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
+import { DocText } from '../ui/DocText';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -253,7 +254,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
     >
       <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13.5 }}>{def.label}</div>
       {def.description && (
-        <div style={{ color: tc.subtext0, marginBottom: 8, lineHeight: 1.4 }}>{def.description}</div>
+        <DocText text={Array.isArray(def.description) ? (def.description as string[]).join('\n') : def.description} style={{ color: tc.subtext0, marginBottom: 8 }} />
       )}
       {inputEntries.length > 0 && (
         <div style={{ marginBottom: 5 }}>
@@ -261,10 +262,13 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
           {inputEntries.map(([k, s]) => {
             const info = getInputInfo(k, s.type);
             return (
-              <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
-                <span style={{ color: tc.blue, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
-                <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
-                {info}
+              <div key={k} style={{ paddingLeft: 4, marginBottom: s.hint ? 4 : 1 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ color: tc.blue, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
+                  <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
+                  {info}
+                </div>
+                {s.hint && <DocText text={s.hint} style={{ color: tc.subtext0, fontSize: 11.5, paddingLeft: 8, marginTop: 1 }} />}
               </div>
             );
           })}
@@ -278,15 +282,38 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
             const probed = s.type === 'float' ? floatValueRegistry.get(`__preview__${node.id}`) : undefined;
             const liveVal = probed !== undefined ? probed.toFixed(3) : null;
             return (
-              <div key={k} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginBottom: 1, alignItems: 'center' }}>
-                <span style={{ color: tc.green, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
-                <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
-                {liveVal && <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{liveVal}</span>}
+              <div key={k} style={{ paddingLeft: 4, marginBottom: s.hint ? 4 : 1 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ color: tc.green, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{s.label}</span>
+                  <span style={{ color: tc.surface2, fontSize: 11, minWidth: 34 }}>{s.type}</span>
+                  {liveVal && <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{liveVal}</span>}
+                </div>
+                {s.hint && <DocText text={s.hint} style={{ color: tc.subtext0, fontSize: 11.5, paddingLeft: 8, marginTop: 1 }} />}
               </div>
             );
           })}
         </div>
       )}
+      {(() => {
+        // Sliders that aren't also sockets, with their docstrings (user nodes
+        // document these in the publish dialog; built-ins via paramDef.hint).
+        const sliders = Object.entries(def.paramDefs ?? {}).filter(([k, pd]) => !(k in def.inputs) && pd.hint);
+        if (sliders.length === 0) return null;
+        return (
+          <div style={{ marginBottom: def.glslFunction ? 8 : 0 }}>
+            <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sliders</div>
+            {sliders.map(([k, pd]) => (
+              <div key={k} style={{ paddingLeft: 4, marginBottom: 4 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ color: tc.mauve, fontFamily: fontFamily.mono, fontSize: 11, minWidth: 60 }}>{pd.label}</span>
+                  {pd.min !== undefined && pd.max !== undefined && <span style={{ color: tc.surface2, fontSize: 11 }}>{pd.min} – {pd.max}</span>}
+                </div>
+                <DocText text={pd.hint!} style={{ color: tc.subtext0, fontSize: 11.5, paddingLeft: 8, marginTop: 1 }} />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
       {def.glslFunction && (
         <div>
           <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>GLSL</div>

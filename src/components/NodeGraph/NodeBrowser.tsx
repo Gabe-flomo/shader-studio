@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { getAllCategories, getNodesByCategory, getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
+import { DocText } from '../ui/DocText';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -282,8 +283,28 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
         <div style={{ borderRadius: radius.md, overflow: 'hidden' }}><NodeInlineViz node={node} /></div>
       ) : null}
       {!isGlsl && def?.description && (
-        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{def.description}</p>
+        <DocText text={Array.isArray(def.description) ? (def.description as string[]).join('\n') : def.description} style={{ fontSize: 12, color: tk.text.muted }} />
       )}
+      {!isGlsl && userNode && (() => {
+        const rows = [
+          ...userNode.inputs.map(i => ({ kind: 'in', label: i.label, type: i.type, hint: i.hint })),
+          ...userNode.params.map(p => ({ kind: 'param', label: p.label, type: `${p.min} – ${p.max}`, hint: p.hint })),
+          ...(userNode.iterations ? [{ kind: 'param', label: userNode.iterations.label, type: `${userNode.iterations.min} – ${userNode.iterations.max} passes`, hint: undefined as string | undefined }] : []),
+          ...userNode.outputs.map(o => ({ kind: 'out', label: o.label, type: o.type, hint: o.hint })),
+        ];
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 8px', borderRadius: radius.md, background: tk.bg.subtle, fontSize: 11.5 }}>
+            {rows.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ color: tk.text.faint, fontSize: 10, width: 34, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{r.kind}</span>
+                <span style={{ fontFamily: fontFamily.mono, color: tk.text.primary }}>{r.label}</span>
+                <span style={{ fontFamily: fontFamily.mono, color: tk.text.faint }}>{r.type}</span>
+                {r.hint && <DocText text={r.hint} style={{ color: tk.text.muted, flexBasis: '100%', paddingLeft: 40, fontSize: 11.5 }} />}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {isGlsl ? (
         <Button size="sm" variant="primary" icon="code" onClick={() => { if (glslSource) onGlslInsert?.(glslSource); }}>Insert at cursor</Button>

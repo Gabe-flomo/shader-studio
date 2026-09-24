@@ -5,7 +5,7 @@
  * slider default), and any float slider inside the group can be promoted to
  * a live param. Everything else is baked into the flattened GLSL function.
  */
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { USER_NODE_DEFAULT_CATEGORY } from '../../types/userNode';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -15,7 +15,7 @@ import { findUnsupportedNode } from '../../compiler/flattenSubgraph';
 import { sourceSubgraph, type PublishPortSpec, type PublishParamSpec, type PublishSource } from '../../nodes/userNodes/publishUserNode';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import { Modal } from '../ui/Modal';
-import { Button } from '../ui/Button';
+import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
@@ -42,6 +42,7 @@ interface PortRow {
   min: number;
   max: number;
   default: number;
+  hint: string;
 }
 
 interface ParamRow extends ParamCandidate {
@@ -50,6 +51,7 @@ interface ParamRow extends ParamCandidate {
   min: number;
   max: number;
   default: number;
+  hint: string;
 }
 
 function TypeDot({ type }: { type: string }) {
@@ -89,21 +91,45 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
         portKey: p.key, type: p.type, label: p.label,
         slider: !!prev?.slider,
         min: prev?.slider?.min ?? 0, max: prev?.slider?.max ?? 1, default: prev?.slider?.default ?? 0,
+        hint: prev?.hint ?? '',
       };
     }),
   );
   const [outputs, setOutputs] = useState<PortRow[]>(() =>
-    (subgraph?.outputPorts ?? []).map(p => ({ portKey: p.key, type: p.type, label: p.label, slider: false, min: 0, max: 1, default: 0 })),
+    (subgraph?.outputPorts ?? []).map(p => {
+      const prev = existing?.outputs.find(o => o.label === p.label && o.type === p.type);
+      return { portKey: p.key, type: p.type, label: p.label, slider: false, min: 0, max: 1, default: 0, hint: prev?.hint ?? '' };
+    }),
   );
   const [params, setParams] = useState<ParamRow[]>(() =>
     (subgraph ? collectParamCandidates(subgraph) : []).map(c => {
       const prev = existing?.params.find(p => p.sourcePath === c.sourcePath);
-      return { ...c, enabled: !!prev, label: prev?.label ?? c.paramLabel, min: prev?.min ?? c.min, max: prev?.max ?? c.max, default: prev?.default ?? c.value };
+      return { ...c, enabled: !!prev, label: prev?.label ?? c.paramLabel, min: prev?.min ?? c.min, max: prev?.max ?? c.max, default: prev?.default ?? c.value, hint: prev?.hint ?? c.hint ?? '' };
     }),
   );
+  // Which rows have their docstring field open (key = 'in:i' | 'out:i' | 'p:i')
+  const [docOpen, setDocOpen] = useState<Set<string>>(() => new Set());
+  const toggleDoc = (k: string) => setDocOpen(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
   const unsupported = useMemo(() => (subgraph ? findUnsupportedNode(subgraph) : null), [subgraph]);
   const enabledParams = params.filter(p => p.enabled);
+
+  // Iteration count: only meaningful when the group loops (loop nodes inside,
+  // or more than one pass configured). Exposed as a stepped, compile-time slider.
+  const sourceIterations = sourceSubgraph(source).iterations;
+  const groupIterates = useMemo(() => {
+    if (!subgraph) return false;
+    if (sourceIterations > 1) return true;
+    const loops = (nodes: GraphNode[]) => nodes.some(n => n.type === 'loopIndex' || n.type === 'loopCarry');
+    return loops(subgraph.nodes) || subgraph.nodes.some(n => n.type === 'group' && loops(((n.params.subgraph as { nodes?: GraphNode[] } | undefined)?.nodes) ?? []));
+  }, [subgraph, sourceIterations]);
+  const [iters, setIters] = useState(() => ({
+    enabled: !!existing?.iterations,
+    label: existing?.iterations?.label ?? 'Iterations',
+    min: existing?.iterations?.min ?? 1,
+    max: existing?.iterations?.max ?? Math.min(16, Math.max(8, sourceIterations)),
+    default: existing?.iterations?.default ?? sourceIterations,
+  }));
 
   const signaturePreview = useMemo(() => {
     const taken = new Set<string>();
@@ -112,8 +138,11 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
       ...enabledParams.map(p => `float ${keyFromLabel(p.label, taken, p.paramKey)}`),
     ];
     const ret = outputs[0]?.type ?? 'void';
-    return `${ret} ${label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'node'}(${args.join(', ')})`;
-  }, [inputs, enabledParams, outputs, label]);
+    const name = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'node';
+    const withIters = groupIterates && iters.enabled;
+    const note = withIters ? `\n// one variant per iteration count (${iters.min}–${iters.max}); the slider picks which is compiled` : '';
+    return `${ret} ${name}${withIters ? `_i${iters.default}` : ''}(${args.join(', ')})${note}`;
+  }, [inputs, enabledParams, outputs, label, groupIterates, iters]);
 
   const updateInput = (i: number, patch: Partial<PortRow>) => setInputs(rows => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const updateOutput = (i: number, patch: Partial<PortRow>) => setOutputs(rows => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -127,6 +156,7 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
       portKey: i.portKey, type: i.type, label: i.label.trim() || i.portKey,
       key: keyFromLabel(i.label, taken, 'input'),
       slider: i.type === 'float' && i.slider ? { min: i.min, max: i.max, default: i.default } : null,
+      hint: i.hint,
     }));
     const paramSpecs: PublishParamSpec[] = enabledParams.map(p => ({
       sourcePath: p.sourcePath, label: p.label.trim() || p.paramLabel,
@@ -136,11 +166,15 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
     const outputSpecs: PublishPortSpec[] = outputs.map(o => ({
       portKey: o.portKey, type: o.type, label: o.label.trim() || o.portKey,
       key: keyFromLabel(o.label, taken, 'output'),
+      hint: o.hint,
     }));
     setBusy(true);
     const result = await publishUserNode(groupNode ? groupNode.id : source, {
       label, category, description,
       inputs: inputSpecs, outputs: outputSpecs, params: paramSpecs,
+      iterations: groupIterates && iters.enabled
+        ? { key: keyFromLabel(iters.label, taken, 'iterations'), label: iters.label.trim() || 'Iterations', min: iters.min, max: iters.max, default: iters.default }
+        : undefined,
       existingId: replace && existing ? existing.id : undefined,
     });
     setBusy(false);
@@ -168,13 +202,25 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
 
   const canPublish = !!subgraph && !unsupported && outputs.length > 0 && label.trim().length > 0 && !busy;
 
+  const docButton = (k: string, has: boolean) => (
+    <IconButton icon="comment" size="sm" label={has ? 'Edit the docstring' : 'Add a docstring (what it expects, its range…)'} active={docOpen.has(k) || has}
+      style={has ? { color: tk.kind.fn } : undefined} onClick={() => toggleDoc(k)} />
+  );
+  const docField = (k: string, value: string, onChange: (v: string) => void) => docOpen.has(k) ? (
+    <div style={{ padding: '0 10px 6px 10px', marginTop: -4 }}>
+      <Field aria-label="Docstring" height={28} value={value} autoFocus onChange={e => onChange(e.target.value)}
+        placeholder="What does it expect? e.g. `0..1` mask, **radians**, or -1..1 coordinates" style={{ background: tk.bg.field }} />
+    </div>
+  ) : null;
+
   return (
     <Modal
       title={existing ? 'Update node type' : 'Publish as node'}
       subtitle={`From ${source.kind === 'group' ? 'group' : 'graph'} "${sourceLabel}" · ${subgraph?.nodes.length ?? 0} nodes flatten into one GLSL function`}
       icon="spark"
       iconColor={tk.kind.fn}
-      width={720}
+      width={760}
+      height={Math.min(720, typeof window !== 'undefined' ? window.innerHeight - 48 : 720)}
       onClose={onClose}
       footer={
         <>
@@ -203,13 +249,16 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
           <Field autoFocus aria-label="Node name" placeholder="Node name" value={label} onChange={e => setLabel(e.target.value)} />
           <Select ariaLabel="Category" height={34} value={category} onChange={setCategory} options={categories.map(c => ({ value: c, label: c }))} />
         </div>
-        <Field aria-label="Description" placeholder="What does it do? (shown in the node browser and search)" value={description} onChange={e => setDescription(e.target.value)} />
+        <textarea aria-label="Description" rows={2} value={description} onChange={e => setDescription(e.target.value)}
+          placeholder={'What does it do? Shown in the node browser and info panel.\nSupports `code`, **bold** and - bullets.'}
+          style={{ resize: 'vertical', minHeight: 52, padding: '8px 10px', border: 0, outline: 'none', borderRadius: radius.control, background: tk.bg.field, color: tk.text.primary, font: `500 12.5px/1.45 ${fontFamily.ui}` }} />
 
         {/* Inputs */}
         {sectionTitle('Inputs', 'group ports become sockets · a float input can carry a slider for when it’s unconnected')}
         {inputs.length === 0 && <div style={{ fontSize: 12, color: tk.text.faint, padding: '2px 10px' }}>No input ports. The node will only read time and UV from the graph.</div>}
         {inputs.map((row, i) => (
-          <div key={row.portKey} style={rowStyle}>
+          <Fragment key={row.portKey}>
+          <div style={rowStyle}>
             <TypeDot type={row.type} />
             <span style={{ fontFamily: fontFamily.mono, fontSize: 11.5, color: tk.text.muted, width: 38 }}>{row.type}</span>
             <Field aria-label={`Input ${i + 1} label`} height={28} value={row.label} onChange={e => updateInput(i, { label: e.target.value })} style={{ flex: 1 }} />
@@ -225,24 +274,55 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
                 )}
               </>
             )}
+            {docButton(`in:${i}`, !!row.hint)}
           </div>
+          {docField(`in:${i}`, row.hint, v => updateInput(i, { hint: v }))}
+          </Fragment>
         ))}
 
         {/* Outputs */}
         {sectionTitle('Outputs', 'the first output is the function’s return value')}
         {outputs.map((row, i) => (
-          <div key={row.portKey} style={rowStyle}>
+          <Fragment key={row.portKey}>
+          <div style={rowStyle}>
             <TypeDot type={row.type} />
             <span style={{ fontFamily: fontFamily.mono, fontSize: 11.5, color: tk.text.muted, width: 38 }}>{row.type}</span>
             <Field aria-label={`Output ${i + 1} label`} height={28} value={row.label} onChange={e => updateOutput(i, { label: e.target.value })} style={{ flex: 1 }} />
+            {docButton(`out:${i}`, !!row.hint)}
           </div>
+          {docField(`out:${i}`, row.hint, v => updateOutput(i, { hint: v }))}
+          </Fragment>
         ))}
+
+        {/* Iterations */}
+        {groupIterates && (
+          <>
+            {sectionTitle('Iterations', iters.enabled ? 'a stepped slider on the node · changing it recompiles' : `baked at ${sourceIterations} pass${sourceIterations === 1 ? '' : 'es'}`)}
+            <div style={{ ...rowStyle, opacity: iters.enabled ? 1 : 0.7 }}>
+              <Toggle checked={iters.enabled} onChange={v => setIters(x => ({ ...x, enabled: v }))} />
+              <span style={{ fontSize: 11.5, color: tk.text.faint, width: 130 }}>Loop passes</span>
+              {iters.enabled ? (
+                <>
+                  <Field aria-label="Iterations label" height={28} value={iters.label} onChange={e => setIters(x => ({ ...x, label: e.target.value }))} style={{ flex: 1 }} />
+                  {miniLabel('min')}<NumberInput value={iters.min} min={1} max={16} step={1} onCommit={v => setIters(x => ({ ...x, min: Math.max(1, Math.min(16, Math.round(v))) }))} style={numStyle} />
+                  {miniLabel('max')}<NumberInput value={iters.max} min={1} max={16} step={1} onCommit={v => setIters(x => ({ ...x, max: Math.max(1, Math.min(16, Math.round(v))) }))} style={numStyle} />
+                  {miniLabel('default')}<NumberInput value={iters.default} min={1} max={16} step={1} onCommit={v => setIters(x => ({ ...x, default: Math.max(1, Math.min(16, Math.round(v))) }))} style={numStyle} />
+                </>
+              ) : (
+                <span style={{ flex: 1, fontSize: 12, color: tk.text.secondary }}>
+                  Iterations <span style={{ color: tk.text.faint, fontFamily: fontFamily.mono }}>= {sourceIterations}</span><span style={{ color: tk.text.faint }}> · baked</span>
+                </span>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Params */}
         {sectionTitle('Sliders', `${enabledParams.length} live · ${params.length - enabledParams.length} baked into the code`)}
         {params.length === 0 && <div style={{ fontSize: 12, color: tk.text.faint, padding: '2px 10px' }}>No sliders inside this group.</div>}
         {params.map((row, i) => (
-          <div key={row.sourcePath} style={{ ...rowStyle, opacity: row.enabled ? 1 : 0.7 }}>
+          <Fragment key={row.sourcePath}>
+          <div style={{ ...rowStyle, opacity: row.enabled ? 1 : 0.7 }}>
             <Toggle checked={row.enabled} onChange={v => updateParam(i, { enabled: v })} />
             <span style={{ fontSize: 11.5, color: tk.text.faint, width: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.groupLabel ? `${row.groupLabel} › ${row.nodeLabel}` : row.nodeLabel}>
               {row.groupLabel ? `${row.groupLabel} › ` : ''}{row.nodeLabel}
@@ -260,7 +340,10 @@ export function PublishNodeModal({ source, onClose, onPublished }: Props) {
                 <span style={{ color: tk.text.faint }}> · baked</span>
               </span>
             )}
+            {row.enabled && docButton(`p:${i}`, !!row.hint)}
           </div>
+          {row.enabled && docField(`p:${i}`, row.hint, v => updateParam(i, { hint: v }))}
+          </Fragment>
         ))}
 
         {/* Signature preview */}

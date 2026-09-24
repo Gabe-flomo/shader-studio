@@ -9,6 +9,7 @@ import { flattenSubgraphToFunction } from '../flattenSubgraph';
 import { registerUserNode, resetUserNodesForTests, getUserNodeDefinition, exportUserNodes, importUserNodes, getUserNode, unregisterUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { compileGraph } from '../graphCompiler';
+import { buildUserNodeDefinition } from '../../nodes/userNodes/publishUserNode';
 
 /**
  *   in0 (vec2) ─▶ length ─▶ multiply(b = 3) ─▶ sin(freq, amp) ─▶ floatToVec3 ─▶ out0 (vec3)
@@ -210,5 +211,52 @@ describe('user node registry + compile', () => {
     // garbage is refused with a message
     expect((await importUserNodes('{"hello": 1}')).ok).toBe(false);
     expect((await importUserNodes('not json')).ok).toBe(false);
+  });
+
+  it('iteration count as a slider: one function variant per count, the instance picks one', async () => {
+    // A loop-carrying group: sin(x) fed back into itself each pass.
+    const sg: SubgraphData = {
+      nodes: [
+        { id: 'c', type: 'loopCarry', position: { x: 0, y: 0 },
+          inputs: { next: { type: 'float', label: 'Next', connection: { nodeId: 's', outputKey: 'output' } } },
+          outputs: { value: { type: 'float', label: 'Value' } }, params: { init: 0.5 } },
+        { id: 's', type: 'sin', position: { x: 0, y: 0 },
+          inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'c', outputKey: 'value' } }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
+          outputs: { output: { type: 'float', label: 'Output' } }, params: { freq: 2, amp: 1 } },
+      ],
+      inputPorts: [],
+      outputPorts: [{ key: 'out0', type: 'float', label: 'Value', fromNodeId: 's', fromOutputKey: 'output' }],
+    };
+    const built = buildUserNodeDefinition({ kind: 'subgraph', subgraph: sg, label: 'Loop', iterations: 3 }, {
+      label: 'Loopy', category: 'My Nodes',
+      inputs: [], outputs: [{ portKey: 'out0', key: 'value', label: 'Value', type: 'float' }], params: [],
+      iterations: { key: 'passes', label: 'Passes', min: 1, max: 4, default: 3 },
+      existingId: 'un_loopy',
+    });
+    expect(built.ok, built.ok ? '' : built.error).toBe(true);
+    if (!built.ok) return;
+    const def = built.def;
+    expect(Object.keys(def.iterations!.functions)).toEqual(['1', '2', '3', '4']);
+    expect(def.iterations!.functions['4']).toMatch(/^float un_loopy_i4\(/);
+    // more passes → more unrolled code
+    expect(def.iterations!.functions['4'].length).toBeGreaterThan(def.iterations!.functions['1'].length);
+
+    await registerUserNode(def, { persist: false });
+    const nd = getNodeDefinition('un_loopy')!;
+    expect(nd.paramDefs?.passes).toMatchObject({ step: 1, compileTime: true, min: 1, max: 4 });
+
+    const graph = (passes: number): GraphNode[] => [
+      { id: 'a', type: 'un_loopy', position: { x: 0, y: 0 }, inputs: {}, outputs: { value: { type: 'float', label: 'Value' } }, params: { passes } },
+      { id: 'out', type: 'output', position: { x: 0, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'a', outputKey: 'value' } } }, outputs: {}, params: {} },
+    ];
+    const two = compileGraph({ nodes: graph(2) });
+    expect(two.success, two.errors?.join()).toBe(true);
+    expect(two.fragmentShader).toContain('= un_loopy_i2(');
+    expect(two.fragmentShader).toContain('float un_loopy_i2(');
+    expect(two.fragmentShader).not.toContain('un_loopy_i3(');   // only the chosen variant is emitted
+    expect(Object.keys(two.paramUniforms).some(u => u.endsWith('_passes'))).toBe(false); // compile-time, not a uniform
+
+    const four = compileGraph({ nodes: graph(4) });
+    expect(four.fragmentShader).toContain('= un_loopy_i4(');
   });
 });
