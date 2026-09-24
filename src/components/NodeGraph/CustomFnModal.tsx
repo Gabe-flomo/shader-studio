@@ -78,7 +78,8 @@ interface Props {
 }
 
 export function CustomFnModal({ node, onClose }: Props) {
-  const { updateNodeParams, updateNodeSockets } = useNodeGraphStore();
+  const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
+  const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fnRef   = useRef<HTMLTextAreaElement | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
