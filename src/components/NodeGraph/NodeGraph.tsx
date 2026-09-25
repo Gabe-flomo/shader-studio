@@ -785,7 +785,9 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     socketPressRef.current = null;
     if (press && !press.nodeId.startsWith('__')
       && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4 && performance.now() - press.t < 600) {
-      setSmartConnect({ nodeId: press.nodeId, key: press.key, dir: 'out', x: press.x, y: press.y });
+      // A second click is a double-click (which removes the output's wires), not a request for suggestions
+      if (e.detail >= 2) setSmartConnect(null);
+      else setSmartConnect({ nodeId: press.nodeId, key: press.key, dir: 'out', x: press.x, y: press.y });
     }
     setDragConnection(null);
   };
@@ -1346,8 +1348,35 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             const isMarchLoopGroup = clickedNode?.type === 'marchLoopGroup' || clickedNode?.type === 'giLitMarchGroup';
             const ids = useNodeGraphStore.getState().selectedNodeIds;
             const canGroup = ids.length >= 2 && activeGroupPath.length < 2;
+            // Wires this node used to have (disconnected or replaced this session) that can come back.
+            const pastWires = clickedNode ? useNodeGraphStore.getState().pastWiresFor(clickedNode.id, displayNodes) : [];
+            const nameOf = (n: import('../../types/nodeGraph').GraphNode) => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinition(n.type)?.label || n.type;
+            const describeWire = (w: (typeof pastWires)[number]) => {
+              const from = displayNodes.find(n => n.id === w.fromNodeId)!;
+              const to = displayNodes.find(n => n.id === w.toNodeId)!;
+              const outLabel = from.outputs[w.fromOutputKey]?.label ?? getNodeDefinition(from.type)?.outputs[w.fromOutputKey]?.label ?? w.fromOutputKey;
+              const inLabel = to.inputs[w.toInputKey]?.label ?? getNodeDefinition(to.type)?.inputs[w.toInputKey]?.label ?? w.toInputKey.replace(/^__param_/, '');
+              // Name the other end; this node's own socket keeps just its label.
+              return w.toNodeId === clickedNode!.id
+                ? `${nameOf(from)} · ${outLabel}  →  ${inLabel}`
+                : `${outLabel}  →  ${nameOf(to)} · ${inLabel}`;
+            };
             return (
               <>
+                {pastWires.length > 0 && (
+                  <>
+                    <div style={{ padding: '4px 12px 2px', fontSize: '10px', letterSpacing: 0.6, textTransform: 'uppercase', color: tc.surface2 }}>Reconnect</div>
+                    {pastWires.slice(0, 6).map(w => (
+                      <button key={`${w.fromNodeId}.${w.fromOutputKey}>${w.toNodeId}.${w.toInputKey}`} style={ctxBtnStyle}
+                        title="Put this wire back the way it was"
+                        onClick={() => { connectNodes(w.fromNodeId, w.fromOutputKey, w.toNodeId, w.toInputKey); setContextMenu(null); }}>
+                        ↩ {describeWire(w)}
+                      </button>
+                    ))}
+                    {pastWires.length > 6 && <div style={{ padding: '2px 12px 4px', fontSize: '10.5px', color: tc.surface2 }}>+{pastWires.length - 6} older</div>}
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
                 {canGroup && (
                   <>
                     <button style={ctxBtnStyle} onClick={() => {

@@ -40,7 +40,37 @@ const RENAMES: Array<[RegExp, string]> = [
   [/\biDate\b/g, 'vec4(0.0, 0.0, 0.0, u_time)'],
   [/\bu_mouse_uv\b/g, 'u_mouse'],
 ];
-const KNOWN_UNIFORMS = new Set(['iResolution', 'iTime', 'iGlobalTime', 'iTimeDelta', 'iFrame', 'iMouse', 'iDate', 'u_time', 'u_resolution', 'u_mouse', 'time', 'resolution', 'mouse']);
+const KNOWN_UNIFORMS = new Set(['iResolution', 'iTime', 'iGlobalTime', 'iTimeDelta', 'iFrame', 'iMouse', 'iDate', 'u_time', 'u_resolution', 'u_mouse']);
+
+/**
+ * Uniform names other hosts use for the same three things (p5.js sketches, glslCanvas,
+ * the Book of Shaders…). Only renamed when the shader declares them as uniforms, so a
+ * local variable called `time` is left alone.
+ */
+const HOST_ALIASES: Record<string, { to: string; type: string; note?: string }> = {
+  time:       { to: 'u_time', type: 'float' },
+  u_seconds:  { to: 'u_time', type: 'float' },
+  millis:     { to: 'u_time', type: 'float', note: 'millis was mapped to Time (seconds). If your sketch passed raw milliseconds, multiply Time by 1000 before the node' },
+  u_millis:   { to: 'u_time', type: 'float', note: 'u_millis was mapped to Time (seconds).' },
+  resolution: { to: 'u_resolution', type: 'vec2' },
+  mouse:      { to: 'u_mouse', type: 'vec2' },
+  u_mouse_uv: { to: 'u_mouse', type: 'vec2' },
+};
+
+/** Uniform types that can become a socket on the imported node (ints and bools ride on a float). */
+const SOCKETABLE: Record<string, { param: string; assign: (v: string) => string }> = {
+  float: { param: 'float', assign: v => v },
+  vec2:  { param: 'vec2',  assign: v => v },
+  vec3:  { param: 'vec3',  assign: v => v },
+  vec4:  { param: 'vec4',  assign: v => v },
+  int:   { param: 'float', assign: v => `int(${v})` },
+  bool:  { param: 'float', assign: v => `(${v} > 0.5)` },
+};
+
+/** Rename an identifier everywhere it is used on its own (not a member `.name`, not part of a longer name). */
+function renameIdent(src: string, from: string, to: string): string {
+  return src.replace(new RegExp(`(?<![\\w.])${from}\\b`, 'g'), to);
+}
 
 function stripDirectives(src: string): string {
   return src
@@ -76,26 +106,45 @@ export function convertFragmentShader(source: string, opts: { label?: string } =
   const notes: string[] = [];
   let src = stripDirectives(source);
 
-  // Uniforms: drop the ones we map; turn the rest into named constants so the shader still compiles.
-  const unknownUniforms: string[] = [];
+  // Uniforms. The ones Shader Studio has (time, resolution, mouse — under any of the usual names)
+  // are dropped and renamed. Every other float / vec / int / bool uniform becomes an INPUT of the
+  // node: a global the entry sets from a socket, so you can wire Mouse, Time or a slider into it.
+  // Arrays and samplers can't be sockets; they become plain globals / black and are reported.
+  const socketUniforms: Array<{ name: string; type: string }> = [];
+  const aliased: string[] = [];
+  const arrays: string[] = [];
+  const samplers: string[] = [];
+  const renameLater: Array<[string, string]> = [];
   src = src.replace(/^[ \t]*uniform\s+(?:(?:lowp|mediump|highp)\s+)?(\w+)\s+([^;]+);[^\n]*\n?/gm, (_whole, type: string, names: string) => {
-    const list = names.split(',').map(s => s.trim().replace(/\[.*$/, ''));
     const kept: string[] = [];
-    for (const name of list) {
+    for (const raw of names.split(',').map(x => x.trim()).filter(Boolean)) {
+      const name = raw.replace(/\s*\[.*$/, '');
+      const arraySuffix = /\[[^\]]*\]/.exec(raw)?.[0] ?? '';
       if (KNOWN_UNIFORMS.has(name)) continue;
-      if (type.startsWith('sampler')) { unknownUniforms.push(`${name} (${type})`); kept.push(`// ${type} ${name}: textures aren't imported — add an image slot in the dialog and use it instead`); continue; }
-      const zero = type === 'float' ? '0.0' : type === 'int' ? '0' : type === 'bool' ? 'false' : `${type}(0.0)`;
-      kept.push(`const ${type} ${name} = ${zero}; // was a uniform: set a value, or expose it as a parameter`);
-      unknownUniforms.push(`${name} (${type})`);
+      const alias = HOST_ALIASES[name];
+      if (alias && !arraySuffix) { renameLater.push([name, alias.to]); aliased.push(alias.note ?? `${name} → ${alias.to === 'u_time' ? 'Time' : alias.to === 'u_mouse' ? 'Mouse' : 'the canvas resolution'}`); continue; }
+      if (type.startsWith('sampler')) { samplers.push(name); continue; }
+      if (arraySuffix) { kept.push(`${type} uni_${name}${arraySuffix};`); renameLater.push([name, `uni_${name}`]); arrays.push(`${name}${arraySuffix}`); continue; }
+      if (!SOCKETABLE[type]) { kept.push(`${type} uni_${name};`); renameLater.push([name, `uni_${name}`]); continue; }
+      kept.push(`${type} uni_${name};`);
+      renameLater.push([name, `uni_${name}`]);
+      socketUniforms.push({ name, type });
     }
     return kept.length ? kept.join('\n') + '\n' : '';
   });
+  for (const [from, to] of renameLater) src = renameIdent(src, from, to);
   for (const [re, to] of RENAMES) src = src.replace(re, to);
+  for (const name of samplers) {
+    src = src.replace(new RegExp(`\\b(?:texture2D|texture|textureLod)\\s*\\(\\s*${name}\\s*,[^;]*?\\)(?=\\s*[;.),*+\\-/])`, 'g'), 'vec4(0.0)');
+  }
   if (/\biChannel\d\b/.test(src)) {
     notes.push('iChannel textures were replaced by black; add an image slot in the dialog and sample it instead.');
     src = src.replace(/\btexture(?:2D)?\s*\(\s*iChannel\d\s*,[^)]*\)/g, 'vec4(0.0)').replace(/\btextureLod\s*\(\s*iChannel\d\s*,[^)]*\)/g, 'vec4(0.0)');
   }
-  if (unknownUniforms.length) notes.push(`Uniforms turned into constants: ${unknownUniforms.join(', ')}.`);
+  if (aliased.length) notes.push(`Mapped to Shader Studio's built-ins: ${aliased.join('; ')}.`);
+  if (socketUniforms.length) notes.push(`Uniforms that became inputs on the node: ${socketUniforms.map(u => `${u.name} (${u.type})`).join(', ')}. Wire Mouse, Time or a slider into them; unwired they are 0.`);
+  if (arrays.length) notes.push(`Uniform arrays can't be sockets and start at zero: ${arrays.join(', ')}. Fill them in the code if the shader needs them.`);
+  if (samplers.length) notes.push(`Texture reads from ${samplers.join(', ')} were replaced by black; add an image slot in the dialog and sample it instead.`);
 
   // parseCodeSource skips main() on purpose (it can't be a node entry) and fails on a file with
   // no other function, so main() is found here and the parse is only used for mainImage.
@@ -123,8 +172,19 @@ export function convertFragmentShader(source: string, opts: { label?: string } =
   if (/\bgl_FragColor\b/.test(converted)) notes.push('gl_FragColor is written outside main(); only main() was converted.');
 
   const label = opts.label?.trim() || 'Imported shader';
+  // Parameter names are the uniform names (they become the socket labels); the globals they set are uni_<name>.
+  const taken = new Set(['uv', 'alpha', 'fragCoord', 'c']);
+  const params = socketUniforms.map(u => {
+    let p = u.name;
+    while (taken.has(p) || new RegExp(`(?<![\\w.])${p}\\b`).test(converted)) p = `${p}_in`;
+    taken.add(p);
+    return { ...u, param: p };
+  });
+  const paramDecls = params.map(u => `${SOCKETABLE[u.type].param} ${u.param}, `).join('');
+  const assigns = params.map(u => `    uni_${u.name} = ${SOCKETABLE[u.type].assign(u.param)};\n`).join('');
   const entry = `// ${label}: the graph's UV (x spans ±aspect, y spans ±1) becomes the shader's pixel coordinate.\n` +
-    `vec3 ${ENTRY}(vec2 uv, out float alpha) {\n` +
+    `vec3 ${ENTRY}(vec2 uv, ${paramDecls}out float alpha) {\n` +
+    assigns +
     `    vec2 fragCoord = (uv / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5) * u_resolution;\n` +
     `    vec4 c = ${INNER}(fragCoord);\n` +
     `    alpha = c.a;\n` +

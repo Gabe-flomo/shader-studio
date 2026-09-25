@@ -217,7 +217,7 @@ import {
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode } from './scene3d';
 import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
-  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode, ColorPickerNode } from './color';
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode, ColorPickerNode, ColorizeNode, StopPaletteNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
@@ -349,6 +349,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   crtMask: CrtMaskNode,
   oklabMix: OklabMixNode,
   colorPicker: ColorPickerNode,
+  colorize: ColorizeNode,
+  stopPalette: StopPaletteNode,
   crtScreen: CrtScreenNode,
   lensDistortion: LensDistortionNode,
   turbulence: TurbulenceNode,

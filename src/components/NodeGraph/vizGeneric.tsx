@@ -276,6 +276,55 @@ function FieldViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ── Stops Palette: the palette over two trips, so Loop / Mirror / Clamp read at a glance ──
+function stopPaletteColor(n: GraphNode, t: number): [number, number, number] {
+  const count = Math.max(2, Math.min(8, Math.round(num(n, 'stops', 5))));
+  const wrap = str(n, 'wrap', 'loop'), blend = str(n, 'blend', 'smooth');
+  const col = (i: number): [number, number, number] => {
+    const v = n.params[`color${i}`];
+    const d = getNodeDefinition(n.type)?.defaultParams?.[`color${i}`];
+    const a = Array.isArray(v) ? v : Array.isArray(d) ? d : [0.5, 0.5, 0.5];
+    return [Number(a[0]) || 0, Number(a[1]) || 0, Number(a[2]) || 0];
+  };
+  const segs = wrap === 'loop' ? count : count - 1;
+  const u = wrap === 'loop' ? fract(t) : wrap === 'mirror' ? Math.abs(fract(t * 0.5) * 2 - 1) : Math.max(0, Math.min(1, t));
+  const x = Math.min(u * segs, segs - 0.0001);
+  const k = Math.floor(x), f = x - k;
+  const w = blend === 'bands' ? 0 : blend === 'linear' ? f : f * f * (3 - 2 * f);
+  const a = col(k), b = col((k + 1) % count);
+  return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w];
+}
+
+function StopPaletteViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const paramsKey = JSON.stringify(node.params);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const barH = H - 12;
+    for (let i = 0; i < W; i++) {
+      const [r, g, b] = stopPaletteColor(node, (i / (W - 1)) * 2);
+      ctx.fillStyle = `rgb(${Math.round(Math.max(0, Math.min(1, r)) * 255)},${Math.round(Math.max(0, Math.min(1, g)) * 255)},${Math.round(Math.max(0, Math.min(1, b)) * 255)})`;
+      ctx.fillRect(i, 0, 1, barH);
+    }
+    // Where Angle 1 falls: one full trip through the stops
+    ctx.strokeStyle = pal.overlay0; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 + 0.5, 0); ctx.lineTo(W / 2 + 0.5, barH); ctx.stroke();
+    ctx.fillStyle = pal.overlay0; ctx.font = `9px ${MONO}`;
+    ctx.fillText('angle 0', 2, H - 2);
+    ctx.fillText('1', W / 2 - 2, H - 2);
+    ctx.fillText('2', W - 8, H - 2);
+  }, [node, paramsKey]);
+  return (
+    <div style={vizContainer()}>
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 46 }} />
+    </div>
+  );
+}
+
 // ── Transfer curves ─────────────────────────────────────────────────────────
 interface Curve {
   /** Input range along x */
@@ -633,13 +682,14 @@ function Shape3DViz({ node }: { node: GraphNode }) {
   );
 }
 
-export const GENERIC_VIZ_TYPES: ReadonlySet<string> = new Set([...Object.keys(SPACE_MAPS), ...Object.keys(CURVES), ...Object.keys(SDF3), ...Object.keys(FIELDS), 'echo', 'waveRadius']);
+export const GENERIC_VIZ_TYPES: ReadonlySet<string> = new Set([...Object.keys(SPACE_MAPS), ...Object.keys(CURVES), ...Object.keys(SDF3), ...Object.keys(FIELDS), 'echo', 'waveRadius', 'stopPalette']);
 
 export function GenericViz({ node }: { node: GraphNode }) {
   if (SPACE_MAPS[node.type]) return <SpaceViz node={node} />;
   if (CURVES[node.type]) return <CurveViz node={node} />;
   if (SDF3[node.type]) return <Shape3DViz node={node} />;
   if (FIELDS[node.type]) return <FieldViz node={node} />;
+  if (node.type === 'stopPalette') return <StopPaletteViz node={node} />;
   if (node.type === 'echo') return <EchoViz node={node} />;
   if (node.type === 'waveRadius') return <WaveRadiusViz node={node} />;
   return null;

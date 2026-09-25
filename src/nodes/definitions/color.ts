@@ -129,6 +129,114 @@ vec3 gradientBlend(vec2 uv, vec3 colorA, vec3 colorB, int mode, float offset) {
     return mix(colorA, colorB, clamp(t + offset, 0.0, 1.0));
 }`;
 
+// ─── Colorize ────────────────────────────────────────────────────────────────
+// What the old Scale Color did: a float field painted with a colour. With the
+// Background left black it is exactly Colour × Field; a Background colour
+// makes it mix(Background, Colour, Field), so 0 shows the background.
+export const ColorizeNode: NodeDefinition = {
+  type: 'colorize',
+  label: 'Colorize', aliases: ['scale color', 'scale colour', 'tint', 'color by field', 'colour field', 'color × float', 'field to color'],
+  category: 'Color', subcategory: 'Build',
+  description:
+    'Paints a float field with a colour: Colour × Field (× Gain). A glow, a distance, a noise or a mask goes in; a vec3 you can wire straight to Output comes out. ' +
+    'Set Background to fade from that colour instead of from black. Wire a Palette or Stops Palette into Colour for a gradient.',
+  inputs: {
+    field:      { type: 'float', label: 'Field', hint: 'The float to paint: a glow, distance, noise, mask… 0 shows Background, 1 shows Colour, above 1 goes brighter.' },
+    color:      { type: 'vec3',  label: 'Colour', hint: 'Wire a Palette for a gradient, or pick a colour below.' },
+    background: { type: 'vec3',  label: 'Background', hint: 'What a field of 0 shows. Black leaves it a plain multiply.' },
+    gain:       { type: 'float', label: 'Gain' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color', hint: 'mix(Background, Colour, Field × Gain).' } },
+  defaultParams: { color: [1.0, 0.55, 0.2], background: [0.0, 0.0, 0.0], gain: 1.0 },
+  paramDefs: {
+    color:      { label: 'Colour',     type: 'vec3color', hint: 'Colour used where the field is 1, when nothing is wired to Colour.' },
+    background: { label: 'Background', type: 'vec3color', hint: 'Colour used where the field is 0. Black = plain multiply.' },
+    gain:       { label: 'Gain',       type: 'float', min: 0, max: 10, step: 0.01, hint: 'Multiplies the field first. Raise it for a faint glow, lower it to tame a hot one.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const fld  = inputVars.field ?? '0.0';
+    const col  = inputVars.color ?? pv3(node.params.color, [1.0, 0.55, 0.2]);
+    const bg   = inputVars.background ?? pv3(node.params.background, [0.0, 0.0, 0.0]);
+    const gain = inputVars.gain ?? p(node.params.gain, 1.0);
+    return {
+      code: `    vec3 ${id}_color = mix(${bg}, ${col}, ${fld} * ${gain});\n`,
+      outputVars: { color: `${id}_color` },
+    };
+  },
+};
+
+// ─── Stops Palette ───────────────────────────────────────────────────────────
+// A palette built from colour stops instead of cosine coefficients. Takes the
+// same Angle / Angle offset / Scale / Speed as Palette, so Time on Angle
+// offset cycles it; Loop wraps the last stop back to the first so it cycles
+// without a seam.
+export const STOP_PALETTE_MAX = 8;
+const STOP_PALETTE_DEFAULTS: number[][] = [
+  [0.16, 0.07, 0.35], [0.72, 0.13, 0.52], [0.98, 0.45, 0.22], [0.99, 0.84, 0.38],
+  [0.18, 0.62, 0.67], [0.35, 0.80, 0.45], [0.20, 0.35, 0.85], [0.95, 0.95, 0.95],
+];
+export const StopPaletteNode: NodeDefinition = {
+  type: 'stopPalette',
+  label: 'Stops Palette', aliases: ['palette creator', 'palette builder', 'custom palette', 'color stops', 'colour stops', 'gradient palette', 'cycle colors'],
+  category: 'Color', subcategory: 'Palette',
+  description:
+    'A palette made from your own colour stops. Angle picks where on it to sample; wire Time into Angle offset to cycle through the colours. ' +
+    'Loop joins the last stop back to the first so cycling never jumps; Mirror runs there and back; Clamp holds the ends. Blend chooses smooth, linear or hard bands.',
+  inputs: {
+    value: { type: 'float', label: 'Angle', defaultValue: 0, hint: 'Where on the palette to sample. 0 → 1 goes once through every stop.' },
+    anim:  { type: 'float', label: 'Angle offset', defaultValue: 0, hint: 'Added to Angle. Wire Time here to cycle the colours.' },
+  },
+  outputs: { color: { type: 'vec3', label: 'Color' } },
+  defaultParams: {
+    value: 0, anim: 0, scale: 1.0, speed: 0.2, stops: '5', wrap: 'loop', blend: 'smooth',
+    ...Object.fromEntries(STOP_PALETTE_DEFAULTS.map((c, i) => [`color${i}`, c])),
+  },
+  paramDefs: {
+    stops: { label: 'Stops', type: 'select', hint: 'How many colours. Stops are evenly spaced along the palette.', options: [2, 3, 4, 5, 6, 7, 8].map(n => ({ value: String(n), label: String(n) })) },
+    wrap:  { label: 'Wrap', type: 'select', hint: 'Past the last stop: Loop blends back to the first (seamless cycling), Mirror runs back down, Clamp holds the end colours.', options: [
+      { value: 'loop', label: 'Loop' }, { value: 'mirror', label: 'Mirror' }, { value: 'clamp', label: 'Clamp' },
+    ] },
+    blend: { label: 'Blend', type: 'select', hint: 'How neighbouring stops meet: Smooth eases, Linear is a straight mix, Bands is hard steps.', options: [
+      { value: 'smooth', label: 'Smooth' }, { value: 'linear', label: 'Linear' }, { value: 'bands', label: 'Bands' },
+    ] },
+    value: { label: 'Angle',        type: 'float', min: 0, max: 1, step: 0.01, hint: 'Where to sample when nothing is wired.' },
+    anim:  { label: 'Angle offset', type: 'float', min: 0, max: 10, step: 0.1, hint: 'Only added to Angle. Wire Time here to animate.' },
+    scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01, hint: 'Multiplies Angle: how many trips through the stops across a wired gradient.' },
+    speed: { label: 'Speed', type: 'float', min: -5, max: 5, step: 0.01, hint: 'Multiplies Angle offset: with Time wired, how fast the colours cycle.' },
+    ...Object.fromEntries(Array.from({ length: STOP_PALETTE_MAX }, (_, i) => [`color${i}`, {
+      label: `Stop ${i + 1}`, type: 'vec3color' as const,
+      ...(i >= 2 ? { showWhen: { param: 'stops', value: Array.from({ length: STOP_PALETTE_MAX - i }, (_, k) => String(i + 1 + k)) } } : {}),
+    }])),
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const n = Math.max(2, Math.min(STOP_PALETTE_MAX, Math.round(Number(node.params.stops) || 5)));
+    const wrap = (node.params.wrap as string) || 'loop';
+    const blend = (node.params.blend as string) || 'smooth';
+    const valRaw = inputVars.value || p(node.params.value, 0);
+    const offRaw = inputVars.anim || p(node.params.anim, 0);
+    const t = `(${valRaw} * ${p(node.params.scale, 1.0)} + ${offRaw} * ${p(node.params.speed, 0.2)})`;
+    const lines: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const fallback = STOP_PALETTE_DEFAULTS[i] ?? [0.5, 0.5, 0.5];
+      lines.push(`    vec3 ${id}_c${i} = ${pv3(node.params[`color${i}`], fallback)};\n`);
+    }
+    // Position along the stops: Loop has n segments (last → first), the others n - 1.
+    const segs = wrap === 'loop' ? n : n - 1;
+    const u = wrap === 'loop' ? `fract(${t})` : wrap === 'mirror' ? `abs(fract(${t} * 0.5) * 2.0 - 1.0)` : `clamp(${t}, 0.0, 1.0)`;
+    lines.push(`    float ${id}_x = min(${u} * ${segs}.0, ${segs}.0 - 0.0001);\n`);
+    lines.push(`    float ${id}_f = fract(${id}_x);\n`);
+    const w = blend === 'bands' ? '0.0' : blend === 'linear' ? `${id}_f` : `${id}_f * ${id}_f * (3.0 - 2.0 * ${id}_f)`;
+    lines.push(`    vec3 ${id}_color = ${id}_c0;\n`);
+    for (let k = 0; k < segs; k++) {
+      const next = (k + 1) % n;
+      lines.push(`    if (${id}_x >= ${k}.0) ${id}_color = mix(${id}_c${k}, ${id}_c${next}, ${w});\n`);
+    }
+    return { code: lines.join(''), outputVars: { color: `${id}_color` } };
+  },
+};
+
 export const GradientNode: NodeDefinition = {
   type: 'gradient',
   label: 'Gradient',
