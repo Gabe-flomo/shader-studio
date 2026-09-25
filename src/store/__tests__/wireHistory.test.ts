@@ -72,4 +72,19 @@ describe('wire memory', () => {
     const scopeWithoutCircle = useNodeGraphStore.getState().nodes.filter(n => n.id !== 'circ');
     expect(useNodeGraphStore.getState().pastWiresFor('f2v', scopeWithoutCircle)).toHaveLength(0);
   });
+
+  it('double-click on an output removes every wire leaving it, in one undo step, and remembers them', () => {
+    // a second wire from the circle, so the output feeds two inputs
+    useNodeGraphStore.getState().connectNodes('circ', 'distance', 'circ', 'radius');
+    const before = useNodeGraphStore.getState().wireHistory.length;
+    const removed = useNodeGraphStore.getState().disconnectOutput('circ', 'distance');
+    expect(removed).toBe(2);
+    const st = useNodeGraphStore.getState();
+    expect(st.nodes.find(n => n.id === 'f2v')!.inputs.input.connection).toBeUndefined();
+    expect(st.nodes.find(n => n.id === 'circ')!.inputs.radius.connection).toBeUndefined();
+    expect(st.wireHistory.length).toBe(before + 2);
+    expect(st.pastWiresFor('f2v', st.nodes).map(w => w.fromNodeId)).toEqual(['circ']);
+    expect(useNodeGraphStore.getState().disconnectOutput('circ', 'distance')).toBe(0);
+  });
 });
+

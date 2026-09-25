@@ -1603,6 +1603,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
                 onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
                 onMouseLeave={leaveOutputSocket}
+                onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
               >
                 <span style={{ fontSize: '10px', color: tc.surface2 }}>&#128274;</span>
                 <span style={{ fontSize: '11px', color: tc.subtext0 }}>{label}</span>
@@ -1631,6 +1632,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
                 onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
                 onMouseLeave={leaveOutputSocket}
+                onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
               >
                 <button
                   onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)}
@@ -2721,7 +2723,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {srcNode ? nodeLink(srcNode.id, srcName) : srcName} → {srcOutLabel} <span style={{ color: tc.surface2 }}>({srcType})</span>
         </span>
       );
-      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click the name to jump to it</span>);
+      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click the name to jump to it · click the socket to disconnect</span>);
     } else {
       // Show compatible sources
       const sources = getCompatibleSources(nodes, node.id, input.type as DataType);
@@ -2769,7 +2771,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         lines.push(<span style={{ paddingLeft: '6px', color: tc.subtext0 }}>{nodeLink(n.id, name)} ← {inLabel}</span>);
       }
       if (targets.length > 8) lines.push(<span style={{ paddingLeft: '6px', color: tc.surface2 }}>...+{targets.length - 8} more</span>);
-      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click a name to jump to it</span>);
+      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click a name to jump to it · double-click the socket to remove these wires</span>);
     } else {
       // List what types this can connect to
       const compatMsg = output.type === 'float'
@@ -3241,6 +3243,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   if (isConnected) {
                     if (isExternal && activeGroupId) removeGroupInputPort(activeGroupId, key);
                     disconnectInput(node.id, key);
+                  } else if (e.detail >= 2) {
+                    // The second click of a double-click that just removed the wire: leave it at that
                   } else if (!isExternal && onSuggestSocket) {
                     // Click on an open input: the nearest outputs that could feed it
                     onSuggestSocket(node.id, key, 'in', e.clientX, e.clientY);
@@ -4004,6 +4008,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 }}
                 onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
                 onMouseLeave={leaveOutputSocket}
+                onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
                 title={`${output.label} (${output.type})`}
                 style={{
                   width: isTouchDevice ? '22px' : '12px',

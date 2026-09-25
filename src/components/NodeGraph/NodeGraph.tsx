@@ -785,7 +785,9 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     socketPressRef.current = null;
     if (press && !press.nodeId.startsWith('__')
       && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4 && performance.now() - press.t < 600) {
-      setSmartConnect({ nodeId: press.nodeId, key: press.key, dir: 'out', x: press.x, y: press.y });
+      // A second click is a double-click (which removes the output's wires), not a request for suggestions
+      if (e.detail >= 2) setSmartConnect(null);
+      else setSmartConnect({ nodeId: press.nodeId, key: press.key, dir: 'out', x: press.x, y: press.y });
     }
     setDragConnection(null);
   };

@@ -555,6 +555,8 @@ interface NodeGraphState {
   ) => void;
 
   disconnectInput: (nodeId: string, inputKey: string) => void;
+  /** Remove every wire leaving `nodeId.outputKey` at the level being edited (one undo step). Returns how many were removed. */
+  disconnectOutput: (nodeId: string, outputKey: string) => number;
 
   // Rebuild a node's input sockets from a custom-fn inputs definition array
   updateNodeSockets: (
@@ -3624,6 +3626,36 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return { nodes: newTop ?? state.nodes };
     });
     get().compile();
+  },
+
+  disconnectOutput: (nodeId, outputKey) => {
+    const st = get();
+    const scope = st.activeGroupPath.length > 0 ? (getActiveNodes(st.nodes, st.activeGroupPath) ?? []) : st.nodes;
+    const targets: Array<{ id: string; key: string }> = [];
+    for (const n of scope) {
+      for (const [k, inp] of Object.entries(n.inputs)) {
+        if (inp.connection?.nodeId === nodeId && inp.connection.outputKey === outputKey) targets.push({ id: n.id, key: k });
+      }
+    }
+    if (targets.length === 0) return 0;
+    undoManager.push(st.nodes);
+    let history = st.wireHistory;
+    for (const t of targets) history = rememberWire(history, { fromNodeId: nodeId, fromOutputKey: outputKey, toNodeId: t.id, toInputKey: t.key });
+    const strip = (nodes: GraphNode[]) => nodes.map(n => {
+      const hit = targets.filter(t => t.id === n.id);
+      if (hit.length === 0) return n;
+      const inputs = { ...n.inputs };
+      for (const t of hit) { const copy = { ...inputs[t.key] }; delete copy.connection; inputs[t.key] = copy; }
+      return { ...n, inputs };
+    });
+    set(state => {
+      if (state.activeGroupPath.length === 0) return { nodes: strip(state.nodes), wireHistory: history };
+      const active = getActiveNodes(state.nodes, state.activeGroupPath);
+      if (!active) return {};
+      return { nodes: setActiveNodes(state.nodes, state.activeGroupPath, strip(active)) ?? state.nodes, wireHistory: history };
+    });
+    get().compile();
+    return targets.length;
   },
 
   clearDisconnectedNotice: () => set({ disconnectedNotice: null }),
