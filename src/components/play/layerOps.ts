@@ -5,7 +5,7 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
-import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayRecord } from '../../types/play';
+import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
@@ -198,4 +198,25 @@ export function layerNullDrives(l: PlayLayer, key: string): { drives: NullDrive[
 export function addCandidateControl(p: PlayRecord, c: PlayCandidate): PlayRecord {
   if (p.controls.some(x => x.target === c.target)) return p;
   return { ...p, controls: [...p.controls, { id: playId('ctl'), target: c.target, kind: c.kind, label: candidateLabel(c), min: c.min, max: c.max, ...(c.step ? { step: c.step } : {}) }] };
+}
+
+/** A layer's numeric property as a panel control (unchanged when it's already one). */
+export function addLayerPropControl(p: PlayRecord, layerId: string, key: string): PlayRecord {
+  const l = p.layers.find(x => x.id === layerId);
+  const d = l && LAYER_NUMERIC_PROPS[l.kind].find(x => x.key === key);
+  const target = layerTarget(layerId, key);
+  if (!l || !d || p.controls.some(c => c.target === target)) return p;
+  return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
+}
+
+/** Map `source` onto the control at `target` (made first if needed), across its whole range. Returns the record and the control. */
+export function mapSourceTo(p: PlayRecord, source: PlaySource, target: { control: string } | { candidate: PlayCandidate } | { layerId: string; key: string }, smoothMs = 60): { play: PlayRecord; control?: PlayControl } {
+  let rec = p, targetKey: string;
+  if ('control' in target) targetKey = p.controls.find(c => c.id === target.control)?.target ?? '';
+  else if ('candidate' in target) { rec = addCandidateControl(rec, target.candidate); targetKey = target.candidate.target; }
+  else { rec = addLayerPropControl(rec, target.layerId, target.key); targetKey = layerTarget(target.layerId, target.key); }
+  const control = rec.controls.find(c => c.target === targetKey);
+  if (!control) return { play: p };
+  const mapping: PlayMapping = { id: playId('map'), controlId: control.id, source, outMin: control.min, outMax: control.max, curve: 'linear', smoothMs, enabled: true };
+  return { play: { ...rec, mappings: [...rec.mappings, mapping] }, control };
 }

@@ -8,6 +8,7 @@ import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumR
 import { inputBus } from '../lib/inputBus';
 import { playEngine } from '../lib/playEngine';
 import { midiEngine } from '../lib/midiEngine';
+import { layerAudio } from '../lib/layerAudio';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
 import { applySolo, usePlayUi } from './play/playUi';
@@ -1003,6 +1004,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       lastRafTime = now;
       if (timePlayingRef.current) virtualTime += dt;
       const elapsed = virtualTime;
+      // Songs in audio layers play on this clock (seeks, pauses and ↺ move them too).
+      {
+        const layers = useNodeGraphStore.getState().play.layers;
+        if (layers.some(l => l.kind === 'audio')) layerAudio.followClock(layers.filter(l => l.kind === 'audio' && l.input === 'file').map(l => l.id), elapsed, timePlayingRef.current);
+      }
       material.uniforms.u_time.value = elapsed;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.

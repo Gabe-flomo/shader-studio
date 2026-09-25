@@ -22,11 +22,15 @@ import { inputBus, paramChannelKey, type InputSource, type InputWriter } from '.
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
-import { liveAudio } from './liveAudio';
 import { beatAt, newTriggerState, noiseAt, stepTrigger, triggerKey, type TriggerState } from '../play/triggers';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } from '../types/play';
+import { layerAudio } from './layerAudio';
+import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
+
+/** Sensor reads that are an audio layer's bands. */
+const AUDIO_READS: ReadonlySet<string> = new Set(['level', 'bass', 'lowmid', 'highmid', 'treble']);
 
 export type ControlValue = number | number[];
 
@@ -359,6 +363,25 @@ class PlayEngine implements InputSource {
     return typeof v === 'number' ? v : null;
   }
 
+  /** An audio layer's bands, measured once a frame from its song (or the live input), times its Gain. */
+  private audioBands = new Map<string, { frame: number; v: Record<LiveBand, number> }>();
+  private audioBand(layerId: string, band: LiveBand): number | null {
+    const l = this.record.layers.find(x => x.id === layerId);
+    if (!l || l.kind !== 'audio') return null;
+    let c = this.audioBands.get(layerId);
+    if (!c || c.frame !== this.frame) {
+      const raw = l.input === 'file' ? layerAudio.raw(layerId) : liveAudio.raw();
+      if (!raw) return null;
+      const gain = this.layerValue(layerId, 'gain', l.gain);
+      const v = { level: levelFromWave(raw.wave) } as Record<LiveBand, number>;
+      for (const b of ['bass', 'lowmid', 'highmid', 'treble'] as const) v[b] = bandFromSpectrum(raw.freq, raw.sampleRate, LIVE_BANDS[b].lo, LIVE_BANDS[b].hi);
+      for (const k of Object.keys(v) as LiveBand[]) v[k] = Math.max(0, Math.min(1, v[k] * gain));
+      c = { frame: this.frame, v };
+      this.audioBands.set(layerId, c);
+    }
+    return c.v[band];
+  }
+
   private nullAt(id: string): { x: number; y: number } | null {
     const l = this.record.layers.find(x => x.id === id);
     return l && l.kind === 'null' ? { x: this.layerValue(id, 'x', l.x), y: this.layerValue(id, 'y', l.y) } : null;
@@ -464,6 +487,7 @@ class PlayEngine implements InputSource {
           const a = this.nullAt(source.layerId), b = this.nullAt(source.otherId);
           return a && b ? Math.min(1, Math.hypot((a.x - b.x) * this.aspect, a.y - b.y)) : null;
         }
+        if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
         return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
       }
       case 'null': {

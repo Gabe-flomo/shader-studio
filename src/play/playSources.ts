@@ -145,7 +145,7 @@ export function triggerLabel(t: TriggerSpec): string {
   }
 }
 
-export const SENSOR_LABELS: Record<SensorRead, string> = { fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance' };
+export const SENSOR_LABELS: Record<SensorRead, string> = { fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble' };
 export const SENSOR_HINTS: Record<SensorRead, string> = {
   fill: 'How full of particles the shape is: 0.5 is as dense as average, 1 is twice that or more.',
   hover: '1 while the pointer is over the shape, else 0.',
@@ -153,6 +153,11 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   spread: 'How spread out the particles are: near 0 in a clump, near 1 everywhere.',
   motion: 'How much is moving in front of the camera.',
   distance: 'How far this null is from another one: 1 is a picture height or more.',
+  level: 'How loud the layer’s sound is overall (its Gain scales it).',
+  bass: 'Bass, 25–150 Hz: kicks and bass lines.',
+  lowmid: 'Low-mids, 150–600 Hz: body, warmth, most voices.',
+  highmid: 'High-mids, 600 Hz–3 kHz: snares, leads, presence.',
+  treble: 'Treble, 3–12 kHz: hi-hats, cymbals, air.',
 };
 
 export const LIVE_BAND_LABELS: Record<LiveAudioBand, string> = { level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble' };

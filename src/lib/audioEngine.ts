@@ -18,6 +18,12 @@ interface AudioNodeState {
   bands: number[];    // array of center Hz values
   freqRange: number;  // shared half-width (0 = full spectrum in 'full' mode)
   mode: string;       // 'band' | 'full'
+  /** ctx.currentTime when the song's 0 would have played (so position = now − startedAt, looped). */
+  startedAt: number;
+  /** Where it stopped, while stopped. */
+  stoppedAt: number;
+  /** A downsampled overview of the waveform, cached per resolution. */
+  peaks?: { n: number; data: Float32Array };
 }
 
 class AudioEngine {
@@ -84,10 +90,13 @@ class AudioEngine {
       bands: [200],
       freqRange: 200,
       mode: 'band',
+      startedAt: 0,
+      stoppedAt: 0,
     });
   }
 
-  startAudio(nodeId: string): void {
+  /** Play from `offset` seconds into the song (looping). */
+  startAudio(nodeId: string, offset = 0): void {
     const state = this.nodes.get(nodeId);
     if (!state) return;
     const audioCtx = this.getCtx();
@@ -112,15 +121,19 @@ class AudioEngine {
     source.connect(state.analyser);
     state.analyser.connect(this.masterGainNode!);
 
-    source.start(0);
+    const dur = state.buffer.duration;
+    const off = dur > 0 ? ((offset % dur) + dur) % dur : 0;
+    source.start(0, off);
 
     state.source = source;
     state.isPlaying = true;
+    state.startedAt = audioCtx.currentTime - off;
   }
 
   stopAudio(nodeId: string): void {
     const state = this.nodes.get(nodeId);
     if (!state?.isPlaying || !state.source) return;
+    state.stoppedAt = this.position(nodeId) ?? 0;
     try { state.source.stop(); } catch (_) { /* already stopped */ }
     state.source.disconnect();
     state.source = null;
@@ -268,6 +281,37 @@ class AudioEngine {
 
   isMasterPaused(): boolean {
     return this.masterPaused;
+  }
+
+  /** Seconds into the song now (where it stopped, while stopped), or null when nothing is loaded. */
+  position(nodeId: string): number | null {
+    const state = this.nodes.get(nodeId);
+    if (!state) return null;
+    if (!state.isPlaying || !this.ctx) return state.stoppedAt;
+    const dur = state.buffer.duration;
+    const t = this.ctx.currentTime - state.startedAt;
+    return dur > 0 ? ((t % dur) + dur) % dur : 0;
+  }
+
+  /** The song's length in seconds (0 when nothing is loaded). */
+  duration(nodeId: string): number {
+    return this.nodes.get(nodeId)?.buffer.duration ?? 0;
+  }
+
+  /** The loudest sample in each of `n` slices of the song (0..1), for a waveform overview. */
+  peaks(nodeId: string, n: number): Float32Array | null {
+    const state = this.nodes.get(nodeId);
+    if (!state) return null;
+    if (state.peaks?.n === n) return state.peaks.data;
+    const ch = state.buffer.getChannelData(0), out = new Float32Array(n), per = Math.max(1, Math.floor(ch.length / n));
+    for (let i = 0; i < n; i++) {
+      let m = 0;
+      const end = Math.min(ch.length, (i + 1) * per);
+      for (let j = i * per; j < end; j += 4) { const a = Math.abs(ch[j]); if (a > m) m = a; }
+      out[i] = m;
+    }
+    state.peaks = { n, data: out };
+    return out;
   }
 
   isLoaded(nodeId: string): boolean {

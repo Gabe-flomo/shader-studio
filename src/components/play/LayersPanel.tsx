@@ -11,11 +11,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
+import { LAYER_NUMERIC_PROPS, SENSOR_READS_FOR, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
 import { addNullFor, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
 import { toast } from '../ui/toastStore';
 import { SoloButton, SoloStrip } from './Solo';
+import { LayerReadings } from './MapToMenu';
+import { Section } from './layers/Section';
 import { usePlayUi } from './playUi';
 import { NOTE_REF_TYPE, noteRef } from './noteRefs';
 import { playOverlay, type ShapeDrawing } from '../../play/overlay';
@@ -242,6 +244,13 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
       {open && (
         <>
           {body}
+          {SENSOR_READS_FOR[l.kind] && l.kind !== 'null' && (
+            <Section kind={l.kind} title={l.kind === 'audio' ? 'Bands' : 'Readings'} hint={l.kind === 'audio'
+              ? 'How loud each part of the sound is right now. Map… sends one to a control: bass to size, treble to sparkle.'
+              : 'What this layer measures right now. Map… sends it to a control.'}>
+              <LayerReadings layer={l} />
+            </Section>
+          )}
           {l.kind !== 'null' && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
         </>
       )}

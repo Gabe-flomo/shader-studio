@@ -119,12 +119,13 @@ export type PlaySource =
    */
   | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string };
 
-export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance';
+export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   shape: ['fill', 'hover'],
   particles: ['speed', 'spread'],
   camera: ['motion'],
   null: ['distance'],
+  audio: ['level', 'bass', 'lowmid', 'highmid', 'treble'],
 };
 
 export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
@@ -326,7 +327,7 @@ function parseTrigger(raw: unknown): TriggerSpec | null {
   }
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;
