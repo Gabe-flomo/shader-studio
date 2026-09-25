@@ -79,7 +79,14 @@ The kinds:
 - **Picture: Shown / Layers only** (`display` in the record). Layers only covers the shader with a backdrop colour; it keeps rendering underneath, so a Reveal matte shows it inside text or images and masked particles show it where they are.
 - **Help.** Every built-in field has a tooltip. Controls show the param's hint from its node definition and the comment written on the node in the graph (the ⓘ next to the label).
 - **Recording.** Videos (both paths) and screenshots include the layers.
-- **Examples** (folder *Play layers*): Particle Glow (emitter and absorber nulls, flocking, the Layers node into SDF Glow), Flow Around Words (a text-shaped wall, a word sequence, brush walls), Letter Drop (bodies down a funnel of drawn shapes onto a glowing hill).
+- **Examples**: see *The Play folder* below. Particle Glow, Flow Around Words and Letter Drop are its last three: bigger pieces that combine several techniques.
+
+## The Play folder and notes
+
+The first folder in Examples is **Play**: one small example per technique, numbered in learning order (01 Controls from the graph … 46 Glowing text and strokes, then the three combined pieces, 49 in all). Each one is a simple graph (a glowing circle, an FBM landscape, or UV → Layers → SDF Glow) with a Play setup that shows one idea and nothing else. The order runs controls and mappings → sources (keys, triggers, beats, live audio, MIDI, OSC, tilt) → nulls → the non-particle layers → particles → zones and sensors → the Layers node.
+
+- **Notes** (`PlayRecord.notes`): plain text shown in a card at the top of the Play page. A blank line starts a paragraph, a line starting with `• ` is a bullet and `**bold**` is bold. Every Play example's notes have the same three parts: *What it shows*, *How it's built*, *Try this*. Anyone can write notes on their own setup (the speech-bubble button in the Controls header, or the pencil on the card). They travel with the graph and in play files, so a setup made for teaching carries its own explanation.
+- **Where things live**: `src/store/playExampleIndex.ts` has the names, descriptions and order (light, so the examples browser can list them without loading the graphs); `src/store/playExamples.ts` builds the records from small helpers, so each one is exactly what the parser produces. The examples test checks that the folder comes first, the numbers match the order, every record parses without loss and has notes, and every control points at a live param or layer.
 
 ## On a website
 

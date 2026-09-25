@@ -3,6 +3,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
+import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
 import type { GraphNode } from '../../types/nodeGraph';
 import { parseLayerTarget, parsePlayRecord } from '../../types/play';
 import { collectPlayCandidates } from '../../play/playControls';
@@ -65,6 +66,18 @@ describe('bundled examples', () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+
+  it('the Play folder comes first, numbered in order, and every example has notes', () => {
+    const folder = EXAMPLE_FOLDERS[0];
+    expect(folder.label).toBe('Play');
+    expect(folder.keys).toEqual(PLAY_EXAMPLE_KEYS);
+    PLAY_EXAMPLE_KEYS.forEach((k, i) => {
+      // The browser sorts by label, so the zero-padded number keeps learning order.
+      expect(EXAMPLE_INDEX[k].label.startsWith(`${String(i + 1).padStart(2, '0')} · `), k).toBe(true);
+      expect(EXAMPLE_GRAPHS[k].label, k).toBe(EXAMPLE_INDEX[k].label);
+      expect(EXAMPLE_GRAPHS[k].play?.notes?.includes('**What it shows.**'), `${k} notes`).toBe(true);
+    });
   });
 
   it('all compile without errors', () => {

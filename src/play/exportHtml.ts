@@ -94,12 +94,15 @@ function escapeHtml(s: string): string {
 
 function bundleOf(input: PlayHtmlInput) {
   const aspect = PREVIEW_ASPECTS.find(a => a.id === input.aspect);
+  // Notes are for the author and learners in the app; the website player never shows them.
+  const play = { ...input.play };
+  delete play.notes;
   return {
     title: input.title,
     fragmentShader: input.fragmentShader,
     uniforms: input.uniforms,
     paramBindings: input.paramBindings,
-    play: input.play,
+    play,
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
     generatedBy: 'Shader Studio',
   };

@@ -11,6 +11,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { ctp } from '../theme/palette';
+import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -156,9 +157,6 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   gridNeighborDisplaced: { label: "Grid: Attract", description: "Cell Displace pulls each cell's UV toward the mouse (strongly nearby, barely far away); its Attract Amount colours the dots through Palette." },
   echoTrails: { label: "Echo Trails", description: "Echo layers dimmer copies of earlier frames. A circle orbits (Rotate 2D driven by Time), SDF Glow tints it, and Add Color lays the live glow over the echoes." },
   feedbackSmear: { label: "Feedback Smear", description: "The feedback loop: Previous Frame is sampled through a slightly rotated, shrunk UV, then mixed 92/8 with fresh noise colour. Every frame smears the last one inward." },
-  particleGlow: { label: "Particle Glow", description: "The Layers node turns the Play layers into a distance field, so SDF Glow makes the particles glow. An emitter null launches a flock that an absorber following the mouse swallows.", play: true },
-  flowAroundWords: { label: "Flow Around Words", description: "Particles stream around a word: a Shape layer takes the text's shape as a wall. N steps the word; drag to paint more walls.", play: true },
-  letterDrop: { label: "Letter Drop", description: "Physics bodies: letters slide down a funnel of drawn shapes and pile on a glowing hill. Space drops them again; the mouse tilts gravity.", play: true },
   beatGrid: { label: "Beat Grid", description: "Grid Layout cuts the screen into cells; BPM Sync pulses every box on the beat and Audio Input (load a track) pushes them further. Cell Filter strokes every other cell; Palette colours by column with its Scale param.", play: true },
   webcamCmyk: { label: "Webcam CMYK", description: "Video Input (choose a file or the camera) sampled through Pixelate, then CMYK Halftone prints it as four rotated dot screens. Swap the halftone for Grid UV → Luma Radius → Dot Mask for a single-ink version." },
   particleGalaxy: { label: "Particle Galaxy", description: "The particle pipeline: P: Init seeds points on a disc, P: Rotate spins them with differential twist, P: Wave adds a breathing ripple, P: Color by Distance and P: Size shade them, P: Render draws them additively over the FBM nebula below." },
@@ -197,6 +195,8 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   voxelTerrain: { label: "3D: Voxel Terrain", description: "Voxelize snaps the ray position to a 0.5 grid inside the Scene Group; Box 3D on its Cell Pos is one cube per cell and an Expression Block decides which cells are solid from the Cell ID (a wave plus a hash gives the height), and, for empty cells, steps exactly to where the ray leaves the cell (the camera's Ray Dir is wired into the Scene Group as a port) — a voxel traversal inside an ordinary march. Outside, the March Loop Group's Hit Pos goes through a second Voxelize whose Cell ID drives a Palette, so every cube has its own colour; Mix by Hit keeps the sky plain." },
   comboVoxelSpheres: { label: "Combo: Voxelize + Sphere 3D + Hash", description: "Voxelize \u2192 Sphere 3D on the Cell Pos puts one sphere in every 0.6 cell; an Expression Block hashes the Cell ID into the sphere's Radius so sizes vary per cell (some vanish), and Intersect with a Box 3D on the raw position trims the infinite field to a block. Outside the scene, Hit Pos \u2192 Voxelize \u2192 Cell ID \u2192 Palette colours each sphere \u2014 one Cell Size Constant feeds both Voxelize nodes (the scene's through a group port), so the colour grid always matches the geometry. The 3D twin of Combo: Repeat + Cell ID + Hash; the terrain version is 3D: Voxel Terrain." },
   comboBlurDirectional: { label: "Combo: Wave Texture + Blur H/V", description: "A sharp Wave Texture through Gaussian Blur set to Horizontal only, Kawase quality (the four diagonal taps from Intel's fast-blur article): the separable Blur X pass from the blur articles, on its own a streak. Switch Direction to Vertical or Both on the card to compare. Both passes plus threshold and screen in one node: Combo: Grid + SDF Fill + Bloom." },
+  // The Play folder: one numbered example per Play technique (playExampleIndex.ts).
+  ...PLAY_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -213,13 +213,13 @@ export async function loadExampleGraphs(): Promise<Record<string, ExampleGraph>>
 // browser and the mobile examples picker (App.tsx) — one taxonomy, shared, so
 // the two surfaces never drift.
 export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string[] }> = [
+  { label: "Play",              color: ctp.pink, keys: PLAY_EXAMPLE_KEYS },
   { label: "Basics",            color: ctp.lavender, keys: ['forLoopRings','noiseFloatDemo','alphaLayerDemo','weightedSdfBlend'] },
   { label: "Color & Lighting",  color: ctp.peach, keys: ['glowCircle','blackbodyDemo','blendModesDemo','toneMapDemo','angularGradient','shapeShowcase','fbmLandscape','spectralLens','vec3SwizzlePalette','vec2SwizzleUV','colorRampFBM','oklabGradient','neonGlow','colorSwatches','colorStopsCycle'] },
   { label: "Color Grading",     color: '#f9a86b', keys: ['cgHueRotate','cgChain','lumaGrainDemo','colorAdjust'] },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','gridDemo','mirroredTileRepeat','neonFloorGrid','spaceAtlas'] },
   { label: "Patterns",          color: ctp.green, keys: ['angularFlowerRepeat','complexPowFlower'] },
-  { label: "Play layers",       color: ctp.pink, keys: ['particleGlow','flowAroundWords','letterDrop'] },
   { label: "Grid",              color: ctp.sky, keys: ['gridBasic','gridWave','gridNeighborDisplaced','gridGravity','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','gridOnionRings','gridIronFilings','beatGrid'] },
   { label: "Halftone",          color: '#a6e3d5', keys: ['halftoneNoise','cmykNoise','ringHalftone','webcamCmyk'] },
   { label: "Rings",             color: ctp.red, keys: ['fractalRings','exprOrbit'] },

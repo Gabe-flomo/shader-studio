@@ -34,6 +34,7 @@ import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
+import { NotesCard } from './NotesCard';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, OscStatusChip } from './chips';
 import { TriggerPicker } from './TriggerPicker';
@@ -177,6 +178,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   // Phones: Controls and Mappings are tabs instead of stacked panes.
   const [tab, setTab] = useState<'controls' | 'layers' | 'mappings'>('controls');
   const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
+  const [notesEditing, setNotesEditing] = useState(false);
   // Layers a source or trigger can read: shapes (click, fill, hover), particles (speed, spread), cameras (motion), nulls (distance).
   const layerRefs = useMemo(() => play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind })), [play.layers]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
@@ -225,6 +227,14 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
           ]}
         />
       </div>
+      {(play.notes || notesEditing) && (
+        <NotesCard
+          notes={play.notes ?? ''}
+          editing={notesEditing}
+          onEdit={setNotesEditing}
+          onChange={notes => update(p => { const next = { ...p, notes }; if (!notes) delete next.notes; return next; })}
+        />
+      )}
       {tab === 'layers' && (
         <LayersPanel
           play={play}
@@ -241,6 +251,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
           <>
             <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
+            {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
             <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
             <AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />
           </>
@@ -252,7 +263,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         <Select ariaLabel="Canvas shape" value={previewAspect} options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.id === 'free' ? 'Free (fill the panel)' : `${a.label} · ${a.hint}` }))} onChange={v => setPreviewAspect(v as typeof previewAspect)} height={26} style={{ flex: 1, minWidth: 0 }} />
       </div>
       <PictureRow play={play} onChange={update} />
-      {tab === 'controls' && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.controls.length === 0 ? (
           <EmptyState
             title="No controls yet"

@@ -2,6 +2,8 @@ import { BLANK_GRAPH } from './exampleIndex';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 
 import type { ExampleGraph } from './exampleIndex';
+import { PLAY_EXAMPLE_GRAPHS } from './playExamples';
+import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { defaultLayer, type PlayLayer, type PlayLayerKind } from '../types/play';
 
 /** A Play layer for an example: the defaults plus what the example changes, so examples never miss a field. */
@@ -476,11 +478,20 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 
   // ── Particle Glow (Play layers) ──
   particleGlow: {
-    label: 'Particle Glow',
+    label: PLAY_EXAMPLE_INDEX.particleGlow.label,
     description: 'The Layers node turns what the Play layers draw into a distance field, so SDF Glow makes the particles themselves glow. An emitter null launches a flock that an absorber (following the mouse on a spring) swallows.',
     counter: 5,
     play: {
       version: 1,
+      notes: `**What it shows.** Several ideas together. An **emitter** null launches particles and an **absorber** null swallows them, drawing field lines between the two. The particles **flock**. The **Layers** node turns them into a distance field, so SDF Glow lights them.
+
+**How it's built.** The Absorber follows the mouse on a spring (with wobble). The Sparks layer has no flow field, so only the nulls and flocking move it; its colour comes from a palette by speed. In the Studio: UV → Layers → SDF Glow → Tone Map. An LFO breathes the glow falloff.
+
+**Try this.**
+• Move the mouse slowly, then fast, to feel the spring.
+• Drag Absorber pull to 0 and the flock drifts free.
+• Space scatters the sparks.
+• Change SDF Glow's mode to Ring in the Studio.`,
       layers: [
         layer('null', 'source', 'Emitter', { x: 0.3, y: 0.5, size: 8, color: '#ffb86b', role: 'emitter', radius: 0.04, strength: 1 }),
         layer('null', 'sink', 'Absorber', { x: 0.7, y: 0.5, size: 8, color: '#6bb8ff', role: 'absorber', radius: 0.04, strength: 4, follow: 'mouse', spring: 0.35, wobble: 0.55 }),
@@ -536,11 +547,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 
   // ── Flow Around Words (Play layers) ──
   flowAroundWords: {
-    label: 'Flow Around Words',
+    label: PLAY_EXAMPLE_INDEX.flowAroundWords.label,
     description: 'Particles stream over an FBM landscape and part around a word: a Shape layer takes the text layer\'s shape and acts as a wall. N steps the word to its next line; drag on the picture to paint more walls with the brush.',
     counter: 6,
     play: {
       version: 1,
+      notes: `**What it shows.** Text as an obstacle. A Shape set to **Layer** takes its outline from another layer (the word), and its action is **Wall**, so the particle stream parts around the letters. The brush paints more walls.
+
+**How it's built.** The Word layer is a text sequence at low opacity; the Word wall shape copies it and stays hidden. The Stream particles flow over an FBM landscape. The Walls brush has Walls on, so its strokes are solid until they fade.
+
+**Try this.**
+• N steps to the next word; the wall follows.
+• Drag on the picture to paint walls; C clears them.
+• Turn Show on for Word wall to see the shape the particles see.`,
       layers: [
         layer('text', 'word', 'Word', { text: 'FLOW\nAROUND\nWORDS', size: 0.3, opacity: 0.18, sequence: true, transition: 'rise', toShader: false }),
         layer('shape', 'wordWall', 'Word wall', { shape: 'layer', sourceId: 'word', show: false, action: 'wall', bounce: 0.1 }),
@@ -598,11 +617,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 
   // ── Letter Drop (Play layers) ──
   letterDrop: {
-    label: 'Letter Drop',
+    label: PLAY_EXAMPLE_INDEX.letterDrop.label,
     description: 'Physics bodies: the letters of a word slide down a funnel (two drawn Shapes set to Wall) and pile on a glowing hill (Solid picture: the bright parts of the shader are ground). Space drops them again, a click scatters them, and the mouse tilts gravity.',
     counter: 5,
     play: {
       version: 1,
+      notes: `**What it shows.** **Bodies**: things with weight that fall, bounce and pile up. Letters slide down a funnel of two drawn **Wall** shapes and land on the shader itself: with Solid picture on, the bright parts of the picture are ground.
+
+**How it's built.** The two ramps are polygon shapes (corners in picture heights, so the funnel keeps its shape on any canvas). The hill is the glowing circle in the graph; Threshold says how bright counts as solid. Mouse X tilts gravity by ±10°.
+
+**Try this.**
+• Space drops the letters again; a click scatters them.
+• Move the mouse to tip the letters off the hill.
+• Change the text, or switch Source to circles or boxes and raise Count.`,
       layers: [
         // A funnel of two drawn ramps (corners in picture heights around the centre, so it keeps its shape on any canvas), with a gap to fall through.
         layer('shape', 'rampL', 'Left ramp', { shape: 'polygon', x: 0.5, y: 0.34, w: 0.78, h: 0.3, points: [-0.9, 0.3, -0.12, 0, -0.12, -0.03, -0.9, 0.27], action: 'wall', fill: [1, 1, 1], fillOpacity: 0.45, strokeWidth: 0 }),
@@ -17855,4 +17882,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       { id: 'cc_out', type: 'output', position: { x: 1220, y: 200 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'cc_tone', outputKey: 'color' } } }, outputs: {}, params: {} },
     ],
   },
+
+  // The Play folder (playExamples.ts).
+  ...PLAY_EXAMPLE_GRAPHS,
 };

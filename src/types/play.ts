@@ -221,6 +221,12 @@ export interface PlayRecord {
   layers: PlayLayer[];
   /** Triggers that do something to a layer (burst, next line, drop…). Absent = none. */
   actions?: PlayAction[];
+  /**
+   * Notes shown on the Play page above the controls: what the setup does and
+   * what to try. Plain text; blank lines separate paragraphs, lines starting
+   * "• " are bullets, **bold** is bold. Travels with the play file.
+   */
+  notes?: string;
   /** Absent means the defaults (picture shown). */
   display?: PlayDisplay;
 }
@@ -473,6 +479,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     }
     if (actions.length) out.actions = actions;
   }
+  if (typeof r.notes === 'string' && r.notes.trim()) out.notes = r.notes.slice(0, 8000);
   const disp = r.display as Record<string, unknown> | undefined;
   if (disp && typeof disp === 'object' && (disp.picture === false || disp.backdrop !== undefined)) {
     out.display = { picture: disp.picture !== false, backdrop: rgb(disp.backdrop, DEFAULT_DISPLAY.backdrop) };
@@ -489,5 +496,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && (play.display?.picture ?? true));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && !play.notes && (play.display?.picture ?? true));
 }
