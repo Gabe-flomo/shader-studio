@@ -491,9 +491,11 @@
       lastPanel = now;
       for (const [id, r] of readouts) {
         const v = live.get(id), driven = v !== undefined;
-        r.input.disabled = driven;
         r.input.parentElement.classList.toggle('ssp-driven', driven);
-        if (driven) { if (r.kind === 'color') r.input.value = hex(v); else { r.input.value = v; r.out.textContent = fmt(v, r.step); } }
+        // A driven colour stays editable: mappings scale it or set one channel, starting from what the picker says.
+        if (r.kind === 'color') { r.out.textContent = driven ? hex(v) : ''; continue; }
+        r.input.disabled = driven;
+        if (driven) { r.input.value = v; r.out.textContent = fmt(v, r.step); }
       }
     };
 

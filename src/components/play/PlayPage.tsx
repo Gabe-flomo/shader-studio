@@ -483,7 +483,9 @@ function ControlRow({ control, index, count, exists, help, value, live, drivenBy
         </span>
       </div>
       {control.kind === 'color' ? (
-        <ColourPad value={Array.isArray(shown) ? shown : [0, 0, 0]} disabled={!exists || driven} onChange={onChange} />
+        // A mapping on a colour scales it or sets one channel; the rest comes from
+        // this colour, so it stays editable while driven. The live result shows beside it.
+        <ColourPad value={Array.isArray(value) ? value : [0, 0, 0]} live={driven && Array.isArray(live) ? live : undefined} disabled={!exists} onChange={onChange} />
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -519,13 +521,14 @@ function RangeEditor({ min, max, onRange }: { min: number; max: number; onRange:
   );
 }
 
-function ColourPad({ value, disabled, onChange }: { value: number[]; disabled: boolean; onChange: (v: number[]) => void }) {
+function ColourPad({ value, live, disabled, onChange }: { value: number[]; live?: number[]; disabled: boolean; onChange: (v: number[]) => void }) {
   const tk = useTokens();
   const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
-  const hex = `#${toHex(value[0])}${toHex(value[1])}${toHex(value[2])}`;
+  const hexOf = (c: number[]) => `#${toHex(c[0])}${toHex(c[1])}${toHex(c[2])}`;
+  const hex = hexOf(value);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <label style={{
+      <label title={live ? 'The colour mappings start from. They scale it or set single channels.' : undefined} style={{
         position: 'relative', flex: 1, height: 34, borderRadius: radius.md, cursor: disabled ? 'default' : 'pointer',
         background: hex, boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.12)}`, opacity: disabled ? 0.8 : 1,
       }}>
@@ -541,6 +544,7 @@ function ColourPad({ value, disabled, onChange }: { value: number[]; disabled: b
           style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'inherit' }}
         />
       </label>
+      {live && <span title="Right now, with its mappings" aria-label={`Live colour ${hexOf(live)}`} style={{ width: 22, height: 22, borderRadius: 6, background: hexOf(live), boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.12)}`, flexShrink: 0 }} />}
       <span style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.muted, width: 64 }}>{hex}</span>
     </div>
   );
