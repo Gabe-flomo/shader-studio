@@ -10,11 +10,11 @@ import { isPlayRecordEmpty } from '../../types/play';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
 import type { Page } from '../page';
 import { Button, IconButton } from '../ui/Button';
-import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
+import { SaveGraphForm, VersionsButton } from './GraphVersions';
 
 const TABS: { page: Page; label: string }[] = [
   { page: 'studio', label: 'Studio' },
@@ -146,35 +146,29 @@ function Divider() {
 }
 
 export function SaveGraphButton() {
-  const saveGraph = useNodeGraphStore(s => s.saveGraph);
+  const tk = useTokens();
+  const current = useNodeGraphStore(s => s.currentGraph);
+  const dirty = useNodeGraphStore(s => s.graphDirty);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const save = async () => {
-    const n = name.trim();
-    if (!n) return;
-    // On failure the popover stays open so the name isn't lost.
-    if (!reportFileResult(await saveGraph(n), { failTitle: `Couldn’t save “${n}”`, success: `Saved “${n}”` })) return;
-    setName('');
-    setOpen(false);
-  };
   return (
-    <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon="save" label="Save graph" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+    <span ref={anchor} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      {current && (
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          title={dirty ? 'Unsaved changes: save a new version' : 'Saved'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 200, height: 28, padding: '0 8px', border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `500 12px ${fontFamily.ui}` }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.name}</span>
+          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>v{current.version}</span>
+          {dirty && <span aria-label="Unsaved changes" style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.warning, flexShrink: 0 }} />}
+        </button>
+      )}
+      <IconButton icon="save" label={current ? `Save “${current.name}” as a new version` : 'Save graph'} active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
       {open && (
-        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={280} padding={10}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Field
-              autoFocus
-              placeholder="Graph name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') save(); }}
-              height={32}
-              style={{ flex: 1 }}
-            />
-            <Button size="sm" variant="primary" disabled={!name.trim()} onClick={save}>Save</Button>
-          </div>
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={300} padding={10}>
+          <SaveGraphForm onDone={() => setOpen(false)} />
         </Popover>
       )}
     </span>
@@ -214,6 +208,7 @@ export function LoadGraphButton() {
       hasPlay={savedGraphHasPlay(n)}
       onLoad={() => { reportFileResult(loadSavedGraph(n), { failTitle: `Couldn’t open “${n}”` }); setOpen(false); }}
       onDelete={() => deleteSavedGraph(n)}
+      onOpened={() => setOpen(false)}
     />
   );
   return (
@@ -255,7 +250,7 @@ export function LoadGraphButton() {
   );
 }
 
-function LoadRow({ name, indent = false, hasPlay = false, onLoad, onDelete }: { name: string; indent?: boolean; hasPlay?: boolean; onLoad: () => void; onDelete: () => void }) {
+function LoadRow({ name, indent = false, hasPlay = false, onLoad, onDelete, onOpened }: { name: string; indent?: boolean; hasPlay?: boolean; onLoad: () => void; onDelete: () => void; onOpened?: () => void }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
@@ -270,6 +265,7 @@ function LoadRow({ name, indent = false, hasPlay = false, onLoad, onDelete }: { 
         style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
       >{name}</button>
       {hasPlay && <span title="Loads with a Play setup" style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}` }}>Play</span>}
+      <VersionsButton name={name} onOpened={onOpened} />
       {hover && <IconButton icon="trash" label={`Delete “${name}”`} size="sm" tone="danger" tooltip={false} onClick={onDelete} />}
     </div>
   );

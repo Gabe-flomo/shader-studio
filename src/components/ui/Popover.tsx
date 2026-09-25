@@ -55,6 +55,10 @@ export function Popover({
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (ref.current?.contains(t) || anchorRef.current?.contains(t)) return;
+      // A popover opened from inside this one is portaled after it, not inside it: a press
+      // there is still "inside" (a saved graph's versions list in the Load menu, say).
+      const other = (t as Element).closest?.('[data-popover]');
+      if (other && ref.current && other !== ref.current && (ref.current.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
       onCloseRef.current();
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current(); } };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { SaveGraphForm, VersionsButton } from '../shell/GraphVersions';
 import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
@@ -51,7 +52,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra }: {
   label: string; icon: IconName; color: string;
   /** One line shown in the row's tooltip (an example's description) */
   hint?: string;
@@ -69,6 +70,8 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
   editLabel?: string;
   /** Save the item as a shareable file. */
   onExport?: () => void;
+  /** Always shown before the hover actions (a saved graph's version count). */
+  extra?: React.ReactNode;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
@@ -97,6 +100,7 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
       {tag && (
         <span title={`Loads with a Play setup`} style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.02em' }}>{tag}</span>
       )}
+      {extra}
       {(hovered || selected) && onExport && <IconButton icon="export" label="Export as a file" size="sm" onClick={e => { e.stopPropagation(); onExport(); }} />}
       {(hovered || selected) && onEdit && <IconButton icon="layoutGraph" label={editLabel} size="sm" onClick={e => { e.stopPropagation(); onEdit(); }} />}
       {(hovered || selected) && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
@@ -201,7 +205,8 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
     return c ? { x: c.x - 180, y: c.y - 90 } : { x: 200 + Math.random() * 120, y: 120 + Math.random() * 200 };
   };
   const addNode                 = useNodeGraphStore(s => s.addNode);
-  const saveGraph               = useNodeGraphStore(s => s.saveGraph);
+  const currentGraph            = useNodeGraphStore(s => s.currentGraph);
+  const graphDirty              = useNodeGraphStore(s => s.graphDirty);
   const getSavedGraphNames      = useNodeGraphStore(s => s.getSavedGraphNames);
   const savedGraphHasPlay       = useNodeGraphStore(s => s.savedGraphHasPlay);
   const loadSavedGraph          = useNodeGraphStore(s => s.loadSavedGraph);
@@ -247,7 +252,6 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
   const [query, setQuery]                           = useState('');
   const [savedNames, setSavedNames]                 = useState<string[]>(() => getSavedGraphNames());
-  const [graphSaveInput, setGraphSaveInput]         = useState('');
   const [showGraphSaveInput, setShowGraphSaveInput] = useState(false);
   const [userPresets, setUserPresets]               = useState<CustomFnPreset[]>(() => loadCustomFns());
   const [exprPresets, setExprPresets]               = useState<ExprPreset[]>(() => loadExprPresets());
@@ -339,15 +343,6 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const toggleFolder = (label: string) =>
     setOpenFolders(prev => { const n = new Set(prev); if (n.has(label)) n.delete(label); else n.add(label); return n; });
 
-  const saveCurrentGraph = async () => {
-    const name = graphSaveInput.trim();
-    if (!name) return;
-    const ok = reportFileResult(await saveGraph(name), { failTitle: `Couldn’t save “${name}”`, success: `Saved “${name}”` });
-    refreshSavedNames();
-    if (!ok) return;
-    setShowGraphSaveInput(false);
-    setGraphSaveInput('');
-  };
 
   const tabInfo = SIDEBAR_TABS.find(t => t.id === activeTab)!;
   const tabColor = (id: TabId) => SIDEBAR_TABS.find(t => t.id === id)!.color(tk);
@@ -454,15 +449,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
         return (
           <>
             {showGraphSaveInput ? (
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                <Field autoFocus value={graphSaveInput} onChange={e => setGraphSaveInput(e.target.value)} placeholder="Graph name" height={30}
-                  onKeyDown={e => { if (e.key === 'Enter') saveCurrentGraph(); if (e.key === 'Escape') setShowGraphSaveInput(false); }}
-                  style={{ flex: 1 }} />
-                <Button size="sm" variant="primary" disabled={!graphSaveInput.trim()} onClick={saveCurrentGraph}>Save</Button>
+              <div style={{ marginBottom: 8 }}>
+                <SaveGraphForm onDone={() => { setShowGraphSaveInput(false); refreshSavedNames(); }} />
               </div>
             ) : (
               <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                <Button size="sm" icon="save" onClick={() => { setShowGraphSaveInput(true); setGraphSaveInput(''); }}>Save current graph</Button>
+                <Button size="sm" icon="save" onClick={() => setShowGraphSaveInput(true)}>{currentGraph ? `Save “${currentGraph.name}”${graphDirty ? ' •' : ''}` : 'Save current graph'}</Button>
                 <Button size="sm" icon="import" title="Import several graph files at once" onClick={() => importGraphs('files')}>Import files…</Button>
                 <Button size="sm" icon="folder" title="Import a folder of graphs; its folders are recreated here" onClick={() => importGraphs('folder')}>Import folder…</Button>
               </div>
@@ -473,6 +465,8 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               items={savedNames.map(name => ({ id: name, label: name }))}
               renderItem={(item) => (
                 <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(item.id) ? 'Play' : undefined}
+                  selected={currentGraph?.name === item.id}
+                  extra={<VersionsButton name={item.id} onOpened={() => onNodeAdded?.()} />}
                   onClick={() => { if (reportFileResult(loadSavedGraph(item.id), { failTitle: `Couldn’t open “${item.label}”` })) onNodeAdded?.(); }}
                   onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }} />
               )}

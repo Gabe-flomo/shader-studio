@@ -47,6 +47,7 @@ import { planGraphImport, type PreviewAspect } from '../utils/graphImportPlan';
 import { loadFolders, createFolder, moveItemsToFolder } from '../utils/assetFolders';
 import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
+import { archiveCurrent, deleteHistory, readVersion } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
 import { groupNodesByRank } from './graphLayout';
 import { typesCompatible } from '../lib/typesCompatible';
@@ -674,7 +675,18 @@ interface NodeGraphState {
   toggleBypass: (nodeId: string) => void;
 
   // Save / Load
-  saveGraph: (name: string) => Promise<FileResult>;
+  /**
+   * Save the graph under `name`. A name that already exists is the same
+   * project: the new save becomes its next version and the one it replaces
+   * is kept in the project's history (graphVersions.ts). `note` says what changed.
+   */
+  saveGraph: (name: string, note?: string) => Promise<FileResult>;
+  /** The saved graph open right now (loaded or last saved), and which version; null for examples, imports and new graphs. */
+  currentGraph: { name: string; version: number; latest: boolean } | null;
+  /** The open graph changed since it was loaded or saved. */
+  graphDirty: boolean;
+  /** Open an earlier version of a saved graph. Saving it makes it the newest version. */
+  loadGraphVersion: (name: string, version: number) => FileResult;
   getSavedGraphNames: () => string[];
   loadSavedGraph: (name: string) => FileResult;
   deleteSavedGraph: (name: string) => void;
@@ -1267,6 +1279,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   paramBindings: {},
   play: emptyPlayRecord(),
   playOpenRequest: 0,
+  currentGraph: null,
+  graphDirty: false,
   focusNodeRequest: null,
   focusNode: (id) => set(s => ({ selectedNodeIds: [id], selectedNodeId: id, focusNodeRequest: { id, n: (s.focusNodeRequest?.n ?? 0) + 1 } })),
   glslErrors: [],
@@ -4596,6 +4610,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const play = graph.play ? parsePlayRecord(graph.play) : emptyPlayRecord();
     set({ nodes, looseGroups: [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
+    // An example is not a saved project: saving it asks for a name.
+    set({ currentGraph: null, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
   },
 
@@ -4670,15 +4686,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
-  saveGraph: async (name) => {
+  saveGraph: async (name, note) => {
     const { nodes, looseGroups, play } = get();
     // `play` is left out when empty so graphs without a Play setup look as they always did.
     const playField = isPlayRecordEmpty(play) ? {} : { play };
-    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now() });
+    // The version this replaces goes into the project's history first.
+    const version = archiveCurrent(name);
+    const noteField = note?.trim() ? { note: note.trim().slice(0, 300) } : {};
+    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version, ...noteField });
     // localStorage is the primary store; a quota failure here means nothing
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
+    set({ currentGraph: { name, version, latest: true }, graphDirty: false });
     window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
     const dir = getGraphDir();
     if (dir) {
@@ -4703,10 +4723,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       .map(k => k.slice('shader-studio:'.length))
       .sort(),
 
-  loadSavedGraph: (name) => {
-    const raw = localStorage.getItem(`shader-studio:${name}`);
+  loadSavedGraph: (name) => get().loadGraphVersion(name, 0),
+
+  loadGraphVersion: (name, wanted) => {
+    // 0 = the newest version.
+    const latest = localStorage.getItem(`shader-studio:${name}`);
+    const raw = wanted ? readVersion(name, wanted) : latest;
     if (!raw) {
-      const error = `No saved graph named "${name}"`;
+      const error = wanted ? `"${name}" has no version ${wanted}` : `No saved graph named "${name}"`;
       console.error('[loadSavedGraph]', error);
       return { ok: false, error };
     }
@@ -4738,14 +4762,21 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     idGenerator.syncFromGraph(nodes);
     // Reset group navigation so a saved graph that was captured inside a
     // subgraph doesn't leave the editor stranded in a non-existent group.
+    let version = 1;
+    try { const v = (JSON.parse(raw) as { version?: unknown }).version; if (typeof v === 'number') version = v; } catch { /* parsed above */ }
+    let latestVersion = version;
+    try { const v = latest ? (JSON.parse(latest) as { version?: unknown }).version : undefined; if (typeof v === 'number') latestVersion = v; } catch { /* newest is unreadable: treat this as it */ }
     set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
+    set({ currentGraph: { name, version, latest: version === latestVersion }, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     return { ok: true };
   },
 
   deleteSavedGraph: (name) => {
     localStorage.removeItem(`shader-studio:${name}`);
+    deleteHistory(name);
+    if (get().currentGraph?.name === name) set({ currentGraph: null });
     window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
   },
 
@@ -4792,6 +4823,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       ...(isPlayFile ? { playOpenRequest: state.playOpenRequest + 1 } : {}),
     }));
     get().compile();
+    set({ currentGraph: null, graphDirty: false });
     // A play file already opens on Play; a plain graph that happens to carry a setup just says so.
     if (!isPlayFile) announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     return { ok: true };
@@ -4952,3 +4984,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return out.sort((a, b) => a.savedAt - b.savedAt);
   },
 }));
+
+// Any change to the graph or its Play setup after it was opened or saved marks it unsaved.
+useNodeGraphStore.subscribe((s, prev) => {
+  if (!s.currentGraph || s.graphDirty || s.currentGraph !== prev.currentGraph) return;
+  if (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play) useNodeGraphStore.setState({ graphDirty: true });
+});
